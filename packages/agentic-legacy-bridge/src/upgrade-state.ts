@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The channel-UPGRADE relationship state machine (M2-DESIGN.md §4.1) — the pure,
  * pod-persistable data + transition model that tracks how far a conversation has moved
@@ -40,10 +41,12 @@ import {
   AGENTIC_AGENT_CARD,
   AGENTIC_COUNTERPARTY,
   AGENTIC_CURRENT_CHANNEL,
+  AGENTIC_OFFER_IRI_VERSION,
   AGENTIC_OFFER_PROTOCOL_HASH,
   AGENTIC_OFFER_PROTOCOL_SOURCE,
   AGENTIC_OFFER_REQUIRED,
   AGENTIC_OFFERED_CHANNEL,
+  AGENTIC_PERSON_IRI_VERSION,
   AGENTIC_RELATIONSHIP,
   AGENTIC_RELATIONSHIP_STATE,
   AGENTIC_STATE_ABORTED,
@@ -79,6 +82,8 @@ export type RelationshipStateName =
 export interface RelationshipState {
   /** The counterparty person node (a `urn:agentic:person:…` or a WebID). */
   readonly personIri: string;
+  /** Key scheme: 1 for legacy URL-canonicalized records, 2 for lexical RDF identity. */
+  readonly personIriVersion?: 1 | 2;
   /** The current state. */
   readonly state: RelationshipStateName;
   /** The channel messages currently flow on. `email` is the always-available floor. */
@@ -89,6 +94,8 @@ export interface RelationshipState {
   readonly agentCardUrl?: string;
   /** The pending upgrade offer (present only in `offer-pending`). */
   readonly pendingOffer?: UpgradeOffer;
+  /** Normalization used by the pending offer: 1 = legacy URL.href, 2 = lexical IRIs. */
+  readonly pendingOfferVersion?: 1 | 2;
   /** The channel upgraded to (present only in `upgraded`; equals `currentChannel`). */
   readonly upgradedChannel?: Channel;
   /** Why the current exchange aborted (present only in `aborted`). */
@@ -137,8 +144,11 @@ const MAX_PROTOCOL_HASH_LENGTH = 256;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: protocol bindings must reject all controls.
 const PROTOCOL_HASH_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
-/** Validate and canonicalise an untrusted offer before it becomes persisted state. */
-export function normalizeUpgradeOffer(offer: unknown): UpgradeOffer | undefined {
+/** Validate an offer; legacy normalization is used only to resume existing pending offers. */
+export function normalizeUpgradeOffer(
+  offer: unknown,
+  iriVersion: 1 | 2 = 2,
+): UpgradeOffer | undefined {
   if (typeof offer !== "object" || offer === null || Array.isArray(offer)) return undefined;
   const rec = offer as Record<string, unknown>;
   const targetChannel = asChannel(rec.targetChannel);
@@ -159,7 +169,18 @@ export function normalizeUpgradeOffer(offer: unknown): UpgradeOffer | undefined 
 
   let protocolSource: string | undefined;
   if (rec.protocolSource !== undefined) {
-    protocolSource = safeHttpIri(rec.protocolSource);
+    let source = rec.protocolSource;
+    if (iriVersion === 1) {
+      if (typeof source !== "string") return undefined;
+      try {
+        // Reproduce the old URL normalization, then delegate escaping/validation.
+        // Never apply this to a new offer's lexical protocol binding.
+        source = new URL(source).href;
+      } catch {
+        return undefined;
+      }
+    }
+    protocolSource = safeHttpIri(source);
     if (protocolSource === undefined) return undefined;
   }
 
@@ -178,7 +199,7 @@ export type TransitionResult =
 
 /** Assemble a new immutable state, omitting undefined optionals. */
 function assemble(
-  personIri: string,
+  identity: Pick<RelationshipState, "personIri" | "personIriVersion">,
   state: RelationshipStateName,
   currentChannel: Channel,
   iso: string,
@@ -186,18 +207,25 @@ function assemble(
     verifiedWebId?: string;
     agentCardUrl?: string;
     pendingOffer?: UpgradeOffer;
+    pendingOfferVersion?: 1 | 2;
     upgradedChannel?: Channel;
     abortReason?: string;
   },
 ): RelationshipState {
   return {
-    personIri,
+    personIri: identity.personIri,
+    personIriVersion: identity.personIriVersion ?? 2,
     state,
     currentChannel,
     updatedAt: iso,
     ...(opt.verifiedWebId !== undefined ? { verifiedWebId: opt.verifiedWebId } : {}),
     ...(opt.agentCardUrl !== undefined ? { agentCardUrl: opt.agentCardUrl } : {}),
-    ...(opt.pendingOffer !== undefined ? { pendingOffer: opt.pendingOffer } : {}),
+    ...(opt.pendingOffer !== undefined
+      ? {
+          pendingOffer: opt.pendingOffer,
+          pendingOfferVersion: opt.pendingOfferVersion ?? 2,
+        }
+      : {}),
     ...(opt.upgradedChannel !== undefined ? { upgradedChannel: opt.upgradedChannel } : {}),
     ...(opt.abortReason !== undefined ? { abortReason: opt.abortReason } : {}),
   };
@@ -219,7 +247,7 @@ export function initialRelationship(
   if (asChannel(currentChannel) === undefined) {
     throw new Error("initialRelationship: currentChannel is not a known channel.");
   }
-  return assemble(safePerson, "legacy-only", currentChannel, now.toISOString(), {});
+  return assemble({ personIri: safePerson }, "legacy-only", currentChannel, now.toISOString(), {});
 }
 
 /** `false` for an illegal transition (typed reason). */
@@ -240,7 +268,7 @@ export function transition(
 ): TransitionResult {
   const iso = now.toISOString();
   const from = state.state;
-  const person = state.personIri;
+  const person = state;
 
   switch (event.kind) {
     case "bridge-detected": {
@@ -416,7 +444,7 @@ export function assertRelationshipInvariant(state: RelationshipState): void {
     if (state.pendingOffer.targetChannel === "email") {
       throw new Error("invariant: a pending offer must target an upgrade above the floor.");
     }
-    if (normalizeUpgradeOffer(state.pendingOffer) === undefined) {
+    if (normalizeUpgradeOffer(state.pendingOffer, state.pendingOfferVersion ?? 1) === undefined) {
       throw new Error("invariant: pending offer is malformed or unsafe.");
     }
   }
@@ -472,6 +500,15 @@ function stateIriToName(iri: string): RelationshipStateName | undefined {
   }
 }
 
+/** Missing metadata denotes the legacy scheme; malformed or future versions fail closed. */
+function parseIriVersion(store: Store, subject: string, predicate: string): 1 | 2 | undefined {
+  const versions = store.getObjects(namedNode(subject), namedNode(predicate), null);
+  if (versions.length === 0) return 1;
+  const version = versions[0];
+  if (versions.length !== 1 || version?.termType !== "Literal") return undefined;
+  return version.value === "1" ? 1 : version.value === "2" ? 2 : undefined;
+}
+
 /**
  * Serialise a relationship state as an owner-private Turtle resource at `resourceUrl`
  * (subject `<resourceUrl>#it`), via `n3.Writer` (never hand-built triples). Every IRI
@@ -497,6 +534,11 @@ export async function serializeRelationship(
   store.addQuad(subject, namedNode(AGENTIC_COUNTERPARTY), namedNode(person));
   store.addQuad(
     subject,
+    namedNode(AGENTIC_PERSON_IRI_VERSION),
+    literal(String(state.personIriVersion ?? 2)),
+  );
+  store.addQuad(
+    subject,
     namedNode(AGENTIC_RELATIONSHIP_STATE),
     namedNode(stateNameToIri(state.state)),
   );
@@ -511,6 +553,11 @@ export async function serializeRelationship(
     if (c !== undefined) store.addQuad(subject, namedNode(AGENTIC_AGENT_CARD), namedNode(c));
   }
   if (state.pendingOffer !== undefined) {
+    store.addQuad(
+      subject,
+      namedNode(AGENTIC_OFFER_IRI_VERSION),
+      literal(String(state.pendingOfferVersion ?? 1)),
+    );
     store.addQuad(
       subject,
       namedNode(AGENTIC_OFFERED_CHANNEL),
@@ -592,6 +639,9 @@ export function parseRelationship(
   const person = personRaw !== undefined ? (asUrn(personRaw) ?? safeHttpIri(personRaw)) : undefined;
   if (person === undefined) return undefined;
 
+  const personIriVersion = parseIriVersion(store, subject, AGENTIC_PERSON_IRI_VERSION);
+  if (personIriVersion === undefined) return undefined;
+
   const channel = asChannel(one(AGENTIC_CURRENT_CHANNEL));
   if (channel === undefined) return undefined;
 
@@ -601,8 +651,11 @@ export function parseRelationship(
   const updatedAt = one(AGENTIC_UPDATED_AT);
 
   let pendingOffer: UpgradeOffer | undefined;
+  let pendingOfferVersion: 1 | 2 | undefined;
   const offeredChannel = asChannel(one(AGENTIC_OFFERED_CHANNEL));
   if (offeredChannel !== undefined) {
+    pendingOfferVersion = parseIriVersion(store, subject, AGENTIC_OFFER_IRI_VERSION);
+    if (pendingOfferVersion === undefined) return undefined;
     const hash = one(AGENTIC_OFFER_PROTOCOL_HASH);
     const sourceRaw = one(AGENTIC_OFFER_PROTOCOL_SOURCE);
     const source = safeHttpIri(sourceRaw);
@@ -613,18 +666,25 @@ export function parseRelationship(
       ...(hash !== undefined ? { protocolHash: hash } : {}),
       ...(source !== undefined ? { protocolSource: source } : {}),
     };
-    pendingOffer = normalizeUpgradeOffer(candidate);
+    pendingOffer = normalizeUpgradeOffer(candidate, pendingOfferVersion);
     if (pendingOffer === undefined) return undefined;
   }
 
-  const rebuilt = assemble(person, stateName, channel, updatedAt ?? new Date(0).toISOString(), {
-    ...(verifiedWebId !== undefined ? { verifiedWebId } : {}),
-    ...(agentCardUrl !== undefined ? { agentCardUrl } : {}),
-    ...(pendingOffer !== undefined ? { pendingOffer } : {}),
-    // `upgraded` state's upgradedChannel is definitionally the currentChannel.
-    ...(stateName === "upgraded" ? { upgradedChannel: channel } : {}),
-    ...(abortReason !== undefined && stateName === "aborted" ? { abortReason } : {}),
-  });
+  const rebuilt = assemble(
+    { personIri: person, personIriVersion },
+    stateName,
+    channel,
+    updatedAt ?? new Date(0).toISOString(),
+    {
+      ...(verifiedWebId !== undefined ? { verifiedWebId } : {}),
+      ...(agentCardUrl !== undefined ? { agentCardUrl } : {}),
+      ...(pendingOffer !== undefined ? { pendingOffer } : {}),
+      ...(pendingOfferVersion !== undefined ? { pendingOfferVersion } : {}),
+      // `upgraded` state's upgradedChannel is definitionally the currentChannel.
+      ...(stateName === "upgraded" ? { upgradedChannel: channel } : {}),
+      ...(abortReason !== undefined && stateName === "aborted" ? { abortReason } : {}),
+    },
+  );
 
   // Reject a document that decodes to a structurally-invalid state (fail-closed).
   try {

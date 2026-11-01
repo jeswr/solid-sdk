@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { grant, policy, stranger } from "../test/helpers.js";
 import { emptyPolicy, ownerPolicy, policiesEqual, scopePolicy, unionPolicies } from "./policy.js";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, safeIri, serialize } from "./rdf.js";
-import { PolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
+import { isPolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
 import type { Subject } from "./types.js";
 
@@ -222,7 +222,22 @@ describe("ACP expressions and writers", () => {
     expect(readAcp(dataset, resource, url, "ess").grants[0]?.who).toEqual([[{ kind: "public" }]]);
     p.add(`${ACP}noneOf`, "urn:exclusion");
     node("urn:exclusion", { [`${ACP}agent`]: [stranger], [`${ACP}client`]: ["urn:client"] });
-    expect(() => readAcp(dataset, resource, url, "ess")).toThrow(PolicyTooComplex);
+    try {
+      readAcp(dataset, resource, url, "ess");
+      expect.fail("Expected a bounded-representation refusal");
+    } catch (error) {
+      expect(isPolicyTooComplex(error)).toBe(true);
+      // A caught refusal exposes only built-in Error machinery, no package class.
+      expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
+      expect(
+        isPolicyTooComplex(
+          Object.assign(new Error((error as Error).message), { name: "PolicyTooComplex" }),
+        ),
+      ).toBe(false);
+      expect(isPolicyTooComplex(new Error("ACP policy exceeds 64 clauses"))).toBe(false);
+      expect(isPolicyTooComplex({ name: "PolicyTooComplex" })).toBe(false);
+      expect(isPolicyTooComplex(null)).toBe(false);
+    }
     for (const q of [
       ...dataset.match(DataFactory.namedNode("urn:policy"), DataFactory.namedNode(`${ACP}noneOf`)),
     ])

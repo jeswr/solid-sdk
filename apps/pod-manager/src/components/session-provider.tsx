@@ -20,8 +20,8 @@
  * (explicit logins skip the doomed `prompt=none` hop; recent-account clicks
  * and background 401 re-auth keep silent-first, retrying interactively in the
  * same window). Issuer-first logins learn the WebID from the ID token's
- * `webid` claim. Tokens live in memory only (AGENTS.md): a reload re-runs
- * silently while the IdP cookie lives.
+ * `webid` claim. Access tokens stay in memory; reload restores the DPoP-bound
+ * refresh credential and validates the authenticated profile.
  *
  * The auth library is dynamically imported so it never evaluates during SSR
  * (AGENTS.md §Mounting in Next.js).
@@ -36,31 +36,23 @@ import {
   useState,
 } from "react";
 import { RecentAccounts, type RecentAccount } from "@/lib/login-ux";
-import { resolveLoginInput, type LoginTarget } from "@/lib/login-input";
 import { openPopupUnlessRenewable, PopupLoginController } from "@/lib/popup-login";
-import { AmbiguousIssuerError, type WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
+import type { WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
 import {
   IndexedDbSessionStore,
   indexedDbAvailable,
   type SessionStore,
 } from "@/lib/session-persistence";
-import { fetchProfile, type PodProfile } from "@/lib/profile";
+import type { PodProfile } from "@/lib/profile";
+import { SessionOperations } from "@/lib/session-operations";
 import { sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
 import { IssueAssignmentAnnouncer } from "@/lib/issues";
 import { toast } from "sonner";
 
-type Status = "loading" | "logged-out" | "authenticating" | "logged-in";
+export { NoWebIdFromProviderError } from "@/lib/session-operations";
 
-/** The provider signed the user in but stated no WebID in the ID token. */
-export class NoWebIdFromProviderError extends Error {
-  constructor(issuer: string) {
-    super(
-      `Signed in, but the provider did not state a WebID in the ID token (${issuer}).`,
-    );
-    this.name = "NoWebIdFromProviderError";
-  }
-}
+type Status = "loading" | "logged-out" | "authenticating" | "logged-in";
 
 export interface Session {
   /** Separate source and Pod transports for connector imports. */
@@ -117,15 +109,10 @@ interface BlockedPopup {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const registeredRef = useRef(false);
   const podTransportRef = useRef<typeof fetch | null>(null);
-  // The WebID the provider's 401-upgrade path should resolve the issuer from
-  // when no issuer is pinned yet (the silent-restore path after a reload).
+  // Validated session identity for the provider's 401 issuer resolution.
   const pendingWebIdRef = useRef<string>(undefined);
-  // The issuer of the active (restored or freshly-logged-in) session, kept so
-  // logout can clear that issuer's persisted refresh token + DPoP key.
-  const activeIssuerRef = useRef<string>(undefined);
-  // The durable refresh-token-session store (IndexedDB, origin-scoped). Created
-  // once on the client; shared by the provider (persist/restore) and logout.
-  const sessionStoreRef = useRef<SessionStore | null>(null);
+  // Shared ownership for login, reload restore and logout.
+  const operationsRef = useRef<SessionOperations | null>(null);
   // The one popup controller — created lazily on the client, shared between
   // the click handlers (synchronous open) and the token provider (getCode).
   const controllerRef = useRef<PopupLoginController>(null);
@@ -169,12 +156,56 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return controllerRef.current;
   }, []);
 
-  // Register the reactive fetch manager exactly once, as early as possible.
+  const getOperations = useCallback(() => {
+    operationsRef.current ??= new SessionOperations({
+      provider: async () => providerReadyRef.current,
+      currentProvider: () => providerSyncRef.current,
+      openPopup: (issuer, expectedWebId) => openPopupUnlessRenewable(
+        getController(), providerSyncRef.current, issuer, expectedWebId,
+      ),
+      closePopup: () => getController().closeIfOpen(),
+      authenticating: () => setStatus("authenticating"),
+      seedIdentity: (id) => { pendingWebIdRef.current = id; },
+      publish: (id, p, issuer, remember) => {
+        setWebId((prev) => {
+          if (prev && prev !== id) readCache.clearWebId(prev);
+          return id;
+        });
+        setProfile(p);
+        setActive(p.storages[0]);
+        setStatus("logged-in");
+        if (remember) {
+          const accounts = new RecentAccounts();
+          accounts.remember({ webId: id, displayName: p.displayName, avatarUrl: p.avatarUrl, issuer, storage: p.storages[0] });
+          setRecentAccounts(accounts.list());
+        }
+        if (typeof localStorage !== "undefined") localStorage.setItem(ACTIVE_WEBID_KEY, id);
+      },
+      failed: () => {
+        getController().closeIfOpen();
+        setBlockedPopup(null);
+        setStatus("logged-out");
+      },
+      loggedOut: () => {
+        readCache.clearAll();
+        setWebId(undefined);
+        setProfile(undefined);
+        setActive(undefined);
+        setStatus("logged-out");
+        setBlockedPopup(null);
+        pendingWebIdRef.current = undefined;
+        getController().cancel();
+        try { localStorage.removeItem(ACTIVE_WEBID_KEY); } catch { /* Storage may be unavailable. */ }
+      },
+    });
+    return operationsRef.current;
+  }, [getController]);
+
+  // Register the reactive fetch manager once.
   useEffect(() => {
     if (registeredRef.current) return;
     registeredRef.current = true;
 
-    let cancelled = false;
     providerReadyRef.current = (async () => {
       const [{ ReactiveFetchManager }, { WebIdDPoPTokenProvider }] =
         await Promise.all([
@@ -198,15 +229,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const sessionStore: SessionStore | undefined = indexedDbAvailable()
         ? new IndexedDbSessionStore()
         : undefined;
-      sessionStoreRef.current = sessionStore ?? null;
 
       const provider = new WebIdDPoPTokenProvider(
         callbackUri,
         // The app-owned popup drives the user through the authorization
         // endpoint (silent first, interactive retry in the same window).
         (uri, signal) => controller.getCode(uri, signal),
-        // 401-upgrade fallback (post-reload silent restore): the WebID whose
-        // issuer to authenticate against comes from the restored session.
+        // Issuer resolution is available only after validated login or restore.
         async () => {
           const id = pendingWebIdRef.current;
           if (!id) throw new Error("No WebID provided for login");
@@ -233,49 +262,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return provider;
     })();
 
-    (async () => {
-      await providerReadyRef.current;
-      if (cancelled) return;
-
-      // Load remembered accounts and attempt a silent restore of the last one.
-      const accounts = new RecentAccounts();
-      const remembered = accounts.list();
-      if (!cancelled) setRecentAccounts(remembered);
-
-      const last =
-        typeof localStorage !== "undefined"
-          ? localStorage.getItem(ACTIVE_WEBID_KEY)
-          : null;
-      if (last) {
-        try {
-          // If a DPoP-bound refresh-token session was persisted for this
-          // account's issuer, restore it via a refresh grant FIRST — a plain
-          // token-endpoint fetch, NO popup/iframe. This is what removes the
-          // brief window a returning user used to see: the in-memory session is
-          // rebuilt before any private read can 401. On failure (expired /
-          // revoked refresh token) restoreIssuer clears the dead entry and
-          // returns undefined; we fall through to the public-profile restore,
-          // and a later private read re-auths silently while the IdP cookie
-          // lives — exactly the previous behaviour, still no popup on restore.
-          const issuer = remembered.find((a) => a.webId === last)?.issuer;
-          if (issuer) {
-            const provider = await providerReadyRef.current;
-            await provider?.restoreIssuer(new URL(issuer)).catch(() => undefined);
-            if (!cancelled) activeIssuerRef.current = issuer;
-          }
-          await restore(last);
-        } catch {
-          if (!cancelled) setStatus("logged-out");
-        }
-      } else if (!cancelled) {
-        setStatus("logged-out");
-      }
-    })().catch(() => {
-      if (!cancelled) setStatus("logged-out");
-    });
+    const accounts = new RecentAccounts();
+    const remembered = accounts.list();
+    setRecentAccounts(remembered);
+    const last = typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_WEBID_KEY) : null;
+    if (last) {
+      void getOperations().restore(last, remembered.find((a) => a.webId === last)?.issuer).catch(() => {});
+    } else {
+      setStatus("logged-out");
+    }
 
     return () => {
-      cancelled = true;
+      operationsRef.current?.invalidate();
       // Tear down proactive-refresh timers + the visibility listeners on
       // unmount so nothing leaks (no orphaned intervals, no token churn) after
       // this provider is discarded. Fire-and-forget; teardown is idempotent.
@@ -284,136 +282,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const restore = useCallback(async (id: string) => {
-    // Silent restore: read the (public) profile; if a private read later 401s
-    // it re-auths silently while the IdP cookie lives.
-    //
-    // Seed pendingWebIdRef FIRST: the reactive provider's WebID resolver reads
-    // it on a 401 to know whose issuer to authenticate against. login() pins
-    // the issuer directly, but after a hard navigation / reload (tokens are
-    // in-memory only) only this restore path runs — without this, the first
-    // private read throws "No WebID provided for login" and the page hangs on
-    // its loading skeleton (e.g. an external app deep-linking into
-    // /connected-apps/grant). See connected-apps e2e.
-    pendingWebIdRef.current = id;
-    const p = await fetchProfile(id);
-    setWebId(id);
-    setProfile(p);
-    setActive(p.storages[0]);
-    setStatus("logged-in");
-  }, []);
-
-  /**
-   * The shared back half of every login: run the code flow against the
-   * resolved issuer, learn/confirm the WebID, load the profile, persist.
-   * The popup MUST already be open (synchronously, by the caller).
-   */
-  const completeLogin = useCallback(
-    async (issuer: string, knownWebId: string | undefined, silentFirst = false) => {
-      setStatus("authenticating");
-      try {
-        const provider = await providerReadyRef.current;
-        if (!provider) throw new Error("Auth is not initialised yet");
-
-        const { webId: statedWebId } = await provider.login(new URL(issuer), {
-          silentFirst,
-        });
-        // A cached fresh session resolves login() without running the code
-        // flow — nothing ever navigates the popup, so close the blank window
-        // the click handler opened.
-        getController().closeIfOpen();
-        const id = knownWebId ?? statedWebId;
-        if (!id) throw new NoWebIdFromProviderError(issuer);
-
-        // From here the 401-upgrade path knows whose session this is, and
-        // logout knows which issuer's persisted session to clear.
-        pendingWebIdRef.current = id;
-        activeIssuerRef.current = issuer;
-
-        // Account switch (logging into a different WebID without an explicit
-        // logout): clear the read cache so the new account never renders the
-        // previous one's cached models. Per-WebID keying already prevents a
-        // cross-account read; this also frees the old partition.
-        setWebId((prev) => {
-          if (prev && prev !== id) readCache.clearWebId(prev);
-          return id;
-        });
-        const p = await fetchProfile(id);
-        setProfile(p);
-        setActive(p.storages[0]);
-        setStatus("logged-in");
-
-        const accounts = new RecentAccounts();
-        accounts.remember({
-          webId: id,
-          displayName: p.displayName,
-          avatarUrl: p.avatarUrl,
-          issuer,
-          storage: p.storages[0],
-        });
-        setRecentAccounts(accounts.list());
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(ACTIVE_WEBID_KEY, id);
-        }
-      } catch (e) {
-        getController().closeIfOpen();
-        setBlockedPopup(null);
-        setStatus("logged-out");
-        throw e;
-      }
-    },
-    [getController],
-  );
-
   const login = useCallback(
-    async (input: string, opts?: { issuer?: string; silentFirst?: boolean }) => {
-      // SYNCHRONOUS popup decision — first statement, inside the user
-      // activation. When the issuer is known NOW (recent-account chip, issuer
-      // choice) and the provider's probe says a cached session or refresh
-      // token completes this login with fetches alone, no popup opens at all
-      // — "Continue as" with a live session must not flash a blank window.
-      // Everywhere else (typed WebID: the issuer is a profile fetch away)
-      // the popup opens here, synchronously, exactly as before.
-      openPopupUnlessRenewable(getController(), providerSyncRef.current, opts?.issuer);
-      setStatus("authenticating");
-      try {
-        // Resolve the smart input: WebID (deref → solid:oidcIssuer) or bare
-        // issuer (OIDC discovery). A remembered issuer (recent account) skips
-        // ambiguity; several advertised issuers without a choice throw so the
-        // UI can let the USER pick — never silently the first.
-        let issuer = opts?.issuer;
-        let knownWebId: string | undefined;
-        const target: LoginTarget = await resolveLoginInput(input);
-        if (target.kind === "webid") {
-          knownWebId = target.webId;
-          if (!issuer) {
-            if (target.issuers.length > 1) {
-              throw new AmbiguousIssuerError(target.webId, target.issuers);
-            }
-            issuer = target.issuers[0];
-          }
-        } else {
-          issuer ??= target.issuer;
-        }
-        await completeLogin(issuer, knownWebId, opts?.silentFirst ?? false);
-      } catch (e) {
-        getController().closeIfOpen();
-        setStatus("logged-out");
-        throw e;
-      }
-    },
-    [completeLogin, getController],
+    (input: string, opts?: { issuer?: string; silentFirst?: boolean }) => getOperations().login(input, opts),
+    [getOperations],
   );
 
   const loginWithIssuer = useCallback(
-    async (issuer: string) => {
-      // SYNCHRONOUS popup decision — first statement, inside the user
-      // activation (see login() above; a repeat provider-picker click with a
-      // live session re-logs-in without a window).
-      openPopupUnlessRenewable(getController(), providerSyncRef.current, issuer);
-      await completeLogin(issuer, undefined);
-    },
-    [completeLogin, getController],
+    (issuer: string) => getOperations().loginWithIssuer(issuer),
+    [getOperations],
   );
 
   const cancelLogin = useCallback(() => {
@@ -422,32 +298,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [getController]);
 
   const logout = useCallback(() => {
-    // Drop every cached read model so a logged-out (or next) user is never
-    // shown the previous account's data from the SWR read cache. The cache is
-    // a render-speed optimization only; clearing it here is the security
-    // boundary for the read snapshots (writes already re-read fresh).
-    readCache.clearAll();
-    setWebId(undefined);
-    setProfile(undefined);
-    setActive(undefined);
-    setStatus("logged-out");
-    pendingWebIdRef.current = undefined;
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem(ACTIVE_WEBID_KEY);
-    }
-    // Wipe the persisted DPoP-bound refresh token + key for this issuer so a
-    // logged-out user is NOT silently restored on the next load (the credential
-    // must not outlive an explicit sign-out). Fire-and-forget; clears both via
-    // the provider (which owns the store) and, defensively, the store directly.
-    const issuer = activeIssuerRef.current;
-    activeIssuerRef.current = undefined;
-    if (issuer) {
-      void providerReadyRef.current
-        ?.then((p) => p?.forgetPersisted(new URL(issuer)))
-        .catch(() => {});
-      void sessionStoreRef.current?.delete(issuer).catch(() => {});
-    }
-  }, []);
+    void getOperations().logout().catch(() => {});
+  }, [getOperations]);
 
   const setActiveStorage = useCallback((storage: string) => setActive(storage), []);
 

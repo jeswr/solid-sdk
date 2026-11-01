@@ -114,6 +114,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
+        "src/lib/session/extension-pod-session.ts",
       ],
       reporter: ["text", "json", "json-summary"],
       thresholds: {

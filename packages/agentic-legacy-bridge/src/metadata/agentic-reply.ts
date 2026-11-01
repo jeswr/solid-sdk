@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Deterministic extraction of a peer agent's **`AgenticReply` carrier** (metadata-
  * protocol Rule 1c — `NOW-PERSONAL-AGENT.md` §5.1/§5.4): the inline JSON-LD block
@@ -65,22 +66,35 @@ const ACTION_TYPES: ReadonlyMap<string, string> = new Map(
   ]),
 );
 
-/** A proof binds an unordered RDF type set, never the order of JSON aliases. */
-function verifiedActionType(subject: unknown): string | undefined {
+/** Reject multiple type properties and action aliases; RDF proofs bind sets, not ordering. */
+function actionType(subject: unknown): string | null | undefined {
   const aliases = [prop(subject, "@type"), prop(subject, "type")].filter(
     (value) => value !== undefined,
   );
-  if (aliases.length !== 1) return undefined;
+  if (aliases.length > 1) return null;
   const raw = aliases[0];
   const types = typeof raw === "string" ? [raw] : Array.isArray(raw) ? raw : [];
   // Reject over-limit sets rather than hiding a conflicting action beyond the cap.
-  if (types.length > 8) return undefined;
+  if (types.length > 8) return null;
   const actions = types.flatMap((type) => {
     const iri = typeof type === "string" ? ACTION_TYPES.get(type.trim()) : undefined;
     return iri === undefined ? [] : [iri];
   });
   // Multiple spellings of the same action are also ambiguous aliases.
-  return actions.length === 1 ? actions[0] : undefined;
+  return actions.length > 1 ? null : actions[0];
+}
+
+/** Supported non-action envelopes; the caller rejects ambiguous types via actionType first. */
+function isMessageEnvelope(subject: unknown): boolean {
+  const raw = firstProp(subject, ["@type", "type"]);
+  const types = typeof raw === "string" ? [raw] : Array.isArray(raw) ? raw : [];
+  return (
+    types.filter(
+      (type) =>
+        typeof type === "string" &&
+        ["Message", "schema:Message", "https://schema.org/Message"].includes(type.trim()),
+    ).length === 1
+  );
 }
 
 /** The verdict an injected verifier returns. Anything but `verified: true` fails closed. */
@@ -163,6 +177,9 @@ function mapReplyBlock(
   if (subject === null || typeof subject !== "object" || Array.isArray(subject)) {
     return { interpretations, patterns };
   }
+  const actionIri = actionType(subject);
+  if (actionIri === null || (verified && actionIri === undefined && !isMessageEnvelope(subject)))
+    return { interpretations, patterns };
 
   // Unverified structure is still extracted, but SELF-REPORTED — never auto-run.
   const calibration: Interpretation["calibration"] = verified ? "Calibrated" : "SelfReported";
@@ -185,17 +202,7 @@ function mapReplyBlock(
   };
 
   // --- the action type (closed set) ---
-  const typeRaw = firstProp(subject, ["@type", "type"]);
-  const typeNames: unknown[] =
-    typeof typeRaw === "string" ? [typeRaw] : Array.isArray(typeRaw) ? typeRaw.slice(0, 8) : [];
-  for (const t of typeNames) {
-    if (typeof t !== "string") continue;
-    const actionIri = ACTION_TYPES.get(t.trim());
-    if (actionIri !== undefined) {
-      push(RDF_TYPE, { kind: "iri", value: actionIri });
-      break;
-    }
-  }
+  if (actionIri !== undefined) push(RDF_TYPE, { kind: "iri", value: actionIri });
 
   // --- the sent-at envelope ---
   const when = parseWhen(firstProp(subject, ["dateSent", "schema:dateSent", SCHEMA_DATE_SENT]));
@@ -309,12 +316,17 @@ export async function extractAgenticReply(
   let verifiedIssuer: string | undefined;
 
   for (const [i, root] of roots.entries()) {
+    // Reject the entire ambiguous block before it can be marked verified or mapped.
+    const subject = prop(root, "credentialSubject");
+    const action = actionType(subject);
+    if (action === null) continue;
     let verified = false;
     let issuer: string | undefined;
     if (options?.verify !== undefined) {
       try {
         const verdict = await options.verify(root);
         if (verdict.verified === true) {
+          if (action === undefined && !isMessageEnvelope(subject)) continue;
           verified = true;
           issuer = safeHttpIri(verdict.issuer);
         }
@@ -322,7 +334,6 @@ export async function extractAgenticReply(
         verified = false;
       }
     }
-    if (verified && verifiedActionType(prop(root, "credentialSubject")) === undefined) continue;
     if (verified) {
       anyVerified = true;
       verifiedIssuer ??= issuer;

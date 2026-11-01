@@ -3,6 +3,13 @@
 <!-- AUTHORED-BY Claude Opus 5.5: the App Group the Share Extension hands batches through (DESIGN D7) -->
 <plist version="1.0">
 <dict>
+    <!-- AUTHORED-BY Codex GPT-6.1-Sol: signing key is app-only; decryption is shared with the NSE. -->
+    <key>aps-environment</key><string>$(APS_ENVIRONMENT)</string>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)org.jeswr.suite</string>
+        <string>$(AppIdentifierPrefix)org.jeswr.suite.push</string>
+    </array>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.org.jeswr.suite</string>
