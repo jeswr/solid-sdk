@@ -10,7 +10,8 @@ injected seams, so a decision can be reproduced independently.
 
 Each hop's policy is evaluated as parsed from its signed policy content, not from the presented
 policy object. The parsed policy must re-serialise to exactly the signed graph; content the ODRL
-projection cannot fully represent denies with `POLICY_INTEGRITY`. A hop presented without content
+projection cannot fully represent denies with `POLICY_INTEGRITY`, as does a scalar operator (`eq`,
+`lteq`, …) with several right operands, since a graph does not order them. A hop presented without content
 denies unless `allowProvisionalPolicy: true` is set, which marks the permit
 `policyIntegrityProvisional`.
 

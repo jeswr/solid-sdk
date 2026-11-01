@@ -288,3 +288,98 @@ describe("Phase D input guards", () => {
     expect(discharged.authorized).toBe(true);
   });
 });
+
+describe("signed-content reading is order- and accessor-independent", () => {
+  /** Issue the institute credential over `content` and verify with it presented. */
+  async function verifySigned(
+    content: string,
+    presented: PresentedChain["policyContents"],
+    request: RequestContext = readRequest(),
+  ): Promise<VerifyAuthorityResult> {
+    const vc = await issueAgentAuthorization(
+      {
+        principal: CAST.inst,
+        agent: CAST.agentR,
+        action: "read",
+        target: CAST.records,
+        policy: CAST.instituteInternalId,
+        policyContent: content,
+        validFrom: VALID_FROM,
+        validUntil: VALID_UNTIL,
+      },
+      base.keys.inst,
+    );
+    return verifyInternal(internalChain({ credentials: [vc], policyContents: presented }), {
+      request,
+    });
+  }
+
+  it("a scalar operator with several right operands is refused (the triple order would pick one)", async () => {
+    const twoBounds: OdrlPolicy = {
+      ...base.instituteInternal,
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: CAST.records,
+          assignee: CAST.agentR,
+          constraints: [
+            {
+              leftOperand: "dateTime",
+              operator: "lteq",
+              rightOperand: ["2026-07-15T00:00:00Z", "2027-07-03T00:00:00Z"],
+            },
+          ],
+        },
+      ],
+    };
+    const content = await policyToTurtle(twoBounds);
+    const r = await verifySigned(content, { [CAST.instituteInternalId]: { content } });
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_INTEGRITY");
+  });
+
+  it("content behind an accessor is read once: a getter that swaps bytes after the digest gate cannot widen", async () => {
+    const genuine = base.policyDocuments.instituteInternal;
+    const forged = await policyToTurtle(widenedInternal());
+    let reads = 0;
+    const presented = {
+      get content() {
+        reads += 1;
+        return reads === 1 ? genuine : forged;
+      },
+    };
+    const r = await verifySigned(
+      genuine,
+      { [CAST.instituteInternalId]: presented },
+      {
+        action: "modify",
+        target: SECRET,
+        attributes: {},
+      },
+    );
+    expect(r.authorized).toBe(false);
+    expect(reads).toBe(1);
+  });
+
+  it("`now` is copied, so a seam that mutates the caller's Date cannot move the instant", async () => {
+    const now = new Date(base.now.getTime());
+    const r = await verifyInternal(internalChain(), {
+      now,
+      resolveKey: (vm: string) => {
+        now.setTime(Date.parse("2030-01-01T00:00:00Z"));
+        return base.registry.resolveKey(vm);
+      },
+      // The status pass re-verifies the credential at `now` after the key seam ran.
+      resolveStatus: () => ({ status: "absent" }),
+    });
+    expect(r.authorized).toBe(true);
+  });
+
+  it("a Set of revoked policy IRIs is accepted", async () => {
+    const r = await verifyInternal(internalChain(), {
+      revoked: new Set([CAST.instituteInternalId]) as unknown as readonly string[],
+    });
+    expect(r.code).toBe("REVOKED");
+  });
+});

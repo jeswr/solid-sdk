@@ -63,6 +63,7 @@
 import type {
   ActiveDuty,
   DelegatedEvaluationResult,
+  OdrlConstraint,
   OdrlPolicy,
   RequestContext,
 } from "@jeswr/solid-odrl";
@@ -189,8 +190,8 @@ export interface VerifyAuthorityOptions {
    * Phase C, the POLICY-level revocation input: policy IRIs revoked via the
    * delegation profile's `odrld:Revocation` (e.g. published in a trace's
    * `revocations.ttl`). Distinct from — and consulted IN ADDITION TO — the
-   * credential-level Bitstring status gate (`resolveStatus`). A single string is
-   * read as a one-element list; any other non-array value denies.
+   * credential-level Bitstring status gate (`resolveStatus`). A single string or a
+   * `Set` is read as a list; any other non-array value denies.
    */
   readonly revoked?: readonly string[];
   /**
@@ -494,6 +495,8 @@ function deny(
 interface CheckedOptions {
   readonly revoked: readonly string[];
   readonly maxChainLength: number;
+  /** A private copy of `now`, so a seam cannot move the one evaluation instant. */
+  readonly now: Date;
 }
 
 /**
@@ -507,7 +510,12 @@ function checkOptions(
   options: VerifyAuthorityOptions,
 ): CheckedOptions | VerifyAuthorityResult {
   const invalid = (reason: string) => deny("assembly", "INVALID_OPTIONS", reason);
-  if (!(options.now instanceof Date) || !Number.isFinite(options.now.getTime())) {
+  // Brand check rather than instanceof, so a Date from another realm is accepted.
+  const nowMs =
+    Object.prototype.toString.call(options.now) === "[object Date]"
+      ? Date.prototype.getTime.call(options.now)
+      : Number.NaN;
+  if (!Number.isFinite(nowMs)) {
     return invalid("`now` is not a valid Date — refusing to evaluate validity windows.");
   }
   if (typeof options.resolveKey !== "function") {
@@ -523,7 +531,12 @@ function checkOptions(
     return invalid("maxChainLength must be a positive integer.");
   }
   const rawRevoked: unknown = options.revoked ?? [];
-  const revoked = typeof rawRevoked === "string" ? [rawRevoked] : rawRevoked;
+  const revoked =
+    typeof rawRevoked === "string"
+      ? [rawRevoked]
+      : rawRevoked instanceof Set
+        ? [...rawRevoked]
+        : rawRevoked;
   if (!Array.isArray(revoked) || !revoked.every((r) => typeof r === "string")) {
     return invalid("revoked must be a policy IRI or a list of policy IRIs.");
   }
@@ -537,7 +550,20 @@ function checkOptions(
       `The presented chain exceeds the maximum length ${maxChainLength}.`,
     );
   }
-  return { revoked, maxChainLength };
+  return { revoked, maxChainLength, now: new Date(nowMs) };
+}
+
+/** Operators that compare against ONE right operand (the evaluator reads only the first). */
+const SCALAR_OPERATORS: ReadonlySet<string> = new Set(["eq", "neq", "gt", "gteq", "lt", "lteq"]);
+
+/**
+ * Every constraint a policy carries: on its rules, its permissions' duties, and its
+ * obligations.
+ */
+function allConstraints(policy: OdrlPolicy): readonly OdrlConstraint[] {
+  const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
+  const duties = [...rules.flatMap((r) => r.duties ?? []), ...(policy.obligations ?? [])];
+  return [...rules, ...duties].flatMap((x) => x.constraints ?? []);
 }
 
 /**
@@ -564,6 +590,19 @@ async function contentBoundPolicy(
     }
     if (parsed.delegatedUnder !== hop.delegatedUnder) {
       return "the signed content places the policy at a different chain position (odrld:delegatedUnder)";
+    }
+    // An RDF graph has no value order, but the evaluator compares a scalar
+    // operator against the FIRST right operand only — so with several values the
+    // presenter's triple order would pick the one that counts.
+    if (
+      allConstraints(parsed).some(
+        (c) =>
+          SCALAR_OPERATORS.has(c.operator) &&
+          Array.isArray(c.rightOperand) &&
+          c.rightOperand.length !== 1,
+      )
+    ) {
+      return "a scalar constraint operator carries several right operands, whose order the signed graph does not fix";
     }
     const [signed, projected] = await Promise.all([
       digestRdfContent(presented.content, contentType),
@@ -592,7 +631,8 @@ export async function verifyAgentAuthority(
 ): Promise<VerifyAuthorityResult> {
   const checked = checkOptions(chain, options);
   if ("authorized" in checked) return checked;
-  const { request, rootPrincipal, now, resolveKey, isControlledBy } = options;
+  const { request, rootPrincipal, resolveKey, isControlledBy } = options;
+  const { now } = checked;
 
   // --- assembly ------------------------------------------------------------
   const assembled = assembleChain(chain.policies);
@@ -714,9 +754,18 @@ export async function verifyAgentAuthority(
   for (const hop of ordered) {
     // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
     const b = bound.get(hop.id)!;
-    const presented: PresentedResourceContent | undefined = Object.hasOwn(contents, hop.id)
+    // Snapshot the content once: the digest gate, the parse and the round-trip
+    // must all read the same bytes (an accessor could otherwise change them).
+    const raw: PresentedResourceContent | undefined = Object.hasOwn(contents, hop.id)
       ? contents[hop.id]
       : undefined;
+    const presented: PresentedResourceContent | undefined =
+      raw === undefined
+        ? undefined
+        : Object.freeze({
+            content: raw.content,
+            ...(raw.contentType !== undefined && { contentType: raw.contentType }),
+          });
 
     // SECURITY (delegation-trust anchor) — runs BEFORE the digest/status gates
     // below, for this hop. Each hop's self-asserted `credentialSubject.id`,
