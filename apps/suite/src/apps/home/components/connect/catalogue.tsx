@@ -2,7 +2,7 @@
 "use client";
 import { FilterChips } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { filterCatalogue } from "../../lib/connect/catalogue";
 import { relativeSync } from "../../lib/connect/copy";
@@ -19,7 +19,6 @@ export function ConnectCatalogue() {
   const [connections] = useConnectors(session.webId);
   const online = useOnline();
   const params = useSearchParams();
-  const router = useRouter();
   const selected = (params.get("domain") ?? "")
     .split(",")
     .filter((id) => domains.some((domain) => domain.id === id));
@@ -87,7 +86,9 @@ export function ConnectCatalogue() {
           const next = new URLSearchParams(params.toString());
           if (value.length) next.set("domain", value.join(","));
           else next.delete("domain");
-          router.replace(`/connect${next.size ? `?${next}` : ""}`, { scroll: false });
+          // Shallow update: the app router syncs useSearchParams with history.replaceState,
+          // which (unlike router.replace) also works on a prerendered page opened with a query.
+          window.history.replaceState(null, "", `/connect${next.size ? `?${next}` : ""}`);
         }}
       />
       <div className="hm-connect-grid">
@@ -97,7 +98,7 @@ export function ConnectCatalogue() {
           const action = connection?.lastSync
             ? "Sync now"
             : entry.status === "demo"
-              ? "Demo data"
+              ? "Try with demo data"
               : entry.status === "import"
                 ? "Import a file"
                 : entry.status === "soon"
