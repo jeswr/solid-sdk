@@ -591,10 +591,41 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2))
 
   apps/mcp-server:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
+      '@jeswr/mcp-oauth':
+        specifier: workspace:*
+        version: link:../../packages/mcp-oauth
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../../packages/solid-dpop
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../../packages/solid-mcp
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@solid/community-server':
+        specifier: 8.0.0-alpha.3
+        version: 8.0.0-alpha.3(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
