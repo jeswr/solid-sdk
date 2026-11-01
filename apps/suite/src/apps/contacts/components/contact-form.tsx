@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -27,7 +28,7 @@ import { Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type FieldPath, useFieldArray, useForm } from "react-hook-form";
 import {
   type ContactFormValues,
   contactFormData,
@@ -92,10 +93,38 @@ function ContactDraft({
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactFormSchema),
     defaultValues: contactFormDefaults(person?.data, initialLabels),
-    shouldFocusError: true,
+    shouldFocusError: false,
   });
+  const formElement = useRef<HTMLFormElement>(null);
   const emails = useFieldArray({ control: form.control, name: "emails" });
   const phones = useFieldArray({ control: form.control, name: "phones" });
+  const focusInvalid = () => {
+    // Appended rows register last, so RHF's registration order differs from the DOM.
+    const fields = formElement.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      "input[name], textarea[name]",
+    );
+    for (const field of fields ?? []) {
+      if (form.getFieldState(field.name as FieldPath<ContactFormValues>).invalid) {
+        field.focus();
+        break;
+      }
+    }
+  };
+  const removePoint = (
+    remove: (index: number) => void,
+    index: number,
+    button: HTMLButtonElement,
+  ) => {
+    const fieldset = button.closest("fieldset") as HTMLFieldSetElement;
+    const fields = fieldset.querySelectorAll<HTMLInputElement>("input");
+    // Keep the surviving DOM node: its field name changes when the rows are reindexed.
+    const target =
+      fields[index + 1] ??
+      fields[index - 1] ??
+      fieldset.querySelector<HTMLButtonElement>(":scope > button");
+    remove(index);
+    target?.focus();
+  };
   const [wide, setWide] = useState(false);
   const [discard, setDiscard] = useState(false);
   const submitted = useRef(false);
@@ -159,6 +188,7 @@ function ContactDraft({
     <>
       <Form {...form}>
         <form
+          ref={formElement}
           className="con-form"
           noValidate
           onSubmit={form.handleSubmit((values) => {
@@ -202,7 +232,7 @@ function ContactDraft({
             }
             submitted.current = true;
             router.push(`/contacts/c/${encodeContactRef(bookUrl, url)}`);
-          })}
+          }, focusInvalid)}
         >
           <div role="status" aria-live="polite" aria-atomic="true" className="con-form-summary">
             {errorCount
@@ -230,7 +260,7 @@ function ContactDraft({
                       label={`Remove email ${index + 1}`}
                       type="button"
                       variant="ghost"
-                      onClick={() => emails.remove(index)}
+                      onClick={(event) => removePoint(emails.remove, index, event.currentTarget)}
                     >
                       <X aria-hidden="true" size={16} />
                     </IconButton>
@@ -271,7 +301,7 @@ function ContactDraft({
                   label={`Remove phone ${index + 1}`}
                   type="button"
                   variant="ghost"
-                  onClick={() => phones.remove(index)}
+                  onClick={(event) => removePoint(phones.remove, index, event.currentTarget)}
                 >
                   <X aria-hidden="true" size={16} />
                 </IconButton>
