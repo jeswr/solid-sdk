@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { call, GOOGLE } from "./providers.js";
+import { HelperError } from "./store.js";
 
 const LIMIT = 256 * 1024;
 const invoke = (response: Response) =>
@@ -8,9 +10,10 @@ const invoke = (response: Response) =>
 
 describe("credential provider response buffering", () => {
   it.each([
-    false,
-    true,
-  ])("cancels as soon as streamed bytes exceed the limit (cancel rejects: %s)", async (rejectCancel) => {
+    [false, undefined],
+    [true, undefined],
+    [false, { "content-length": "1" }],
+  ] as const)("cancels as soon as streamed bytes exceed the limit (cancel rejects: %s, headers: %j)", async (rejectCancel, headers) => {
     let pulls = 0;
     const cancel = vi.fn(() => {
       if (rejectCancel) throw new Error("synthetic response body must stay private");
@@ -26,9 +29,12 @@ describe("credential provider response buffering", () => {
       },
       { highWaterMark: 0 },
     );
-    const response = new Response(stream);
+    const response = new Response(stream, { headers });
     const buffer = vi.spyOn(response, "arrayBuffer");
-    await expect(invoke(response)).rejects.toThrow("token exchange: answer too large");
+    await expect(invoke(response)).rejects.toMatchObject({
+      code: "unavailable",
+      message: "token exchange: answer too large",
+    });
     expect(pulls).toBe(2);
     expect(cancel).toHaveBeenCalledOnce();
     expect(buffer).not.toHaveBeenCalled();
@@ -49,28 +55,56 @@ describe("credential provider response buffering", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it("counts encoded bytes rather than characters", async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify("£".repeat(LIMIT / 2))));
+        },
+        cancel,
+      }),
+    );
+    await expect(invoke(response)).rejects.toThrow(/answer too large/);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
   it("accepts exactly the byte limit and preserves the status", async () => {
     const body = `{"ok":true}${" ".repeat(LIMIT - 11)}`;
     expect(Buffer.byteLength(body)).toBe(LIMIT);
-    await expect(invoke(new Response(body, { status: 400 }))).resolves.toEqual({
+    const bytes = new TextEncoder().encode(body);
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes.subarray(0, 1000));
+          controller.enqueue(bytes.subarray(1000));
+          controller.close();
+        },
+        cancel,
+      }),
+      { status: 400 },
+    );
+    await expect(invoke(response)).resolves.toEqual({
       status: 400,
       body: { ok: true },
     });
+    expect(cancel).not.toHaveBeenCalled();
+    expect(response.body?.locked).toBe(false);
   });
 
   it("decodes multibyte UTF-8 split between chunks", async () => {
-    const bytes = new TextEncoder().encode('{"message":"£"}');
-    const split = bytes.indexOf(0xc2) + 1;
+    const bytes = new TextEncoder().encode('{"message":"£☀"}');
     const stream = new ReadableStream({
       start(controller) {
-        controller.enqueue(bytes.slice(0, split));
-        controller.enqueue(bytes.slice(split));
+        for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
         controller.close();
       },
     });
     await expect(invoke(new Response(stream))).resolves.toEqual({
       status: 200,
-      body: { message: "£" },
+      body: { message: "£☀" },
     });
   });
 
@@ -80,9 +114,12 @@ describe("credential provider response buffering", () => {
         controller.error(new Error("synthetic private provider body"));
       },
     });
-    await expect(invoke(new Response(stream))).rejects.toThrow(
-      "token exchange: the answer could not be read",
-    );
+    const error = await invoke(new Response(stream)).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(HelperError);
+    expect(error).toMatchObject({
+      code: "unavailable",
+      message: "token exchange: the answer could not be read",
+    });
     expect(stream.locked).toBe(false);
   });
 

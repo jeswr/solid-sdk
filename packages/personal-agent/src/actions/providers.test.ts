@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -664,7 +665,10 @@ describe("review counterexamples (independently reproduced) and related boundari
     });
   });
 
-  it("widens busy times across Lord Howe's thirty-minute repeated interval", async () => {
+  it.each([
+    "Australia/Lord_Howe",
+    "UTC",
+  ])("widens busy times across Lord Howe's thirty-minute repeated interval (owner zone: %s)", async (ownerTimeZone) => {
     expect(
       new Date(
         zonedToUtcChecked("2026-04-05", 105, "Australia/Lord_Howe", "earliest") as number,
@@ -693,7 +697,7 @@ describe("review counterexamples (independently reproduced) and related boundari
         connectionId: "m",
         calendarId: "primary",
         window: { start: "2026-04-04T00:00:00Z", end: "2026-04-06T00:00:00Z" },
-        ownerTimeZone: "Australia/Lord_Howe",
+        ownerTimeZone,
       },
       at,
     );
@@ -706,9 +710,15 @@ describe("review counterexamples (independently reproduced) and related boundari
   it.each([
     "earliest",
     "latest",
-  ] as const)("rejects Lord Howe's skipped half-hour and Samoa's skipped day (%s)", (prefer) => {
+  ] as const)("rejects skipped wall times and preserves normal times (%s)", (prefer) => {
     expect(zonedToUtcChecked("2026-10-04", 135, "Australia/Lord_Howe", prefer)).toBeUndefined();
     expect(zonedToUtcChecked("2011-12-30", 720, "Pacific/Apia", prefer)).toBeUndefined();
+    expect(zonedToUtcChecked("2026-04-05", 180, "Australia/Lord_Howe", prefer)).toBe(
+      Date.parse("2026-04-04T16:30:00Z"),
+    );
+    expect(zonedToUtcChecked("2026-04-05", 540, "Asia/Kathmandu", prefer)).toBe(
+      Date.parse("2026-04-05T03:15:00Z"),
+    );
   });
 
   it("the adapter boundary refuses malformed or expired token expiry from any credential provider", async () => {

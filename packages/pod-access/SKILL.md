@@ -3,6 +3,7 @@ name: pod-access
 description: Use when working on @jeswr/pod-access, the pod sharing and permissions across access-control models package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-access
 
@@ -18,6 +19,11 @@ This package is security critical. Keep coverage thresholds at 100% and add beha
 tests with the implementation. Retain the migrator's conservative source readings, widest target
 readings, target ACP allowlist, bounded complexity, report IDs/options, and dialect behavior.
 Server implementation is a trusted caller assertion, never derived from editable access RDF.
+
+In-process callers are trusted code. Keep internal mode lists private and frozen and helper
+classes out of public exports; no export may let one caller alter another caller's proof.
+The public mode list is a frozen copy; returned policies and reports are caller-owned.
+Patching shared JavaScript built-ins or dependencies directly is outside this trust boundary.
 
 The migrator owns HTTP, public group snapshots, review decisions, effective target phase proofs,
 scope checks, conditional persistence, and execution. Run its tests when changing this core;
