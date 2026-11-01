@@ -3398,6 +3398,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop
