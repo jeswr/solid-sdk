@@ -22,6 +22,7 @@ import { boundedRead } from "./bounded-read";
 import {
   chooseSession,
   ExtensionSessionError,
+  isLiveStorageGrant,
   openExtensionSession,
   requestStorageAccess,
 } from "./extension-pod-session";
@@ -134,12 +135,14 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
             const session: ExtensionPodSession = {
               ...opened,
               disconnect: async () => {
+                let disconnected = false;
                 try {
                   await opened.disconnect();
+                  disconnected = true;
                 } finally {
                   // Older extensions don't broadcast class revocations. Re-read even on failure.
                   if (live) {
-                    if (isCurrent(captured)) invalidate();
+                    if (disconnected && isCurrent(captured)) invalidate();
                     await refresh();
                   }
                 }
@@ -249,7 +252,13 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
         void select(
           next.webId,
           next.webId && api.fetch ? grant : undefined,
-          grant ? undefined : new ExtensionSessionError("not-granted"),
+          grant
+            ? undefined
+            : new ExtensionSessionError(
+                grants.some((candidate) => isLiveStorageGrant(candidate, Date.now()))
+                  ? "no-storage"
+                  : "not-granted",
+              ),
           retry,
         );
       } catch (error) {

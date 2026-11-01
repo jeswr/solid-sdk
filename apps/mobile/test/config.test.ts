@@ -65,5 +65,7 @@ describe("mobileConfig", () => {
     expect(config.server).toMatchObject({ url: "http://localhost:3210", cleartext: true });
     expect(config.android?.webContentsDebuggingEnabled).toBe(true);
     expect(config.ios?.webContentsDebuggingEnabled).toBe(true);
+    // Bridge payload logging would print secure-store values, even in debug builds.
+    expect(config.loggingBehavior).toBe("none");
   });
 });
