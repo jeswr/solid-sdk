@@ -68,11 +68,17 @@ function request(root: string, now: number): Quad[] {
   ];
 }
 
-/** Records hold recipients and purposes, so only the owner may read or write them. */
+/**
+ * Records hold recipients and purposes, so only the owner may read or write them. The folder is
+ * already sealed, as pod-access leaves it: its ACL carries the random key that names decision
+ * records, so the records Permissions seeds there aren't taken for unreadable leftovers.
+ */
 function recordsAcl(root: string, owner: string): Quad[] {
   const folder = namedNode(new URL("settings/access-records/", root).href);
-  const rule = namedNode(`${folder.value}.acl#owner`);
+  const acl = `${folder.value}.acl`;
+  const rule = namedNode(`${acl}#owner`);
   return [
+    quad(namedNode(acl), namedNode(`${NS.ACCESS_MANAGER}recordsKey`), literal(crypto.randomUUID())),
     quad(rule, TYPE, namedNode(`${ACL}Authorization`)),
     quad(rule, namedNode(`${ACL}agent`), namedNode(owner)),
     quad(rule, namedNode(`${ACL}accessTo`), folder),
