@@ -34,6 +34,8 @@ and intended audience. Missing/unverifiable messages fail closed. Rendering is
 deterministic; validation and transmission enforce freshness. Lookup may reconcile
 an accepted message after expiry, using exact bytes as positive evidence.
 Parsed BridgeMessages carry unverified JSON-LD; parsing confers no authority.
+The root's pure `readEnvelope(raw)` validator is also used for daemon eligibility.
+It applies the same 64 KiB byte and compact-JWS string bounds as the direct parser.
 
 `transmit(wire, { account, tokens, dryRun? })` defaults to dry-run. Explicit
 `dryRun: false` delivers only to the isolated in-memory inbox selected by `account`;

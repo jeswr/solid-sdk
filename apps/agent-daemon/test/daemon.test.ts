@@ -1,7 +1,9 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
-import { type BridgeMessage, ChannelParseError } from "@jeswr/agent-channels";
+import { type BridgeMessage, ChannelParseError, DIRECT } from "@jeswr/agent-channels";
+import { createDirectReader } from "@jeswr/agent-channels/direct";
+import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import {
   type ApprovalContext,
   createExecutor,
@@ -636,6 +638,49 @@ it("proposes only for structured or independently owner-flagged messages", async
     await createDaemon({ ...h.options, isFlagged: vi.fn(async () => flagged) }).once();
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(flagged ? 1 : 0);
   }
+});
+it.each([
+  20_000,
+  DIRECT.maxBytes,
+])("keeps a supported %i-byte direct envelope eligible before committing its cursor", async (size) => {
+  const h = harness();
+  const reader = createDirectReader(
+    { inboxes: new Map(), accepted: new Map() },
+    new RecordingTokenProvider(),
+  );
+  const carrier = {
+    "@context": { agent: "https://jeswr.org/ns/agent#" },
+    "@type": "agent:SignedMessage",
+    "agent:wireFormat": "jws-compact",
+    "agent:compactJws": "a.b.c",
+  };
+  const padding = size - Buffer.byteLength(canonicalJson(carrier));
+  carrier["agent:compactJws"] = `${"a".repeat(padding + 1)}.b.c`;
+  const block = canonicalJson(carrier);
+  expect(Buffer.byteLength(block)).toBe(size);
+  expect(reader.ingest.parse({ id: "seed", raw: block }).jsonLdBlocks).toEqual([block]);
+  h.ingest.list.mockResolvedValue({ items: [{ id: "seed", raw: block }], next: "one" });
+  await createDaemon({
+    ...h.options,
+    accounts: [
+      {
+        id: "fixture",
+        category: "chat",
+        enabled: true,
+        binding: { id: "direct", ingest: { ...h.ingest, parse: reader.ingest.parse } },
+      },
+    ],
+  }).once();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+  expect(h.state.cursors.get("fixture")).toBe("one");
+});
+it("bounds structured eligibility even for a custom channel parser", async () => {
+  const h = harness();
+  const carrier = JSON.parse(h.message.jsonLdBlocks?.[0] ?? "null");
+  carrier["agent:compactJws"] = `${"a".repeat(DIRECT.maxBytes)}.b.c`;
+  Object.assign(h.message, { jsonLdBlocks: [canonicalJson(carrier)] });
+  await createDaemon(h.options).once();
+  expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
 });
 it.each([
   "not JSON",

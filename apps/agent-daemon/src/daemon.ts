@@ -1,13 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { ChannelParseError } from "@jeswr/agent-channels";
+import { ChannelParseError, readEnvelope } from "@jeswr/agent-channels";
 import { proposalApprovalTerms } from "@jeswr/agent-executor";
-import {
-  AGENT,
-  canonicalJson,
-  digestOf,
-  parseBoundedJson,
-  podRecordSchema,
-} from "@jeswr/agent-model";
+import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
@@ -33,17 +27,12 @@ const triageSchema = z.object({
   urgency: z.enum(["urgent", "not_urgent"]),
   confidence: z.number().min(0).max(1),
 });
-const envelopeSchema = z.strictObject({
-  "@context": z.strictObject({ agent: z.literal(AGENT) }),
-  "@type": z.literal("agent:SignedMessage"),
-  "agent:wireFormat": z.literal("jws-compact"),
-  "agent:compactJws": z.string().regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
-});
 function hasStructuredEnvelope(blocks: readonly string[] | undefined): boolean {
   if (!blocks || blocks.length > 512) return false;
   return blocks.some((block) => {
     try {
-      return envelopeSchema.safeParse(parseBoundedJson(block)).success;
+      readEnvelope(block);
+      return true;
     } catch {
       return false;
     }

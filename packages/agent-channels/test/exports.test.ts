@@ -109,6 +109,7 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
 });
 
 it("keeps send factories out of root and reader exports", () => {
+  expect(entry0).toHaveProperty("readEnvelope");
   expect(entry0).not.toHaveProperty("createDirectSend");
   expect(entry0).not.toHaveProperty("createInMemoryDirectBinding");
   expect(entry17).not.toHaveProperty("createDirectSend");
