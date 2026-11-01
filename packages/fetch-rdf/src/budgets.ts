@@ -45,28 +45,41 @@ export function jsonDepthScanner(maxDepth: number): (text: string) => void {
   };
 }
 
-/** Custom loaders already return objects; inspect without recursive serialization. */
-export function checkJsonDepth(document: unknown, maxDepth: number): void {
-  const parents: Iterator<unknown>[] = [[document].values()];
-  for (;;) {
-    const parent = parents.at(-1);
-    if (!parent) return;
-    const { value, done } = parent.next();
-    if (done) {
-      parents.pop();
-      continue;
+/**
+ * Copy a custom loader's result into plain JSON data, enforcing depth while copying.
+ * The parser receives only this snapshot, so accessors, inherited or non-enumerable
+ * properties and later mutations cannot add nesting after the check.
+ */
+export function snapshotJson(document: unknown, maxDepth: number): unknown {
+  const root: { value?: unknown } = {};
+  const stack: { source: object; target: Record<string, unknown> | unknown[]; depth: number }[] =
+    [];
+  const copy = (value: unknown, depth: number): unknown => {
+    if (value === null || typeof value !== "object") return value;
+    if (depth > maxDepth) throw parseLimit("maxJsonDepth");
+    const target: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+    stack.push({ source: value, target, depth });
+    return target;
+  };
+  root.value = copy(document, 1);
+  for (let frame = stack.pop(); frame; frame = stack.pop()) {
+    const { source, target, depth } = frame;
+    if (Array.isArray(target)) {
+      const items = source as unknown[];
+      for (let index = 0; index < items.length; index++) target.push(copy(items[index], depth + 1));
+    } else {
+      for (const key of Object.keys(source)) {
+        // Define rather than assign so a "__proto__" key stays plain data.
+        Object.defineProperty(target, key, {
+          value: copy((source as Record<string, unknown>)[key], depth + 1),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
     }
-    if (value === null || typeof value !== "object") continue;
-    if (parents.length > maxDepth) throw parseLimit("maxJsonDepth");
-    parents.push(values(value));
   }
-
-  // Keep traversal memory proportional to depth, even for very wide documents.
-  function* values(object: object): Generator<unknown> {
-    for (const key in object) {
-      if (Object.hasOwn(object, key)) yield (object as Record<string, unknown>)[key];
-    }
-  }
+  return root.value;
 }
 
 /** Check expanded terms before a quad can enter any parser output buffer. */

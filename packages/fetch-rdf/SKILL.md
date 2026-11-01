@@ -120,7 +120,7 @@ quad budgets before expansion/output buffering. Fixed parser vocabulary constant
 created during initialization are excluded from the construction count. JSON depth
 is scanned on raw text before each chunk reaches the JSON-LD parser, retaining string
 and escape state across chunks. The context helper scans while reading before
-`JSON.parse`; custom-loader objects are checked iteratively before parser handoff.
+`JSON.parse`; custom-loader results are copied into plain JSON data (own enumerable properties only) with the depth checked during the copy, and the parser receives only that copy.
 The engine path gets byte-capped input, applies its own parse limits, and its result
 is checked against `maxQuads`. Term-length and JSON-depth budgets apply only to the
 default parser. These limits do not provide a general CPU budget.

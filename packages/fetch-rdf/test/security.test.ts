@@ -461,6 +461,29 @@ describe("context budgets and cancellation", () => {
     ).rejects.toMatchObject({ code: "PARSE_LIMIT" });
   });
 
+  it("hands the parser a depth-checked snapshot, not the custom loader's own object", async () => {
+    let deep: unknown = context["@context"];
+    for (let i = 0; i < 140; i++) deep = [deep];
+    const parse = (document: object) =>
+      parseRdf(jsonld(contextUrl), "application/ld+json", {
+        documentLoader: { load: async () => document },
+        maxJsonDepth: 4,
+      });
+
+    // A non-enumerable accessor is not JSON data: the parser sees a document with no context.
+    const hidden = Object.defineProperty({}, "@context", { get: () => deep });
+    await expect(parse(hidden)).rejects.toMatchObject({ name: "RdfFetchError" });
+
+    // An accessor that deepens after validation is read exactly once, into the snapshot.
+    let reads = 0;
+    const shifting = Object.defineProperty({}, "@context", {
+      enumerable: true,
+      get: () => (reads++ === 0 ? context["@context"] : deep),
+    });
+    expect((await parse(shifting)).size).toBe(1);
+    expect(reads).toBe(1);
+  });
+
   it("preserves a custom loader's refusal in the direct parse cause", async () => {
     const failure = new Error(`Remote JSON-LD context refused: ${contextUrl}.`);
     await expect(

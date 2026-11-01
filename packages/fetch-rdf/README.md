@@ -103,7 +103,7 @@ Term construction and quad budgets run inside the parser's data factory before
 terms enter expansion buffers or quads enter the dataset. JSON depth is checked on
 raw text before each chunk reaches the JSON-LD parser, preserving string and escape
 state across chunks. The context helper checks raw text while reading, before
-`JSON.parse`; custom-loader objects are checked iteratively before parser handoff.
+`JSON.parse`; custom-loader results are copied into plain JSON data (own enumerable properties only) with the depth checked during the copy, and the parser receives only that copy.
 These limits do not provide a general CPU budget.
 
 ### JSON-LD remote contexts

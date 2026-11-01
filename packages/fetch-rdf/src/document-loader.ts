@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
   bufferBody,
-  checkJsonDepth,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_JSON_DEPTH,
   jsonDepthScanner,
   limit,
   parseLimit,
+  snapshotJson,
 } from "./budgets.js";
 import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
@@ -171,8 +171,7 @@ export function parseDocumentLoader(
         loader.load(url, { signal, maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES, maxJsonDepth }),
         signal,
       );
-      checkJsonDepth(document, maxJsonDepth);
-      return document;
+      return snapshotJson(document, maxJsonDepth) as typeof document;
     } finally {
       const next = waiting.shift();
       if (next) next();
