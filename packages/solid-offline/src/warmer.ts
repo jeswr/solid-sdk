@@ -9,6 +9,12 @@
 
 import { type ReadResult, type StorageClient, StorageError } from '@jeswr/storage-client';
 import { policyResponse } from './storage.js';
+import {
+  LARGE_RESOURCE_BYTES,
+  WarmLimitError,
+  warmContentLength,
+  warmStorage,
+} from './warm-transport.js';
 import { deriveSeeds, type Seed, type SeedKind, typeIndexTargets } from './warmer-rdf.js';
 
 /** Fully-resolved warmer budget (decision 6 defaults). */
@@ -40,9 +46,6 @@ const BINARY_TYPE_PREFIXES = [
   'application/pdf',
   'application/zip',
 ];
-
-/** Size (bytes) above which even a non-binary resource is skipped to protect the byte budget. */
-const LARGE_RESOURCE_BYTES = 5_000_000;
 
 export interface WarmDeps {
   /** Authenticated page-side client; all reads stay inside its storage boundary. */
@@ -146,6 +149,27 @@ export async function warm(
   webId: string,
   deps: WarmDeps,
   budget: ResolvedWarmBudget = DEFAULT_WARM_BUDGET,
+  profileTurtle?: string,
+  opts?: { seeds?: string[] },
+): Promise<WarmResult> {
+  const guarded = await warmStorage(deps.storage, budget, deps.signal);
+  let result: WarmResult | undefined;
+  try {
+    result = await crawl(webId, { ...deps, storage: guarded.storage }, budget, profileTurtle, opts);
+    return result;
+  } finally {
+    const snapshot = await guarded.close();
+    if (result && snapshot) {
+      result.bytes = Math.max(result.bytes, snapshot.bytes);
+      result.budgetHit ||= snapshot.budgetHit;
+    }
+  }
+}
+
+async function crawl(
+  webId: string,
+  deps: WarmDeps,
+  budget: ResolvedWarmBudget,
   profileTurtle?: string,
   opts?: { seeds?: string[] },
 ): Promise<WarmResult> {
@@ -291,7 +315,7 @@ async function visit(
 
   // #9: HEAD-probe first. A binary / declared-large resource is recorded
   // metadata-only and short-circuits here, so the byte-pulling GET is never issued.
-  if (await probeHeadForSkip(item, state, deps)) return discovered;
+  if (await probeHeadForSkip(item, state, deps, budget)) return discovered;
 
   // #10: reserve the byte-budget slot synchronously BEFORE the GET (the GET is what
   // flows through the SW + caches bytes), so concurrent workers can't overshoot.
@@ -305,6 +329,17 @@ async function visit(
     });
   } catch (error) {
     state.visited += 1;
+    if (error instanceof WarmLimitError) {
+      state.bytes += error.observation.bytes;
+      state.budgetHit ||= error.budgetHit;
+      recordVisit(state, deps, {
+        ...item,
+        status: error.observation.status,
+        bytes: error.observation.bytes,
+        skipped: error.observation.skipped,
+      });
+      return discovered;
+    }
     if (error instanceof StorageError && (error.status === 403 || error.status === 404)) {
       return pruneForbidden(item, error.status, state, deps, discovered);
     }
@@ -323,11 +358,17 @@ async function probeHeadForSkip(
   item: FrontierItem,
   state: CrawlState,
   deps: WarmDeps,
+  budget: ResolvedWarmBudget,
 ): Promise<boolean> {
   try {
     const head = await deps.storage.head(item.url, { signal: deps.signal });
-    const length = policyResponse(head)?.headers.get('content-length') ?? null;
-    const skipped = sizeSkipReason(head.contentType, length);
+    const length =
+      warmContentLength(head) ?? policyResponse(head)?.headers.get('content-length') ?? null;
+    let skipped = sizeSkipReason(head.contentType, length);
+    if (!skipped && bodyBytes(null, length) > budget.maxBytes - state.bytes) {
+      skipped = 'large-resource';
+      state.budgetHit = true;
+    }
     if (!skipped) return false;
     state.visited += 1;
     recordVisit(state, deps, {
@@ -374,7 +415,8 @@ async function warmGetResponse(
   // Absent header ⇒ proceed (a child 403 prunes later).
   const canRead = res.allow?.read !== false;
   const contentType = res.contentType;
-  const contentLength = policyResponse(res)?.headers.get('content-length') ?? null;
+  const contentLength =
+    warmContentLength(res) ?? policyResponse(res)?.headers.get('content-length') ?? null;
   const container = res.kind === 'container';
 
   // Binary / declared-large: record metadata only, never pull the bytes.
@@ -509,6 +551,7 @@ async function enumerateContainer(
 }
 
 function budgetExceeded(state: CrawlState, budget: ResolvedWarmBudget): boolean {
+  if (state.budgetHit) return true;
   // Check RESERVATIONS, not just completed `warmed` (the #10 LOW corrective): once
   // `reserved` hits the cap, admitting more frontier items would only generate
   // more HEAD probes for resources we'll never warm. `reserved >= warmed` always,

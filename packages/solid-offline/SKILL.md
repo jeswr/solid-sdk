@@ -45,7 +45,7 @@ Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry.
 - Respect `Vary`; normalize supported RDF reads to the canonical accept value without collapsing genuinely different variants.
 - On an online hit, serve immediately and conditionally revalidate. A `304` refreshes metadata; a changed `200` replaces bytes and broadcasts an update.
 - Treat notification `state`/ETag equality as a fast no-op, not a universal correctness assumption. Reconcile after disconnects.
-- Bound warming by resource count, bytes, depth, and concurrency. Prune unreadable subtrees and avoid eager caching of large binary bodies.
+- Bound warming by resource count, bytes, depth, and concurrency. Acknowledge the worker budget session before intercepted StorageClient reads, retain HEAD size evidence, and validate streams before Cache.put; never retry guarded failures outside the budget. Prune unreadable subtrees and avoid eager caching of large binary bodies.
 - Keep app-shell caches versioned and separate from pod-data caches. Cache only explicitly declared public shell URLs.
 
 ## Status and React integration

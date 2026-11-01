@@ -46,7 +46,18 @@ function makeInstallingWorker() {
 
 /** Stub the minimal browser globals `register()`/`close()` touch. */
 function stubBrowser() {
-  const active: FakeSW = { postMessage: vi.fn() };
+  const active: FakeSW = {
+    postMessage: vi.fn((message, ports?: MessagePort[]) => {
+      if (message.type !== 'warm-start') return;
+      const port = ports?.[0];
+      if (!port) return;
+      port.onmessage = ({ data }) => {
+        port.postMessage({ id: data.id, snapshot: { bytes: 0, budgetHit: false } });
+        if (data.type === 'close') port.close();
+      };
+      port.postMessage({ id: 0, snapshot: { bytes: 0, budgetHit: false } });
+    }),
+  };
   const controllerListeners = new Map<string, Set<() => void>>();
   const swContainer = {
     controller: active,

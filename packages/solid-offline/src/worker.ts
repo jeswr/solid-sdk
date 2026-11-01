@@ -39,6 +39,7 @@ import { cacheNameForWebId, isScopeChange } from './scope.js';
 import { createPolicyStorage } from './storage.js';
 import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
 import type { AppShellConfig, OfflineClientConfig, PageToWorkerMessage } from './types.js';
+import { type WarmStartMessage, WorkerWarmSession } from './warm-transport.js';
 
 declare const self: ServiceWorkerGlobalScope & {
   /**
@@ -63,6 +64,7 @@ let channel: BroadcastChannel | undefined;
 let configuredWebId: string | undefined;
 let storageRoot: string | undefined;
 let storageBackend: OfflineClientConfig['storageBackend'];
+const warmSessions = new Map<string, WorkerWarmSession>();
 let invalidationGeneration = 0;
 /** Tracks whether `configuredWebId` has ever been set by a config message. */
 let webIdConfigured = false;
@@ -271,11 +273,46 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
 });
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
-  const data = event.data as PageToWorkerMessage | undefined;
+  const data = event.data as PageToWorkerMessage | WarmStartMessage | undefined;
   if (!data || typeof data !== 'object') return;
+  if (data.type === 'warm-start') {
+    const port = event.ports?.[0];
+    const client = event.source as Client | null;
+    if (!port) return;
+    if (
+      !client?.id ||
+      warmSessions.has(client.id) ||
+      data.root !== storageRoot ||
+      !Number.isSafeInteger(data.maxBytes) ||
+      data.maxBytes < 0
+    ) {
+      port.postMessage({ id: 0, error: 'Worker warming scope unavailable or already active' });
+      port.close();
+      return;
+    }
+    const session = new WorkerWarmSession(data.root, data.maxBytes);
+    warmSessions.set(client.id, session);
+    event.waitUntil(
+      new Promise<void>((resolve) => {
+        port.onmessage = (message) => {
+          const command = message.data;
+          port.postMessage({ id: command.id, snapshot: session.command(command) });
+          if (command.type === 'close') {
+            if (warmSessions.get(client.id) === session) warmSessions.delete(client.id);
+            port.close();
+            resolve();
+          }
+        };
+        port.postMessage({ id: 0, snapshot: session.command({ type: 'inspect' }) });
+      }),
+    );
+    return;
+  }
   if (data.type === 'config') {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
+    if (storageRoot !== data.config.storageRoot || configuredWebId !== data.config.webId)
+      for (const session of warmSessions.values()) session.close();
     storageRoot = data.config.storageRoot;
     storageBackend = data.config.storageBackend;
     invalidationGeneration += 1;
@@ -552,6 +589,16 @@ async function respond(event: FetchEvent): Promise<Response> {
     isOnline: () => self.navigator.onLine,
   };
 
+  const warming = warmSessions.get(event.clientId);
+  const guarded =
+    warming?.matches(event.request) &&
+    createSolidBackend({ root: warming.root, fetch: deps.fetch }).isWithinStorage(event.request.url)
+      ? warming
+      : undefined;
+  if (guarded) {
+    const transport = deps.fetch;
+    deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
+  }
   try {
     const result = await handleFetch(event.request, deps);
     // Keep background revalidation alive past the response if the SW supports it.
@@ -560,6 +607,8 @@ async function respond(event: FetchEvent): Promise<Response> {
     }
     return result.response;
   } catch {
+    // A warming failure must never retry outside the transport budget.
+    if (guarded) return new Response(null, { status: 413 });
     // Never-authoritative: on any engine error, fall back to the live network so
     // the page still gets an authoritative answer.
     return self.fetch(event.request);
