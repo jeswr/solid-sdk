@@ -47,7 +47,7 @@ export function AccountMenu() {
         <PopoverTrigger asChild>
           {/* No aria-label: the sr-only sentence names it, so the name and its text agree
               (axe label-content-name-mismatch, WCAG 2.5.3). */}
-          <Button ref={trigger} className="suite-shell-icon-button" variant="ghost" size="icon">
+          <Button ref={trigger} className="suite-shell-icon-button" variant="ghost">
             <span className="suite-sr-only">Account: {active.name}</span>
             {/* Initials are decoration; the name is the sentence above (WCAG 2.5.3). */}
             <span aria-hidden="true">

@@ -51,10 +51,10 @@ test("demo tray groups notifications, approves Editor, marks read and dismisses 
   await expect(page.getByRole("region", { name: "Earlier", exact: true })).toBeVisible();
   await capture(page, "populated", info.project.name);
   const row = page.getByRole("listitem").filter({ hasText: "Rowan Vale requested access" });
-  await row.getByRole("combobox", { name: "Role", exact: true }).click();
+  await row.getByRole("combobox", { name: /^Role for / }).click();
   await page.getByRole("option", { name: "Editor", exact: true }).click();
   await expect(row.getByText("Not available on this storage", { exact: true })).toBeVisible();
-  await row.getByRole("button", { name: "Approve", exact: true }).click();
+  await row.getByRole("button", { name: /^Approve access to / }).click();
   await expect(row.getByRole("status")).toHaveText("Approved for Editor");
   await capture(page, "approved", info.project.name);
   await page.getByRole("button", { name: "Mark all read", exact: true }).click();
@@ -99,12 +99,12 @@ test("fixture covers loading, errors, decision retry, durations and sync conflic
     .getByRole("combobox", { name: "Fixture state", exact: true })
     .selectOption("decision-error");
   const row = page.getByRole("listitem").filter({ hasText: "Rowan Vale requested access" });
-  await row.getByRole("combobox", { name: "Role", exact: true }).click();
+  await row.getByRole("combobox", { name: /^Role for / }).click();
   await page.getByRole("option", { name: "Editor", exact: true }).click();
   await row.getByRole("radio", { name: "1 day", exact: true }).click();
   await expect(row.getByRole("radio", { name: "1 day", exact: true })).toBeChecked();
   await expect(row.getByRole("radio", { name: "Custom", exact: true })).toHaveCount(0);
-  await row.getByRole("button", { name: "Approve", exact: true }).click();
+  await row.getByRole("button", { name: /^Approve access to / }).click();
   await expect(row.getByRole("alert")).toContainText("Couldn't save this decision");
   await capture(page, "decision-error", info.project.name);
   await row.getByRole("button", { name: "Retry", exact: true }).click();
@@ -121,7 +121,7 @@ test("keyboard denial, notification shortcut and 320px reflow", async ({ page },
   await expect(page).toHaveURL(/\/notifications$/);
   await page.setViewportSize({ width: 320, height: 900 });
   const row = page.getByRole("listitem").filter({ hasText: "Rowan Vale requested access" });
-  const deny = row.getByRole("button", { name: "Deny", exact: true });
+  const deny = row.getByRole("button", { name: /^Deny access to / });
   await deny.focus();
   await deny.press("Enter");
   await expect(row.getByRole("status")).toHaveText("Denied");

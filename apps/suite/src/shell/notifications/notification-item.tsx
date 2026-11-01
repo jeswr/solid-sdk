@@ -120,6 +120,7 @@ export function NotificationItem({
           <div className={styles.request} aria-busy={pending}>
             <fieldset className="su-fieldset" disabled={pending}>
               <RoleSelect
+                label={`Role for ${item.request.resourceName}`}
                 value={role}
                 onChange={(next) => {
                   if (next !== "manager" && item.request?.roles.includes(next)) setRole(next);
@@ -164,14 +165,14 @@ export function NotificationItem({
                   })
                 }
               >
-                Approve
+                Approve<span className="suite-sr-only"> access to {item.request.resourceName}</span>
               </Button>
               <Button
                 variant="outline"
                 disabled={pending}
                 onClick={() => void decide({ approve: false })}
               >
-                Deny
+                Deny<span className="suite-sr-only"> access to {item.request.resourceName}</span>
               </Button>
             </div>
             {pending && <p role="status">Saving decision…</p>}

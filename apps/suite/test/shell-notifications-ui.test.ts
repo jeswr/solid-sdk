@@ -84,14 +84,14 @@ it("groups, approves Editor with retry, clears the badge, dismisses all and has 
   if (!request) throw new Error("Request row missing");
   const row = within(request);
   fireEvent(
-    row.getByRole("combobox", { name: "Role" }),
+    row.getByRole("combobox", { name: /^Role for / }),
     Object.assign(new MouseEvent("pointerdown", { bubbles: true, button: 0 }), {
       pointerType: "mouse",
     }),
   );
   fireEvent.click(await screen.findByRole("option", { name: "Editor" }));
   fireEvent.click(row.getByRole("radio", { name: "1 day" }));
-  fireEvent.click(row.getByRole("button", { name: "Approve" }));
+  fireEvent.click(row.getByRole("button", { name: /^Approve/ }));
   await row.findByRole("alert");
   await accessible();
   fireEvent.click(row.getByRole("button", { name: "Retry" }));
@@ -110,7 +110,7 @@ it("explains unsupported expiry, disables duration choices and confirms denial i
   await accessible();
   for (const radio of screen.getAllByRole("radio"))
     expect((radio as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Deny/ }));
   await screen.findByText("Denied", { exact: true });
-  expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Approve/ })).toBeNull();
 });
