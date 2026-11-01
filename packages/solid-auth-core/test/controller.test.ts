@@ -3890,6 +3890,60 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
     }
   });
 
+  it("restore() refuses (and forgets) a credential whose WebID profile no longer lists the issuer", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
+      });
+      await controller.login(Alice);
+      await controller.dropLiveSession();
+
+      // The profile now names a different OP: this issuer may no longer sign in as Alice.
+      agentIssuer = "https://other-idp.example/";
+      const outcome = await controller.restore();
+      expect(outcome).toEqual({ outcome: "login" });
+      expect(controller.webId).toBeNull();
+      expect(store.map.has(Issuer)).toBe(false);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("restore() restores nothing but KEEPS the credential when the profile cannot be read", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
+      });
+      await controller.login(Alice);
+      await controller.dropLiveSession();
+
+      issuerResolveDelay = async () => {
+        throw new Error("profile host unreachable");
+      };
+      const outcome = await controller.restore();
+      expect(outcome).toEqual({ outcome: "login" });
+      expect(controller.webId).toBeNull();
+      expect(store.map.has(Issuer)).toBe(true); // a transient outage must not cost the credential
+    } finally {
+      issuerResolveDelay = undefined;
+      ls.restore();
+    }
+  });
+
   it("logout() (the contrast) DELETES the credential + pointer; a subsequent restore() falls back to login", async () => {
     const store = new RecordingStore();
     const ls = installKeyedLocalStorage();

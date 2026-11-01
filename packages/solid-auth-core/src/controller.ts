@@ -1370,6 +1370,21 @@ class SolidAuthEngine implements SolidAuth {
       if (generation === this.#generation) await this.#forget(issuer);
       return undefined;
     }
+    // ISSUER-BINDING GUARD: the restored WebID's profile must (still) list this issuer as a
+    // solid:oidcIssuer. Covers credentials persisted before issuer-only logins were bound,
+    // and a user who has since removed this OP from their profile. A profile that cannot
+    // be read keeps the credential (it may be a transient outage) but restores nothing.
+    let bound: boolean;
+    try {
+      bound = (await this.#advertisedIssuers(restored.webId)).some((i) => sameIssuer(i, issuer));
+    } catch {
+      return undefined;
+    }
+    if (generation !== this.#generation) return undefined;
+    if (!bound) {
+      await this.#forget(issuer);
+      return undefined;
+    }
     // We don't have the full AS/client here; rebuild a minimal live session for the
     // authenticated-fetch path. Re-discover lazily on a refresh via the provider.
     // The session is tagged with THIS restore's generation so a later refresh of it
@@ -3331,11 +3346,17 @@ function needsInteraction(e: unknown): boolean {
  * slash, as discovery normalises it). Unparseable values never match (fail-closed).
  */
 function sameIssuer(advertised: string, issuer: URL): boolean {
+  let candidate: URL;
   try {
-    return new URL(advertised).href.replace(/\/$/, "") === issuer.href.replace(/\/$/, "");
+    candidate = new URL(advertised);
   } catch {
     return false;
   }
+  // An OIDC issuer identifier has no query or fragment (OIDC Discovery §3); refuse
+  // either rather than compare them, and only forgive a trailing slash on the PATH.
+  if (candidate.search || candidate.hash || issuer.search || issuer.hash) return false;
+  const trim = (path: string) => path.replace(/\/$/, "");
+  return candidate.origin === issuer.origin && trim(candidate.pathname) === trim(issuer.pathname);
 }
 
 /** The WebID from Solid-OIDC id_token claims (`webid`, else `sub`). */

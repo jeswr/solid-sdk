@@ -562,7 +562,16 @@ describe("completeRedirectLogin", () => {
     await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
     expect(auth.webId).toBeNull(); // no session, no credential, no pointer
     expect(store.puts).toHaveLength(0);
+    expect(auth.recentAccounts()).toHaveLength(0);
     expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
+  });
+
+  it("issuer-only login: an issuer with a query component never matches (OIDC issuers have none)", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/?tenant=alice" });
+    agentIssuer = "https://idp.example/?tenant=alice/";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull();
   });
 
   it("REJECTS a non-DPoP (Bearer) token_type (sender-constraint enforced)", async () => {
