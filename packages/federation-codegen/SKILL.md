@@ -45,6 +45,9 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
   emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
   literal datatypes, prefix names and namespace IRIs immediately before `n3.Writer`.
+  The shared runtime validators also check term kinds/positions, Turtle blank-node
+  labels and BCP 47 language tags. Re-parse buffered output and verify the same
+  quad set with a known blank-node bijection before returning it; fail with `TypeError`.
   Generated per-node `subject()` handles call
   runtime `subjectIri`, rejecting unsafe resources with `TypeError` and preserving
   exact lexical identity for safe resources and derived fragment IRIs.
@@ -58,6 +61,9 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   Inline or unprojected `sh:node` values are admission errors. Every projected parameter
   retains strict RDF term-kind, datatype and lexical validation; enum literals use the
   runtime's `readLiteral` reader.
+  Decimal/integer bounds and enums must preserve canonical decimal spelling through
+  JS number conversion. Reject noncanonical literal enum members that the runtime
+  writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.
 - Config may add guards (defaults, trims, sort, http(s) scheme) but never contradict the
   shape; the fidelity assertion fails if a required guard is missing or disagrees with SHACL.
   Config defaults on Violation `minCount >= 1` fields are rejected.

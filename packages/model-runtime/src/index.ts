@@ -68,3 +68,5 @@ export {
   type Model,
   type ModelEntity,
 } from "./model.js";
+
+export { assertSerializedQuads, assertWritableQuads } from "./rdf.js";

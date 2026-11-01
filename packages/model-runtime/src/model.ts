@@ -123,6 +123,35 @@ function planField(field: ManifestField): FieldPlan {
   return { field, mapper };
 }
 
+/** Enum reads compare RDF identity BEFORE conversion can erase lexical spelling. */
+function enumTermMatches(doc: TermWrapper, plan: FieldPlan, term: Term): boolean {
+  const { field, mapper } = plan;
+  if (field.in === undefined) return true;
+  return field.in.some(
+    (member) =>
+      tryRead(() => {
+        const canonical = mapper.from(member as never, doc.factory);
+        return term.termType === "Literal" && canonical.termType === "Literal"
+          ? term.value === canonical.value &&
+              term.datatype.value === canonical.datatype.value &&
+              term.language === canonical.language
+          : term.termType === "NamedNode" &&
+              canonical.termType === "NamedNode" &&
+              term.value === canonical.value;
+      }) === true,
+  );
+}
+
+function sanitizeLiteral(plan: FieldPlan, value: unknown): unknown {
+  return plan.field.kind === "literal" &&
+    plan.mapper.jsType === "string" &&
+    typeof value === "string" &&
+    plan.mapper.lexicalValid === undefined &&
+    plan.field.guards?.sanitizeText !== false
+    ? sanitizeText(value)
+    : value;
+}
+
 /** Whether a field is an IRI field carrying the http(s)-only scheme guard. */
 function hasIriSchemeGuard(field: ManifestField): boolean {
   return field.kind === "iri" && field.guards?.iriScheme !== undefined;
@@ -288,10 +317,14 @@ function makeGuardedSet(
       out.push(g);
     };
     if (iri) {
-      for (const raw of rawNamedNodeValues(doc, predicate)) push(raw);
+      for (const raw of rawNamedNodeValues(doc, predicate)) {
+        if (field.in !== undefined && !field.in.includes(raw)) continue;
+        push(raw);
+      }
     } else {
       const pred = doc.factory.namedNode(predicate);
       for (const q of doc.dataset.match(doc as unknown as Term, pred, null, null)) {
+        if (!enumTermMatches(doc, { field, mapper }, q.object)) continue;
         push(tryRead(() => mapper.as(new TermWrapper(q.object, doc.dataset, doc.factory))));
       }
     }
@@ -346,19 +379,17 @@ function makeGuardedSet(
     forEach(callback: (v: unknown, v2: unknown, s: Set<unknown>) => void, thisArg?: unknown) {
       for (const v of validMembers()) callback.call(thisArg, v, v, guarded);
     },
-    keys() {
-      return validMembers()[Symbol.iterator]();
+    *keys() {
+      yield* validMembers();
     },
-    values() {
-      return validMembers()[Symbol.iterator]();
+    *values() {
+      yield* validMembers();
     },
-    entries() {
-      return validMembers()
-        .map((v) => [v, v] as [unknown, unknown])
-        [Symbol.iterator]();
+    *entries() {
+      for (const value of validMembers()) yield [value, value] as [unknown, unknown];
     },
-    [Symbol.iterator]() {
-      return validMembers()[Symbol.iterator]();
+    *[Symbol.iterator]() {
+      yield* validMembers();
     },
     get size() {
       return validMembers().length;
@@ -391,6 +422,7 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
     if (object === undefined) continue;
     present = true;
     if (field.maxCount === 0) return undefined;
+    if (!enumTermMatches(doc, plan, object)) continue;
     const raw = tryRead(() => mapper.as(new TermWrapper(object, doc.dataset, doc.factory)));
     const value = normalise(raw);
     // Undefined alone triggers fallback: false, zero and the empty string win.
@@ -485,19 +517,17 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
     forEach(callback, thisArg?) {
       for (const value of members()) callback.call(thisArg, value, value, union);
     },
-    keys() {
-      return members()[Symbol.iterator]();
+    *keys() {
+      yield* members();
     },
-    values() {
-      return members()[Symbol.iterator]();
+    *values() {
+      yield* members();
     },
-    entries() {
-      return members()
-        .map((value) => [value, value] as [unknown, unknown])
-        [Symbol.iterator]();
+    *entries() {
+      for (const value of members()) yield [value, value] as [unknown, unknown];
     },
-    [Symbol.iterator]() {
-      return members()[Symbol.iterator]();
+    *[Symbol.iterator]() {
+      yield* members();
     },
     get size() {
       return members().length;
@@ -534,12 +564,7 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   // would silently REPAIR an invalid value (`"PT30M\u0000"` → `"PT30M"`); it is
   // validated RAW by applyDatatypeValidity below, so an invalid input drops fail-closed.
   if (v !== undefined && mapper.jsType === "string") {
-    v =
-      typeof v === "string"
-        ? mapper.lexicalValid !== undefined || field.guards?.sanitizeText === false
-          ? v
-          : sanitizeText(v)
-        : undefined;
+    v = typeof v === "string" ? sanitizeLiteral(plan, v) : undefined;
   }
   // Lexical validity (e.g. xsd:duration) + numeric-range / string-length guards.
   v = applyDatatypeValidity(mapper, v);
@@ -597,7 +622,7 @@ function makeWrapperClass(
         get(this: TermWrapper) {
           return fieldSet(this, plan);
         },
-        enumerable: true,
+        enumerable: false,
         configurable: true,
       });
     } else {
@@ -608,7 +633,7 @@ function makeWrapperClass(
         set(this: TermWrapper, value: unknown) {
           writeSingle(this, plan, value);
         },
-        enumerable: true,
+        enumerable: false,
         configurable: true,
       });
     }
@@ -623,26 +648,15 @@ function makeWrapperClass(
  * emptyStringDrop / defaultNow / materializeDefault). Shared by the flat + composite paths.
  */
 function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): void {
-  const { field, mapper } = plan;
+  const { field } = plan;
   const raw = data[field.name];
   if (field.collection === "set") {
     const set = fieldSet(doc, plan);
     const members = Array.isArray(raw) ? raw : [];
     for (const member of members) {
-      let m: unknown = member;
+      let m = sanitizeLiteral(plan, member);
       if (field.guards?.trim && typeof m === "string") m = m.trim();
       if (field.guards?.dropBlank && (m === "" || m === undefined || m === null)) continue;
-      // Sanitize LITERAL text members only; IRI members are canonicalised +
-      // scheme-filtered by the filtered set's add (never sanitized as text).
-      if (
-        field.kind === "literal" &&
-        mapper.jsType === "string" &&
-        typeof m === "string" &&
-        field.guards?.sanitizeText !== false &&
-        mapper.lexicalValid === undefined // a narrowed-lexical member is validated RAW
-      ) {
-        m = sanitizeText(m);
-      }
       // Datatype validity + numeric-range / string-length guards + IRI canonicalisation
       // are ALL applied by the guarded set's `add` (in the correct order), so a raw
       // member is handed straight to it.
@@ -650,7 +664,7 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
     }
     return;
   }
-  let v = raw;
+  let v = sanitizeLiteral(plan, raw);
   // emptyStringDrop drops ONLY an empty string (not a valid falsy 0 / false).
   if (field.kind === "literal" && field.guards?.emptyStringDrop && v === "") v = undefined;
   if (v === undefined && field.defaultNow) v = new Date();

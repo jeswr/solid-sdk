@@ -62,6 +62,37 @@ export function isTurtlePrefixName(value: unknown): value is string {
   return last !== ".";
 }
 
+/** Turtle BLANK_NODE_LABEL, excluding the `_:` introducer. */
+export function isTurtleBlankNodeLabel(value: string): boolean {
+  if (value === "") return false;
+  let first = true;
+  let last = "";
+  for (const ch of value) {
+    if (
+      first
+        ? !PN_CHARS_BASE.test(ch) && !/^[_0-9]$/.test(ch)
+        : ch !== "." && !PN_CHARS_BASE.test(ch) && !PN_CHARS_EXTRA.test(ch)
+    )
+      return false;
+    first = false;
+    last = ch;
+  }
+  return last !== ".";
+}
+
+/** XML 1.0 Name/NCName/Nmtoken productions used by the XSD string family. */
+export function isXsdName(value: string, kind: "Name" | "NCName" | "NMTOKEN"): boolean {
+  if (!value) return false;
+  let first = true;
+  for (const ch of value) {
+    const start = PN_CHARS_BASE.test(ch) || ch === "_" || (kind !== "NCName" && ch === ":");
+    if (!start && ((first && kind !== "NMTOKEN") || (ch !== "." && !PN_CHARS_EXTRA.test(ch))))
+      return false;
+    first = false;
+  }
+  return true;
+}
+
 /** Validate both the resource and its derived subject, preserving lexical identity. */
 export function subjectIri(resourceUrl: string, fragment?: string): string {
   if (!isSafeAbsoluteIri(resourceUrl))

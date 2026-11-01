@@ -12,7 +12,7 @@
 import type { DataFactory, Term } from "@rdfjs/types";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, type TermWrapper } from "@rdfjs/wrapper";
 
-import { isSafeAbsoluteIri } from "./guards.js";
+import { isSafeAbsoluteIri, isXsdName } from "./guards.js";
 
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 
@@ -275,8 +275,8 @@ export function isXsdDate(value: string): boolean {
  * malformed dateTime literals with every other malformed-literal drop; the field's
  * `requiredFailClosed` grading then decides admit/reject as usual.
  *
- * A lexically-valid value JS `Date` cannot represent (a negative/far year, or an
- * offset-timezoned `xsd:date`, which V8 refuses to parse) also drops fail-closed:
+ * A lexically-valid value JS `Date` cannot represent (outside its time range, or an
+ * offset-timezoned `xsd:date`) also drops fail-closed:
  * `Date` is the surface type, and a value it cannot faithfully carry must never
  * surface as `Invalid Date`.
  */
@@ -290,7 +290,21 @@ function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
       throw new Error("date/dateTime: term datatype does not match the field datatype");
     }
     if (!lexicalValid(t.value)) throw new Error("date/dateTime: invalid XSD lexical");
-    const d = new Date(t.value);
+    // Translate ONLY the validated XSD year into ECMAScript's expanded-year
+    // syntax; V8 otherwise refuses wide dateTimes and misreads negative dates.
+    const m = (isDate ? XSD_DATE_RE : XSD_DATETIME_RE).exec(t.value);
+    if (!m) throw new Error("date/dateTime: invalid XSD lexical");
+    const year = Number(m[1]);
+    if (!Number.isSafeInteger(year) || Math.abs(year) > 275760 || Object.is(year, -0))
+      throw new Error("date year out of range");
+    const jsYear =
+      year < 0 || year > 9999
+        ? `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`
+        : String(year).padStart(4, "0");
+    const lexical = isDate
+      ? `${jsYear}-${m[2]}-${m[3]}T00:00:00${m[4] ?? "Z"}`
+      : jsYear + t.value.slice((m[1] as string).length);
+    const d = new Date(lexical);
     if (!Number.isFinite(d.getTime())) {
       throw new Error("date/dateTime: value not representable as a JS Date");
     }
@@ -302,7 +316,6 @@ function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
       // parsed Date's UTC calendar date against the lexical's own fields; any
       // disagreement (or a non-UTC offset an engine someday accepts — the UTC
       // fields would not be the lexical's calendar date) drops fail-closed.
-      const m = XSD_DATE_RE.exec(t.value);
       const tz = m?.[4];
       if (
         m === null ||
@@ -342,9 +355,8 @@ function utcDateLexical(value: Date): string {
  * (`LiteralFrom.date` writes the full `toISOString()` dateTime lexical tagged
  * `xsd:date`, which is not in `xsd:date`'s lexical space and would (correctly)
  * fail the strict read-back.) Time-of-day is dropped — inherent to `xsd:date`'s
- * value space. A year-0 / negative-year lexical is written VALID but V8 cannot
- * faithfully re-parse it — the strict reader drops it fail-closed (see
- * {@link dateAs}) rather than surfacing a wrong value.
+ * value space. The reader translates the XSD year to ECMAScript syntax so year
+ * zero, negative and expanded years all round-trip faithfully.
  */
 function dateFrom(value: Date, factory: DataFactory): Term {
   return factory.literal(`${utcDateLexical(value)}Z`, factory.namedNode(`${XSD}date`));
@@ -360,11 +372,8 @@ function dateFrom(value: Date, factory: DataFactory): Term {
  * `-000001-…` (a six-digit zero-padded year — XSD prohibits leading zeros beyond
  * four digits; it round-tripped only by riding V8's own leniency, and a conforming
  * XSD consumer rejects it). Years 0–9999 serialize byte-identically to
- * `toISOString()`. As with `xsd:date`, an expanded/negative-year lexical is written
- * VALID but V8 cannot faithfully re-parse the XSD dateTime form (it REFUSES —
- * `new Date("100000-01-01T…Z")` is an `Invalid Date`, never a misparse) — the
- * strict reader drops it fail-closed (see {@link dateAs}) rather than surfacing a
- * wrong value; an old-form `-000001-…` literal already in a store still reads.
+ * `toISOString()`. The reader translates the validated XSD year to ECMAScript
+ * syntax, allowing expanded and negative years to round-trip too.
  */
 function dateTimeFrom(value: Date, factory: DataFactory): Term {
   const hours = String(value.getUTCHours()).padStart(2, "0");
@@ -415,9 +424,48 @@ function numericAs(datatype: string, integer: boolean): (term: TermWrapper) => n
     if (!valid) throw new Error("invalid XSD numeric lexical");
     const value = Number(lex);
     if (!Number.isFinite(value)) throw new Error("numeric value is not finite");
+    if (canonicalDecimal(lex) !== canonicalDecimal(toPlainDecimalString(value))) {
+      throw new Error("numeric lexical loses precision through a JS number");
+    }
     return value;
   };
 }
+
+/** Exact decimal identity, ignoring redundant signs/zeros, without numeric conversion. */
+function canonicalDecimal(lexical: string): string {
+  const negative = lexical.startsWith("-");
+  const [whole = "", fraction = ""] = lexical.replace(/^[+-]/, "").split(".");
+  const integer = whole.replace(/^0+/, "") || "0";
+  const tail = fraction.replace(/0+$/, "");
+  return `${negative && (integer !== "0" || tail !== "") ? "-" : ""}${integer}${tail ? `.${tail}` : ""}`;
+}
+
+// Conservative lexical spaces: whitespace-normalizing XSD types accept only
+// their normalized spelling. Reject rather than silently repair RDF identity.
+const normalizedString = (s: string) => {
+  for (const ch of s) {
+    const c = ch.codePointAt(0) as number;
+    if (!(c >= 0x20 && (c <= 0xd7ff || (c >= 0xe000 && c <= 0xfffd) || c >= 0x10000))) return false;
+  }
+  return true;
+};
+const token = (s: string) => normalizedString(s) && !/^ | $| {2}/.test(s);
+const listOf = (s: string, kind: "NCName" | "NMTOKEN") =>
+  s !== "" && token(s) && s.split(" ").every((part) => isXsdName(part, kind));
+const STRING_LEXICAL: Record<string, (s: string) => boolean> = {
+  normalizedString,
+  token,
+  language: (s) => normalizedString(s) && /^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/.test(s),
+  Name: (s) => isXsdName(s, "Name"),
+  NCName: (s) => isXsdName(s, "NCName"),
+  NMTOKEN: (s) => isXsdName(s, "NMTOKEN"),
+  ID: (s) => isXsdName(s, "NCName"),
+  IDREF: (s) => isXsdName(s, "NCName"),
+  ENTITY: (s) => isXsdName(s, "NCName"),
+  NMTOKENS: (s) => listOf(s, "NMTOKEN"),
+  IDREFS: (s) => listOf(s, "NCName"),
+  ENTITIES: (s) => listOf(s, "NCName"),
+};
 
 function booleanAs(term: TermWrapper): boolean {
   const lex = literalLexical(term, `${XSD}boolean`);
@@ -435,12 +483,19 @@ function booleanAs(term: TermWrapper): boolean {
  */
 export function literalMapper(datatypeIri: string): DatatypeMapper {
   const iri = expandDatatype(datatypeIri);
+  const local = localOf(iri);
+  const lexicalValid =
+    iri.startsWith(XSD) && Object.hasOwn(STRING_LEXICAL, local) ? STRING_LEXICAL[local] : undefined;
+  if (lexicalValid)
+    return {
+      as: (term) => literalLexical(term, iri),
+      from: typedStringFrom(iri) as DatatypeMapper["from"],
+      jsType: "string",
+      lexicalValid,
+    };
   switch (iri) {
     case `${XSD}string`:
-    case `${XSD}normalizedString`:
-    case `${XSD}token`:
     case `${XSD}anyURI`:
-    case `${XSD}language`:
       return {
         as: (term) => literalLexical(term, iri),
         from: typedStringFrom(iri) as DatatypeMapper["from"],
@@ -569,6 +624,7 @@ export function isKnownDatatype(datatypeIri: string): boolean {
 }
 
 const KNOWN_DATATYPES = new Set<string>([
+  ...Object.keys(STRING_LEXICAL).map((local) => XSD + local),
   `${XSD}string`,
   `${XSD}normalizedString`,
   `${XSD}token`,
