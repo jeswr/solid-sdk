@@ -334,6 +334,10 @@ describe("demo pod HTTP contract", () => {
     await pod.fetch(`${file}.acl`, { method: "PUT", body: "" });
     expect((await pod.fetch(`${file}.acl`, { method: "DELETE" })).status).toBe(205);
     expect(pod.has(file)).toBe(true);
+    // An orphan ACL-named file has no subject, so it stays an ordinary member.
+    await pod.fetch(`${folder}orphan.acl`, { method: "PUT", body: "" });
+    const again = await graph(await pod.fetch(folder), folder);
+    expect(objects(again, folder, `${LDP}contains`)).toEqual([file, `${folder}orphan.acl`]);
   });
 
   it("handles missing/outside URLs, OPTIONS, unknown methods, queries and fragments", async () => {
