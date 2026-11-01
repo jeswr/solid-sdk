@@ -174,7 +174,14 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
           resource: current,
           model,
           dataset,
-          policy: readPolicy(dataset, current, endpoint, model, options.implementation ?? "css"),
+          policy: readPolicy(
+            dataset,
+            current,
+            endpoint,
+            model,
+            options.implementation ?? "css",
+            resource,
+          ),
           etag: response.headers.get("etag"),
         };
         documents.push(document);

@@ -120,11 +120,13 @@ Roles are `viewer | commenter | editor | manager`; kinds are
 `resource`, `comments`, and `acr` arrays of the existing lowercase neutral `Mode` type.
 `rolesToModes(role, kind, ctx)` grants Read to viewers; commenters add Append on
 `ctx.commentsContainer` (required for documents; without it other kinds project to viewer).
-Editors get Read+Write+Append, or Read+Append for chatrooms. Managers add WAC Control or
-ACP Read+Write on the own ACR. `modesToRole(modes, kind, ctx?)` accepts either those split
+Editors get Read+Write+Append, or Read+Append for chatrooms. Managers add WAC or CSS ACP
+resource Control; ESS ACP managers instead add Read+Write on the own ACR.
+`modesToRole(modes, kind, ctx?)` accepts either those split
 arrays or an iterable of resource modes, returns the highest fully covered role, and
 returns undefined for partial management or odd permissions. Append on a file is not
-comment access. WAC is the mapping default; pass `model: "acp"` for ACR management.
+comment access. WAC is the mapping default; for ACP pass `model: "acp"` and the trusted
+`implementation` (`css` by default, or `ess`) to both mapping helpers.
 
 `AgentRef` supports WebIDs, public and authenticated agents, WAC groups, and ACP apps
 (client matchers). ACP groups require a membership snapshot and WAC cannot express apps;
@@ -137,17 +139,34 @@ Use `isRoleError` and `code` to classify errors; no error class/prototype is exp
 
 Discovery uses advertised Link `rel="acl"` endpoints (also the ACP accessControl relation),
 RDF vocabulary and ACP type links. WAC stops at the nearest existing ACL, including an
-empty one; ACP adds ancestor member controls. Returned rows retain each document's origin;
+empty one; ACP adds ancestor member controls. ACP modes for each principal are combined
+across all contributing documents before role projection. Each contributing source gets
+a row with that effective role, including sources with only part of its required modes.
+Returned rows retain each document's origin;
 odd/partial permissions are omitted, never rounded up. Conditional or richer policies are
 refused instead of silently replaced. Comments are read via `commentsContainer` when supplied;
 a commenter that depends on inherited Append names that comments ancestor as its source.
 Round-tripping those inherited rows preserves explicit Read and sends no writes.
 `implementation` is a trusted caller assertion (default `css`; `ess` selects ACP mode
-vocabulary; `nss` enables legacy WAC defaultForNew), never inferred from editable RDF.
+vocabulary, ACR management and client activation; `nss` enables legacy WAC defaultForNew),
+never inferred from editable RDF. ACP mode vocabulary must match the implementation
+(`acl:*` for CSS, `acp:*` for ESS); inactive vocabulary is refused before normalization.
+CSS-inactive ESS management forms and CSS foreign member bindings are refused. Ancestor
+bindings back to the selected child are also refused rather than hiding effective access.
+CSS ACR-self access controls remain unrelated RDF and do not project as resource access.
+Conjunctions of distinct non-public selectors (including named agent with client or
+AuthenticatedAgent) are refused by every roles operation. ESS app matchers include the
+required PublicAgent activation alongside the client restriction; client-only ESS matchers
+and special clients such as PublicClient are refused. Removing an app's last client also
+removes its activation marker.
 
 `setGrants` applies the full requested **explicit** set to each resource, preserving
 container defaults, unrelated targets and annotations. Inherited rows are read-only and
-must match their governing source. On the first explicit WAC change, effective inherited
+must match their governing source. They never overwrite an explicit selection for the same
+principal, regardless of row order. An unchanged role selection preserves that principal's
+existing modes, including chatroom Write and partial ACP contributions completed by
+inheritance. A changed role is mapped using the requested kind and implementation.
+On the first explicit WAC change, effective inherited
 authorizations are copied to an own ACL, changing default to accessTo; copied container
 defaults also continue protecting descendants. A `pod-access:materializedFrom` annotation
 preserves these copied grants across repeated applications even when omitted from the

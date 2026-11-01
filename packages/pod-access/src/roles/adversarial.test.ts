@@ -289,7 +289,17 @@ describe("hostile policy shapes", () => {
     "ambiguous",
     "unplaced",
   ])("rejects ACP %s", async (shape) => {
-    const dataset = await acpDataset();
+    const implementation = shape === "partial-acr" || shape === "control" ? "ess" : "css";
+    const dataset = implementation === "ess" ? new Store() : await acpDataset();
+    if (implementation === "ess") {
+      appendAcp(
+        dataset,
+        resource,
+        acrUrl,
+        [{ agent: manager.agent, modes: new Set(["read", "write", "control"]) }],
+        "ess",
+      );
+    }
     const matcher = nodeOf(dataset, `${ACP}agent`);
     const policy = nodeOf(dataset, `${ACP}allow`);
     const rootNode = properties(required(roots(dataset)[0]), dataset);
@@ -314,11 +324,11 @@ describe("hostile policy shapes", () => {
         const management = required(nodeOf(dataset, `${ACP}access`).nodes(`${ACP}access`)[0]);
         properties(management as Term, dataset)
           .values(`${ACP}allow`)
-          .delete(`${ACL}Write`);
+          .delete(`${ACP}Write`);
         break;
       }
       case "control":
-        policy.add(`${ACP}allow`, `${ACL}Control`);
+        policy.add(`${ACP}allow`, `${ACP}Control`);
         break;
       case "detached":
         properties(nn("urn:detached"), dataset).add(`${ACP}agent`, owner);
@@ -332,7 +342,9 @@ describe("hostile policy shapes", () => {
     }
     const mem = memoryAccess("acp");
     mem.attach(resource, await serialize(dataset));
-    await expect(grantsWithRoles(resource, mem.options)).rejects.toBeDefined();
+    await expect(
+      grantsWithRoles(resource, { ...mem.options, implementation }),
+    ).rejects.toBeDefined();
     expect(mem.writes()).toHaveLength(0);
   });
   it("rejects invalid typed terms and unsupported neutral subjects", () => {
@@ -400,15 +412,9 @@ it("reads ESS modes, multiple/any matchers, canonical typed roots and ACR-self c
     [{ agent: manager.agent, modes: new Set(["read", "write", "append", "control"]) }],
     "ess",
   );
-  const existing = required(roots(dataset)[0]);
   const canonical = properties(nn(acrUrl), dataset);
   // Canonical ESS typed root can omit acp:resource.
-  for (const q of [...dataset.match(existing as Term)]) {
-    if (q.predicate.value !== `${ACP}resource`) canonical.terms(q.predicate.value).add(q.object);
-    properties(existing as Term, dataset)
-      .terms(q.predicate.value)
-      .clear();
-  }
+  canonical.values(`${ACP}resource`).clear();
   // Unrelated RDF annotations do not become access roots.
   properties(nn("urn:annotation"), dataset).add(`${RDF}type`, "urn:Annotation");
   const policy = properties(
@@ -451,7 +457,7 @@ it("reads ESS modes, multiple/any matchers, canonical typed roots and ACR-self c
   );
   managementPolicy.values(`${ACP}allow`).clear();
   mem.attach(resource, await serialize(dataset));
-  expect(await grantsWithRoles(resource, mem.options)).toEqual([]);
+  expect(await grantsWithRoles(resource, { ...mem.options, implementation: "ess" })).toEqual([]);
 });
 it("retains unrelated ACP targets and member policies when replacing resource controls", async () => {
   const dataset = await acpDataset();
@@ -490,7 +496,7 @@ it("copies only matching defaults, supports NSS legacy defaults, and leaves unkn
   ).toEqual([]);
   expect(mem.writes()).toHaveLength(1);
 });
-it("refuses ACP resource Control and treats policies without matchers as inert", async () => {
+it("accepts CSS resource Control and treats policies without matchers as inert", async () => {
   const dataset = await acpDataset();
   const rootNode = properties(required(roots(dataset)[0]), dataset);
   const policy = properties(
@@ -498,8 +504,14 @@ it("refuses ACP resource Control and treats policies without matchers as inert",
     dataset,
   );
   policy.add(`${ACP}allow`, `${ACL}Control`);
-  expect(() => readPolicy(dataset, resource, acrUrl, "acp", "css")).toThrow("own ACR");
+  expect(readPolicy(dataset, resource, acrUrl, "acp", "css").grants[0]?.modes.has("control")).toBe(
+    true,
+  );
   policy.values(`${ACP}allow`).delete(`${ACL}Control`);
+  for (const matcher of policy.nodes(`${ACP}allOf`))
+    properties(matcher as Term, dataset)
+      .values(`${ACP}agent`)
+      .clear();
   policy.terms(`${ACP}allOf`).clear();
   const mem = memoryAccess("acp");
   mem.attach(resource, await serialize(dataset));

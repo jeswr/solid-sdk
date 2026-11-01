@@ -13,7 +13,7 @@ export type AgentRef =
   | { type: "authenticated" }
   | { type: "group"; id: string }
   | { type: "app"; id: string };
-/** One role and its governing access document. Inherited rows are read-only. */
+/** Effective role and contributing access document. Inherited rows are read-only. */
 export interface RoleGrant {
   agent: AgentRef;
   role: Role;
@@ -39,6 +39,8 @@ export interface RoleModes {
 export interface RoleContext {
   model?: "wac" | "acp";
   commentsContainer?: string;
+  /** Trusted dialect, default CSS: resource Control; ESS: own-ACR Read+Write; NSS: WAC defaultForNew. */
+  implementation?: PodImplementation;
 }
 /** All HTTP uses the caller's guarded, authenticated fetch. */
 export interface RolesOptions extends RoleContext {
@@ -46,8 +48,6 @@ export interface RolesOptions extends RoleContext {
   kind?: ResourceKind;
   /** Bounds ancestor discovery. Defaults to the resource's origin root. */
   root?: string;
-  /** Trusted server assertion. Defaults to CSS; NSS enables defaultForNew. */
-  implementation?: PodImplementation;
 }
 /** Notification delivery is deferred to SDK-APP-07; these values are only recorded. */
 export interface GrantMutationOptions extends RolesOptions {

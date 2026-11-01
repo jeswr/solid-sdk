@@ -3,7 +3,7 @@ import type { Mode } from "../types.js";
 import { roleError } from "./errors.js";
 import type { ResourceKind, Role, RoleContext, RoleModes } from "./types.js";
 
-/** Map a role to distinct targets; ACP managers edit the own ACR with Read+Write. */
+/** Map roles using the trusted dialect's management target. Defaults to CSS/WAC. */
 export function rolesToModes(role: Role, kind: ResourceKind, ctx: RoleContext): RoleModes {
   const result: { resource: Mode[]; comments: Mode[]; acr: Mode[] } = {
     resource: ["read"],
@@ -24,7 +24,7 @@ export function rolesToModes(role: Role, kind: ResourceKind, ctx: RoleContext): 
     result.resource.push("append");
   }
   if (role === "manager") {
-    if (ctx.model === "acp") result.acr.push("read", "write");
+    if (ctx.model === "acp" && ctx.implementation === "ess") result.acr.push("read", "write");
     else result.resource.push("control");
   }
   return result;
@@ -44,7 +44,9 @@ export function modesToRole(
   if (!resource.has("read")) return undefined;
   const edits = kind === "chatroom" ? resource.has("append") : resource.has("write");
   const management =
-    ctx.model === "acp" ? acr.has("read") && acr.has("write") : resource.has("control");
+    ctx.model === "acp" && ctx.implementation === "ess"
+      ? acr.has("read") && acr.has("write")
+      : resource.has("control");
   if ((resource.has("control") || acr.size > 0) && (!edits || !management)) return undefined;
   if (management && edits) return "manager";
   if (edits) return "editor";

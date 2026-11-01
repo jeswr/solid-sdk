@@ -83,3 +83,23 @@ absence races, preservation of unrelated RDF, creation/replacement preconditions
 `movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
 its security and proof semantics must remain unchanged. `@jeswr/fetch-rdf` is an existing
 workspace runtime dependency for role HTTP parsing. Keep exactOptionalPropertyTypes enabled.
+
+`RoleContext.implementation` applies to both mapping helpers as well as HTTP options.
+CSS ACP managers use resource acl:Control; ESS uses acp:Read+Write on the own ACR.
+Validate the active mode vocabulary before normalization (CSS acl:*, ESS acp:*).
+Refuse inactive management forms, foreign CSS member controls and ancestor bindings back
+to the selected resource. Preserve CSS ACR-self controls as unrelated RDF using the same
+dialect-aware target invariant for reads, full-set detachment and single-agent splitting.
+ESS app matchers require PublicAgent alongside client; remove this activation marker when
+removing the last client so revocation cannot create public access. Client-only ESS input
+and special clients such as PublicClient are unsupported. Conjunctions of distinct non-public
+selectors must be refused, never treated as empty principal intersections. These refusals
+apply to reads and all three mutation operations.
+
+Combine each ACP principal's resource modes across documents before role projection, and
+emit its effective role for every contributing source. Keep partial source provenance visible.
+Inherited rows validate sources only; an explicit selection for the same principal always
+takes precedence regardless of input order. Preserve existing modes for unchanged role
+selections (including chatroom Write and partial ACP contributions completed by inheritance),
+even when another principal changes. Never reconstruct an unchanged selection solely by
+inverting the many-to-one role mapping.

@@ -40,6 +40,7 @@ function rows(snapshot: Snapshot, documents = snapshot.documents): Map<string, R
   const result = new Map<string, Row>();
   for (const document of documents)
     for (const grant of document.policy.grants) {
+      if (!grant.modes.size) continue;
       const scope = document.resource === snapshot.resource ? "resource" : "members";
       if (grant.appliesTo !== scope && grant.appliesTo !== "both") continue;
       if (grant.except.length || grant.who.some((clause) => clause.length !== 1))
@@ -59,11 +60,12 @@ function rows(snapshot: Snapshot, documents = snapshot.documents): Map<string, R
   return result;
 }
 function role(row: Row, model: Snapshot["model"], options: RolesOptions, comments?: Row) {
+  const separateAcr = model === "acp" && options.implementation === "ess";
   return modesToRole(
     {
-      resource: [...row.modes].filter((m) => model !== "acp" || m !== "control"),
+      resource: [...row.modes].filter((m) => !separateAcr || m !== "control"),
       comments: [...(comments?.modes ?? [])],
-      acr: model === "acp" && row.modes.has("control") ? ["read", "write"] : [],
+      acr: separateAcr && row.modes.has("control") ? ["read", "write"] : [],
     },
     options.kind ?? "resource",
     { ...options, model },
@@ -71,9 +73,17 @@ function role(row: Row, model: Snapshot["model"], options: RolesOptions, comment
 }
 function project(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot): RoleGrant[] {
   const commentRows = comments ? rows(comments) : new Map<string, Row>();
+  const effective = rows(snapshot);
   return snapshot.documents.flatMap((document) =>
     [...rows(snapshot, [document])].flatMap(([key, row]) => {
-      const projected = role(row, snapshot.model, options, commentRows.get(key));
+      // ACP controls compose across documents before a role can be established.
+      // Every contributing source remains visible, including Write-only sources.
+      const projected = role(
+        effective.get(key) as Row,
+        snapshot.model,
+        options,
+        commentRows.get(key),
+      );
       if (projected === undefined) return [];
       // A commenter depends on the comments permission as well as resource Read.
       // Keep the governing ancestor visible even when Read is explicit.
@@ -200,8 +210,15 @@ async function plan(
       replaceWac(dataset, snapshot.resource, row.agent, [...(desired.get(key)?.modes ?? [])]);
     }
   } else {
-    if (agent) removeAcpAgent(dataset, snapshot.resource, snapshot.ownUrl, agent);
-    else detachAcp(dataset, snapshot.resource, snapshot.ownUrl);
+    if (agent)
+      removeAcpAgent(
+        dataset,
+        snapshot.resource,
+        snapshot.ownUrl,
+        agent,
+        options.implementation ?? "css",
+      );
+    else detachAcp(dataset, snapshot.resource, snapshot.ownUrl, options.implementation ?? "css");
     appendAcp(
       dataset,
       snapshot.resource,
@@ -267,7 +284,9 @@ async function prepare(
       throw roleError("conflict", url, "Grant snapshot is stale or does not cover this URL");
   }
   const current = editableRows(snapshot);
-  const inherited = project(snapshot, options, comments).filter((g) => g.inherited);
+  const projected = project(snapshot, options, comments);
+  const inherited = projected.filter((g) => g.inherited);
+  const explicit = new Set(grants.filter((g) => !g.inherited).map((g) => agentKey(g.agent)));
   const desired = new Map<string, Row>();
   if (snapshot.model === "wac") {
     const own = snapshot.own;
@@ -322,7 +341,21 @@ async function prepare(
           "Inherited grants must be changed at their governing document",
         );
       const retained = current.get(agentKey(grant.agent));
-      if (retained) desired.set(agentKey(grant.agent), retained);
+      // Inherited rows validate provenance; they never override an explicit edit.
+      if (retained && !explicit.has(agentKey(grant.agent)))
+        desired.set(agentKey(grant.agent), retained);
+      continue;
+    }
+    const key = agentKey(grant.agent);
+    const previous = current.get(key);
+    // Role projection is many-to-one (e.g. chatroom Read+Write and Read+Append).
+    // An unchanged selection retains its exact raw modes, including partial
+    // contributions whose role depends on another ACP source.
+    if (
+      previous &&
+      projected.some((g) => !g.inherited && agentKey(g.agent) === key && g.role === grant.role)
+    ) {
+      desired.set(key, previous);
       continue;
     }
     const modes = rolesToModes(grant.role, options.kind ?? "resource", {
@@ -345,7 +378,8 @@ async function prepare(
         snapshot.model,
         options,
         comments ? rows(comments).get(agentKey(row.agent)) : undefined,
-      ) === undefined
+      ) === undefined &&
+      !sameModes(row.modes, desired.get(agentKey(row.agent))?.modes ?? new Set())
     )
       throw roleError("unsupported", url, "Partial permissions need a richer policy model");
   const writes: Write[] = [];

@@ -8,11 +8,28 @@ const roles: Role[] = ["viewer", "commenter", "editor", "manager"];
 describe("role modes", () => {
   it("round trips every role and kind on both models", () => {
     for (const model of ["wac", "acp"] as const)
-      for (const kind of kinds)
-        for (const role of roles) {
-          const ctx = { model, commentsContainer: "https://pod.example/comments/" };
-          expect(modesToRole(rolesToModes(role, kind, ctx), kind, ctx)).toBe(role);
-        }
+      for (const implementation of ["css", "ess"] as const)
+        for (const kind of kinds)
+          for (const role of roles) {
+            const ctx = {
+              model,
+              implementation,
+              commentsContainer: "https://pod.example/comments/",
+            };
+            expect(modesToRole(rolesToModes(role, kind, ctx), kind, ctx)).toBe(role);
+          }
+  });
+  it("maps ACP management to the trusted implementation's enforcement target", () => {
+    expect(rolesToModes("manager", "resource", { model: "acp" })).toEqual({
+      resource: ["read", "write", "append", "control"],
+      comments: [],
+      acr: [],
+    });
+    expect(rolesToModes("manager", "resource", { model: "acp", implementation: "ess" })).toEqual({
+      resource: ["read", "write", "append"],
+      comments: [],
+      acr: ["read", "write"],
+    });
   });
   it("requires document comments and never rounds up partial or odd modes", () => {
     expect(() => rolesToModes("commenter", "document", {})).toThrow("commentsContainer");

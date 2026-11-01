@@ -101,22 +101,40 @@ export function subjectAgent(subject: Subject): AgentRef {
 export function agentKey(agent: AgentRef): string {
   return JSON.stringify("id" in agent ? [agent.type, agent.id] : [agent.type]);
 }
-function allowed(iris: Iterable<string>, model: "wac" | "acp"): Set<Mode> {
-  const canonical = [...iris].map((iri) => (model === "acp" ? iri.replace(ACP, ACL) : iri));
+function allowed(
+  iris: Iterable<string>,
+  model: "wac" | "acp",
+  implementation: PodImplementation,
+): Set<Mode> {
+  const vocabulary = model === "acp" && implementation === "ess" ? ACP : ACL;
+  const raw = [...iris];
   if (
-    canonical.some(
+    raw.some(
       (iri) =>
-        !["read", "append", "write", "control"].some((mode) => modeIri(mode as Mode) === iri),
+        !["read", "append", "write", "control"].some(
+          (mode) => modeIri(mode as Mode).replace(ACL, vocabulary) === iri,
+        ),
     )
   )
     throw new TypeError("Unknown access mode");
-  return readModes(canonical);
+  return readModes(raw.map((iri) => iri.replace(vocabulary, ACL)));
 }
-function matcherSubjects(matcher: Matcher): Subject[] {
+function matcherSubjects(matcher: Matcher, implementation: PodImplementation): Subject[] {
   for (const q of matcher.dataset.match(matcher as Term))
     if (![`${RDF}type`, `${ACP}agent`, `${ACP}client`].includes(q.predicate.value))
       throw new TypeError("Conditional ACP matcher");
-  if (matcher.agent.size && matcher.client.size) throw new TypeError("Conjoined ACP attributes");
+  if (matcher.client.size) {
+    // PublicAgent is conjunction's identity. It activates ESS client matchers
+    // without turning an app grant into a public grant.
+    if (implementation === "ess" && !matcher.agent.size)
+      throw new TypeError("ESS client matchers require an agent");
+    if (matcher.agent.size && !matcher.agent.has(`${ACP}PublicAgent`))
+      throw new TypeError("Conjoined ACP attributes");
+    return [...matcher.client].map((clientId): Subject => {
+      if (clientId.startsWith(ACP)) throw new TypeError("Unsupported special ACP client");
+      return { kind: "client", clientId };
+    });
+  }
   return [
     ...[...matcher.agent].map((webId): Subject => {
       if (webId === `${ACP}PublicAgent`) return { kind: "public" };
@@ -124,22 +142,41 @@ function matcherSubjects(matcher: Matcher): Subject[] {
       if (webId.startsWith(ACP)) throw new TypeError("Unsupported special ACP agent");
       return { kind: "agent", webId };
     }),
-    ...[...matcher.client].map((clientId): Subject => ({ kind: "client", clientId })),
   ];
 }
-function policySubjects(policy: Policy): Subject[][] {
+function policySubjects(policy: Policy, implementation: PodImplementation): Subject[][] {
   if (policy.deny.size || policy.noneOf.size)
     throw new TypeError("ACP denial or exclusion needs a richer policy model");
   let result: Map<string, Subject> | undefined;
   const intersect = (values: Subject[]) => {
     const next = new Map(values.map((s) => [agentKey(subjectAgent(s)), s]));
     if (result === undefined || result.has('["public"]')) result = next;
-    else if (!next.has('["public"]'))
-      result = new Map([...result].filter(([key]) => next.has(key)));
+    else if (!next.has('["public"]')) {
+      // Distinct selectors can overlap even when their principal keys differ
+      // (agent AND client, named agent AND authenticated, etc.). Never mistake
+      // that conjunction for an inert policy or split it into unconditional rows.
+      if (
+        result.size &&
+        next.size &&
+        (result.size !== next.size || [...result.keys()].some((key) => !next.has(key)))
+      )
+        throw new TypeError("Conjoined ACP selectors need a richer policy model");
+      if (!next.size) result.clear();
+    }
   };
-  for (const matcher of policy.allOf) intersect(matcherSubjects(matcher));
-  if (policy.anyOf.size) intersect([...policy.anyOf].flatMap(matcherSubjects));
+  for (const matcher of policy.allOf) intersect(matcherSubjects(matcher, implementation));
+  if (policy.anyOf.size)
+    intersect([...policy.anyOf].flatMap((matcher) => matcherSubjects(matcher, implementation)));
   return [...(result?.values() ?? [])].map((subject) => [subject]);
+}
+/** Only ESS treats an ACR-self binding as management of the subject resource. */
+function ownAcpTarget(
+  target: string,
+  resource: string,
+  url: string,
+  implementation: PodImplementation,
+): boolean {
+  return target === resource || (implementation === "ess" && target === url);
 }
 /** Role projection is a closed, unconditional subset; reject shapes it cannot preserve. */
 export function readPolicy(
@@ -148,6 +185,7 @@ export function readPolicy(
   url: string,
   model: "wac" | "acp",
   implementation: PodImplementation,
+  selectedResource = resource,
 ): EffectivePolicy {
   for (const q of dataset) {
     if (q.graph.termType !== "DefaultGraph")
@@ -188,7 +226,7 @@ export function readPolicy(
   }
   if (model === "wac") {
     for (const auth of new AclResource(dataset, DataFactory).authorizations)
-      allowed(auth.mode, model);
+      allowed(auth.mode, model, implementation);
     return readWac(dataset, resource, url, implementation);
   }
   const result: EffectivePolicy = { grants: [], denials: [] };
@@ -201,20 +239,31 @@ export function readPolicy(
     if (resources.length > 1) throw new TypeError("Ambiguous ACP target");
     const target = resources[0] ?? resource;
     if (!resources.length && root.value !== url) throw new TypeError("Unplaced ACP root");
+    if (implementation !== "ess") {
+      if (!resources.length) throw new TypeError("CSS ACP roots require a resource binding");
+      if (target !== resource && root.memberAccessControl.size)
+        throw new TypeError("Foreign CSS member controls need a richer scope model");
+      if (target !== resource && target === selectedResource && root.accessControl.size)
+        throw new TypeError(
+          "CSS ancestor binding to the selected resource needs a richer scope model",
+        );
+      if (node.nodes(`${ACP}access`).length || node.nodes(`${ACP}memberAccess`).length)
+        throw new TypeError("CSS management requires resource Control");
+    }
     function add(policy: Policy, scope: Grant["appliesTo"], management: boolean) {
       visit(policy as Term);
       for (const matcher of [...policy.allOf, ...policy.anyOf, ...policy.noneOf])
         visit(matcher as Term);
-      const who = policySubjects(policy);
-      const modes = allowed(policy.allow, model);
+      const who = policySubjects(policy, implementation);
+      const modes = allowed(policy.allow, model, implementation);
       if (management) {
         if (modes.size && (modes.has("control") || !(modes.has("read") && modes.has("write"))))
           throw new TypeError("Partial ACR management");
         modes.clear();
         if (policy.allow.size) modes.add("control");
-      } else if (modes.has("control"))
+      } else if (implementation === "ess" && modes.has("control"))
         throw new TypeError("ACP management requires own ACR Read+Write");
-      if (target !== resource && target !== url) return;
+      if (!ownAcpTarget(target, resource, url, implementation)) return;
       result.grants.push({
         modes,
         who,
@@ -229,7 +278,8 @@ export function readPolicy(
     ] as const)
       for (const control of controls) {
         visit(control as Term);
-        for (const policy of control.apply) add(policy, scope, target === url);
+        for (const policy of control.apply)
+          add(policy, scope, implementation === "ess" && target === url);
       }
     for (const [policies, scope] of [
       [node.nodes(`${ACP}access`), "resource"],
@@ -310,11 +360,16 @@ export function replaceWac(
   }
 }
 /** Detach only resource and own ACR controls; defaults and policy metadata remain intact. */
-export function detachAcp(dataset: Store, resource: string, url: string): void {
+export function detachAcp(
+  dataset: Store,
+  resource: string,
+  url: string,
+  implementation: PodImplementation,
+): void {
   for (const root of roots(dataset)) {
     const node = properties(root as Term, dataset);
-    const targets = node.iris(`${ACP}resource`);
-    if (targets.length && !targets.includes(resource) && !targets.includes(url)) continue;
+    const target = node.iris(`${ACP}resource`)[0] ?? resource;
+    if (!ownAcpTarget(target, resource, url, implementation)) continue;
     node.values(`${ACP}accessControl`).clear();
     node.values(`${ACP}access`).clear();
   }
@@ -325,11 +380,12 @@ export function removeAcpAgent(
   resource: string,
   url: string,
   agent: AgentRef,
+  implementation: PodImplementation,
 ): void {
   const key = agentKey(agent);
   function withoutAgent(term: Term): Term {
     if (
-      !policySubjects(new Policy(term, dataset, DataFactory)).some(
+      !policySubjects(new Policy(term, dataset, DataFactory), implementation).some(
         (clause) => agentKey(subjectAgent(clause[0] as Subject)) === key,
       )
     )
@@ -348,6 +404,10 @@ export function removeAcpAgent(
         if (original.values(selector).has(principal)) {
           const split = clone(matcher as Term, dataset, dataset, []);
           split.values(selector).delete(principal);
+          // Removing the last client must not leave its activation-only
+          // PublicAgent behind as an unconditional public authorization.
+          if (subject.kind === "client" && !split.values(selector).size)
+            split.values(`${ACP}agent`).clear();
           next = split as Term;
         }
         copy.terms(ACP + name).add(next);
@@ -356,8 +416,8 @@ export function removeAcpAgent(
   }
   for (const root of roots(dataset)) {
     const node = properties(root as Term, dataset);
-    const targets = node.iris(`${ACP}resource`);
-    if (targets.length && !targets.includes(resource) && !targets.includes(url)) continue;
+    const target = node.iris(`${ACP}resource`)[0] ?? resource;
+    if (!ownAcpTarget(target, resource, url, implementation)) continue;
     for (const policy of [...node.nodes(`${ACP}access`)]) {
       const next = withoutAgent(policy as Term);
       node.terms(`${ACP}access`).delete(policy as Term);
@@ -374,7 +434,7 @@ export function removeAcpAgent(
     }
   }
 }
-/** Write the unconditional ACP subset with separate ACR Read+Write management. */
+/** Write the unconditional subset using the trusted dialect's modes and management. */
 export function appendAcp(
   dataset: Store,
   resource: string,
@@ -382,15 +442,20 @@ export function appendAcp(
   rows: Iterable<{ agent: AgentRef; modes: Set<Mode> }>,
   implementation: PodImplementation,
 ): void {
-  const root = properties(DataFactory.blankNode(), dataset);
+  const root = properties(
+    implementation === "ess" ? DataFactory.namedNode(url) : DataFactory.blankNode(),
+    dataset,
+  );
   root.add(`${RDF}type`, `${ACP}AccessControlResource`);
   root.add(`${ACP}resource`, resource);
   const vocabulary = implementation === "ess" ? ACP : ACL;
   for (const row of rows) {
     const matcher = properties(DataFactory.blankNode(), dataset);
     const subject = agentSubject(row.agent);
-    if (subject.kind === "client") matcher.add(`${ACP}client`, subject.clientId);
-    else if (subject.kind === "agent") matcher.add(`${ACP}agent`, subject.webId);
+    if (subject.kind === "client") {
+      matcher.add(`${ACP}client`, subject.clientId);
+      if (implementation === "ess") matcher.add(`${ACP}agent`, `${ACP}PublicAgent`);
+    } else if (subject.kind === "agent") matcher.add(`${ACP}agent`, subject.webId);
     else if (subject.kind === "public" || subject.kind === "authenticated")
       matcher.add(
         `${ACP}agent`,
@@ -403,8 +468,9 @@ export function appendAcp(
     control.terms(`${ACP}apply`).add(policy as Term);
     root.terms(`${ACP}accessControl`).add(control as Term);
     for (const mode of row.modes)
-      if (mode !== "control") policy.add(`${ACP}allow`, modeIri(mode).replace(ACL, vocabulary));
-    if (row.modes.has("control")) {
+      if (mode !== "control" || implementation !== "ess")
+        policy.add(`${ACP}allow`, modeIri(mode).replace(ACL, vocabulary));
+    if (row.modes.has("control") && implementation === "ess") {
       const management = properties(DataFactory.blankNode(), dataset);
       management.terms(`${ACP}allOf`).add(matcher as Term);
       management.add(`${ACP}allow`, `${vocabulary}Read`);
