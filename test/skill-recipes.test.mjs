@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Execute the documented examples so API and credential-boundary regressions fail the gate.
 import * as nodeCrypto from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -327,18 +328,21 @@ describe("reviewed recipe failure boundaries", () => {
     expect(mark).not.toHaveBeenCalled();
   });
 
-  it("wires the documented notification client to bounded fetch, invalidation, resync and cleanup", async () => {
+  async function notificationRecipe(state = "connecting") {
     const code = blocks("pod-notifications", "ts")[0];
     const handlers = new Map();
     const removers = [];
     const subscription = {
+      state,
       on: vi.fn((event, handler) => {
         handlers.set(event, handler);
-        const remove = vi.fn();
+        const remove = vi.fn(() => handlers.delete(event));
         removers.push(remove);
         return remove;
       }),
-      close: vi.fn(async () => {}),
+      close: vi.fn(async () => {
+        subscription.state = "closed";
+      }),
     };
     const subscribe = vi.fn(async () => subscription);
     const createNotifications = vi.fn(() => ({ subscribe }));
@@ -354,8 +358,43 @@ describe("reviewed recipe failure boundaries", () => {
     const storage = { root: "https://pod.example/alice/" };
     const hotResource = "https://pod.example/alice/note.txt";
     const invalidate = vi.fn();
+    const reportError = vi.fn();
+    return {
+      handlers,
+      removers,
+      subscription,
+      subscribe,
+      createNotifications,
+      fetch,
+      storage,
+      hotResource,
+      invalidate,
+      reportError,
+      watch: (reconcile) =>
+        watchCollection(fetch, storage, hotResource, invalidate, reconcile, reportError),
+      transition: (next) => {
+        subscription.state = next;
+        handlers.get("state")?.(next);
+      },
+    };
+  }
+
+  it("wires the documented notification client to bounded fetch, invalidation, resync and cleanup", async () => {
+    const {
+      watch,
+      createNotifications,
+      subscribe,
+      fetch,
+      storage,
+      hotResource,
+      handlers,
+      invalidate,
+      removers,
+      subscription,
+      reportError,
+    } = await notificationRecipe("degraded");
     const reconcile = vi.fn();
-    const cleanup = await watchCollection(fetch, storage, hotResource, invalidate, reconcile);
+    const cleanup = await watch(reconcile);
     expect(createNotifications).toHaveBeenCalledWith({ fetch, storage });
     expect(subscribe).toHaveBeenCalledWith([storage.root], {
       depth: "recursive",
@@ -371,15 +410,111 @@ describe("reviewed recipe failure boundaries", () => {
     await cleanup();
     for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
     expect(subscription.close).toHaveBeenCalledOnce();
-    subscription.close.mockClear();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("reconciles changes during push setup on first live without waiting for resync", async () => {
+    const { watch, transition } = await notificationRecipe();
+    let authoritative = "initial";
+    let cached;
+    const reconcile = vi.fn(async () => {
+      cached = authoritative;
+    });
+    const cleanup = await watch(reconcile);
+    expect(cached).toBe("initial");
+    authoritative = "changed before push connected";
+    transition("live");
+    expect(cached).toBe(authoritative);
+    expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
+    transition("degraded");
+    transition("live");
+    expect(reconcile).toHaveBeenCalledTimes(2); // Later reconnects use resync.
+    await cleanup();
+  });
+
+  it("reconciles an already-live subscription after registering every listener", async () => {
+    const { watch, handlers, transition } = await notificationRecipe("live");
+    const reconcile = vi.fn(() => {
+      expect(new Set(handlers.keys())).toEqual(new Set(["change", "resync", "state"]));
+    });
+    const cleanup = await watch(reconcile);
+    transition("degraded");
+    transition("live");
+    expect(reconcile).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
+  it("awaits initial async reconciliation before returning cleanup", async () => {
+    const { watch } = await notificationRecipe("degraded");
+    const pending = Promise.withResolvers();
+    const resolved = vi.fn();
+    const watching = watch(() => pending.promise).then((cleanup) => {
+      resolved();
+      return cleanup;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    pending.resolve();
+    const cleanup = await watching;
+    expect(resolved).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
+  it.each([false, true])("closes on initial reconciliation failure (async=%s)", async (async) => {
+    const { watch, handlers, removers, subscription, reportError } = await notificationRecipe();
     const failure = new Error("Initial reconciliation failed");
-    await expect(
-      watchCollection(fetch, storage, hotResource, invalidate, () => {
-        throw failure;
-      }),
-    ).rejects.toBe(failure);
+    const reconcile = async
+      ? () => Promise.reject(failure)
+      : () => {
+          throw failure;
+        };
+    await expect(watch(reconcile)).rejects.toBe(failure);
     expect(subscription.close).toHaveBeenCalledOnce();
     for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["resync", false],
+    ["resync", true],
+    ["state", false],
+    ["state", true],
+  ])("closes and reports later %s reconciliation failure (async=%s)", async (event, async) => {
+    const { watch, handlers, removers, subscription, reportError, transition } =
+      await notificationRecipe();
+    const failure = new Error("Later reconciliation failed");
+    const reconcile = vi.fn().mockImplementationOnce(() => {});
+    reconcile.mockImplementation(() => {
+      if (async) return Promise.reject(failure);
+      throw failure;
+    });
+    await watch(reconcile);
+    if (event === "state") transition("live");
+    else handlers.get("resync")(new Date());
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(subscription.close).toHaveBeenCalledOnce();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+  });
+
+  it("reports cleanup rejection after an event reconciliation failure", async () => {
+    const { watch, handlers, subscription, reportError } = await notificationRecipe();
+    const failure = new Error("Cleanup failed");
+    const reconcile = vi
+      .fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementation(() => {
+        throw new Error("Later reconciliation failed");
+      });
+    await watch(reconcile);
+    subscription.close.mockRejectedValueOnce(failure);
+    handlers.get("resync")(new Date());
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
   });
 
   it.each([

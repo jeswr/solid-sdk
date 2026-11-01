@@ -21,7 +21,8 @@ export async function watchCollection(
   storage: StorageClient,
   hotResource: string,
   invalidate: (url: string) => void,
-  reconcile: (since: Date) => void,
+  reconcile: (since: Date) => void | Promise<void>,
+  reportError: (error: unknown) => void,
 ) {
   const notifications = createNotifications({ fetch, storage });
   const subscription = await notifications.subscribe([storage.root], {
@@ -30,15 +31,33 @@ export async function watchCollection(
     pollIntervalMs: 30_000,
   });
   const stopChanges = subscription.on('change', event => invalidate(event.object));
-  const stopResync = subscription.on('resync', since => reconcile(since));
+  const reconcileAfterEvent = async (since: Date) => {
+    try {
+      await reconcile(since);
+    } catch (error) {
+      await close();
+      throw error;
+    }
+  };
+  const stopResync = subscription.on('resync', since => {
+    void reconcileAfterEvent(since).catch(reportError);
+  });
+  let sawLive = subscription.state === 'live';
+  const stopState = subscription.on('state', state => {
+    if (state === 'live' && !sawLive) {
+      sawLive = true;
+      void reconcileAfterEvent(new Date(0)).catch(reportError);
+    }
+  });
   const close = async () => {
     stopChanges();
     stopResync();
+    stopState();
     await subscription.close();
   };
   try {
-    // Reconcile after attaching listeners; subscription setup can race with changes.
-    reconcile(new Date(0));
+    // Seed polling/already-live subscriptions; first live covers the push setup gap.
+    await reconcile(new Date(0));
   } catch (error) {
     await close();
     throw error;
@@ -50,6 +69,12 @@ export async function watchCollection(
 Own the returned async cleanup in the application lifecycle, including logout. `subscribe`
 also accepts an abort signal. Alternatively iterate the subscription with `for await`; ending
 an iterator detaches that iterator, so still close the subscription itself.
+
+`subscribe()` can return while push is still connecting. The first `live` transition does
+not emit `resync`, so refresh again then to cover changes during setup. Initial reconciliation
+is awaited and failures close the subscription before rejecting `watchCollection`. Later
+reconciliation failures also close it and call the application's non-throwing `reportError`
+handler; use that handler to show an error or arrange a retry.
 
 `plan()` is an I/O-free advertised preference, while `subscription.channel` reports the actual
 transport. Supported push adapters are Solid WebSocketChannel2023 / StreamingHTTP, LWS
