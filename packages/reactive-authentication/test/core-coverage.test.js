@@ -54,6 +54,16 @@ test("pattern issuers reject unmatched requests and static boundaries validate a
   await assert.rejects(provider.getIssuer(new Request("https://other.example/a")), {
     name: "UnrecognizedRequestUri",
   });
+  for (const flags of ["g", "y"]) {
+    const stateful = new PatternIssuerProvider([
+      { pattern: new RegExp("^https://pod\\.example/", flags), result: "https://issuer.example/" },
+    ]);
+    for (let i = 0; i < 3; i++)
+      assert.equal(
+        (await stateful.getIssuer(new Request("https://pod.example/a"))).href,
+        "https://issuer.example/",
+      );
+  }
   for (const entry of [
     "relative",
     "ftp://pod.example/",
