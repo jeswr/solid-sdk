@@ -161,8 +161,11 @@ export function CaptureBar({ label }: { label?: string }) {
             onClick: () => {
               const detail = { key: captureKey, webId: session.webId, handled: false };
               window.dispatchEvent(new CustomEvent(captureRetry, { detail }));
-              // No capture bar is mounted for this key: retry from this closure.
-              if (!detail.handled) void finish(confirmed);
+              // No capture bar is mounted for this key: retry from this closure, but
+              // only while the kept text is still the one this failure stored
+              // (a later bar may already have saved or replaced it).
+              if (!detail.handled && localStorage.getItem(captureKey) === recovery.current)
+                void finish(confirmed);
             },
           },
         });

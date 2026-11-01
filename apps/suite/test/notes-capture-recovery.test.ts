@@ -453,7 +453,7 @@ it("retries a failed Save anyway from the toast after the bar unmounts", async (
   );
   const create = vi.fn().mockRejectedValue(new Error("Offline"));
   mocks.context.create = create;
-  const { CaptureBar } = await page();
+  const { CaptureBar, key } = await page();
   const ui = await mount(h(CaptureBar));
   const writing = deferred<StoredNote>();
   create.mockReturnValueOnce(writing.promise);
@@ -465,10 +465,16 @@ it("retries a failed Save anyway from the toast after the bar unmounts", async (
   await ui.unmount();
   await act(() => writing.reject(new Error("Offline")));
   create.mockResolvedValue({} as StoredNote);
-  await act(() => mocks.toast.error.mock.lastCall?.[1].action.onClick());
+  const retry = mocks.toast.error.mock.lastCall?.[1].action.onClick;
+  await act(() => retry());
+  expect(create).toHaveBeenCalledTimes(2);
   expect(create).toHaveBeenLastCalledWith(
     { title: "Flagged", body: "<p>Flagged</p>", labels: [] },
     false,
     "default",
   );
+  expect(localStorage.getItem(key)).toBeNull();
+  // A late second click finds nothing kept and creates nothing more.
+  await act(() => retry());
+  expect(create).toHaveBeenCalledTimes(2);
 });
