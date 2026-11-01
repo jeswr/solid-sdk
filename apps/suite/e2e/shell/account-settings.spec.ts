@@ -2,8 +2,23 @@
 import { mkdir, readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
-import { secondDemoAccount } from "../../src/shell/account/test-backends";
-import { demoAccount } from "../../src/shell/session/demo-backend";
+
+// Mirrors src/shell/session/demo-backend.ts and src/shell/account/test-backends.ts. Importing
+// those here would load the demo pod seed (and its calendar deps) into the Playwright runner.
+const demoAccount = {
+  id: "demo",
+  name: "Alice Wilder",
+  webId: "https://alice.demo.pod/profile/card#me",
+  storageUrl: "https://alice.demo.pod/",
+  kind: "demo",
+};
+const secondDemoAccount = {
+  id: "test-second-demo",
+  kind: "demo",
+  name: "Rowan Vale",
+  webId: "https://example.org/rowan/profile#me",
+  storageUrl: "https://example.org/rowan/",
+};
 
 async function accessible(page: Page) {
   const result = await new AxeBuilder({ page }).analyze();
