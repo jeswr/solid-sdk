@@ -163,6 +163,32 @@ describe("runFileImport checks cancellation at the Pod writer boundary", () => {
     expect(calls).toEqual([]);
   });
 
+  it("rejects with the abort reason when the cancel surfaces as an adapter error", async () => {
+    const controller = new AbortController();
+    const gate = pause();
+    const { calls, podWriter } = ports("read music/songs.ttl", gate);
+    const run = runFileImport({
+      adapter: {
+        ...adapter,
+        async importFile(f, ctx) {
+          try {
+            await adapter.importFile(f, ctx);
+          } catch {
+            throw new Error("the export file ended early");
+          }
+        },
+      },
+      file,
+      podWriter,
+      signal: controller.signal,
+    });
+    await gate.started;
+    controller.abort(reason);
+    gate.release();
+    await expect(run).rejects.toBe(reason);
+    expect(calls).toEqual(["read music/songs.ttl"]);
+  });
+
   it("completes a run whose signal is still live, including provenance", async () => {
     const controller = new AbortController();
     const { calls, podWriter } = ports("", pause());

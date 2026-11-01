@@ -152,7 +152,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
         /* Original failure takes priority. */
       }
     opts.onState?.(session.state());
-    throw error;
+    // A cancel can surface as an adapter or write error; callers match the abort reason.
+    throw signal?.aborted ? signal.reason : error;
   }
 }
 

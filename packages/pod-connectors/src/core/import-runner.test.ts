@@ -542,6 +542,26 @@ describe("runImport enforces cancellation for adapters that ignore ctx.signal", 
     ).resolves.toMatchObject({ indexUrl: "https://memory.test/index" });
   });
 
+  it("rejects with the abort reason when the cancel surfaces as an adapter error", async () => {
+    const controller = new AbortController();
+    const { podWriter, sourceAuth } = ports();
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        controller.abort(reason);
+        try {
+          await ctx.write(doc());
+        } catch {
+          throw new Error("the source stream ended early");
+        }
+        return {};
+      },
+    };
+    await expect(
+      runImport({ adapter, mode: "live", podWriter, sourceAuth, signal: controller.signal }),
+    ).rejects.toBe(reason);
+  });
+
   it("does not write provenance when cancellation arrives during Type Index registration", async () => {
     const controller = new AbortController();
     const { calls, podWriter, sourceAuth } = ports(() => controller.abort(reason));

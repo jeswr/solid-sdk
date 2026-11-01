@@ -132,7 +132,8 @@ export interface RunFileImportOptions extends ConnectorStateOptions {
    * registration or provenance write, and rejects with its reason. The check runs at the
    * PodWriter boundary, immediately before each port call, so a cancel during a pending read
    * still stops the write that follows. Pass the same signal to `createFetchPodWriter`. A
-   * cancelled run records no activity and reports an error state that advances nothing.
+   * cancelled run records no activity and reports an error state that advances nothing; a
+   * cancel that lands after the provenance write already finished is reported as complete.
    */
   signal?: AbortSignal;
 }
@@ -228,7 +229,8 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         /* Original failure takes priority. */
       }
     opts.onState?.(session.state());
-    throw error;
+    // A cancel can surface as an adapter or write error; callers match the abort reason.
+    throw signal?.aborted ? signal.reason : error;
   }
 }
 
