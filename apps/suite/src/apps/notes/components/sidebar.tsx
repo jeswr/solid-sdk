@@ -143,7 +143,7 @@ export function NotesSidebar() {
           Import from Keep
         </Button>
       </nav>
-      <KeepImportDialog open={importing} close={() => setImporting(false)} />
+      {importing && <KeepImportDialog open close={() => setImporting(false)} />}
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="notes-edit-labels">
           <DialogTitle>Edit labels</DialogTitle>
