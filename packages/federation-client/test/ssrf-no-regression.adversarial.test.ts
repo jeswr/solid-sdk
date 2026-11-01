@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // ADVERSARIAL no-SSRF-regression guard for the @jeswr/guarded-fetch adoption.
 //
@@ -15,7 +16,7 @@
 //      literal in the corpus must classify NON-public via the re-exported `isPublicAddress`
 //      (the exact predicate the old guard used). One flip to public fails the test.
 //   2. END-TO-END guard level — every blocked vector, driven as a full URL through the
-//      re-exported `createGuardedFetch` (with an injected DNS resolver so it is offline +
+//      shared `createGuardedFetch` (with an injected DNS resolver so it is offline +
 //      deterministic), must be REFUSED before reaching the underlying fetch.
 //
 // Public addresses are also asserted to stay reachable (so the guard is not vacuously
@@ -24,8 +25,9 @@
 // multicast, reserved/TEST-NET), v6 (ULA, link-local, ::ffff-mapped, 6to4, NAT64,
 // loopback/unspecified), alt-encoded loopback (URL-canonicalised), bracketed v6, zone ids.
 
+import { createGuardedFetch, isPublicAddress } from "@jeswr/guarded-fetch";
 import { describe, expect, it } from "vitest";
-import { createGuardedFetch, type DnsLookup, isPublicAddress, SsrfError } from "../src/index.js";
+import { type DnsLookup, SsrfError } from "../src/index.js";
 
 // --- corpus: literals that MUST classify non-public (one flip = SSRF regression) --------
 const MUST_BE_NON_PUBLIC: readonly string[] = [
