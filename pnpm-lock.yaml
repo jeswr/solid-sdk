@@ -3062,21 +3062,15 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
-      '@jeswr/solid-dpop':
+      '@jeswr/pod-auth':
         specifier: workspace:*
-        version: link:../solid-dpop
-      '@jeswr/solid-openid-client':
-        specifier: workspace:*
-        version: link:../solid-openid-client
+        version: link:../pod-auth
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
       n3:
         specifier: ^2.1.1
         version: 2.1.1
-      openid-client:
-        specifier: ^6.8.4
-        version: 6.8.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1

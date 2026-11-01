@@ -3,12 +3,13 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
-import { exportDpopKeyPairJwk, importDpopKeyPairJwk } from "@jeswr/solid-dpop";
 import {
-  type AuthorizationRequestState,
-  createSolidOidcClient,
-  type SolidOidcClient,
-} from "@jeswr/solid-openid-client";
+  createNodeOidcClient,
+  exportServerDpopKey,
+  importServerDpopKey,
+  type ServerAuthorizationState,
+  type ServerOidcClient,
+} from "@jeswr/pod-auth/node";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import {
@@ -30,14 +31,14 @@ const STORAGE = "http://www.w3.org/ns/pim/space#storage";
 const MAX_CACHED_CLIENTS = 256;
 const CLIENT_CACHE_TTL = 300;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
-// Only call after solid-openid-client has successfully validated the ID token.
+// Only call after pod-auth has successfully validated the ID token.
 const verifiedIdTokenClaims = (token: string) =>
   JSON.parse(Buffer.from(token.split(".")[1] as string, "base64url").toString("utf8")) as {
     sub: string;
     nonce?: string;
   };
-type PrivateJwk = Awaited<ReturnType<typeof exportDpopKeyPairJwk>>;
-type CachedClient = { bytes: Uint8Array; client: SolidOidcClient };
+type PrivateJwk = Awaited<ReturnType<typeof exportServerDpopKey>>;
+type CachedClient = { bytes: Uint8Array; client: ServerOidcClient };
 
 class Profile extends TermWrapper {
   get issuers(): Set<string> {
@@ -52,7 +53,7 @@ interface Pending {
   kind: "pending";
   issuer: string;
   expectedWebId?: string;
-  state: AuthorizationRequestState;
+  state: ServerAuthorizationState;
   key: PrivateJwk;
   expiresAt: number;
 }
@@ -115,7 +116,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
   const cacheClient = (
     value: Pick<StoredPodSession, "identity" | "expiresAt" | "accessExpiresAt">,
     bytes: Uint8Array,
-    client: SolidOidcClient,
+    client: ServerOidcClient,
   ) => {
     pruneClients();
     const id = value.identity.id;
@@ -146,12 +147,11 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
   const clientFor = async (issuer: string, key?: PrivateJwk, sessionId?: string) => {
     // Construction performs discovery; the same transport later fetches pod resources.
     let discovering = true;
-    const client = await createSolidOidcClient({
+    const client = await createNodeOidcClient({
       issuer,
       clientId: options.clientId,
       redirectUri: options.redirectUri,
-      scope: "openid webid offline_access",
-      ...(key === undefined ? {} : { dpopKeyPair: await importDpopKeyPairJwk(key) }),
+      ...(key === undefined ? {} : { dpopKeyPair: await importServerDpopKey(key) }),
       fetch: async (input, init) => {
         const request = new Request(input, init);
         // Public-client discovery/token calls carry no Authorization header. Check each
@@ -230,13 +230,13 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       }
       secureUrl(issuer);
       const client = await clientFor(issuer);
-      const authorization = await client.authorizationUrl({ prompt: "consent" });
+      const authorization = await client.authorizationUrl();
       const pending: Pending = {
         kind: "pending",
         issuer,
         expectedWebId,
         state: authorization.state,
-        key: await exportDpopKeyPairJwk(client.dpopKeyPair),
+        key: await exportServerDpopKey(client.dpopKeyPair),
         expiresAt: now() + LOGIN_TTL,
       };
       if (

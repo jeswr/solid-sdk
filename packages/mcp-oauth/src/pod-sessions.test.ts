@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/solid-openid-client";
+import { SERVER_MAX_REPLAY_BODY_BYTES as DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/pod-auth/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
 import {
@@ -394,7 +394,7 @@ describe("Solid-OIDC pod broker", () => {
     };
     const provider = createPodSessionProvider({ ...f.options, fetch: fetcher });
     await expect(provider.begin(POD_ISSUER, POD_CALLBACK)).rejects.toMatchObject({
-      cause: { message: "Pod issuer mismatch" },
+      message: "Pod issuer mismatch",
     });
     const defaultClock = createPodSessionProvider({ ...f.options, now: undefined });
     f.op.controls.discoveryIssuer = POD_ISSUER;
@@ -442,7 +442,8 @@ describe("Solid-OIDC pod broker", () => {
       return (await provider.fetchFor(session.id))(`${POD_ROOT}notes`);
     };
     await expect(operation()).rejects.toMatchObject({
-      cause: { error: "invalid_request", status: 413 },
+      error: "invalid_request",
+      status: 413,
     });
     expect(cancel).toHaveBeenCalledOnce();
     expect(response?.bodyUsed).toBe(true);
