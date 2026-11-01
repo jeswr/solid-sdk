@@ -148,14 +148,25 @@ export function assertJsonBounds(value: unknown, limits: PilotLimits = DEFAULT_L
       if (v.length > limits.maxArrayLength) {
         throw new BoundsError("array-too-long", `array exceeds ${limits.maxArrayLength}`);
       }
+      if (v.length > limits.maxJsonNodes - nodes - stack.length) {
+        throw new BoundsError("too-many-nodes", `JSON exceeds ${limits.maxJsonNodes} values`);
+      }
       for (const item of v) stack.push({ v: item, d: d + 1 });
     } else if (v !== null && typeof v === "object") {
-      for (const [key, item] of Object.entries(v)) {
+      // Count a bounded set of own properties before reading values or queuing children.
+      const keys: string[] = [];
+      const remaining = limits.maxJsonNodes - nodes - stack.length;
+      for (const key in v) {
+        if (!Object.hasOwn(v, key)) continue;
+        if (keys.length >= remaining) {
+          throw new BoundsError("too-many-nodes", `JSON exceeds ${limits.maxJsonNodes} values`);
+        }
         if (key.length > limits.maxStringLength) {
           throw new BoundsError("string-too-long", "object key too long");
         }
-        stack.push({ v: item, d: d + 1 });
+        keys.push(key);
       }
+      for (const key of keys) stack.push({ v: (v as Record<string, unknown>)[key], d: d + 1 });
     }
   }
 }

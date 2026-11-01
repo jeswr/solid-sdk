@@ -18,6 +18,8 @@
 // verificationMethod, proofPurpose, created) AND the document — see
 // src/canonicalize.ts.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Quad } from "@rdfjs/types";
 import { dataIntegrityHash } from "./canonicalize.js";
 import { base58btcDecode, base58btcEncode } from "./multibase.js";
@@ -118,10 +120,18 @@ export class SuiteRegistry {
  * the proof minus its `proofValue`.
  */
 export function proofOptionsQuads(proof: Omit<DataIntegrityProof, "proofValue">): Quad[] {
+  return encodedProofOptionsQuads(proof, "https://w3id.org/security#cryptosuiteString");
+}
+
+/** The legacy xsd:string variant is verification-only; new proofs use the standard datatype. */
+function encodedProofOptionsQuads(
+  proof: Omit<DataIntegrityProof, "proofValue">,
+  cryptosuiteDatatype?: string,
+): Quad[] {
   const b = new GraphBuilder();
   const node = { kind: "blank", value: "_:proof" } as const;
   b.addType(node, "https://w3id.org/security#DataIntegrityProof");
-  b.addLiteral(node, SEC_CRYPTOSUITE, proof.cryptosuite);
+  b.addLiteral(node, SEC_CRYPTOSUITE, proof.cryptosuite, cryptosuiteDatatype);
   b.addIri(node, SEC_VERIFICATION_METHOD, proof.verificationMethod);
   b.addIri(node, SEC_PROOF_PURPOSE, purposeIri(proof.proofPurpose));
   if (proof.created !== undefined) {
@@ -222,11 +232,28 @@ export class DataIntegritySuite implements ProofSuite {
     const hash = await dataIntegrityHash(documentQuads, proofOptionsQuads(optionsNoValue));
     const algorithm = algorithmFor(this.cryptosuite);
     try {
+      if (
+        await crypto.subtle.verify(
+          algorithm,
+          publicKey,
+          signature as unknown as BufferSource,
+          hash as unknown as BufferSource,
+        )
+      )
+        return true;
+      // origin/main issued both suites with an xsd:string cryptosuite. That
+      // historical preimage differs ONLY in this datatype: reconstruct it from
+      // the same document and complete proof configuration, without rewriting
+      // claims, changing keys, or relaxing any verification gate.
+      const legacyHash = await dataIntegrityHash(
+        documentQuads,
+        encodedProofOptionsQuads(optionsNoValue),
+      );
       return await crypto.subtle.verify(
         algorithm,
         publicKey,
         signature as unknown as BufferSource,
-        hash as unknown as BufferSource,
+        legacyHash as unknown as BufferSource,
       );
     } catch {
       return false;

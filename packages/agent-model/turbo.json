@@ -1,0 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["@jeswr/fetch-rdf#build", "@jeswr/rdf-serialize#build"]
+    },
+    "typecheck": {
+      "dependsOn": ["build", "@jeswr/personal-agent#build"]
+    }
+  }
+}
