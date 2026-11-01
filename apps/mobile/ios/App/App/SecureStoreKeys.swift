@@ -54,8 +54,13 @@ final class SecureStoreAuthenticationSession: SecureStoreAuthentication {
     }
 
     static func failure(_ error: Error?) -> SecureStoreFailure {
-        guard let error = error as? LAError else { return .failed }
-        switch error.code {
+        // Match on domain and code: a CFError from Security bridges to NSError, not to LAError.
+        guard let error = error else { return .failed }
+        let nsError = error as NSError
+        guard nsError.domain == LAError.errorDomain, let code = LAError.Code(rawValue: nsError.code) else {
+            return .failed
+        }
+        switch code {
         case .userCancel, .appCancel, .systemCancel: return .cancelled
         case .biometryLockout: return .lockout
         case .biometryNotAvailable, .biometryNotEnrolled, .passcodeNotSet, .notInteractive: return .unavailable
