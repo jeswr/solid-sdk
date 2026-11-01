@@ -5,6 +5,7 @@ import {
   type ImportReport,
   type NormalisedDoc,
   type PodWriter,
+  type TokenSet,
 } from "@jeswr/pod-connectors";
 import { Store } from "n3";
 import type { PodSession } from "../../../../lib/session/pod-session";
@@ -15,11 +16,39 @@ import type {
 } from "../../lib/connect/connection-state";
 import { withConnectorLock } from "../../lib/connect/import-lock";
 
+/** A sign-in that expired while waiting for another sync; nothing was recorded. */
+export class SignInExpiredError extends Error {
+  constructor() {
+    super("Sign in again.");
+    this.name = "SignInExpiredError";
+  }
+}
+
+/** Tokens within this margin of expiry are treated as expired. */
+export const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
+/** Whether a run can start with this token: unexpired (with margin) or refreshable. */
+export function tokenStillUsable(token: TokenSet, canRefresh: boolean, now = Date.now()): boolean {
+  return (
+    token.expiresAt === undefined ||
+    token.expiresAt - now > TOKEN_EXPIRY_MARGIN_MS ||
+    (canRefresh && !!token.refreshToken)
+  );
+}
+
+export interface SavedImportHooks<Auth> {
+  /** Another sync of this connector holds the reservation; this one is waiting. */
+  readonly onWait?: () => void;
+  /** Checked inside the reservation; false stops with SignInExpiredError before recording. */
+  readonly usable?: (auth: Auth) => boolean;
+}
+
 /** Read the current checkpoint only after acquiring the reservation, and persist
  * every outcome before releasing it. update must read durable state, not React state.
  * authorize (source sign-in) runs first, outside the reservation: it has no deadline,
  * so an unfinished sign-in never blocks another tab's import of this connector, and an
- * abandoned sign-in never marks a service as incompletely synced. */
+ * abandoned sign-in never marks a service as incompletely synced. A sign-in that is no
+ * longer usable once the reservation is held (it expired while waiting) records nothing. */
 export async function runSavedImport<Auth = undefined>(
   storage: string,
   id: string,
@@ -32,29 +61,37 @@ export async function runSavedImport<Auth = undefined>(
     auth: Auth,
   ) => Promise<ImportReport>,
   authorize?: () => Promise<Auth>,
+  hooks: SavedImportHooks<Auth> = {},
 ): Promise<ImportReport> {
   signal.throwIfAborted();
   const auth = authorize ? await authorize() : (undefined as Auth);
   signal.throwIfAborted();
   // Only checkpoint -> run -> persist holds the reservation.
-  return withConnectorLock(storage, id, signal, async () => {
-    const connection = update({ type: "start", at: new Date().toISOString(), mode });
-    try {
-      const result = await run(mode === "live" ? connection.cursor : undefined, connection, auth);
-      signal.throwIfAborted();
-      update({
-        type: "success",
-        at: new Date().toISOString(),
-        added: result.state?.counts.items ?? result.written.length,
-        skipped: result.skipped ?? 0,
-        cursor: result.cursor,
-      });
-      return result;
-    } catch (error) {
-      update({ type: signal.aborted ? "incomplete" : "error" });
-      throw error;
-    }
-  });
+  return withConnectorLock(
+    storage,
+    id,
+    signal,
+    async () => {
+      if (hooks.usable && !hooks.usable(auth)) throw new SignInExpiredError();
+      const connection = update({ type: "start", at: new Date().toISOString(), mode });
+      try {
+        const result = await run(mode === "live" ? connection.cursor : undefined, connection, auth);
+        signal.throwIfAborted();
+        update({
+          type: "success",
+          at: new Date().toISOString(),
+          added: result.state?.counts.items ?? result.written.length,
+          skipped: result.skipped ?? 0,
+          cursor: result.cursor,
+        });
+        return result;
+      } catch (error) {
+        update({ type: signal.aborted ? "incomplete" : "error" });
+        throw error;
+      }
+    },
+    hooks.onWait,
+  );
 }
 
 export function fetchWithSignal(transport: typeof fetch, signal: AbortSignal): typeof fetch {

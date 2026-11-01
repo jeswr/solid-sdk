@@ -32,6 +32,29 @@ describe("connector import reservations", () => {
     await expect(withConnectorLock("pod", "discord", controller.signal, work)).rejects.toThrow();
     expect(work).toHaveBeenCalledTimes(1);
   });
+  it("reports a wait only when another sync holds the reservation, with Web Locks and without", async () => {
+    for (const locks of [exclusiveLocks(), undefined]) {
+      vi.stubGlobal("navigator", locks ? { locks } : {});
+      const onWait = vi.fn();
+      expect(await withConnectorLock("pod", "discord", signal(), async () => "free", onWait)).toBe(
+        "free",
+      );
+      expect(onWait).not.toHaveBeenCalled();
+      const release = deferred();
+      const entered = deferred();
+      const first = withConnectorLock("pod", "discord", signal(), async () => {
+        entered.resolve();
+        await release.promise;
+      });
+      await entered.promise;
+      const second = withConnectorLock("pod", "discord", signal(), async () => "after", onWait);
+      await vi.waitFor(() => expect(onWait).toHaveBeenCalledOnce());
+      release.resolve();
+      await first;
+      expect(await second).toBe("after");
+      expect(onWait).toHaveBeenCalledOnce();
+    }
+  });
   it("serializes the fallback within one tab, while other connectors and storage roots run independently", async () => {
     vi.stubGlobal("navigator", {});
     const entered = deferred();

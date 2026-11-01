@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { IntegrationSyncError } from "./errors.js";
 import { createSourceAuth, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
+import { Provenance } from "./provenance.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
 import type { ImportContext, IntegrationAdapter } from "./types.js";
 import { CLASSES, MusicRecording } from "./vocab.js";
@@ -569,6 +570,38 @@ describe("runImport enforces cancellation for adapters that ignore ctx.signal", 
     // The failure state never advances the checkpoint.
     expect(states).toHaveLength(1);
     expect((states[0] as { cursor?: string }).cursor).toBeUndefined();
+  });
+
+  it("leaves a cancelled run's written documents naming an activity it never records (documented)", async () => {
+    const pod = createMemoryPod();
+    const controller = new AbortController();
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        controller.abort(reason);
+        return {};
+      },
+    };
+    await expect(
+      runImport({
+        adapter,
+        mode: "demo",
+        podWriter: createFetchPodWriter({
+          adapterId: "toy",
+          webId: TEST_WEBID,
+          profileDocumentUrl: TEST_PROFILE_DOC,
+          podRoot: TEST_POD_ROOT,
+          fetch: pod.fetch,
+        }),
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    const docUrl = `${TEST_POD_ROOT}integrations/toy/music/songs.ttl`;
+    const [activity] = new Provenance(docUrl, pod.dataset(docUrl), DataFactory).generatedBy;
+    expect(activity).toMatch(/_provenance\.ttl#run-/);
+    // No Pod I/O after cancellation: the run's activity is never described.
+    expect(pod.get(`${TEST_POD_ROOT}integrations/toy/_provenance.ttl`)).toBeUndefined();
   });
 
   it("completes a run whose signal is still live through registration and provenance", async () => {

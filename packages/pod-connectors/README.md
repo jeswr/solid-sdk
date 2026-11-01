@@ -377,8 +377,9 @@ the current ETag.
 Item counts retain one counter per written document. Replacement counts the adapter's current
 local subjects (excluding the document URL); merging counts each local source subject once per document
 in the current run, using stored provenance to detect repeats. Removal drops the document's
-count. Subjects added only by sector mappings are excluded. Session accounting therefore
-scales with documents, including when Takeout releases its reconciliation manifests.
+count. Subjects added only by sector mappings, and subjects an adapter lists in
+`NormalisedDoc.carriedForward` (kept unchanged from the stored document), are excluded.
+Session accounting therefore scales with documents, including when Takeout releases its reconciliation manifests.
 
 Run provenance retains at most `MAX_RUN_SOURCES = 1,000` distinct source IRIs, including
 the connector's own source IRI, added first. `createImportSession` accepts `maxRunSources`
@@ -393,6 +394,10 @@ fallback. Otherwise the source API origin or a connector export URN is used. Eac
 activity in the connector's reserved `_provenance.ttl`, with the bounded source summary,
 connector IRI and start/end times. This companion document is excluded from imported-document
 counts and Type Index registration. Failed runs attempt provenance recording and retain the original error.
+A cancelled run makes no further Pod request, so it records no activity: documents and items it
+already wrote keep `prov:wasGeneratedBy` naming an activity absent from `_provenance.ttl`. Read
+such an unrecorded activity as a cancelled, incomplete run; the next run that rewrites those
+documents or items links them to its own recorded activity.
 
 Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutating adapter
 input. Existing music, calendar and social class alignments add sector types alongside legacy
@@ -680,8 +685,8 @@ withholds `playlist-read-private` or `playlist-read-collaborative`, listed playl
 kind are omitted after the bounded, budgeted list read and their items are not requested.
 Spotify also leaves withheld kinds out of `/me/playlists`, so while either playlist scope is
 withheld every previously imported playlist this run does not describe (with its list items
-and tracks) carries forward into the replaced `music/playlists.ttl`; only a run with both
-playlist scopes drops playlists the source no longer lists. Other adapters ignore `scopes`. Other playlists retain their metadata
+and tracks) carries forward into the replaced `music/playlists.ttl` without counting as an
+imported item; only a run with both playlist scopes drops playlists the source no longer lists. Other adapters ignore `scopes`. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
 ## Tier A sync behavior

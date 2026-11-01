@@ -112,6 +112,12 @@ export interface NormalisedDoc {
    * container (e.g. a profile doc beside the repositories collection).
    */
   readonly skipRegistration?: boolean;
+  /**
+   * Absolute IRIs of subjects copied unchanged from the stored document rather than imported
+   * by this run (for example playlists a partial grant cannot see). They are written but
+   * excluded from the run's item counts.
+   */
+  readonly carriedForward?: readonly string[];
 }
 
 /**
@@ -187,7 +193,8 @@ export interface ImportContext {
   /**
    * Cancels the run. The runner already refuses further `api`, `read`, `write`, `writeBinary`,
    * `remove` and `progress` calls once it aborts; adapters pass it on to stop in-flight waits
-   * (for example on a rate-limit delay).
+   * (for example on a rate-limit delay). A cancelled run records no activity, so documents it
+   * already wrote name an activity absent from `_provenance.ttl` (see `RunImportOptions.signal`).
    */
   readonly signal?: AbortSignal;
   /**

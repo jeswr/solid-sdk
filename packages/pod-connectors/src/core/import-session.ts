@@ -92,9 +92,16 @@ export function createImportSession(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
     );
     let itemCount = doc.writeMode === "merge" ? (itemCounts.get(url) ?? 0) : 0;
+    const carried = new Set(input.carriedForward);
     for (const subject of subjects) {
-      // Counts describe adapter-supplied local source items; mapped resources stay uncounted.
-      if (subject === url || !subject.startsWith(connectorRoot) || !sourceSubjects.has(subject))
+      // Counts describe adapter-supplied local source items; mapped resources and subjects
+      // kept from the stored document stay uncounted.
+      if (
+        subject === url ||
+        !subject.startsWith(connectorRoot) ||
+        !sourceSubjects.has(subject) ||
+        carried.has(subject)
+      )
         continue;
       // The stored dataset already records which subjects this run wrote. Inspect it
       // before incoming descriptions/provenance replace those subjects on a merge.

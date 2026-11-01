@@ -114,9 +114,13 @@ describe("plain connect copy", () => {
     expect(stepCopy(0, 4)).toBe("Step 1 of 4");
     expect(stepCopy(1, 4)).toBe("Step 2 of 4");
     expect(stepCopy(3, 4)).toBe("Step 4 of 4");
-    expect(stepCopy(4, 4)).toBe("Step 4 of 4");
-    expect(stepCopy(9, 4)).toBe("Step 4 of 4");
     expect(stepCopy(-1, 1)).toBe("Step 1 of 1");
+    // A finished run, or an item-counting adapter's final report, never reads as a step.
+    expect(stepCopy(4, 4)).toBe("Finishing…");
+    expect(stepCopy(9, 4)).toBe("Finishing…");
+    expect(stepCopy(5000, 5000)).toBe("Finishing…");
+    expect(stepCopy(0, 0)).toBe("Finishing…");
+    expect(stepCopy(0, Number.NaN)).toBe("Finishing…");
     expect(scopeLabel("user-follow-read")).toBe("Artists you follow");
     expect(scopeLabel("new-scope")).toBe("Service data");
     expect(

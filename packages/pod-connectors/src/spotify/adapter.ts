@@ -78,13 +78,20 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       const skipped = new SkipCounter();
       const checkpoint = parseCursor(ctx.cursor);
       // Finish bounded source fetching before replacing any existing collection.
-      const stage = (slug: string, dataset: Store, forClass: string, merge = false) => {
+      const stage = (
+        slug: string,
+        dataset: Store,
+        forClass: string,
+        merge = false,
+        carriedForward?: readonly string[],
+      ) => {
         documents.push({
           slug,
           dataset,
           category: "media",
           forClass,
           writeMode: merge ? "merge" : "replace",
+          ...(carriedForward?.length ? { carriedForward } : {}),
         });
       };
       const track = (value: SpotifyTrack | null | undefined, slug: string, ds: Store) => {
@@ -255,14 +262,21 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
           ds.addQuads([...contents]);
         }
       }
+      let carried: string[] = [];
       if (partialPlaylists) {
         const previous = await ctx.read(slug);
         if (previous) {
           const local = `${ctx.resolve(slug)}#`;
-          carryForward(previous, ds, storedPlaylists(previous, `${local}playlist-`), local);
+          carried = carryForward(
+            previous,
+            ds,
+            storedPlaylists(previous, `${local}playlist-`),
+            local,
+          );
         }
       }
-      stage(slug, ds, CLASSES.MusicPlaylist);
+      // Kept playlists are not imported by this run, so they do not count as added items.
+      stage(slug, ds, CLASSES.MusicPlaylist, false, carried);
 
       ctx.progress({ label: "Fetching recently played…", done: 3, total: 4 });
       const historySlug = "music/recently-played.ttl";
@@ -332,14 +346,22 @@ function storedPlaylists(previous: DatasetCore, prefix: string): Set<string> {
 
 /**
  * Copy the stored descriptions of `roots` and of the document-local nodes they link to (list
- * items, tracks). A subject this run already describes keeps its new description.
+ * items, tracks). A subject this run already describes keeps its new description. Returns the
+ * subjects copied.
  */
-function carryForward(previous: DatasetCore, target: Store, roots: Set<string>, local: string) {
+function carryForward(
+  previous: DatasetCore,
+  target: Store,
+  roots: Set<string>,
+  local: string,
+): string[] {
   const pending = [...roots];
   const seen = new Set(pending);
+  const copied: string[] = [];
   for (let subject = pending.pop(); subject !== undefined; subject = pending.pop()) {
     const node = DataFactory.namedNode(subject);
     if (target.countQuads(node, null, null, null) > 0) continue;
+    copied.push(subject);
     for (const quad of previous.match(node, null, null, null)) {
       target.add(quad);
       const object = quad.object;
@@ -353,6 +375,7 @@ function carryForward(previous: DatasetCore, target: Store, roots: Set<string>, 
       }
     }
   }
+  return copied;
 }
 
 function parseCursor(

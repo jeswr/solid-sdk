@@ -649,6 +649,20 @@ describe("Spotify playlist permissions", () => {
     expect(new MusicPlaylist(`${Playlists}#playlist-mine`, ds, DataFactory).name).toBe("Mine");
   });
 
+  // AUTHORED-BY Claude Opus 5.5
+  it("does not count playlists it only keeps from the stored snapshot as added items", async () => {
+    const synced = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S")]), synced);
+    const kept = await run(playlists([], []), synced, withoutPrivate);
+    expect(
+      synced.dataset(Playlists).match(nn(`${Playlists}#playlist-mine`), TYPE).size,
+    ).toBeGreaterThan(0);
+    // The same partial run against an empty pod imports exactly what this one imported.
+    const fresh = await run(playlists([], []), createMemoryPod(), withoutPrivate);
+    expect(kept.state?.counts.items).toBe(fresh.state?.counts.items);
+    expect(kept.state?.counts.documents).toBe(fresh.state?.counts.documents);
+  });
+
   it("keeps no earlier playlists when a partial grant re-syncs an empty pod", async () => {
     const pod = createMemoryPod();
     const report = await run(playlists([], []), pod, withoutPrivate);

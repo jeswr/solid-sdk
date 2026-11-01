@@ -43,6 +43,11 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * write, progress report, Type Index registration or provenance write, and rejects with its
    * reason; adapters that read `ctx.signal` also end waits (rate-limit backoff). A run whose
    * provenance write already finished is reported as complete.
+   *
+   * A cancelled run records no activity. Documents and items it already wrote keep
+   * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
+   * read an activity missing from that document as a cancelled, incomplete run. The next run
+   * that rewrites those documents or items links them to its own activity.
    */
   signal?: AbortSignal;
   /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
@@ -137,6 +142,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the
     // run was not cancelled, preserving the original failure if the provenance write fails.
+    // A cancelled run starts no further Pod I/O, so its writes name an unrecorded activity
+    // (documented on RunImportOptions.signal).
     if (signal?.aborted) session.release();
     else
       try {

@@ -8,6 +8,7 @@ import {
   runFileImport,
   runImport,
   type SourceAuth,
+  type TokenSet,
 } from "@jeswr/pod-connectors";
 import { EmptyState, ErrorState, Progress } from "@jeswr/suite-ui";
 import Link from "next/link";
@@ -32,11 +33,21 @@ import {
   fetchWithSignal,
   fileWithSignal,
   runSavedImport,
+  SignInExpiredError,
+  tokenStillUsable,
 } from "./import-service";
 import { login, sourceFetch } from "./oauth-login";
 import { requiredScopesFor, withRequiredScopes, withSelectedScopes } from "./scopes";
 import { ConnectorLogo, StatusBadge } from "./shared";
 import { useOnline } from "./use-online";
+
+/** Abort reason when the connection drops: the user did not cancel. */
+class WentOffline extends Error {
+  constructor() {
+    super("The connection was lost.");
+    this.name = "AbortError";
+  }
+}
 
 export function ConnectFlow({ service }: { service: string }) {
   // The server route has already validated the id against this same catalogue.
@@ -67,6 +78,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const [blockedHref, setBlockedHref] = useState<string>();
   const [popupClosed, setPopupClosed] = useState(false);
   const [notice, setNotice] = useState("");
+  // Signed in (or no sign-in needed) but another sync of this connector holds the reservation.
+  const [waitingForLock, setWaitingForLock] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const running = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -89,7 +102,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     [],
   );
   useEffect(() => {
-    if (!online) controller.current?.abort();
+    if (!online) controller.current?.abort(new WentOffline());
     if (wasOnline.current === online) return;
     wasOnline.current = online;
     // The control that had focus was just replaced; never pull focus from elsewhere.
@@ -116,11 +129,18 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     setWritten(0);
     setImportedDomains([]);
     setProgress(undefined);
-    setPhase(mode === "live" && adapter?.oauth ? "waiting" : "running");
-    const domainsByResource = new Map<string, DataCategory>();
+    setWaitingForLock(false);
     const oauth = mode === "live" ? adapter?.oauth : undefined;
+    if (oauth) setPhase("waiting");
+    else {
+      // No sign-in: the sync itself starts now, on the Importing step.
+      setStep(3);
+      setPhase("running");
+    }
+    const domainsByResource = new Map<string, DataCategory>();
     let started = false;
     let signedIn = false;
+    let token: TokenSet | undefined;
     try {
       const result = await runSavedImport(
         session.storageUrl,
@@ -131,6 +151,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         async (cursor, connection, sourceAuth: SourceAuth | undefined) => {
           started = true;
           abort.signal.throwIfAborted();
+          setWaitingForLock(false);
           setBlockedHref(undefined);
           setStep(3);
           setPhase("running");
@@ -176,23 +197,35 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         oauth && adapter
           ? async () => {
               const config = { ...oauth, scopes: selectedScopes };
-              const token = await login(entry.id, config, abort.signal, setBlockedHref, () =>
-                setPopupClosed(true),
+              const signedInToken = await login(
+                entry.id,
+                config,
+                abort.signal,
+                setBlockedHref,
+                () => setPopupClosed(true),
               );
+              token = signedInToken;
               signedIn = true;
               abort.signal.throwIfAborted();
               // Signed in: what remains (waiting for another tab's sync, then importing) is
               // the sync itself, cancellable from the Importing panel.
               setBlockedHref(undefined);
               setPopupClosed(false);
+              setStep(3);
               setPhase("running");
               const transport = fetchWithSignal(sourceFetch, abort.signal);
               return (
-                adapter.createSourceAuth?.(config, token, transport) ??
-                createSourceAuth(entry.id, adapter, token, transport)
+                adapter.createSourceAuth?.(config, signedInToken, transport) ??
+                createSourceAuth(entry.id, adapter, signedInToken, transport)
               );
             }
           : undefined,
+        {
+          onWait: () => setWaitingForLock(true),
+          // A token can expire while another sync holds the reservation; only adapters with
+          // their own source auth refresh it.
+          usable: () => !token || tokenStillUsable(token, !!adapter?.createSourceAuth),
+        },
       );
       const completed = new Map<string, DataCategory>();
       for (const { url } of result.written) {
@@ -203,13 +236,26 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
       setReport(result);
       setPhase("done");
     } catch (error) {
-      if (abort.signal.aborted && !started) {
+      const offline = abort.signal.reason instanceof WentOffline;
+      if (error instanceof SignInExpiredError) {
+        // Nothing was recorded; the sign-in panel offers a fresh sign-in.
+        setStep(2);
+        setPhase("idle");
+        setNotice(
+          `Your ${entry.name} sign-in expired while another sync finished. Sign in again to sync.`,
+        );
+      } else if (abort.signal.aborted && !started) {
         // Nothing was imported or recorded: return to the start panel.
+        setStep(2);
         setPhase("idle");
         setNotice(
           oauth && !signedIn
-            ? `Sign-in to ${entry.name} cancelled.`
-            : "Sync cancelled before it started.",
+            ? offline
+              ? `Sign-in to ${entry.name} stopped because you went offline.`
+              : `Sign-in to ${entry.name} cancelled.`
+            : offline
+              ? "Sync stopped before it started because you went offline."
+              : "Sync cancelled before it started.",
         );
       } else {
         setFailure(error);
@@ -239,9 +285,13 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         ? popupClosedCopy
         : `Waiting for ${entry.name}…`
       : phase === "running"
-        ? total !== undefined && progress
-          ? stepCopy(progress.done, total)
-          : progressCopy(written, undefined, "collections")
+        ? waitingForLock
+          ? `Waiting for another sync of ${entry.name} to finish`
+          : !progress && !written
+            ? "Starting sync…"
+            : total !== undefined && progress
+              ? stepCopy(progress.done, total)
+              : progressCopy(written, undefined, "collections")
         : phase === "done" && report
           ? [
               addedCopy(
@@ -302,7 +352,12 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 ))}
               </ol>
               {entry.status === "soon" ? (
-                <p>Coming soon</p>
+                <div className="hm-connect-result">
+                  {/* A focus target for reconnecting, like every other panel. */}
+                  <h2 ref={panelHeading} tabIndex={-1}>
+                    Coming soon
+                  </h2>
+                </div>
               ) : phase === "done" && report ? (
                 <div className="hm-connect-result">
                   <h2 ref={panelHeading} tabIndex={-1}>

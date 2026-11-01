@@ -22,11 +22,13 @@ export function progressCopy(count: number, total?: number, collection = "items"
     ? `Imported ${count} ${collection}`
     : `Imported ${count} of ${total} ${collection}`;
 }
-/** Adapters report steps (`done` completed of `total`), not collections or items: name the
- * step in progress, never a count of data. */
+/** Most adapters report steps (`done` completed of `total`): name the step in progress, never a
+ * count of data. Item-counting adapters (Gmail, Google Drive, Contacts) only send a total in
+ * their final `done === total` report, so a finished or empty total reads as neutral copy. */
 export function stepCopy(done: number, total: number): string {
-  const step = Math.max(1, Math.min(total, Math.floor(done) + 1));
-  return `Step ${step} of ${total}`;
+  if (!Number.isFinite(total) || total < 1 || !(done < total)) return "Finishing…";
+  const steps = Math.ceil(total);
+  return `Step ${Math.min(steps, Math.max(1, Math.floor(done) + 1))} of ${steps}`;
 }
 export function relativeSync(value: string | undefined, now: number): string {
   const elapsed = value ? now - Date.parse(value) : Number.NaN;

@@ -17,6 +17,8 @@ import {
   fetchWithSignal,
   fileWithSignal,
   runSavedImport,
+  SignInExpiredError,
+  tokenStillUsable,
 } from "../src/apps/home/components/connect/import-service";
 import { withRequiredScopes, withSelectedScopes } from "../src/apps/home/components/connect/scopes";
 import { isDemoImport } from "../src/apps/home/lib/connect";
@@ -786,6 +788,49 @@ describe("sign-in before recording a run", () => {
     expect(report.adapterId).toBe("spotify");
     expect(duringSignIn).toBeUndefined();
     expect(store.read(DEMO_WEBID).spotify).toMatchObject({ lastOutcome: "ok" });
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("a sign-in that expires while waiting for the reservation", () => {
+  const now = Date.parse("2026-11-01T12:00:00Z");
+  const token = (expiresAt?: number, refreshToken?: string) => ({
+    accessToken: "memory-only",
+    tokenType: "Bearer",
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+    ...(refreshToken ? { refreshToken } : {}),
+  });
+  it("treats a token within 60 s of expiry as expired unless the adapter can refresh it", () => {
+    expect(tokenStillUsable(token(), false, now)).toBe(true);
+    expect(tokenStillUsable(token(now + 61_000), false, now)).toBe(true);
+    expect(tokenStillUsable(token(now + 60_000), false, now)).toBe(false);
+    expect(tokenStillUsable(token(now - 1), false, now)).toBe(false);
+    expect(tokenStillUsable(token(now - 1, "refresh"), true, now)).toBe(true);
+    // A refresh token is useless without an adapter that refreshes.
+    expect(tokenStillUsable(token(now - 1, "refresh"), false, now)).toBe(false);
+    expect(tokenStillUsable(token(now - 1), true, now)).toBe(false);
+  });
+  it("checks the sign-in inside the reservation and records nothing when it is no longer usable", async () => {
+    const [store] = preferencesPair();
+    const update = updater(store, "spotify");
+    const run = vi.fn();
+    const auth = { fetch: vi.fn<typeof fetch>() };
+    const usable = vi.fn(() => false);
+    await expect(
+      runSavedImport(
+        DEMO_ROOT,
+        "spotify",
+        "live",
+        new AbortController().signal,
+        update,
+        run,
+        async () => auth,
+        { usable },
+      ),
+    ).rejects.toBeInstanceOf(SignInExpiredError);
+    expect(usable).toHaveBeenCalledWith(auth);
+    expect(run).not.toHaveBeenCalled();
+    expect(store.read(DEMO_WEBID).spotify).toBeUndefined();
   });
 });
 
