@@ -458,21 +458,19 @@ function SharingContent({
                           <Button
                             variant="link"
                             disabled={disabled}
-                            onClick={() =>
+                            onClick={(event) => {
+                              const button = event.currentTarget;
                               void act(person.webId, () =>
                                 adapter.setPerson(url, person.webId, person.role as ShareRole, {}),
                               ).then(() =>
-                                // On success this button unmounts; keep focus in the row.
+                                // On success this button unmounts (and the dialog's focus trap
+                                // would park focus on the dialog); keep focus in the row.
                                 requestAnimationFrame(() => {
-                                  if (
-                                    document.activeElement &&
-                                    document.activeElement !== document.body
-                                  )
-                                    return;
+                                  if (button.isConnected) return;
                                   document.getElementById(`${id}-expiry-${person.webId}`)?.focus();
                                 }),
-                              )
-                            }
+                              );
+                            }}
                           >
                             Remove end date
                             <span className="suite-sr-only">
