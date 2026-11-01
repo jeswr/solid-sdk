@@ -7,7 +7,7 @@ import {
   podScopedUrl,
 } from "@jeswr/guarded-fetch";
 import { Container } from "@solid/object";
-import { createNameComparator, groupAlbums, type LibraryTrack, totalDuration } from "../library";
+import { createNameComparator, type LibraryAlbum, type LibraryTrack } from "../library";
 import {
   DataFactory,
   InvalidMusicError,
@@ -18,12 +18,13 @@ import {
   Store,
   saveMusic,
 } from "../model";
-import { S } from "../model/vocab";
+import { normalizeLibrary } from "./normalize";
 
 const rdfMediaTypes = new Set<string>(SUPPORTED_RDF_MEDIA_TYPES);
 
 export interface MusicTrack extends LibraryTrack {
   artistId: string;
+  artistIds: string[];
   loved: boolean;
   imageUrl: string | undefined;
   sourceUrl: string | undefined;
@@ -31,7 +32,7 @@ export interface MusicTrack extends LibraryTrack {
 }
 export interface Library {
   tracks: MusicTrack[];
-  albums: ReturnType<typeof groupAlbums>;
+  albums: LibraryAlbum[];
   artists: {
     id: string;
     /** The model's statistics key: an IRI, or a literal-only credit. */
@@ -115,85 +116,7 @@ export async function loadLibrary(
   await walk(musicRoot(root));
   await walk(new URL("integrations/spotify/music/", root).href);
   const models = readLibrary(dataset);
-  const artistKeys = new Map<string, string>();
-  const tracks: MusicTrack[] = models.tracks.map((track) => {
-    const artist = track.artists[0];
-    const album = track.album;
-    const artistId =
-      artist?.iri ??
-      new URL(`artists/inferred-${encodeURIComponent(artist?.name ?? "unknown")}`, musicRoot(root))
-        .href;
-    artistKeys.set(artistId, artist?.iri ?? artist?.name ?? "Unknown artist");
-    return {
-      id: track.value,
-      title: track.title,
-      artist: artist?.name ?? "Unknown artist",
-      artistId,
-      albumId:
-        album?.iri ??
-        new URL(`albums/inferred-${encodeURIComponent(album?.name ?? "unknown")}`, musicRoot(root))
-          .href,
-      albumTitle: album?.name ?? "Unknown album",
-      loved: track.loved,
-      imageUrl: track.imageUrl,
-      sourceUrl: track.sourceUrl,
-      durationSeconds:
-        track.durationSeconds === undefined ? undefined : Math.floor(track.durationSeconds),
-      ...(Number(track.strings(`${S}discNumber`)[0])
-        ? { discNumber: Number(track.strings(`${S}discNumber`)[0]) }
-        : {}),
-      ...(Number(track.strings(`${S}trackNumber`, `${S}position`)[0])
-        ? { trackNumber: Number(track.strings(`${S}trackNumber`, `${S}position`)[0]) }
-        : {}),
-      added: track.strings(`${S}dateCreated`)[0] ?? "",
-    };
-  });
-  const albums = groupAlbums(tracks);
-  for (const album of models.albums) {
-    if (!albums.some((group) => group.id === album.value))
-      albums.push({
-        id: album.value,
-        title: album.title,
-        artist: album.artists[0]?.name ?? "Unknown artist",
-        compilation: false,
-        tracks: [],
-        durationSeconds: 0,
-      });
-  }
-  const groups = new Map<string, MusicTrack[]>();
-  const byId = new Map(tracks.map((track) => [track.id, track]));
-  // Keep album/disc/track order, grouping on identity rather than the display name.
-  for (const album of albums)
-    for (const member of album.tracks) {
-      const track = byId.get(member.id) as MusicTrack;
-      const group = groups.get(track.artistId);
-      if (group) group.push(track);
-      else groups.set(track.artistId, [track]);
-    }
-  const artists: Library["artists"] = [...groups].map(([id, members]) => ({
-    id,
-    key: artistKeys.get(id) as string,
-    name: (members[0] as MusicTrack).artist,
-    tracks: members,
-    albumIds: [...new Set(members.map((track) => track.albumId))],
-    durationSeconds: totalDuration(members),
-  }));
-  for (const artist of models.artists) {
-    if (!artists.some((group) => group.id === artist.value))
-      artists.push({
-        id: artist.value,
-        key: artist.value,
-        name: artist.title,
-        albumIds: models.albums
-          .filter((album) => album.artists.some((ref) => ref.iri === artist.value))
-          .map((album) => album.value),
-        tracks: [],
-        durationSeconds: 0,
-      });
-  }
-  const compare = createNameComparator();
-  albums.sort((a, b) => compare(a.title, b.title));
-  artists.sort((a, b) => compare(a.name, b.name));
+  const { tracks, albums, artists } = normalizeLibrary(models, musicRoot(root));
   return { tracks, models, documents, albums, artists };
 }
 

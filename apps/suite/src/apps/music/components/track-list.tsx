@@ -22,15 +22,13 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { encodeRef } from "@/lib/refs";
 import { type MusicTrack, sortTracks } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { formatDuration } from "../lib/library";
+import { albumHref, artistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
 import { AddToPlaylist } from "./playlist-dialogs";
 
-export const albumHref = (id: string) => `/music/a/${encodeRef(id)}`;
-export const artistHref = (id: string) => `/music/ar/${encodeRef(id)}`;
 export function Like({ track }: { track: MusicTrack }) {
   const music = useMusic();
   return (

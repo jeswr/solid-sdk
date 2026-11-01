@@ -17,8 +17,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
-import { encodeRef } from "@/lib/refs";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { playlistHref } from "../lib/navigation";
 import { MusicProvider, useMusic } from "../state/music-context";
 import { CreatePlaylist } from "./playlist-dialogs";
 
@@ -62,8 +62,8 @@ function Sidebar() {
         {music.snapshot?.playlists.map((playlist) => (
           <li key={playlist.id}>
             <Link
-              href={`/music/p/${encodeRef(playlist.id)}`}
-              aria-current={pathname === `/music/p/${encodeRef(playlist.id)}` ? "page" : undefined}
+              href={playlistHref(playlist.id)}
+              aria-current={pathname === playlistHref(playlist.id) ? "page" : undefined}
             >
               <ListMusic size={16} aria-hidden="true" />
               <span className="mus-truncate">{playlist.name}</span>

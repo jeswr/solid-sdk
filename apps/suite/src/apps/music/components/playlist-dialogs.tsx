@@ -19,8 +19,8 @@ import {
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, type Ref, useId, useState } from "react";
-import { encodeRef } from "@/lib/refs";
 import type { MusicPlaylist } from "../lib/data/playlists";
+import { playlistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
 
 export function CreatePlaylist({ compact = false }: { compact?: boolean }) {
@@ -75,7 +75,7 @@ export function CreatePlaylist({ compact = false }: { compact?: boolean }) {
               setOpen(false);
               setName("");
               setDescription("");
-              router.push(`/music/p/${encodeRef(iri)}`);
+              router.push(playlistHref(iri));
             } else setError("Couldn’t create your playlist. Try again.");
           }}
           className="mus-form"
@@ -247,9 +247,9 @@ export function AddSongs({
           <ul>
             {tracks.map((track) => (
               <li key={track.id}>
-                <label htmlFor={`${pickerId}-${encodeRef(track.id)}`}>
+                <label htmlFor={`${pickerId}-${encodeURIComponent(track.id)}`}>
                   <Checkbox
-                    id={`${pickerId}-${encodeRef(track.id)}`}
+                    id={`${pickerId}-${encodeURIComponent(track.id)}`}
                     checked={selected.includes(track.id)}
                     onCheckedChange={(checked) =>
                       setSelected((ids) =>

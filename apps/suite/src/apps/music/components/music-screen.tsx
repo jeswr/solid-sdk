@@ -18,17 +18,18 @@ import { ArrowRight, Disc3, Heart, ListMusic, Music2, Trash2 } from "lucide-reac
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { decodeRef, encodeRef } from "@/lib/refs";
+import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { formatDuration } from "../lib/library";
 import type { ArtistPeriod } from "../lib/model";
+import { albumHref, artistHref, playlistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
 import { Artwork } from "./artwork";
 import { MusicSurface } from "./music-app";
 import { AddSongs, CreatePlaylist, EditPlaylistDetails } from "./playlist-dialogs";
-import { albumHref, artistHref, Like, PlaylistTracks, TrackList, TrackName } from "./track-list";
+import { Like, PlaylistTracks, TrackList, TrackName } from "./track-list";
 
 export type MusicView =
   | "home"
@@ -55,7 +56,6 @@ const titles: Record<MusicView, string> = {
   playlist: "Playlist",
   search: "Search",
 };
-const playlistHref = (id: string) => `/music/p/${encodeRef(id)}`;
 function Empty({ title, body }: { title: string; body: string }) {
   return (
     <EmptyState
@@ -175,22 +175,20 @@ function Home() {
           {top.length ? (
             <ol className="mus-ranking" aria-label="Your top artists">
               {top.map((artist, i) => {
-                const id = snapshot.library.artists.find((group) => group.key === artist.key)?.id;
+                const group = snapshot.library.artists.find((group) => group.key === artist.key);
+                const id = group?.id;
+                const name = group?.name ?? artist.name;
                 return (
                   <li key={artist.key}>
                     <span className="mus-rank mus-number">{i + 1}</span>
                     <Artwork
-                      name={artist.name}
+                      name={name}
                       image={
                         snapshot.library.models.artists.find((node) => node.value === artist.key)
                           ?.imageUrl
                       }
                     />
-                    {id ? (
-                      <Link href={artistHref(id)}>{artist.name}</Link>
-                    ) : (
-                      <span>{artist.name}</span>
-                    )}
+                    {id ? <Link href={artistHref(id)}>{name}</Link> : <span>{name}</span>}
                     <span className="mus-play-count mus-number">
                       {artist.plays}
                       <small>plays</small>
@@ -486,7 +484,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
     const artist = library.artists.find((a) => a.id === id);
     if (artist) {
       const top = mostPlayedTracks(library, snapshot.history, "1Y", new Date())
-        .filter((entry) => entry.track.artistId === artist.id)
+        .filter((entry) => entry.track.artistIds.includes(artist.id))
         .slice(0, 5);
       return (
         <>
