@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
+import { ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 import { SuiteFrame } from "../../../components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "../../../lib/session/pod-session";
 import { AgentWorkspaceProvider } from "../lib/hooks";
+import { ApprovalDeviceProvider } from "./approval-key-setup-sheet";
 import { AgentSidebar } from "./sidebar";
 
 function SessionGate({ children }: { children: ReactNode }) {
@@ -23,9 +24,11 @@ function SessionGate({ children }: { children: ReactNode }) {
         )
       }
     >
-      <SuiteFrame app="agent" sidebar={<AgentSidebar />} context="Agent">
-        {children}
-      </SuiteFrame>
+      <ApprovalDeviceProvider>
+        <SuiteFrame app="agent" sidebar={<AgentSidebar />} context="Agent">
+          {children}
+        </SuiteFrame>
+      </ApprovalDeviceProvider>
     </AgentWorkspaceProvider>
   );
 }
@@ -35,6 +38,7 @@ export function AgentApp({ children }: { children: ReactNode }) {
       <PodSessionProvider>
         <SessionGate>{children}</SessionGate>
       </PodSessionProvider>
+      <Toaster />
     </div>
   );
 }

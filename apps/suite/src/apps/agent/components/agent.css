@@ -190,3 +190,8 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.agent-app input:focus-visible,
+.agent-app button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

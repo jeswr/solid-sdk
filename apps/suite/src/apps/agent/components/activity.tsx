@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { isLoaded } from "../lib/client";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
-import { readAudit } from "../lib/readers";
+import { readAudit, readControl } from "../lib/readers";
+import { createAgentVerifier } from "../lib/verify";
 import { DetailScreen, QueryRows, Screen } from "./states";
 export function ActivityScreen({ seq }: { seq?: string }) {
-  const { client } = useAgentWorkspace();
+  const { client, session } = useAgentWorkspace();
   const query = useAgentQuery(client.paths.audit, readAudit);
+  const controls = useAgentQuery(session.storageUrl, (c) =>
+    readControl(c, createAgentVerifier(session)),
+  );
   const selected =
     query.status === "ready" && seq !== undefined
       ? {
@@ -52,7 +56,18 @@ export function ActivityScreen({ seq }: { seq?: string }) {
     </QueryRows>
   );
   return seq === undefined ? (
-    <Screen title="Activity">{content}</Screen>
+    <Screen title="Activity">
+      {content}
+      {controls.status === "ready" &&
+        controls.data
+          .filter((row) => !isLoaded(row) || row.verified !== "verified")
+          .map((row) => (
+            <article className="agent-card" key={row.url}>
+              <h2>Unverified record</h2>
+              <p>This record could not be verified and has no effect on your agent's status.</p>
+            </article>
+          ))}
+    </Screen>
   ) : (
     <DetailScreen title={`Activity record ${seq}`} back="/agent/activity">
       {content}

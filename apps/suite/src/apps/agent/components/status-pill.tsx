@@ -12,13 +12,15 @@ import { useEffect, useState } from "react";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { loadedRecords, readControl, readHeartbeat } from "../lib/readers";
 import { type AgentStatus, agentStatus } from "../lib/status";
+import { createAgentVerifier } from "../lib/verify";
+import { AgentControl } from "./agent-control";
 
 export function useDaemonStatus() {
-  const { client, session } = useAgentWorkspace();
+  const { session } = useAgentWorkspace();
   const [now, setNow] = useState(Date.now);
-  const query = useAgentQuery(client.paths.control, async (c) => ({
+  const query = useAgentQuery(session.storageUrl, async (c) => ({
     heartbeat: await readHeartbeat(c),
-    controls: await readControl(c),
+    controls: await readControl(c, createAgentVerifier(session)),
   }));
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -27,7 +29,7 @@ export function useDaemonStatus() {
   const status = agentStatus({
     heartbeatAt: query.status === "ready" ? loadedRecords(query.data.heartbeat)[0]?.at : undefined,
     controls: query.status === "ready" ? loadedRecords(query.data.controls) : [],
-    now,
+    now: Math.max(now, Date.now()),
     loading: query.status === "loading",
     owner: session.webId,
   });
@@ -46,15 +48,21 @@ export function StatusPill({ status }: { status: AgentStatus }) {
     : undefined;
   return (
     <div className="agent-status">
-      <StatusDot
-        status={
-          status.state === "running"
-            ? "success"
-            : status.state === "stopped"
-              ? "warning"
-              : "neutral"
+      <AgentControl
+        stopped={status.state === "stopped"}
+        triggerLabel={`Agent status: ${labels[status.state]}`}
+        trigger={
+          <StatusDot
+            status={
+              status.state === "running"
+                ? "success"
+                : status.state === "stopped"
+                  ? "warning"
+                  : "neutral"
+            }
+            label={labels[status.state]}
+          />
         }
-        label={labels[status.state]}
       />
       {status.lastSeen && (
         <small>last seen {elapsed === 0 ? "just now" : `${elapsed} minutes ago`}</small>

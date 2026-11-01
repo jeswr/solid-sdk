@@ -1,24 +1,25 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-
-import type { ActionProposal, Approval, ControlStatement } from "@jeswr/agent-model";
+import type { ActionProposal } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { describe, expect, it } from "vitest";
-import { pendingApprovals } from "../src/apps/agent/lib/queue";
+import { canBulkApprove, pendingApprovals } from "../src/apps/agent/lib/queue";
+import type { DisplayApproval, DisplayControl } from "../src/apps/agent/lib/readers";
 import { agentStatus } from "../src/apps/agent/lib/status";
 
 const now = Date.parse("2026-11-01T12:00:00Z");
 const at = (offset: number) => new Date(now + offset).toISOString();
 const control = (
-  kind: ControlStatement["kind"],
+  kind: DisplayControl["kind"],
   created: number,
   expires = 60000,
-): ControlStatement => ({
+): DisplayControl => ({
   ...exampleRecords["control-statement"],
+  verification: "verified",
   kind,
   createdAt: at(created),
   expires: at(expires),
 });
-describe("agent status table", () => {
+describe("agent verified status table", () => {
   it.each([
     { heartbeatAt: undefined, controls: [], state: "offline" },
     { heartbeatAt: at(-120001), controls: [], state: "offline" },
@@ -43,9 +44,37 @@ describe("agent status table", () => {
       controls: [control("Halt", 2), control("SetBindingState", -1)],
       state: "running",
     },
+    {
+      heartbeatAt: at(-30000),
+      controls: [{ ...control("Halt", -1), verification: "unchecked" as const }],
+      state: "running",
+    },
+    {
+      heartbeatAt: at(-30000),
+      controls: [{ ...control("Halt", -1), verification: { invalid: "signature" } }],
+      state: "running",
+    },
+    {
+      heartbeatAt: at(-30000),
+      controls: [
+        control("Halt", -1),
+        { ...control("Resume", 0), verification: "unchecked" as const },
+      ],
+      state: "stopped",
+    },
+    {
+      heartbeatAt: at(-30000),
+      controls: [control("Halt", -1), control("Resume", -1)],
+      state: "stopped",
+    },
+    {
+      heartbeatAt: at(-30000),
+      controls: [control("Resume", -1), control("Halt", -1)],
+      state: "stopped",
+    },
   ])("$state for $heartbeatAt and $controls", ({ state, ...input }) =>
     expect(agentStatus({ ...input, now }).state).toBe(state));
-  it("has an unknown loading state, preserves lastSeen and restricts owner controls", () => {
+  it("keeps loading unknown, last seen and owner binding", () => {
     expect(agentStatus({ now, controls: [], loading: true })).toEqual({ state: "unknown" });
     expect(
       agentStatus({
@@ -70,28 +99,31 @@ const proposal: ActionProposal = {
   createdAt: at(-1000),
   validUntil: at(60000),
 };
-const approval = (decision: Approval["decision"] = "approve"): Approval => ({
+const approval = (decision: DisplayApproval["decision"] = "approve"): DisplayApproval => ({
   ...exampleRecords.approval,
   decision,
+  verification: "verified",
   approves: proposal.id,
   termsDigest: proposal.intent.termsDigest,
   createdAt: at(-500),
   expires: at(30000),
 });
-describe("pending approvals table", () => {
+describe("approval queue", () => {
   it.each([
     "approved",
     "denied",
     "expired",
     "sent",
     "failed",
-  ] as const)("excludes %s proposals", (state) =>
+  ] as const)("excludes daemon %s proposals", (state) =>
     expect(pendingApprovals([{ ...proposal, state }], [], [], now)).toEqual([]));
-  it("includes proposed, unexpired terms with reason and lifetime", () => {
+  it("includes pending terms with friendly reason and lifetime", () => {
     expect(pendingApprovals([proposal], [], [], now)).toEqual([
       {
         proposal,
-        reason: "confirm-required",
+        reason: "Ask first",
+        state: "pending",
+        verification: "unchecked",
         expiresIn: 60000,
         approvedAwaitingSend: false,
         needsNewApproval: false,
@@ -105,51 +137,54 @@ describe("pending approvals table", () => {
         [],
         now,
       )[0]?.reason,
-    ).toBe("prohibited");
+    ).toBe("Never");
   });
-  it("shows unchecked approvals awaiting send, denial and terms changes", () => {
+  it("settles only verified decisions and re-queues changed terms", () => {
     expect(pendingApprovals([proposal], [approval()], [], now)[0]).toMatchObject({
+      state: "approved",
       approvedAwaitingSend: true,
-      needsNewApproval: false,
+      verification: "verified",
     });
-    expect(pendingApprovals([proposal], [approval("deny")], [], now)).toEqual([]);
-    const changed = { ...approval(), termsDigest: "sha-256:old" };
-    expect(pendingApprovals([proposal], [changed], [], now)[0]).toMatchObject({
-      needsNewApproval: true,
-      reason: "Needs a new approval",
-    });
+    expect(pendingApprovals([proposal], [approval("deny")], [], now)[0]?.state).toBe("denied");
     expect(
-      pendingApprovals(
-        [proposal],
-        [
-          { ...approval(), expires: at(0) },
-          { ...approval(), createdAt: at(1) },
-          { ...approval(), approves: "urn:other" },
-        ],
-        [],
-        now,
-      )[0]?.approvedAwaitingSend,
-    ).toBe(false);
-    expect(
-      pendingApprovals(
-        [proposal],
-        [approval(), { ...approval("deny"), createdAt: at(-1) }],
-        [],
-        now,
-      ),
-    ).toEqual([]);
-    expect(
-      pendingApprovals(
-        [proposal],
-        [{ ...approval("deny"), createdAt: at(-1) }, approval()],
-        [],
-        now,
-      ),
-    ).toEqual([]);
+      pendingApprovals([proposal], [{ ...approval(), termsDigest: "sha-256:old" }], [], now)[0],
+    ).toMatchObject({ needsNewApproval: true, reason: "Needs a new approval", state: "pending" });
+    for (const invalid of [
+      { ...approval(), expires: at(0) },
+      { ...approval(), createdAt: at(1) },
+      { ...approval(), approves: "urn:other" },
+      { ...approval(), verification: "unchecked" as const },
+      { ...approval(), verification: { invalid: "key" } },
+    ])
+      expect(pendingApprovals([proposal], [invalid], [], now)[0]?.approvedAwaitingSend).toBe(false);
+    for (const decisions of [
+      [approval(), { ...approval("deny"), createdAt: at(-1) }],
+      [{ ...approval("deny"), createdAt: at(-1) }, approval()],
+      [approval(), approval("deny")],
+      [approval("deny"), approval()],
+    ])
+      expect(pendingApprovals([proposal], decisions, [], now)[0]?.state).toBe("denied");
   });
-  it("distinguishes sent and incomplete transmissions and sorts newest first", () => {
-    const tx = { ...exampleRecords.transmission, proposal: proposal.id };
-    expect(pendingApprovals([proposal], [], [{ ...tx, status: "sent" }], now)).toEqual([]);
+  it("recognizes sent for this approval, keeps changed or incomplete transmissions and sorts", () => {
+    const tx = {
+      ...exampleRecords.transmission,
+      proposal: proposal.id,
+      underApproval: approval().id,
+    };
+    expect(
+      pendingApprovals([proposal], [approval()], [{ ...tx, status: "sent" }], now)[0]?.state,
+    ).toBe("sent");
+    expect(pendingApprovals([proposal], [], [{ ...tx, status: "sent" }], now)[0]?.state).toBe(
+      "pending",
+    );
+    expect(
+      pendingApprovals(
+        [proposal],
+        [approval()],
+        [{ ...tx, underApproval: "urn:old", status: "sent" }],
+        now,
+      )[0]?.state,
+    ).toBe("approved");
     expect(
       pendingApprovals([proposal], [], [tx, { ...tx, proposal: "urn:other", status: "sent" }], now),
     ).toHaveLength(1);
@@ -158,5 +193,21 @@ describe("pending approvals table", () => {
       newer.id,
       proposal.id,
     ]);
+  });
+  it("bulk requires pending identical kinds and recipients and no prohibition", () => {
+    const row = pendingApprovals([proposal], [], [], now)[0];
+    if (!row) throw new Error("Missing fixture");
+    expect(canBulkApprove([])).toBe(false);
+    expect(canBulkApprove([row, row])).toBe(true);
+    for (const changed of [
+      { ...row, state: "denied" as const },
+      { ...row, reason: "Never" },
+      { ...row, proposal: { ...proposal, intent: { ...proposal.intent, action: "remember" } } },
+      {
+        ...row,
+        proposal: { ...proposal, intent: { ...proposal.intent, recipientHash: "different" } },
+      },
+    ])
+      expect(canBulkApprove([row, changed])).toBe(false);
   });
 });

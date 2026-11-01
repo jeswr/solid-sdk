@@ -230,13 +230,15 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
         agent("registry"),
         "@jeswr/suite-ui",
       ]);
-      // A-015's injected pod adapter lives only in lib; components stay RDF-free.
+      // A-015 pod adapters and A-016's browser-safe signing/resolver live only
+      // in lib; components stay RDF-free.
       if (ctx.uiData)
         for (const dependency of [
           "@jeswr/guarded-fetch",
           "@jeswr/fetch-rdf",
           "@jeswr/rdf-serialize",
           "@jeswr/ldp-container",
+          "@jeswr/solid-vc",
         ])
           uiAllowed.add(dependency);
       if (
@@ -249,9 +251,10 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
       if (
         name === agent("mandate") &&
         !typeOnly &&
-        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target)
+        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target) &&
+        !(ctx.uiData && /^@jeswr\/agent-mandate\/(?:approval|control)(?:\/|$)/.test(target))
       )
-        failures.push("agent UI mandate values must use issue/verify subpaths");
+        failures.push("agent UI mandate values must use issue/verify or approval/control subpaths");
     }
   }
   return failures;

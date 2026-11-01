@@ -6,12 +6,13 @@ import { readContainerMembers } from "@jeswr/ldp-container";
 import { Store } from "n3";
 import type { PodSession } from "../../../lib/session/pod-session";
 import { agentPaths } from "./paths";
+import type { Verification } from "./verify";
 
 export interface Loaded<T> {
   url: string;
   record: T;
   etag: string | null;
-  verified: "unchecked";
+  verified: Verification;
 }
 export interface Unreadable {
   url: string;

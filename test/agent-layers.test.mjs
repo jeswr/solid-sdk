@@ -1100,6 +1100,7 @@ it("allows the A-015 pod adapters only inside the agent data layer", () => {
     "@jeswr/fetch-rdf",
     "@jeswr/rdf-serialize",
     "@jeswr/ldp-container",
+    "@jeswr/solid-vc",
   ]) {
     expect(scan("apps/suite/src/apps/agent/lib/client.ts", `import "${dependency}";`)).toEqual([]);
     for (const path of [
@@ -1115,4 +1116,21 @@ it("allows the A-015 pod adapters only inside the agent data layer", () => {
   expect(
     scan("apps/suite/src/apps/agent/lib/client.ts", "const io = globalThis.fetch;").join("\n"),
   ).toContain("forbidden agent identifier");
+});
+
+it("allows P0's browser-safe approval/control entry points and rejects the general mandate barrel", () => {
+  for (const entry of ["approval", "control"]) {
+    expect(
+      scan("apps/suite/src/apps/agent/lib/sign.ts", `import "@jeswr/agent-mandate/${entry}";`),
+    ).toEqual([]);
+    expect(
+      scan(
+        "apps/suite/src/apps/agent/components/list.tsx",
+        `import "@jeswr/agent-mandate/${entry}";`,
+      ).join("\n"),
+    ).toContain("issue/verify");
+  }
+  expect(
+    scan("apps/suite/src/apps/agent/lib/sign.ts", 'import "@jeswr/agent-mandate";').join("\n"),
+  ).toContain("issue/verify");
 });

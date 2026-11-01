@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { pendingApprovals } from "../lib/queue";
 import { loadedRecords, readApprovals, readOutbox, readProposals } from "../lib/readers";
+import { createAgentVerifier } from "../lib/verify";
 import { StatusPill, useDaemonStatus } from "./status-pill";
 
 const NAV = [
@@ -28,12 +29,12 @@ const NAV = [
 ] as const;
 export function AgentSidebar() {
   const pathname = usePathname();
-  const { client } = useAgentWorkspace();
+  const { session } = useAgentWorkspace();
   const status = useDaemonStatus();
-  const queue = useAgentQuery(client.workspace, async (c) =>
+  const queue = useAgentQuery(session.storageUrl, async (c) =>
     pendingApprovals(
       loadedRecords(await readProposals(c)),
-      loadedRecords(await readApprovals(c)),
+      loadedRecords(await readApprovals(c, createAgentVerifier(session))),
       loadedRecords(await readOutbox(c)),
       Date.now(),
     ),
@@ -53,7 +54,7 @@ export function AgentSidebar() {
                 {label}
                 {slug === "approvals" && queue.status === "ready" && (
                   <CountBadge
-                    count={queue.data.filter((row) => !row.approvedAwaitingSend).length}
+                    count={queue.data.filter((row) => row.state === "pending").length}
                     label="waiting for approval"
                   />
                 )}

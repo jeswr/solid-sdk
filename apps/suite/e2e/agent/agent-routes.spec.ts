@@ -34,11 +34,11 @@ for (const [route, heading, item] of routes) {
       await expect(page.locator("pre")).toHaveText(
         "Subject: Re: Project catch-up\nTo: My own account\n\nThanks for the invitation. Tomorrow at 14:00 works for me.\n\n— Alice",
       );
-      await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
-      await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeDisabled();
-      await page.locator('[title="Set up approvals on this device first"]').first().focus();
+      await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeEnabled();
+      await page.locator('[title="Available once you can edit permissions"]').first().focus();
       await expect(page.getByRole("tooltip")).toContainText(
-        "Set up approvals on this device first",
+        "Available once you can edit permissions",
       );
       await page.keyboard.press("Escape");
     }

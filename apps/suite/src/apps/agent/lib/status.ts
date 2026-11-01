@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ControlStatement } from "@jeswr/agent-model";
+import type { DisplayControl } from "./readers";
 export interface AgentStatus {
   state: "running" | "paused" | "stopped" | "offline" | "unknown";
   lastSeen?: string;
@@ -12,7 +12,7 @@ export function agentStatus({
   owner,
 }: {
   heartbeatAt?: string | undefined;
-  controls: readonly ControlStatement[];
+  controls: readonly DisplayControl[];
   now: number;
   loading?: boolean;
   owner?: string;
@@ -21,12 +21,15 @@ export function agentStatus({
   const latest = controls
     .filter(
       (c) =>
+        c.verification === "verified" &&
         (c.kind === "Halt" || c.kind === "Resume") &&
         Date.parse(c.expires) > now &&
         Date.parse(c.createdAt) <= now &&
         (owner === undefined || c.attributedTo === owner),
     )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+    .sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.kind === "Halt" ? -1 : 1),
+    )[0];
   const seen = heartbeatAt === undefined ? {} : { lastSeen: heartbeatAt };
   if (latest?.kind === "Halt") return { state: "stopped", ...seen };
   const at = Date.parse(heartbeatAt ?? "");

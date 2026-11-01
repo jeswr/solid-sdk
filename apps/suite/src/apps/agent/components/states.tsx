@@ -105,7 +105,10 @@ export function DetailScreen({
         if (!open) router.push(back);
       }}
     >
-      <SheetContent side="bottom" className="agent-app agent-detail-sheet">
+      <SheetContent
+        side="bottom"
+        className={`agent-app agent-detail-sheet ${back === "/agent/approvals" ? "agent-approval-detail" : ""}`}
+      >
         <SheetTitle asChild>
           <h1>{title}</h1>
         </SheetTitle>

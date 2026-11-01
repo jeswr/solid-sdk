@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Browser demo storage. Every mutation reads the latest durable pod and commits
  * with a revision compare-and-set in one IndexedDB transaction. A stale tab
@@ -76,6 +77,13 @@ function commit(
 
 let current: Promise<DemoPod> | undefined;
 let dispose: (() => void) | undefined;
+
+declare global {
+  interface Window {
+    // biome-ignore lint/style/useNamingConvention: dev fixture hook shared with Playwright
+    __suiteDemoPod?: DemoPod;
+  }
+}
 
 /** The tab's stable demo pod facade (created on first use). */
 export function getDemoPod(): Promise<DemoPod> {
@@ -188,6 +196,12 @@ export function getDemoPod(): Promise<DemoPod> {
       },
     };
   })();
+  // Fixture capability is compiled out of ordinary builds. It uses the same durable
+  // facade and notifications as the app, including conditional writes.
+  if (process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" && typeof window !== "undefined")
+    void current.then((pod) => {
+      window.__suiteDemoPod = pod;
+    });
   return current;
 }
 

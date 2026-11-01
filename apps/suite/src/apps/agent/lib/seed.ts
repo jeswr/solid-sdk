@@ -157,7 +157,7 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       conversation: id("conversations/welcome/"),
       binding: "gmail",
       action: index === 1 ? "remember" : "send",
-      recipientHash: index === 2 ? "salted-demo-non-listed-recipient" : "salted-demo-owner",
+      recipientHash: index === 2 ? "salted-demo-non-listed-recipient" : "salted-demo-gmail",
       parameters: {
         summary: subjects[index] as string,
         approvalRule: "Ask before sending to another person or saving a preference",

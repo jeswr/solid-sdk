@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { type Approval, readApprovalClaims } from "@jeswr/agent-mandate/approval";
+import { type ControlStatementClaims, readControlClaims } from "@jeswr/agent-mandate/control";
 import type { ConversationTurn, InboundMessage, PodRecord, RecordType } from "@jeswr/agent-model";
 import { type AgentClient, AgentReadError, isLoaded, type Loaded, type Row } from "./client";
 import { AGENT, guardSlug, metadataNode, PROV, RDF, resourceSlug } from "./paths";
+import type { AgentVerifier, Verification } from "./verify";
 
 function timestamp(value: unknown): number {
   const record = value as Record<string, unknown>;
@@ -61,15 +65,85 @@ export const readDescriptors = (client: AgentClient) =>
   records(client, client.paths.descriptors, "channel-capability");
 export const readProposals = (client: AgentClient) =>
   records(client, client.paths.proposals, "action-proposal");
-export const readApprovals = (client: AgentClient) =>
-  records(client, client.paths.approvals, "approval");
+export type DisplayApproval = Approval & { createdAt: string; verification: Verification };
+export type DisplayControl = ControlStatementClaims & { verification: Verification };
+export async function readApprovals(
+  client: AgentClient,
+  verifier?: AgentVerifier,
+): Promise<Row<DisplayApproval>[]> {
+  return newest(
+    await Promise.all(
+      (await client.list(client.paths.approvals))
+        .filter((m) => !m.container)
+        .map((m) =>
+          attempt(m.url, async () => {
+            const doc = await client.graph(m.url);
+            const claims = await readApprovalClaims(doc.text, m.url);
+            if (!claims) throw new Error("Unreadable approval");
+            // dct:created is part of the signed proof, not an agent-model approval field.
+            const proofGraph = [...doc.dataset].find(
+              (q) =>
+                q.subject.value === m.url &&
+                q.predicate.value === "https://w3id.org/security#proof" &&
+                q.graph.termType === "DefaultGraph",
+            )?.object;
+            const proofDate = [...doc.dataset].find(
+              (q) =>
+                proofGraph !== undefined &&
+                q.graph.equals(proofGraph) &&
+                q.predicate.value === "http://purl.org/dc/terms/created" &&
+                q.object.termType === "Literal",
+            )?.object.value;
+            const createdAt =
+              proofDate ??
+              metadataNode(doc.dataset, m.url).text("http://purl.org/dc/terms/created") ??
+              "";
+            const verification = verifier
+              ? await verifier.verifyApproval(doc.text, claims)
+              : "unchecked";
+            return {
+              url: m.url,
+              etag: doc.etag,
+              verified: verification,
+              record: { ...claims, createdAt, verification },
+            };
+          }),
+        ),
+    ),
+  );
+}
 export const readMandates = (client: AgentClient) =>
   records(client, client.paths.mandates, "mandate-reference", [
     client.paths.mandatesCurrent,
     client.paths.mandatesStatus,
   ]);
-export const readControl = (client: AgentClient) =>
-  records(client, client.paths.control, "control-statement", [client.paths.heartbeat]);
+export async function readControl(
+  client: AgentClient,
+  verifier?: AgentVerifier,
+): Promise<Row<DisplayControl>[]> {
+  return newest(
+    await Promise.all(
+      (await client.list(client.paths.control))
+        .filter((m) => !m.container && m.url !== client.paths.heartbeat)
+        .map((m) =>
+          attempt(m.url, async () => {
+            const doc = await client.graph(m.url);
+            const claims = await readControlClaims(doc.text, m.url);
+            if (!claims) throw new Error("Unreadable control");
+            const verification = verifier
+              ? await verifier.verifyControl(doc.text, m.url)
+              : "unchecked";
+            return {
+              url: m.url,
+              etag: doc.etag,
+              verified: verification,
+              record: { ...claims, verification },
+            };
+          }),
+        ),
+    ),
+  );
+}
 export const readOutbox = (client: AgentClient) =>
   records(client, client.paths.outbox, "transmission");
 export async function readMandateCurrent(client: AgentClient) {
