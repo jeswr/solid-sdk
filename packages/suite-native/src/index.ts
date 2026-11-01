@@ -19,12 +19,24 @@ export {
   BusyError,
   InvalidShareError,
   NativeAuthError,
+  SecureStoreError,
+  type SecureStoreErrorCode,
   ShareUnavailableError,
   StateMismatchError,
   SuiteNativeError,
   UserCancelledError,
 } from "./errors.js";
 export { type CapacitorRuntime, isNativeApp, type Platform, platform } from "./platform.js";
+export {
+  createSecureStore,
+  type RefreshTokenIdentity,
+  refreshTokenKey,
+  type SecureStore,
+  type SecureStoreEntry,
+  type SecureStorePlugin,
+  type SecureStoreSetOptions,
+  type SecureStoreStatus,
+} from "./secure-store.js";
 export {
   type ShareContent,
   type SharePlugin,

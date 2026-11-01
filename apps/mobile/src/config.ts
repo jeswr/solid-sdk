@@ -37,7 +37,9 @@ export function mobileConfig(env: MobileEnv): CapacitorConfig {
     appId: APP_ID,
     appName: "Solid Suite",
     webDir: "www",
-    loggingBehavior: debug ? "debug" : "none",
+    // Capacitor's "debug" logging prints plugin call arguments and results, which would put
+    // SuiteSecureStore refresh tokens in the device log, so no build logs bridge payloads.
+    loggingBehavior: "none",
     server: {
       url: origin.origin,
       // No allowNavigation: the server origin is the only in-app origin, enforced exactly by
