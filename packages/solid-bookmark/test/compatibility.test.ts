@@ -186,6 +186,27 @@ it("carries a timezone-qualified xsd:date created value through a plain-data edi
   }
 });
 
+it("does not carry an impossible date-only created value", async () => {
+  for (const lexical of [
+    "2025-02-30+00:00",
+    "2025-02-30",
+    "2025-04-31Z",
+    "2025-03-04+23:59",
+    "2025-03-04+00:60",
+  ]) {
+    const parsed = await parseBookmarkTtl(
+      RES,
+      doc(`schema:url <https://example.org/> ; dct:created "${lexical}"^^xsd:date`),
+    );
+    expect(parsed && "created" in parsed).toBe(false);
+  }
+  const edge = await parseBookmarkTtl(
+    RES,
+    doc(`schema:url <https://example.org/> ; dct:created "2025-03-04+14:00"^^xsd:date`),
+  );
+  expect(edge?.created?.toISOString()).toBe("2025-03-03T10:00:00.000Z");
+});
+
 it("rejects a relative or unsafe resource URL instead of minting a relative subject", () => {
   expect(() => buildBookmark("bm/1", { url: "https://example.org/" })).toThrow(TypeError);
   expect(() => buildBookmark("https://pod.example/a b", { url: "https://example.org/" })).toThrow(
