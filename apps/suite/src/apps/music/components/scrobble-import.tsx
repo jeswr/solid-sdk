@@ -24,7 +24,8 @@ const day = (date: Date) =>
     timeZone: "UTC",
   });
 /** Let the browser paint the busy state before synchronous parsing starts. */
-const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const nextFrame = () =>
+  new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
 type Phase =
   | { name: "idle" }
@@ -39,18 +40,16 @@ function Importer() {
   const errorId = useId();
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [error, setError] = useState<{ text: string; attempt: number }>();
-  const [announcement, setAnnouncement] = useState("");
-  // Each phase's first element takes focus, so keyboard users keep their place
-  // when the control they used is replaced.
+  // Each phase's first element takes focus (and so is read out), so keyboard and
+  // screen reader users keep their place when the control they used is replaced.
   const focusTarget = useRef<HTMLElement | null>(null);
   const moved = useRef(false);
   const fail = (text: string) =>
     setError((current) => ({ text, attempt: (current?.attempt ?? 0) + 1 }));
   const library = music.snapshot?.library;
-  const go = (next: Phase, say = "") => {
+  const go = (next: Phase) => {
     moved.current = true;
     setPhase(next);
-    if (say) setAnnouncement(say);
   };
   useEffect(() => {
     if (!moved.current) return;
@@ -65,7 +64,7 @@ function Importer() {
     const files = Array.from(list ?? []);
     if (!files.length || !library) return;
     setError(undefined);
-    go({ name: "reading" }, "Reading your export…");
+    go({ name: "reading" });
     try {
       const texts = await Promise.all(
         files.map(async (file) => ({ name: file.name, text: await file.text() })),
@@ -78,7 +77,7 @@ function Importer() {
         return;
       }
       const plan = planScrobbleImport(listens, warnings, library.tracks, music.storage);
-      go({ name: "preview", plan }, `Ready to import ${count(plan.plays.length, "listen")}.`);
+      go({ name: "preview", plan });
     } catch (cause) {
       go({ name: "idle" });
       fail(scrobbleErrorMessage(cause));
@@ -87,12 +86,12 @@ function Importer() {
 
   async function save(plan: ScrobblePlan) {
     setError(undefined);
-    go({ name: "saving", plan, done: 0, total: 0 }, "Saving your listens…");
+    go({ name: "saving", plan, done: 0, total: 0 });
     try {
       const result = await music.importListens(plan, (done, total) =>
         setPhase({ name: "saving", plan, done, total }),
       );
-      go({ name: "done", ...result }, `Import finished. Added ${count(result.added, "listen")}.`);
+      go({ name: "done", ...result });
     } catch (cause) {
       go({ name: "preview", plan });
       fail(saveErrorMessage(cause));
@@ -118,9 +117,6 @@ function Importer() {
           <strong>Last.fm:</strong> a .csv file with artist, album, track and timestamp columns.
         </li>
       </ul>
-      <p role="status" className="suite-sr-only">
-        {announcement}
-      </p>
       {phase.name === "idle" && (
         <div className="mus-import-pick">
           <label htmlFor={inputId}>Choose export files</label>

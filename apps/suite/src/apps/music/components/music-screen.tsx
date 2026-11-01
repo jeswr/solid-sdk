@@ -17,7 +17,7 @@ import {
 import { ArrowRight, Disc3, FileUp, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
@@ -292,9 +292,21 @@ function HistoryView() {
   const snapshot = music.snapshot;
   // Imported history can hold tens of thousands of plays; render them in pages.
   const [shown, setShown] = useState(HISTORY_PAGE);
+  // "Show more" moves focus to the first newly shown play, since the button can disappear.
+  const focusFrom = useRef<number | null>(null);
+  const timeline = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusFrom.current === null) return;
+    timeline.current
+      ?.querySelector<HTMLElement>(`[data-play-index="${focusFrom.current}"]`)
+      ?.focus();
+    focusFrom.current = null;
+  });
   if (!snapshot) return null;
   const groups = new Map<string, typeof snapshot.history>();
+  const order = new Map<string, number>();
   for (const play of snapshot.history.slice(0, shown)) {
+    order.set(play.iri, order.size);
     const key = play.startTime.toISOString().slice(0, 10);
     const group = groups.get(key) ?? [];
     group.push(play);
@@ -304,7 +316,7 @@ function HistoryView() {
   return (
     <>
       {groups.size ? (
-        <div className="mus-timeline">
+        <div className="mus-timeline" ref={timeline}>
           {[...groups].map(([date, plays]) => (
             <section key={date}>
               <h2>
@@ -320,7 +332,7 @@ function HistoryView() {
                 {plays.map((play) => {
                   const track = tracks.get(play.trackIri);
                   return (
-                    <li key={play.iri}>
+                    <li key={play.iri} data-play-index={order.get(play.iri)} tabIndex={-1}>
                       <time className="mus-number" dateTime={play.startTime.toISOString()}>
                         {play.startTime.toLocaleTimeString("en-GB", {
                           hour: "2-digit",
@@ -354,7 +366,13 @@ function HistoryView() {
       )}
       {snapshot.history.length > shown && (
         <div className="mus-load-older">
-          <Button variant="outline" onClick={() => setShown((value) => value + HISTORY_PAGE)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              focusFrom.current = shown;
+              setShown((value) => value + HISTORY_PAGE);
+            }}
+          >
             Show more plays
           </Button>
           <p className="mus-muted">

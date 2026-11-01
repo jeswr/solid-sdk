@@ -202,8 +202,11 @@ function importedIds(musicBase: string, url: string, play: ImportedPlayback) {
 function mergeShard(dataset: Store, group: readonly ReturnType<typeof importedIds>[]) {
   const has = (iri: string) => dataset.countQuads(DataFactory.namedNode(iri), null, null, null) > 0;
   const times = new Map<string, number[]>();
-  const remember = (trackIri: string, time: number) =>
-    times.set(trackIri, [...(times.get(trackIri) ?? []), time]);
+  const remember = (trackIri: string, time: number) => {
+    const list = times.get(trackIri);
+    if (list) list.push(time);
+    else times.set(trackIri, [time]);
+  };
   for (const play of readHistory(dataset)) remember(play.trackIri, play.startTime.getTime());
   const near = (trackIri: string, time: number) =>
     (times.get(trackIri) ?? []).some((other) => Math.abs(other - time) <= NEAR_DUPLICATE_MS);
@@ -236,7 +239,8 @@ function mergeShard(dataset: Store, group: readonly ReturnType<typeof importedId
  * the shard (the same IRI, or the same song within 30 seconds) is counted as existing,
  * so importing an export twice, or the same listens from another service, adds
  * nothing. A shard changed during the import (412) is re-read and merged again a few
- * times; shards written before a failure stay written.
+ * times; shards written before a failure stay written. Known limits: near-duplicates
+ * are only found within one month shard, and only for the same track IRI.
  */
 export async function appendPlaybacks(
   fetch: typeof globalThis.fetch,
