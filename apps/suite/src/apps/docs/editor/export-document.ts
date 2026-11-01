@@ -4,6 +4,7 @@ import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
+import { htmlDocument } from "../lib/convert/schema";
 import { normaliseImageDestination } from "../lib/editor/destination";
 import { baseExtensions } from "./extensions";
 import { imagePng } from "./image-blob";
@@ -37,7 +38,7 @@ export async function downloadDocument(
     format === "md"
       ? new Blob([exportMarkdown(json)], { type: "text/markdown;charset=utf-8" })
       : format === "html"
-        ? new Blob([generateHTML(json, baseExtensions(globalThis.fetch))], {
+        ? new Blob([htmlDocument(generateHTML(json, baseExtensions(globalThis.fetch)), title)], {
             type: "text/html;charset=utf-8",
           })
         : await Packer.toBlob(await toDocx(json, (src) => readExportImage(session, src)));

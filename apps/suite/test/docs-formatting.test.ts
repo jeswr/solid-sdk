@@ -17,7 +17,7 @@ import { docxStyles } from "../src/apps/docs/lib/convert/docx-styles";
 import { WORD } from "../src/apps/docs/lib/convert/docx-xml";
 import { exportMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { sanitiseImport } from "../src/apps/docs/lib/convert/sanitise";
-import { importHtml, normaliseImport } from "../src/apps/docs/lib/convert/schema";
+import { htmlDocument, importHtml, normaliseImport } from "../src/apps/docs/lib/convert/schema";
 import {
   colour,
   colourHex,
@@ -409,6 +409,29 @@ it("exports native Word run properties and recovers them in paragraphs and lists
       ],
     });
   }
+});
+
+it("exports HTML as a standalone UTF-8 page that re-imports as only its body", () => {
+  const body = generateHTML(
+    {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Café ✓" }] }],
+    },
+    baseExtensions(vi.fn()),
+  );
+  const page = htmlDocument(body, "Plans <draft> & notes");
+  expect(page.startsWith("<!doctype html>\n")).toBe(true);
+  expect(page).toContain('<meta charset="utf-8">');
+  expect(page).toContain("<title>Plans &lt;draft&gt; &amp; notes</title>");
+  expect(page).toContain(`<body>\n${body}\n</body>`);
+  expect(htmlDocument(body, "")).toContain("<title>Untitled document</title>");
+  // The title and metadata stay out of the re-imported document, with nothing skipped.
+  const skipped: { label: string; count: number }[] = [];
+  expect(importHtml(page, skipped).json).toEqual(importHtml(body).json);
+  expect(skipped).toEqual([]);
+  expect(importHtml("<HTML><BODY><p>Upper</p></BODY></HTML>").json.content).toMatchObject([
+    { type: "paragraph", content: [{ text: "Upper" }] },
+  ]);
 });
 
 it("keeps indent and alignment across the suite's own DOCX and HTML export and re-import", async () => {

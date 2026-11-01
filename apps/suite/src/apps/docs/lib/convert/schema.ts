@@ -138,10 +138,23 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
   return { json: result, skipped };
 }
 
+/** A standalone web page: browsers need the charset to read non-ASCII text from a file. */
+export function htmlDocument(body: string, title: string) {
+  const name = (title || "Untitled document")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${name}</title>\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+}
+
 export function importHtml(source: string, skipped: SkippedItem[] = []) {
   // All six HTML heading levels have the same meaning as Markdown/DOCX levels.
   const fragment = document.createElement("template");
-  fragment.innerHTML = source;
+  // A whole page (such as the suite's own export) contributes only its body, so the
+  // title and metadata never become document text.
+  fragment.innerHTML = /<(?:!doctype|html|head|body)[\s>]/i.test(source)
+    ? parseHtmlDocument(source).body.innerHTML
+    : source;
   normaliseHtmlLists(fragment.content);
   const html = sanitiseImport(fragment.innerHTML, skipped);
   const dom = parseHtmlDocument(html);
