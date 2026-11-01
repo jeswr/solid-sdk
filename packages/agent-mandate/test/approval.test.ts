@@ -4,7 +4,12 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
-import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
+import {
+  type Approval,
+  issueApproval,
+  readApprovalClaims,
+  verifyApproval,
+} from "../src/approval.js";
 import { node, readProof, SEC, trig } from "../src/rdf.js";
 import {
   alterProofGraph,
@@ -221,4 +226,31 @@ it("rejects malformed RDF and duplicate claims", async () => {
       },
     }),
   ).toEqual({ valid: false, reason: "malformed" });
+});
+
+it("reads unsigned approval claims for display only, even when expired or tampered", async () => {
+  for (const decision of ["approve", "deny"] as const) {
+    const approval = { ...a, decision, expires: "2020-01-01T00:00:00Z" };
+    const doc = await issueApproval(approval, key, NOW);
+    expect(await readApprovalClaims(doc, a.id)).toEqual(approval);
+    const changed = doc.replace(a.termsDigest, "unverified display terms");
+    expect(await readApprovalClaims(changed, a.id)).toEqual({
+      ...approval,
+      termsDigest: "unverified display terms",
+    });
+    expect(await verifyApproval(changed, options())).toEqual({ valid: false, reason: "signature" });
+  }
+});
+it("refuses malformed or ambiguous approval display claims", async () => {
+  const doc = await issueApproval(a, key, NOW);
+  for (const changed of [
+    "garbage",
+    doc.replace("agent#Approval", "agent#ControlStatement"),
+    doc.replace('"approve"', '"maybe"'),
+  ])
+    expect(await readApprovalClaims(changed, a.id)).toBeUndefined();
+  expect(await readApprovalClaims(doc, "urn:missing")).toBeUndefined();
+  const store = await parseRdf(doc, "application/trig");
+  node(store, a.id).setText("https://jeswr.org/ns/agent#termsDigest", "duplicate");
+  expect(await readApprovalClaims(await trig(store), a.id)).toBeUndefined();
 });

@@ -20,6 +20,14 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     },
+    "./approval": {
+      "types": "./dist/approval.d.ts",
+      "default": "./dist/approval.js"
+    },
+    "./control": {
+      "types": "./dist/control.d.ts",
+      "default": "./dist/control.js"
+    },
     "./sparq": {
       "types": "./dist/sparq.d.ts",
       "default": "./dist/sparq.js"
@@ -43,6 +51,7 @@
   },
   "dependencies": {
     "@jeswr/agent-authz-verifier": "workspace:*",
+    "@jeswr/agent-model": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",

@@ -79,6 +79,27 @@ export async function issueApproval(approval: Approval, key: KeyPair, now: Date)
   writeProof(store, approval.id, proof);
   return trig(store);
 }
+/** Parse unsigned claims for display only, never authority. No signature or expiry verification. */
+export async function readApprovalClaims(
+  document: string,
+  id: string,
+): Promise<Approval | undefined> {
+  try {
+    const a = node(await parseRdf(document, "application/trig"), id);
+    if (a.iri(RDF_TYPE) !== `${AGENT}Approval`) return undefined;
+    const decision = a.text(`${AGENT}decision`);
+    if (decision !== "approve" && decision !== "deny") return undefined;
+    return {
+      id,
+      approves: a.iri(`${AGENT}approves`),
+      termsDigest: a.text(`${AGENT}termsDigest`),
+      expires: a.text(`${AGENT}expires`),
+      decision,
+    };
+  } catch {
+    return undefined;
+  }
+}
 /** Verify an approval against an owner's authoritative WebID assertionMethod and exact proposal terms. */
 export async function verifyApproval(
   document: string,

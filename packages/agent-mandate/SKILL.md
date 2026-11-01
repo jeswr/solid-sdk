@@ -7,8 +7,8 @@ description: Use when issuing or verifying owner mandates and approvals, evaluat
 # @jeswr/agent-mandate
 
 Read README.md and agent DESIGN D3 / §4.2 before changing this security-critical surface.
-The public interfaces are in src/types.ts, src/mandate.ts and src/approval.ts; ./testing
-contains explicit in-memory fakes. The optional Node-only sparq binary adapter is ./sparq.
+The public interfaces are in src/types.ts, src/mandate.ts, src/approval.ts and src/control.ts;
+./testing contains explicit in-memory fakes. The optional Node-only sparq binary adapter is ./sparq.
 
 Use `issueMandate` with Ed25519 and a mandatory revocation status entry. Policies are embedded
 in the signed credential graph. `mandateToTurtle` (historical name) / `parseMandateCredential`
@@ -27,9 +27,12 @@ requires a separate verified approval. Accounting and transmissions belong to ag
 
 Approval checks are ordered: exact ecdsa-rdfc-2019 suite / assertion purpose; WebID assertionMethod
 and P-256 key; RDFC signature; proposal IRI; constant-work digest comparison; expiry using the
-injected clock; approve/deny decision. Keep non-extractable key support. Native browser issuance
-is currently blocked by solid-vc's node:crypto hashing; do not claim browser integration without
-fixing and verifying that upstream dependency. Do not implement alternate crypto here.
+injected clock; approve/deny decision. Keep non-extractable key support. Browser signing uses
+the ./approval and ./control subpaths with solid-vc's WebCrypto hashing and browser bundle.
+The general entry point includes the Node mandate verifier.
+Control statements use the agent-model vocabulary and require the same suite/key/signature
+checks, then exact owner attribution and expiry. Claim readers are display only, never
+authority. Do not implement alternate crypto here.
 
 Legacy OwnerMandate JWS is import-only. Trust locally pinned keys, reject embedded keys and
 unexpected headers, enforce the pilot subset and require an injected revocation check.
