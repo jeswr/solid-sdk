@@ -60,6 +60,7 @@
 // which permits `w` the requested action — forbidding the fail-open of skipping the
 // leaf-assignee check (the roborev round-1 finding this design was hardened against).
 
+import { parseRdf } from "@jeswr/fetch-rdf";
 import type {
   ActiveDuty,
   DelegatedEvaluationResult,
@@ -69,6 +70,7 @@ import type {
 } from "@jeswr/solid-odrl";
 import {
   DEFAULT_MAX_CHAIN_LENGTH,
+  evaluate,
   evaluateDelegated,
   ODRL_ACTIONS,
   parsePolicy,
@@ -79,13 +81,7 @@ import type {
   VerifiableCredential,
   VerifyCredentialOptions,
 } from "@jeswr/solid-vc";
-import {
-  digestQuads,
-  digestRdfContent,
-  SVC,
-  verifyCredential,
-  verifyRelatedResources,
-} from "@jeswr/solid-vc";
+import { digestQuads, SVC, verifyCredential, verifyRelatedResources } from "@jeswr/solid-vc";
 import {
   PHASE_A_CODES,
   STATUS_GATE_CODES,
@@ -557,6 +553,66 @@ function checkOptions(
   return { revoked, maxChainLength, now: new Date(nowMs) };
 }
 
+/** The http(s) document a policy IRI names (its fragment removed), else undefined. */
+function policyDocumentUrl(policyId: string): string | undefined {
+  try {
+    const url = new URL(policyId);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+    url.hash = "";
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An XSD dateTime that names its timezone; a bare local time depends on the host TZ. */
+const ZONED_DATE_TIME = /^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/** A validity bound that is absent, or a zoned dateTime that parses. */
+function validBound(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (typeof value === "string" && ZONED_DATE_TIME.test(value) && Number.isFinite(Date.parse(value)))
+  );
+}
+
+/**
+ * A chain prohibition the request might trigger whose constraints name an operand
+ * the request does not supply. solid-odrl treats a missing operand as unsatisfied,
+ * so the prohibition would not fire: a request could escape it by leaving the
+ * operand out. Probes each such prohibition with its unresolved constraints (and
+ * its assignee) removed, against the requested action and against `grantUse`
+ * (the delegation edge check). Returns the policy holding one that would match.
+ */
+function unresolvedProhibition(
+  chain: readonly OdrlPolicy[],
+  request: RequestContext,
+  now: Date,
+): OdrlPolicy | undefined {
+  const attributes = request.attributes ?? {};
+  const resolved = (c: OdrlConstraint) =>
+    c.leftOperand === "dateTime" ||
+    (Object.hasOwn(attributes, c.leftOperand) && typeof attributes[c.leftOperand] !== "boolean");
+  // The delegation-depth operand is injected per edge by the evaluator.
+  const kept = (c: OdrlConstraint) => resolved(c) && c.leftOperand !== "delegationDepth";
+  for (const policy of chain) {
+    const suspects = (policy.prohibitions ?? [])
+      .filter((r) => (r.constraints ?? []).some((c) => !resolved(c)))
+      .map(({ assignee: _assignee, ...r }) => ({
+        ...r,
+        constraints: (r.constraints ?? []).filter(kept),
+      }));
+    if (suspects.length === 0) continue;
+    const probe: OdrlPolicy = { id: policy.id, prohibitions: suspects };
+    for (const action of [request.action, "grantUse"] as const) {
+      if (evaluate(probe, { ...request, action }, { now }).matchedProhibitions.length > 0) {
+        return policy;
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Operators that compare against ONE right operand (the evaluator reads only the first). */
 const SCALAR_OPERATORS: ReadonlySet<string> = new Set(["eq", "neq", "gt", "gteq", "lt", "lteq"]);
 
@@ -587,7 +643,13 @@ async function contentBoundPolicy(
 ): Promise<OdrlPolicy | string> {
   try {
     const contentType = presented.contentType ?? "text/turtle";
-    const parsed = await parsePolicy(presented.content, contentType);
+    // Resolve relative IRIs (`<#policy>`) against the policy document, as a
+    // consumer fetching it would; the digest gate above binds the bytes. Parse once
+    // so the policy and the round-trip compare read the same graph.
+    const dataset = await parseRdf(presented.content, contentType, {
+      ...(policyDocumentUrl(hop.id) !== undefined && { baseIRI: policyDocumentUrl(hop.id) }),
+    });
+    const parsed = await parsePolicy(dataset);
     if (parsed === undefined) return "the signed content holds no well-formed ODRL policy";
     if (parsed.id !== hop.id) {
       return `the signed content's policy is <${parsed.id}>, not <${hop.id}>`;
@@ -609,7 +671,7 @@ async function contentBoundPolicy(
       return "a scalar constraint operator carries several right operands, whose order the signed graph does not fix";
     }
     const [signed, projected] = await Promise.all([
-      digestRdfContent(presented.content, contentType),
+      digestQuads([...dataset.match()]),
       digestQuads(policyToRdf(parsed)),
     ]);
     if (signed !== projected) {
@@ -735,6 +797,14 @@ export async function verifyAgentAuthority(
       expectedProofPurpose: "assertionMethod",
       now,
     });
+    if (phaseARes.verified && !(validBound(b.vc.validFrom) && validBound(b.vc.validUntil))) {
+      return deny(
+        "A",
+        "MALFORMED",
+        `Phase A (credential verification) failed for hop <${hop.id}>: a validity bound is not a dateTime with a timezone.`,
+        chainIds,
+      );
+    }
     if (!phaseARes.verified) {
       const detail = phaseARes.errors.map((e) => e.message).join("; ");
       const phaseAError = phaseARes.errors.find((e) =>
@@ -1017,22 +1087,52 @@ export async function verifyAgentAuthority(
   // scalar operator and lets one element decide a set operator, so a value set
   // could ride an `eq` permission or switch off an `isNoneOf` prohibition. The
   // verifier takes single-valued attributes only.
-  const multiValued = Object.entries(request.attributes ?? {}).find(([, v]) => Array.isArray(v));
-  if (multiValued !== undefined) {
+  // A malformed scalar (an object, NaN, a dateTime that does not parse) could
+  // throw inside the evaluator; refuse it here as a denial.
+  const malformed = Object.entries(request.attributes ?? {}).find(
+    ([key, v]) =>
+      Array.isArray(v) ||
+      !(
+        typeof v === "boolean" ||
+        (typeof v === "number" && Number.isFinite(v)) ||
+        (typeof v === "string" &&
+          (key !== "dateTime" || (ZONED_DATE_TIME.test(v) && Number.isFinite(Date.parse(v)))))
+      ),
+  );
+  if (malformed !== undefined) {
     return deny(
       "D",
       "POLICY_DENIED",
-      `Phase D denied: the request attribute ${JSON.stringify(multiValued[0])} is multi-valued; the verifier evaluates single-valued attributes only.`,
+      `Phase D denied: the request attribute ${JSON.stringify(malformed[0])} is not a single well-formed value.`,
       chainIds,
     );
   }
   const primaryRequest: RequestContext = { ...request, agent: leafAssignee };
-  const decision = evaluateDelegated(ordered, primaryRequest, {
-    now,
-    revoked: [...revoked],
-    ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
-    maxChainLength: checked.maxChainLength,
-  });
+  const unresolved = unresolvedProhibition(ordered, primaryRequest, now);
+  if (unresolved !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: a prohibition in <${unresolved.id}> may apply, but the request does not supply every operand it constrains.`,
+      chainIds,
+    );
+  }
+  let decision: DelegatedEvaluationResult;
+  try {
+    decision = evaluateDelegated(ordered, primaryRequest, {
+      now,
+      revoked: [...revoked],
+      ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
+      maxChainLength: checked.maxChainLength,
+    });
+  } catch (e) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the evaluator failed (${e instanceof Error ? e.message : String(e)}).`,
+      chainIds,
+    );
+  }
   if (decision.decision !== "permit") {
     return deny("D", "POLICY_DENIED", `Phase D denied: ${decision.reason}`, chainIds, {
       decision,

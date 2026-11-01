@@ -351,6 +351,89 @@ describe("signed-content reading is order- and accessor-independent", () => {
     });
   }
 
+  it("signed content with relative IRIs and no @base resolves against the policy document", async () => {
+    const absolute = await policyToTurtle(base.instituteInternal);
+    const content = absolute.replaceAll(`<${CAST.instituteInternalId}>`, "<#policy>");
+    expect(content).not.toBe(absolute);
+    const r = await verifySigned(content, { [CAST.instituteInternalId]: { content } });
+    expect(r.code).toBeUndefined();
+    expect(r.authorized).toBe(true);
+  });
+
+  it("a prohibition whose operand the request leaves out still denies", async () => {
+    const guarded: OdrlPolicy = {
+      ...base.instituteInternal,
+      prohibitions: [
+        {
+          type: "prohibition",
+          action: "read",
+          target: CAST.records,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: "https://evil.example/ads" },
+          ],
+        },
+      ],
+    };
+    const content = await policyToTurtle(guarded);
+    const presented = { [CAST.instituteInternalId]: { content } };
+    const silent = await verifySigned(content, presented);
+    expect(silent.authorized).toBe(false);
+    expect(silent.phase).toBe("D");
+    expect(silent.code).toBe("POLICY_DENIED");
+    const research = readRequest();
+    const stated = await verifySigned(content, presented, {
+      ...research,
+      attributes: { ...research.attributes, purpose: CAST.purpose },
+    });
+    expect(stated.authorized).toBe(true);
+    const ads = await verifySigned(content, presented, {
+      ...research,
+      attributes: { ...research.attributes, purpose: "https://evil.example/ads" },
+    });
+    expect(ads.authorized).toBe(false);
+  });
+
+  it("a malformed scalar in the request context denies instead of throwing", async () => {
+    for (const attributes of [
+      { dateTime: "not a timestamp" },
+      { dateTime: "2026-08-01T00:00:00" },
+      { dateTime: base.now.toISOString(), count: Number.NaN },
+      { dateTime: base.now.toISOString(), purpose: {} },
+    ]) {
+      const r = await verifyInternal(internalChain(), {
+        request: {
+          ...readRequest(),
+          attributes: attributes as unknown as RequestContext["attributes"],
+        },
+      });
+      expect(r.authorized).toBe(false);
+      expect(r.code).toBe("POLICY_DENIED");
+    }
+  });
+
+  it("a validity bound without a timezone, or one that does not parse, denies", async () => {
+    const content = base.policyDocuments.instituteInternal;
+    for (const validFrom of ["2026-01-01T00:00:00", "the first of January"]) {
+      const vc = await issueAgentAuthorization(
+        {
+          principal: CAST.inst,
+          agent: CAST.agentR,
+          action: "read",
+          target: CAST.records,
+          policy: CAST.instituteInternalId,
+          policyContent: content,
+          validFrom,
+          validUntil: VALID_UNTIL,
+        },
+        base.keys.inst,
+      ).catch(() => undefined);
+      if (vc === undefined) continue;
+      const r = await verifyInternal(internalChain({ credentials: [vc] }));
+      expect(r.authorized).toBe(false);
+      expect(r.phase).toBe("A");
+    }
+  });
+
   it("a scalar operator with several right operands is refused (the triple order would pick one)", async () => {
     const twoBounds: OdrlPolicy = {
       ...base.instituteInternal,

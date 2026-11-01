@@ -17,7 +17,11 @@ denies unless `allowProvisionalPolicy: true` is set, which marks the permit
 
 `isControlledBy` is required, and an invalid `now`, `revoked` or `maxChainLength` denies with
 `INVALID_OPTIONS`. The chain-length cap (default 8) applies before any key is resolved. An unknown
-request action, or a multi-valued request attribute, denies in Phase D. The credential's `svc:action` and `svc:target` claims are read
+request action, a multi-valued or malformed request attribute, a `dateTime` without a timezone,
+or a chain prohibition that may apply but constrains an operand the request leaves out, denies in
+Phase D, as does any evaluator failure. A credential validity bound that is not a dateTime with a
+timezone denies in Phase A. Signed policy content is parsed with its relative IRIs resolved against
+the policy document (the policy IRI without its fragment). The credential's `svc:action` and `svc:target` claims are read
 but not enforced; the bound policy decides scope.
 
 Authorization credentials must contain one subject record (a single-element array is

@@ -47,6 +47,7 @@
   },
   "homepage": "https://github.com/jeswr/agent-authz-verifier#readme",
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",

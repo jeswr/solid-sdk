@@ -2475,6 +2475,9 @@ importers:
 
   packages/agent-authz-verifier:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/solid-odrl':
         specifier: workspace:*
         version: link:../solid-odrl
