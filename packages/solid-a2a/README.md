@@ -58,14 +58,19 @@ const protocol = await buildProtocolDocument({
 
 ## Reading untrusted intents
 
-- `intentFromRdf` / `parseIntentGraph` return `undefined` for anything ambiguous: an
-  action typed with more than one kind, more than one target, recipient or agent, an
+- `intentFromRdf` / `parseIntentGraph` return `undefined` for anything ambiguous: a
+  graph with more than one `a2a:Intent`, an action typed with more than one kind, more than one target, recipient or agent, an
   action agent that differs from the intent agent, an unknown `a2a:mode`, or an IRI that
   is not absolute. The request shapes do not bound these, so act on the projection, not
   on `validateIntent` alone.
 - `validateIntent` never throws: an Intent the writers refuse, or a shape the validator
   cannot compile, is `conforms: false`. Shapes using `sh:pattern` are refused, because a
   peer's pinned Protocol Document is not vetted and a backtracking regex cannot be timed out.
+  For the same reason a shapes graph is refused before validation when its shape references
+  (`sh:node`, `sh:property`, `sh:not`, `sh:qualifiedValueShape`, `sh:and`/`sh:or`/`sh:xone`
+  lists) form a cycle or unfold to more than 1024 shape evaluations, or when it uses
+  `sh:qualifiedValueShapesDisjoint`; the validator does not memoise, so a small graph whose
+  shapes each name the next twice would otherwise cost 2^depth.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.

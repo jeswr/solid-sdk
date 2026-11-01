@@ -130,6 +130,67 @@ describe("validateIntent reports, never throws or hangs", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
+  it("refuses a peer shape whose sh:and references double at each level", async () => {
+    let levels = "";
+    for (let i = 0; i < 40; i++)
+      levels += `<urn:L${i}> sh:and ( <urn:L${i + 1}> <urn:L${i + 1}> ) .\n`;
+    const started = performance.now();
+    const report = await validateIntent(
+      intent,
+      await shape(`sh:and ( <urn:L0> <urn:L0> ) .\n${levels}<urn:L40> sh:nodeKind sh:IRI`),
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluation budget/);
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  for (const [name, extra] of [
+    ["sh:or", "sh:or ( <urn:A> <urn:A> )"],
+    ["sh:xone", "sh:xone ( <urn:A> <urn:A> )"],
+    ["sh:node", "sh:node <urn:A>, <urn:A2>"],
+    ["sh:not", "sh:not <urn:A>"],
+  ] as const) {
+    it(`counts ${name} references against the budget`, async () => {
+      let levels = "";
+      for (let i = 0; i < 30; i++) {
+        levels += `<urn:A${i === 0 ? "" : i}> sh:or ( <urn:A${i + 1}> <urn:A${i + 1}> ) .\n`;
+      }
+      const report = await validateIntent(
+        intent,
+        await shape(`${extra} .\n${levels}<urn:A2> a sh:NodeShape`),
+      );
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/evaluation budget/);
+    });
+  }
+
+  it("refuses shape reference cycles, looping lists and disjoint qualified shapes", async () => {
+    for (const extra of [
+      "sh:node <urn:S>",
+      "sh:and _:l . _:l <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:X> ; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:l",
+      "sh:or <urn:not-a-list>",
+      "sh:property [ sh:path a2a:action ; sh:qualifiedValueShape [ sh:nodeKind sh:IRI ] ; sh:qualifiedMinCount 1 ; sh:qualifiedValueShapesDisjoint true ]",
+    ]) {
+      const report = await validateIntent(intent, await shape(extra));
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/not evaluated \(unbounded cost\)/);
+    }
+  });
+
+  it("still evaluates bounded nested shapes", async () => {
+    const report = await validateIntent(
+      intent,
+      await shape(
+        "sh:and ( [ sh:nodeKind sh:IRI ] [ sh:property [ sh:path a2a:action ; sh:minCount 1 ] ] ) ; sh:or ( [ sh:nodeKind sh:IRI ] )",
+      ),
+    );
+    expect(report.conforms).toBe(true);
+    for (const action of ["read", "grant", "list", "subscribe"] as const) {
+      const built = await validateIntent(intent, buildShapeForIntent(action));
+      expect(built.results.every((r) => !/unbounded cost/.test(r.message))).toBe(true);
+    }
+  });
+
   it("an invalid regex or an invalid Intent is a non-conformance", async () => {
     const bad = await validateIntent(
       intent,
@@ -141,6 +202,27 @@ describe("validateIntent reports, never throws or hangs", () => {
       buildShapeForIntent("read"),
     );
     expect(wrongAction.conforms).toBe(false);
+  });
+});
+
+describe("a graph with several intents projects to none", () => {
+  it("does not pick one of two conforming grants by store order", async () => {
+    const body = `${PREFIXES}
+<urn:i:benign> a a2a:Intent ; a2a:action _:a .
+_:a a a2a:GrantAction ; schema:object <https://alice.example/pub> ;
+  schema:recipient <https://bob.example/#me> ; a2a:mode acl:Read, acl:Read2 .
+<urn:i:evil> a a2a:Intent ; a2a:action _:b .
+_:b a a2a:GrantAction ; schema:object <https://alice.example/private/> ;
+  schema:recipient <https://mallory.example/#me> ; a2a:mode acl:Control .`;
+    expect(await parseIntentGraph(body)).toBeUndefined();
+  });
+
+  it("does not pick an agent when two intents share one action", async () => {
+    const body = `${PREFIXES}
+<urn:i:1> a a2a:Intent ; a2a:action <urn:act> ; schema:agent <https://a.example/#me> .
+<urn:i:2> a a2a:Intent ; a2a:action <urn:act> ; schema:agent <https://b.example/#me> .
+<urn:act> a schema:ReadAction ; schema:object <https://alice.example/x> .`;
+    expect(await parseIntentGraph(body)).toBeUndefined();
   });
 });
 

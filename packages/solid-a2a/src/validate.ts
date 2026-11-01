@@ -6,7 +6,7 @@
 // (conforms + projected results) and NEVER throws on non-conformance — a
 // malformed intent is `conforms: false` with a populated `results`, not an error.
 
-import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
 import { intentToRdf } from "./intent.js";
@@ -52,6 +52,88 @@ export async function validateIntent(
  */
 const SH_PATTERN = "http://www.w3.org/ns/shacl#pattern";
 
+const SH_NS = "http://www.w3.org/ns/shacl#";
+const RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+/** Constraints whose object is one shape the validator evaluates per value node. */
+const SHAPE_REFS = new Set(
+  ["node", "property", "not", "qualifiedValueShape"].map((p) => SH_NS + p),
+);
+/** Constraints whose object is an RDF list of shapes. */
+const SHAPE_LISTS = new Set(["and", "or", "xone"].map((p) => SH_NS + p));
+/**
+ * The most shape evaluations one validation may unfold to, counting a shape once
+ * per reference path. The validator does not memoise, so a small graph whose
+ * shapes each name the next one twice costs 2^depth; this request-sized budget
+ * refuses that before any work starts. The package's own shapes unfold to a few
+ * dozen.
+ */
+const MAX_SHAPE_EVALUATIONS = 1024;
+const MAX_LIST_LENGTH = 256;
+const OVER_BUDGET = "Shapes that unfold past the evaluation budget";
+
+/**
+ * Why a shapes graph is refused before validation, or undefined when it is
+ * bounded: a reference cycle, a list that loops or runs long, disjoint qualified
+ * shapes (each check re-evaluates every sibling), or an unfolded size over budget.
+ */
+function unboundedShapes(graph: Store): string | undefined {
+  const key = (t: Term) => `${t.termType}:${t.value}`;
+  const listMembers = (head: Term): Term[] | undefined => {
+    const members: Term[] = [];
+    const seen = new Set<string>();
+    let node = head;
+    while (!(node.termType === "NamedNode" && node.value === `${RDF_NS}nil`)) {
+      if (seen.has(key(node)) || members.length >= MAX_LIST_LENGTH) return undefined;
+      seen.add(key(node));
+      const first = graph.getObjects(node, `${RDF_NS}first`, null);
+      const rest = graph.getObjects(node, `${RDF_NS}rest`, null);
+      if (first.length !== 1 || rest.length !== 1) return undefined;
+      members.push(first[0] as Term);
+      node = rest[0] as Term;
+    }
+    return members;
+  };
+  if (graph.getQuads(null, `${SH_NS}qualifiedValueShapesDisjoint`, null, null).length > 0) {
+    return "Shapes using sh:qualifiedValueShapesDisjoint are not evaluated (unbounded cost)";
+  }
+  const size = new Map<string, number>();
+  const active = new Set<string>();
+  const unfold = (shape: Term): number | string => {
+    const k = key(shape);
+    const known = size.get(k);
+    if (known !== undefined) return known;
+    if (active.has(k)) return "Shapes that reference themselves";
+    active.add(k);
+    let total = 1;
+    for (const quad of graph.getQuads(shape, null, null, null)) {
+      let refs: Term[] = [];
+      if (SHAPE_REFS.has(quad.predicate.value)) refs = [quad.object];
+      else if (SHAPE_LISTS.has(quad.predicate.value)) {
+        const members = listMembers(quad.object);
+        if (members === undefined) return "Shapes with a malformed sh:and/sh:or/sh:xone list";
+        refs = members;
+      }
+      for (const ref of refs) {
+        const child = unfold(ref);
+        if (typeof child === "string") return child;
+        total += child;
+        if (total > MAX_SHAPE_EVALUATIONS) return OVER_BUDGET;
+      }
+    }
+    active.delete(k);
+    size.set(k, total);
+    return total;
+  };
+  let total = 0;
+  for (const subject of graph.getSubjects(null, null, null)) {
+    const n = unfold(subject);
+    if (typeof n === "string") return `${n} are not evaluated (unbounded cost)`;
+    total += n;
+    if (total > MAX_SHAPE_EVALUATIONS) return `${OVER_BUDGET} are not evaluated (unbounded cost)`;
+  }
+  return undefined;
+}
+
 async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
@@ -72,6 +154,8 @@ async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<V
   }
   // Shapes use the SAME total renaming, without interpreting constraint roles.
   const shapeGraph = validationDataset(toDataset(shapes), false) as Store;
+  const unbounded = unboundedShapes(shapeGraph);
+  if (unbounded !== undefined) return { conforms: false, results: [{ message: unbounded }] };
 
   const validator = new SHACLValidator(shapeGraph);
   const report = await validator.validate(dataGraph);

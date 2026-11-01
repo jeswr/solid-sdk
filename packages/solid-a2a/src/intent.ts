@@ -144,20 +144,16 @@ function actionTypeAlias(intent: Intent): string {
 
 /**
  * Read a structured {@link Intent} back from an already-parsed RDF dataset (the
- * round-trip read). Returns the FIRST well-formed `a2a:Intent` found, or
- * `undefined` if there is none / it lacks a recognised action.
+ * round-trip read). Returns the graph's one `a2a:Intent`, or `undefined` when there
+ * is none, more than one (a consent UI could show one while another is acted on),
+ * or it is malformed or ambiguous.
  */
 export function intentFromRdf(dataset: DatasetCore): Intent | undefined {
   const graph = validationDataset(dataset);
   if (graph === undefined) return undefined;
-  const intents = wrapIntent(graph).intents();
-  for (const node of intents) {
-    const intent = projectIntent(node);
-    if (intent !== undefined) {
-      return intent;
-    }
-  }
-  return undefined;
+  const intents = [...wrapIntent(graph).intents()];
+  const node = intents[0];
+  return node === undefined || intents.length !== 1 ? undefined : projectIntent(node);
 }
 
 /**
