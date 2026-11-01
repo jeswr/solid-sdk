@@ -35,7 +35,7 @@ export function objectTerms(node: TermWrapper, ...predicates: string[]): Set<Ter
  * Add one object-IRI triple through the node's factory and dataset.
  *
  * The predicate must be a trusted vocabulary IRI and the subject must already
- * be safe. The object passes through {@link escapeIri}, with no scheme validation
+ * be safe. The object passes through `escapeIri`, with no scheme validation
  * or URL normalisation. Callers enforce any additional field-specific policy.
  */
 export function addIriTriple(node: TermWrapper, predicate: string, objectIri: string): void {
@@ -46,7 +46,7 @@ export function addIriTriple(node: TermWrapper, predicate: string, objectIri: st
 }
 
 /**
- * Add an HTTP(S) object-IRI triple through {@link safeHttpIri}.
+ * Add an HTTP(S) object-IRI triple through `safeHttpIri`.
  *
  * Returns false and adds nothing when the object is unsafe; otherwise returns
  * true after adding the escaped lexical IRI. The predicate must be a trusted

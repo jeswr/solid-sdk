@@ -1,0 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/wrapper.d.ts",
+  "apiReport": {
+    "reportFileName": "rdf-serialize-wrapper.api.md"
+  }
+}
