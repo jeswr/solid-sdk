@@ -583,6 +583,9 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.pho-page .pho-tile > a:focus-visible {
+  outline-offset: -4px;
+}
 @media (max-width: 767px) {
   .pho-page {
     padding: var(--space-4);

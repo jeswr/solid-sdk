@@ -17,13 +17,14 @@ import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
 import { createAlbum, createAlbumWriter, listAlbums, type StoredAlbum } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
 import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
-import { statusOf } from "../lib/data/shared";
+import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import {
   emptyTrash,
   listTrash,
   purgePhoto,
   restorePhoto,
+  resumeTrash,
   type TrashedPhoto,
   trashPhoto,
 } from "../lib/data/trash";
@@ -35,9 +36,17 @@ interface Snapshot {
   trash: TrashedPhoto[];
   favourites: string[];
   warnings: number;
+  albumFailures: Failure[];
 }
 type Patch = (state: Snapshot) => Snapshot;
-const empty: Snapshot = { photos: [], albums: [], trash: [], favourites: [], warnings: 0 };
+const empty: Snapshot = {
+  photos: [],
+  albums: [],
+  trash: [],
+  favourites: [],
+  warnings: 0,
+  albumFailures: [],
+};
 const Context = createContext<ReturnType<typeof usePhotosState> | null>(null);
 
 function usePhotosState(session: PodSession) {
@@ -80,6 +89,7 @@ function usePhotosState(session: PodSession) {
         trash: trash.items,
         favourites: prefs.favourites,
         warnings: library.failures.length + albums.failures.length + trash.failures.length,
+        albumFailures: albums.failures,
       };
       redraw();
       setStatus(library.items.length ? "ready" : "empty");
@@ -313,7 +323,9 @@ function usePhotosState(session: PodSession) {
     (urls?: string[]) => {
       const patch: Patch = (s) => ({
         ...s,
-        trash: urls ? s.trash.filter((item) => !urls.includes(item.url)) : [],
+        trash: s.trash.filter(
+          (item) => item.status === "needs-recovery" || (urls && !urls.includes(item.url)),
+        ),
       });
       return run(patch, async () => {
         if (!urls) {
@@ -329,6 +341,25 @@ function usePhotosState(session: PodSession) {
       });
     },
     [io, run],
+  );
+  const resume = useCallback(
+    (urls: string[]) =>
+      run(
+        (s) => s,
+        async () => {
+          for (const url of urls) {
+            const outcome = await resumeTrash(io, url);
+            if (!outcome.ok) throw outcome.error;
+          }
+          announce("Move to trash completed");
+          toast("Moved to trash", {
+            duration: 10000,
+            action: { label: "Undo", onClick: () => restore(urls) },
+          });
+          return (s) => s;
+        },
+      ),
+    [io, run, restore],
   );
   const keywords = useCallback(
     (photo: LibraryPhoto, value: string[]) => {
@@ -461,6 +492,7 @@ function usePhotosState(session: PodSession) {
     favourite,
     moveToTrash,
     restore,
+    resume,
     purge,
     keywords,
     uploads,

@@ -4,8 +4,9 @@ import { PhotoIoError, type PreparedPhoto, photoStorage, type UploadInput } from
 import { googlePhotosStorage } from "./google-photos";
 import { requireEtag } from "./shared";
 /** Strong validators prove which partial writes this adapter may clean up.
- * Successful creates without validators and lost responses both retain their
- * prepared bytes for the same byte-verified resume path. */
+ * Successful creates without validators and every unsuccessful create retain
+ * their prepared bytes for the same byte-verified resume path. An HTTP failure
+ * (including a gateway error) cannot prove that the PUT did not commit. */
 export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string) {
   const root = new URL("photos/", storage).href;
   const createdBinaries = new Map<string, string>();
@@ -62,7 +63,7 @@ export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string
     const etag = response.headers.get("etag");
     if (binaryCreate && response.ok && etag && !etag.startsWith("W/"))
       createdBinaries.set(url, etag);
-    else if (binaryCreate && response.ok) ambiguousBinaries.set(url, init?.body as Blob);
+    else if (binaryCreate) ambiguousBinaries.set(url, init?.body as Blob);
     return response;
   };
   return {

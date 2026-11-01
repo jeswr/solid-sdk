@@ -6,7 +6,14 @@ import { browserEncoder, LocationStripError } from "../src/apps/photos/lib/brows
 import { createAlbum, createAlbumWriter } from "../src/apps/photos/lib/data/albums";
 import { createKeywordWriter, listLibrary } from "../src/apps/photos/lib/data/library";
 import { photoDataStorage } from "../src/apps/photos/lib/data/storage";
-import { listTrash, purgePhoto, restorePhoto, trashPhoto } from "../src/apps/photos/lib/data/trash";
+import {
+  emptyTrash,
+  listTrash,
+  purgePhoto,
+  restorePhoto,
+  resumeTrash,
+  trashPhoto,
+} from "../src/apps/photos/lib/data/trash";
 import { uploadFiles } from "../src/apps/photos/lib/data/upload";
 import { buildTrash, type ImageEncoder, RestoreReceipt } from "../src/apps/photos/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -29,6 +36,7 @@ function setup() {
   const lost = new Set<string>();
   const noEtag = new Set<string>();
   const weakEtag = new Set<string>();
+  const committedErrors = new Map<string, number | "network" | "timeout">();
   let afterPut: ((url: string) => Promise<void>) | undefined;
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -40,6 +48,10 @@ function setup() {
     if (noEtag.has(key)) response.headers.delete("etag");
     if (weakEtag.has(key)) response.headers.set("etag", 'W/"weak"');
     if (lost.has(key)) throw new Error("Lost response");
+    const committedError = committedErrors.get(key);
+    if (committedError === "network") throw new TypeError("Network unavailable");
+    if (committedError === "timeout") throw new DOMException("Timed out", "TimeoutError");
+    if (committedError !== undefined) return new Response(null, { status: committedError });
     return response;
   };
   const io = photoDataStorage(fetch, ROOT);
@@ -57,6 +69,7 @@ function setup() {
     lost,
     noEtag,
     weakEtag,
+    committedErrors,
     upload,
     afterPut: (callback: typeof afterPut) => {
       afterPut = callback;
@@ -71,6 +84,52 @@ async function photo(s: ReturnType<typeof setup>) {
 }
 
 describe("Photos recovery regressions", () => {
+  it.each([
+    "originals/photo.png",
+    "thumbs/photo.webp",
+  ])("verifies committed %s writes after any unsuccessful HTTP response, network error or timeout", async (path) => {
+    for (const outcome of [302, 400, 408, 412, 429, 500, 502, 503, "network", "timeout"] as const) {
+      const s = setup();
+      const url = `${s.io.root}${path}`;
+      s.committedErrors.set(`PUT ${url}`, outcome);
+      expect((await s.upload())[0]?.ok).toBe(false);
+      expect(s.io.createdBinaries.has(url)).toBe(false);
+      const before = await s.pod.fetch(url);
+      expect(before.status).toBe(200);
+      const bytes = await before.arrayBuffer();
+      s.committedErrors.clear();
+      expect((await s.upload("photo", "2026-11-02T12:00:00Z"))[0]?.ok).toBe(true);
+      const after = await s.pod.fetch(url);
+      expect(after.headers.get("etag")).toBe(before.headers.get("etag"));
+      expect(await after.arrayBuffer()).toEqual(bytes);
+      expect((await listLibrary(s.io)).items).toHaveLength(1);
+      expect((await s.io.loadPhoto(`${s.io.root}items/photo.ttl`)).photo?.created).toBe(NOW);
+      expect(s.io.createdBinaries.size).toBe(0);
+      expect(s.io.uploads.size).toBe(0);
+    }
+  });
+  it("retries uncommitted binary failures and keeps byte verification after a committed 502", async () => {
+    for (const scenario of ["uncommitted", "unreadable", "no-etag", "changed"]) {
+      const s = setup();
+      const url = `${s.io.root}originals/photo.png`;
+      if (scenario === "uncommitted") s.fail.set(`PUT ${url}`, 503);
+      else s.committedErrors.set(`PUT ${url}`, 502);
+      expect((await s.upload())[0]?.ok).toBe(false);
+      s.fail.clear();
+      s.committedErrors.clear();
+      if (scenario === "unreadable") s.fail.set(`GET ${url}`, 500);
+      if (scenario === "no-etag") s.noEtag.add(`GET ${url}`);
+      if (scenario === "changed")
+        await s.pod.fetch(url, { method: "PUT", body: "Another client's bytes" });
+      expect((await s.upload())[0]?.ok).toBe(scenario === "uncommitted");
+      if (scenario === "uncommitted") continue;
+      expect((await s.pod.fetch(`${s.io.root}items/photo.ttl`)).status).toBe(404);
+      expect((await s.pod.fetch(url)).status).toBe(200);
+      s.fail.clear();
+      s.noEtag.clear();
+      expect((await s.upload())[0]?.ok).toBe(scenario !== "changed");
+    }
+  });
   it.each([
     "originals/photo.png",
     "thumbs/photo.webp",
@@ -347,6 +406,102 @@ describe("Photos recovery regressions", () => {
     expect((await restorePhoto(s.io, copy)).ok).toBe(true);
     expect((await trashPhoto(s.io, original.url, "again", ACTOR, NOW)).ok).toBe(true);
     expect((await purgePhoto(s.io, `${s.io.root}.trash/again.ttl`)).ok).toBe(true);
+  });
+  it("classifies incomplete moves before restore or purge claims and resumes the same ID", async () => {
+    const s = setup();
+    const original = await photo(s);
+    const copy = `${s.io.root}.trash/move.ttl`;
+    s.fail.set(`PUT ${original.url}`, 500);
+    expect((await trashPhoto(s.io, original.url, "move", ACTOR, NOW)).ok).toBe(false);
+    expect((await listTrash(s.io)).items).toMatchObject([{ url: copy, status: "needs-recovery" }]);
+    const etag = (await s.io.read(copy)).etag;
+    // Stale per-item and bulk actions must not poison the recovery record as restoring/purging.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await restorePhoto(s.io, copy)).toMatchObject({ ok: false });
+      expect(await purgePhoto(s.io, copy)).toMatchObject({ ok: false });
+      expect(await emptyTrash(s.io)).toEqual({ purged: [], failures: [] });
+      expect((await s.io.read(copy)).etag).toBe(etag);
+    }
+    s.fail.clear();
+    expect(await resumeTrash(s.io, copy)).toEqual({ ok: true, value: copy });
+    expect((await listLibrary(s.io)).items).toHaveLength(0);
+    expect((await listTrash(s.io)).items).toMatchObject([{ url: copy, status: "trashed" }]);
+    expect((await restorePhoto(s.io, copy)).ok).toBe(true);
+    expect((await listTrash(s.io)).items).toHaveLength(0);
+    expect((await listLibrary(s.io)).items).toHaveLength(1);
+  });
+  it("preserves recovery copies when reads, cleanup or the resumed move fail", async () => {
+    const s = setup();
+    const original = await photo(s);
+    const copy = `${s.io.root}.trash/move.ttl`;
+    s.fail.set(`PUT ${original.url}`, 500);
+    expect((await trashPhoto(s.io, original.url, "move", ACTOR, NOW)).ok).toBe(false);
+    expect((await resumeTrash(s.io, copy)).ok).toBe(false);
+    s.fail.clear();
+    s.fail.set(`GET ${original.url}`, 500);
+    expect(await listTrash(s.io)).toMatchObject({
+      items: [],
+      failures: [{ url: copy, error: { status: 500 } }],
+    });
+    expect((await restorePhoto(s.io, copy)).ok).toBe(false);
+    s.fail.clear();
+    s.fail.set(`DELETE ${copy}`, 500);
+    expect((await resumeTrash(s.io, copy)).ok).toBe(false);
+    s.fail.clear();
+    await s.io.savePhoto(
+      original.url,
+      { ...original, name: "Changed elsewhere" },
+      { etag: original.etag as string },
+    );
+    expect(await resumeTrash(s.io, copy)).toMatchObject({ ok: false, error: { status: 412 } });
+    expect((await listTrash(s.io)).items).toMatchObject([{ status: "needs-recovery" }]);
+    expect((await s.io.loadPhoto(original.url)).photo?.name).toBe("Changed elsewhere");
+    for (const url of [
+      `${ROOT}outside.ttl`,
+      `${s.io.root}.trash/not-turtle`,
+      `${s.io.root}.trash/nested/bad.ttl`,
+      `${s.io.root}.trash/missing.ttl`,
+    ])
+      expect((await resumeTrash(s.io, url)).ok).toBe(false);
+  });
+  it("allows missing legacy originals but keeps claimed restore cleanup out of move recovery", async () => {
+    for (const status of [404, 410]) {
+      const s = setup();
+      const original = await photo(s);
+      expect((await trashPhoto(s.io, original.url, "move", ACTOR, NOW)).ok).toBe(true);
+      s.fail.set(`GET ${original.url}`, status);
+      expect((await listTrash(s.io)).items).toMatchObject([{ status: "trashed" }]);
+    }
+    const s = setup();
+    const original = await photo(s);
+    const copy = `${s.io.root}.trash/move.ttl`;
+    expect((await trashPhoto(s.io, original.url, "move", ACTOR, NOW)).ok).toBe(true);
+    s.fail.set(`DELETE ${copy}`, 500);
+    expect((await restorePhoto(s.io, copy)).ok).toBe(false);
+    expect((await listTrash(s.io)).items).toMatchObject([
+      { status: "trashed", record: { state: "restoring" } },
+    ]);
+    s.fail.clear();
+    expect((await restorePhoto(s.io, copy)).ok).toBe(true);
+    expect((await listTrash(s.io)).items).toHaveLength(0);
+  });
+  it("empties completed trash moves while preserving live recovery copies", async () => {
+    const s = setup();
+    const original = await photo(s);
+    s.fail.set(`PUT ${original.url}`, 500);
+    expect((await trashPhoto(s.io, original.url, "move", ACTOR, NOW)).ok).toBe(false);
+    s.fail.clear();
+    expect((await s.upload("other"))[0]?.ok).toBe(true);
+    const other = `${s.io.root}items/other.ttl`;
+    expect((await trashPhoto(s.io, other, "other-move", ACTOR, NOW)).ok).toBe(true);
+    expect(await emptyTrash(s.io)).toEqual({
+      purged: [`${s.io.root}.trash/other-move.ttl`],
+      failures: [],
+    });
+    expect((await listTrash(s.io)).items).toMatchObject([
+      { url: `${s.io.root}.trash/move.ttl`, status: "needs-recovery" },
+    ]);
+    expect((await s.pod.fetch(original.contentUrl)).status).toBe(200);
   });
   it("recognizes a committed tombstone whose response was lost", async () => {
     const s = setup();

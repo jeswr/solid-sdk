@@ -101,7 +101,17 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   const today = page.getByRole("region", { name: "Today", exact: true });
   await expect(today.getByRole("link", { name: /^Open Upload/ })).toHaveCount(3);
   await capture(page, info, "timeline");
+  await page.keyboard.press("Tab");
   await page.getByRole("link", { name: "Open Upload 3.png", exact: true }).focus();
+  // The tile clips outward outlines; the keyboard ring must stay inside its image.
+  await expect(page.getByRole("link", { name: "Open Upload 3.png", exact: true })).toHaveCSS(
+    "outline-offset",
+    "-4px",
+  );
+  await expect(page.getByRole("link", { name: "Open Upload 3.png", exact: true })).toHaveCSS(
+    "outline-style",
+    "solid",
+  );
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Upload 3.png", exact: true })).toBeVisible();
   await page.keyboard.press("ArrowRight");

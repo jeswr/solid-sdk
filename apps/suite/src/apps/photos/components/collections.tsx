@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
+  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -104,7 +105,15 @@ export function CollectionScreen({
             ? (album?.name ?? "Album unavailable")
             : "Photos";
   const selectedPhotos = photos.filter((photo) => selected.has(photo.ref));
-  const selectedTrash = selectedPhotos.map((photo) => photo.url);
+  const recoveryUrls = new Set(
+    state.trash.filter((item) => item.status === "needs-recovery").map((item) => item.url),
+  );
+  const selectedTrash = selectedPhotos
+    .filter((photo) => !recoveryUrls.has(photo.url))
+    .map((photo) => photo.url);
+  const selectedRecovery = selectedPhotos
+    .filter((photo) => recoveryUrls.has(photo.url))
+    .map((photo) => photo.url);
   const focusRef = search.get("focus");
   useEffect(() => {
     if (!focusRef || state.status === "loading") return;
@@ -182,7 +191,7 @@ export function CollectionScreen({
           {kind === "trash" && (
             <Button
               variant="outline"
-              disabled={!state.trash.length}
+              disabled={!state.trash.some((item) => item.status !== "needs-recovery")}
               onClick={() => setConfirmation("empty")}
             >
               Empty trash
@@ -190,6 +199,13 @@ export function CollectionScreen({
           )}
         </div>
       </header>
+      {kind === "trash" && recoveryUrls.size > 0 && (
+        <div className="pho-warning" role="status">
+          {recoveryUrls.size} photo{recoveryUrls.size === 1 ? " needs" : "s need"} recovery and
+          {recoveryUrls.size === 1 ? " is" : " are"} still in your library. Resume the move to trash
+          before restoring or deleting.
+        </div>
+      )}
       {album && (
         <div className="pho-album-settings">
           <Button variant="outline" onClick={() => setRenaming(true)}>
@@ -227,23 +243,40 @@ export function CollectionScreen({
             actions={
               kind === "trash"
                 ? [
-                    {
-                      id: "restore",
-                      label: "Restore",
-                      onSelect: () => {
-                        void state.restore(selectedTrash).then((ok) => {
-                          if (ok) setSelected(new Set());
-                        });
-                      },
-                    },
-                    {
-                      id: "purge",
-                      label: "Delete forever",
-                      onSelect: () => {
-                        setPurgeUrls(selectedTrash);
-                        setConfirmation("purge");
-                      },
-                    },
+                    ...(selectedRecovery.length
+                      ? [
+                          {
+                            id: "resume",
+                            label: "Resume",
+                            onSelect: () => {
+                              void state.resume(selectedRecovery).then((ok) => {
+                                if (ok) setSelected(new Set());
+                              });
+                            },
+                          },
+                        ]
+                      : []),
+                    ...(selectedTrash.length
+                      ? [
+                          {
+                            id: "restore",
+                            label: "Restore",
+                            onSelect: () => {
+                              void state.restore(selectedTrash).then((ok) => {
+                                if (ok) setSelected(new Set());
+                              });
+                            },
+                          },
+                          {
+                            id: "purge",
+                            label: "Delete forever",
+                            onSelect: () => {
+                              setPurgeUrls(selectedTrash);
+                              setConfirmation("purge");
+                            },
+                          },
+                        ]
+                      : []),
                     {
                       id: "clear",
                       label: "Clear selection",
@@ -350,29 +383,43 @@ export function CollectionScreen({
           album={album}
           itemActions={
             kind === "trash"
-              ? (photo) => (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        void state.restore([photo.url]);
-                      }}
-                    >
-                      Restore
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setPurgeUrls([photo.url]);
-                        setConfirmation("purge");
-                      }}
-                    >
-                      Delete forever
-                    </Button>
-                  </>
-                )
+              ? (photo) =>
+                  recoveryUrls.has(photo.url) ? (
+                    <>
+                      <Badge>Needs recovery</Badge>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          void state.resume([photo.url]);
+                        }}
+                      >
+                        Resume
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          void state.restore([photo.url]);
+                        }}
+                      >
+                        Restore
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setPurgeUrls([photo.url]);
+                          setConfirmation("purge");
+                        }}
+                      >
+                        Delete forever
+                      </Button>
+                    </>
+                  )
               : undefined
           }
         />
@@ -432,7 +479,9 @@ export function CollectionScreen({
         description={
           confirmation === "album"
             ? "The album will be removed. Your photos will be kept."
-            : "The originals and their previews will be permanently deleted. This can't be undone."
+            : confirmation === "empty" && recoveryUrls.size
+              ? "Completed trash moves will be permanently deleted. Photos needing recovery will be kept. This can't be undone."
+              : "The originals and their previews will be permanently deleted. This can't be undone."
         }
         action={
           confirmation === "album"
@@ -457,6 +506,7 @@ export function CollectionScreen({
 export function AlbumsScreen() {
   const state = usePhotos();
   const [create, setCreate] = useState(false);
+  const albumFailureMessage = `${state.albumFailures.length} album${state.albumFailures.length === 1 ? "" : "s"} couldn't be read.`;
   return (
     <div className="pho-page">
       <header className="pho-page-header">
@@ -470,9 +520,17 @@ export function AlbumsScreen() {
           New album
         </Button>
       </header>
+      {state.albumFailures.length > 0 && state.albums.length > 0 && (
+        <div className="pho-warning" role="status">
+          {albumFailureMessage} Your other albums are available.{" "}
+          <Button variant="ghost" onClick={() => void state.refresh()}>
+            Retry
+          </Button>
+        </div>
+      )}
       {state.status === "loading" ? (
         <LoadingSkeleton preset="grid" />
-      ) : state.status === "error" ? (
+      ) : state.status === "error" || (state.albumFailures.length > 0 && !state.albums.length) ? (
         <ErrorState
           error="unreachable"
           actions={{
@@ -480,7 +538,9 @@ export function AlbumsScreen() {
               void state.refresh();
             },
           }}
-        />
+        >
+          {state.albumFailures.length > 0 && <p>{albumFailureMessage}</p>}
+        </ErrorState>
       ) : !state.albums.length ? (
         <EmptyState
           title="A home for every story"

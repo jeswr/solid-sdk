@@ -49,6 +49,7 @@ async function setup() {
     favourites: [],
     trash: [],
     warnings: 0,
+    albumFailures: [],
     albums: [
       {
         name: "Weekend",
@@ -68,6 +69,76 @@ it("keeps an album card's accessible name unchanged when its decorative cover lo
   expect(image).not.toBeNull();
   expect(image?.getAttribute("alt")).toBe("");
   expect(image?.closest('[aria-hidden="true"]')).not.toBeNull();
+});
+it.each([0, 1])("shows album-specific failures with Retry when %s albums loaded", async (count) => {
+  await setup();
+  const snapshot = state.usePhotos();
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  state.usePhotos.mockReturnValue({
+    ...snapshot,
+    albums: snapshot.albums.slice(0, count),
+    albumFailures: [{ url: `${ROOT}photos/albums/broken.ttl`, error: new Error("Bad RDF") }],
+    warnings: 1,
+    refresh,
+  });
+  const view = await mount(h(AlbumsScreen));
+  expect(view.host.textContent).toContain("1 album couldn't be read.");
+  expect(view.host.textContent).not.toContain("A home for every story");
+  expect(view.host.querySelectorAll(".pho-album-card")).toHaveLength(count);
+  if (count === 0) expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+  await click(getByRole(view.host, "button", { name: "Retry" }));
+  expect(refresh).toHaveBeenCalledOnce();
+  state.usePhotos.mockReturnValue({ ...snapshot, refresh });
+  await view.render(h(AlbumsScreen));
+  expect(view.host.textContent).not.toContain("couldn't be read");
+});
+it("gives incomplete trash moves their own Resume action and excludes them from normal bulk actions", async () => {
+  await setup();
+  const snapshot = state.usePhotos();
+  const resume = vi.fn().mockResolvedValue(true);
+  const restore = vi.fn().mockResolvedValue(true);
+  const recoveryUrl = `${ROOT}photos/.trash/recovery.ttl`;
+  const trashedUrl = `${ROOT}photos/.trash/complete.ttl`;
+  const recovery = {
+    url: recoveryUrl,
+    photo,
+    etag: '"recovery"',
+    record: { originalUrl: photo.url },
+    status: "needs-recovery",
+  };
+  state.usePhotos.mockReturnValue({ ...snapshot, resume, restore, trash: [recovery] });
+  const view = await mount(h(CollectionScreen, { kind: "trash", collectionPath: "/photos/trash" }));
+  const card = view.host.querySelector(".pho-tile") as HTMLElement;
+  expect(card.textContent).toContain("Needs recovery");
+  expect(card.textContent).not.toContain("Restore");
+  expect(card.textContent).not.toContain("Delete forever");
+  expect(getByRole(view.host, "button", { name: "Empty trash" }).hasAttribute("disabled")).toBe(
+    true,
+  );
+  await click(getByRole(card, "button", { name: "Resume" }));
+  expect(resume).toHaveBeenLastCalledWith([recoveryUrl]);
+  await click(getByRole(card, "checkbox", { name: "Select Garden" }));
+  const selection = view.host.querySelector(".pho-selection") as HTMLElement;
+  expect(selection.textContent).not.toContain("Restore");
+  expect(selection.textContent).not.toContain("Delete forever");
+  await click(getByRole(selection, "button", { name: "Resume" }));
+  expect(resume).toHaveBeenLastCalledWith([recoveryUrl]);
+  // A mixed selection can only restore fully moved photos.
+  state.usePhotos.mockReturnValue({
+    ...snapshot,
+    resume,
+    restore,
+    trash: [recovery, { ...recovery, url: trashedUrl, status: "trashed" }],
+  });
+  await view.render(h(CollectionScreen, { kind: "trash", collectionPath: "/photos/trash" }));
+  for (const item of view.host.querySelectorAll<HTMLElement>(".pho-tile"))
+    await click(getByRole(item, "checkbox", { name: "Select Garden" }));
+  await click(
+    getByRole(view.host.querySelector(".pho-selection") as HTMLElement, "button", {
+      name: "Restore",
+    }),
+  );
+  expect(restore).toHaveBeenLastCalledWith([trashedUrl]);
 });
 it("selects trash records independently when two records describe the same original subject", async () => {
   await setup();

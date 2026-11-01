@@ -189,19 +189,61 @@ it("retains a trash operation ID after a failed tombstone, so retry leaves one u
     expect(await s.state.moveToTrash([original])).toBe(false);
   });
   expect(s.state.trash).toHaveLength(1);
+  expect(s.state.trash[0]?.status).toBe("needs-recovery");
   const recoveryUrl = s.state.trash[0]?.url;
   s.intercept(undefined);
   await s.remount();
   await act(async () => {
-    expect(await s.state.moveToTrash([original])).toBe(true);
+    expect(await s.state.resume([recoveryUrl as string])).toBe(true);
   });
   expect(s.state.photos).toHaveLength(0);
   expect(s.state.trash.map((item) => item.url)).toEqual([recoveryUrl]);
+  expect(s.state.trash[0]?.status).toBe("trashed");
   await act(async () => {
     expect(await s.state.restore([recoveryUrl as string])).toBe(true);
   });
   expect(s.state.photos).toHaveLength(1);
   expect(s.state.trash).toHaveLength(0);
+});
+it("keeps recovery copies when emptying trash and can still retry from the live library", async () => {
+  const s = await setup(2);
+  const [original, other] = s.state.photos;
+  if (!original || !other) throw new Error("Missing fixture");
+  s.intercept(async (url, method) =>
+    url === original.url && method === "PUT" ? new Response(null, { status: 500 }) : undefined,
+  );
+  await act(async () => {
+    expect(await s.state.moveToTrash([original, other])).toBe(false);
+  });
+  const recoveryUrl = s.state.trash.find((item) => item.status === "needs-recovery")?.url;
+  expect(recoveryUrl).toBeDefined();
+  await act(async () => {
+    expect(await s.state.purge()).toBe(true);
+  });
+  expect(s.state.trash.map((item) => item.url)).toEqual([recoveryUrl]);
+  s.intercept(undefined);
+  await s.remount();
+  await act(async () => {
+    expect(await s.state.moveToTrash([original])).toBe(true);
+  });
+  expect(s.state.trash.map((item) => item.url)).toEqual([recoveryUrl]);
+  expect(s.state.trash[0]?.status).toBe("trashed");
+});
+it("retains album-specific document failures and clears them after Retry", async () => {
+  const s = await setup();
+  await act(async () => {
+    expect(await s.state.newAlbum("Garden")).toBe(true);
+    expect(await s.state.newAlbum("Trip")).toBe(true);
+  });
+  const broken = `${s.io.root}albums/garden.ttl`;
+  s.intercept(async (url) => (url === broken ? new Response(null, { status: 500 }) : undefined));
+  await act(async () => s.state.refresh());
+  expect(s.state.albumFailures).toMatchObject([{ url: broken, error: { status: 500 } }]);
+  expect(s.state.albums.map((album) => album.name)).toEqual(["Trip"]);
+  s.intercept(undefined);
+  await act(async () => s.state.refresh());
+  expect(s.state.albumFailures).toEqual([]);
+  expect(s.state.albums).toHaveLength(2);
 });
 it("creates an album populated with the selection when PUT supplies no ETag", async () => {
   const s = await setup();
