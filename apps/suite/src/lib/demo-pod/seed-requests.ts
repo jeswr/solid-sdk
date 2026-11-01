@@ -1,8 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The demo pod's access-request fixtures (03-home-permissions §9 scenario 9): one pending ODRL
- * request in Alice's inbox from MaraCoach for her Activity data, the Type Index registration that
- * request resolves through, and the owner-only ACL a real pod gives its access-records folder.
+ * request in Alice's inbox from MaraCoach for her Activity data, the Type Index registration (of
+ * the Activity document alone) that request resolves through, and the owner-only ACL a real pod gives its access-records folder.
  * RDF is built from DataFactory terms and serialised with `n3.Writer`.
  */
 
@@ -24,6 +24,8 @@ export const DEMO_REQUESTER_NAME = "MaraCoach";
 export const DEMO_REQUEST_PURPOSE = "build your training plan";
 export const ACTIVITY_CLASS = `${NS.HEALTH}StepCountObservation`;
 const INDEX = "settings/privateTypeIndex.ttl";
+/** Seeded by seed-permissions: Alice's step counts. */
+export const ACTIVITY_DOCUMENT = "health/activity.ttl";
 
 function turtle(quads: Iterable<Quad>): Promise<string> {
   const writer = new Writer({ format: "text/turtle" });
@@ -98,7 +100,9 @@ export async function seedRequests(
   const registration = new TypeRegistration(`${indexUrl}#activity`, index, DataFactory);
   registration.types.add(`${NS.SOLID}TypeRegistration`);
   registration.classes.add(ACTIVITY_CLASS);
-  registration.container = new URL("health/", root).href;
+  // The one document holding Activity, not the health/ container: approving Activity must never
+  // reach the other Health data (vitals, conditions, medications) the Health app keeps there.
+  registration.instance = new URL(ACTIVITY_DOCUMENT, root).href;
   return [
     ...files.filter((file) => file.path !== INDEX),
     { path: INDEX, body: await turtle(index), contentType: "text/turtle", modified: now },

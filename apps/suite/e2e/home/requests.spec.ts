@@ -164,10 +164,21 @@ test.describe("scenario 9: requests (accessRequests)", () => {
       expect(expiry).toHaveLength(1);
       expect(Math.abs(Date.parse(expiry[0] as string) - expected.getTime())).toBeLessThan(120_000);
     } else expect(expiry).toEqual([]);
+    // The grant lands on the registered Activity document alone, never on the health/ folder.
     const [acl] = await podDocuments(page, `${ROOT}health/activity.ttl.acl`);
     expect(objects(acl?.[1] ?? "", `${ROOT}health/activity.ttl.acl`, `${ACL}agent`)).toContain(
       REQUESTER,
     );
+    const [folderAcl] = await podDocuments(page, `${ROOT}health/.acl`);
+    expect(folderAcl).toBeDefined();
+    expect(objects(folderAcl?.[1] ?? "", `${ROOT}health/.acl`, `${ACL}agent`)).not.toContain(
+      REQUESTER,
+    );
+    const granted = (await podDocuments(page, ROOT)).filter(
+      ([url, body]) =>
+        url.endsWith(".acl") && objects(body, url, `${ACL}agent`).includes(REQUESTER),
+    );
+    expect(granted.map(([url]) => url)).toEqual([`${ROOT}health/activity.ttl.acl`]);
   });
 
   test("Cancel asks before denying; Keep reviewing keeps the sheet", async ({ page }) => {
