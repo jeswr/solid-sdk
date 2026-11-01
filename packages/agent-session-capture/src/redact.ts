@@ -14,9 +14,10 @@ export function redactSecrets(text: string): string {
       .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[REDACTED JWT]")
       .replace(/\b(?:proxy-)?authorization\s*:[^\r\n]*/gi, "[REDACTED AUTHORIZATION]")
       // Redact every shell/.env assignment, including non-secret-looking variable names,
-      // multiline quoted values and an unfinished final quote. Retain no variable value.
+      // multiline quoted values, unquoted backslash-newline continuations and an unfinished
+      // final quote. Retain no variable value.
       .replace(
-        /\b(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:"[^"\\]*(?:\\[\s\S][^"\\]*)*(?:"|\\?$)|'[^']*(?:'|$)|[^\r\n]*)/g,
+        /\b(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:"[^"\\]*(?:\\[\s\S][^"\\]*)*(?:"|\\?$)|'[^']*(?:'|$)|(?:[^\r\n\\]|\\(?:\r\n|[\s\S]|$))*)/g,
         "[REDACTED ENV]",
       )
   );

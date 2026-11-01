@@ -54,6 +54,19 @@ describe("redaction before persistence", () => {
       "[REDACTED ENV] Safe",
     );
   });
+  it.each(["\n", "\r\n"])("redacts unquoted continuations with line ending %j", (newline) => {
+    const value = `FAKE_FIRST\\${newline}FAKE_SECOND\\${newline}FAKE_LAST`;
+    for (const prefix of ["", "export "]) {
+      const redacted = redactSecrets(`Before${newline}${prefix}API_TOKEN=${value}${newline}After`);
+      expect(redacted).toBe(`Before${newline}[REDACTED ENV]${newline}After`);
+      expect(redactSecrets(redacted)).toBe(redacted);
+      for (const ending of ["\\", `\\${newline}`]) {
+        const unfinished = redactSecrets(`Before${newline}${prefix}API_TOKEN=${value}${ending}`);
+        expect(unfinished).toBe(`Before${newline}[REDACTED ENV]`);
+      }
+    }
+    expect(redactSecrets(`TOKEN=a\\ b${newline}Safe`)).toBe(`[REDACTED ENV]${newline}Safe`);
+  });
   it("keeps ordinary text and all safe context outside a redaction", () => {
     expect(redactSecrets("Hello, world. Read src/main.ts")).toBe("Hello, world. Read src/main.ts");
     expect(redactSecrets("Before\nAuthorization: FAKE\nAfter")).toBe(
