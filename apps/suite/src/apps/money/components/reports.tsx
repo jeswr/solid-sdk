@@ -3,7 +3,7 @@
 import { Button, EmptyState } from "@jeswr/suite-ui";
 import { ArrowDownRight, ArrowUpRight, BarChart3, Minus } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   buildReport,
   type MoneyReport,
@@ -107,7 +107,7 @@ export function ReportsScreen() {
         <section className="mon-panel">
           <EmptyState
             title="Can't build this report"
-            body={`Your ${currency} transactions can't be added up exactly, so there's no report for them. Try another currency.`}
+            body={`Your ${currency} transactions can't be added up exactly, so there's no report for them.${currencies.length > 1 ? " Try another currency." : ""}`}
           />
         </section>
       ) : (
@@ -138,9 +138,9 @@ function ReportBody({
       </p>
       {report.skipped > 0 && (
         <p className="mon-hint" role="status">
-          {report.skipped} {report.skipped === 1 ? "transaction has" : "transactions have"} an
-          amount with more decimal places than {currency} allows and{" "}
-          {report.skipped === 1 ? "isn't" : "aren't"} included.
+          {report.skipped} {report.skipped === 1 ? "transaction" : "transactions"} in this period{" "}
+          {report.skipped === 1 ? "has an amount that" : "have amounts that"} can't be counted
+          exactly in {currency}, so {report.skipped === 1 ? "it isn't" : "they aren't"} included.
         </p>
       )}
       <div className="mon-worth-grid mon-report-totals">
@@ -294,10 +294,17 @@ function niceMax(minor: number) {
 
 function Months({ report }: { report: MoneyReport }) {
   const [table, setTable] = useState(false);
-  const [hovered, setHovered] = useState<string>();
-  const [focusedMonth, setFocusedMonth] = useState<string>();
-  const [dismissed, setDismissed] = useState(false);
-  const active = dismissed ? undefined : (focusedMonth ?? hovered);
+  // The latest pointer or focus event wins; leaving a bar falls back to the focused one.
+  const [active, setActive] = useState<string>();
+  const focusedMonth = useRef<string>(undefined);
+  useEffect(() => {
+    if (!active) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActive(undefined);
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [active]);
   const scale = 10 ** minorUnits(report.currency);
   const tip = useId();
   const top = niceMax(Math.max(0, ...report.months.map((row) => row.minor)));
@@ -366,21 +373,24 @@ function Months({ report }: { report: MoneyReport }) {
                     className="mon-chart-hit"
                     aria-describedby={active === row.month ? tip : undefined}
                     onPointerEnter={(event) => {
-                      if (event.pointerType === "touch") return;
-                      setDismissed(false);
-                      setHovered(row.month);
+                      if (event.pointerType !== "touch") setActive(row.month);
                     }}
                     onPointerLeave={(event) => {
-                      if (event.pointerType !== "touch") setHovered(undefined);
+                      if (event.pointerType === "touch") return;
+                      setActive((current) =>
+                        current === row.month ? focusedMonth.current : current,
+                      );
                     }}
                     onFocus={() => {
-                      setDismissed(false);
-                      setFocusedMonth(row.month);
+                      focusedMonth.current = row.month;
+                      setActive(row.month);
                     }}
-                    onBlur={() => setFocusedMonth(undefined)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") setDismissed(true);
+                    onBlur={() => {
+                      focusedMonth.current = undefined;
+                      setActive((current) => (current === row.month ? undefined : current));
                     }}
+                    // Taps don't focus buttons in iOS Safari; a click shows the value there.
+                    onClick={() => setActive(row.month)}
                   >
                     <span
                       className="mon-chart-bar"

@@ -207,14 +207,17 @@ describe("exact amounts", () => {
       tx("2026-11-02", "-4.999"),
       tx("2026-11-02", "-10.500"),
       tx("2026-11-03", "-2", { debitAccount: `${B}x`, amount: "-1.001" }),
+      tx("2026-11-03", "2", { creditAccount: `${B}x`, amount: "1.001" }),
+      tx("2026-10-01", "-1.001"),
     ];
     const skipped: string[] = [];
     expect(
       reportRows(rows, categories, "GBP", false, skipped).map((row) => row.amount.minor),
     ).toEqual([-1050]);
-    expect(skipped).toEqual([rows[0]?.id, rows[2]?.id]);
+    expect(skipped).toEqual([rows[0]?.id, rows[2]?.id, rows[3]?.id, rows[4]?.id]);
+    // Only the in-period non-transfer row would have counted.
     const report = buildReport(rows, categories, "GBP", "month", "2026-11-14");
-    expect(report.skipped).toBe(2);
+    expect(report.skipped).toBe(1);
     expect(report.expense.amount).toBe("10.50");
   });
   it("reports zero-decimal currencies in whole units", () => {

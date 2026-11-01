@@ -193,7 +193,7 @@ export interface MoneyReport {
   net: ReportChange;
   categories: CategoryBar[];
   months: MonthBar[];
-  /** Rows in this currency left out because their amount isn't exact. */
+  /** Non-transfer rows in the period left out because their amount isn't exact. */
   skipped: number;
 }
 
@@ -232,6 +232,7 @@ export function buildReport(
 ): MoneyReport {
   const { current, previous } = presetPeriods(preset, today);
   const skipped: string[] = [];
+  const byId = new Map(transactions.map((row) => [row.id, row]));
   const rows = reportRows(transactions, categories, currency, options.rollUp, skipped);
   const comparison = comparePeriods(rows, previous, current, { currency });
   const labels = new Map(categories.map((category) => [category.id, category.label]));
@@ -248,7 +249,14 @@ export function buildReport(
     income: changeOf(comparison.income),
     expense: changeOf(comparison.expense),
     net: changeOf(comparison.net),
-    skipped: skipped.length,
+    // Only rows that would have counted: non-transfers dated inside the period.
+    skipped: skipped.filter((id) => {
+      const row = byId.get(id) as Transaction;
+      const date = row.postingTime.slice(0, 10);
+      return (
+        !row.debitAccount && !row.creditAccount && date >= current.start && date <= current.end
+      );
+    }).length,
     categories: spending
       .map((row) => ({
         id: row.categoryId,
