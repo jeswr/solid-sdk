@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
@@ -16,8 +15,8 @@ import {
 } from "./auth.js";
 import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
-import { handlesProfileRedirects } from "./profile-redirects.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
+import { handlesProfileRedirects } from "./profile-redirects.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {

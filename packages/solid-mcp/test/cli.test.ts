@@ -116,6 +116,8 @@ describe("stdio executable", () => {
           arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
         });
       }
+      const fetched = await callTool({ name: "fetch", arguments: { id: `${POD}note` } });
+      expect(JSON.parse(text(fetched))).toMatchObject({ id: `${POD}note`, text: "hello fixture" });
       const stats = await callTool({
         name: "solid_read",
         arguments: { url: `${POD}stats` },
