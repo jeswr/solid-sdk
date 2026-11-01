@@ -2,7 +2,7 @@
 import { addAmounts, type Category, type Transaction } from "../model";
 import { formatMoney, parseMoney, spendingByCategory } from "../reports";
 import { type AccountSummary, listAccounts } from "./accounts";
-import { loadCategories } from "./categories";
+import { loadCategories, resolveCategory } from "./categories";
 import type { MoneyClient } from "./container";
 import { allTransactions } from "./ledger";
 export function overview(
@@ -26,25 +26,20 @@ export function overview(
       const rows = transactions
         .filter((row) => row.currency === currency)
         .map((row) => {
-          // The first cut has no explicit income/expense kind. Categorised inflows
-          // outside Income are refunds; uncategorised inflows are income.
-          let category = categories.find((c) => c.id === row.category);
-          while (category?.parent) category = categories.find((c) => c.id === category?.parent);
-          const income =
-            category?.label.toLowerCase() === "income" ||
-            (!row.category && !row.amount.startsWith("-"));
+          // Until the model has an explicit kind, signs classify income and spending.
           const kind =
             row.debitAccount || row.creditAccount
               ? ("transfer" as const)
-              : income
-                ? ("income" as const)
-                : ("expense" as const);
+              : row.amount.startsWith("-")
+                ? ("expense" as const)
+                : ("income" as const);
           return {
             id: row.id,
             date: row.postingTime.slice(0, 10),
             amount: parseMoney(currency, row.amount),
             kind,
-            categoryId: kind === "expense" ? (row.category ?? null) : null,
+            categoryId:
+              kind === "expense" ? (resolveCategory(row.category, categories) ?? null) : null,
           };
         });
       return spendingByCategory(

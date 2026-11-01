@@ -81,6 +81,7 @@ async function setup(empty = false) {
     reset: async () => {},
   };
   await provision(session);
+  await storeOf(session).put(".sample-complete", "", "text/plain", { create: true });
   const base = storeOf(session).resolve("categories.ttl");
   const cats = [
     { id: `${base}#food`, label: "Food" },
@@ -458,7 +459,7 @@ it("offers resume after reopening an import whose rows saved but completion mark
   await click(button("Preview transactions"));
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(f.app.host.textContent).toContain("0 of 1 transactions selected");
+    expect(f.app.host.textContent).toContain("1 of 1 transactions selected");
   });
   expect(button("Resume import").disabled).toBe(false);
   expect(f.app.host.textContent).toContain("original mapping and row selection");
@@ -771,4 +772,211 @@ it.each([
   expect(saved.account).toBe(
     change === "account" ? money.accounts.find((a) => a.label === "Savings")?.id : f.id,
   );
+});
+
+it.each([
+  "account",
+  "transaction",
+  "transfer",
+] as const)("keeps a reopened %s draft when an earlier save completes", async (kind) => {
+  const f = await setup();
+  await createAccount(f.session, "savings", {
+    name: "Savings",
+    type: "savings",
+    currency: "GBP",
+    openingBalance: "0",
+    date: money.today,
+  });
+  await act(() => money.refresh());
+  const account = must(money.accounts.find((a) => a.id === f.id));
+  const close = vi.fn();
+  const created = vi.fn();
+  const dialog = (open: boolean) =>
+    kind === "account"
+      ? h(AccountDialog, { open, onOpenChange: close, onCreated: created })
+      : kind === "transaction"
+        ? h(TransactionDialog, { account, open, onOpenChange: close })
+        : h(TransferDialog, { account, open, onOpenChange: close });
+  await screen(f, dialog(true));
+  if (kind === "account") await fill("Account name", "First account");
+  else {
+    if (kind === "transaction") await fill("Payee / description", "First purchase");
+    else await select("To account", "Savings");
+    await fill("Amount (GBP)", "10");
+  }
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  let once = true;
+  f.intercept(async (input, init) => {
+    const response = await f.pod.fetch(input, init);
+    if (once && init?.method === "PUT" && String(input).endsWith(".ttl")) {
+      once = false;
+      entered.resolve();
+      await release.promise;
+    }
+    return response;
+  });
+  await act(async () => {
+    must(document.querySelector('[role="dialog"] form')).dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
+    await entered.promise;
+  });
+  await screen(f, dialog(false));
+  await screen(f, dialog(true));
+  if (kind === "account") await fill("Account name", "Second account draft");
+  else {
+    if (kind === "transaction") await fill("Payee / description", "Second purchase draft");
+    else await select("To account", "Savings");
+    await fill("Amount (GBP)", "27");
+  }
+  await act(async () => {
+    release.resolve();
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.saving).toBe(false);
+  });
+  expect(close).not.toHaveBeenCalled();
+  expect(created).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  const draft = must(
+    document.querySelector<HTMLInputElement>(
+      kind === "account"
+        ? "#mon-money-forms-field-0"
+        : kind === "transaction"
+          ? "#mon-money-forms-field-5"
+          : "#mon-money-forms-field-8",
+    ),
+  );
+  expect(draft.value).toBe(
+    kind === "account"
+      ? "Second account draft"
+      : kind === "transaction"
+        ? "Second purchase draft"
+        : "27",
+  );
+  await submit();
+  expect(close).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledWith(false);
+  if (kind === "account") expect(created).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "-100",
+  "invalid",
+])("previews a pending plan despite the newly mapped amount being %s", async (alternative) => {
+  const f = await setup();
+  const text = `Date,Payee,Amount,Alternative\n${money.today},First,-1,${alternative}\n${money.today},Second,-2,-200`;
+  const options = suggestMapping(text).options;
+  const rows = (await previewImport(f.session, f.id, "GBP", text, "csv", options)).map(
+    (row, index) => ({
+      ...row,
+      include: index === 1,
+      category: must(f.cats[1]).id,
+      duplicate: index === 0,
+    }),
+  );
+  await expect(
+    commitImport(
+      {
+        ...f.session,
+        fetch: async (input, init) => {
+          if (
+            init?.method === "PUT" &&
+            String(input).endsWith(".json") &&
+            String(init.body).includes('"completed"')
+          )
+            return new Response(null, { status: 500 });
+          return f.pod.fetch(input, init);
+        },
+      },
+      f.id,
+      "GBP",
+      text,
+      "csv",
+      options,
+      rows,
+      () => {},
+    ),
+  ).rejects.toMatchObject({ status: 500 });
+  await act(() => money.refresh());
+  await screen(f, h(ImportScreen));
+  await pickFile(f.app.host, new File([text], "recovery.csv"));
+  await waitForText(f.app.host, "CSV ready");
+  await click(button("Continue", f.app.host));
+  await select("Amount column", "Alternative");
+  await click(button("Preview transactions", f.app.host));
+  await waitForText(f.app.host, "1 of 2 transactions selected");
+  const preview = must(f.app.host.querySelector(".mon-preview-list"));
+  expect(preview.textContent).toContain("-£1.00");
+  expect(preview.textContent).toContain("-£2.00");
+  expect(preview.textContent).not.toContain("-£100.00");
+  const checks = Array.from(preview.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+  expect(checks.map((input) => input.checked)).toEqual([false, true]);
+  expect(checks.every((input) => input.disabled)).toBe(true);
+  expect(
+    Array.from(preview.querySelectorAll('[role="combobox"]')).map((select) => select.textContent),
+  ).toEqual(["Groceries", "Groceries"]);
+  await click(button("Resume import", f.app.host));
+  await waitForText(f.app.host, "1 transactions added to Daily spending");
+  expect(money.transactions.filter((row) => row.derivedFrom).map((row) => row.amount)).toEqual([
+    "-2",
+  ]);
+});
+
+it("routes initialization Retry through the resumable sample writer", async () => {
+  const pod = createDemoPod({ root: "https://retry-sample.example/", latency: 0 });
+  let fail = true;
+  const session: PodSession = {
+    mode: "demo",
+    storageUrl: pod.root,
+    webId: `${pod.root}me`,
+    displayName: "Example",
+    subscribe: () => () => {},
+    reset: async () => {},
+    fetch: async (input, init) => {
+      if (fail && init?.method === "PUT" && String(input).endsWith("accounts/current.ttl")) {
+        fail = false;
+        return new Response(null, { status: 500 });
+      }
+      return pod.fetch(input, init);
+    },
+  };
+  await mount(h(MoneyProvider, { session, children: h(Probe) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.status).toBe("error");
+  });
+  expect(pod.has(storeOf(session).resolve(".sample-complete"))).toBe(false);
+  await act(() => money.refresh());
+  expect(money.status).toBe("ready");
+  expect(money.accounts).toHaveLength(2);
+  expect(money.transactions.length).toBeGreaterThan(65);
+  expect(pod.has(storeOf(session).resolve(".sample-complete"))).toBe(true);
+});
+
+it("shows orphaned categories as Uncategorised in ledger cards, filters and search, then bulk repairs them", async () => {
+  const f = await setup();
+  await bulkCategorise(f.session, [f.rowId], must(f.cats[1]).id);
+  await saveCategories(f.session, (tree) =>
+    tree.filter((category) => category.id !== must(f.cats[1]).id),
+  );
+  await act(() => money.refresh());
+  await screen(f, h(LedgerScreen, { accountId: f.id }));
+  const controls = Array.from(f.app.host.querySelectorAll('[aria-label="Category for Market"]'));
+  expect(controls.length).toBeGreaterThan(0);
+  expect(controls.every((control) => control.textContent === "Uncategorised")).toBe(true);
+  await select("Filter category", "Uncategorised");
+  expect(f.app.host.querySelector(".mon-ledger-card")?.textContent).toContain("Market");
+  await screen(f, h(SearchScreen));
+  expect(f.app.host.querySelector(".mon-recent")?.textContent).toContain("Uncategorised");
+  await screen(f, h(LedgerScreen, { accountId: f.id }));
+  await click(must(f.app.host.querySelector('input[aria-label="Select Market"]')));
+  await select("Categorise selected as", "Fun");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.saving).toBe(false);
+  });
+  expect(money.transactions.find((row) => row.id === f.rowId)?.category).toBe(must(f.cats[2]).id);
 });

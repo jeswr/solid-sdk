@@ -3,6 +3,7 @@ import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import {
   addAmounts,
+  type Category,
   conditionalHeaders,
   MoneyDocument,
   MoneyIoError,
@@ -17,6 +18,7 @@ import {
 } from "../model";
 import { parseMoney } from "../reports";
 import type { AccountSummary } from "./accounts";
+import { loadCategories, resolveCategory } from "./categories";
 import { type MoneyClient, storeOf } from "./container";
 export async function allTransactions(client: MoneyClient): Promise<Transaction[]> {
   const store = storeOf(client);
@@ -40,6 +42,7 @@ export function ledgerRows(
   transactions: readonly Transaction[],
   range: Range,
   filters: LedgerFilters = {},
+  categories: readonly Category[] = [],
 ) {
   let opening = account.balance.amount;
   for (const row of transactions) {
@@ -58,8 +61,8 @@ export function ledgerRows(
     (row) =>
       (!filters.category ||
         (filters.category === "uncategorised"
-          ? !row.category
-          : row.category === filters.category)) &&
+          ? !resolveCategory(row.category, categories)
+          : resolveCategory(row.category, categories) === filters.category)) &&
       (!filters.query ||
         `${row.payee ?? ""} ${row.description}`
           .toLowerCase()
@@ -74,7 +77,9 @@ export async function loadLedger(
   range: Range,
   filters?: LedgerFilters,
 ) {
-  return ledgerRows(account, await allTransactions(client), range, filters);
+  const transactions = await allTransactions(client);
+  const { categories } = await loadCategories(client);
+  return ledgerRows(account, transactions, range, filters, categories);
 }
 export async function addTransaction(
   client: MoneyClient,

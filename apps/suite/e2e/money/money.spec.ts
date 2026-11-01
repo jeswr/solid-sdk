@@ -9,6 +9,7 @@ import { must } from "../../test/money/helpers";
 const fixture = fileURLToPath(new URL("./fixtures/statement.csv", import.meta.url));
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
   await page.route("**/__drive-test-reset", (route) =>
     route.fulfill({
       contentType: "text/html",

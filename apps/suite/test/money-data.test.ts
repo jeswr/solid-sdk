@@ -143,25 +143,43 @@ describe("Money data against the demo pod", () => {
     expect(rows.map((r) => r.runningBalance)).toEqual(["990", "1010", "1005"]);
     expect(
       must(
-        ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
-          category: cat,
-          sign: "out",
-          query: "THIRD",
-        })[0],
+        ledger.ledgerRows(
+          summary,
+          await ledger.allTransactions(client),
+          range,
+          {
+            category: cat,
+            sign: "out",
+            query: "THIRD",
+          },
+          [{ id: cat, label: "Test category" }],
+        )[0],
       ).runningBalance,
     ).toBe("1005");
     expect(
-      ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
-        category: "uncategorised",
-        query: "second",
-        sign: "in",
-      }),
+      ledger.ledgerRows(
+        summary,
+        await ledger.allTransactions(client),
+        range,
+        {
+          category: "uncategorised",
+          query: "second",
+          sign: "in",
+        },
+        [{ id: cat, label: "Test category" }],
+      ),
     ).toHaveLength(1);
     expect(
-      ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
-        category: cat,
-        sign: "in",
-      }),
+      ledger.ledgerRows(
+        summary,
+        await ledger.allTransactions(client),
+        range,
+        {
+          category: cat,
+          sign: "in",
+        },
+        [{ id: cat, label: "Test category" }],
+      ),
     ).toHaveLength(0);
     await expect(add(client, a.id, "first", "1", "2026-09-01")).rejects.toMatchObject({
       status: 412,
@@ -563,11 +581,11 @@ describe("Money data against the demo pod", () => {
       { currency: "GBP", amount: "1069" },
       { currency: "USD", amount: "1000" },
     ]);
-    expect(result.spending.map((row) => row.amount)).toEqual(["10.00", "1.00"]);
+    expect(result.spending.map((row) => row.amount)).toEqual(["12.00", "1.00"]);
     expect(result.recent).toHaveLength(7);
     expect(overview([], [], [], today)).toEqual({ totals: [], recent: [], spending: [] });
   });
-  it("seeds once, is create-only, and skips an existing or non-demo container", async () => {
+  it("seeds once, resumes an incomplete container, and skips completed or non-demo samples", async () => {
     const { client, session, pod } = setup();
     await Promise.all([
       ensureSample(session, new Date(today)),
@@ -582,7 +600,7 @@ describe("Money data against the demo pod", () => {
     const fresh = setup();
     await provision(fresh.client);
     await ensureSample(fresh.session);
-    expect(await accounts.listAccounts(fresh.client, today)).toEqual([]);
+    expect(await accounts.listAccounts(fresh.client, today)).toHaveLength(2);
     const non = setup();
     await ensureSample({ ...non.session, mode: "live" } as unknown as PodSession);
     expect(non.pod.has(moneyRoot(non.client))).toBe(false);

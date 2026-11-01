@@ -102,7 +102,7 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
                     {table ? "Show as bars" : "Show as table"}
                   </Button>
                 </div>
-                <p className="mon-hint">Spending by category · transfers excluded</p>
+                <p className="mon-hint">Outflows by category · inflows and transfers excluded</p>
                 {!data.spending.length ? (
                   <p className="mon-soft-empty">No spending this month yet.</p>
                 ) : table ? (

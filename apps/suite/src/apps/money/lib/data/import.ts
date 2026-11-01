@@ -122,7 +122,7 @@ interface ImportPlan {
   currency: string;
   format: "csv" | "ofx";
   options: CsvOptions;
-  selection: { include: boolean; category?: string | undefined }[];
+  selection: { include: boolean; category?: string | undefined; duplicate?: boolean }[];
   status: "pending" | "completed";
 }
 export class PendingImportError extends Error {
@@ -142,6 +142,35 @@ async function readImportPlan(client: MoneyClient, text: string) {
 export async function importStatus(client: MoneyClient, text: string) {
   return (await readImportPlan(client, text)).previous?.status ?? "new";
 }
+/** Recover the reserved mapping and decisions before attempting to parse a new mapping. */
+export async function recoveryPreview(
+  client: MoneyClient,
+  account: string,
+  currency: string,
+  text: string,
+  format: "csv" | "ofx",
+): Promise<PreviewRow[] | undefined> {
+  const { previous } = await readImportPlan(client, text);
+  if (!previous) return undefined;
+  if (previous.status === "completed")
+    throw new Error("This statement has already been imported. Open the ledger to review it.");
+  checkImportTarget(previous, account, currency, format);
+  const rows =
+    format === "csv" ? importCsv(text, { ...previous.options, currency }) : importOfx(text);
+  return rows.map((row, index) => ({
+    row,
+    index,
+    duplicate: previous.selection[index]?.duplicate ?? false,
+    include: previous.selection[index]?.include ?? false,
+    category: previous.selection[index]?.category,
+  }));
+}
+function checkImportTarget(plan: ImportPlan, account: string, currency: string, format: string) {
+  if (plan.account !== account || plan.currency !== currency || plan.format !== format)
+    throw new Error(
+      "Resume this import in its original account and currency using the original format.",
+    );
+}
 export async function commitImport(
   client: MoneyClient,
   account: string,
@@ -160,19 +189,17 @@ export async function commitImport(
     new Error("This statement has already been imported. Open the ledger to review it.");
   if (previous?.status === "completed") throw alreadyImported();
   if (previous && !recover) throw new PendingImportError();
-  if (
-    previous &&
-    (previous.account !== account || previous.currency !== currency || previous.format !== format)
-  )
-    throw new Error(
-      "Resume this import in its original account and currency using the original format.",
-    );
+  if (previous) checkImportTarget(previous, account, currency, format);
   const plan: ImportPlan = previous ?? {
     account,
     currency,
     format,
     options,
-    selection: preview.map(({ include, category }) => ({ include, category })),
+    selection: preview.map(({ include, category, duplicate }) => ({
+      include,
+      category,
+      duplicate,
+    })),
     status: "pending",
   };
   let condition = previous

@@ -29,9 +29,11 @@ export async function loadCategories(client: MoneyClient) {
 export async function saveCategories(
   client: MoneyClient,
   change: (categories: Category[]) => readonly Category[],
+  createOnly = false,
 ) {
   const store = storeOf(client);
   const loaded = await store.read("categories.ttl");
+  if (createOnly && loaded.exists) return;
   const categories = change(loaded.document.categories());
   categoryTree(categories);
   await writeCategories(client, loaded, categories);
@@ -89,4 +91,9 @@ export function reparent(category: Category, parent: string | undefined): Catego
   if (parent === undefined) delete result.parent;
   else result.parent = parent;
   return result;
+}
+
+/** Deleted or unknown category references remain editable as Uncategorised. */
+export function resolveCategory(id: string | undefined, categories: readonly Category[]) {
+  return categories.some((category) => category.id === id) ? id : undefined;
 }

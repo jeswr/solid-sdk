@@ -19,6 +19,7 @@ import { useEffect, useId, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { type AccountSummary, accountTypes, createAccount } from "../lib/data/accounts";
+import { resolveCategory } from "../lib/data/categories";
 import { addTransaction, categorised, createTransfer, updateTransaction } from "../lib/data/ledger";
 import type { Transaction } from "../lib/model";
 import { parseMoney } from "../lib/reports";
@@ -70,7 +71,7 @@ export function CategorySelect({
   return (
     <MoneySelect
       label={label}
-      value={value || "none"}
+      value={resolveCategory(value, categories) ?? "none"}
       onChange={(value) => onChange(value === "none" ? undefined : value)}
       disabled={disabled}
       options={[
@@ -160,6 +161,7 @@ export function AccountDialog({
 }) {
   const money = useMoney();
   const operation = useRef<string | null>(null);
+  const generation = useRef(0);
   const {
     register,
     handleSubmit,
@@ -178,10 +180,14 @@ export function AccountDialog({
     },
   });
   useEffect(() => {
+    ++generation.current;
     if (open) {
       operation.current = null;
       reset({ name: "", type: "current", currency: "GBP", openingBalance: "0", date: money.today });
     }
+    return () => {
+      ++generation.current;
+    };
   }, [open, reset, money.today]);
   return (
     <Modal
@@ -193,13 +199,14 @@ export function AccountDialog({
       <form
         className="mon-form"
         onSubmit={handleSubmit(async (input) => {
+          const request = generation.current;
           operation.current ??= crypto.randomUUID();
           const key = operation.current;
           let id = "";
           const saved = await money.mutate(async () => {
             id = (await createAccount(money.session, key, input)).id;
           });
-          if (saved) {
+          if (saved && request === generation.current) {
             onCreated?.(id);
             onOpenChange(false);
           }
@@ -291,6 +298,7 @@ export function TransactionDialog({
 }) {
   const money = useMoney();
   const operation = useRef<string | null>(null);
+  const generation = useRef(0);
   const {
     register,
     handleSubmit,
@@ -300,6 +308,7 @@ export function TransactionDialog({
     formState: { errors, isSubmitting },
   } = useForm<z.infer<typeof transactionSchema>>({ resolver: zodResolver(transactionSchema) });
   useEffect(() => {
+    ++generation.current;
     if (open) {
       operation.current = null;
       reset({
@@ -311,6 +320,9 @@ export function TransactionDialog({
         note: "",
       });
     }
+    return () => {
+      ++generation.current;
+    };
   }, [open, transaction, reset, money.today]);
   const transfer = Boolean(transaction?.debitAccount || transaction?.creditAccount);
   return (
@@ -330,6 +342,7 @@ export function TransactionDialog({
         <form
           className="mon-form"
           onSubmit={handleSubmit(async (input) => {
+            const request = generation.current;
             operation.current ??= crypto.randomUUID();
             const key = operation.current;
             const amount = input.direction === "out" ? `-${input.amount}` : input.amount;
@@ -364,7 +377,7 @@ export function TransactionDialog({
                   })
                 : undefined,
             );
-            if (saved) onOpenChange(false);
+            if (saved && request === generation.current) onOpenChange(false);
           })}
         >
           <label htmlFor="mon-money-forms-field-4">
@@ -442,6 +455,7 @@ export function TransferDialog({
 }) {
   const money = useMoney();
   const operation = useRef<string | null>(null);
+  const generation = useRef(0);
   const eligible = money.accounts.filter(
     (a) => a.id !== account.id && a.currency === account.currency,
   );
@@ -457,10 +471,14 @@ export function TransferDialog({
     defaultValues: { to: "", amount: "", date: money.today },
   });
   useEffect(() => {
+    ++generation.current;
     if (open) {
       operation.current = null;
       reset({ to: "", amount: "", date: money.today });
     }
+    return () => {
+      ++generation.current;
+    };
   }, [open, reset, money.today]);
   return (
     <Modal
@@ -474,14 +492,13 @@ export function TransferDialog({
         onSubmit={handleSubmit(async (input) => {
           const to = eligible.find((a) => a.id === input.to);
           if (!to) return;
+          const request = generation.current;
           operation.current ??= crypto.randomUUID();
           const key = operation.current;
-          if (
-            await money.mutate(() =>
-              createTransfer(money.session, key, account, to, input.date, input.amount),
-            )
-          )
-            onOpenChange(false);
+          const saved = await money.mutate(() =>
+            createTransfer(money.session, key, account, to, input.date, input.amount),
+          );
+          if (saved && request === generation.current) onOpenChange(false);
         })}
       >
         <MoneySelect

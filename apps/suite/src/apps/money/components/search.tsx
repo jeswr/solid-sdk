@@ -40,7 +40,11 @@ export function SearchScreen() {
                   <Link href={`/money/a/${encodeRef(row.account)}`}>{row.description}</Link>
                   <p>
                     {row.postingTime.slice(0, 10)} ·{" "}
-                    {money.accounts.find((a) => a.id === row.account)?.label}
+                    {money.accounts.find((a) => a.id === row.account)?.label} ·{" "}
+                    {row.debitAccount || row.creditAccount
+                      ? "Transfer"
+                      : (money.categories.find((category) => category.id === row.category)?.label ??
+                        "Uncategorised")}
                   </p>
                 </div>
                 <Amount amount={row.amount} currency={row.currency} signed />

@@ -72,6 +72,7 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
     }
     invalidated.current = false;
     try {
+      await ensureSample(session);
       const next = await read();
       if (!alive.current || request !== generation.current || pending.current.length) return;
       baseline.current = next;
@@ -86,16 +87,11 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
         setStatus("error");
       }
     }
-  }, [paint, read]);
+  }, [paint, read, session]);
   useEffect(() => {
     alive.current = true;
     let timer: ReturnType<typeof setTimeout>;
-    void ensureSample(session).then(refresh, (failure) => {
-      if (alive.current) {
-        setError(failure);
-        setStatus("error");
-      }
-    });
+    void refresh();
     const unsubscribe = session.subscribe((url) => {
       if (!url.startsWith(moneyRoot(session))) return;
       invalidated.current = true;
@@ -187,7 +183,7 @@ export function useTransactions(
     refresh: money.refresh,
     transactions:
       account && range.start <= range.end
-        ? ledgerRows(account, money.transactions, range, filters)
+        ? ledgerRows(account, money.transactions, range, filters, money.categories)
         : [],
   };
 }

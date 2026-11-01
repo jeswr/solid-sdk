@@ -9,9 +9,9 @@ import { encodeRef } from "@/lib/refs";
 import {
   commitImport,
   detectFormat,
-  importStatus,
   type PreviewRow,
   previewImport,
+  recoveryPreview,
   suggestMapping,
 } from "../lib/data/import";
 import type { CsvOptions, DateFormat } from "../lib/import";
@@ -109,21 +109,27 @@ export function ImportScreen() {
           category: c.id,
           description: { match: "contains" as const, value: c.label },
         }));
-      const result = await previewImport(
+      const saved = await recoveryPreview(
         money.session,
         account.id,
         account.currency,
         file.text,
         file.format,
-        options,
-        rules,
       );
       if (request !== generation.current) return;
-      const status = await importStatus(money.session, file.text);
+      const result =
+        saved ??
+        (await previewImport(
+          money.session,
+          account.id,
+          account.currency,
+          file.text,
+          file.format,
+          options,
+          rules,
+        ));
       if (request !== generation.current) return;
-      if (status === "completed")
-        throw new Error("This statement has already been imported. Open the ledger to review it.");
-      setRecover(status === "pending");
+      setRecover(saved !== undefined);
       if (!result.length)
         throw new Error("This statement has no transactions. Choose another file.");
       setRows(result);
