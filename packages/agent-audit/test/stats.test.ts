@@ -90,7 +90,7 @@ it("aggregates tasks in stable order without double-counting gateway tool summar
 
 it("exports golden CSV and lossless JSON without prompts, identities or record references", async () => {
   const report = aggregateTaskStats(fixture().entries());
-  expect(taskStatsCsv(report)).toMatchFileSnapshot("fixtures/stats.csv");
+  await expect(taskStatsCsv(report)).toMatchFileSnapshot("fixtures/stats.csv");
   expect(JSON.parse(taskStatsJson(report))).toEqual(report);
   for (const output of [taskStatsCsv(report), taskStatsJson(report)]) {
     expect(output).not.toContain(base.agent);
@@ -173,11 +173,29 @@ it("rejects duplicate call identities rather than publishing inflated statistics
   expect(() => aggregateTaskStats(ledger.entries())).toThrow("Duplicate call identity");
 });
 
+it("rejects accessors and non-JSON evidence before reading unverified statistics", () => {
+  const entry = required(fixture().entries()[0]);
+  let reads = 0;
+  const substituted = { ...entry };
+  Object.defineProperty(substituted, "record", {
+    enumerable: true,
+    get() {
+      reads++;
+      return entry.record;
+    },
+  });
+  expect(() => aggregateTaskStats([substituted])).toThrow("canonicalisable");
+  expect(reads).toBe(0);
+  expect(() => aggregateTaskStats([{ ...entry, hidden: undefined }] as never)).toThrow();
+});
+
 it("keeps instrumentation bounded and body-free at the ledger boundary", () => {
   const record = { ...base, type: "tool-call", id: "urn:tool:1", tool: "pod_read" };
   expect(checkedRecord(record)).toEqual(record);
   for (const fields of [
     { taskId: "user prompt" },
+    { taskId: "" },
+    { taskId: "paper\n" },
     { taskId: "a".repeat(129) },
     { conversation: "not-an-iri" },
     { modelCall: "https://user:secret@example.org/" },
@@ -185,6 +203,7 @@ it("keeps instrumentation bounded and body-free at the ledger boundary", () => {
     { outputTokens: 1.5 },
     { latencyMs: Infinity },
     { tool: "free text" },
+    { tool: "pod_read\n" },
     { arguments: { secret: "not allowed" } },
     { prompt: "not allowed" },
     { result: "not allowed" },

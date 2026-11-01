@@ -24,8 +24,13 @@ const iri = z
   .refine(isIri)
   .refine((value) => !/^[a-z][a-z0-9+.-]*:\/\/[^/]*@/i.test(value));
 const label = z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/);
+const instrumentationLabel = z
+  .string()
+  .min(1)
+  .max(128)
+  .refine((value) => !/[^a-zA-Z0-9_.-]/.test(value));
 /** Opaque runtime-assigned experiment label; never a prompt or user-supplied title. */
-export const taskIdSchema = label;
+export const taskIdSchema = instrumentationLabel;
 export const digestSchema = z.string().regex(/^sha-256:[a-f0-9]{64}$/);
 export const recipientHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const instantSchema = z.iso.datetime({ precision: 3 });
@@ -65,7 +70,7 @@ const recordSchema = z.strictObject({
   provider: z.enum(["openai", "anthropic"]).optional(),
   model: label.optional(),
   modelCall: iri.optional(),
-  tool: label.optional(),
+  tool: instrumentationLabel.optional(),
   tokens: count.optional(),
   inputTokens: count.optional(),
   outputTokens: count.optional(),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { canonicalJson } from "@jeswr/agent-model";
 import { CHAIN_SCOPE, verifyLedger } from "./ledger.js";
 import { type AuditRecord, type LedgerEntry, taskIdSchema } from "./records.js";
 
@@ -115,11 +116,14 @@ export function aggregateTaskStats(
   taskId?: string,
 ): TaskStatsReport {
   if (taskId !== undefined) taskIdSchema.parse(taskId);
-  const chain = verifyLedger(entries);
+  // Use the same detached JSON values for validation and aggregation. Accessors must
+  // not substitute unverified task labels or counters after the integrity check.
+  const snapshot = JSON.parse(canonicalJson(entries)) as LedgerEntry[];
+  const chain = verifyLedger(snapshot);
   if (!chain.ok) throw new Error("Ledger integrity failure");
   const tasks = new Map<string, AuditRecord[]>();
   let unassignedEntries = 0;
-  for (const { record } of entries) {
+  for (const { record } of snapshot) {
     if (record.type === "ledger-checkpoint") continue;
     if (record.taskId === undefined) {
       unassignedEntries++;
