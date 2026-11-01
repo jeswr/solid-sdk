@@ -18,15 +18,34 @@ export async function storageFor(
   storage?: StorageClient,
 ): Promise<StorageClient> {
   if (storage) return storage;
+  let accessFailure: { status: 401 | 403; url: string; method: string } | undefined;
   // Transport cache policy only; discovery, protocol requests and parsing stay in the SDK.
-  const revalidatingFetch: typeof fetch = (input, init) => {
+  const revalidatingFetch: typeof fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
     headers.set("cache-control", "no-cache");
-    return fetchImpl(input, { ...init, headers, cache: "no-cache" });
+    const response = await fetchImpl(input, { ...init, headers, cache: "no-cache" });
+    if (response.status === 401 || response.status === 403) {
+      accessFailure = {
+        status: response.status,
+        url: String(input),
+        method: init?.method ?? "GET",
+      };
+    }
+    return response;
   };
   const target = new URL(url);
   target.hash = "";
-  return (await createPodClient({ storage: target.href, fetch: revalidatingFetch })).storage;
+  try {
+    return (await createPodClient({ storage: target.href, fetch: revalidatingFetch })).storage;
+  } catch (error) {
+    if (accessFailure) {
+      throw new StorageError(accessFailure.status === 401 ? "unauthenticated" : "forbidden", {
+        ...accessFailure,
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
 
 /** Revalidate RDF using the authenticated SDK transport. Strip WebID fragments for HTTP. */

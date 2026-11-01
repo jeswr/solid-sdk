@@ -97,6 +97,33 @@ describe.each(["solid", "lws"] as const)("real PodClient discovery for %s", (pro
   });
 });
 
+describe("cold discovery access failures", () => {
+  it.each([
+    { status: 401, code: "unauthenticated" },
+    { status: 403, code: "forbidden" },
+  ])("preserves a root HEAD $status without discovery links", async ({ status, code }) => {
+    const root = `https://docs-discovery-access-${status}.example/`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(String(input)).toBe(root);
+      expect(init?.method).toBe("HEAD");
+      expect(new Headers(init?.headers).get("cache-control")).toBe("no-cache");
+      return new Response(null, { status });
+    });
+    const store = createDocsStore({
+      podRoot: root,
+      webId: `${root}card#me`,
+      fetchImpl: fetch,
+    });
+    await expect(store.list()).rejects.toMatchObject({
+      code,
+      status,
+      url: root,
+      method: "HEAD",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("cold type-index discovery", () => {
   it.each([
     "solid",
