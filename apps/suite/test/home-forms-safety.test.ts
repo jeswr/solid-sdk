@@ -76,6 +76,21 @@ describe("finding 1: injection-safe IRIs", () => {
     expect(body).toBe("");
   });
 
+  // AUTHORED-BY Claude Opus 5.5 — fix round 5 (finding 4)
+  it("refuses typed literal control characters (NUL, SOH, DEL) in an email", async () => {
+    for (const control of ["\u0000", "\u0001", "\u001F", "\u007F"]) {
+      const unsafe = `a${control}b@x.y`;
+      expect(toMailto(unsafe)).toBeUndefined();
+      expect(() => valueToTerm(EMAIL, unsafe)).toThrow(FieldValidationError);
+    }
+    const dataset = await parse(`<#me> <${VCARD}fn> "Ada".`);
+    const { result, body } = await saveAndReadBack(dataset, [EMAIL], {
+      [EMAIL.id]: "ada\u0001@example.org",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "validation", fieldId: EMAIL.id });
+    expect(body).toBe("");
+  });
+
   it("encodes a valid address and reads it back unchanged", async () => {
     const dataset = await parse(`<#me> <${VCARD}fn> "Ada".`);
     expect(toMailto("ada?cc=x#y@example.org")).toBe("mailto:ada%3Fcc=x%23y@example.org");

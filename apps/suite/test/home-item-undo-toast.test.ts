@@ -16,11 +16,16 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
 
 import { readItem } from "../src/apps/home/components/item/data";
 import {
+  CLAIM_STALE_MS,
   createDeleteController,
   HOLD_GRACE_MS,
   UNDO_MS,
 } from "../src/apps/home/components/item/delete-controller";
-import { offerResumedUndo, offerUndo } from "../src/apps/home/components/item/use-item-actions";
+import {
+  deletionStore,
+  offerResumedUndo,
+  offerUndo,
+} from "../src/apps/home/components/item/use-item-actions";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
 const root = "https://pod.example/alice/";
@@ -134,6 +139,31 @@ it("offers Undo once for deletions resumed after a reload", async () => {
   expect(lastToast().duration).toBeGreaterThan(UNDO_MS - 3_500);
   expect(lastToast().duration).toBeLessThanOrEqual(UNDO_MS - 3_000);
   clickUndo();
+  await vi.advanceTimersByTimeAsync(UNDO_MS + HOLD_GRACE_MS);
+  expect(pod.has(url)).toBe(true);
+  expect(saved.size).toBe(0);
+});
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 5 (finding 3)
+it("offers Undo again when this page takes over a deletion another tab abandoned", async () => {
+  const { item, pod, session } = await setup();
+  const controller = deletionStore(session);
+  await controller.remove(item, vi.fn());
+  offerUndo(controller, url, "Deleted My bookmark");
+  const key = `suite.home.pending-deletes:${session.webId}\u0000${root}`;
+  const [tombstone] = JSON.parse(saved.get(key) as string);
+  // Another tab claimed it, then closed before sending its DELETE.
+  saved.set(key, JSON.stringify([{ ...tombstone, claim: { by: "closed-tab", at: Date.now() } }]));
+  lastToast().onAutoClose?.({});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(toast.success).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS);
+  expect(toast.success).toHaveBeenCalledTimes(2);
+  expect(toast.success.mock.calls[1]?.[0]).toBe("Deleting item");
+  expect(lastToast().duration).toBe(UNDO_MS);
+  clickUndo();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(toast.error).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(UNDO_MS + HOLD_GRACE_MS);
   expect(pod.has(url)).toBe(true);
   expect(saved.size).toBe(0);

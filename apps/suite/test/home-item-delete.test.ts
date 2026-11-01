@@ -3,6 +3,7 @@ import { Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readItem } from "../src/apps/home/components/item/data";
 import {
+  CLAIM_POLL_MS,
   CLAIM_STALE_MS,
   createDeleteController,
   HOLD_GRACE_MS,
@@ -690,4 +691,287 @@ it("reports a failed restore when every PUT is refused and the item isn't there"
     init?.method === "PUT" ? new Response(null, { status: 412 }) : pod.fetch(input, init),
   );
   expect(await controller.undo(url)).toBe(true);
+});
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 5 (findings 1, 2, 3)
+const queueKey = `suite.home.pending-deletes:${root}profile/card#me\u0000${root}`;
+/**
+ * The demo pod, but with ETags derived from content only, as some servers do: an identical
+ * re-write keeps the ETag, so an If-Match rewrite can't fence off an earlier DELETE.
+ */
+function contentEtags(pod: Awaited<ReturnType<typeof setup>>["pod"]) {
+  const tag = async (input: RequestInfo | URL) => {
+    const current = await pod.fetch(input);
+    return current.ok ? `"c-${encodeURIComponent(await current.text()).length}"` : undefined;
+  };
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    const match = headers.get("if-match");
+    if (match) {
+      if ((await tag(input)) !== match) return new Response(null, { status: 412 });
+      headers.delete("if-match");
+    }
+    const response = await pod.fetch(input, { ...init, headers });
+    const etag = response.headers.has("etag") ? await tag(input) : undefined;
+    if (!etag) return response;
+    const out = new Headers(response.headers);
+    out.set("etag", etag);
+    const empty = init?.method === "HEAD" || [204, 304].includes(response.status);
+    return new Response(empty ? null : await response.arrayBuffer(), {
+      status: response.status,
+      headers: out,
+    });
+  };
+}
+/** Tab A deleted the item and holds its saved copy; tab B resumed the same tombstone. */
+async function copyHolderAndCommitter() {
+  const setupResult = await setup();
+  const { session, pod, fetch } = setupResult;
+  const etagged = contentEtags(pod);
+  fetch.mockImplementation(etagged);
+  const item = (await readItem(session, url)).item;
+  expect(item.etag).toMatch(/^"c-/);
+  const tabA = setupResult.controller;
+  expect(await tabA.remove(item, vi.fn())).toBe(true);
+  expect(tabA.hold(url)).toBe(true);
+  const refreshB = vi.fn(async () => {});
+  const failedB = vi.fn();
+  const tabB = createDeleteController({ ...session }, refreshB, failedB);
+  return { ...setupResult, etagged, item, tabA, tabB, refreshB, failedB };
+}
+it("Undo holding the copy waits out another tab's DELETE already sent, then re-creates the item", async () => {
+  vi.useFakeTimers();
+  const { pod, fetch, etagged, tabA, failedB } = await copyHolderAndCommitter();
+  const deleting = gate();
+  let sent = false;
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE") {
+      sent = true;
+      await deleting.opened;
+    }
+    return etagged(input, init);
+  });
+  // Tab B's timer: it claims, re-checks the item and sends its DELETE, still in flight.
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sent).toBe(true);
+  const undone = tabA.undo(url);
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS * 3);
+  // Undo waits for that DELETE instead of trusting an If-Match rewrite.
+  expect(sends(fetch, "PUT")).toBe(0);
+  expect(JSON.parse(saved.get(queueKey) as string)[0]).toMatchObject({ undone: true });
+  deleting.open();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(await undone).toBe(true);
+  expect(failedB).not.toHaveBeenCalled();
+  // The DELETE landed before Undo answered; nothing deletes the restored copy afterwards.
+  const deletes = sends(fetch, "DELETE");
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS + HOLD_GRACE_MS);
+  expect(sends(fetch, "DELETE")).toBe(deletes);
+  expect(await (await pod.fetch(url)).text()).toBe(body);
+  expect(fetch.mock.calls.at(-1)?.[1]?.method).not.toBe("DELETE");
+  expect(saved.size).toBe(0);
+  expect(tabA.getSnapshot().size).toBe(0);
+});
+it("Undo holding the copy stops a committer that has not sent its DELETE yet", async () => {
+  vi.useFakeTimers();
+  const { session, pod, fetch, etagged, tabA, failedB, refreshB } = await copyHolderAndCommitter();
+  const read = gate();
+  let reading = false;
+  fetch.mockImplementation(async (input, init) => {
+    if (String(input) === url && (init?.method ?? "GET") === "GET") {
+      reading = true;
+      await read.opened;
+    }
+    return etagged(input, init);
+  });
+  // Tab B claimed and is re-checking the item (its GET is held open).
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(reading).toBe(true);
+  const undone = tabA.undo(url);
+  await vi.advanceTimersByTimeAsync(0);
+  read.open();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(await undone).toBe(true);
+  // Tab B re-checked its claim, found it undone, and sent no DELETE.
+  expect(sends(fetch, "DELETE")).toBe(0);
+  expect(refreshB).toHaveBeenCalled();
+  expect(failedB).not.toHaveBeenCalled();
+  expect(await (await pod.fetch(url)).text()).toBe(body);
+  expect(saved.size).toBe(0);
+  // A reload while the Undo tab restores doesn't resume an undone tombstone.
+  saved.set(queueKey, JSON.stringify([{ url, etag: "x", deleteAt: 0, undone: true }]));
+  expect(createDeleteController({ ...session }, vi.fn()).getSnapshot().size).toBe(0);
+});
+it("reports a failed restore when the item still isn't there after the committer is done", async () => {
+  vi.useFakeTimers();
+  const { fetch, etagged, tabA } = await copyHolderAndCommitter();
+  await vi.advanceTimersByTimeAsync(UNDO_MS - 1);
+  // Tab B claims (no network yet: the GET is held), then tab A's Undo meets that claim.
+  const read = gate();
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "GET" || init?.method === undefined) await read.opened;
+    if (init?.method === "PUT") return new Response(null, { status: 412 });
+    if (init?.method === "HEAD") return new Response(null, { status: 404 });
+    return etagged(input, init);
+  });
+  await vi.advanceTimersByTimeAsync(1);
+  const undone = tabA.undo(url);
+  const outcome = expect(undone).rejects.toThrow("Restore failed");
+  read.open();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  await outcome;
+});
+it("runs claims, withdrawals and the claim re-check before DELETE under the queue's Web Lock", async () => {
+  vi.useFakeTimers();
+  const { session, controller, item, fetch, pod } = await setup();
+  const locks = navigator.locks as unknown as {
+    request: (name: string, options: unknown, work: () => unknown) => Promise<unknown>;
+  };
+  const request = vi.spyOn(locks, "request");
+  await controller.remove(item, vi.fn());
+  expect(request).toHaveBeenCalledWith(queueKey, { mode: "exclusive" }, expect.any(Function));
+  const tabB = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  controller.hold(url);
+  // Another holder keeps the lock: tab B's claim waits for it.
+  const held = gate();
+  void locks.request(queueKey, { mode: "exclusive" }, () => held.opened);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(JSON.stringify([...saved.values()])).not.toContain("claim");
+  // Tab A's Undo (withdraw) queues behind tab B's claim.
+  const undone = controller.undo(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(saved.size).toBe(1);
+  held.open();
+  // Tab B claimed first, so the Undo met its claim, marked it undone, and B sent no DELETE.
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(await undone).toBe(true);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  expect(pod.has(url)).toBe(true);
+  expect(tabB.getSnapshot().size).toBe(0);
+  const work = request.mock.calls.length;
+  expect(work).toBeGreaterThanOrEqual(5);
+});
+it("falls back to plain read-modify-writes when Web Locks are unavailable", async () => {
+  vi.useFakeTimers();
+  Object.defineProperty(globalThis.navigator, "locks", { configurable: true, value: undefined });
+  const { session, controller, item, fetch, pod } = await setup();
+  await controller.remove(item, vi.fn());
+  expect(saved.size).toBe(1);
+  const tabB = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  expect(await controller.undo(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  expect(tabB.getSnapshot().size).toBe(0);
+  await controller.remove((await readItem(session, url)).item, vi.fn());
+  const tabC = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  controller.hold(url);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  expect(pod.has(url)).toBe(false);
+  expect(saved.size).toBe(0);
+  expect(tabC.getSnapshot().size).toBe(0);
+});
+it("keeps the card hidden while another tab's claim is live, and re-checks on storage events", async () => {
+  vi.useFakeTimers();
+  const events = new EventTarget();
+  vi.stubGlobal("addEventListener", events.addEventListener.bind(events));
+  vi.stubGlobal("removeEventListener", events.removeEventListener.bind(events));
+  const storageEvent = () =>
+    events.dispatchEvent(Object.assign(new Event("storage"), { key: queueKey }));
+  const { session, controller, item, fetch, pod } = await setup();
+  await controller.remove(item, vi.fn());
+  const refreshB = vi.fn(async () => {});
+  const tabB = createDeleteController({ ...session }, refreshB);
+  const deleting = gate();
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE") await deleting.opened;
+    return pod.fetch(input, init);
+  });
+  controller.hold(url);
+  // Tab B claims at the deadline; tab A's toast then closes and A's commit meets that claim.
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  controller.release(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.getSnapshot().has(url)).toBe(true);
+  expect(controller.pendingDeletes()).toEqual([]);
+  expect(controller.hold(url)).toBe(false);
+  storageEvent();
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS / 2);
+  expect(controller.getSnapshot().has(url)).toBe(true);
+  // A resumed tab's late Undo is too late, and its card stays hidden too.
+  const tabC = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  expect(await tabC.undo(url)).toBe(false);
+  expect(tabC.getSnapshot().has(url)).toBe(true);
+  deleting.open();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(pod.has(url)).toBe(false);
+  expect(tabB.getSnapshot().size).toBe(0);
+  // Tab B's queue write reaches tab A as a storage event: the card follows the pod now.
+  const refreshes = refreshB.mock.calls.length;
+  storageEvent();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.getSnapshot().size).toBe(0);
+  expect(tabC.getSnapshot().size).toBe(0);
+  expect(refreshB.mock.calls.length).toBe(refreshes);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  controller.dispose();
+});
+it("takes over a claim that went stale as its own pending deletion, so Undo works", async () => {
+  vi.useFakeTimers();
+  const { session, item, fetch, pod } = await setup();
+  const offered = vi.fn();
+  const tabA = createDeleteController(
+    session,
+    vi.fn(async () => {}),
+    vi.fn(),
+    offered,
+  );
+  await tabA.remove(item, vi.fn());
+  // Another tab claimed it and closed mid-commit.
+  const [tombstone] = JSON.parse(saved.get(queueKey) as string);
+  saved.set(
+    queueKey,
+    JSON.stringify([{ ...tombstone, claim: { by: "crashed-tab", at: Date.now() } }]),
+  );
+  const started = vi.fn();
+  tabA.hold(url, started);
+  tabA.release(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(started).toHaveBeenCalledOnce();
+  expect(tabA.getSnapshot().has(url)).toBe(true);
+  expect(offered).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS);
+  expect(offered).toHaveBeenCalledWith(url, Date.now() + UNDO_MS);
+  expect(tabA.pendingDeletes()).toEqual([{ url, deleteAt: Date.now() + UNDO_MS, resumed: false }]);
+  const [fresh] = JSON.parse(saved.get(queueKey) as string);
+  expect(fresh).toEqual({ url, etag: item.etag, deleteAt: Date.now() + UNDO_MS });
+  expect(tabA.hold(url)).toBe(true);
+  expect(await tabA.undo(url)).toBe(true);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  expect(pod.has(url)).toBe(true);
+  expect(saved.size).toBe(0);
+  expect(tabA.getSnapshot().size).toBe(0);
+  // Without Undo the taken-over deletion runs after its fresh window.
+  await tabA.remove((await readItem(session, url)).item, vi.fn());
+  const [again] = JSON.parse(saved.get(queueKey) as string);
+  saved.set(queueKey, JSON.stringify([{ ...again, claim: { by: "crashed-tab", at: Date.now() } }]));
+  tabA.release(url);
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS);
+  expect(pod.has(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  expect(pod.has(url)).toBe(false);
+  expect(saved.size).toBe(0);
 });

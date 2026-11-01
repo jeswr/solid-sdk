@@ -201,8 +201,11 @@ export function cloneToStore(source: DatasetCore): Store {
 
 /** A `%XX` escape that decodes to a control character (C0 or DEL). */
 const CONTROL_ESCAPE = /^%(?:[01][0-9A-Fa-f]|7[Ff])$/;
-/** Characters an email address may never carry into a `mailto:` IRI. */
-const UNSAFE_EMAIL = /[\s<>"{}|\\^`]/;
+/**
+ * Characters an email address may never carry into a `mailto:` IRI, including typed control
+ * characters (`\p{Cc}`: U+0000–U+001F, U+007F and the C1 range).
+ */
+const UNSAFE_EMAIL = /[\s<>"{}|\\^`\p{Cc}]/u;
 /** One `@`, a dotted domain, and nothing that could break out of an IRI. */
 export function isEmailAddress(value: string): boolean {
   return !UNSAFE_EMAIL.test(value) && /^[^@]+@[^@]+\.[^@]+$/.test(value);

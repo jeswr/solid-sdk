@@ -14,15 +14,21 @@ const controllers = new WeakMap<HomeSession, DeleteController>();
 const announced = new WeakSet<DeleteController>();
 const empty: ReadonlySet<string> = new Set();
 const deleteFailed = () => toast.error("Couldn't delete this item. Please try again.");
+/** Browser storage keeps only the address, never the item's title or content. */
+const deletingMessage = (url: string) =>
+  `Deleting ${nameFromUrl(url).replace(/\.(?:ttl|jsonld)$/i, "")}`;
 
 export function deletionStore(session: HomeSession) {
   let controller = controllers.get(session);
   if (!controller) {
-    controller = createDeleteController(
+    const created = createDeleteController(
       session,
       () => domainStore(session).refresh(),
       deleteFailed,
+      // A deletion another tab claimed and abandoned is this page's own again: offer Undo.
+      (url, deleteAt) => offerUndo(created, url, deletingMessage(url), deleteAt - Date.now()),
     );
+    controller = created;
     controllers.set(session, controller);
   }
   return controller;
@@ -72,13 +78,7 @@ export function offerResumedUndo(controller: DeleteController, now = Date.now())
   announced.add(controller);
   for (const entry of controller.pendingDeletes())
     if (entry.resumed)
-      offerUndo(
-        controller,
-        entry.url,
-        // Browser storage keeps only the address, never the item's title or content.
-        `Deleting ${nameFromUrl(entry.url).replace(/\.(?:ttl|jsonld)$/i, "")}`,
-        entry.deleteAt - now,
-      );
+      offerUndo(controller, entry.url, deletingMessage(entry.url), entry.deleteAt - now);
 }
 
 export function useItemActions(session: HomeSession) {
