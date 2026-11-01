@@ -39,7 +39,7 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
 
 test("different-account validation and the provider preview seam", async ({ page }, info) => {
   await page.goto("/signin");
-  const address = page.getByRole("textbox", { name: "Your WebID" });
+  const address = page.getByRole("textbox", { name: "WebID", exact: true });
   await expect(address).toBeVisible();
   await accessible(page);
   await screenshot(page, "signin", info.project.name);
@@ -61,7 +61,7 @@ test("different-account validation and the provider preview seam", async ({ page
   expect(await remembered()).toEqual([]);
   await accessible(page);
   // The provider field keeps its intent, even for a provider that lives under a path.
-  await page.getByRole("button", { name: "Another provider" }).click();
+  await page.getByRole("button", { name: "Other provider", exact: true }).click();
   const provider = page.getByRole("combobox", { name: "Provider address" });
   await provider.fill("https://login.example.org/realms/solid");
   await provider.press("Enter");
@@ -132,7 +132,7 @@ test("unsafe next cannot redirect the demo outside the suite", async ({ page }) 
 
 test("expired sessions keep content inert until reauthentication or signout", async ({ page }) => {
   await page.goto("/signin");
-  await page.getByRole("textbox", { name: "Your WebID" }).fill("https://example.org/");
+  await page.getByRole("textbox", { name: "WebID", exact: true }).fill("https://example.org/");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
   await page.evaluate(() =>
