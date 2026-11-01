@@ -96,6 +96,19 @@ and special clients such as PublicClient are unsupported. Conjunctions of distin
 selectors must be refused, never treated as empty principal intersections. These refusals
 apply to reads and all three mutation operations.
 
+ESS client matching carries a policy-level login requirement. The shared policy projection
+must refuse any public result from a policy containing client matchers, including mixed
+anyOf alternatives; splitting the policy or removing its last client must never produce
+anonymous access. Apply the invariant to resource/member/management policies across own,
+ancestor and comments documents and generated-document validation. Independent public
+and client policies remain supported.
+
+Allocate ACP roots through one shared writer invariant for full-set and single-agent edits,
+including comments: reuse the canonical ACR IRI only when it is unreferenced and either
+unused or an existing root bound to the selected resource (or the implicit canonical ESS
+root). Otherwise allocate a fresh root. Preserve ACR-self/foreign bindings and identities
+used as controls, policies or matchers, including references with no outgoing statements.
+
 Combine each ACP principal's resource modes across documents before role projection, and
 emit its effective role for every contributing source. Keep partial source provenance visible.
 Inherited rows validate sources only; an explicit selection for the same principal always

@@ -158,7 +158,10 @@ Conjunctions of distinct non-public selectors (including named agent with client
 AuthenticatedAgent) are refused by every roles operation. ESS app matchers include the
 required PublicAgent activation alongside the client restriction; client-only ESS matchers
 and special clients such as PublicClient are refused. Removing an app's last client also
-removes its activation marker.
+removes its activation marker. ESS policies that combine a public alternative with client
+matchers are refused when their role projection would lose the policy's login requirement.
+This check covers resource, member and ACR management policies in own, ancestor and comments
+documents, for reads and every mutation.
 
 `setGrants` applies the full requested **explicit** set to each resource, preserving
 container defaults, unrelated targets and annotations. Inherited rows are read-only and
@@ -173,6 +176,9 @@ preserves these copied grants across repeated applications even when omitted fro
 explicit selection. Explicitly selecting that agent can change the local copy. Ancestors
 are never edited. Unchanged documents receive no PUT. Comment changes preserve unrelated
 container permissions and refuse to discard Write as if it were only Append.
+ACP writes reuse the canonical ACR IRI only when it is unreferenced and either unused or
+already a root for the selected resource. Existing ACR-self and foreign bindings, and
+identities used by controls, policies or matchers, remain separate from generated roots.
 
 `readGrants(url, options)` returns a JSON-serialisable `GrantSnapshot` with `{ url, grants,
 version }`. `grantsWithRoles(url, options)` keeps returning the plain array and is exactly

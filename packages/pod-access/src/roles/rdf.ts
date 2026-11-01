@@ -167,6 +167,16 @@ function policySubjects(policy: Policy, implementation: PodImplementation): Subj
   for (const matcher of policy.allOf) intersect(matcherSubjects(matcher, implementation));
   if (policy.anyOf.size)
     intersect([...policy.anyOf].flatMap((matcher) => matcherSubjects(matcher, implementation)));
+  // ESS's login requirement applies to the whole policy when any matcher has
+  // clients, including a public anyOf alternative. Splitting that alternative
+  // into a client-free policy (or removing its last client) would grant anonymous
+  // access. Refuse projections that cannot retain this policy-level condition.
+  if (
+    implementation === "ess" &&
+    result?.has('["public"]') &&
+    [...policy.allOf, ...policy.anyOf].some((matcher) => matcher.client.size)
+  )
+    throw new TypeError("ESS client policy login requirements need a richer policy model");
   return [...(result?.values() ?? [])].map((subject) => [subject]);
 }
 /** Only ESS treats an ACR-self binding as management of the subject resource. */
@@ -434,6 +444,24 @@ export function removeAcpAgent(
     }
   }
 }
+/** Reuse an unreferenced canonical IRI only if unused or already a resource root. */
+function acpResourceRoot(
+  dataset: Store,
+  resource: string,
+  url: string,
+  implementation: PodImplementation,
+): Properties {
+  const candidate = implementation === "ess" ? DataFactory.namedNode(url) : DataFactory.blankNode();
+  const available =
+    !dataset.match(null, null, candidate).size &&
+    (!dataset.match(candidate).size ||
+      roots(dataset).some(
+        (root) =>
+          root.equals(candidate) &&
+          (properties(root as Term, dataset).iris(`${ACP}resource`)[0] ?? resource) === resource,
+      ));
+  return properties(available ? candidate : DataFactory.blankNode(), dataset);
+}
 /** Write the unconditional subset using the trusted dialect's modes and management. */
 export function appendAcp(
   dataset: Store,
@@ -442,10 +470,7 @@ export function appendAcp(
   rows: Iterable<{ agent: AgentRef; modes: Set<Mode> }>,
   implementation: PodImplementation,
 ): void {
-  const root = properties(
-    implementation === "ess" ? DataFactory.namedNode(url) : DataFactory.blankNode(),
-    dataset,
-  );
+  const root = acpResourceRoot(dataset, resource, url, implementation);
   root.add(`${RDF}type`, `${ACP}AccessControlResource`);
   root.add(`${ACP}resource`, resource);
   const vocabulary = implementation === "ess" ? ACP : ACL;
