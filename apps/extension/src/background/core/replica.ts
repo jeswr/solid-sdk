@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The single, extension-owned SHARED REPLICA (design §2, §5.2).
  *
@@ -79,7 +81,7 @@ export interface EgressPort {
     url: string,
     method: string,
     headers: Record<string, string>,
-    body: string | null,
+    body: string | Uint8Array<ArrayBuffer> | null,
     nonce: string | undefined,
   ): Promise<{ response: Response; nonce?: string; url?: string }>;
 }
@@ -255,7 +257,9 @@ export class SharedReplica {
     if (response.status === 304 && cachedBytes && meta) {
       await this.commit(() => this.cfg.db.putMetadata({ ...meta, fetchedAt: Date.now() }));
       return {
-        response: responseFromCache(cachedBytes.clone(), meta, isHead),
+        // Cache.match already supplies an independent response. A tee here would leave an
+        // unread branch that prevents relay cancellation from reaching the cached stream.
+        response: responseFromCache(cachedBytes, meta, isHead),
         fromCache: true,
         nonce: serverNonce,
       };
@@ -291,7 +295,7 @@ export class SharedReplica {
     url: string,
     method: string,
     headers: Record<string, string>,
-    body: string | null,
+    body: string | Uint8Array<ArrayBuffer> | null,
     nonce: string | undefined,
   ): Promise<ReplicaResult | { deny: Response }> {
     const decision = await this.cfg.gate(url, method);

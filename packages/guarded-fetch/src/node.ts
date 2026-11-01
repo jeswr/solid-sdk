@@ -71,7 +71,9 @@ import { normalizeRequest } from "./redirect.js";
 export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
 // Re-export the redirect-refusal wrapper from THIS entry too, so a `./node`-only consumer can
 // stack it on the pinning fetch (`refuseRedirects(nodeGuardedFetch)` — SSRF-pinned AND
-// redirect-refusing). `./index.js` is external in the node bundle, so `RedirectRefusedError` is
+// redirect-refusing): the guard honours the wrapper's captured redirect: "manual",
+// so it returns the first redirect for the outer wrapper to refuse. `./index.js` is external
+// in the node bundle, so `RedirectRefusedError` is
 // the SAME runtime class as the one from `@jeswr/guarded-fetch` (a single shared class, like
 // `SsrfError`), and `instanceof` works across both entries.
 export {
@@ -111,6 +113,16 @@ const defaultResolveAll: ResolveAll = (hostname) =>
       resolve(addresses);
     });
   });
+
+/** Options honoured by the bare connection-pinning dispatcher (no guard limits or deadline). */
+export interface PinningDispatcherOptions {
+  /** Permit loopback for development; plaintext HTTP remains loopback-only. */
+  readonly allowLoopback?: boolean;
+  /** Connect-time resolver; every returned address is validated before connecting. */
+  readonly resolveAll?: ResolveAll;
+  /** Additional trusted TLS certificates; certificate verification remains enabled. */
+  readonly ca?: string | Buffer | Array<string | Buffer>;
+}
 
 /** Options for the Node pinning path. Extends the shared guard options (sans the fetch seams). */
 export interface NodePinningOptions
@@ -245,7 +257,36 @@ export function createValidatingLookup(
  * dispatcher match the posture {@link createNodeGuardedFetch} (and the guard's URL-level scheme +
  * literal-IP checks) already apply.
  */
-export function createPinningDispatcher(options: NodePinningOptions = {}): Agent {
+export function createPinningDispatcher(options?: PinningDispatcherOptions): Agent;
+/** Compatibility overload: defined guard-only options throw TypeError rather than being ignored. */
+export function createPinningDispatcher(options?: NodePinningOptions): Agent;
+export function createPinningDispatcher(
+  options: PinningDispatcherOptions | NodePinningOptions = {},
+): Agent {
+  // Include inherited/non-enumerable legacy guard fields as well as unknown own options.
+  const keys = new Set([
+    ...Object.getOwnPropertyNames(options),
+    "maxBytes",
+    "maxRedirects",
+    "timeoutMs",
+    "requireDnsPinning",
+    "allowUnresolvedHosts",
+    "hostnameDenylist",
+    "allowedContentTypes",
+    "enforcePortGate",
+  ]);
+  for (const key of keys) {
+    if (
+      key !== "allowLoopback" &&
+      key !== "resolveAll" &&
+      key !== "ca" &&
+      (options as Record<string, unknown>)[key] !== undefined
+    ) {
+      throw new TypeError(
+        `createPinningDispatcher does not support option "${key}"; use createNodeGuardedFetch for guard limits and deadlines.`,
+      );
+    }
+  }
   const allowLoopback = options.allowLoopback ?? false;
   const resolveAll = options.resolveAll ?? defaultResolveAll;
 

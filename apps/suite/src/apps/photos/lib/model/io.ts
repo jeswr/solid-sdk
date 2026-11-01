@@ -40,6 +40,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
   async function put(url: string, body: BodyInit, contentType: string, precondition: Precondition) {
     const response = await scoped(documentUrl(url), {
       method: "PUT",
+      redirect: "error",
       headers: { "content-type": contentType, ...condition(precondition) },
       body,
     });
@@ -57,6 +58,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
   async function remove(url: string, etag: string) {
     const response = await scoped(documentUrl(url), {
       method: "DELETE",
+      redirect: "error",
       headers: condition({ etag }),
     });
     if (!response.ok && response.status !== 404 && response.status !== 410)
@@ -75,6 +77,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
       const url = new URL(path, root).href;
       const response = await scoped(url, {
         method: "PUT",
+        redirect: "error",
         headers: {
           "content-type": "text/turtle",
           "if-none-match": "*",

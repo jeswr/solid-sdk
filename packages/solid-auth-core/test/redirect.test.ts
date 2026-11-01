@@ -544,6 +544,53 @@ describe("completeRedirectLogin", () => {
     expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
   });
 
+  it("issuer-only login: accepts the returned WebID when its profile lists THIS issuer", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example" });
+    agentIssuer = "https://idp.example"; // advertised without the trailing slash
+    const result = await auth.completeRedirectLogin(callback());
+    expect(result.webId).toBe(webIdClaim);
+    expect(auth.webId).toBe(webIdClaim);
+  });
+
+  it("issuer-only login: REJECTS a WebID whose profile does not list this issuer (fail-closed)", async () => {
+    const store = new RecordingStore();
+    // Observable localStorage: the remembered pointer and recent accounts live there.
+    const written = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => written.get(k) ?? null,
+      setItem: (k: string, v: string) => void written.set(k, v),
+      removeItem: (k: string) => void written.delete(k),
+    });
+    const { auth, storage } = makeAuth({ store });
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/" });
+    // A hostile OP asserts a WebID whose profile names a DIFFERENT issuer.
+    agentIssuer = "https://real-idp.example/";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull(); // no session, no credential, no pointer
+    expect(store.puts).toHaveLength(0);
+    expect(auth.recentAccounts()).toHaveLength(0);
+    expect([...written.keys()]).toEqual([]); // no pointer, no recent-account entry
+    vi.unstubAllGlobals();
+    expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
+  });
+
+  it("issuer-only login: an issuer with a query component never matches (OIDC issuers have none)", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/?tenant=alice" });
+    agentIssuer = "https://idp.example/?tenant=alice/";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull();
+  });
+
+  it("issuer-only login: an empty fragment or query on the advertised issuer never matches", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/" });
+    agentIssuer = "https://idp.example/#";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull();
+  });
+
   it("REJECTS a non-DPoP (Bearer) token_type (sender-constraint enforced)", async () => {
     const { auth } = await begunAuth();
     loginTokenType = "Bearer";

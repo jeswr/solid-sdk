@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -75,6 +76,235 @@ function setupPartial(intercept?: Parameters<typeof setup>[0]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it.each([
+    "retained",
+    "already removed",
+    "changed destination",
+  ])("round43 cleanup retains a refused destination receipt unless it is already absent (%s)", async (state) => {
+    const { pod, client } = setup();
+    const trashed = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = trashed.done[0];
+    if (!entry) throw new Error("Missing trash entry");
+    const receiptUrl = new URL("partial.ttl", entry.url).href;
+    const receipt = emptyTrashIndex();
+    addTrashRecord(receipt, entry);
+    receipt.record(entry.url).status = "complete";
+    receipt.record(entry.url).restoredLocation = entry.original;
+    await client.write(
+      receiptUrl,
+      await serializeTrashIndex(receipt),
+      {
+        contentType: "text/turtle",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
+    const remove = client.remove;
+    let conflicted = false;
+    vi.spyOn(client, "remove").mockImplementation(async function (this: DriveClient, ...args) {
+      if (args[0] === receiptUrl && !conflicted) {
+        conflicted = true;
+        if (state === "already removed") await remove.apply(this, args);
+        if (state === "changed destination") {
+          receipt.record(entry.url).restoredLocation = `${FROM}other`;
+          await pod.fetch(receiptUrl, {
+            method: "PUT",
+            headers: { "content-type": "text/turtle" },
+            body: await serializeTrashIndex(receipt),
+          });
+        }
+        throw new DriveError("conflict", 412, receiptUrl);
+      }
+      return remove.apply(this, args);
+    });
+    const result = await restoreItems(client, DRIVE, [entry]);
+    expect(conflicted).toBe(true);
+    expect(await (await client.read(entry.original)).text()).toBe("A");
+    if (state !== "already removed")
+      expect(result.failed[0]?.error).toMatchObject({ kind: "conflict", status: 412 });
+    if (state === "changed destination") {
+      const current = await client.readRdf(receiptUrl);
+      if (!current) throw new Error("Lost changed receipt");
+      expect(trashIndexFrom(current.dataset).record(entry.url).restoredLocation).toBe(
+        `${FROM}other`,
+      );
+    } else if (state === "already removed") {
+      expect(result.failed).toEqual([]);
+      expect(pod.has(receiptUrl)).toBe(false);
+      expect(await listTrash(client, DRIVE)).toEqual([]);
+    } else expect(pod.has(receiptUrl)).toBe(true);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("round43 restore destinations survive failed index writes and source deletion (collision %s)", async (collision) => {
+    let failIndex = false;
+    let blocked: string | undefined;
+    const { pod, client } = setup(async (url, init) => {
+      if (failIndex && url === INDEX && init?.method === "PUT")
+        return new Response(null, { status: 500 });
+      if (url === blocked && init?.method === "DELETE") return new Response(null, { status: 403 });
+      return undefined;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const trashed = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = trashed.done[0];
+    if (!entry) throw new Error("Missing trash entry");
+    if (collision) await pod.fetch(entry.original, { method: "PUT", body: "Occupant" });
+    const target = collision ? `${FROM}a%20(restored)` : entry.original;
+    failIndex = true;
+    blocked = entry.url;
+    expect((await restoreItems(client, DRIVE, [entry])).failed).toHaveLength(1);
+    const receipt = await client.readRdf(new URL("partial.ttl", entry.url).href);
+    if (!receipt) throw new Error("Missing destination receipt");
+    expect(trashIndexFrom(receipt.dataset).record(entry.url).restoredLocation).toBe(target);
+    blocked = undefined;
+    const retry = await restoreItems(client, DRIVE, await listTrash(client, DRIVE));
+    expect(retry.failed).toEqual([]);
+    expect(retry.done[0]).toMatchObject({ url: target, renamed: collision });
+    expect(await (await client.read(target)).text()).toBe("A");
+    if (collision) expect(await (await client.read(entry.original)).text()).toBe("Occupant");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it.each([
+    "missing validator",
+    "weak validator",
+    "changed destination",
+    "foreign destination",
+  ])("round43 restore receipts retain recovery on %s", async (fault) => {
+    let failIndex = false;
+    const { pod, client } = setup(async (url, init) =>
+      failIndex && url === INDEX && init?.method === "PUT"
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const trashed = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = trashed.done[0];
+    if (!entry) throw new Error("Missing trash entry");
+    const receiptUrl = new URL("partial.ttl", entry.url).href;
+    const receipt = emptyTrashIndex();
+    addTrashRecord(receipt, entry);
+    receipt.record(entry.url).status = "complete";
+    if (fault === "foreign destination")
+      receipt.record(entry.url).restoredLocation = "https://foreign.test/a";
+    await client.write(
+      receiptUrl,
+      await serializeTrashIndex(receipt),
+      {
+        contentType: "text/turtle",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
+    const read = client.readRdf;
+    let reads = 0;
+    vi.spyOn(client, "readRdf").mockImplementation(async (url) => {
+      const current = await read(url);
+      if (url !== receiptUrl || !current || ++reads < 2) return current;
+      if (fault === "changed destination")
+        trashIndexFrom(current.dataset).record(entry.url).restoredLocation = `${FROM}other`;
+      if (fault === "missing validator") {
+        const { etag: _etag, ...withoutValidator } = current;
+        return withoutValidator;
+      }
+      return fault === "weak validator" ? { ...current, etag: 'W/"receipt"' } : current;
+    });
+    failIndex = true;
+    const result = await restoreItems(client, DRIVE, [entry]);
+    expect(result.done).toEqual([]);
+    expect(result.failed[0]?.error).toMatchObject({
+      kind:
+        fault === "foreign destination"
+          ? "invalid-trash-record"
+          : fault === "changed destination"
+            ? "conflict"
+            : "missing-validator",
+    });
+    expect(pod.has(entry.url)).toBe(true);
+    expect(pod.has(entry.original)).toBe(false);
+    expect(pod.has(receiptUrl)).toBe(true);
+  });
+
+  it("serializes trash and restore moves while keeping every intent durable before deletion", async () => {
+    let deleting = false;
+    const { pod, client } = setup(async (url, init) => {
+      if (deleting && url.startsWith(FROM) && init?.method === "DELETE") {
+        const durable = await client.readRdf(INDEX);
+        const records = durable && trashIndexFrom(durable.dataset).records;
+        expect(records).toHaveLength(9);
+        expect(records?.every((record) => record.status === "pending")).toBe(true);
+        expect(new Headers(init.headers).get("if-match")).toBeTruthy();
+      }
+      return undefined;
+    });
+    for (let index = 0; index < 7; index++)
+      await client.write(
+        `${FROM}extra-${index}`,
+        "extra",
+        {
+          contentType: "text/plain",
+          ifNoneMatch: "*",
+        },
+        { kind: "protect-ancestors" },
+      );
+    let active = 0;
+    let peak = 0;
+    const move = client.move;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, ...args) {
+      peak = Math.max(peak, ++active);
+      try {
+        return await move.apply(this, args);
+      } finally {
+        active--;
+      }
+    });
+    const items = await client.list(FROM);
+    deleting = true;
+    const trashed = await trashItems(client, DRIVE, items);
+    deleting = false;
+    expect(trashed.failed).toEqual([]);
+    expect(trashed.done.map((entry) => entry.original)).toEqual(items.map((item) => item.url));
+    expect(peak).toBe(1);
+    expect(active).toBe(0);
+    peak = 0;
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done.map((entry) => entry.url)).toEqual(items.map((item) => item.url));
+    expect(peak).toBe(1);
+    expect(active).toBe(0);
+    expect(items.every(({ url }) => pod.has(url))).toBe(true);
+  });
+
+  it("retains copies without deleting a source after a destination check fails", async () => {
+    const checking = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { pod, fetch, client } = setup(async (url, init) => {
+      if (
+        init?.method === "HEAD" &&
+        url === `${TO}a` &&
+        pod.has(`${TO}b`) &&
+        new Headers(init.headers).has("if-match")
+      ) {
+        checking.resolve();
+        await release.promise;
+        return new Response(null, { status: 503 });
+      }
+      return undefined;
+    });
+    const moving = client.move(FROM, TO, { kind: "confirm-move" });
+    const settled = vi.fn();
+    void moving.catch(settled);
+    await checking.promise;
+    expect(settled).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+    release.resolve();
+    await expect(moving).rejects.toMatchObject({ kind: "partial-failure" });
+    expect([`${FROM}a`, `${FROM}b`, `${TO}a`, `${TO}b`].every((url) => pod.has(url))).toBe(true);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+  });
+
   it.each([
     "deleted",
     "changed",
@@ -1330,6 +1560,13 @@ describe("Drive data-safety regressions", () => {
     `${DRIVE}folder/`,
     `${DRIVE}%2fescape`,
     `${DRIVE}a/../file`,
+    `${ROOT}docs/nested/plan.ttl`,
+    `${ROOT}docs/plan.txt`,
+    `${ROOT}docs/`,
+    `${ROOT}docs/plan.ttl?query`,
+    `${ROOT}docs/%2fplan.ttl`,
+    `${ROOT}docs/plan.ttl#it`,
+    `${ROOT}docs/plan/`,
   ])("rejects unsafe restore destination %s", async (original) => {
     const { client, fetch } = setup();
     const entry = {

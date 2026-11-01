@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // Unit tests for the data-class → target resolver (design §2.3, Type-Index rung). Pure parse
 // helpers run against Turtle fixtures; the network walk runs against an injected fetch. Proves
@@ -9,8 +11,21 @@ import { describe, expect, it } from 'vitest';
 import {
   parseTargetsForClass,
   parseTypeIndexRefs,
-  resolveClassTargets,
+  resolveClassTargets as resolveClass,
 } from '../src/background/core/class-resolve';
+import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
+
+// Keep the original Type Index target/filter assertions and check its resolver annotations.
+async function resolveClassTargets(...args: Parameters<typeof resolveClass>) {
+  const result = await resolveClass(...args);
+  expect(result.truncated).toBe(false);
+  for (const target of result.targets) {
+    expect(target.source).toBe('type-index');
+    expect(target.sources).toEqual(['type-index']);
+    expect(target.check).toBe('unchecked');
+  }
+  return result.targets.map(({ url, kind }) => ({ url, kind }));
+}
 
 const WEBID = 'https://alice.pod.example/profile/card#me';
 const FINANCE = 'https://w3id.org/jeswr/sectors/finance#Transaction';
@@ -56,6 +71,22 @@ describe('parseTypeIndexRefs', () => {
 });
 
 describe('parseTargetsForClass', () => {
+  it.each([
+    '..%2foutside/',
+    '%2Foutside/',
+    '%252foutside/',
+    '%2e%2e/',
+    '%2E%2e/contacts/',
+    '%5Coutside/',
+    './contacts/',
+    'contacts/../other/',
+  ])('does not pin ambiguous paths through the Type Index rung (%s)', (path) => {
+    const index = `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${FINANCE}>;
+      <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/${path}>;
+      <http://www.w3.org/ns/solid/terms#instance> <https://alice.pod.example/finance/${path}> .`;
+    expect(parseTargetsForClass(WEBID, index, FINANCE)).toEqual([]);
+  });
+
   it('collects instance + instanceContainer for the matching class only', () => {
     const targets = parseTargetsForClass(
       'https://alice.pod.example/settings/publicTypeIndex.ttl',
@@ -229,5 +260,135 @@ describe('resolveClassTargets — the walk', () => {
       { url: 'https://alice.pod.example/finance/summary.ttl', kind: 'instance' },
       { url: 'https://alice.pod.example/finance/', kind: 'container' },
     ]);
+  });
+});
+
+describe('pim:Storage built-in resolution', () => {
+  const origin = 'https://alice.pod.example';
+  const storage = 'http://www.w3.org/ns/pim/space#storage';
+
+  async function resolve(profile: string, profileUrl = WEBID, allowedOrigins = new Set([origin])) {
+    const fetched: Array<{ url: string; authenticated: boolean }> = [];
+    const targets = await resolveClassTargets(PIM_STORAGE_CLASS, {
+      webId: WEBID,
+      allowedOrigins,
+      authenticatedOrigins: allowedOrigins,
+      fetch: async (url, authenticated) => {
+        fetched.push({ url, authenticated });
+        return { ok: true, text: profile, url: profileUrl };
+      },
+    });
+    // Even a profile advertising public/private indexes never causes an index fetch.
+    expect(fetched).toEqual([{ url: WEBID, authenticated: false }]);
+    return targets;
+  }
+
+  it('pins multiple normalised, deduplicated storage containers on the WebID subject', async () => {
+    expect(
+      await resolve(`${PROFILE}
+        <${WEBID}> <${storage}> <https://ALICE.pod.example:443/pod/./?view=1#root>,
+          <https://alice.pod.example/pod/>, <https://alice.pod.example/second/> .
+        <#someone-else> <${storage}> <https://alice.pod.example/unrelated/> .`),
+    ).toEqual([
+      { url: `${origin}/pod/`, kind: 'container' },
+      { url: `${origin}/second/`, kind: 'container' },
+    ]);
+  });
+
+  it.each([
+    '"https://alice.pod.example/pod/"',
+    '[]',
+    '<ftp://alice.pod.example/pod/>',
+    '<urn:pod:root>',
+    '<https://evil.example/pod/>',
+    '<https://alice.pod.example/pod>',
+    '<https://alice.pod.example/pod?path=/>',
+    '<https://[invalid]/>',
+  ])('drops an unsafe or non-container storage value: %s', async (object) => {
+    expect(await resolve(`<${WEBID}> <${storage}> ${object} .`)).toEqual([]);
+  });
+
+  it('accepts HTTP containers only when their origin is allowed', async () => {
+    const profile = `<${WEBID}> <${storage}> <http://localhost:3000/alice/> .`;
+    expect(await resolve(profile)).toEqual([]);
+    expect(await resolve(profile, WEBID, new Set(['http://localhost:3000']))).toEqual([
+      { url: 'http://localhost:3000/alice/', kind: 'container' },
+    ]);
+    expect(await resolve(profile, WEBID, new Set())).toEqual([]);
+  });
+
+  it("keeps the resolver's optional origin filter and normalises a bare origin to its root container", async () => {
+    expect(
+      await resolveClassTargets(PIM_STORAGE_CLASS, {
+        webId: WEBID,
+        fetch: async (url) => ({
+          ok: true,
+          url,
+          text: `<${WEBID}> <${storage}> <https://alice.pod.example> .`,
+        }),
+      }),
+    ).toEqual([{ url: `${origin}/`, kind: 'container' }]);
+  });
+
+  it('uses the final profile URL as base while matching the original WebID', async () => {
+    const profile = `<${WEBID}> <${storage}> <../../pod/> .
+      <#me> <${storage}> <../../other/> .`;
+    const finalUrl = 'https://redirect.example/profiles/alice/card#redirected';
+    expect(await resolve(profile, finalUrl, new Set(['https://redirect.example']))).toEqual([
+      { url: 'https://redirect.example/pod/', kind: 'container' },
+    ]);
+    expect(await resolve(profile, finalUrl)).toEqual([]);
+  });
+
+  it.each([
+    PROFILE,
+    'not valid Turtle',
+  ])('returns no targets without usable storage (%#)', async (profile) => {
+    expect(await resolve(profile)).toEqual([]);
+  });
+
+  it.each([
+    'non-ok',
+    'throw',
+  ])('fails closed when the profile fetch fails (%s)', async (failure) => {
+    expect(
+      await resolveClassTargets(PIM_STORAGE_CLASS, {
+        webId: WEBID,
+        fetch: async (url) => {
+          if (failure === 'throw') throw new Error('offline');
+          return { ok: false, text: '', url };
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  it('resolves a mixed request independently, using the Type Index only for the ordinary class', async () => {
+    const fetched: string[] = [];
+    const results = [];
+    for (const classIRI of [PIM_STORAGE_CLASS, FINANCE]) {
+      results.push(
+        await resolveClassTargets(classIRI, {
+          webId: WEBID,
+          allowedOrigins: new Set([origin]),
+          fetch: async (url, authenticated) => {
+            expect(authenticated).toBe(false);
+            fetched.push(url);
+            return {
+              ok: true,
+              url,
+              text: url === WEBID ? `${PROFILE}<${WEBID}> <${storage}> </pod/> .` : PUBLIC_INDEX,
+            };
+          },
+        }),
+      );
+    }
+    expect(results).toEqual([
+      [{ url: `${origin}/pod/`, kind: 'container' }],
+      [
+        { url: `${origin}/finance/summary.ttl`, kind: 'instance' },
+        { url: `${origin}/finance/`, kind: 'container' },
+      ],
+    ]);
+    expect(fetched).toEqual([WEBID, WEBID, `${origin}/settings/publicTypeIndex.ttl`]);
   });
 });
