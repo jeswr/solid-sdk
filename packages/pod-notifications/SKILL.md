@@ -1,10 +1,69 @@
 ---
 name: pod-notifications
-description: Work on @jeswr/pod-notifications, storage-scoped change normalisation, WebSocket lifecycle, subscription state and polling across Solid and LWS.
+description: Use when watching Solid or LWS pod changes with @jeswr/pod-notifications, reconciling missed events, selecting push or polling, or managing subscription cleanup.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/pod-notifications
+
+## Quick reference
+
+Create the client with `auth.fetch` from [pod-auth](../pod-auth/SKILL.md) and the `storage`
+returned by [createPodClient](../storage-client/SKILL.md). It is scoped to one storage.
+Notifications invalidate cached data; re-read through the storage API for authoritative state.
+
+```ts
+import { createNotifications } from '@jeswr/pod-notifications';
+import type { StorageClient } from '@jeswr/storage-client';
+
+export async function watchCollection(
+  fetch: typeof globalThis.fetch,
+  storage: StorageClient,
+  hotResource: string,
+  invalidate: (url: string) => void,
+  reconcile: (since: Date) => void,
+) {
+  const notifications = createNotifications({ fetch, storage });
+  const subscription = await notifications.subscribe([storage.root], {
+    depth: 'recursive',
+    hot: [hotResource],
+    pollIntervalMs: 30_000,
+  });
+  const stopChanges = subscription.on('change', event => invalidate(event.object));
+  const stopResync = subscription.on('resync', since => reconcile(since));
+  const close = async () => {
+    stopChanges();
+    stopResync();
+    await subscription.close();
+  };
+  try {
+    // Reconcile after attaching listeners; subscription setup can race with changes.
+    reconcile(new Date(0));
+  } catch (error) {
+    await close();
+    throw error;
+  }
+  return close;
+}
+```
+
+Own the returned async cleanup in the application lifecycle, including logout. `subscribe`
+also accepts an abort signal. Alternatively iterate the subscription with `for await`; ending
+an iterator detaches that iterator, so still close the subscription itself.
+
+`plan()` is an I/O-free advertised preference, while `subscription.channel` reports the actual
+transport. Supported push adapters are Solid WebSocketChannel2023 / StreamingHTTP, LWS
+WebSocket / SSE, and NSS `Updates-Via`. Webhook relay is still a stub: even with `relay`, an
+advertised webhook plan currently polls. Missing push support also polls; `pollIntervalMs: 0`
+disables that fallback and leaves the subscription degraded. Observe `state` for
+`connecting`, `live`, `degraded` or terminal `closed`; polling is degraded by design.
+
+`depth` is best effort, not a recursive crawler. LWS push retains server-recursive container
+semantics. Solid container subscriptions and all polling observe direct membership; add
+individual resources with `hot` to observe edits. Reconcile on `resync` after interruptions;
+it supplies a timestamp, not a durable replay cursor. Polling establishes a quiet baseline
+and missing ETags do not produce changes. See [LWS differences](../../skills/lws-vs-solid/SKILL.md).
+
 
 T-040 implements the ADR-005 contracts, `createNotifications`, internal `createChangeNormalizer`,
 subscription lifecycle/async iteration, `./channels/poll`, and `./testing` fakes. T-041 adds

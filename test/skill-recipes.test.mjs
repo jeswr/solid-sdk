@@ -21,7 +21,12 @@ const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 function blocks(skill, language, section = "", file = "SKILL.md") {
-  const directory = skill === "solid-fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
+  const directory =
+    skill === "solid-fetch-rdf"
+      ? "packages/fetch-rdf"
+      : skill === "pod-notifications"
+        ? "packages/pod-notifications"
+        : `skills/${skill}`;
   const markdown = readFileSync(new URL(`../${directory}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
@@ -322,30 +327,59 @@ describe("reviewed recipe failure boundaries", () => {
     expect(mark).not.toHaveBeenCalled();
   });
 
-  it("posts the exact discovered notification channel type to its service", async () => {
-    const code = blocks("solid-notifications", "ts", "### 2. Subscribe")[0];
-    for (const channelTypeIri of [
-      "http://www.w3.org/ns/solid/notifications#WebSocketChannel2023",
-      "https://server.example/channels#WebSocketChannel2023",
-    ]) {
-      const fetch = vi.fn(async () =>
-        Response.json({ receiveFrom: "wss://server.example/receive" }),
-      );
-      const subscriptionServiceUrl = "https://server.example/subscriptions";
-      const resourceUrl = "https://pod.example/notes.ttl";
-      expect(
-        await execute(
-          code,
-          { fetch, subscriptionServiceUrl, channelTypeIri, resourceUrl },
-          {},
-          "wsUrl",
-        ),
-      ).toBe("wss://server.example/receive");
-      const [url, init] = fetch.mock.calls[0];
-      expect(url).toBe(subscriptionServiceUrl);
-      expect(init.method).toBe("POST");
-      expect(JSON.parse(init.body)).toMatchObject({ type: channelTypeIri, topic: resourceUrl });
-    }
+  it("wires the documented notification client to bounded fetch, invalidation, resync and cleanup", async () => {
+    const code = blocks("pod-notifications", "ts")[0];
+    const handlers = new Map();
+    const removers = [];
+    const subscription = {
+      on: vi.fn((event, handler) => {
+        handlers.set(event, handler);
+        const remove = vi.fn();
+        removers.push(remove);
+        return remove;
+      }),
+      close: vi.fn(async () => {}),
+    };
+    const subscribe = vi.fn(async () => subscription);
+    const createNotifications = vi.fn(() => ({ subscribe }));
+    const { watchCollection } = await execute(
+      code,
+      {},
+      {
+        "@jeswr/pod-notifications": { createNotifications },
+      },
+      "({ watchCollection })",
+    );
+    const fetch = vi.fn();
+    const storage = { root: "https://pod.example/alice/" };
+    const hotResource = "https://pod.example/alice/note.txt";
+    const invalidate = vi.fn();
+    const reconcile = vi.fn();
+    const cleanup = await watchCollection(fetch, storage, hotResource, invalidate, reconcile);
+    expect(createNotifications).toHaveBeenCalledWith({ fetch, storage });
+    expect(subscribe).toHaveBeenCalledWith([storage.root], {
+      depth: "recursive",
+      hot: [hotResource],
+      pollIntervalMs: 30_000,
+    });
+    expect(reconcile).toHaveBeenCalledWith(new Date(0));
+    handlers.get("change")({ object: hotResource, raw: { untrusted: true } });
+    expect(invalidate).toHaveBeenCalledWith(hotResource);
+    const since = new Date("2026-10-01T00:00:00Z");
+    handlers.get("resync")(since);
+    expect(reconcile).toHaveBeenLastCalledWith(since);
+    await cleanup();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    subscription.close.mockClear();
+    const failure = new Error("Initial reconciliation failed");
+    await expect(
+      watchCollection(fetch, storage, hotResource, invalidate, () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(subscription.close).toHaveBeenCalledOnce();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
   });
 
   it.each([

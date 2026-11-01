@@ -1,6 +1,6 @@
 ---
 name: storage-client
-description: Use or maintain @jeswr/storage-client, including createPodClient, conditional storage mutations, Solid and LWS semantics, and offline HTTP fixture recording/replay.
+description: Use when reading, creating, conditionally editing, listing or moving pod resources with @jeswr/storage-client, or maintaining its Solid/LWS backends and offline fixtures.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -8,7 +8,7 @@ description: Use or maintain @jeswr/storage-client, including createPodClient, c
 
 # @jeswr/storage-client
 
-## App usage
+## Quick reference
 
 Apps import `createPodClient` from `@jeswr/storage-client`. Inject the authenticated, guarded
 fetch supplied by the auth layer; discovery and storage operations use that same transport.
@@ -21,6 +21,10 @@ work and tests (the SDK layer guard disallows app manifest edges to those subpat
 
 ```ts
 import { createPodClient } from '@jeswr/storage-client';
+
+declare const authenticatedFetch: typeof fetch; // Inject pod-auth auth.fetch.
+declare const storageRoot: string;
+declare const signal: AbortSignal;
 
 const { storage, features } = await createPodClient({
   fetch: authenticatedFetch,
@@ -36,6 +40,10 @@ await storage.write(created.url, 'second draft', {
   contentType: 'text/plain', ifMatch: current.etag,
 });
 ```
+
+Read [LWS app differences](../../skills/lws-vs-solid/SKILL.md) before assuming path containment,
+permission headers or recursive notifications. Use [pod-notifications](../pod-notifications/SKILL.md)
+for changes; [pod-access](../pod-access/SKILL.md) currently has no sharing implementation.
 
 `capabilities` in the factory options is an optional `DescriptionCache`, shared with other
 capability consumers; the default is the capabilities package's shared in-memory cache.
@@ -89,6 +97,13 @@ and inspect captures before committing them.
 import {
   createRecordingFetch, createReplayFetch, loadFixtures,
 } from '@jeswr/storage-client/testing';
+import { createPodClient } from '@jeswr/storage-client';
+import { createMemoryCache } from '@jeswr/storage-capabilities/cache';
+
+declare const authenticatedFetch: typeof fetch;
+declare const directory: string; // Fresh directory containing synthetic/public fixture data.
+declare const storageRoot: string;
+const freshCache = createMemoryCache();
 
 const recordedFetch = createRecordingFetch({ fetch: authenticatedFetch, directory });
 // In RECORD=1 mode, inject recordedFetch into the conformance client's factory.

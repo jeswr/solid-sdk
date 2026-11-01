@@ -1,6 +1,6 @@
 ---
 name: pod-auth
-description: Integrate or maintain @jeswr/pod-auth for suite login, credential-bounded fetch, restore, React sessions, Node agents and Client Identifier Documents. Replaces the four deprecated client auth packages; published @solid/reactive-authentication 0.1.x examples are legacy.
+description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -9,12 +9,12 @@ description: Integrate or maintain @jeswr/pod-auth for suite login, credential-b
 Use this package for new suite client authentication. It owns session policy over the imported
 `@jeswr/reactive-authentication` protocol engine. It supersedes the current-integration guidance in
 [`skills/solid-reactive-authentication`](../../skills/solid-reactive-authentication/SKILL.md), which
-describes the external published `@solid/reactive-authentication` 0.1.x and historical global patches.
+routes existing integrations to the current packages and historical references.
 Read [README.md](./README.md) and `src/types.ts` for the implemented API; do not infer APIs from the
 published 0.1.x package or copy its providers into applications. This workspace package remains
 private and experimental pending conformance.
 
-## Choose the entry point
+## Quick reference
 
 | Entry point | Use |
 | --- | --- |
@@ -24,17 +24,16 @@ private and experimental pending conformance.
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 
 ```ts
-import { createPodAuth } from '@jeswr/pod-auth';
+import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
+
+// Supply application UI that returns the complete callback URL and honors cancellation.
+declare const ui: PodAuthOptions['ui'];
 
 const auth = createPodAuth({
   clientId: 'https://suite.example/.well-known/solid-client-id.jsonld',
   redirectUri: 'https://suite.example/auth/callback.html',
   boundary: { roots: ['https://pod.example/alice/'] },
-  ui: {
-    getWebId: () => shell.askWebId(),
-    chooseIssuer: issuers => shell.chooseIssuer(issuers),
-    getCode: (authorizationUrl, signal) => shell.authorize(authorizationUrl, signal),
-  },
+  ui,
 });
 
 await auth.restore();
@@ -42,6 +41,11 @@ await auth.login({ webId: 'https://id.example/alice#me' });
 const response = await auth.fetch('https://pod.example/alice/private');
 const identity = await auth.identity();
 ```
+
+Pass `auth.fetch` to [storage-client](../storage-client/SKILL.md),
+[storage-capabilities](../storage-capabilities/SKILL.md) and
+[pod-notifications](../pod-notifications/SKILL.md). Read the
+[LWS differences](../../skills/lws-vs-solid/SKILL.md) for storage and grant semantics.
 
 Construct one core per application session. `ui.getCode` must return the complete callback URL,
 including `state`, `code` and `iss`, honor cancellation and own popup/redirect cleanup. Choose among
