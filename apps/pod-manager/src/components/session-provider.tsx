@@ -45,6 +45,7 @@ import {
   type SessionStore,
 } from "@/lib/session-persistence";
 import { fetchProfile, type PodProfile } from "@/lib/profile";
+import { loginProfile, restoredIdentity } from "@/lib/session-identity";
 import { sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
 import { IssueAssignmentAnnouncer } from "@/lib/issues";
@@ -258,12 +259,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           // and a later private read re-auths silently while the IdP cookie
           // lives — exactly the previous behaviour, still no popup on restore.
           const issuer = remembered.find((a) => a.webId === last)?.issuer;
+          let restoredWebId = last;
           if (issuer) {
             const provider = await providerReadyRef.current;
-            await provider?.restoreIssuer(new URL(issuer)).catch(() => undefined);
+            const restored = await provider?.restoreIssuer(new URL(issuer)).catch(() => undefined);
+            restoredWebId = restoredIdentity(last, restored);
             if (!cancelled) activeIssuerRef.current = issuer;
           }
-          await restore(last);
+          if (cancelled) return;
+          // Credentials can outlive an interrupted pointer update during an account switch.
+          if (restoredWebId !== last && typeof localStorage !== "undefined") {
+            localStorage.setItem(ACTIVE_WEBID_KEY, restoredWebId);
+          }
+          await restore(restoredWebId);
         } catch {
           if (!cancelled) setStatus("logged-out");
         }
@@ -329,6 +337,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const id = statedWebId ?? knownWebId;
         if (!id) throw new NoWebIdFromProviderError(issuer);
 
+        // Validate a newly claimed identity before exposing it to UI or account memory.
+        const p = await loginProfile(id, issuer, knownWebId, provider);
+
         // From here the 401-upgrade path knows whose session this is, and
         // logout knows which issuer's persisted session to clear.
         pendingWebIdRef.current = id;
@@ -342,7 +353,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           if (prev && prev !== id) readCache.clearWebId(prev);
           return id;
         });
-        const p = await fetchProfile(id);
         setProfile(p);
         setActive(p.storages[0]);
         setStatus("logged-in");
@@ -449,15 +459,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
     // Wipe the persisted DPoP-bound refresh token + key for this issuer so a
     // logged-out user is NOT silently restored on the next load (the credential
-    // must not outlive an explicit sign-out). Fire-and-forget; clears both via
-    // the provider (which owns the store) and, defensively, the store directly.
+    // must not outlive an explicit sign-out). The provider orders deletion with
+    // its writes so a duplicate direct delete cannot erase a newer login.
     const issuer = activeIssuerRef.current;
     activeIssuerRef.current = undefined;
     if (issuer) {
-      void providerReadyRef.current
-        ?.then((p) => p?.forgetIssuer(new URL(issuer)))
-        .catch(() => {});
-      void sessionStoreRef.current?.delete(issuer).catch(() => {});
+      const provider = providerSyncRef.current;
+      if (provider) {
+        void provider.forgetIssuer(new URL(issuer)).catch(() => {});
+      } else {
+        void (async () => {
+          const ready = await providerReadyRef.current?.catch(() => undefined);
+          if (ready) await ready.forgetIssuer(new URL(issuer));
+          else await sessionStoreRef.current?.delete(issuer);
+        })().catch(() => {});
+      }
     }
   }, []);
 
