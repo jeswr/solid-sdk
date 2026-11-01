@@ -43,8 +43,17 @@ function makeProvider() {
   return { provider, getCode };
 }
 
+async function establishRejectedSession(provider: WebIdDPoPTokenProvider, getCode: { mockClear(): unknown }) {
+  await provider.login(new URL("https://as.test"));
+  await provider.invalidate(await provider.upgrade(new Request("https://pod.test/private")));
+  as.activeRefreshTokens.clear();
+  getCode.mockClear();
+  as.authorizationRequests.length = 0;
+}
+
 beforeEach(async () => {
   as = await createFakeAuthorizationServer({
+    webIdClaim: WEBID,
     issueRefreshTokens: true,
     scopesSupported: ["openid", "webid", "offline_access"],
     grantTypesSupported: ["authorization_code", "refresh_token"],
@@ -60,6 +69,7 @@ afterEach(() => {
 describe("WebIdDPoPTokenProvider refresh tokens", () => {
   it("requests offline_access and authenticates as the Client Identifier Document", async () => {
     const { provider } = makeProvider();
+    await provider.login(new URL("https://as.test"));
 
     const upgraded = await provider.upgrade(new Request("https://pod.test/private"));
 
@@ -71,6 +81,7 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("refreshes an expired access token without user interaction", async () => {
     const { provider, getCode } = makeProvider();
+    await provider.login(new URL("https://as.test"));
 
     const first = await provider.upgrade(new Request("https://pod.test/a"));
 
@@ -86,6 +97,7 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("adopts the rotated refresh token across consecutive renewals", async () => {
     const { provider, getCode } = makeProvider();
+    await provider.login(new URL("https://as.test"));
 
     await provider.upgrade(new Request("https://pod.test/a"));
 
@@ -104,12 +116,14 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("sends prompt=consent on the interactive attempt so strict servers honour offline_access (OIDC Core §11)", async () => {
     as = await createFakeAuthorizationServer({
+      webIdClaim: WEBID,
       issueRefreshTokens: true,
       scopesSupported: ["openid", "webid", "offline_access"],
       enforceOfflineAccessConsent: true,
     });
     vi.stubGlobal("fetch", as.fetch);
     const { provider, getCode } = makeProvider();
+    await provider.login(new URL("https://as.test"), { silentFirst: true });
 
     const first = await provider.upgrade(new Request("https://pod.test/a"));
 
@@ -128,6 +142,7 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("renews via the refresh grant when the attached token is invalidated (401 after upgrade)", async () => {
     const { provider, getCode } = makeProvider();
+    await provider.login(new URL("https://as.test"));
 
     const first = await provider.upgrade(new Request("https://pod.test/a"));
 
@@ -181,6 +196,8 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
   });
 
   it("login(issuer) reports no WebID when the ID token states none", async () => {
+    as = await createFakeAuthorizationServer();
+    vi.stubGlobal("fetch", as.fetch);
     const { provider } = makeProvider(); // fake AS without a webid claim; sub is "user"
 
     const { webId } = await provider.login(new URL("https://as.test"));
@@ -251,12 +268,14 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("the 401-upgrade path stays silent-first (background re-auth must not force a login page)", async () => {
     as = await createFakeAuthorizationServer({
+      webIdClaim: WEBID,
       issueRefreshTokens: true,
       scopesSupported: ["openid", "webid", "offline_access"],
       enforceOfflineAccessConsent: true,
     });
     vi.stubGlobal("fetch", as.fetch);
     const { provider, getCode } = makeProvider();
+    await establishRejectedSession(provider, getCode);
 
     await provider.upgrade(new Request("https://pod.test/private"));
 
@@ -266,6 +285,7 @@ describe("WebIdDPoPTokenProvider refresh tokens", () => {
 
   it("falls back to a fresh authorization when the refresh grant fails", async () => {
     const { provider, getCode } = makeProvider();
+    await provider.login(new URL("https://as.test"));
 
     await provider.upgrade(new Request("https://pod.test/a"));
 
@@ -624,7 +644,7 @@ describe("persisted refresh-token session: restore without a window", () => {
     const reloaded = makeProviderWith(store);
     const restored = await reloaded.restoreIssuer(new URL("https://as.test"));
 
-    expect(restored).toEqual({ webId: WEBID });
+    expect(restored).toMatchObject({ webId: WEBID });
     expect(noPopup).not.toHaveBeenCalled(); // NO window opened
     expect(as.authorizationRequests).toHaveLength(1); // still just the original
     expect(as.tokenRequests.at(-1)?.get("grant_type")).toBe("refresh_token");
@@ -671,7 +691,7 @@ describe("persisted refresh-token session: restore without a window", () => {
     // A SECOND reload restores from the rotated token, still no popup.
     const reloadedAgain = makeProviderWith(store);
     const restored = await reloadedAgain.restoreIssuer(new URL("https://as.test"));
-    expect(restored).toEqual({ webId: WEBID });
+    expect(restored).toMatchObject({ webId: WEBID });
     expect(noPopup).not.toHaveBeenCalled();
   });
 
@@ -701,14 +721,14 @@ describe("persisted refresh-token session: restore without a window", () => {
     expect(noPopup).not.toHaveBeenCalled();
   });
 
-  it("forgetPersisted clears the stored session (logout)", async () => {
+  it("forgetIssuer clears the stored session (logout)", async () => {
     const store = new StructuredCloneSessionStore();
     const getCode = vi.fn((url: URL) => as.authorize(url));
     const provider = makeProviderWith(store, getCode as unknown as typeof noPopup);
     await provider.login(new URL("https://as.test"));
     expect(store.peek(ISSUER_HREF)).toBeDefined();
 
-    await provider.forgetPersisted(new URL("https://as.test"));
+    await provider.forgetIssuer(new URL("https://as.test"));
     expect(store.peek(ISSUER_HREF)).toBeUndefined();
 
     // After logout, a reload restores nothing (no silent revival of a logged-out
@@ -769,6 +789,7 @@ describe("silent prompt=none ignored by the server (NSS / Trinpod)", () => {
 
   it("(a) reclassifies an HTML-login 200 on the silent path → interactive retry, no hang", async () => {
     const { provider, getCode } = makeProvider();
+    await establishRejectedSession(provider, getCode);
 
     // The 401-upgrade path is silent-first; the server ignores prompt=none.
     const upgraded = await provider.upgrade(new Request("https://pod.test/private"));
@@ -812,6 +833,7 @@ describe("silent prompt=none on a COMPLIANT server still classifies the OIDC err
     });
     vi.stubGlobal("fetch", as.fetch);
     const { provider, getCode } = makeProvider();
+    await establishRejectedSession(provider, getCode);
 
     const upgraded = await provider.upgrade(new Request("https://pod.test/private"));
 
