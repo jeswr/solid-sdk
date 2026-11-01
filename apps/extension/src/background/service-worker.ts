@@ -1658,10 +1658,10 @@ async function handleRequestAccess(
             );
             const resolved = new Map<
               string,
-              { targets: readonly PinnedTarget[]; shape: null; truncated: boolean }
+              { targets: readonly PinnedTarget[]; shape: string | null; truncated: boolean }
             >();
             for (const cls of spec.classes) {
-              const { targets, truncated } = await resolveClassTargets(cls, {
+              const { targets, shape, truncated } = await resolveClassTargets(cls, {
                 webId: ctx.session.webId,
                 fetch: read.fetch,
                 read,
@@ -1670,7 +1670,7 @@ async function handleRequestAccess(
                 authenticatedOrigins: allowedOrigins,
                 allowedOrigins,
               });
-              resolved.set(cls, { targets, shape: null, truncated });
+              resolved.set(cls, { targets, shape: shape ?? null, truncated });
               try {
                 await checkAuthority();
               } catch (error) {
@@ -1693,7 +1693,7 @@ async function handleRequestAccess(
                 const previous = resolved.get(cls);
                 resolved.set(cls, {
                   targets: previous?.targets ?? [],
-                  shape: null,
+                  shape: previous?.shape ?? null,
                   truncated: true,
                 });
               }
@@ -2009,6 +2009,7 @@ async function handleResolveClass(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
         let targets: Awaited<ReturnType<typeof resolveClassTargets>>['targets'];
+        let shape: string | undefined;
         {
           const read = makeResolveRead(
             { ...fetchSession, allowedOrigins },
@@ -2027,7 +2028,7 @@ async function handleResolveClass(
                 throw new Error('Out of grant scope');
             },
           );
-          ({ targets } = await resolveClassTargets(message.classIRI, {
+          ({ targets, shape } = await resolveClassTargets(message.classIRI, {
             webId: ctx.session.webId,
             fetch: read.fetch,
             read,
@@ -2047,7 +2048,7 @@ async function handleResolveClass(
         }
         return {
           requestId,
-          shape: null,
+          shape: shape ?? null,
           targets: visible,
         };
       },

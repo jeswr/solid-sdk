@@ -127,6 +127,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/music/lib/data/**/*.ts",
+        "src/apps/money/lib/data/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
       ],

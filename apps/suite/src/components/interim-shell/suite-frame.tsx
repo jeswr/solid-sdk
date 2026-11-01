@@ -20,12 +20,13 @@ import {
   Music,
   Search,
   Users,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "music";
+export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "money" | "music";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
@@ -33,6 +34,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
+  { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "music", label: "Music", href: "/music", icon: Music },
 ];
 
