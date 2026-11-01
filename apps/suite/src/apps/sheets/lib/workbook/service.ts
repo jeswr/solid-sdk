@@ -70,6 +70,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       const container = new URL(`${stem}${attempt === 1 ? "" : `-${attempt}`}/`, root).href;
       const layout = workbookLayout(container);
       const written = new Map<string, string | undefined>();
+      let indexPublished = false;
       let reservation: string;
       try {
         const etag = await storage.saveIndex(container, initial, { ifNoneMatch: "*" });
@@ -94,8 +95,8 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         const published = await io.authoritative(container, () =>
           storage.saveIndex(container, metadata, { ifMatch: reservation }),
         );
-        // Keep the reservation validator until publication is verified; a stale
-        // If-Match then stops rollback before touching the other resources.
+        // Once published, failed validator discovery must preserve the complete workbook.
+        indexPublished = true;
         const indexEtag = await io.indexEtag(container, metadata, published);
         written.set(layout.index, indexEtag);
         await register();
@@ -110,8 +111,14 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       }
 
       async function rollback() {
+        if (indexPublished) return;
         // Reserving an index does not establish ownership of its container.
-        for (const [url, etag] of written) {
+        // Check snapshot ownership before removing projections or the reservation.
+        const derived = [...written.keys()].filter(
+          (url) => url !== layout.snapshot && url !== layout.index,
+        );
+        for (const url of [layout.snapshot, ...derived, layout.index]) {
+          const etag = written.get(url);
           if (etag === undefined) continue;
           try {
             await storage.deleteResource(url, { ifMatch: etag });
@@ -160,7 +167,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   ): Promise<SaveResult> {
     container = checked(container);
     const layout = workbookLayout(container);
-    base = await io.verify(container, base);
+    if (!saveOptions.force) base = await io.verify(container, base);
     const previous = await storage.loadIndex(container);
     const previousIndexEtag = strongEtag(previous.etag, layout.index);
     if (!saveOptions.force && previousIndexEtag !== base.indexEtag)
@@ -195,12 +202,14 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
           published = await storage.saveIndex(container, metadata, { ifMatch: indexEtag });
         } catch (error) {
           if (!hasStatus(error, 412)) throw error;
-          // Only index-only changes can be reconciled while our snapshot still owns the revision.
+          const fresh = await storage.loadIndex(container);
+          indexEtag = strongEtag(fresh.etag, layout.index);
+          // Read the index BEFORE checking snapshot ownership. A newer save that
+          // publishes its index before our PUT makes our If-Match fail. If it
+          // publishes afterward, its If-Match fails and it reconciles its newer list.
           if ((await io.etag(layout.snapshot, null)) !== snapshotEtag)
             throw new WorkbookConflictError(container);
           if (attempt === 3) throw error;
-          const fresh = await storage.loadIndex(container);
-          indexEtag = strongEtag(fresh.etag, layout.index);
           metadata = {
             ...fresh.value,
             title: saveOptions.title ?? fresh.value.title,

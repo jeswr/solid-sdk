@@ -78,7 +78,8 @@ function Grid({
   engineRef: { current: SheetEngine | null };
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const initialSnapshot = useRef(snapshot);
+  const latestSnapshot = useRef(snapshot);
+  latestSnapshot.current = snapshot;
   const { resolvedTheme } = useTheme();
   const dark = useRef(resolvedTheme === "dark");
   const [ready, setReady] = useState(false);
@@ -99,7 +100,7 @@ function Grid({
       const mount = await loadEngine();
       if (!live || !host.current) return;
       engine = await mount(host.current, {
-        snapshot: initialSnapshot.current,
+        snapshot: latestSnapshot.current,
         dark: dark.current,
         compact: matchMedia("(max-width: 639px)").matches,
       });
@@ -166,9 +167,9 @@ export function SheetEditor({ container }: { container: string }) {
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
-  const [grid, setGrid] = useState<{ container: string; snapshot: Snapshot; revision: number }>();
+  const [grid, setGrid] = useState<{ container: string; revision: number }>();
   if (state.workbook?.container === container && grid?.container !== container)
-    setGrid({ container, snapshot: state.workbook.snapshot, revision: 0 });
+    setGrid({ container, revision: 0 });
   useEffect(() => {
     if (returnConflictFocus && !busy && state.status !== "conflict" && fileTrigger.current) {
       if (fileTrigger.current.disabled) return;
@@ -290,7 +291,7 @@ export function SheetEditor({ container }: { container: string }) {
         {state.workbook ? (
           <Grid
             key={grid?.revision ?? 0}
-            snapshot={grid?.snapshot ?? state.workbook.snapshot}
+            snapshot={state.workbook.snapshot}
             onChange={state.scheduleSave}
             engineRef={engine}
           />
@@ -429,7 +430,6 @@ export function SheetEditor({ container }: { container: string }) {
                   else
                     setGrid((current) => ({
                       container,
-                      snapshot,
                       revision: (current?.revision ?? 0) + 1,
                     }));
                 });

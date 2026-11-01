@@ -76,7 +76,7 @@ describe("Sheets concurrent revision ownership", () => {
       WorkbookConflictError,
     );
     const deletes = h.calls.filter((c) => c.method === "DELETE");
-    expect(deletes.map((c) => c.url)).toEqual([workbookLayout(container).index]);
+    expect(deletes.map((c) => c.url)).toEqual([workbookLayout(container).snapshot]);
     expect(deletes[0]?.headers.get("if-match")).toMatch(/^"demo-/);
     const opened = await h.service.open(container);
     expect(opened.snapshot).toEqual(remote);
@@ -102,7 +102,7 @@ describe("Sheets concurrent revision ownership", () => {
     });
     await expect(h.service.create({ title: "Unknown derived" })).rejects.toThrow("1.jsonld");
     const deletes = h.calls.filter((c) => c.method === "DELETE");
-    expect(deletes.map((c) => c.url)).toEqual([layout.index, layout.snapshot, layout.container]);
+    expect(deletes.map((c) => c.url)).toEqual([layout.snapshot, layout.index, layout.container]);
     expect(deletes.slice(0, 2).every((c) => c.headers.has("if-match"))).toBe(true);
     expect(deletes[2]?.headers.has("if-match")).toBe(false);
     expect(h.pod.has(layout.sheet(1).csv)).toBe(true);
@@ -125,9 +125,7 @@ describe("Sheets concurrent revision ownership", () => {
     await expect(h.service.create({ title: "Unverified create" })).rejects.toMatchObject({
       status: 503,
     });
-    expect(h.calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
-      `${container}index.ttl`,
-    ]);
+    expect(h.calls.filter((c) => c.method === "DELETE")).toEqual([]);
     h.setHook(() => undefined);
     const opened = await h.service.open(container);
     expect(opened.metadata.sheets).toHaveLength(1);

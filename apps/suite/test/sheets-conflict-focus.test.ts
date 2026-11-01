@@ -148,6 +148,39 @@ it("returns conflict focus after Keep mine finishes and File becomes enabled", a
   await editor.unmount();
 });
 
+it("remounts local edits after Load their version is forbidden, then keeps those edits", async () => {
+  const { service, book, setHook } = await setup();
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  const local = snapshot("Local\nunsaved edits", true);
+  engine.load(local);
+  const entry = pendingSaves.get(book.container);
+  if (!entry) throw new Error("Missing pending writer");
+  await service.save(book.container, snapshot("Remote\nedits"), book.version);
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    await entry.flush();
+  });
+  expect(entry.status).toBe("conflict");
+  expect(entry.workbook.snapshot).toEqual(local);
+  setHook((call) =>
+    call.method === "GET" && call.url.endsWith("workbook.json")
+      ? new Response(null, { status: 403 })
+      : undefined,
+  );
+  await click(button(document, "Load their version"));
+  expect(editor.host.textContent).toContain("Couldn't open this spreadsheet");
+  expect(engine.dispose).toHaveBeenCalledOnce();
+  expect(entry.workbook.snapshot).toEqual(local);
+  setHook(() => undefined);
+  await click(button(editor.host, "Retry"));
+  expect(mocks.mount.mock.calls.at(-1)?.[1].snapshot).toEqual(local);
+  await click(button(document, "Keep mine"));
+  expect(entry.status).toBe("saved");
+  expect((await service.open(book.container)).snapshot).toEqual(local);
+  await editor.unmount();
+});
+
 it("starts the grid from the new workbook's snapshot when navigating between containers", async () => {
   const { service, book } = await setup();
   const other = await service.create({ title: "Other", snapshot: snapshot("Other\nvalues") });
