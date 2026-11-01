@@ -159,7 +159,7 @@ function needsInteraction(authorizationResponse: string): boolean {
  * structurally so this module needs no import from the protocol layer.
  */
 export interface RenewProbe {
-  canRenewWithoutInteraction(issuer: URL): boolean;
+  canRenewWithoutInteraction(issuer: URL, expectedWebId?: string): boolean;
 }
 
 /**
@@ -184,11 +184,12 @@ export function openPopupUnlessRenewable(
   controller: PopupLoginController,
   provider: RenewProbe | null | undefined,
   issuer: string | undefined,
+  expectedWebId?: string,
 ): void {
   if (provider != null && issuer !== undefined) {
     let renewable = false;
     try {
-      renewable = provider.canRenewWithoutInteraction(new URL(issuer));
+      renewable = provider.canRenewWithoutInteraction(new URL(issuer), expectedWebId);
     } catch {
       // Unparsable issuer: open the popup and let the login flow surface the
       // error (its failure path closes the dangling window).

@@ -1,6 +1,10 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 # Federation code generation proof of concept
 
+> **Superseded (1 Nov 2026)** by [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md).
+> The PoC in `tools/federation-codegen` was retired in favour of the signed-off rev-3 packages
+> `packages/federation-codegen` and `packages/model-runtime`. Kept for its analysis only.
+
 Status: review-only proof of concept. The generated package is private and must not be published.
 
 ## Decision

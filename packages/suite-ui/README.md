@@ -82,6 +82,45 @@ selection or missing custom date. Cancel asks for confirmation before calling `o
 offline content stays visible with sharing controls disabled. Retry/clear callbacks belong to the
 consumer. Dev examples live at `/dev/components/{people-picker,role-select,duration-chips,consent-sheet,permission-row}`.
 
+## Shared sign-in card
+
+Import `SignInCard` and its presentation types from `@jeswr/suite-ui/sign-in`, and
+load `@jeswr/suite-ui/styles/sign-in.css` after the token, theme, density and component
+styles. Tailwind consumers must scan this package's source, as for the primitives.
+
+Remembered `recentAccounts` open a single account list. “Use another account” moves to
+WebID entry and provider pills; Back restores focus to that row. With no accounts the
+sign-in step opens directly. `defaultView` (`"accounts"` or `"sign-in"`) sets only the initial view.
+`accountsTitle` defaults to “Choose an account”; `title` applies to sign-in (default “Sign in”).
+`subtitle` is optional. Pass ordered `providers` (home first), `recentProviders`, and
+`onWebId`, `onProvider`, `onCustomProvider`, `onAccount` callbacks. Forms submit trimmed,
+non-empty strings, including provider URLs pasted into WebID. The host owns validation,
+authentication and history; the card has no auth dependency or network transport.
+
+Provider pills show `label ?? name`; `description` is deprecated and no longer displayed.
+`PROVIDER_BRANDS` maps issuer origins to colours and bundled Solid / Inrupt logos.
+Other providers use monograms and a stable colour from `FALLBACK_BRAND_COLORS`.
+`color` overrides the fill only when it is a six-digit `#rrggbb`; text uses WCAG contrast
+to select white or near-black. `iconUrl` opts into a custom logo. It, `photoUrl` and
+`signUpUrl` require absolute HTTP(S) URLs; unsafe values are ignored. No default logos
+are fetched remotely. Neutral colours follow the light/dark theme.
+
+`pending={{ kind, key }}` forces the matching step, disables actions, and shows a spinner
+and “Signing in…” on the matching account, provider or form. Keys are provider ID (or
+issuer URL), account WebID or submitted form input. Supply `onCancel` for cancellation.
+`error` stays with the last action: on accounts, under the submitted input, or above
+providers. `allowCustomProvider={false}` hides custom entry; `defaultCustomProviderOpen`
+sets its initial expansion. `webIdHelpHref` replaces the WebID explanation sheet with
+a native link for an absolute HTTP(S) URL or a single-slash local path. Footer links
+keep 44px targets and are disabled while pending; host `footer` content becomes inert.
+
+The subpath also exports `monogramFor`, `toneAt`, `toneFor` (legacy app-tone helpers),
+`safeHref`, `hostOf`, `signUpTarget`, `providerBrandFor`, `validColor`,
+`relativeLuminance`, `contrastRatio`, and `foregroundFor`. `safeHref` trims outer
+whitespace and rejects embedded whitespace and backslashes; local paths require its
+second argument to be `true`. Fixtures at `/dev/components/sign-in` accept
+`?state=accounts|default|pending|error|account-error|custom` and a density selector.
+
 ## DS-02 primitives and atoms
 
 Import `@jeswr/suite-ui/styles/components.css` after the token, theme and density styles.
@@ -347,3 +386,19 @@ shows, the details toggle reports collapsed, and any change writes back one regi
 and the TopBar is 48px. The details breakpoint follows the DS-04 task and 02-§2 (sheet below
 1024), not the ≥1280 persistent pane in 01-§4 and the mockups.
 Dev routes: `/dev/components/{shell,top-bar,sidebar-nav,details-pane}` in apps/suite.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Sync and storage capabilities
+
+Import `CapabilityProvider`, `CapabilityGate`, `OfflinePill` (also named `SyncStatus`),
+`SyncSheet`, `ConflictDialog`, `syncStatus` and their types from `@jeswr/suite-ui/sync`
+or the package root. Import `@jeswr/suite-ui/styles/sync.css` after the shared component CSS.
+All sync state comes from a `SyncSnapshot` prop; these components do not start network requests.
+`SyncSheet` accepts optional `locale` and `now` props for locale-aware dates and a fixed clock.
+
+Provide capabilities with `<CapabilityProvider capabilities={capabilities}>`.
+Missing capabilities are unsupported. Gate children must be controls that forward native
+`disabled` and `aria-disabled` props; fragments and multiple controls are supported.
+`useRequiresOnline(online, "change sharing")` returns `{ disabled, reason }` for controls that
+need a connection. Pass the current online value explicitly. `ConflictDialog` calls `onChoose`
+with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.

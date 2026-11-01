@@ -2,5 +2,10 @@
 <!doctype html>
 <html lang="en">
   <head><meta charset="utf-8"><title>Suite navigation guard probe</title></head>
-  <body><p>Attempting foreign top-frame navigation.</p><script src="/navigation.js"></script></body>
+  <body>
+    <p>Foreign top-frame navigation probe.</p>
+    <a id="e2e-foreign" href="http://localhost:4174/foreign.html">Attempt foreign navigation</a>
+    <textarea id="e2e-result" aria-label="e2e-result" readonly rows="6" style="width: 95%"></textarea>
+    <script src="/navigation.js"></script>
+  </body>
 </html>

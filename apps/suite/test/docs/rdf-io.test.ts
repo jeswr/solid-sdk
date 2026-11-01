@@ -2,8 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 // Ported Pod Docs regression tests.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { createPodScopedFetch, PodScopeError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ConcurrencyValidatorError,
   ResourceDeleteError,
@@ -20,6 +21,27 @@ import {
 import { mockFetch, turtleToStore } from "./helpers.js";
 
 const URL_X = "https://alice.pod/pod-docs/x.ttl";
+
+for (const method of ["PUT", "DELETE"] as const) {
+  it.each([
+    303, 307,
+  ])(`refuses %s on scoped RDF ${method} without false success or replay`, async (status) => {
+    const transport = vi.fn<typeof fetch>(
+      async (): Promise<Response> =>
+        transport.mock.calls.length === 1
+          ? new Response(null, { status, headers: { location: "next.ttl" } })
+          : new Response(null, { status: 200 }),
+    );
+    const fetch = createPodScopedFetch("https://alice.pod/", { fetch: transport });
+    await expect(
+      method === "PUT"
+        ? writeRdf(URL_X, new Store(), { createOnly: true, fetchImpl: fetch })
+        : deleteRdf(URL_X, fetch),
+    ).rejects.toBeInstanceOf(PodScopeError);
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport.mock.calls[0]?.[1]?.method).toBe(method);
+  });
+}
 
 describe("serializeTurtle", () => {
   it("serialises a dataset to Turtle with prefixes", async () => {
