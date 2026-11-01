@@ -369,6 +369,26 @@ describe("signed-content reading is order- and accessor-independent", () => {
     expect(r.authorized).toBe(true);
   });
 
+  it("Turtle relative forms the base-free digest merges cannot be swapped for one another", async () => {
+    const reports = "https://institute.example/policies/reports/";
+    const scoped: OdrlPolicy = {
+      ...base.instituteInternal,
+      permissions: [{ type: "permission", action: "read", target: reports, assignee: CAST.agentR }],
+    };
+    const absolute = await policyToTurtle(scoped);
+    const signedForm = absolute.replaceAll(`<${reports}>`, "<./reports/>");
+    const swapped = absolute.replaceAll(`<${reports}>`, "<../reports/>");
+    expect(signedForm).not.toBe(absolute);
+    expect(await digestRdfContent(swapped)).toBe(await digestRdfContent(signedForm));
+    const r = await verifySigned(
+      signedForm,
+      { [CAST.instituteInternalId]: { content: swapped } },
+      readRequest("https://institute.example/reports/"),
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_INTEGRITY");
+  });
+
   it("JSON-LD content cannot add relative-IRI rules the base-free signed graph dropped", async () => {
     const doc = CAST.instituteInternalId.replace(/#.*$/, "");
     const forgedId = `${doc}#forged`;

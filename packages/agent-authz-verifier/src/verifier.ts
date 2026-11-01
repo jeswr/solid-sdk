@@ -575,6 +575,13 @@ function policyDocumentUrl(policyId: string): string | undefined {
 /** An IRI with a scheme. */
 const ABSOLUTE_IRI = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
+/** Whether a base-free quad holds a relative IRI that is not `#fragment`. */
+function hasNonFragmentRelativeIri(quad: Quad): boolean {
+  return [quad.subject, quad.predicate, quad.object, quad.graph].some(
+    (t) => t.termType === "NamedNode" && !ABSOLUTE_IRI.test(t.value) && !t.value.startsWith("#"),
+  );
+}
+
 /** `quad` with each relative IRI resolved against `base` (left as is without one). */
 function resolveQuad(quad: Quad, base: string | undefined): Quad {
   const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
@@ -724,6 +731,12 @@ async function contentBoundPolicy(
     });
     const unbased = await parseRdf(presented.content, contentType);
     const unbasedQuads = [...unbased.match()] as Quad[];
+    // A base-free parse merges relative forms (`./x`, `../x` and `?/x` all read
+    // as `/x`), so the signed graph cannot tell them apart. Only a fragment
+    // reference (`#x`) has one meaning against the document; refuse the rest.
+    if (unbasedQuads.some(hasNonFragmentRelativeIri)) {
+      return "the signed content uses a relative IRI other than a fragment reference (#…), whose meaning the signature does not fix";
+    }
     const [signedDigest, unbasedDigest, resolvedDigest, basedDigest] = await Promise.all([
       digestRdfContent(presented.content, contentType),
       digestQuads(unbasedQuads),
