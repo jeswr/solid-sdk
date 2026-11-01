@@ -41,6 +41,10 @@ with `node scripts/generate-vocab.mjs` from this package directory.
 
 The copied core test uses the unchanged pilot integration fixtures through the
 test-only personal-agent workspace dependency. Production modules never import it.
+The package Turbo override builds only production workspace dependencies first;
+typecheck waits for personal-agent's build. This avoids a build-task cycle through
+personal-agent → legacy-bridge → agent-channels → agent-model while preserving
+the pilot parity tests.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
 The package remains private per ADR-001 D5.

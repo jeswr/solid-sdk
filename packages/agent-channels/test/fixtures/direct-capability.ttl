@@ -1,0 +1,21 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix schema: <https://schema.org/>.
+
+<urn:agent:binding:direct> a agent:ChannelCapability;
+    agent:channel "direct";
+    agent:binding "direct";
+    agent:carriage "direct-local/0.1";
+    agent:structuredPayload true;
+    agent:endToEndEncrypted false;
+    agent:deliveryReceipts false;
+    agent:historyWindow "P0D"^^<http://www.w3.org/2001/XMLSchema#duration>;
+    agent:maxMessageBytes 65536;
+    agent:sendSupported true;
+    agent:costPerMessage "0"^^<http://www.w3.org/2001/XMLSchema#decimal>;
+    agent:rateLimit <urn:agent:node:368d15990171a0b539e9784dc181bf0b>;
+    agent:credentialState "connected".
+<urn:agent:node:368d15990171a0b539e9784dc181bf0b> agent:perRecipient 0;
+    agent:perDay 0.

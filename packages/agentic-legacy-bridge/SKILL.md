@@ -8,7 +8,9 @@ description: Maintain imported channel parsing, BridgeMessage and ChannelAdapter
 
 Preserve the channel-neutral contracts and the public `.`, `./email`, `./metadata`, and
 `./webhook` exports. The existing `PROTOCOL.md` and `docs/DECISIONS.md` describe wire behavior.
-Future extraction into agent-channels is a separate task.
+Shared message, email/reply shapes, ChannelParseError and adapter contracts now
+live in agent-channels (A-005). Keep these compatibility re-exports and the
+email-default adapter/parser here; do not introduce a reverse dependency.
 
 Treat inbound messages as hostile. Identity, authority, interpretation, and approval are
 separate assessments; missing or unverifiable evidence must not authorize a reply.

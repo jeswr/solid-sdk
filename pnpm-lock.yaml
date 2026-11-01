@@ -2427,12 +2427,32 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(terser@5.51.2)
 
   packages/agent-channels:
+    dependencies:
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-credentials:
+    dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
@@ -2526,6 +2546,9 @@ importers:
 
   packages/agentic-legacy-bridge:
     dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
