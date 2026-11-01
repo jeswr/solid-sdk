@@ -18,8 +18,9 @@
 #   - media:isrc sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" (Warning);
 #   - the media:playedVia property (sh:nodeKind sh:BlankNodeOrIRI, Info), which the
 #     composite does not project.
-# Both stay in the published listening.shacl.ttl, which src/shape.test.ts validates
-# with rdf-validate-shacl. Reviewed pattern support is tracked as a follow-up bead.
+# The ISRC pattern stays in the published listening.shacl.ttl, which src/shape.test.ts
+# validates with rdf-validate-shacl; listening.shacl.ttl never constrained playedVia.
+# Reviewed pattern support is tracked as a follow-up bead (sst-ild.4.11).
 #
 # media:playedWork is narrowed from the sector's sh:class media:CreativeWork to
 # media:Track, matching this package's published listening.shacl.ttl: the generator

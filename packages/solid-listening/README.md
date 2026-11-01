@@ -166,7 +166,26 @@ scrobble shapes, with three deliberate projections documented in its header: the
 `sh:pattern` and the unprojected `media:playedVia` shape are left out (the generator
 has no reviewed guard for them, and no earlier model enforced them), and
 `media:playedWork` is narrowed to `sh:class media:Track`, matching
-`listening.shacl.ttl`. The published `listening.shacl.ttl` keeps every constraint.
+`listening.shacl.ttl`. The published `listening.shacl.ttl` keeps the ISRC pattern (it
+never constrained `playedVia`).
+
+### Exact divergences from the July package
+
+The model now runs on the workspace `@jeswr/model-runtime`, which follows the media
+SHACL profile exactly. Compared with the July package (the same generated core on the
+git-pinned runtime `8c7f78e`), `parseScrobble` differs as follows, pinned in
+`test/compatibility.test.ts`:
+
+- A required value that does not conform rejects the scrobble: a language-tagged,
+  repeated or IRI `dct:title` on the track, or two `time:inXSDDateTime` values. July
+  admitted these. A scrobble written by another client with a language-tagged title
+  therefore no longer parses; whether the profile should accept `rdf:langString` titles
+  is an open normative question.
+- An ambiguous optional value drops that field (two `media:isrc` values, two artist
+  names) instead of keeping the first.
+- A track typed with a class that the same document declares `rdfs:subClassOf
+  media:Track` is accepted (SHACL `sh:class` semantics). Field values are still read only
+  from the scrobble's own `#track` node.
 
 ## License
 

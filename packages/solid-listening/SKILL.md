@@ -19,7 +19,8 @@ the reasons are in its header. `listening.shacl.ttl` is the published, complete 
 validated in `src/shape.test.ts`.
 
 Parse behaviour: required links (`playedWork`, `atTime`) and the track title fail
-closed. The links are `sh:class`-only, so an optional problem on a child (two artists,
+closed on any non-conforming value (a language-tagged title rejects the scrobble; README
+"Exact divergences" lists the changes from the July package). The links are `sh:class`-only, so an optional problem on a child (two artists,
 two albums, a malformed optional value) drops only that field.
 
 From the workspace root:
