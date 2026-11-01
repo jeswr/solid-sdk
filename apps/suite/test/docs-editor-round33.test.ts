@@ -53,6 +53,19 @@ vi.mock("@/components/interim-shell/suite-frame", () => ({
 
 import { DocumentEditor } from "../src/apps/docs/components/document-editor";
 
+const resizeObservers: { target: Element | undefined; callback: ResizeObserverCallback }[] = [];
+/** Report a toolbar width, as a browser's first ResizeObserver callback does. */
+async function measureToolbar(width: number) {
+  await act(async () => {
+    for (const observer of resizeObservers)
+      if (observer.target?.matches('[role="toolbar"]'))
+        observer.callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          observer as unknown as ResizeObserver,
+        );
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("ClipboardEvent", Event);
@@ -63,10 +76,17 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  resizeObservers.length = 0;
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      observe() {}
+      target: Element | undefined;
+      constructor(readonly callback: ResizeObserverCallback) {
+        resizeObservers.push(this);
+      }
+      observe(target: Element) {
+        this.target = target;
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -568,6 +588,8 @@ it.each([
 ])("round33 empty-caret %s stored marks immediately update toolbar feedback", async (label) => {
   const view = await mountEditor();
   try {
+    // The toolbar shows text-style buttons once it has measured room for them.
+    await measureToolbar(1600);
     const button = view.host.querySelector<HTMLButtonElement>(
       `[role="toolbar"] [aria-label="${label}"]`,
     ) as HTMLButtonElement;
@@ -766,7 +788,12 @@ it.each([
       view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Import to replace…",
     );
-    const input = document.querySelector('[role="dialog"] input[type="file"]') as HTMLInputElement;
+    // Menu commands run once the closed menu has restored focus to its trigger.
+    const input = await vi.waitFor(() => {
+      const found = document.querySelector('[role="dialog"] input[type="file"]');
+      expect(found).not.toBeNull();
+      return found as HTMLInputElement;
+    });
     const source =
       completion === "no warnings"
         ? "Replacement"

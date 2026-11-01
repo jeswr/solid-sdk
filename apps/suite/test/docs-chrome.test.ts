@@ -256,11 +256,14 @@ it("switches open menus with arrows and pointers, handles typeahead and nested-m
   key(screen.getByRole("menu"), "r");
   await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe("Rename"));
   key(document.activeElement as Element, "Escape");
+  // Radix restores focus after the closing menu unmounts; the trigger gets it back.
+  await vi.waitFor(() => expect(document.activeElement).toBe(menuitem("File")));
   await openMenu("File");
   await openSub("Download");
   key(document.activeElement as Element, "ArrowLeft");
   await vi.waitFor(() => expect(screen.getAllByRole("menu")).toHaveLength(1));
   key(document.activeElement as Element, "Escape");
+  await vi.waitFor(() => expect(document.activeElement).toBe(menuitem("File")));
   await openMenu("File");
   fireEvent.pointerEnter(menuitem("Help"));
   await vi.waitFor(() =>

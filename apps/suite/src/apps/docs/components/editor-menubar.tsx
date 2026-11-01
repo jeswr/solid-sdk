@@ -113,7 +113,13 @@ export function EditorMenubar(props: EditorMenubarProps) {
   };
   const item = (label: string, run: () => void, keys = "", disabled = readOnly) => (
     <DropdownMenuItem key={label} textValue={label} disabled={disabled} onSelect={choose(run)}>
-      {label} {keys && <Kbd>{keyboardLabel(keys, mac)}</Kbd>}
+      {label}
+      {keys && (
+        <>
+          {" "}
+          <Kbd>{keyboardLabel(keys, mac)}</Kbd>
+        </>
+      )}
     </DropdownMenuItem>
   );
   const command = (label: string) => {
@@ -354,8 +360,10 @@ export function EditorMenubar(props: EditorMenubarProps) {
               }
               const run = pending.current;
               pending.current = null;
-              if (run) run();
-              else trigger(index)?.focus();
+              // Land on the durable trigger first: a dialog the command opens then
+              // restores focus here when it closes, instead of to the removed item.
+              trigger(index)?.focus();
+              run?.();
             }}
             onKeyDown={(event) => {
               if (
