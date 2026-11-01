@@ -102,6 +102,14 @@ describe("demo seed and binary fixtures", () => {
     expect((await graph(await pod.fetch(`${DEMO_ROOT}drive/Archive/`), DEMO_ROOT)).size).toBe(5);
   });
 
+  it("leaves Calendar data out when calendar seeding is disabled", async () => {
+    const seed = await buildDemoSeed(NOW, { calendar: false });
+    const full = await buildDemoSeed(NOW);
+    expect(seed.some((file) => file.path.startsWith("calendar/"))).toBe(false);
+    expect(full.some((file) => file.path.startsWith("calendar/"))).toBe(true);
+    expect(seed.some((file) => file.path.startsWith("drive/"))).toBe(true);
+  });
+
   it("provides distinct PNGs with image dimensions and a PDF with readable report content", () => {
     for (const png of [SUNSET_PNG, HILLS_PNG]) {
       expect([...png.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
