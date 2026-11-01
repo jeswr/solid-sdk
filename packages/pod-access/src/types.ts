@@ -131,8 +131,10 @@ export interface AccessClient {
 /** Use the public storage interface; authentication and transport stay in storage-client. */
 export interface AccessClientOptions {
   storage: StorageClient;
+  /** Trusted caller assertion of ACP semantics, never inferred from editable access RDF. */
+  acpDialect?: "css" | "ess" | undefined;
   /** Canonical description.id, required on LWS; it can differ from storage.root. */
-  storageId?: string;
+  storageId?: string | undefined;
   /** Current caller identifier (adapt pod-auth.identity); absent/anonymous means unknown. */
   identity?: () => string | null;
 }

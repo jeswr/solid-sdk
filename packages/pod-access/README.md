@@ -26,7 +26,8 @@ parsing/serialization and transport errors.
 import { createAccessClient } from '@jeswr/pod-access';
 
 // storage is the StorageClient returned by createPodClient.
-const access = createAccessClient({ storage });
+// Set acpDialect only from independent knowledge of the deployment (here CSS).
+const access = createAccessClient({ storage, acpDialect: 'css' });
 const grant = await access.share(resourceUrl, {
   agent: 'https://bob.example/profile/card#me', modes: ['read'],
 }, { inherit: false });
@@ -65,12 +66,21 @@ expiry constraints return `unsupported` on Solid. Mode lists round-trip explicit
 adding implied modes.
 
 WAC uses `AclResource`/`Authorization` from `@solid/object`. With `inherit: true` on a
-container it writes both `acl:accessTo` and `acl:default`. ACP uses one AccessControl, Policy
-and Matcher per grant, with `acp:allow` ACL modes and `acp:allOf` matching a single agent.
+container it writes both `acl:accessTo` and `acl:default`. ACP requires an explicit trusted
+`acpDialect: 'css' | 'ess'` assertion; absent or unknown dialects return `unsupported` before I/O.
+Never infer the dialect from editable access RDF, hostname guesses, or capability diagnostics.
+Mode activation and serialization reuse the offline translation core: CSS uses `acl:*` modes,
+ESS uses `acp:*` modes. ACP uses one AccessControl, Policy and Matcher per grant,
+with `acp:allOf` matching a single agent. ESS resource Control is inactive, so sharing Control
+on ESS is `unsupported`; its ACR access policies require a richer editor.
 Inheritance links the control through both `acp:accessControl` and `acp:memberAccessControl`.
 Inherited entries here mean defaults on this document; ancestor grants are not resolved.
 ACP roots shared by the requested resource and other resources return `unsupported`.
 Every `acp:resource` association must be an IRI, otherwise the document returns `invalid-response`.
+Resource-less roots are accepted only for a typed canonical ESS ACR subject. Resource-less
+fragment/blank roots, ACR-self resource bindings, and `acp:access`/`acp:memberAccess` policies
+return `unsupported` for listing, sharing and revocation, even when another root could be edited.
+Revocation never reports success after silently ignoring those potentially active Control grants.
 
 `revoke` accepts a `RevocationKey`: an authorization/policy IRI, an agent/group IRI,
 `{ public: true }`, or `{ authenticated: true }`. Selectors revoke all matching grants,

@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -15,6 +17,66 @@ import { DOCUMENT_CLASS } from "./vocab.js";
 
 // Exercise real factory discovery separately from legacy HTTP-contract fixtures.
 vi.unmock("@jeswr/storage-client");
+
+it.each([
+  false,
+  true,
+])("shares LWS using description.id distinct from the root (injected=%s)", async (injected) => {
+  const root = `https://docs-sharing-${injected}.example/pod/`;
+  const id = new URL("/storage", root).href;
+  const endpoint = `${root}grants`;
+  let written: Record<string, unknown> | undefined;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+    const url = String(input);
+    if (url === id)
+      return new Response(
+        JSON.stringify({
+          id,
+          type: "Storage",
+          service: [
+            { type: "StorageRoot", serviceEndpoint: root },
+            {
+              type: "AccessGrantService",
+              serviceEndpoint: endpoint,
+              conformsTo: ["https://www.w3.org/ns/lws#AccessProfile"],
+            },
+          ],
+          capability: [
+            {
+              type: "https://jeswr.org/ns/solid-sd#AccessControl",
+              model: "https://jeswr.org/ns/solid-sd#ODRLGrants",
+            },
+          ],
+        }),
+        { headers: { "content-type": "application/lws+cid" } },
+      );
+    if (url === endpoint && init?.method === "POST") {
+      written = JSON.parse(String(init.body));
+      return new Response(null, {
+        status: 201,
+        headers: { location: `${root}grant-1`, etag: '"grant"' },
+      });
+    }
+    expect(init?.method).toBe("HEAD");
+    return new Response(null, {
+      headers: { link: `<${id}>; rel="https://www.w3.org/ns/lws#storage", <${root}>; rel="up"` },
+    });
+  });
+  const discovered = injected ? await createPodClient({ storage: root, fetch }) : undefined;
+  const store = createDocsStore({
+    podRoot: root,
+    webId: "https://id.example/#me",
+    container: root,
+    fetchImpl: fetch,
+    ...(discovered && { storage: discovered.storage, storageId: discovered.description.id }),
+  });
+  const shared = await store.share(`${root}document`, { agent: { public: true }, modes: ["read"] });
+  expect(shared.id).toBe(`${root}grant-1`);
+  expect(written).toMatchObject({
+    storage: id,
+    access: [{ action: ["read"], target: { value: [`${root}document`] } }],
+  });
+});
 
 describe.each(["solid", "lws"] as const)("real PodClient discovery for %s", (protocol) => {
   it("retries failed discovery, then uses the authenticated transport for app data", async () => {

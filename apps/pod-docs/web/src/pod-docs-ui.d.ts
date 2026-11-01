@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Ambient typing for the @jeswr/pod-docs/ui module the host consumes. Vite
@@ -23,6 +24,8 @@ declare module "@jeswr/pod-docs/ui" {
     fetch?: typeof fetch;
     /** Optional heading rendered above the listing. */
     title?: string;
+    container?: string;
+    onContainerChange?: (selection: { podRoot: string; webId: string; container: string }) => void;
   }
 
   export function DocumentBrowser(props: DocumentBrowserProps): JSX.Element;

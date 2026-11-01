@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** Document persistence over the discovered SDK client, with logical containment checks. */
-import { type AccessGrant, createAccessClient } from "@jeswr/pod-access";
+import { type AccessClientOptions, type AccessGrant, createAccessClient } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import {
   type BuildDocumentInput,
@@ -58,6 +58,10 @@ export type DocsStoreOptions = {
   webId: string;
   fetchImpl?: typeof fetch;
   storage?: StorageClient;
+  /** Canonical description.id when injecting a discovered storage client. */
+  storageId?: string;
+  /** Trusted ACP server semantics; absent means ACP sharing is unsupported. */
+  acpDialect?: AccessClientOptions["acpDialect"];
   container?: string;
   /** Called as soon as storage assigns a new collection, even if document creation later fails. */
   onContainerChange?: (container: string) => void;
@@ -75,6 +79,8 @@ export class DocsStore {
     private readonly storage?: StorageClient,
     container?: string,
     private readonly onContainerChange?: (container: string) => void,
+    private storageId?: string,
+    private readonly acpDialect?: AccessClientOptions["acpDialect"],
   ) {
     this.explicitContainer = container !== undefined;
     this.containerUrl = container ?? new URL(DOCS_SLUG, podRoot).href;
@@ -83,12 +89,12 @@ export class DocsStore {
     return this.containerUrl;
   }
   private client(): Promise<StorageClient> {
-    this.pending ??= storageFor(this.podRoot, this.fetchImpl, this.storage).catch(
-      (error: unknown) => {
-        this.pending = undefined;
-        throw error;
-      },
-    );
+    this.pending ??= storageFor(this.podRoot, this.fetchImpl, this.storage, (id) => {
+      this.storageId = id;
+    }).catch((error: unknown) => {
+      this.pending = undefined;
+      throw error;
+    });
     return this.pending;
   }
 
@@ -140,8 +146,10 @@ export class DocsStore {
   async list(): Promise<DocumentEntry[]> {
     const storage = await this.client();
     const out: DocumentEntry[] = [];
+    let observedEntry = false;
     try {
       for await (const entry of storage.listAll(this.containerUrl, { revalidate: true })) {
+        observedEntry = true;
         if (entry.kind === "container") continue;
         let doc: StoredDocument | undefined;
         try {
@@ -159,8 +167,13 @@ export class DocsStore {
         });
       }
     } catch (error) {
+      // StorageClient reports cursor failures at the cursor URL and rejects a
+      // cursor equal to the initial container. Even an empty first page must not
+      // turn a continuation failure into a successful empty collection.
       if (
         error instanceof StorageError &&
+        !observedEntry &&
+        error.url === this.containerUrl &&
         (error.code === "not-found" || error.code === "forbidden")
       )
         return [];
@@ -243,7 +256,11 @@ export class DocsStore {
     opts: { inherit?: boolean } = {},
   ): Promise<AccessGrant> {
     const storage = await this.assertInContainer(url);
-    return createAccessClient({ storage }).share(url, grant, opts);
+    return createAccessClient({
+      storage,
+      storageId: this.storageId,
+      acpDialect: this.acpDialect,
+    }).share(url, grant, opts);
   }
 
   /** Solid Type Index registration is optional protocol metadata, absent on LWS. */
@@ -268,6 +285,8 @@ export function createDocsStore(opts: DocsStoreOptions): DocsStore {
     opts.storage,
     opts.container,
     opts.onContainerChange,
+    opts.storageId,
+    opts.acpDialect,
   );
 }
 export { nameFromUrl };

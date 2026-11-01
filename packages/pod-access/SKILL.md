@@ -42,6 +42,13 @@ agent/group IRIs, `{ public: true }` and `{ authenticated: true }`. Explicit sel
 revoke blank-node rules, which have no stable grant id. Validate and snapshot selector keys
 before storage operations; shared WAC targets still fail closed.
 On Solid, purpose/expiry and ACP groups/reserved agent IRIs passed as WebIDs are unsupported.
+ACP operations require `acpDialect: 'css' | 'ess'` from trusted deployment knowledge;
+never infer it from editable RDF. Sharing reuses the translation core's mode activation and
+serialization: CSS `acl:*`, ESS `acp:*`. Unknown dialects refuse before I/O. ESS resource
+Control sharing is unsupported. Refuse `acp:access`/`acp:memberAccess`, ACR-self resource
+bindings and resource-less fragment/blank roots before listing or any edit; these must never
+be silently skipped during revocation. Resource-less canonical roots require the ESS dialect
+and `acp:AccessControlResource` type. Keep the shared translation semantics in sync.
 
 On Solid, `effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns
 null when absent; `public: []` means unknown because StorageClient exposes no anonymous modes.

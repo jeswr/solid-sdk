@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { type AccessGrant, createAccessClient } from "@jeswr/pod-access";
+import { type AccessClientOptions, type AccessGrant, createAccessClient } from "@jeswr/pod-access";
 import {
   type Body,
   type CreateOptions,
@@ -72,6 +72,7 @@ async function discoverStorage(
   url: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
+  onStorageId?: (id: string) => void,
 ): Promise<StorageClient> {
   let accessFailure: { status: 401 | 403; url: string } | undefined;
   let targetNotFound = false;
@@ -106,13 +107,13 @@ async function discoverStorage(
     return response;
   };
   try {
-    return (
-      await createPodClient({
-        storage: url,
-        fetch: transport,
-        ...(signal ? { signal } : {}),
-      })
-    ).storage;
+    const { storage, description } = await createPodClient({
+      storage: url,
+      fetch: transport,
+      ...(signal ? { signal } : {}),
+    });
+    onStorageId?.(description.id);
+    return storage;
   } catch (error) {
     if (accessFailure) throw new DriveAccessError(accessFailure.status, accessFailure.url, error);
     if (targetNotFound)
@@ -120,7 +121,12 @@ async function discoverStorage(
     if (slashRedirect) {
       // Browsers hide Location. Discover through the parent instead of following the
       // redirect or guessing that a slashless identifier belongs to Solid.
-      const storage = await discoverStorage(new URL("./", url).href, fetchImpl, signal);
+      const storage = await discoverStorage(
+        new URL("./", url).href,
+        fetchImpl,
+        signal,
+        onStorageId,
+      );
       if (storage.protocol === "solid") return storage;
     }
     throw error;
@@ -167,12 +173,20 @@ export function createDriveStore(options: {
   root: string;
   fetch?: typeof fetch;
   storage?: StorageClient;
+  /** Canonical description.id when injecting a discovered storage client. */
+  storageId?: string;
+  /** Trusted ACP server semantics; absent means ACP sharing is unsupported. */
+  acpDialect?: AccessClientOptions["acpDialect"];
 }) {
   let pending: Promise<StorageClient> | undefined;
+  let storageId = options.storageId;
+  const acpDialect = options.acpDialect;
   const client = () =>
     (pending ??= options.storage
       ? Promise.resolve(options.storage)
-      : discoverStorage(options.root, options.fetch ?? globalThis.fetch).catch((error: unknown) => {
+      : discoverStorage(options.root, options.fetch ?? globalThis.fetch, undefined, (id) => {
+          storageId = id;
+        }).catch((error: unknown) => {
           pending = undefined;
           throw error;
         }));
@@ -199,7 +213,11 @@ export function createDriveStore(options: {
       });
     },
     async share(url: string, grant: AccessGrant, opts: { inherit?: boolean } = {}) {
-      return createAccessClient({ storage: await client() }).share(url, grant, opts);
+      return createAccessClient({ storage: await client(), storageId, acpDialect }).share(
+        url,
+        grant,
+        opts,
+      );
     },
   };
 }

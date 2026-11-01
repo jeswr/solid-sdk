@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
@@ -275,4 +276,54 @@ it("does not bootstrap an unreadable Solid settings container", async () => {
   });
   await expect(store.create({ title: "Denied" })).rejects.toMatchObject({ code: "forbidden" });
   expect(create.mock.calls.every((call) => call[2]?.name !== "settings")).toBe(true);
+});
+
+describe.each(["not-found", "forbidden"] as const)("listing failures: %s", (code) => {
+  it.each([
+    true,
+    false,
+  ])("propagates a failed continuation page (empty first page=%s)", async (empty) => {
+    const { storage, store: original } = await setup("lws");
+    const doc = await original.create({ title: "Readable document" });
+    const failure = new StorageError(code, {
+      url: `${ROOT}cursor?opaque=1`,
+      method: "GET",
+      status: code === "not-found" ? 404 : 403,
+    });
+    const store = createDocsStore({
+      podRoot: ROOT,
+      webId: WEBID,
+      container: original.container,
+      storage: {
+        ...storage,
+        async *listAll() {
+          if (!empty) {
+            const entry = (await storage.list(original.container)).items.find(
+              (e) => e.url === doc.url,
+            );
+            expect(entry).toBeDefined();
+            yield entry as NonNullable<typeof entry>;
+          }
+          throw failure;
+        },
+      },
+    });
+    await expect(store.list()).rejects.toBe(failure);
+  });
+  it("returns empty only when the initial collection request fails", async () => {
+    const { storage, store: original } = await setup("lws");
+    const failure = new StorageError(code, { url: original.container, method: "GET" });
+    const store = createDocsStore({
+      podRoot: ROOT,
+      webId: WEBID,
+      storage: {
+        ...storage,
+        async *listAll() {
+          yield* [];
+          throw failure;
+        },
+      },
+    });
+    expect(await store.list()).toEqual([]);
+  });
 });

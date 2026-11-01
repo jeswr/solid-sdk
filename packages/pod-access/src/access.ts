@@ -27,12 +27,17 @@ import type {
 /** Sharing over advertised Solid access documents or LWS access services. */
 export function createAccessClient(options: AccessClientOptions): AccessClient {
   const { storage } = options;
+  const acpDialect = options.acpDialect;
   const lws = createLwsAccess(options);
   const model: AccessClient["model"] = () =>
     storage.features.accessControl.state === "available"
       ? storage.features.accessControl.detail.model
       : "none";
   const unsupported = () => fail("unsupported", storage.root);
+  function dialect() {
+    if (acpDialect !== "css" && acpDialect !== "ess") return unsupported();
+    return acpDialect;
+  }
 
   function parse<T>(url: string, read: () => T): T {
     try {
@@ -46,6 +51,7 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
   async function document(url: string, mutate: boolean) {
     const selected = model();
     if (storage.protocol !== "solid" || (selected !== "wac" && selected !== "acp")) unsupported();
+    if (selected === "acp") dialect();
     const head = await storage.head(url);
     if (mutate && head.allow !== null && !head.allow.control) {
       throw new StorageError("forbidden", { url: head.url, method: "PUT", status: 403 });
@@ -146,7 +152,9 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
       return parse(doc.url, () =>
         doc.model === "wac"
           ? wacGrants(doc.dataset, doc.target, doc.url)
-          : acpEntries(acr(doc.dataset, doc.target, doc.url), doc.url).map(({ grant }) => grant),
+          : acpEntries(acr(doc.dataset, doc.target, doc.url, dialect()), doc.url, dialect()).map(
+              ({ grant }) => grant,
+            ),
       );
     },
     async share(url, grant, opts) {
@@ -154,6 +162,9 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
       const value = validate(grant);
       const inherit = opts.inherit === true;
       if (model() === "acp" && typeof value.agent !== "string" && "group" in value.agent)
+        unsupported();
+      // ESS Control requires access/memberAccess policies, outside the sharing editor's grammar.
+      if (model() === "acp" && acpDialect === "ess" && value.modes.includes("control"))
         unsupported();
       if (
         model() === "acp" &&
@@ -169,7 +180,11 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
       const id = `${doc.url}#grant-${crypto.randomUUID()}`;
       parse(doc.url, () => {
         if (doc.model === "wac") addWac(doc.dataset, doc.target, value, inherit, id);
-        else addAcp(acr(doc.dataset, doc.target, doc.url), doc.target, value, inherit, id);
+        else {
+          const root = acr(doc.dataset, doc.target, doc.url, dialect());
+          acpEntries(root, doc.url, dialect());
+          addAcp(root, doc.target, value, inherit, id, dialect());
+        }
       });
       await write(doc);
       return { ...value, id };
@@ -181,7 +196,7 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
       const changed = parse(doc.url, () =>
         doc.model === "wac"
           ? revokeWac(doc.dataset, doc.target, value, doc.url)
-          : revokeAcp(acr(doc.dataset, doc.target, doc.url), value, doc.url),
+          : revokeAcp(acr(doc.dataset, doc.target, doc.url, dialect()), value, doc.url, dialect()),
       );
       if (changed) await write(doc);
     },
