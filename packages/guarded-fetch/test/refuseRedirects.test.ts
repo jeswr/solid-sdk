@@ -19,6 +19,33 @@ import {
 
 const URL_A = "https://api.example/resource";
 
+it.each([
+  ["/next", "/next"],
+  ["next", "next"],
+  ["../next?token=secret#secret", "../next"],
+  ["/next?token=secret#secret", "/next"],
+  ["https://user:secret@api.example/next?token=secret#secret", "https://api.example/next"],
+  ["ht\ttps://user:secret@api.example/next", "https://api.example/next"],
+  ["https://user:secret@ho st/next", "(invalid URL)"],
+])("preserves the shared constructor's safe Location reference for %s", (location, safe) => {
+  const cause = new Error("fixture cause");
+  const error = new RedirectRefusedError("fixture message", {
+    url: URL_A,
+    status: 307,
+    location,
+    cause,
+  });
+  expect(error).toMatchObject({
+    name: "RedirectRefusedError",
+    message: "fixture message",
+    url: URL_A,
+    status: 307,
+    location: safe,
+    cause,
+  });
+  expect(error.location).not.toContain("secret");
+});
+
 /** A real (Node/undici-shaped) manual-redirect response: readable 3xx status + Location. */
 function movedTo(location: string, status = 302): Response {
   return new Response(null, { status, headers: { location } });
@@ -168,7 +195,7 @@ describe("refuseRedirects — credential/userinfo redaction", () => {
     const err = (await f(URL_A).catch((e: unknown) => e)) as RedirectRefusedError;
     expect(err.message).not.toContain("s3cr3t");
     expect(err.location).not.toContain("s3cr3t");
-    expect(err.location).toContain("<redacted>");
+    expect(err.location).toBe("https://evil.example/steal");
   });
 
   it("redacts userinfo in the REQUEST url (message + .url field)", async () => {
@@ -266,7 +293,7 @@ describe("refuseRedirects — default underlying fetch", () => {
 });
 
 describe("refuseRedirects — composition with the SSRF guard", () => {
-  it("nested under createGuardedFetch: the redirect is refused (surfaced as SsrfError w/ RedirectRefusedError cause)", async () => {
+  it("nested under createGuardedFetch: the redirect is refused with a sanitised diagnostic and no raw cause", async () => {
     const inner = vi.fn(async () => movedTo("https://elsewhere.example/x"));
     const composed = createGuardedFetch({
       // IP-literal target so the guard needs no DNS resolver; refuseRedirects wraps the inner.
@@ -278,7 +305,8 @@ describe("refuseRedirects — composition with the SSRF guard", () => {
       cause?: unknown;
     };
     expect(err).toBeInstanceOf(SsrfError);
-    expect(err.cause).toBeInstanceOf(RedirectRefusedError);
+    expect(err.message).toContain("Refusing to follow a redirect");
+    expect(err.cause).toBeUndefined();
     expect(inner).toHaveBeenCalledTimes(1); // issued once, redirect never followed
   });
 

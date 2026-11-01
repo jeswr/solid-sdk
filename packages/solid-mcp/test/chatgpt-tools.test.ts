@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -509,6 +508,7 @@ describe.each([
     ]);
     expect(result).toMatchObject({ id, url: id });
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([id, finalUrl]);
+    expect(fetch.mock.calls.map(([, init]) => init?.redirect)).toEqual(["manual", "manual"]);
   });
 
   it.each([

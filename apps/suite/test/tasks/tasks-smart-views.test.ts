@@ -119,6 +119,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("malformed external task timestamps", () => {
+  it.each([
+    ["Today", TodayView, `${NS.WF}dateDue`, "open"],
+    ["Completed", CompletedView, `${NS.PROV}endedAtTime`, "closed"],
+  ] as const)("keeps %s rendering and counts a skipped task as a warning", async (_, View, predicate, state) => {
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    await cache.createTask(inbox, { title: "Valid", state, due: now, endedAt: now });
+    const malformed = await cache.store.createTask(inbox, {
+      title: "Malformed",
+      state,
+      dueDate: now,
+      endedAt: now,
+    });
+    const dataset = await pod.dataset(malformed.url);
+    node(malformed.task.id, dataset).setTyped(predicate, "invalid", `${NS.XSD}dateTime`);
+    pod.seed(malformed.url, await serialize(dataset));
+    await cache.loadTasks(inbox, true);
+
+    const { host } = await mount(h("main", null, h(View)));
+    expect(titles(host)).toEqual(["Valid"]);
+    expect(cache.getSnapshot().tasks[inbox.url]).toMatchObject({
+      status: "ready",
+      warningCount: 1,
+    });
+    expect(cache.getSnapshot().tasks[inbox.url]?.items.map((item) => item.task.title)).toEqual([
+      "Valid",
+    ]);
+    expect(node(malformed.task.id, await pod.dataset(malformed.url)).text(predicate)).toBe(
+      "invalid",
+    );
+  });
+});
+
 describe("Today", () => {
   it("returns focus to Reschedule all on Escape and to the heading when Overdue disappears", async () => {
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
@@ -435,6 +468,157 @@ describe("Completed", () => {
 });
 
 describe("Label view", () => {
+  it("aborts deletion after a failed load followed by a create makes the cache look ready", async () => {
+    const { home } = await labels();
+    pod.intercept = (request) =>
+      request.method === "GET" && request.url === home.tracker.stateStore
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await cache.loadTasks(home, true);
+    expect(cache.getSnapshot().tasks[home.url]?.status).toBe("error");
+    await cache.createTask(home, { title: "Created after failure" });
+    expect(cache.getSnapshot().tasks[home.url]).toMatchObject({
+      status: "ready",
+      warningCount: 0,
+    });
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+    expect((await cache.store.readProject(home.url)).tracker.labels).toHaveLength(1);
+    pod.intercept = undefined;
+    const serverTasks = await cache.store.listTasks(home.tracker.stateStore as string);
+    const homeLabel = labelTargets("bills", cache.getSnapshot().projects).find(
+      ({ project }) => project.url === home.url,
+    )?.labelIds[0];
+    expect(homeLabel).toBeDefined();
+    expect(
+      serverTasks
+        .find((item) => item.task.title === "Home rent")
+        ?.task.types.has(homeLabel as string),
+    ).toBe(true);
+  });
+
+  it("removes labels from server-only tasks using fresh validators before removing the class", async () => {
+    await labels();
+    const target = labelTargets("bills", cache.getSnapshot().projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const other = await cache.ensureLabels(target.project, ["keep"]);
+    if (!other) throw new Error("Missing other label");
+    const keep = other.tracker.labels.find((label) => label.name === "keep");
+    if (!keep) throw new Error("Missing keep label");
+    const external = await cache.store.createTask(other, {
+      title: "Server only",
+      state: "closed",
+      endedAt: now,
+      categoryTypes: [...target.labelIds, keep.id],
+    });
+    const cached = cache.getSnapshot().tasks[other.url]?.items[0];
+    if (!cached) throw new Error("Missing cached task");
+    const fresh = await cache.store.updateTask(cached, (task) => {
+      task.title = "Edited elsewhere";
+    });
+    expect(cache.getSnapshot().views.some((task) => task.url === external.url)).toBe(false);
+    const start = pod.requests.length;
+    const result = await deleteLabel("bills", api());
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(2);
+    const requests = pod.requests.slice(start);
+    const externalWrite = requests.findIndex((r) => r.method === "PUT" && r.url === external.url);
+    const classWrite = requests.findIndex((r) => r.method === "PUT" && r.url === other.url);
+    expect(externalWrite).toBeGreaterThan(-1);
+    expect(classWrite).toBeGreaterThan(externalWrite);
+    expect(requests[externalWrite]?.headers.get("If-Match")).toBe(external.etag);
+    expect(
+      requests.find((r) => r.method === "PUT" && r.url === fresh.url)?.headers.get("If-Match"),
+    ).toBe(fresh.etag);
+    expect(requests[classWrite]?.headers.get("If-Match")).toBe(other.etag);
+    const persisted = await cache.store.readTask(external.url);
+    expect(target.labelIds.some((id) => persisted.task.types.has(id))).toBe(false);
+    expect(persisted.task.types.has(keep.id)).toBe(true);
+    expect((await cache.store.readTask(cached.url)).task.title).toBe("Edited elsewhere");
+    expect(
+      (await cache.store.readProject(other.url)).tracker.labels.map((label) => label.name),
+    ).toEqual(["keep"]);
+    expect(cache.getSnapshot().views.find((task) => task.url === external.url)?.labelIds).toEqual([
+      keep.id,
+    ]);
+    expect(
+      requests
+        .filter((r) => r.method === "GET")
+        .every((r) => r.headers.get("Cache-Control") === "no-cache"),
+    ).toBe(true);
+  });
+
+  it.each([
+    404,
+    410,
+    "RDF",
+    "container",
+  ] as const)("writes nothing when the fresh task listing fails with %s", async (failure) => {
+    const { home } = await labels();
+    const container = home.tracker.stateStore as string;
+    if (failure === "RDF") pod.seed(container, "invalid RDF {");
+    else if (failure === "container") {
+      const dataset = await pod.dataset(container);
+      node(container, dataset).types.clear();
+      pod.seed(container, await serialize(dataset));
+    } else
+      pod.intercept = (request) =>
+        request.method === "GET" && request.url === container
+          ? new Response(null, { status: failure })
+          : undefined;
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+  });
+
+  it.each([
+    503,
+    404,
+    410,
+    "RDF",
+    "task",
+    "recurrence",
+  ] as const)("writes nothing in any tracker when a fresh member read fails with %s", async (failure) => {
+    await labels();
+    const target = labelTargets("bills", cache.getSnapshot().projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const external = await cache.store.createTask(target.project, {
+      title: "Unreadable server task",
+      state: "open",
+      categoryTypes: target.labelIds,
+    });
+    if (failure === "RDF") pod.seed(external.url, "invalid RDF {");
+    else if (failure === "task" || failure === "recurrence") {
+      const dataset = await pod.dataset(external.url);
+      const subject = node(external.task.id, dataset);
+      if (failure === "task") subject.types.delete(`${NS.WF}Task`);
+      else {
+        const rule = `${external.url}#recurrence`;
+        subject.iris(`${NS.SCHEDULING}recurrence`).add(rule);
+        node(rule, dataset).setText(`${NS.SCHEDULING}frequency`, "FORTNIGHTISH");
+      }
+      pod.seed(external.url, await serialize(dataset));
+    } else
+      pod.intercept = (request) =>
+        request.method === "GET" && request.url === external.url
+          ? new Response(null, { status: failure })
+          : undefined;
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+    expect((await cache.store.readProject(target.project.url)).tracker.labels).toHaveLength(1);
+  });
+
   it("shares focus across project groups and skips rows in collapsed groups", async () => {
     await labels();
     const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
@@ -513,6 +697,89 @@ describe("Label view", () => {
   });
 
   it.each([
+    0, 1,
+  ])("blocks label changes during a paused refresh with %s previous warnings", async (warningCount) => {
+    await labels();
+    const target = labelTargets("bills", cache.getSnapshot().projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const malformed = await cache.store.createTask(target.project, {
+      title: "Skipped",
+      state: "open",
+      categoryTypes: target.labelIds,
+    });
+    const dataset = await pod.dataset(malformed.url);
+    const subject = node(malformed.task.id, dataset);
+    const rule = `${malformed.url}#recurrence`;
+    subject.iris(`${NS.SCHEDULING}recurrence`).add(rule);
+    node(rule, dataset).setText(`${NS.SCHEDULING}frequency`, "FORTNIGHTISH");
+    pod.seed(malformed.url, await serialize(dataset));
+    if (warningCount) await cache.loadTasks(target.project, true);
+
+    const entered = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    pod.intercept = async (request) => {
+      if (request.method === "GET" && request.url === target.project.tracker.stateStore) {
+        entered.resolve();
+        await resume.promise;
+      }
+      return undefined;
+    };
+    const refresh = cache.loadTasks(target.project, true);
+    await entered.promise;
+    try {
+      expect(cache.getSnapshot().tasks[target.project.url]).toMatchObject({
+        status: "ready",
+        refreshing: true,
+        warningCount,
+      });
+      const writes = pod.mutations().length;
+      const deletion = await deleteLabel("bills", api());
+      expect(deletion.done).toEqual([]);
+      expect(deletion.failed).toHaveLength(1);
+      const rename = await renameLabel("bills", "utilities", api());
+      expect(rename.done).toEqual([]);
+      expect(rename.failed).toHaveLength(1);
+      expect(pod.mutations()).toHaveLength(writes);
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+      expect(
+        cache.getSnapshot().projects.every((project) => project.tracker.labels.length === 1),
+      ).toBe(true);
+      expect(
+        node(malformed.task.id, await pod.dataset(malformed.url)).types.has(
+          target.labelIds[0] as string,
+        ),
+      ).toBe(true);
+    } finally {
+      resume.resolve();
+      await refresh;
+      pod.intercept = undefined;
+    }
+    expect(cache.getSnapshot().tasks[target.project.url]).toMatchObject({
+      status: "ready",
+      warningCount: 1,
+    });
+    expect(cache.getSnapshot().tasks[target.project.url]?.refreshing).toBeFalsy();
+    expect((await deleteLabel("bills", api())).done).toEqual([]);
+
+    subject.clear(`${NS.SCHEDULING}recurrence`);
+    pod.seed(malformed.url, await serialize(dataset));
+    await cache.loadTasks(target.project, true);
+    expect(cache.getSnapshot().tasks[target.project.url]).toMatchObject({
+      status: "ready",
+      warningCount: 0,
+    });
+    expect(cache.getSnapshot().tasks[target.project.url]?.refreshing).toBeFalsy();
+    const deletion = await deleteLabel("bills", api());
+    expect(deletion.failed).toEqual([]);
+    expect(deletion.done).toHaveLength(2);
+    expect(
+      node(malformed.task.id, await pod.dataset(malformed.url)).types.has(
+        target.labelIds[0] as string,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
     "missing",
     "loading",
     "error",
@@ -582,7 +849,7 @@ describe("Label view", () => {
       endedAt: now,
       labelIds: updated.tracker.labels.map((label) => label.id),
     });
-    const updates = vi.spyOn(cache, "updateTask");
+    const updates = vi.spyOn(cache.store, "updateTask");
     const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
     await click(button("Delete", host));
     expect(updates).not.toHaveBeenCalled();
@@ -607,10 +874,11 @@ describe("Label view", () => {
     const target = labelTargets("bills", tasks.projects)[0];
     if (!target) throw new Error("Missing label target");
     const oldIds = target.labelIds;
-    const update = tasks.updateTask;
-    tasks.updateTask = vi.fn((item, change) =>
-      item.task.title === "Inbox rent" ? Promise.resolve(undefined) : update(item, change),
-    );
+    pod.intercept = (request) =>
+      request.method === "PUT" &&
+      request.url.startsWith(target.project.tracker.stateStore as string)
+        ? new Response(null, { status: 503 })
+        : undefined;
     const result = await deleteLabel("bills", tasks);
     expect(result.done).toHaveLength(1);
     expect(result.failed).toHaveLength(1);

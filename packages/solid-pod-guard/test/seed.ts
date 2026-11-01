@@ -132,3 +132,18 @@ export async function seedPod(
     }
   }
 }
+
+const STORAGE_LINK = '<http://www.w3.org/ns/pim/space#Storage>; rel="type"';
+
+/**
+ * Pod-IO seam for the vendored test server, which predates sparq's storage-root
+ * `Link: <pim:Storage>; rel="type"` header (current sparq and CSS send it). A HEAD on
+ * an origin root answers as a storage root; everything else goes to the real server.
+ */
+export const storageRootFetch: typeof fetch = (input, init) => {
+  const url = new URL(input instanceof Request ? input.url : String(input));
+  if ((init?.method ?? "GET").toUpperCase() === "HEAD" && url.pathname === "/") {
+    return Promise.resolve(new Response(null, { status: 200, headers: { link: STORAGE_LINK } }));
+  }
+  return fetch(input, { ...init, redirect: "error" });
+};

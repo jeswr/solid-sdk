@@ -59,6 +59,21 @@ describe("completed day groups", () => {
     });
   });
 
+  it("skips invalid completion dates before pagination while retaining undated completions", () => {
+    const invalid = Array.from({ length: 51 }, (_, index) =>
+      view(`invalid ${index}`, { state: "closed", completedAt: new Date(Number.NaN) }),
+    );
+    const valid = view("valid", { state: "closed", completedAt: now });
+    const undated = view("undated", { state: "closed" });
+    expect(completedGroups([...invalid, undated, valid], { page: 0 }, now)).toEqual({
+      groups: [
+        { dayKey: "2026-10-27", label: "Today", tasks: [valid] },
+        { dayKey: undefined, label: "Earlier", tasks: [undated] },
+      ],
+      hasMore: false,
+    });
+  });
+
   it("paginates rows after filtering and sorting, including a split day and unknown dates", () => {
     const tasks = Array.from({ length: 101 }, (_, index) =>
       view(String(index), {

@@ -1,3 +1,11 @@
+import { decodeJwt } from 'jose';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  MAX_BODY_BYTES,
+  RESPONSE_BODY_LIMIT_ERROR,
+} from '../src/shared/body-codec';
+import type { FetchRequest } from '../src/shared/messages';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 //
@@ -19,6 +27,8 @@ import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
 import { MemoryProfileDb } from './profile-fixtures';
+
+// AUTHORED-BY Codex GPT-6
 
 let profileDb: MemoryProfileDb;
 vi.mock('../src/background/profile-db', () => ({
@@ -104,7 +114,7 @@ vi.mock('../src/background/core/replica-db', async (importOriginal) => {
 // --- An in-memory Cache API (caches.open) double --------------------------------------
 const cacheStore = new Map<
   string,
-  { body: string; status: number; headers: Record<string, string> }
+  { body: ArrayBuffer; status: number; headers: Record<string, string> }
 >();
 function installCaches(): void {
   (globalThis as unknown as { caches: unknown }).caches = {
@@ -115,7 +125,7 @@ function installCaches(): void {
       },
       put: async (request: Request, response: Response) => {
         cacheStore.set(request.url, {
-          body: await response.text(),
+          body: await response.arrayBuffer(),
           status: response.status,
           headers: Object.fromEntries(response.headers.entries()),
         });
@@ -221,7 +231,6 @@ function sendFetch(
           requestId: 'r1',
           method: 'GET',
           headers: {},
-          body: null,
           ...message,
         },
         sender,
@@ -463,7 +472,7 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
       { origin: 'https://pm.example', url: 'https://pm.example/app' },
     );
     const aBytes = [...cacheStore.values()][0]?.body;
-    expect(aBytes).toBe('ALICE-BYTES');
+    expect(new TextDecoder().decode(aBytes)).toBe('ALICE-BYTES');
 
     // Now user B is the active session (same device, same granted origin, same URL + ETag).
     profileDb = new MemoryProfileDb();
@@ -482,8 +491,12 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
     // B got B's bytes, never A's (the WebID is in the key).
     expect(b.body).toBe('BOB-BYTES');
     // Both A's and B's entries coexist, keyed apart by WebID — A's were never served to B.
-    expect([...cacheStore.values()].some((e) => e.body === 'ALICE-BYTES')).toBe(true);
-    expect([...cacheStore.values()].some((e) => e.body === 'BOB-BYTES')).toBe(true);
+    expect(
+      [...cacheStore.values()].some((e) => new TextDecoder().decode(e.body) === 'ALICE-BYTES'),
+    ).toBe(true);
+    expect(
+      [...cacheStore.values()].some((e) => new TextDecoder().decode(e.body) === 'BOB-BYTES'),
+    ).toBe(true);
   });
 
   it('LOW #5 (wired): a HEAD request relays NO body to the page', async () => {
@@ -535,5 +548,348 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
     expect(cacheStore.size).toBe(0);
     expect(idbMeta.size).toBe(0);
     expect(idbNonces.size).toBe(0);
+  });
+});
+
+// The real adapter's body protocol against the worker listener, replica and DPoP egress.
+// The transport fixture supplies a granted HTTP sender/stamp to reach the body boundary;
+// popup-origin authorization is outside these serialization regression tests.
+describe('popup adapter to worker body protocol', () => {
+  const url = 'https://alice.pod.example/private/resource';
+  const origin = 'https://pm.example';
+  const sender = { origin, url: `${origin}/app` };
+
+  async function connect() {
+    await seedSession();
+    storage.set('solid:granted-origins', [origin]);
+    await loadWorker();
+    const requests: FetchRequest[] = [];
+    vi.spyOn(chrome.runtime, 'sendMessage').mockImplementation(((
+      message: Record<string, unknown>,
+      callback?: (response: unknown) => void,
+    ) => {
+      if (!callback) return Promise.resolve(); // Worker broadcasts have no callback.
+      // Chrome's JSON channel drops undefined fields and cannot transport raw bytes.
+      const wire = JSON.parse(JSON.stringify(message));
+      if (wire.type === 'SOLID_FETCH_REQUEST') requests.push(wire);
+      void sendMessage({ ...wire, stampedOrigin: origin }, sender).then(callback);
+    }) as typeof chrome.runtime.sendMessage);
+    const { MessageBridgeLoginController } = await import('../src/popup/message-bridge-controller');
+    const controller = new MessageBridgeLoginController();
+    expect(await controller.restore()).toEqual({
+      outcome: 'restored',
+      webId: 'https://alice.pod.example/profile/card#me',
+    });
+    return { controller, requests };
+  }
+
+  it('omits absent bodies on a GET accepted by the real worker validator', async () => {
+    const { controller, requests } = await connect();
+    fetchImpl = async () => new Response('GET accepted');
+    const response = await controller.authenticatedFetch(url);
+    expect(await response.text()).toBe('GET accepted');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty('body');
+    expect(requests[0]).not.toHaveProperty('bodyBase64');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('carries a text body unchanged through the worker to authenticated egress', async () => {
+    const { controller, requests } = await connect();
+    const body = '\uFEFFhéllo 🌍';
+    fetchImpl = async (_url, init) => {
+      expect(init?.body).toBe(body);
+      expect(new Headers(init?.headers).get('authorization')).toBe('DPoP access-token-xyz');
+      return new Response(null, { status: 204 });
+    };
+    const response = await controller.authenticatedFetch(url, { method: 'PUT', body });
+    expect(response.status).toBe(204);
+    expect(response.body).toBeNull();
+    expect(requests[0].body).toBe(body);
+    expect(requests[0]).not.toHaveProperty('bodyBase64');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('carries binary requests and replies byte-exact through both real codecs', async () => {
+    const { controller, requests } = await connect();
+    const bytes = Uint8Array.from({ length: 1024 }, (_, i) => i % 256);
+    fetchImpl = async (_url, init) => {
+      expect(init?.body).toEqual(bytes);
+      return new Response(bytes, { headers: { 'content-type': 'image/png' } });
+    };
+    const response = await controller.authenticatedFetch(url, {
+      method: 'POST',
+      body: new DataView(bytes.buffer),
+      headers: { 'content-type': 'image/png' },
+    });
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(requests[0].bodyBase64).toBe(bytesToBase64(bytes));
+    expect(requests[0]).not.toHaveProperty('body');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('decodes binary GET replies on cold and revalidated cached reads', async () => {
+    const { controller } = await connect();
+    const bytes = new Uint8Array([0, 128, 255, 239, 187, 191]);
+    let reads = 0;
+    fetchImpl = async () =>
+      ++reads === 1
+        ? new Response(bytes, { headers: { 'content-type': 'image/png', etag: '"binary"' } })
+        : new Response(null, { status: 304 });
+    for (let i = 0; i < 2; i++) {
+      const response = await controller.authenticatedFetch(url);
+      expect(response.status).toBe(200);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    }
+    expect(reads).toBe(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('"binary"');
+  });
+
+  it('surfaces the worker size rejection for an oversized reply without caching it', async () => {
+    const { controller } = await connect();
+    const cancel = vi.fn();
+    fetchImpl = async () =>
+      new Response(new ReadableStream({ cancel }), {
+        headers: { 'content-length': String(MAX_BODY_BYTES + 1) },
+      });
+    await expect(controller.authenticatedFetch(url)).rejects.toThrow(RESPONSE_BODY_LIMIT_ERROR);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+});
+
+// Binary transport exercises the REAL message listener, replica and signed DPoP egress.
+describe('binary extension fetch transport', () => {
+  const origin = 'https://pm.example';
+  const url = 'https://alice.pod.example/private/image.png';
+  const sender = { origin, url: `${origin}/app` };
+  async function start(): Promise<void> {
+    await seedSession();
+    storage.set('solid:granted-origins', [origin]);
+    await loadWorker();
+  }
+
+  it('replays identical binary PUT bytes on a real DPoP nonce challenge, stripping caller credentials', async () => {
+    await start();
+    const bytes = Uint8Array.from({ length: 1024 }, (_, i) => i % 256);
+    let attempts = 0;
+    fetchImpl = async (_url, init) => {
+      expect(init?.body).toBeInstanceOf(Uint8Array);
+      expect(init?.body).toEqual(bytes);
+      const headers = new Headers(init?.headers);
+      expect(headers.get('authorization')).toBe('DPoP access-token-xyz');
+      const proof = decodeJwt(headers.get('dpop')!);
+      expect(proof.htm).toBe('PUT');
+      expect(proof.htu).toBe(url);
+      expect(proof.nonce).toBe(attempts === 0 ? undefined : 'binary-nonce');
+      attempts++;
+      return attempts === 1
+        ? new Response(null, {
+            status: 401,
+            headers: {
+              'www-authenticate': 'DPoP error="use_dpop_nonce"',
+              'dpop-nonce': 'binary-nonce',
+            },
+          })
+        : new Response(null, { status: 204 });
+    };
+    const result = await sendFetch(
+      {
+        url,
+        method: 'PUT',
+        bodyBase64: bytesToBase64(bytes),
+        headers: {
+          authorization: 'Bearer page-token',
+          dpop: 'page-proof',
+          'content-type': 'image/png',
+        },
+        stampedOrigin: origin,
+      },
+      sender,
+    );
+    expect(result.status).toBe(204);
+    expect(result.body).toBeUndefined();
+    expect(result.bodyBase64).toBeUndefined();
+    expect(attempts).toBe(2);
+    expect(fetchCalls[0].init?.body).toBe(fetchCalls[1].init?.body);
+    expect(cacheStore.size).toBe(0); // write bodies are never stored in the replica
+  });
+
+  it('relays a binary GET byte-exact, including on a 304-confirmed cache hit', async () => {
+    await start();
+    const bytes = Uint8Array.from({ length: 1024 }, (_, i) => i % 256);
+    let reads = 0;
+    fetchImpl = async () =>
+      ++reads === 1
+        ? new Response(bytes, { headers: { 'content-type': 'image/png', etag: '"png-v1"' } })
+        : new Response(null, { status: 304 });
+    for (let i = 0; i < 2; i++) {
+      const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+      expect(result.status).toBe(200);
+      expect(result.body).toBeUndefined();
+      expect(base64ToBytes(result.bodyBase64 as string)).toEqual(bytes);
+    }
+    expect(reads).toBe(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('"png-v1"');
+  });
+
+  it.each([
+    undefined,
+    'text/plain',
+    'application/json',
+  ])('preserves a UTF-8 BOM in cold and cached responses with Content-Type=%s', async (contentType) => {
+    await start();
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x41]);
+    const headers = new Headers({ etag: '"bom-v1"' });
+    if (contentType) headers.set('content-type', contentType);
+    let reads = 0;
+    fetchImpl = async () =>
+      ++reads === 1 ? new Response(bytes, { headers }) : new Response(null, { status: 304 });
+    for (let i = 0; i < 2; i++) {
+      const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+      expect(result.status).toBe(200);
+      expect(result.body).toBe('\uFEFFA');
+      expect(result.bodyBase64).toBeUndefined();
+      expect(new Uint8Array(await new Response(result.body as string).arrayBuffer())).toEqual(
+        bytes,
+      );
+    }
+    expect(reads).toBe(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('"bom-v1"');
+    expect([...cacheStore.values()][0]?.body).toEqual(bytes.buffer);
+  });
+
+  it.each([
+    ['text/turtle', new TextEncoder().encode('<#s> <#p> "café" .'), { body: '<#s> <#p> "café" .' }],
+    ['text/plain', new Uint8Array([0xc3, 0x28, 0xff]), { bodyBase64: 'wyj/' }],
+    [
+      'application/pdf',
+      new TextEncoder().encode('ASCII is still binary for this MIME'),
+      { bodyBase64: 'QVNDSUkgaXMgc3RpbGwgYmluYXJ5IGZvciB0aGlzIE1JTUU=' },
+    ],
+  ] as const)('selects the correct response field for %s', async (contentType, bytes, expected) => {
+    await start();
+    fetchImpl = async () => new Response(bytes, { headers: { 'content-type': contentType } });
+    const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+    expect(result).toMatchObject(expected);
+    expect(result.body).toBe('body' in expected ? expected.body : undefined);
+    expect(result.bodyBase64).toBe('bodyBase64' in expected ? expected.bodyBase64 : undefined);
+  });
+
+  // Emit more than the cap, then stay open: an unbounded read cannot finish this body.
+  function oversizedOpenBody(cancel: (reason: unknown) => void): ReadableStream<Uint8Array> {
+    const chunk = new Uint8Array(1024 * 1024);
+    let emitted = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted++ <= MAX_BODY_BYTES / chunk.byteLength) controller.enqueue(chunk);
+      },
+      cancel,
+    });
+  }
+
+  it.each([
+    undefined,
+    '1',
+  ])('cancels an oversized open response before EOF with Content-Length=%s, without relay or cache', async (length) => {
+    await start();
+    const cancel = vi.fn();
+    fetchImpl = async () =>
+      new Response(oversizedOpenBody(cancel), {
+        headers: length ? { 'content-length': length } : {},
+      });
+    const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+    expect(result).toEqual({
+      requestId: 'r1',
+      status: 502,
+      error: 'Response body exceeds the 25 MiB limit for extension fetches',
+    });
+    expect(cancel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Response body exceeds the 25 MiB limit for extension fetches',
+      }),
+    );
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('rejects an excessive Content-Length and cancels without reading the body', async () => {
+    await start();
+    const cancel = vi.fn();
+    const pull = vi.fn();
+    fetchImpl = async () =>
+      new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+        headers: { 'content-length': String(MAX_BODY_BYTES + 1) },
+      });
+    const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+    expect(result.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pull).not.toHaveBeenCalled();
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('cancels an oversized cached response before EOF after a 304, without relaying bytes', async () => {
+    await start();
+    fetchImpl = async () => new Response('cached', { headers: { etag: '"v1"' } });
+    expect((await sendFetch({ url, stampedOrigin: origin }, sender)).body).toBe('cached');
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const cancel = vi.fn();
+    vi.spyOn(cache, 'match').mockResolvedValue(
+      new Response(oversizedOpenBody(cancel), { headers: { 'content-length': '1' } }),
+    );
+    const open = vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    fetchImpl = async () => new Response(null, { status: 304 });
+    try {
+      const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+      expect(result).toEqual({
+        requestId: 'r1',
+        status: 502,
+        error: 'Response body exceeds the 25 MiB limit for extension fetches',
+      });
+      expect(new Headers(fetchCalls.at(-1)?.init?.headers).get('if-none-match')).toBe('"v1"');
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it.each([
+    { body: 'text', bodyBase64: 'AA==' },
+    { body: 42 },
+    { body: null },
+    { bodyBase64: 42 },
+    { bodyBase64: 'AB==' },
+    { bodyBase64: 'AA A' },
+    { bodyBase64: 'A'.repeat(Math.ceil(MAX_BODY_BYTES / 3) * 4 + 4) },
+  ])('independently rejects invalid wire bodies before egress (case %#)', async (fields) => {
+    await start();
+    const result = await sendFetch(
+      { url, method: 'PUT', stampedOrigin: origin, ...fields },
+      sender,
+    );
+    expect(result.error).toBeTypeOf('string');
+    expect(result.body).toBeUndefined();
+    expect(result.bodyBase64).toBeUndefined();
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('keeps autoDivert denial bodyless with zero worker network, even with a binary payload', async () => {
+    await start();
+    const result = await sendFetch(
+      {
+        url: 'https://foreign.example/data',
+        method: 'PUT',
+        bodyBase64: 'AID/',
+        autoDivert: true,
+        stampedOrigin: origin,
+      },
+      sender,
+    );
+    expect(result).toEqual({ requestId: 'r1', passthrough: true });
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
   });
 });

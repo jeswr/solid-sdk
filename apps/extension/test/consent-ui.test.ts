@@ -1,5 +1,7 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -9,6 +11,20 @@ import { expectAccessible } from './permission-a11y';
 
 let dom: JSDOM;
 let send: ReturnType<typeof vi.fn>;
+type TargetFixture = PendingConsentView['classes'][number]['targets'][number];
+const target = (
+  url: string,
+  kind: TargetFixture['kind'],
+  extra: Partial<TargetFixture> = {},
+): TargetFixture => ({
+  id: `t:${url}`,
+  url,
+  kind,
+  source: 'type-index',
+  check: 'unchecked',
+  preselected: true,
+  ...extra,
+});
 const view = (id = '1'): PendingConsentView => ({
   consentId: 'fixture',
   origin: 'https://app.example',
@@ -25,7 +41,7 @@ const view = (id = '1'): PendingConsentView => ({
       purpose: 'build your address book',
       expiresAt: 3_000_000_000_000,
       shape: null,
-      targets: [{ url: `https://pod.example/${id}/private`, kind: 'instance' }],
+      targets: [target(`https://pod.example/${id}/private`, 'instance')],
     },
   ],
 });
@@ -112,8 +128,8 @@ function storageView(id = '1'): PendingConsentView {
         dataClass: PIM_STORAGE_CLASS,
         modes: ['read', 'write'],
         targets: [
-          { url: `https://pod.example/${id}/`, kind: 'container' },
-          { url: 'https://other-pod.example/storage/', kind: 'container' },
+          target(`https://pod.example/${id}/`, 'container', { preselected: false }),
+          target('https://other-pod.example/storage/', 'container', { preselected: false }),
         ],
       },
     ],
@@ -164,7 +180,9 @@ it.each([
       type: 'SOLID_CONSENT_DECISION',
       consentId: 'fixture',
       profileId: '1',
-      approvedClasses: [PIM_STORAGE_CLASS],
+      approvedTargets: {
+        [PIM_STORAGE_CLASS]: ['t:https://pod.example/1/', 't:https://other-pod.example/storage/'],
+      },
     },
     expect.any(Function),
   );
@@ -185,7 +203,7 @@ it('keeps ordinary classes selected in mixed requests without approving storage'
   approve.click();
   expect(send).toHaveBeenLastCalledWith(
     expect.objectContaining({
-      approvedClasses: ['https://schema.org/Person'],
+      approvedTargets: { 'https://schema.org/Person': ['t:https://pod.example/1/private'] },
     }),
     expect.any(Function),
   );
@@ -245,7 +263,7 @@ it('falls back without a purpose and keeps untrusted labels, purposes and target
         ...initial.classes[0],
         dataClass: 'https://example.test/#%3Csvg%20onload=alert(1)%3E',
         purpose: '<script>page input</script>',
-        targets: [{ url: '<img src=x>', kind: 'container' }],
+        targets: [target('<img src=x>', 'container')],
       },
     ],
   });
@@ -287,7 +305,7 @@ it('keeps Select all in sync, shows partial selection, and prevents sharing an e
       type: 'SOLID_CONSENT_DECISION',
       consentId: 'fixture',
       profileId: '1',
-      approvedClasses: ['https://schema.org/Event'],
+      approvedTargets: { 'https://schema.org/Event': ['t:https://pod.example/1/private'] },
     },
     expect.any(Function),
   );
@@ -314,7 +332,7 @@ it('reloads scope and resets the selection before sharing from another account',
       type: 'SOLID_CONSENT_DECISION',
       consentId: 'fixture',
       profileId: '2',
-      approvedClasses: ['https://schema.org/Person'],
+      approvedTargets: { 'https://schema.org/Person': ['t:https://pod.example/2/private'] },
     },
     expect.any(Function),
   );
@@ -380,13 +398,11 @@ it.each([
   expect(document.querySelector<HTMLElement>('#empty-note')?.hidden).toBe(false);
   expect(approve.disabled).toBe(true);
   expect(all.checked).toBe(false);
-  expect(all.disabled).toBe(noClasses);
+  // Nothing can be pinned, so there is nothing to select.
+  expect(all.disabled).toBe(true);
 });
 
-it.each([
-  'Cancel',
-  'pagehide',
-])('denies on %s with the existing empty class decision', async (action) => {
+it.each(['Cancel', 'pagehide'])('denies on %s with an empty target decision', async (action) => {
   const { document } = await mount();
   if (action === 'Cancel') (document.querySelector('#deny') as HTMLButtonElement).click();
   else dom.window.dispatchEvent(new dom.window.Event('pagehide'));
@@ -394,7 +410,7 @@ it.each([
     {
       type: 'SOLID_CONSENT_DECISION',
       consentId: 'fixture',
-      approvedClasses: [],
+      approvedTargets: {},
     },
     expect.any(Function),
   );
@@ -410,13 +426,36 @@ it.each(['missing', 'expired'])('keeps Share disabled for a %s request', async (
   expect(document.querySelector<HTMLElement>('#error')?.hidden).toBe(false);
 });
 
+it('shows expiry and keeps the window open when revocation refuses an already displayed approval', async () => {
+  const { document, approve, all, picker } = await mount();
+  send.mockImplementationOnce((_message, callback) => {
+    callback({ error: 'This access request has expired. Please request access again.' });
+  });
+  approve.click();
+  expect(dom.window.close).not.toHaveBeenCalled();
+  expect(document.querySelector('#error')?.textContent).toContain('expired');
+  expect(document.querySelector<HTMLElement>('#error')?.hidden).toBe(false);
+  expect(approve.disabled).toBe(true);
+  expect(all.disabled).toBe(true);
+  picker.value = '2';
+  picker.dispatchEvent(new dom.window.Event('change'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(approve.disabled).toBe(true);
+  expect(document.querySelector('#error')?.textContent).toContain('expired');
+  (document.querySelector('#deny') as HTMLButtonElement).click();
+  expect(dom.window.close).toHaveBeenCalledOnce();
+  expect(
+    send.mock.calls.filter(([message]) => message.type === 'SOLID_CONSENT_DECISION'),
+  ).toHaveLength(1);
+});
+
 it.each([
-  [[{ url: 'https://pod.example/docs/', kind: 'container' as const }], '1 folder and its contents'],
+  [[target('https://pod.example/docs/', 'container')], '1 folder and its contents'],
   [
     [
-      { url: 'https://pod.example/a/', kind: 'container' as const },
-      { url: 'https://pod.example/b/', kind: 'container' as const },
-      { url: 'https://pod.example/c', kind: 'instance' as const },
+      target('https://pod.example/a/', 'container'),
+      target('https://pod.example/b/', 'container'),
+      target('https://pod.example/c', 'instance'),
     ],
     '2 folders and their contents and 1 item',
   ],
@@ -428,4 +467,129 @@ it.each([
     classes: [{ ...initial.classes[0]!, targets }],
   });
   expect(document.querySelector('.meta')?.textContent).toContain(summary);
+});
+
+it('shows truncation from the resolver while retaining the discovered scope', async () => {
+  const initial = view();
+  const { document } = await mount({
+    ...initial,
+    classes: [{ ...initial.classes[0], truncated: true }],
+  });
+  expect(document.querySelector('.class-item')?.textContent).toContain(
+    'Some data could not be checked',
+  );
+  expect(document.querySelector('.targets')?.textContent).toBe('https://pod.example/1/private');
+});
+
+function mixedSourceView(): PendingConsentView {
+  const initial = view();
+  return {
+    ...initial,
+    classes: [
+      {
+        ...initial.classes[0],
+        targets: [
+          target('https://pod.example/1/contacts/', 'container', {
+            id: 'sai-conforms',
+            source: 'sai',
+            check: 'conforms',
+          }),
+          target('https://pod.example/1/maybe/', 'container', {
+            id: 'sai-unchecked',
+            source: 'sai',
+            preselected: false,
+          }),
+          target('https://pod.example/1/people.ttl', 'instance', { id: 'type-index' }),
+        ],
+      },
+    ],
+  };
+}
+
+it('groups targets by source, preselects confirmed ones and explains unconfirmed ones', async () => {
+  const { document, approve, all } = await mount(mixedSourceView());
+  const card = document.querySelector('.class-item')!;
+  expect([...card.querySelectorAll('.target-group')].map((p) => p.textContent)).toEqual([
+    'From your data registries',
+    'From your type index',
+  ]);
+  const lists = card.querySelectorAll('ul.targets');
+  expect(lists).toHaveLength(2);
+  expect(lists[0].querySelectorAll('input')).toHaveLength(2);
+  expect(lists[1].querySelectorAll('input')).toHaveLength(1);
+  const box = (id: string) =>
+    card.querySelector<HTMLInputElement>(`input[data-target-id="${id}"]`)!;
+  expect(box('sai-conforms').checked).toBe(true);
+  expect(box('sai-unchecked').checked).toBe(false);
+  expect(box('type-index').checked).toBe(true);
+  expect(box('sai-conforms').hasAttribute('aria-describedby')).toBe(false);
+  expect(
+    document.getElementById(box('sai-unchecked').getAttribute('aria-describedby')!)?.textContent,
+  ).toBe("Couldn't confirm this holds contacts");
+  expect(card.querySelector('details')!.open).toBe(true);
+  expect(lists[0].textContent).toContain(
+    'https://pod.example/1/contacts/ (folder and its contents)',
+  );
+  const classBox = card.querySelector<HTMLInputElement>('.class-head input')!;
+  expect(classBox.checked).toBe(false);
+  expect(classBox.indeterminate).toBe(true);
+  expect(all.indeterminate).toBe(true);
+  expect(document.querySelector('#selection-hint')?.textContent).toBe(
+    '2 items selected. Only checked items will be shared.',
+  );
+  await expectAccessible(document);
+  approve.click();
+  expect(send).toHaveBeenLastCalledWith(
+    {
+      type: 'SOLID_CONSENT_DECISION',
+      consentId: 'fixture',
+      profileId: '1',
+      approvedTargets: { 'https://schema.org/Person': ['sai-conforms', 'type-index'] },
+    },
+    expect.any(Function),
+  );
+});
+
+it('lets the person choose single targets and toggles a whole class from its box', async () => {
+  const { document, approve } = await mount(mixedSourceView());
+  const card = document.querySelector('.class-item')!;
+  const box = (id: string) =>
+    card.querySelector<HTMLInputElement>(`input[data-target-id="${id}"]`)!;
+  const classBox = card.querySelector<HTMLInputElement>('.class-head input')!;
+  box('sai-unchecked').click();
+  expect(classBox.checked).toBe(true);
+  expect(classBox.indeterminate).toBe(false);
+  classBox.click();
+  expect(
+    [...card.querySelectorAll<HTMLInputElement>('[data-target-id]')].some((b) => b.checked),
+  ).toBe(false);
+  expect(approve.disabled).toBe(true);
+  expect(document.querySelector('#selection-hint')?.textContent).toBe(
+    'Choose at least one item to share.',
+  );
+  box('sai-unchecked').click();
+  expect(document.querySelector('#selection-hint')?.textContent).toBe(
+    '1 item selected. Only checked items will be shared.',
+  );
+  approve.click();
+  expect(send).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      approvedTargets: { 'https://schema.org/Person': ['sai-unchecked'] },
+    }),
+    expect.any(Function),
+  );
+});
+
+it('keeps the target list closed when every target is preselected', async () => {
+  const { document } = await mount();
+  expect(document.querySelector('details')!.open).toBe(false);
+  expect(document.querySelector('.target-group')?.textContent).toBe('From your type index');
+  expect(document.querySelector('.target-hint')).toBeNull();
+});
+
+it('lists whole-pod storage roots without source headings or unconfirmed hints', async () => {
+  const { document } = await mount(storageView());
+  expect(document.querySelector('.target-group')).toBeNull();
+  expect(document.querySelector('.target-hint')).toBeNull();
+  expect(document.querySelectorAll('[data-target-id]')).toHaveLength(2);
 });

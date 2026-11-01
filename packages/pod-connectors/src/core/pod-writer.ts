@@ -69,7 +69,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
       const url = resolve(slug);
       const headers = new Headers();
       if (conditions.ifMatch) headers.set("if-match", conditions.ifMatch);
-      const response = await podFetch(url, { method: "DELETE", headers });
+      const response = await podFetch(url, { method: "DELETE", redirect: "error", headers });
       if (!response.ok && response.status !== 404)
         throw new ResourceWriteError(url, response.status);
     },
@@ -122,6 +122,7 @@ async function writeBinaryResource(
   }
   const response = await podFetch(url, {
     method: "PUT",
+    redirect: "error",
     headers,
     body: doc.body as Uint8Array<ArrayBuffer>,
   });

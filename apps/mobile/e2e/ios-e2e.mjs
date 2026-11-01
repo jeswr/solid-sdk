@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
@@ -76,7 +77,8 @@ export async function exportAttachments(bundle, output, run = command) {
       }
       const name = field(node.name);
       const id = field(node.payloadRef?.id);
-      if (attachmentNames.includes(name) && typeof id === "string") payloads.push({ name, id });
+      if ((attachmentNames.includes(name) || name === "e2e-debug.txt") && typeof id === "string")
+        payloads.push({ name, id });
     });
     for (const { name, id } of payloads) {
       const path = join(output, `${count++}-${name}`);
@@ -283,6 +285,7 @@ export async function runIOS({
     let evidence;
     try {
       report.exportFormat = await exportAttachments(bundle, attachments, run);
+      report.debug = await readDebugAttachments(attachments);
       evidence = await readAttachments(attachments);
     } catch (error) {
       report.debug = await readDebugAttachments(attachments);
