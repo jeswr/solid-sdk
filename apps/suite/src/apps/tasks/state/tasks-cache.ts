@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError } from "../lib/model/errors";
 import { DataFactory } from "../lib/model/rdf";
 import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
@@ -25,8 +26,8 @@ export interface TasksSnapshot {
   saving: string[];
   views: TaskView[];
 }
-export interface NewTask {
-  title: string;
+export interface NewTask extends Omit<TaskDetails, "state"> {
+  state?: TaskDetails["state"];
   sectionId?: string | undefined;
   due?: Date | undefined;
   allDay?: string | undefined;
@@ -377,19 +378,20 @@ export class TasksCache {
     const id = crypto.randomUUID();
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const details: TaskDetails = {
+      ...data,
       title: data.title.trim(),
       project: project.tracker.id,
-      creator: this.webId,
-      state: "open",
-      created: new Date(),
+      creator: data.creator ?? this.webId,
+      state: data.state ?? "open",
+      created: data.created ?? new Date(),
       ...(data.allDay
         ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
         : data.due
           ? { dueDate: data.due }
           : {}),
       allDay: data.allDay,
-      rank: data.position,
-      categoryTypes: data.sectionId ? [data.sectionId] : [],
+      rank: data.position ?? data.rank,
+      categoryTypes: data.categoryTypes ?? (data.sectionId ? [data.sectionId] : []),
     };
     const dataset = createTask(url, details);
     const optimistic = {
@@ -450,6 +452,45 @@ export class TasksCache {
         void this.updateTask(item, change);
       },
       [item.url],
+    );
+  }
+  moveTaskToProject(item: StoredTask, target: StoredProject): Promise<StoredTask | undefined> {
+    const source = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!source) return Promise.resolve(undefined);
+    if (source.url === target.url) return Promise.resolve(item);
+    const id = crypto.randomUUID();
+    const url = `${target.tracker.stateStore}${id}.ttl`;
+    const relocate = (state: TasksSnapshot, moved: StoredTask) =>
+      replaceTask(replaceTask(state, source.url, item.url), target.url, url, moved);
+    return this.mutate(
+      (state) => {
+        const current = state.tasks[source.url]?.items.find((task) => task.url === item.url);
+        const from = state.projects.find((project) => project.url === source.url);
+        const to = state.projects.find((project) => project.url === target.url);
+        if (!current || !from || !to) return state;
+        const dataset = createTask(url, projectMoveData(current, from, to));
+        return relocate(state, {
+          url,
+          dataset,
+          etag: null,
+          task: new TaskItem(`${url}#it`, dataset, DataFactory),
+        });
+      },
+      async () => {
+        const moved = await this.store.moveTaskToProject(
+          this.task(source.url, item.url),
+          this.project(source.url),
+          this.project(target.url),
+          id,
+        );
+        return { result: moved, commit: (state) => relocate(state, moved) };
+      },
+      () => {
+        void this.moveTaskToProject(item, target);
+      },
+      [item.url, url],
     );
   }
   deleteTask(item: StoredTask): Promise<boolean | undefined> {
