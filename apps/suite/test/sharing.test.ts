@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 
 import { LiteralAs, LiteralFrom, NamedGraphDataset, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
@@ -179,6 +180,14 @@ for (const model of ["wac", "acp"] as const) {
       const inherited = document(model, true);
       grant(inherited, ALICE, ["Read"]);
       inherited.inherited = false;
+      if (model === "wac") {
+        expect(() =>
+          readSharing({
+            access: { resource: inherited.governingResource, documents: [inherited] },
+          }),
+        ).toThrow("Folder and descendant permissions differ");
+        return;
+      }
       expect(
         readSharing({ access: { resource: inherited.governingResource, documents: [inherited] } })
           .people,
@@ -765,4 +774,87 @@ it("honors all ACP resource targets, including a shared data and policy scope", 
   properties(acr).values(`${ACP}resource`).add(FILE);
   properties(acr).values(`${ACP}resource`).add(doc.source);
   expect(readSharing(input(doc)).people[0]?.role).toBe("owner");
+});
+
+it("combines inherited and own ACP management modes on the actual own ACR", () => {
+  const own = document("acp");
+  const parent = document("acp", true);
+  policy(own, ALICE, ["Read", "Write"]);
+  policy(own, ALICE, ["Read"], own.source);
+  policy(parent, ALICE, ["Write"], own.source);
+  const value = { access: { resource: FILE, documents: [own, parent] } };
+  const state = readSharing(value);
+  expect(state.people).toEqual([
+    {
+      webId: ALICE,
+      role: "owner",
+      explicit: true,
+      inherited: true,
+      sources: [own.source, parent.source].sort(),
+    },
+  ]);
+  expect(diffSharing(value, state)).toEqual([]);
+  expect(() => diffSharing(value, { ...state, people: [] })).toThrow("Owner rows");
+});
+
+it("does not confuse management of an ancestor ACR with management of the own ACR", () => {
+  const own = document("acp");
+  const parent = document("acp", true);
+  policy(own, ALICE, ["Read", "Write"]);
+  policy(parent, ALICE, ["Read", "Write"], parent.source);
+  expect(
+    readSharing({ access: { resource: FILE, documents: [own, parent] } }).people[0]?.role,
+  ).toBe("editor");
+});
+
+it.each(
+  [PUBLIC, BOB].flatMap((principal) =>
+    ["default", "defaultForNew"].flatMap((predicate) =>
+      ["children-only", "folder-only", "children-editor", "folder-editor"].map((difference) => ({
+        principal,
+        predicate,
+        difference,
+      })),
+    ),
+  ),
+)("rejects hidden or differing WAC folder scopes in projection and planning ($principal / $predicate / $difference)", ({
+  principal,
+  predicate,
+  difference,
+}) => {
+  const folder = "https://example.org/drive/";
+  const doc = document("wac", false, folder);
+  if (difference !== "children-only")
+    authorization(doc, principal, difference === "folder-editor" ? ["Read", "Write"] : ["Read"]);
+  if (difference !== "folder-only") {
+    const auth = authorization(
+      doc,
+      principal,
+      difference === "children-editor" ? ["Read", "Write"] : ["Read"],
+    );
+    auth.accessTo = undefined;
+    properties(auth)
+      .values(ACL + predicate)
+      .add(folder);
+  }
+  expect(() => readSharing(input(doc))).toThrow("Folder and descendant permissions differ");
+  expect(() => diffSharing(input(doc), restricted)).toThrow(
+    "Folder and descendant permissions differ",
+  );
+});
+
+it("compares effective WAC folder modes across split defaults and ignores redundant Append under Write", () => {
+  const folder = "https://example.org/drive/";
+  const doc = document("wac", false, folder);
+  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+  authorization(doc, BOB, ["Read", "Write"]);
+  for (const mode of ["Read", "Write", "Append"]) {
+    const auth = authorization(doc, BOB, [mode]);
+    auth.accessTo = undefined;
+    properties(auth).values(`${ACL}defaultForNew`).add(folder);
+  }
+  const state = readSharing(input(doc));
+  expect(state.people.find((p) => p.webId === BOB)?.role).toBe("editor");
+  expect(diffSharing(input(doc), state)).toEqual([]);
+  expect(readSharing(input(document("wac", false, folder))).people).toEqual([]);
 });
