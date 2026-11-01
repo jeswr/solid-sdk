@@ -2,6 +2,7 @@
 "use client";
 import { Badge } from "@jeswr/suite-ui";
 import Link from "next/link";
+import { collection } from "../lib/collections";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { resourceSlug } from "../lib/paths";
 import { readConversations, readTurns } from "../lib/readers";
@@ -13,7 +14,7 @@ export function ChatScreen({ id }: { id?: string }) {
   const conversations = useAgentQuery(client.paths.conversations, readConversations);
   const turns = useAgentQuery(
     id ? `${client.paths.conversations}${id}/` : client.paths.conversations,
-    (c) => (id ? readTurns(c, id) : Promise.resolve([])),
+    (c) => (id ? readTurns(c, id) : Promise.resolve(collection<never>([]))),
   );
   return (
     <Screen title="Chat">

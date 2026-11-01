@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { isLoaded, type Row } from "../lib/client";
+import { isTruncated } from "../lib/collections";
 import type { Query } from "../lib/hooks";
 
 export function QueryRows<T>({
@@ -31,11 +32,10 @@ export function QueryRows<T>({
   if (query.status === "loading") return <LoadingSkeleton label="Loading agent records" />;
   if (query.status === "error")
     return <ErrorState error="unreachable" actions={{ retry: query.reload }} />;
-  if (query.data.length === 0)
-    return <EmptyState title={empty} body="Records will appear here when your agent adds them." />;
   const failed = query.data.filter((row) => !isLoaded(row));
   return (
     <>
+      <CollectionNotice rows={query.data} />
       {failed.length > 0 && (
         <div role="alert">
           <p>
@@ -46,9 +46,16 @@ export function QueryRows<T>({
           </Button>
         </div>
       )}
-      {children(query.data.filter(isLoaded<T>).map((row) => row.record))}
+      {query.data.length === 0 ? (
+        <EmptyState title={empty} body="Records will appear here when your agent adds them." />
+      ) : (
+        children(query.data.filter(isLoaded<T>).map((row) => row.record))
+      )}
     </>
   );
+}
+export function CollectionNotice({ rows }: { rows: readonly unknown[] }) {
+  return isTruncated(rows) ? <p role="status">Showing the newest 500</p> : null;
 }
 export function DisabledAction({
   children,

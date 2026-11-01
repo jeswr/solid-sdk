@@ -55,8 +55,26 @@ async function stored(value: unknown) {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.resetModules();
   TestChannel.peers.clear();
+});
+
+it.each([
+  ["1", "localhost", true],
+  ["1", "127.0.0.1", true],
+  ["1", "[::1]", true],
+  ["1", "suite.example", false],
+  ["1", "localhost.evil.example", false],
+  ["1", "127.0.0.1.evil.example", false],
+  ["0", "localhost", false],
+  [undefined, "localhost", false],
+] as const)("exposes the demo hook only with fixtures=%s on loopback %s", async (flag, hostname, exposed) => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", flag);
+  vi.stubGlobal("indexedDB", undefined);
+  vi.stubGlobal("window", { location: { hostname } });
+  const pod = await (await tab()).getDemoPod();
+  expect(window.__suiteDemoPod).toBe(exposed ? pod : undefined);
 });
 
 it("preserves uploads from stale tabs and reloads both resources", async () => {

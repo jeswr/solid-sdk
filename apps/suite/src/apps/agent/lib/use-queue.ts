@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import type { Row, Unreadable } from "./client";
+import { collection, isTruncated } from "./collections";
 import { type Query, useAgentClock, useAgentQuery, useAgentWorkspace } from "./hooks";
 import { type PendingApproval, pendingApprovals } from "./queue";
 import { loadedRecords, readApprovals, readOutbox, readProposals } from "./readers";
@@ -24,19 +25,22 @@ export function useApprovalQueue(): Query<Row<PendingApproval>[]> {
   );
   return {
     ...query,
-    data: [
-      ...errors,
-      ...pendingApprovals(
-        loadedRecords(proposals),
-        loadedRecords(approvals),
-        loadedRecords(outbox),
-        now,
-      ).map((record) => ({
-        record,
-        url: record.proposal.id,
-        etag: null,
-        verified: record.verification,
-      })),
-    ],
+    data: collection(
+      [
+        ...errors,
+        ...pendingApprovals(
+          loadedRecords(proposals),
+          loadedRecords(approvals),
+          loadedRecords(outbox),
+          now,
+        ).map((record) => ({
+          record,
+          url: record.proposal.id,
+          etag: null,
+          verified: record.verification,
+        })),
+      ],
+      [proposals, approvals, outbox].some(isTruncated),
+    ),
   };
 }

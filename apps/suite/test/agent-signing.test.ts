@@ -75,7 +75,7 @@ describe("device approval keys", () => {
       kty: "EC",
       crv: "P-256",
     });
-    const restored = await store.get(DEMO_WEBID);
+    const restored = await store.get(key.verificationMethod);
     expect(restored?.privateKey.extractable).toBe(false);
     await publishApprovalKey(session, key);
     const response = await session.fetch(profile);
@@ -101,11 +101,18 @@ describe("device approval keys", () => {
   it("appends new keys without removing old audit keys; both approvals still verify", async () => {
     const { session, client } = await fixture();
     await setupApprovalKey(session);
+    const firstKey = localStorage.getItem(PREF) as string;
     const first = await createAgentSigner(session, client, () => now).signApproval(
       proposal,
       "approve",
     );
     await setupApprovalKey(session);
+    const secondKey = localStorage.getItem(PREF) as string;
+    expect(secondKey).not.toBe(firstKey);
+    const store = new ApprovalKeyStore();
+    expect((await store.get(firstKey))?.verificationMethod).toBe(firstKey);
+    expect((await store.get(secondKey))?.verificationMethod).toBe(secondKey);
+    expect(await withApprovalKey(session, async (key) => key.verificationMethod)).toBe(secondKey);
     const second = await createAgentSigner(session, client, () => now).signApproval(
       proposal,
       "deny",
@@ -133,6 +140,102 @@ describe("device approval keys", () => {
       ).toMatchObject({ valid: true });
       expect(approvals.find((a) => a.id === approval.id)?.createdAt).toBe(now.toISOString());
     }
+  });
+  it.each([
+    "PUT",
+    "readback",
+    "pointer",
+  ])("keeps the old key usable and removes the orphan after a failed replacement (%s)", async (failure) => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const old = localStorage.getItem(PREF);
+    const store = new ApprovalKeyStore();
+    const generate = vi.spyOn(store, "generate");
+    const fetch: typeof globalThis.fetch = async (input, init) =>
+      init?.method === "PUT"
+        ? new Response(null, { status: failure === "PUT" ? 403 : 205 })
+        : session.fetch(input, init);
+    if (failure === "pointer")
+      vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+        throw new Error("storage full");
+      });
+    await expect(
+      setupApprovalKey({ ...session, fetch: failure === "pointer" ? session.fetch : fetch }, store),
+    ).rejects.toThrow();
+    const orphan = await generate.mock.results[0]?.value;
+    expect(orphan).toBeDefined();
+    expect(await store.get(orphan.verificationMethod)).toBeUndefined();
+    expect(localStorage.getItem(PREF)).toBe(old);
+    expect(await approvalKeyStatus(session)).toBe("ready");
+    expect(await withApprovalKey(session, async (key) => key.verificationMethod)).toBe(old);
+    const approval = await createAgentSigner(session, client, () => now).signApproval(
+      proposal,
+      "approve",
+    );
+    expect(
+      (
+        await readApprovals(
+          client,
+          createAgentVerifier(session, () => now),
+        )
+      ).find((row) => row.url === approval.id),
+    ).toMatchObject({ verified: "verified" });
+  });
+  it("ignores a published but inactive key after a crash before the pointer switch", async () => {
+    const { session } = await fixture();
+    const store = new ApprovalKeyStore();
+    const inactive = await store.generate(DEMO_WEBID);
+    await publishApprovalKey(session, inactive);
+    expect(await approvalKeyStatus(session)).toBe("none");
+    await expect(withApprovalKey(session, async () => true)).rejects.toThrow("Set up");
+    await setupApprovalKey(session);
+    const old = localStorage.getItem(PREF);
+    const replacement = await store.generate(DEMO_WEBID);
+    await publishApprovalKey(session, replacement);
+    // Simulate a reload: new store/resolver instances only consult the saved pointer.
+    expect(await approvalKeyStatus(session, new ApprovalKeyStore())).toBe("ready");
+    expect(await withApprovalKey(session, async (key) => key.verificationMethod)).toBe(old);
+    expect((await store.get(replacement.verificationMethod))?.privateKey.extractable).toBe(false);
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(
+        replacement.verificationMethod,
+        session.webId,
+      ),
+    ).toBe(true);
+  });
+  it("keeps an existing owner-keyed device record usable and retains it when rotating", async () => {
+    const { session } = await fixture();
+    const store = new ApprovalKeyStore();
+    const key = await store.generate(session.webId);
+    await publishApprovalKey(session, key);
+    await store.delete(key.verificationMethod);
+    // Recreate the previous on-disk format without migrating or exporting private material.
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open("solid-suite-agent-keys", 1);
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction("keys", "readwrite");
+      tx.objectStore("keys").put(key, session.webId);
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    localStorage.setItem(PREF, key.verificationMethod);
+    expect(await approvalKeyStatus(session)).toBe("ready");
+    expect(await withApprovalKey(session, async (saved) => saved.verificationMethod)).toBe(
+      key.verificationMethod,
+    );
+    await setupApprovalKey(session);
+    expect(localStorage.getItem(PREF)).not.toBe(key.verificationMethod);
+    expect((await store.get(session.webId))?.verificationMethod).toBe(key.verificationMethod);
+    const response = await session.fetch(profile);
+    await session.fetch(profile, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    await expect(withApprovalKey(session, async () => true)).rejects.toThrow("Set up");
+    expect(await response.text()).toContain("assertionMethod");
   });
   it("retries three profile conflicts, retaining concurrent profile changes and validators", async () => {
     const { session } = await fixture();
@@ -240,7 +343,7 @@ describe("device approval keys", () => {
     });
     await expect(store.get(DEMO_WEBID)).rejects.toThrow("read failed");
     get.mockRestore();
-    const put = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
+    const put = vi.spyOn(IDBObjectStore.prototype, "add").mockImplementation(function (
       this: IDBObjectStore,
     ) {
       this.transaction.abort();
@@ -249,12 +352,16 @@ describe("device approval keys", () => {
     await expect(store.generate(DEMO_WEBID)).rejects.toBeNull();
     put.mockRestore();
     await setupApprovalKey(session);
-    const original = store.get.bind(store);
-    let reads = 0;
-    vi.spyOn(ApprovalKeyStore.prototype, "get").mockImplementation((owner) =>
-      ++reads === 1 ? original(owner) : Promise.resolve(undefined),
-    );
-    await expect(withApprovalKey(session, async () => true)).rejects.toThrow("cannot approve");
+    await store.delete(localStorage.getItem(PREF) as string);
+    await expect(withApprovalKey(session, async () => true)).rejects.toThrow("Set up");
+    const remove = vi.spyOn(IDBObjectStore.prototype, "delete").mockImplementation(function (
+      this: IDBObjectStore,
+    ) {
+      this.transaction.abort();
+      return {} as IDBRequest;
+    });
+    await expect(store.delete("missing")).rejects.toBeNull();
+    remove.mockRestore();
   });
 });
 
@@ -349,7 +456,7 @@ describe("signed approvals and controls", () => {
     );
     expect(rows[0]?.verification).not.toBe("verified");
     await setupApprovalKey(session);
-    const key = await new ApprovalKeyStore().get(DEMO_WEBID);
+    const key = await new ApprovalKeyStore().get(localStorage.getItem(PREF) as string);
     if (!key) throw new Error("Missing test key");
     const id = `${client.paths.approvals}without-created.trig`;
     const plain = { ...exampleRecords.approval, id };

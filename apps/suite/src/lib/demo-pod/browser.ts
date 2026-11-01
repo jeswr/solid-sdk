@@ -198,7 +198,11 @@ export function getDemoPod(): Promise<DemoPod> {
   })();
   // Fixture capability is compiled out of ordinary builds. It uses the same durable
   // facade and notifications as the app, including conditional writes.
-  if (process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" && typeof window !== "undefined")
+  if (
+    process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" &&
+    typeof window !== "undefined" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname)
+  )
     void current.then((pod) => {
       window.__suiteDemoPod = pod;
     });

@@ -2,6 +2,7 @@
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { recordToTurtle } from "@jeswr/agent-model";
 import { afterEach, expect, it, vi } from "vitest";
+import { collection } from "../src/apps/agent/lib/collections";
 import { AgentWorkspaceProvider } from "../src/apps/agent/lib/hooks";
 import type { PendingApproval } from "../src/apps/agent/lib/queue";
 import { loadedRecords } from "../src/apps/agent/lib/readers";
@@ -10,7 +11,7 @@ import { useApprovalQueue } from "../src/apps/agent/lib/use-queue";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
-import { act, click, h, key, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -26,6 +27,7 @@ import { ApprovalsScreen } from "../src/apps/agent/components/approvals";
 import { ChatScreen } from "../src/apps/agent/components/chat";
 import { InboxScreen } from "../src/apps/agent/components/inbox";
 import { AgentSidebar } from "../src/apps/agent/components/sidebar";
+import { QueryRows } from "../src/apps/agent/components/states";
 import { StatusPill, useDaemonStatus } from "../src/apps/agent/components/status-pill";
 
 const NOW = Date.parse("2026-11-01T12:00:00Z");
@@ -42,7 +44,7 @@ async function fixture() {
     webId: DEMO_WEBID,
     displayName: "Alice",
     storageUrl: DEMO_ROOT,
-    fetch: pod.fetch,
+    fetch: (input, init) => pod.fetch(input, init),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -94,7 +96,11 @@ it("renders URN proposal references as plain text beside supported proposal link
   await view.unmount();
 });
 
-it("restores inbox sheet focus to the exact message button that opened it", async () => {
+it.each([
+  "unchanged",
+  "reloaded",
+  "removed",
+])("restores inbox sheet focus after the opener is %s", async (change) => {
   const f = await fixture();
   const view = await mount(f.tree(h(InboxScreen, { binding: "gmail" })));
   await until(() =>
@@ -107,13 +113,55 @@ it("restores inbox sheet focus to the exact message button that opened it", asyn
   opener.focus();
   await click(opener);
   await until(() => Boolean(document.querySelector('[role="dialog"]')));
+  const id = opener.dataset.agentMessageId as string;
+  const findOpener = () =>
+    [...view.host.querySelectorAll<HTMLButtonElement>("[data-agent-message-id]")].find(
+      (button) => button.dataset.agentMessageId === id,
+    );
+  if (change !== "unchanged") {
+    if (change === "removed") await f.pod.fetch(id, { method: "DELETE" });
+    const reload = deferred<void>();
+    const io = f.pod.fetch;
+    vi.spyOn(f.pod, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === id && change === "reloaded") await reload.promise;
+      return io(input, init);
+    });
+    f.emit(id);
+    await until(() => findOpener() !== opener);
+    await act(() => reload.resolve());
+    if (change === "reloaded") await until(() => Boolean(findOpener()));
+    expect(opener.isConnected).toBe(false);
+  }
   const close = document.querySelector<HTMLButtonElement>(
     '[role="dialog"] button[aria-label="Close"]',
   );
   if (!close) throw new Error("Missing sheet close");
   await click(close);
-  await until(() => document.activeElement === opener);
+  const target = change === "removed" ? view.host.querySelector("h2") : findOpener();
+  await until(() => document.activeElement === target);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await view.unmount();
+});
+
+it.each([
+  false,
+  true,
+])("shows collection truncation in the UI only when flagged (%s)", async (truncated) => {
+  const view = await mount(
+    h(QueryRows, {
+      query: {
+        status: "ready",
+        data: collection(
+          [{ url: "test", record: {}, etag: null, verified: "unchecked" }],
+          truncated,
+        ),
+        reload: () => {},
+      },
+      empty: "Empty",
+      children: () => h("p", {}, "Records"),
+    }),
+  );
+  expect(view.host.textContent?.includes("Showing the newest 500")).toBe(truncated);
   await view.unmount();
 });
 

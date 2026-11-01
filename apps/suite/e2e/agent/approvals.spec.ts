@@ -74,7 +74,7 @@ test("1: first approval sets up this device and publishes assertionMethod", asyn
       const r = db
         .transaction("keys")
         .objectStore("keys")
-        .get("https://alice.demo.pod/profile/card#me");
+        .get(localStorage.getItem("agent.approvalKey") ?? "");
       r.onsuccess = () => resolve(r.result);
     });
     db.close();
@@ -231,14 +231,18 @@ test("setup failure can retry, and a restored device appends a replacement audit
   await open(page, "settings");
   await page.getByRole("button", { name: "Set up this device", exact: true }).click();
   await page.evaluate(() => {
-    const original = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function (...args) {
-      if (this.transaction.db.name === "solid-suite-agent-keys") {
-        IDBObjectStore.prototype.put = original;
-        throw new Error("Fixture storage failure");
-      }
-      return original.apply(this, args);
-    };
+    const { add, put } = IDBObjectStore.prototype;
+    const fail = (original: typeof add) =>
+      function (this: IDBObjectStore, ...args: Parameters<typeof add>) {
+        if (this.transaction.db.name === "solid-suite-agent-keys") {
+          IDBObjectStore.prototype.add = add;
+          IDBObjectStore.prototype.put = put;
+          throw new Error("Fixture storage failure");
+        }
+        return original.apply(this, args);
+      };
+    IDBObjectStore.prototype.add = fail(add);
+    IDBObjectStore.prototype.put = fail(put);
   });
   const sheet = page.getByRole("dialog");
   await sheet.getByRole("button", { name: "Set up this device", exact: true }).click();
@@ -254,7 +258,7 @@ test("setup failure can retry, and a restored device appends a replacement audit
     });
     await new Promise<void>((resolve) => {
       const tx = db.transaction("keys", "readwrite");
-      tx.objectStore("keys").delete("https://alice.demo.pod/profile/card#me");
+      tx.objectStore("keys").delete(id ?? "");
       tx.oncomplete = () => resolve();
     });
     db.close();

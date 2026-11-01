@@ -115,20 +115,34 @@ export function ApprovalDeviceProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Device["status"]>("checking");
   const [open, setOpen] = useState(false);
   const pending = useRef<(() => void) | undefined>(undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: closing setup rechecks the actual pointer even after failure
   useEffect(() => {
     let active = true;
-    void approvalKeyStatus(session).then(
-      (value) => {
-        if (active) setStatus(value);
-      },
-      () => {
-        if (active) setStatus("unavailable");
-      },
-    );
+    let generation = 0;
+    const refresh = () => {
+      const request = ++generation;
+      void approvalKeyStatus(session).then(
+        (value) => {
+          if (active && request === generation) setStatus(value);
+        },
+        () => {
+          if (active && request === generation) setStatus("unavailable");
+        },
+      );
+    };
+    refresh();
+    addEventListener("storage", refresh);
+    addEventListener("focus", refresh);
+    const unsubscribe = session.subscribe((url) => {
+      if (url.split("#")[0] === session.webId.split("#")[0]) refresh();
+    });
     return () => {
       active = false;
+      removeEventListener("storage", refresh);
+      removeEventListener("focus", refresh);
+      unsubscribe();
     };
-  }, [session]);
+  }, [session, open]);
   const requireKey = useCallback(
     async (action: () => void) => {
       const value = await approvalKeyStatus(session).catch(() => "unavailable" as const);

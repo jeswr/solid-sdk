@@ -18,11 +18,11 @@ export class ApprovalKeyStore {
       request.onerror = () => reject(request.error);
     });
   }
-  async get(owner: string): Promise<KeyPair | undefined> {
+  async get(id: string): Promise<KeyPair | undefined> {
     const db = await this.database();
     try {
       return await new Promise((resolve, reject) => {
-        const request = db.transaction("keys").objectStore("keys").get(owner);
+        const request = db.transaction("keys").objectStore("keys").get(id);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -46,7 +46,7 @@ export class ApprovalKeyStore {
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction("keys", "readwrite");
-        tx.objectStore("keys").put(key, owner);
+        tx.objectStore("keys").add(key, key.verificationMethod);
         tx.oncomplete = () => resolve();
         tx.onabort = tx.onerror = () => reject(tx.error);
       });
@@ -55,6 +55,27 @@ export class ApprovalKeyStore {
     }
     return key;
   }
+  async delete(id: string): Promise<void> {
+    const db = await this.database();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction("keys", "readwrite");
+        tx.objectStore("keys").delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onabort = tx.onerror = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+}
+
+async function activeKey(owner: string, store: ApprovalKeyStore): Promise<KeyPair | undefined> {
+  const id = localStorage.getItem(PREFERENCE);
+  if (!id) return undefined;
+  // Keep pre-rotation owner-keyed records usable without overwriting or removing them.
+  const key = (await store.get(id)) ?? (await store.get(owner));
+  return key?.verificationMethod === id ? key : undefined;
 }
 
 export async function publishApprovalKey(
@@ -107,8 +128,8 @@ export async function approvalKeyStatus(
 ): Promise<KeyStatus> {
   const id = localStorage.getItem(PREFERENCE);
   if (!id) return "none";
-  const key = await store.get(session.webId);
-  if (!key || key.verificationMethod !== id) return "unavailable";
+  const key = await activeKey(session.webId, store);
+  if (!key) return "unavailable";
   const resolver = createWebIdKeyResolver({ fetch: session.fetch });
   return (await resolver.isControlledBy(id, session.webId)) ? "ready" : "unavailable";
 }
@@ -117,8 +138,14 @@ export async function setupApprovalKey(
   store = new ApprovalKeyStore(),
 ) {
   const key = await store.generate(session.webId);
-  await publishApprovalKey(session, key);
-  localStorage.setItem(PREFERENCE, key.verificationMethod);
+  try {
+    await publishApprovalKey(session, key);
+    // Publication and readback must finish before this device can select the new key.
+    localStorage.setItem(PREFERENCE, key.verificationMethod);
+  } catch (error) {
+    await store.delete(key.verificationMethod);
+    throw error;
+  }
 }
 /** Signing always rechecks device storage and the current profile, including after a restore. */
 export async function withApprovalKey<T>(
@@ -126,9 +153,14 @@ export async function withApprovalKey<T>(
   sign: (key: KeyPair) => Promise<T>,
 ): Promise<T> {
   const store = new ApprovalKeyStore();
-  if ((await approvalKeyStatus(session, store)) !== "ready")
+  const key = await activeKey(session.webId, store);
+  if (
+    !key ||
+    !(await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(
+      key.verificationMethod,
+      session.webId,
+    ))
+  )
     throw new Error("Set up this device before approving.");
-  const key = await store.get(session.webId);
-  if (!key) throw new Error("This device cannot approve.");
   return sign(key);
 }

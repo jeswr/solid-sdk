@@ -11,6 +11,7 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { collection } from "../lib/collections";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { type InboxMessage, readAccounts, readInbox } from "../lib/readers";
 import { QueryRows, Screen } from "./states";
@@ -48,11 +49,13 @@ function MessageDetail({ message }: { message: InboxMessage }) {
 export function InboxScreen({ binding }: { binding?: string }) {
   const { client } = useAgentWorkspace();
   const [selected, setSelected] = useState<InboxMessage>();
-  const opener = useRef<HTMLButtonElement>(null);
+  const openerId = useRef<string | undefined>(undefined);
+  const list = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const accounts = useAgentQuery(client.paths.accounts, readAccounts);
   const messages = useAgentQuery(
     binding ? `${client.paths.inbox}${binding}/` : client.paths.inbox,
-    (c) => (binding ? readInbox(c, binding) : Promise.resolve([])),
+    (c) => (binding ? readInbox(c, binding) : Promise.resolve(collection<never>([]))),
   );
   return (
     <Screen title="Inbox">
@@ -80,34 +83,40 @@ export function InboxScreen({ binding }: { binding?: string }) {
           );
         }}
       </QueryRows>
-      <QueryRows query={messages} empty={binding ? "No messages yet" : "Choose an inbox"}>
-        {(rows) => (
-          <ul className="agent-list">
-            {rows.map((message) => (
-              <li className="agent-card" key={message.id}>
-                <Button
-                  variant="ghost"
-                  onClick={(event) => {
-                    opener.current = event.currentTarget;
-                    setSelected(message);
-                  }}
-                >
-                  {message.subject ?? "Message"}
-                </Button>
-                <p>{message.text.slice(0, 120)}</p>
-                <div className="agent-row">
-                  <Badge variant="outline">Unverified sender</Badge>
-                  {message.structuredPart.length > 0 && (
-                    <Badge variant="secondary">Structured envelope</Badge>
-                  )}
-                  {message.triage && <Badge variant="secondary">{message.triage.primary}</Badge>}
-                  {message.triageError ? <span>Assessment couldn't be read</span> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </QueryRows>
+      <div ref={list}>
+        <h2 ref={heading} tabIndex={-1}>
+          Messages
+        </h2>
+        <QueryRows query={messages} empty={binding ? "No messages yet" : "Choose an inbox"}>
+          {(rows) => (
+            <ul className="agent-list">
+              {rows.map((message) => (
+                <li className="agent-card" key={message.id}>
+                  <Button
+                    variant="ghost"
+                    data-agent-message-id={message.id}
+                    onClick={() => {
+                      openerId.current = message.id;
+                      setSelected(message);
+                    }}
+                  >
+                    {message.subject ?? "Message"}
+                  </Button>
+                  <p>{message.text.slice(0, 120)}</p>
+                  <div className="agent-row">
+                    <Badge variant="outline">Unverified sender</Badge>
+                    {message.structuredPart.length > 0 && (
+                      <Badge variant="secondary">Structured envelope</Badge>
+                    )}
+                    {message.triage && <Badge variant="secondary">{message.triage.primary}</Badge>}
+                    {message.triageError ? <span>Assessment couldn't be read</span> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </QueryRows>
+      </div>
       <Sheet
         open={Boolean(selected)}
         onOpenChange={(open) => {
@@ -119,7 +128,11 @@ export function InboxScreen({ binding }: { binding?: string }) {
           className="agent-app agent-detail-sheet"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            opener.current?.focus();
+            const opener = [
+              ...(list.current?.querySelectorAll<HTMLButtonElement>("[data-agent-message-id]") ??
+                []),
+            ].find((button) => button.dataset.agentMessageId === openerId.current);
+            (opener ?? heading.current)?.focus();
           }}
         >
           <SheetTitle>{selected?.subject ?? "Message"}</SheetTitle>

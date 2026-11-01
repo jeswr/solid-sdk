@@ -4,6 +4,7 @@ import { type Approval, readApprovalClaims } from "@jeswr/agent-mandate/approval
 import { type ControlStatementClaims, readControlClaims } from "@jeswr/agent-mandate/control";
 import type { ConversationTurn, InboundMessage, PodRecord, RecordType } from "@jeswr/agent-model";
 import { type AgentClient, AgentReadError, isLoaded, type Loaded, type Row } from "./client";
+import { type Collection, collection, isTruncated, mapBounded, selectMembers } from "./collections";
 import { AGENT, guardSlug, metadataNode, PROV, RDF, resourceSlug } from "./paths";
 import type { AgentVerifier, Verification } from "./verify";
 
@@ -42,13 +43,12 @@ async function records<T extends RecordType>(
   type: T,
   skip: string[] = [],
 ) {
-  const members = await client.list(container);
-  return newest(
-    await Promise.all(
-      members
-        .filter((m) => !m.container && !skip.includes(m.url))
-        .map((m) => attempt(m.url, () => client.read(m.url, type))),
-    ),
+  const { members, truncated } = selectMembers(
+    (await client.list(container)).filter((m) => !m.container && !skip.includes(m.url)),
+  );
+  return collection(
+    newest(await mapBounded(members, (m) => attempt(m.url, () => client.read(m.url, type)))),
+    truncated,
   );
 }
 async function optional<T>(load: () => Promise<T>): Promise<T | undefined> {
@@ -70,46 +70,48 @@ export type DisplayControl = ControlStatementClaims & { verification: Verificati
 export async function readApprovals(
   client: AgentClient,
   verifier?: AgentVerifier,
-): Promise<Row<DisplayApproval>[]> {
-  return newest(
-    await Promise.all(
-      (await client.list(client.paths.approvals))
-        .filter((m) => !m.container)
-        .map((m) =>
-          attempt(m.url, async () => {
-            const doc = await client.graph(m.url);
-            const claims = await readApprovalClaims(doc.text, m.url);
-            if (!claims) throw new Error("Unreadable approval");
-            // dct:created is part of the signed proof, not an agent-model approval field.
-            const proofGraph = [...doc.dataset].find(
-              (q) =>
-                q.subject.value === m.url &&
-                q.predicate.value === "https://w3id.org/security#proof" &&
-                q.graph.termType === "DefaultGraph",
-            )?.object;
-            const proofDate = [...doc.dataset].find(
-              (q) =>
-                proofGraph !== undefined &&
-                q.graph.equals(proofGraph) &&
-                q.predicate.value === "http://purl.org/dc/terms/created" &&
-                q.object.termType === "Literal",
-            )?.object.value;
-            const createdAt =
-              proofDate ??
-              metadataNode(doc.dataset, m.url).text("http://purl.org/dc/terms/created") ??
-              "";
-            const verification = verifier
-              ? await verifier.verifyApproval(doc.text, claims)
-              : "unchecked";
-            return {
-              url: m.url,
-              etag: doc.etag,
-              verified: verification,
-              record: { ...claims, createdAt, verification },
-            };
-          }),
-        ),
+): Promise<Collection<DisplayApproval>> {
+  const { members, truncated } = selectMembers(
+    (await client.list(client.paths.approvals)).filter((m) => !m.container),
+  );
+  return collection(
+    newest(
+      await mapBounded(members, (m) =>
+        attempt(m.url, async () => {
+          const doc = await client.graph(m.url);
+          const claims = await readApprovalClaims(doc.text, m.url);
+          if (!claims) throw new Error("Unreadable approval");
+          // dct:created is part of the signed proof, not an agent-model approval field.
+          const proofGraph = [...doc.dataset].find(
+            (q) =>
+              q.subject.value === m.url &&
+              q.predicate.value === "https://w3id.org/security#proof" &&
+              q.graph.termType === "DefaultGraph",
+          )?.object;
+          const proofDate = [...doc.dataset].find(
+            (q) =>
+              proofGraph !== undefined &&
+              q.graph.equals(proofGraph) &&
+              q.predicate.value === "http://purl.org/dc/terms/created" &&
+              q.object.termType === "Literal",
+          )?.object.value;
+          const createdAt =
+            proofDate ??
+            metadataNode(doc.dataset, m.url).text("http://purl.org/dc/terms/created") ??
+            "";
+          const verification = verifier
+            ? await verifier.verifyApproval(doc.text, claims)
+            : "unchecked";
+          return {
+            url: m.url,
+            etag: doc.etag,
+            verified: verification,
+            record: { ...claims, createdAt, verification },
+          };
+        }),
+      ),
     ),
+    truncated,
   );
 }
 export const readMandates = (client: AgentClient) =>
@@ -120,35 +122,39 @@ export const readMandates = (client: AgentClient) =>
 export async function readControl(
   client: AgentClient,
   verifier?: AgentVerifier,
-): Promise<Row<DisplayControl>[]> {
-  return newest(
-    await Promise.all(
-      (await client.list(client.paths.control))
-        .filter((m) => !m.container && m.url !== client.paths.heartbeat)
-        .map((m) =>
-          attempt(m.url, async () => {
-            const doc = await client.graph(m.url);
-            const claims = await readControlClaims(doc.text, m.url);
-            if (!claims) throw new Error("Unreadable control");
-            const verification = verifier
-              ? await verifier.verifyControl(doc.text, m.url)
-              : "unchecked";
-            return {
-              url: m.url,
-              etag: doc.etag,
-              verified: verification,
-              record: { ...claims, verification },
-            };
-          }),
-        ),
+): Promise<Collection<DisplayControl>> {
+  const { members, truncated } = selectMembers(
+    (await client.list(client.paths.control)).filter(
+      (m) => !m.container && m.url !== client.paths.heartbeat,
     ),
+  );
+  return collection(
+    newest(
+      await mapBounded(members, (m) =>
+        attempt(m.url, async () => {
+          const doc = await client.graph(m.url);
+          const claims = await readControlClaims(doc.text, m.url);
+          if (!claims) throw new Error("Unreadable control");
+          const verification = verifier
+            ? await verifier.verifyControl(doc.text, m.url)
+            : "unchecked";
+          return {
+            url: m.url,
+            etag: doc.etag,
+            verified: verification,
+            record: { ...claims, verification },
+          };
+        }),
+      ),
+    ),
+    truncated,
   );
 }
 export const readOutbox = (client: AgentClient) =>
   records(client, client.paths.outbox, "transmission");
 export async function readMandateCurrent(client: AgentClient) {
   const row = await optional(() => client.read(client.paths.mandatesCurrent, "mandate-reference"));
-  return row ? [row] : [];
+  return collection(row ? [row] : []);
 }
 export interface Heartbeat {
   id: string;
@@ -179,52 +185,56 @@ export type InboxMessage = InboundMessage & { triage?: Triage | undefined; triag
 export async function readInbox(
   client: AgentClient,
   binding: string,
-): Promise<Row<InboxMessage>[]> {
+): Promise<Collection<InboxMessage>> {
   const root = `${client.paths.inbox}${guardSlug(binding)}/`;
-  const accounts = await client.list(root);
-  const groups = await Promise.all(
-    accounts.map(async (member) => {
-      if (!member.container) return [];
+  const accounts = selectMembers((await client.list(root)).filter((m) => m.container));
+  const errors: Row<InboxMessage>[] = [];
+  let truncated = accounts.truncated;
+  // Finish the listing phase before reading messages: nested worker pools would multiply fanout.
+  const groups = await mapBounded(accounts.members, async (member) => {
+    try {
+      const selected = selectMembers(
+        (await client.list(member.url)).filter(
+          (m) => !m.container && !m.url.endsWith(".triage.ttl"),
+        ),
+      );
+      truncated ||= selected.truncated;
+      return selected.members;
+    } catch (error) {
+      errors.push({ url: member.url, error });
+      return [];
+    }
+  });
+  const messages = selectMembers(groups.flat());
+  const rows = await mapBounded(messages.members, (m) =>
+    attempt<InboxMessage>(m.url, async () => {
+      const loaded = await client.read(m.url, "inbound-message");
+      let triage: Triage | undefined;
+      let triageError: unknown;
       try {
-        const messages = await client.list(member.url);
-        return Promise.all(
-          messages
-            .filter((m) => !m.container && !m.url.endsWith(".triage.ttl"))
-            .map((m) =>
-              attempt<InboxMessage>(m.url, async () => {
-                const loaded = await client.read(m.url, "inbound-message");
-                let triage: Triage | undefined;
-                let triageError: unknown;
-                try {
-                  const url = m.url.replace(/\.ttl$/, ".triage.ttl");
-                  const doc = await optional(() => client.graph(url));
-                  if (doc) {
-                    const node = metadataNode(doc.dataset, url);
-                    if (
-                      !node.iris(`${RDF}type`).has(`${AGENT}TriageAssessment`) ||
-                      node.iri(`${PROV}wasDerivedFrom`) !== m.url
-                    )
-                      throw new Error("Invalid triage assessment");
-                    const confidence = node.text(`${AGENT}confidence`);
-                    triage = {
-                      primary: node.text(`${AGENT}primaryClass`),
-                      urgency: node.text(`${AGENT}urgency`),
-                      confidence: confidence === undefined ? undefined : Number(confidence),
-                    };
-                  }
-                } catch (error) {
-                  triageError = error;
-                }
-                return { ...loaded, record: { ...loaded.record, triage, triageError } };
-              }),
-            ),
-        );
+        const url = m.url.replace(/\.ttl$/, ".triage.ttl");
+        const doc = await optional(() => client.graph(url));
+        if (doc) {
+          const node = metadataNode(doc.dataset, url);
+          if (
+            !node.iris(`${RDF}type`).has(`${AGENT}TriageAssessment`) ||
+            node.iri(`${PROV}wasDerivedFrom`) !== m.url
+          )
+            throw new Error("Invalid triage assessment");
+          const confidence = node.text(`${AGENT}confidence`);
+          triage = {
+            primary: node.text(`${AGENT}primaryClass`),
+            urgency: node.text(`${AGENT}urgency`),
+            confidence: confidence === undefined ? undefined : Number(confidence),
+          };
+        }
       } catch (error) {
-        return [{ url: member.url, error }];
+        triageError = error;
       }
+      return { ...loaded, record: { ...loaded.record, triage, triageError } };
     }),
   );
-  return newest(groups.flat());
+  return collection(newest([...errors, ...rows]), truncated || messages.truncated);
 }
 export interface Conversation {
   id: string;
@@ -234,35 +244,41 @@ export interface Conversation {
 }
 export const readTurns = (client: AgentClient, conversationId: string) =>
   records(client, client.paths.resolveSlug("conversations", conversationId), "conversation-turn");
-export async function readConversations(client: AgentClient): Promise<Row<Conversation>[]> {
-  const containers = (await client.list(client.paths.conversations)).filter((m) => m.container);
-  return newest(
-    await Promise.all(
-      containers.map((m) =>
-        attempt(m.url, async () => {
-          const id = resourceSlug(m.url);
-          if (!id) throw new Error("Invalid conversation identifier");
-          const turns = await readTurns(client, id);
-          const error = turns.find((t) => !isLoaded(t));
-          if (error && !isLoaded(error)) throw error.error;
-          const loaded = turns.filter(isLoaded<ConversationTurn>);
-          const last = loaded[0]?.record;
-          const first = loaded.at(-1)?.record;
-          return {
-            url: m.url,
-            etag: null,
-            verified: "unchecked",
-            record: {
-              id: m.url,
-              title: first?.text ?? id,
-              updatedAt: last?.createdAt ?? "",
-              unread: last?.role === "agent",
-            },
-          };
-        }),
-      ),
-    ),
+export async function readConversations(client: AgentClient): Promise<Collection<Conversation>> {
+  const containers = selectMembers(
+    (await client.list(client.paths.conversations)).filter((m) => m.container),
   );
+  const rows: Row<Conversation>[] = [];
+  let truncated = containers.truncated;
+  // Each turn collection uses the same six-worker helper. Walk conversations in
+  // sequence so their nested pools never multiply the number of in-flight GETs.
+  for (const m of containers.members) {
+    rows.push(
+      await attempt(m.url, async () => {
+        const id = resourceSlug(m.url);
+        if (!id) throw new Error("Invalid conversation identifier");
+        const turns = await readTurns(client, id);
+        truncated ||= isTruncated(turns);
+        const error = turns.find((t) => !isLoaded(t));
+        if (error && !isLoaded(error)) throw error.error;
+        const loaded = turns.filter(isLoaded<ConversationTurn>);
+        const last = loaded[0]?.record;
+        const first = loaded.at(-1)?.record;
+        return {
+          url: m.url,
+          etag: null,
+          verified: "unchecked",
+          record: {
+            id: m.url,
+            title: first?.text ?? id,
+            updatedAt: last?.createdAt ?? "",
+            unread: last?.role === "agent",
+          },
+        };
+      }),
+    );
+  }
+  return collection(newest(rows), truncated);
 }
 export async function readAudit(
   client: AgentClient,
@@ -270,31 +286,27 @@ export async function readAudit(
 ) {
   if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 0))
     throw new Error("Invalid audit limit");
-  const members = (await client.list(client.paths.audit))
-    .filter((m) => !m.container && m.url !== client.paths.auditChain)
-    .map((member) => {
-      const slug = resourceSlug(member.url);
-      const seq = slug && /^\d+$/.test(slug) ? Number(slug) : NaN;
-      return { ...member, seq: Number.isSafeInteger(seq) ? seq : -1 };
-    })
-    .filter((m) => options.before === undefined || m.seq < options.before)
-    .sort((a, b) => b.seq - a.seq || a.url.localeCompare(b.url))
-    .slice(0, options.limit);
-  const rows: Row<Extract<PodRecord, { type: "audit-entry" }>>[] = [];
-  const work = members.entries();
-  await Promise.all(
-    Array.from({ length: Math.min(6, members.length) }, async () => {
-      for (const [index, member] of work) {
-        rows[index] = await attempt(member.url, async () => {
-          if (member.seq < 0) throw new Error("Invalid audit sequence");
-          const loaded = await client.read(member.url, "audit-entry");
-          if (loaded.record.seq !== member.seq) throw new Error("Audit sequence mismatch");
-          return loaded;
-        });
-      }
+  const selected = selectMembers(
+    (await client.list(client.paths.audit))
+      .filter((m) => !m.container && m.url !== client.paths.auditChain)
+      .map((member) => {
+        const slug = resourceSlug(member.url);
+        const seq = slug && /^\d+$/.test(slug) ? Number(slug) : NaN;
+        return { ...member, seq: Number.isSafeInteger(seq) ? seq : -1 };
+      })
+      .filter((m) => options.before === undefined || m.seq < options.before),
+    options.limit,
+    (a, b) => b.seq - a.seq || a.url.localeCompare(b.url),
+  );
+  const rows = await mapBounded(selected.members, (member) =>
+    attempt(member.url, async () => {
+      if (member.seq < 0) throw new Error("Invalid audit sequence");
+      const loaded = await client.read(member.url, "audit-entry");
+      if (loaded.record.seq !== member.seq) throw new Error("Audit sequence mismatch");
+      return loaded;
     }),
   );
-  return rows;
+  return collection(rows, selected.truncated);
 }
 export const loadedRecords = <T>(rows: Row<T>[]) =>
   rows.filter(isLoaded<T>).map((row) => row.record);

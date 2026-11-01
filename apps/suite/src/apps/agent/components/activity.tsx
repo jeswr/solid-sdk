@@ -2,10 +2,11 @@
 "use client";
 import Link from "next/link";
 import { isLoaded } from "../lib/client";
+import { collection, isTruncated } from "../lib/collections";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { readAudit, readControl } from "../lib/readers";
 import { createAgentVerifier } from "../lib/verify";
-import { DetailScreen, QueryRows, Screen } from "./states";
+import { CollectionNotice, DetailScreen, QueryRows, Screen } from "./states";
 export function ActivityScreen({ seq }: { seq?: string }) {
   const { client, session } = useAgentWorkspace();
   const query = useAgentQuery(client.paths.audit, readAudit);
@@ -16,7 +17,10 @@ export function ActivityScreen({ seq }: { seq?: string }) {
     query.status === "ready" && seq !== undefined
       ? {
           ...query,
-          data: query.data.filter((row) => !isLoaded(row) || String(row.record.seq) === seq),
+          data: collection(
+            query.data.filter((row) => !isLoaded(row) || String(row.record.seq) === seq),
+            isTruncated(query.data),
+          ),
         }
       : query;
   const content = (
@@ -58,6 +62,7 @@ export function ActivityScreen({ seq }: { seq?: string }) {
   return seq === undefined ? (
     <Screen title="Activity">
       {content}
+      {controls.status === "ready" && <CollectionNotice rows={controls.data} />}
       {controls.status === "ready" &&
         controls.data
           .filter((row) => !isLoaded(row) || row.verified !== "verified")
