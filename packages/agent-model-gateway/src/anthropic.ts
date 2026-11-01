@@ -62,6 +62,7 @@ export async function anthropicPropose(
     const timer = setTimeout(() => controller.abort(), config.timeoutMs);
     let succeeded = false;
     let retries = 0;
+    let unrecordedAssistant = false;
     let callStart = start;
     const seen = new Map<string, { index: number; tools: Set<string>; start: number }>();
     try {
@@ -108,6 +109,7 @@ export async function anthropicPropose(
           }
         }
         if (event.type === "assistant") {
+          unrecordedAssistant = true;
           if (event.error) throw new Error("Provider failed");
           const message = assistant.parse(event.message);
           let entry = seen.get(message.id);
@@ -118,6 +120,7 @@ export async function anthropicPropose(
             callStart = now();
             retries = 0;
           }
+          unrecordedAssistant = false;
           for (const block of message.content) {
             if (block.type !== "tool_use") continue;
             const toolId = z.string().parse(block.id);
@@ -151,7 +154,7 @@ export async function anthropicPropose(
       if (!succeeded || seen.size === 0 || controller.signal.aborted)
         throw new Error("Incomplete provider run");
     } catch (error) {
-      if (seen.size === 0 || retries > 0)
+      if (seen.size === 0 || retries > 0 || unrecordedAssistant)
         calls.push(
           record(
             config,

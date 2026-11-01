@@ -617,6 +617,14 @@ describe("Anthropic Proposer SDK isolation", () => {
       await failure(setup({ provider: "anthropic" }).gateway.proposer.propose([], context()));
     }
   });
+  it("retains a failed SDK call after an earlier successful call", async () => {
+    events([assistant(), { type: "assistant", error: "authentication_failed" }]);
+    const s = setup({ provider: "anthropic" });
+    const error = await failure(s.gateway.proposer.propose([], context()));
+    expect(error.calls).toHaveLength(2);
+    expect(error.calls[0]?.tokens).toEqual({ input: 11, output: 7 });
+    expect(error.calls[1]?.tokens).toEqual({ input: 0, output: 0 });
+  });
   it("uses default clock in SDK sessions", async () => {
     events([assistant(), success]);
     const s = setup({ provider: "anthropic", now: undefined });
