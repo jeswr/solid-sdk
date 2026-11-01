@@ -3,7 +3,9 @@ import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RdfLimitError } from "../src/bounded-rdf.js";
-import { search } from "../src/pod.js";
+import { MAX_CONTENT_BYTES } from "../src/content.js";
+import { fetchDocument } from "../src/fetch.js";
+import { listContainer, search } from "../src/pod.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createStoragePodPort } from "../src/storage-pod-port.js";
 
@@ -106,6 +108,21 @@ describe("storage-client PodPort", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "solid",
+    "lws",
+  ] as const)("rejects explicit wildcard update conditions before any %s mutation", async (protocol) => {
+    const { pod, storage } = fixture(protocol);
+    const write = vi.spyOn(storage, "write");
+    const create = vi.spyOn(storage, "create");
+    await expect(
+      pod.write(FILE, new Uint8Array([1]), "application/octet-stream", { ifMatch: "*" }),
+    ).rejects.toThrow("Unsupported wildcard update precondition");
+    expect(createPodClient).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("defaults the adapter and server to read-only", async () => {
     const pod = createStoragePodPort({ fetch: vi.fn(), podRoot: ROOT });
     expect(pod.webId).toBe("");
@@ -126,6 +143,43 @@ describe("storage-client PodPort", () => {
     await expect(pod.read("https://identity-port.example/other")).rejects.toThrow("scope");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+it.each([
+  "text/plain",
+  "text/turtle",
+  "application/octet-stream",
+])("preserves bounded native fetch projection for %s", async (contentType) => {
+  const { createSolidBackend } = await import("@jeswr/storage-client/solid");
+  const cancel = vi.fn();
+  let downloaded = 0;
+  const fetch: typeof globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            downloaded += 65536;
+            controller.enqueue(new Uint8Array(65536).fill(120));
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { headers: { "content-type": contentType, etag: '"v1"' } },
+    );
+  vi.mocked(createPodClient).mockImplementationOnce(
+    async (options) =>
+      ({ storage: createSolidBackend({ root: ROOT, fetch: options.fetch }) }) as Awaited<
+        ReturnType<typeof createPodClient>
+      >,
+  );
+  const pod = createStoragePodPort({ fetch, podRoot: ROOT });
+  const result = await fetchDocument(pod, FILE);
+  const binary = contentType === "application/octet-stream";
+  expect(result.text).toBe(contentType === "text/plain" ? "x".repeat(MAX_CONTENT_BYTES) : "");
+  expect(result.metadata).toEqual({ contentType, etag: '"v1"', truncated: !binary });
+  expect(downloaded).toBeLessThanOrEqual(binary ? 0 : MAX_CONTENT_BYTES + 65536);
+  expect(cancel).toHaveBeenCalledOnce();
 });
 
 it("smokes sparq LWS through the shared storage wire fixtures, including all 1500 paginated members", async () => {
@@ -160,6 +214,8 @@ it("smokes sparq LWS through the shared storage wire fixtures, including all 150
     });
   };
   const pod = createStoragePodPort({ fetch, podRoot: LWS_ROOT });
+  // The first native fetch must fully read the JSON storage description.
+  expect((await fetchDocument(pod, `${LWS_CONTAINER}note-0000.ttl`)).text).toContain('"hi"');
   const entries = await pod.list(LWS_CONTAINER);
   expect(entries).toHaveLength(1500);
   expect(entries[0]).toMatchObject({
@@ -172,6 +228,40 @@ it("smokes sparq LWS through the shared storage wire fixtures, including all 150
   expect(calls.filter((r) => r.url.includes("?page="))).toHaveLength(2);
   expect(calls.every((r) => r.redirect === "manual")).toBe(true);
   expect(calls.every((r) => !r.headers.has("authorization"))).toBe(true);
+});
+
+it("gives storage read decorators complete bodies for fetch and listing authorization", async () => {
+  const { createSolidBackend } = await import("@jeswr/storage-client/solid");
+  const body = "private content ending in a denial marker";
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    return new Response(
+      request.url === ROOT
+        ? `<> a <http://www.w3.org/ns/ldp#BasicContainer>; <http://www.w3.org/ns/ldp#contains> <${FILE}> .`
+        : body,
+      { headers: { "content-type": request.url === ROOT ? "text/turtle" : "text/plain" } },
+    );
+  };
+  vi.mocked(createPodClient).mockImplementationOnce(
+    async (options) =>
+      ({ storage: createSolidBackend({ root: ROOT, fetch: options.fetch }) }) as Awaited<
+        ReturnType<typeof createPodClient>
+      >,
+  );
+  const pod = createStoragePodPort({ fetch, podRoot: ROOT });
+  const read = pod.read;
+  const inspected: string[] = [];
+  pod.read = async (url, options) => {
+    const result = await read(url, options);
+    if (url === FILE) {
+      inspected.push(new TextDecoder().decode(result.body));
+      if (inspected.at(-1)?.endsWith("denial marker")) throw new Error("purpose denied");
+    }
+    return result;
+  };
+  await expect(fetchDocument(pod, FILE)).rejects.toThrow("purpose denied");
+  expect(await listContainer(pod, ROOT)).toEqual([]);
+  expect(inspected).toEqual([body, body]);
 });
 
 it("keeps public same-origin storage discovery anonymous and propagates discovery errors", async () => {

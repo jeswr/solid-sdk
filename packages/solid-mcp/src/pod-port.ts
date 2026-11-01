@@ -95,6 +95,11 @@ export function isFetchPodRead(read: PodPort["read"]): boolean {
   return nativeReads.has(read);
 }
 
+/** @internal Register a built-in read that does not authorize against body content. */
+export function registerNativePodRead(read: PodPort["read"]): void {
+  nativeReads.add(read);
+}
+
 /** Type relations may share a Link header with quoted commas and other relations. */
 function hasContainerTypeLink(header: string): boolean {
   for (const link of header.matchAll(/<([^<>]*)>((?:[^"<,]|"(?:[^"\\]|\\.)*")*)/g)) {
