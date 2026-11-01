@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkCodegen } from "../scripts/check-codegen.mjs";
+import { checkCodegen, stripComments, workspaceGlobs } from "../scripts/check-codegen.mjs";
 
 const guard = fileURLToPath(new URL("../scripts/check-codegen.mjs", import.meta.url));
 const dirs = [];
@@ -179,6 +179,62 @@ describe("codegen guard", () => {
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("pnpm-workspace.yaml");
+  });
+
+  it("parses block, zero-indent and flow packages lists with comments and negations", () => {
+    const parse = (yaml) => workspaceGlobs(workspace({ "pnpm-workspace.yaml": yaml }));
+    expect(parse('packages:\n  - "packages/*"\n# tools\n  - "tools/*"\n')).toEqual({
+      include: ["packages/*", "tools/*"],
+      exclude: [],
+    });
+    expect(
+      parse("packages: # projects\r\n- packages/*\r\n- '!packages/legacy'\r\nother: 1\n"),
+    ).toEqual({
+      include: ["packages/*"],
+      exclude: ["packages/legacy"],
+    });
+    expect(parse('packages: ["packages/*", apps/*]\n')).toEqual({
+      include: ["packages/*", "apps/*"],
+      exclude: [],
+    });
+  });
+
+  it("honours negated workspace globs and project names like build or out", () => {
+    const bare = { name: "@jeswr/bare" };
+    const root = workspace({
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - "!packages/legacy"\n',
+      "packages/legacy/package.json": bare,
+      "packages/legacy/src/generated/codegen.lock.json": "{}",
+      "packages/build/package.json": bare,
+      "packages/build/src/generated/codegen.lock.json": "{}",
+    });
+    const { projects, problems } = checkCodegen(root);
+    expect(projects).toBe(1);
+    expect(problems.every((p) => p.startsWith("packages/build:"))).toBe(true);
+  });
+
+  it("strips comments without touching comment-like text inside strings", () => {
+    expect(stripComments('run(["--filter", "//x", "codegen", "--out", o]); // gone')).toBe(
+      'run(["--filter", "//x", "codegen", "--out", o]); ',
+    );
+    expect(stripComments('glob("src/generated/*.ts"); f("codegen", "--out"); /** doc */')).toBe(
+      'glob("src/generated/*.ts"); f("codegen", "--out"); ',
+    );
+    expect(stripComments("a(`/*`); b('codegen', '--out'); c(`*/`);")).toBe(
+      "a(`/*`); b('codegen', '--out'); c(`*/`);",
+    );
+  });
+
+  it("finds drift tests in __tests__ and accepts a quoted --out path", () => {
+    const manifest = {
+      ...MANIFEST,
+      scripts: { codegen: MANIFEST.scripts.codegen.replace("src/generated", "'src/generated'") },
+    };
+    const root = workspace({
+      ...generated("packages/example", manifest, ""),
+      "packages/example/__tests__/drift.test.ts": DRIFT_TEST,
+    });
+    expect(checkCodegen(root).problems).toEqual([]);
   });
 
   it("passes the real workspace", () => {

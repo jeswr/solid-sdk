@@ -17,7 +17,7 @@
 // The drift test is what proves byte-identity; this guard proves every generated
 // project has one and that Turbo re-runs it whenever the generator or project changes.
 import { existsSync, globSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, matchesGlob, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -27,39 +27,81 @@ const SKIP = /(?:^|\/)(?:node_modules|dist|out|build|coverage|\.next|\.turbo|\.g
 const DRIFT_CALL = /["'`]codegen["'`]\s*,\s*["'`]--out["'`]/;
 /** A drift test must also assert something about what it regenerated. */
 const ASSERTION = /\bexpect\s*\(|\bassert(?:\.\w+)?\s*\(/;
-/** `--out src/generated`, `--out=./src/generated/` and similar. */
-const OUT_GENERATED = /--out(?:\s+|=)(?:\.\/)?src\/generated\/?(?:\s|$)/;
-const TEST_GLOBS = ["{src,test,tests}/**/*.{test,spec}.{ts,mts,cts,tsx,js,mjs,cjs,jsx}"];
-
-/** Drop line and block comments so a commented-out call never counts as a drift test. */
-function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/.*$/gm, "$1");
-}
+/** `--out src/generated`, `--out=./src/generated/`, `--out 'src/generated'` and similar. */
+const OUT_GENERATED = /--out(?:\s+|=)(["']?)(?:\.\/)?src\/generated\/?\1(?:\s|$)/;
+const TEST_GLOBS = [
+  "{src,test,tests,__tests__}/**/*.{test,spec}.{ts,mts,cts,tsx,js,mjs,cjs,jsx}",
+  "*.{test,spec}.{ts,mts,cts,tsx,js,mjs,cjs,jsx}",
+];
 
 /**
- * The `packages:` globs of `pnpm-workspace.yaml`, so every workspace project kind
+ * Drop line and block comments so a commented-out call never counts as a drift test.
+ * String and template literals are copied through untouched, so `"//x"` or `"src/*"`
+ * inside a string never starts a comment. (Regex literals are not special-cased.)
+ */
+export function stripComments(source) {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    const char = source[i];
+    const next = source[i + 1];
+    if (char === "/" && next === "/") {
+      while (i < source.length && source[i] !== "\n") i++;
+    } else if (char === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
+      i = end === -1 ? source.length : end + 2;
+    } else if (char === '"' || char === "'" || char === "`") {
+      let j = i + 1;
+      while (j < source.length && source[j] !== char) {
+        if (source[j] === "\\") j++;
+        else if (char !== "`" && source[j] === "\n") break;
+        j++;
+      }
+      out += source.slice(i, j + 1);
+      i = j + 1;
+    } else {
+      out += char;
+      i++;
+    }
+  }
+  return out;
+}
+
+const unquote = (value) =>
+  value
+    .trim()
+    .replace(/^(["'])(.*)\1$/, "$2")
+    .replace(/\/+$/, "");
+
+/**
+ * The `packages:` globs of `pnpm-workspace.yaml` (block or flow sequence, comments
+ * allowed), split into includes and `!` negations, so every workspace project kind
  * (including nested `apps/<slug>/web` deployables and `tools/*`) is covered.
  */
-function workspaceGlobs(root) {
+export function workspaceGlobs(root) {
   const path = join(root, "pnpm-workspace.yaml");
   if (!existsSync(path)) throw new Error(`no pnpm-workspace.yaml under ${root}`);
-  const globs = [];
+  const entries = [];
   let inPackages = false;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (/^packages:\s*$/.test(line)) {
-      inPackages = true;
+  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const line = raw.replace(/(^|\s)#.*$/, "");
+    if (!line.trim()) continue;
+    const key = /^packages:\s*(.*)$/.exec(line);
+    if (key) {
+      const flow = /^\[(.*)\]$/.exec(key[1].trim());
+      if (flow) entries.push(...flow[1].split(",").map(unquote).filter(Boolean));
+      inPackages = !flow;
       continue;
     }
     if (!inPackages) continue;
-    const entry = /^\s+-\s+["']?([^"'#\s]+)["']?\s*(?:#.*)?$/.exec(line);
-    if (entry) {
-      if (!entry[1].startsWith("!")) globs.push(entry[1].replace(/\/+$/, ""));
-    } else if (/^\S/.test(line)) {
-      inPackages = false;
-    }
+    const item = /^\s*-\s+(.+)$/.exec(line);
+    if (item) entries.push(unquote(item[1]));
+    else if (/^\S/.test(line)) inPackages = false;
   }
-  if (!globs.length) throw new Error(`pnpm-workspace.yaml under ${root} lists no packages`);
-  return globs;
+  const include = entries.filter((entry) => !entry.startsWith("!"));
+  const exclude = entries.filter((entry) => entry.startsWith("!")).map((entry) => entry.slice(1));
+  if (!include.length) throw new Error(`pnpm-workspace.yaml under ${root} lists no packages`);
+  return { include, exclude };
 }
 
 function readJson(path) {
@@ -73,11 +115,22 @@ function readJson(path) {
 /** Return one human-readable problem per violation, sorted, for the workspace at `root`. */
 export function checkCodegen(root) {
   const problems = [];
-  const locks = globSync(
-    workspaceGlobs(root).map((glob) => `${glob}/src/generated/codegen.lock.json`),
-    { cwd: root, exclude: (entry) => SKIP.test(entry) },
-  );
-  for (const lock of [...new Set(locks)].sort()) {
+  const { include, exclude } = workspaceGlobs(root);
+  const locks = [
+    ...new Set(
+      globSync(
+        include.map((glob) => `${glob}/src/generated/codegen.lock.json`),
+        { cwd: root },
+      ),
+    ),
+  ].filter((lock) => {
+    const project = dirname(dirname(dirname(lock)));
+    return (
+      !project.split("/").includes("node_modules") &&
+      !exclude.some((glob) => matchesGlob(project, glob))
+    );
+  });
+  for (const lock of locks.sort()) {
     const project = dirname(dirname(dirname(lock)));
     const manifest = readJson(join(root, project, "package.json"));
     if (!manifest) {
@@ -108,7 +161,7 @@ export function checkCodegen(root) {
       );
     }
   }
-  return { projects: new Set(locks).size, problems: problems.sort() };
+  return { projects: locks.length, problems: problems.sort() };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
