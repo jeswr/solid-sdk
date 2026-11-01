@@ -49,10 +49,9 @@ final class PushProofTests: XCTestCase {
          kSecAttrSynchronizable as String: false]
     }
     func testFallbackReallyCreatesProtectedKeyAndEnforcesActualProviderPolicy() throws {
+        // Force the Enclave attempt to fail: current simulators can emulate the Secure Enclave, so the
+        // real provider may succeed there. The fallback below is still created by the real provider.
         let query = isolatedQuery(), provider = RecordingProvider()
-        #if targetEnvironment(simulator)
-        provider.rejectEnclave = false // The real simulator provider must reject Enclave and create the fallback.
-        #endif
         defer { try? provider.delete(query) }
         let outcome = Result { try PushSigningKey(create: true, query: query, provider: provider) }
         XCTAssertEqual(provider.enclaveAttempts, [true, false])
