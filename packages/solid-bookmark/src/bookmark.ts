@@ -137,10 +137,16 @@ function firstText(
   return undefined;
 }
 
+/** An `xsd:date` lexical form with its optional timezone (`2025-03-04`, `2025-03-04+00:00`). */
+const XSD_DATE = /^(\d{4}-\d{2}-\d{2})(Z|[+-]\d{2}:\d{2})?$/;
+
 function firstDate(dataset: DatasetCore, subject: string, predicate: string): Date | undefined {
   const [first] = literals(dataset, subject, predicate);
   if (first === undefined) return undefined;
-  const date = new Date(first.value);
+  // `new Date` rejects a timezone-qualified date-only value, so give it midnight in that zone.
+  const dateOnly = XSD_DATE.exec(first.value);
+  const lexical = dateOnly ? `${dateOnly[1]}T00:00:00${dateOnly[2] ?? "Z"}` : first.value;
+  const date = new Date(lexical);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 

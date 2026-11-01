@@ -169,6 +169,23 @@ it("keeps unprofiled values through a plain-data edit of an unrelated field", as
   });
 });
 
+it("carries a timezone-qualified xsd:date created value through a plain-data edit", async () => {
+  for (const [lexical, iso] of [
+    ["2025-03-04+00:00", "2025-03-04T00:00:00.000Z"],
+    ["2025-03-04-05:00", "2025-03-04T05:00:00.000Z"],
+    ["2025-03-04Z", "2025-03-04T00:00:00.000Z"],
+  ]) {
+    const parsed = await parseBookmarkTtl(
+      RES,
+      doc(`schema:url <https://example.org/> ; dct:created "${lexical}"^^xsd:date`),
+    );
+    expect(parsed?.created?.toISOString()).toBe(iso);
+    if (!parsed) throw new Error("expected a bookmark");
+    const edited = await serializeBookmark(RES, { ...parsed, archived: true });
+    expect((await parseBookmarkTtl(RES, edited))?.created?.toISOString()).toBe(iso);
+  }
+});
+
 it("rejects a relative or unsafe resource URL instead of minting a relative subject", () => {
   expect(() => buildBookmark("bm/1", { url: "https://example.org/" })).toThrow(TypeError);
   expect(() => buildBookmark("https://pod.example/a b", { url: "https://example.org/" })).toThrow(
