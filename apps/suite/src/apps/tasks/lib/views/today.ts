@@ -4,6 +4,7 @@ import type { TaskView } from "./types";
 
 /** All-day markers take precedence, including when read in another time zone. */
 export function taskDayKey(task: TaskView): string | undefined {
+  if (task.due !== undefined && !Number.isFinite(task.due.getTime())) return undefined;
   return task.allDay ?? (task.due && localDayKey(task.due));
 }
 

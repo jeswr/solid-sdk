@@ -55,9 +55,35 @@ export function labelTargets(key: string, projects: readonly StoredProject[]) {
   });
 }
 
+/** Check all targets before writing. Renames only change metadata; deletion needs every task. */
+function labelLoadFailure(
+  key: string,
+  targets: ReturnType<typeof labelTargets>,
+  tasks: TasksContextValue,
+  action: "rename" | "delete",
+) {
+  const incomplete = targets.filter(({ project }) => {
+    const load = tasks.tasks[project.url];
+    return (
+      load?.refreshing ||
+      (action === "delete" && (load?.status !== "ready" || (load.warningCount ?? 0) > 0))
+    );
+  });
+  if (incomplete.length) {
+    const error = new Error(
+      `Couldn't ${action} @${key}. Reload all tasks in ${incomplete.map(({ project }) => project.tracker.title ?? "Project").join(", ")} and fix any loading errors before ${action === "delete" ? "deleting" : "renaming"} the label.`,
+    );
+    toast.error(error.message);
+    return { done: [], failed: incomplete.map((item) => ({ item, error })) };
+  }
+}
+
 export async function renameLabel(key: string, name: string, tasks: TasksContextValue) {
   requireTitle(name);
-  return runBulk(labelTargets(key, tasks.projects), async ({ project, labelIds }) => {
+  const targets = labelTargets(key, tasks.projects);
+  const failure = labelLoadFailure(key, targets, tasks, "rename");
+  if (failure) return failure;
+  return runBulk(targets, async ({ project, labelIds }) => {
     saved(
       await tasks.updateProject(project, (tracker) => {
         for (const id of labelIds)
@@ -70,18 +96,8 @@ export async function renameLabel(key: string, name: string, tasks: TasksContext
 /** At most four projects write at once. Clear all task references before removing a class. */
 export async function deleteLabel(key: string, tasks: TasksContextValue) {
   const targets = labelTargets(key, tasks.projects);
-  // Check the entire operation before its first write: skipped tasks can retain the label type.
-  const incomplete = targets.filter(({ project }) => {
-    const load = tasks.tasks[project.url];
-    return load?.status !== "ready" || (load.warningCount ?? 0) > 0;
-  });
-  if (incomplete.length) {
-    const error = new Error(
-      `Couldn't delete @${key}. Reload all tasks in ${incomplete.map(({ project }) => project.tracker.title ?? "Project").join(", ")} and fix any loading errors before deleting the label.`,
-    );
-    toast.error(error.message);
-    return { done: [], failed: incomplete.map((item) => ({ item, error })) };
-  }
+  const failure = labelLoadFailure(key, targets, tasks, "delete");
+  if (failure) return failure;
   return runBulk(targets, async ({ project, labelIds }) => {
     const load = tasks.tasks[project.url];
     if (!load) throw new Error("Load this project's tasks before deleting its label");

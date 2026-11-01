@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError } from "../lib/model/errors";
@@ -17,6 +16,8 @@ import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } 
 export interface TaskLoad {
   status: "loading" | "ready" | "error";
   items: StoredTask[];
+  /** Cached rows stay visible, but this load is incomplete until revalidation settles. */
+  refreshing?: boolean;
   /** Invalid RDF tasks skipped while projecting this project's last load. */
   warningCount?: number;
   error?: unknown;
@@ -83,6 +84,7 @@ function replaceTask(
       ...state.tasks,
       [projectUrl]: {
         status: "ready",
+        refreshing: previous?.refreshing ?? false,
         warningCount: previous?.warningCount ?? 0,
         items: [
           ...(previous?.items ?? []).filter((item) => item.url !== url),
@@ -274,6 +276,8 @@ export class TasksCache {
         ...this.baseline.tasks,
         [project.url]: {
           status: previous?.status === "ready" ? "ready" : "loading",
+          refreshing: true,
+          warningCount: previous?.warningCount ?? 0,
           items: previous?.items ?? [],
         },
       },
