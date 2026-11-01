@@ -2601,7 +2601,39 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
-  packages/agent-memory: {}
+  packages/agent-memory:
+    dependencies:
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../agent-mandate
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../pkg-memory
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      componentsjs:
+        specifier: 5.5.1
+        version: 5.5.1
 
   packages/agent-model:
     dependencies:
