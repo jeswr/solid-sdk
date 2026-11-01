@@ -1044,9 +1044,11 @@ function canonicalizeAliases(
     budget,
     request,
   );
-  // Every other defining manifest's checks run too, under the same shared budget.
+  // Every other defining manifest's checks run too, under the same shared budget and
+  // with the same write focus: the wrappers' owners belong to the PRIMARY manifest, so
+  // only its scan can resolve an untyped, unreached composite focus.
   for (const other of context.checkAlso)
-    checks.push(...aliasFocusNodes(store, other, factory, budget).checks);
+    checks.push(...aliasFocusNodes(store, other, factory, budget, request).checks);
   const selectedScopes = request ? new Map([[request.owner, new Set([request.iri])]]) : scopes;
   const output = new Store([...store]);
   const migratingTypes = new Set<string>();
