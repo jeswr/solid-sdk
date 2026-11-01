@@ -20,7 +20,8 @@ private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
     var started: (() -> Void)?
     var committed: (() -> Void)?
     var finished: (() -> Void)?
-    var allowsHTMLLoads = false
+    var decided: ((URL?, WKNavigationActionPolicy) -> Void)?
+    var failed: ((Error) -> Void)?
     var policyCalls = 0
     var finishes = 0
     var terminations = 0
@@ -39,19 +40,26 @@ private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
     override func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                           decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         policyCalls += 1
-        // HTML supplied by the admission fixture can arrive as an about:blank navigation even
-        // with an HTTPS base URL. Capacitor otherwise rejects that non-application URL.
-        if allowsHTMLLoads, navigationAction.request.url?.absoluteString == "about:blank" {
-            decisionHandler(.allow)
-            return
+        super.webView(webView, decidePolicyFor: navigationAction) { policy in
+            self.decided?(navigationAction.request.url, policy)
+            decisionHandler(policy)
         }
-        super.webView(webView, decidePolicyFor: navigationAction, decisionHandler: decisionHandler)
     }
 
     override func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         super.webView(webView, didFinish: navigation)
         finishes += 1
         finished?()
+    }
+
+    override func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        super.webView(webView, didFail: navigation, withError: error)
+        failed?(error)
+    }
+
+    override func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        super.webView(webView, didFailProvisionalNavigation: navigation, withError: error)
+        failed?(error)
     }
 
     override func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -421,17 +429,22 @@ private final class SecureStoreAdmissionBridge: NSObject, @preconcurrency CAPBri
         let window = UIWindow(windowScene: scene)
         window.frame = scene.coordinateSpace.bounds
         self.window = window
+        let descriptor = InstanceDescriptor()
+        // The host opts into WKAppBoundDomains. Bridge scripts/messages require both a listed
+        // host and the WebKit flag that CAPBridgeViewController normally copies from this config.
+        let host = try XCTUnwrap((Bundle.main.object(forInfoDictionaryKey: "WKAppBoundDomains") as? [String])?.first)
+        descriptor.serverURL = "https://\(host)"
+        descriptor.limitsNavigationsToAppBoundDomains = true
+        descriptor.handleApplicationNotifications = false
+        descriptor.errorPath = nil // Surface fixture load failures instead of loading the offline page.
+        let configuration = InstanceConfiguration(with: descriptor, isDebug: false)
         let webConfiguration = WKWebViewConfiguration()
+        webConfiguration.limitsNavigationsToAppBoundDomains = configuration.limitsNavigationsToAppBoundDomains
         let handler = SecureStoreTestNavigationHandler()
-        handler.allowsHTMLLoads = true
         self.handler = handler
         webConfiguration.userContentController = handler.contentController
         webView = WKWebView(frame: window.bounds, configuration: webConfiguration)
         super.init()
-        let descriptor = InstanceDescriptor()
-        descriptor.serverURL = "https://suite.example"
-        descriptor.handleApplicationNotifications = false
-        let configuration = InstanceConfiguration(with: descriptor, isDebug: false)
         bridge = CapacitorBridge(with: configuration, delegate: self,
                                  cordovaConfiguration: descriptor.cordovaConfiguration,
                                  assetHandler: WebViewAssetHandler(router: CapacitorRouter()),
@@ -494,18 +507,29 @@ private final class SecureStoreAdmissionBridge: NSObject, @preconcurrency CAPBri
 @MainActor
 final class SecureStoreAdmissionTests: XCTestCase {
     private func load(_ fixture: SecureStoreAdmissionBridge, path: String) throws {
+        let url = fixture.bridge.config.serverURL.appendingPathComponent(path)
+        let allowed = expectation(description: "Capacitor allowed configured document URL")
         let committed = expectation(description: "Main-frame commit forwarded")
         let finished = expectation(description: "Document loaded")
+        fixture.handler.decided = { requestedURL, policy in
+            XCTAssertEqual(requestedURL, url)
+            XCTAssertEqual(policy, .allow)
+            allowed.fulfill()
+        }
+        fixture.handler.failed = { error in XCTFail("Document navigation failed: \(error)") }
         fixture.handler.committed = { committed.fulfill() }
         fixture.handler.finished = { finished.fulfill() }
         defer {
+            fixture.handler.decided = nil
+            fixture.handler.failed = nil
             fixture.handler.committed = nil
             fixture.handler.finished = nil
         }
-        let url = try XCTUnwrap(URL(string: "https://suite.example/\(path)"))
-        // The HTTPS base URL supplies the real frame origin without a network request.
-        try XCTUnwrap(fixture.webView.loadHTMLString("<!doctype html><p>fixture</p>", baseURL: url))
-        wait(for: [committed, finished], timeout: 10, enforceOrder: true)
+        // Use a request URL, not loadHTMLString's about:blank navigation/base-URL distinction.
+        // A simulated response preserves its HTTPS frame origin without any network access.
+        _ = fixture.webView.loadSimulatedRequest(URLRequest(url: url), responseHTML: "<!doctype html><p>fixture</p>")
+        wait(for: [allowed, committed, finished], timeout: 10, enforceOrder: true)
+        XCTAssertEqual(fixture.webView.url, url)
     }
 
     private func submit(_ fixture: SecureStoreAdmissionBridge, key: String = "a", callbackId: String = "read") {
