@@ -114,7 +114,8 @@ export function RequestsLink({ pending = 0 }: { pending?: number }) {
 
 /** The Requests link with the live pending count; mounted only when requests are available. */
 function PendingRequestsLink() {
-  return <RequestsLink pending={useRequests().pending.length} />;
+  const { pending, unreadable } = useRequests();
+  return <RequestsLink pending={pending.length + unreadable.length} />;
 }
 
 export function PermissionsPage() {

@@ -4,7 +4,14 @@ import {
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { NS } from "@jeswr/suite-vocab";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The roles module brands its own errors; stand in for that brand here.
+vi.mock("@jeswr/pod-access/roles", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  isRoleError: (error: unknown) => error instanceof Error && error.name === "RoleError",
+}));
+
 import { requestCaps } from "../src/apps/home/lib/requests/caps";
 import {
   addDuration,
@@ -18,25 +25,31 @@ import {
   requestedDurationText,
 } from "../src/apps/home/lib/requests/duration";
 import {
+  ADD_ONLY_TEXT,
   accessText,
   approvedMessage,
   cardLabels,
+  classLocalName,
   decidedText,
   deniedMessage,
+  EXPIRY_NOT_ENFORCED,
+  finishedMessage,
   headline,
+  initialSelection,
   initials,
   isReadable,
+  isShareable,
   listText,
   purposeLine,
   purposeText,
   type ReadableRequest,
+  type RequestCard,
   requestCards,
   requesterHost,
   requesterName,
   reviewError,
   selectedDataTypes,
   splitRequests,
-  unreadableNotice,
 } from "../src/apps/home/lib/requests/model";
 
 const STEPS = `${NS.HEALTH}StepCountObservation`;
@@ -167,6 +180,15 @@ describe("requesters and purposes", () => {
     expect(initials("  ")).toBe("?");
   });
 
+  it("strips bidi and zero-width characters from requester names", () => {
+    expect(requesterName(request({ requesterName: "Mara\u202EhcaoC\u202C" }))).toBe("MarahcaoC");
+    expect(requesterName(request({ requesterName: "Ma\u200Bra\u200DCoach\uFEFF" }))).toBe(
+      "MaraCoach",
+    );
+    expect(requesterName(request({ requesterName: "\u2066\u200F\u2069" }))).toBe("coach.example");
+    expect(requesterName(request({ requesterName: "Bob\u0007 Smith" }))).toBe("Bob Smith");
+  });
+
   it("shows a purpose's words: requester text or a known DPV label, never an IRI", () => {
     expect(purposeText(undefined)).toBeUndefined();
     expect(purposeText("   ")).toBeUndefined();
@@ -195,11 +217,11 @@ describe("requesters and purposes", () => {
 });
 
 describe("data type cards", () => {
-  it("groups requested classes by Home data type and keeps unknown ones as Other data", () => {
+  it("groups requested classes by Home data type and names each unsorted class", () => {
     const unknown = "https://vocab.example/Thing";
     const cards = requestCards({
       dataTypes: [STEPS, EXERCISE, unknown],
-      modesByType: { [STEPS]: ["read"], [EXERCISE]: ["write", "read"] },
+      modesByType: { [STEPS]: ["read"], [EXERCISE]: ["write", "read"], [unknown]: ["read"] },
     });
     expect(cards).toEqual([
       {
@@ -208,24 +230,79 @@ describe("data type cards", () => {
         description: "Exercise and step counts.",
         domainId: "body-health",
         dataTypes: [STEPS, EXERCISE],
+        shareableTypes: [STEPS, EXERCISE],
         modes: ["read", "write"],
       },
       {
         id: unknown,
-        label: "Other data",
+        label: "Thing",
         description: expect.stringContaining("isn't sorted"),
+        classIri: unknown,
         dataTypes: [unknown],
-        modes: [],
+        shareableTypes: [unknown],
+        modes: ["read"],
       },
     ]);
     expect(selectedDataTypes(cards, ["activity"])).toEqual([STEPS, EXERCISE]);
     expect(selectedDataTypes(cards, [])).toEqual([]);
-    expect(cardLabels(cards)).toEqual(["Activity", "Other data"]);
-    expect(cardLabels(cards, [unknown])).toEqual(["Other data"]);
+    expect(cardLabels(cards)).toEqual(["Activity", "Thing"]);
+    expect(cardLabels(cards, [unknown])).toEqual(["Thing"]);
+    // Only sorted data starts checked: the owner opts in to anything else.
+    expect(initialSelection(cards)).toEqual(["activity"]);
     expect(accessText(["read"])).toBe("Can see");
     expect(accessText(["read", "write"])).toBe("Can change");
     expect(accessText(["append"])).toBe("Can add");
     expect(listText(["Activity", "Sleep", "Steps"])).toBe("Activity, Sleep, and Steps");
+  });
+
+  it("keeps distinct unsorted classes apart, even when their names match", () => {
+    const a = "https://a.example/ns#Thing";
+    const b = "https://b.example/vocab/Thing";
+    const cards = requestCards({
+      dataTypes: [a, b],
+      modesByType: { [a]: ["read"], [b]: ["read"] },
+    });
+    expect(cards.map((card) => [card.id, card.label, card.classIri])).toEqual([
+      [a, "Thing", a],
+      [b, "Thing", b],
+    ]);
+    expect(cardLabels(cards)).toEqual(["Thing", "Thing"]);
+    expect(initialSelection(cards)).toEqual([]);
+  });
+
+  it("names a class from its fragment or last path segment, cleaned for display", () => {
+    expect(classLocalName("https://vocab.example/ns#RunSession")).toBe("RunSession");
+    expect(classLocalName("https://vocab.example/types/RunSession/")).toBe("RunSession");
+    expect(classLocalName("https://vocab.example/types/Run%20Session")).toBe("Run Session");
+    expect(classLocalName("https://vocab.example/a#Ev\u202Eil")).toBe("Evil");
+    expect(classLocalName("https://vocab.example/a#%E2%80%AEEvil")).toBe("Evil");
+    expect(classLocalName("https://vocab.example/a#%E0%A4%A")).toBe("%E0%A4%A");
+    expect(classLocalName(`https://vocab.example/${"x".repeat(100)}`)).toBe(`${"x".repeat(59)}…`);
+    expect(classLocalName("https://vocab.example/")).toBe("Other data");
+    expect(classLocalName("not a url/Thing")).toBe("Thing");
+  });
+
+  it("marks append-only and mode-less classes as not shareable", () => {
+    const inbox = "https://vocab.example/Note";
+    const empty = "https://vocab.example/Blank";
+    const cards = requestCards({
+      dataTypes: [STEPS, EXERCISE, inbox, empty],
+      modesByType: { [STEPS]: ["read"], [EXERCISE]: ["append"], [inbox]: ["append"] },
+    });
+    const [activity, note, blank] = cards as [RequestCard, RequestCard, RequestCard];
+    expect(activity.shareableTypes).toEqual([STEPS]);
+    expect(isShareable(activity)).toBe(true);
+    expect(isShareable(note)).toBe(false);
+    expect(isShareable(blank)).toBe(false);
+    expect(initialSelection(cards)).toEqual(["activity"]);
+    // An add-only class is never sent, even when its card is somehow selected.
+    expect(
+      selectedDataTypes(
+        cards,
+        cards.map((card) => card.id),
+      ),
+    ).toEqual([STEPS]);
+    expect(ADD_ONLY_TEXT).toBe("Can only add — can't be shared yet");
   });
 
   it("confirms decisions in plain words, saying when the requester wasn't told", () => {
@@ -244,10 +321,15 @@ describe("data type cards", () => {
         false,
       ),
     ).toBe(
-      "MaraCoach can now see and change your Activity and Other data. We couldn't tell MaraCoach; they'll see it next time they check.",
+      "MaraCoach can now see and change your Activity and Doc. We couldn't tell MaraCoach; they'll see it next time they check.",
     );
     expect(deniedMessage("Bob", true)).toBe("You denied Bob's request.");
     expect(deniedMessage("Bob", false)).toContain("We couldn't tell Bob;");
+    expect(finishedMessage("Bob", true)).toBe("You finished approving Bob's request.");
+    expect(finishedMessage("Bob", false)).toContain("We couldn't tell Bob;");
+    expect(EXPIRY_NOT_ENFORCED).toBe(
+      "Access won't end automatically on this storage; remove it from Permissions when you're done.",
+    );
   });
 });
 
@@ -272,10 +354,18 @@ describe("pending and decided lists", () => {
     );
     expect(lists.pending.map((entry) => entry.id)).toEqual(["b", "a", "c", "d", "e"]);
     expect(lists.decided.map((entry) => entry.id)).toEqual(["h", "k", "g"]);
-    expect(lists.unreadable).toBe(1);
+    expect(lists.unreadable).toEqual([{ id: "f", status: "unreadable" }]);
     expect(isReadable({ id: "x", status: "unreadable" })).toBe(false);
-    expect(unreadableNotice(1)).toBe("1 request couldn't be read");
-    expect(unreadableNotice(3)).toBe("3 requests couldn't be read");
+  });
+
+  it("drops requests answered in this session from the waiting lists", () => {
+    const lists = splitRequests(
+      [request({ id: "a" }), request({ id: "b" }), { id: "f", status: "unreadable" }],
+      new Date(),
+      new Set(["a", "f"]),
+    );
+    expect(lists.pending.map((entry) => entry.id)).toEqual(["b"]);
+    expect(lists.unreadable).toEqual([]);
   });
 
   it("labels decisions", () => {
@@ -296,6 +386,7 @@ describe("errors and capabilities", () => {
       kind: "error",
       category: "unsupported",
       message: "Approving requests isn't available on this storage yet",
+      retry: false,
     });
     expect(reviewError(new UnsupportedAccessModelError("unknown"), false)).toMatchObject({
       message: "Answering requests isn't available on this storage yet",
@@ -304,16 +395,71 @@ describe("errors and capabilities", () => {
       kind: "error",
       category: "unreachable",
       message: "You're offline. Reconnect and try again.",
+      retry: true,
     });
     expect(reviewError(new Error(" The access records folder is shared "), true)).toEqual({
       kind: "error",
       category: "unknown",
       message: "The access records folder is shared",
+      retry: true,
     });
     expect(reviewError(new Error(""), true)).toMatchObject({
       message: "Your answer wasn't saved. Try again.",
     });
     expect(reviewError("boom", false)).toMatchObject({ category: "unknown" });
+  });
+
+  it.each([
+    ["Conditional write failed (412)", "Something else changed this request", true],
+    ["The access records folder ACL kept changing", "Something else changed this request", true],
+    ["Every approved data type needs an owner registration", "isn't registered in your pod", false],
+    ["Registered container is missing", "isn't registered in your pod", false],
+    ["This request claims an approval that was never recorded", "no record of that", false],
+    [
+      "This request only asks to add data, which no sharing role allows on its own, so it can't be approved",
+      "only asks to add data, which can't be shared yet",
+      false,
+    ],
+    ["Decision grants no requested modes", "only asks to add data", false],
+    ["Cannot deny an approval", "can't be denied now. Finish approving it", false],
+    ["Cannot approve a denial", "You already denied this request", false],
+    [
+      "Request x is still finishing with different choices; finish it first",
+      "still finishing. Close this and choose Finish approving",
+      false,
+    ],
+    ["Unreadable access request", "couldn't be read, so it can't be answered here", false],
+    ["Request no longer exists", "isn't in your inbox any more", false],
+  ])("maps the SDK's %j to plain copy", (raw, copy, retry) => {
+    const failure = reviewError(new Error(raw), true);
+    expect(failure).toMatchObject({ kind: "error", category: "unknown", retry });
+    expect(failure.kind === "error" && failure.message).toContain(copy);
+    expect(failure.kind === "error" && failure.message).not.toContain(raw);
+  });
+
+  it("never shows a sharing-layer error's own message, which names a document", () => {
+    const roleError = (code: string) =>
+      Object.assign(new Error(`Refused: https://pod.test/health/activity.ttl`), {
+        name: "RoleError",
+        code,
+      });
+    const cases: [string, string, string, boolean][] = [
+      ["conflict", "unknown", "Something else changed this request at the same time.", true],
+      [
+        "unsupported",
+        "unsupported",
+        "Sharing this data isn't available on this storage yet",
+        false,
+      ],
+      ["owner-lockout", "unknown", "would lock you out of your own data", false],
+      ["scope", "unknown", "Your answer wasn't saved. Try again.", true],
+    ];
+    for (const [code, category, copy, retry] of cases) {
+      const failure = reviewError(roleError(code), true);
+      expect(failure).toMatchObject({ kind: "error", category, retry });
+      expect(failure.kind === "error" && failure.message).toContain(copy);
+      expect(failure.kind === "error" && failure.message).not.toContain("https://");
+    }
   });
 
   it("reads request capabilities from overrides, falling back to the public caps", () => {

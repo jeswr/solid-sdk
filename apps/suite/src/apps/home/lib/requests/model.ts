@@ -2,7 +2,8 @@
 /**
  * The Requests inbox view model (03-home-permissions §2.5): requester names, the ConsentSheet
  * headline rule, one card per Home data type, the pending/decided split and plain-language copy.
- * Requests are requester-authored and untrusted: nothing here ever shows a raw IRI.
+ * Requests are requester-authored and untrusted: the only IRI ever shown is an unsorted class's own
+ * IRI, as secondary text under its name, so the owner can see exactly what was asked for.
  */
 
 import {
@@ -11,16 +12,32 @@ import {
   type RequestMode,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
+import { isRoleError } from "@jeswr/pod-access/roles";
 import { classificationForClass } from "../model/domains";
 import { httpUrl } from "../model/rdf";
 import { dpvPurposeLabel } from "../permissions/dpvLabels";
 
 export type ReadableRequest = Exclude<AccessRequestEntry, { status: "unreadable" }>;
+export type UnreadableRequest = Extract<AccessRequestEntry, { status: "unreadable" }>;
 
 const DAY = 86_400_000;
 /** Decided requests stay in the history this long (§2.5). */
 export const DECIDED_WINDOW_DAYS = 30;
 const MAX_NAME = 80;
+const MAX_CLASS_NAME = 60;
+
+/** Format characters (bidi overrides, zero-width joiners) can disguise requester-written text. */
+function plainText(value: string): string {
+  return value
+    .replace(/\p{Cf}/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/\p{Cc}/gu, "")
+    .trim();
+}
+
+function capped(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
 
 export function isReadable(entry: AccessRequestEntry): entry is ReadableRequest {
   return entry.status !== "unreadable";
@@ -33,8 +50,8 @@ export function requesterHost(entry: Pick<ReadableRequest, "requester">): string
 
 /** The notification's own name, else the requester's host, else "Someone". */
 export function requesterName(entry: Pick<ReadableRequest, "requester" | "requesterName">): string {
-  const named = entry.requesterName?.replace(/\s+/g, " ").trim();
-  if (named) return named.length > MAX_NAME ? `${named.slice(0, MAX_NAME - 1)}…` : named;
+  const named = entry.requesterName === undefined ? "" : plainText(entry.requesterName);
+  if (named) return capped(named, MAX_NAME);
   return requesterHost(entry) ?? "Someone";
 }
 
@@ -90,19 +107,50 @@ export interface RequestCard {
   id: string;
   label: string;
   description: string;
+  /** For a class the Home model doesn't sort: its full IRI, shown under the label. */
+  classIri?: string;
   /** Home domain id, for item counts from the Home model. */
   domainId?: string;
-  /** The request's data type IRIs this card stands for (sent to decide when checked). */
+  /** The request's data type IRIs this card stands for. */
   dataTypes: string[];
+  /**
+   * The data types a sharing role can grant (read or change was asked for); only these are sent
+   * to decide. Append-only and mode-less types have no role, so the SDK would refuse them.
+   */
+  shareableTypes: string[];
   modes: RequestMode[];
 }
 
-const OTHER = {
-  label: "Other data",
-  description: "Data this request names that isn't sorted into your usual data types.",
-};
+const OTHER_DESCRIPTION = "Data this request names that isn't sorted into your usual data types.";
+/** Shown instead of a role for cards no sharing role can grant. */
+export const ADD_ONLY_TEXT = "Can only add — can't be shared yet";
 
-/** One card per Home data type; requested IRIs of the same data type share a card. */
+/** A class's own name: its fragment or last path segment, cleaned for display. */
+export function classLocalName(iri: string): string {
+  let raw = "";
+  try {
+    const url = new URL(iri);
+    raw = url.hash.slice(1) || (url.pathname.split("/").filter(Boolean).at(-1) ?? "");
+  } catch {
+    raw = iri.split(/[#/]/).filter(Boolean).at(-1) ?? "";
+  }
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    /* Keep the encoded form. */
+  }
+  return capped(plainText(decoded), MAX_CLASS_NAME) || "Other data";
+}
+
+function shareable(modes: readonly RequestMode[] | undefined): boolean {
+  return modes?.includes("read") === true || modes?.includes("write") === true;
+}
+
+/**
+ * One card per Home data type; requested IRIs of the same data type share a card. Each class the
+ * Home model doesn't sort gets its own card, named after the class.
+ */
 export function requestCards(
   entry: Pick<ReadableRequest, "dataTypes" | "modesByType">,
 ): RequestCard[] {
@@ -110,19 +158,35 @@ export function requestCards(
   for (const iri of entry.dataTypes) {
     const { domain, dataType } = classificationForClass(iri);
     const id = dataType?.id ?? iri;
-    const card = cards.get(id) ?? {
+    const card: RequestCard = cards.get(id) ?? {
       id,
       ...(dataType
         ? { label: dataType.label, description: dataType.description, domainId: domain.id }
-        : OTHER),
+        : {
+            label: classLocalName(iri),
+            description: OTHER_DESCRIPTION,
+            classIri: plainText(iri),
+          }),
       dataTypes: [],
+      shareableTypes: [],
       modes: [],
     };
+    const modes = entry.modesByType[iri];
     card.dataTypes.push(iri);
-    card.modes = [...new Set([...card.modes, ...(entry.modesByType[iri] ?? [])])];
+    if (shareable(modes)) card.shareableTypes.push(iri);
+    card.modes = [...new Set([...card.modes, ...(modes ?? [])])];
     cards.set(id, card);
   }
   return [...cards.values()];
+}
+
+export function isShareable(card: RequestCard): boolean {
+  return card.shareableTypes.length > 0;
+}
+
+/** Sorted data types start checked; unsorted classes and add-only cards wait for the owner. */
+export function initialSelection(cards: readonly RequestCard[]): string[] {
+  return cards.filter((card) => !card.classIri && isShareable(card)).map((card) => card.id);
 }
 
 /** The plain role a card's modes amount to (§7 role labels). */
@@ -132,13 +196,14 @@ export function accessText(modes: readonly RequestMode[]): string {
   return "Can add";
 }
 
+/** What the checked cards share: only data types a role can grant. */
 export function selectedDataTypes(
   cards: readonly RequestCard[],
   selected: readonly string[],
 ): string[] {
   return [
     ...new Set(
-      cards.filter((card) => selected.includes(card.id)).flatMap((card) => card.dataTypes),
+      cards.filter((card) => selected.includes(card.id)).flatMap((card) => card.shareableTypes),
     ),
   ];
 }
@@ -148,14 +213,11 @@ export function listText(items: readonly string[]): string {
   return new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(items);
 }
 
+/** One label per card: distinct classes that share a name are still listed separately. */
 export function cardLabels(cards: readonly RequestCard[], selected?: readonly string[]): string[] {
-  return [
-    ...new Set(
-      cards
-        .filter((card) => selected === undefined || selected.includes(card.id))
-        .map((card) => card.label),
-    ),
-  ];
+  return cards
+    .filter((card) => selected === undefined || selected.includes(card.id))
+    .map((card) => card.label);
 }
 
 const NOT_TOLD = (name: string) =>
@@ -167,7 +229,7 @@ export function approvedMessage(
   selected: readonly string[],
   notified: boolean,
 ): string {
-  const chosen = cards.filter((card) => selected.includes(card.id));
+  const chosen = cards.filter((card) => selected.includes(card.id) && isShareable(card));
   const verb = chosen.some((card) => card.modes.includes("write")) ? "see and change" : "see";
   return `${name} can now ${verb} your ${listText(cardLabels(chosen))}.${notified ? "" : NOT_TOLD(name)}`;
 }
@@ -175,6 +237,18 @@ export function approvedMessage(
 export function deniedMessage(name: string, notified: boolean): string {
   return `You denied ${name}'s request.${notified ? "" : NOT_TOLD(name)}`;
 }
+
+/**
+ * Finishing an interrupted approval resumes the choices pinned when it started, which may be a
+ * subset of what was asked for: the message names no data types, only what the result says.
+ */
+export function finishedMessage(name: string, notified: boolean): string {
+  return `You finished approving ${name}'s request.${notified ? "" : NOT_TOLD(name)}`;
+}
+
+/** Added to a confirmation when an expiry was sent but the storage won't enforce it. */
+export const EXPIRY_NOT_ENFORCED =
+  "Access won't end automatically on this storage; remove it from Permissions when you're done.";
 
 function time(value: string | undefined): number {
   const parsed = value === undefined ? Number.NaN : Date.parse(value);
@@ -186,16 +260,27 @@ export interface RequestLists {
   pending: ReadableRequest[];
   /** Approved and denied within the last 30 days, most recently decided first. */
   decided: ReadableRequest[];
-  /** Notifications that couldn't be read. */
-  unreadable: number;
+  /** Notifications that couldn't be read; they can only be denied. */
+  unreadable: UnreadableRequest[];
 }
 
-export function splitRequests(entries: readonly AccessRequestEntry[], now: Date): RequestLists {
+/**
+ * Split the inbox. `answered` holds requests decided in this session: they leave the waiting lists
+ * at once, before (or even without) a fresh listing showing their new status.
+ */
+export function splitRequests(
+  entries: readonly AccessRequestEntry[],
+  now: Date,
+  answered: ReadonlySet<string> = new Set(),
+): RequestLists {
   const readable = entries.filter(isReadable);
   const since = now.getTime() - DECIDED_WINDOW_DAYS * DAY;
   return {
     pending: readable
-      .filter((entry) => entry.status === "pending" || entry.status === "approving")
+      .filter(
+        (entry) =>
+          (entry.status === "pending" || entry.status === "approving") && !answered.has(entry.id),
+      )
       .sort((a, b) => time(b.created) - time(a.created) || a.id.localeCompare(b.id)),
     decided: readable
       .filter(
@@ -204,12 +289,10 @@ export function splitRequests(entries: readonly AccessRequestEntry[], now: Date)
           time(entry.decidedAt) >= since,
       )
       .sort((a, b) => time(b.decidedAt) - time(a.decidedAt) || a.id.localeCompare(b.id)),
-    unreadable: entries.length - readable.length,
+    unreadable: entries.filter(
+      (entry): entry is UnreadableRequest => !isReadable(entry) && !answered.has(entry.id),
+    ),
   };
-}
-
-export function unreadableNotice(count: number): string {
-  return `${count} ${count === 1 ? "request" : "requests"} couldn't be read`;
 }
 
 export function decidedText(entry: ReadableRequest, formatDate: (value: string) => string): string {
@@ -219,11 +302,67 @@ export function decidedText(entry: ReadableRequest, formatDate: (value: string) 
 
 export type ReviewError =
   | { kind: "conflict" }
-  | { kind: "error"; category: "unsupported" | "unreachable" | "unknown"; message: string };
+  | {
+      kind: "error";
+      category: "unsupported" | "unreachable" | "unknown";
+      message: string;
+      /** Whether running the same decision again can succeed. */
+      retry: boolean;
+    };
+
+/** Plain copy for the SDK's known refusals, matched on its messages. */
+const CHANGED = "Something else changed this request at the same time. Try again.";
+const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[] = [
+  { match: /^Conditional write failed \(412\)|kept changing/, message: CHANGED, retry: true },
+  {
+    match: /needs an owner registration|Registered container is missing/,
+    message: "Some of this data isn't registered in your pod, so it can't be shared from here.",
+    retry: false,
+  },
+  {
+    match: /claims an approval that was never recorded/,
+    message:
+      "This request says it was already approved, but your pod has no record of that. You can still deny it.",
+    retry: false,
+  },
+  {
+    match: /only asks to add data|grants no requested modes/,
+    message: "This request only asks to add data, which can't be shared yet.",
+    retry: false,
+  },
+  {
+    match: /^Cannot deny an approval/,
+    message:
+      "Approving this request has already started, so it can't be denied now. Finish approving it, then remove access from Permissions if you change your mind.",
+    retry: false,
+  },
+  {
+    match: /^Cannot approve a denial/,
+    message: "You already denied this request, so it can't be approved.",
+    retry: false,
+  },
+  {
+    match: /still finishing/,
+    message:
+      "An earlier approval of this request is still finishing. Close this and choose Finish approving.",
+    retry: false,
+  },
+  {
+    match: /^Unreadable access request/,
+    message: "This request couldn't be read, so it can't be answered here.",
+    retry: false,
+  },
+  {
+    match: /^Request no longer exists/,
+    message: "This request isn't in your inbox any more.",
+    retry: false,
+  },
+];
 
 /**
- * What the sheet shows for a failed decision. The SDK's errors carry user-readable messages; a
- * race with another decision is not an error for the user, and ACP storage gets its own copy.
+ * What the sheet shows for a failed decision: plain copy for the SDK's known refusals, the error's
+ * own message otherwise. A race with another decision is not an error for the user, and ACP
+ * storage gets its own copy.
  */
 export function reviewError(error: unknown, approve: boolean, online = true): ReviewError {
   if (error instanceof RequestConflictError) return { kind: "conflict" };
@@ -234,17 +373,46 @@ export function reviewError(error: unknown, approve: boolean, online = true): Re
       message: approve
         ? "Approving requests isn't available on this storage yet"
         : "Answering requests isn't available on this storage yet",
+      retry: false,
     };
   if (!online)
     return {
       kind: "error",
       category: "unreachable",
       message: "You're offline. Reconnect and try again.",
+      retry: true,
     };
+  // Sharing-layer refusals name the document they hit, so their own messages are never shown.
+  if (isRoleError(error)) {
+    if (error.code === "unsupported")
+      return {
+        kind: "error",
+        category: "unsupported",
+        message: "Sharing this data isn't available on this storage yet",
+        retry: false,
+      };
+    if (error.code === "owner-lockout")
+      return {
+        kind: "error",
+        category: "unknown",
+        message: "Sharing this would lock you out of your own data, so nothing was changed.",
+        retry: false,
+      };
+    return {
+      kind: "error",
+      category: "unknown",
+      message: error.code === "conflict" ? CHANGED : "Your answer wasn't saved. Try again.",
+      retry: true,
+    };
+  }
   const message = error instanceof Error ? error.message.trim() : "";
+  const known = KNOWN_ERRORS.find((candidate) => candidate.match.test(message));
+  if (known)
+    return { kind: "error", category: "unknown", message: known.message, retry: known.retry };
   return {
     kind: "error",
     category: "unknown",
     message: message || "Your answer wasn't saved. Try again.",
+    retry: true,
   };
 }

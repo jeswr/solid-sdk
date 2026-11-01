@@ -79,7 +79,7 @@ it("lists with the session's fetch and splits pending, decided and unreadable", 
   expect(binding.status).toBe("ready");
   expect(binding.pending).toEqual([pending]);
   expect(binding.decided).toEqual([decided]);
-  expect(binding.unreadable).toBe(1);
+  expect(binding.unreadable).toEqual([{ id: `${ROOT}inbox/x`, status: "unreadable" }]);
   expect(mocks.list).toHaveBeenCalledWith({
     fetch: mocks.session.fetch,
     webId: `${ROOT}profile#me`,
@@ -155,6 +155,45 @@ it("decides through the SDK in one call and re-lists whatever the outcome", asyn
     await expect(binding.decide(readable, { approve: false })).rejects.toThrow("refused");
   });
   expect(mocks.list).toHaveBeenCalledTimes(3);
+});
+
+it("drops a decided request from Pending at once, while the re-list runs and after it fails", async () => {
+  await mount(h(Probe));
+  const relist = deferred<AccessRequestEntry[]>();
+  mocks.list.mockReturnValueOnce(relist.promise);
+  mocks.decide.mockResolvedValue({
+    status: "denied",
+    receiptUrl: `${ROOT}r`,
+    notified: false,
+    expiryEnforced: false,
+  });
+  const readable = binding.pending[0] as Exclude<AccessRequestEntry, { status: "unreadable" }>;
+  await act(async () => {
+    await binding.decide(readable, { approve: false });
+  });
+  // The re-list is still running and the last listing still says pending; it is gone all the same.
+  expect(mocks.list).toHaveBeenCalledTimes(2);
+  expect(binding.pending).toEqual([]);
+  await act(async () => relist.reject(new Error("offline")));
+  expect(binding.pending).toEqual([]);
+  // A later listing that still shows it pending (a stale cache) doesn't bring it back.
+  mocks.list.mockResolvedValueOnce([pending]);
+  await act(() => binding.refresh());
+  expect(binding.pending).toEqual([]);
+  // Unreadable requests leave the same way; a failed decision leaves the list as it was.
+  const unreadable: AccessRequestEntry = { id: `${ROOT}inbox/x`, status: "unreadable" };
+  mocks.list.mockResolvedValue([pending, unreadable]);
+  await act(() => binding.refresh());
+  expect(binding.unreadable).toEqual([unreadable]);
+  mocks.decide.mockRejectedValueOnce(new Error("Unreadable access request"));
+  await act(async () => {
+    await expect(binding.decide(unreadable, { approve: false })).rejects.toThrow();
+  });
+  expect(binding.unreadable).toEqual([unreadable]);
+  await act(async () => {
+    await binding.decide(unreadable, { approve: false });
+  });
+  expect(binding.unreadable).toEqual([]);
 });
 
 it("refreshes on focus at most once a minute", async () => {

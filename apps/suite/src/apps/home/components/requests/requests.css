@@ -7,7 +7,7 @@
   font-weight: 600;
 }
 .hm-requests-page :is(a, button),
-.hm-request-sheet :is(button, select, input) {
+.hm-request-sheet :is(button, input) {
   min-height: 40px;
 }
 .hm-request-back {
@@ -48,6 +48,10 @@
   .hm-request-row {
     grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr) auto;
     align-items: center;
+  }
+  /* No requester to show: the details take the first two columns. */
+  .hm-request-row[data-unreadable] {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 .hm-request-who {
@@ -108,16 +112,10 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.hm-request-account {
-  display: grid;
-  gap: var(--space-1);
-}
-.hm-request-account select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--foreground);
-  padding-inline: var(--space-2);
+/* A class the Home model doesn't sort shows its own IRI, which may be long. */
+.hm-request-iri {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 .hm-request-error {
   overflow-wrap: anywhere;

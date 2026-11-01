@@ -25,12 +25,7 @@ import { provenanceOf } from "../lib/model/provenance";
 import { inStorage } from "../lib/model/rdf";
 import { readTypeIndexes } from "../lib/model/type-index";
 import { type RequestCaps, requestCaps } from "../lib/requests/caps";
-import {
-  type ReadableRequest,
-  type RequestCard,
-  type RequestLists,
-  splitRequests,
-} from "../lib/requests/model";
+import { type RequestCard, type RequestLists, splitRequests } from "../lib/requests/model";
 
 /** Focus refreshes at most this often (§3). */
 export const FOCUS_REFRESH_MS = 60_000;
@@ -46,6 +41,8 @@ interface RequestsStore {
   loadedAt: number;
   loading?: Promise<void> | undefined;
   generation: number;
+  /** Requests decided in this session, hidden from the waiting lists whatever a listing says. */
+  answered: Set<string>;
   listeners: Set<() => void>;
 }
 
@@ -60,6 +57,7 @@ function storeFor(session: PodSession): RequestsStore {
       snapshot: { status: "loading", entries: [] },
       loadedAt: 0,
       generation: 0,
+      answered: new Set(),
       listeners: new Set(),
     };
     stores.set(session.fetch, store);
@@ -106,8 +104,12 @@ function load(store: RequestsStore, session: PodSession): Promise<void> {
 export interface RequestsBinding extends RequestLists {
   status: RequestsSnapshot["status"];
   refresh(): Promise<void>;
-  /** One SDK decision; the inbox is re-listed afterwards whatever the outcome. */
-  decide(entry: ReadableRequest, decision: RequestDecision): Promise<DecisionResult>;
+  /**
+   * One SDK decision; the inbox is re-listed afterwards whatever the outcome. A decided request
+   * leaves the waiting lists as soon as the decision resolves, so it can't be decided twice while
+   * the re-list runs or after it fails.
+   */
+  decide(entry: AccessRequestEntry, decision: RequestDecision): Promise<DecisionResult>;
 }
 
 export function useRequests(): RequestsBinding {
@@ -140,19 +142,22 @@ export function useRequests(): RequestsBinding {
   }, [store, session]);
 
   const decide = useCallback(
-    async (entry: ReadableRequest, decision: RequestDecision) => {
+    async (entry: AccessRequestEntry, decision: RequestDecision) => {
       try {
-        return await decideRequest(entry, decision, requestOptions(session));
+        const result = await decideRequest(entry, decision, requestOptions(session));
+        store.answered.add(entry.id);
+        publish(store, { ...store.snapshot });
+        return result;
       } finally {
         void refresh();
       }
     },
-    [session, refresh],
+    [store, session, refresh],
   );
 
   return {
     status: snapshot.status,
-    ...splitRequests(snapshot.entries, new Date()),
+    ...splitRequests(snapshot.entries, new Date(), store.answered),
     refresh,
     decide,
   };
