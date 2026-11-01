@@ -327,7 +327,7 @@ export function fromRdf(dataset: DatasetCore, id: string): PodRecord {
 }
 const MAX_TURTLE_BYTES = 256 * 1024;
 function assertTurtleBounds(text: string): void {
-  if (Buffer.byteLength(text, "utf8") > MAX_TURTLE_BYTES)
+  if (new TextEncoder().encode(text).byteLength > MAX_TURTLE_BYTES)
     throw new Error("Turtle exceeds record bounds");
 }
 
