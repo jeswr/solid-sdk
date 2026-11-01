@@ -107,7 +107,7 @@ function publicData(data: BookmarkData | undefined): BookmarkData | undefined {
     archived: data.archived ?? false,
     ...(data.created === undefined ? {} : { created: data.created }),
     ...(data.modified === undefined ? {} : { modified: data.modified }),
-    ...(data.tags === undefined ? {} : { tags: data.tags }),
+    ...(data.tags === undefined ? {} : { tags: [...data.tags].sort() }),
   };
 }
 

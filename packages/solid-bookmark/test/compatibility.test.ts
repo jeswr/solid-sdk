@@ -93,3 +93,15 @@ it("preserves clearing setter types for strict consumers of the built declaratio
     fileURLToPath(new URL("./consumer.ts", import.meta.url)),
   ]);
 }, 15_000);
+
+it("sorts parsed tags by code unit like the hand-written package (not locale order)", async () => {
+  const resourceUrl = "https://pod.example/b/2";
+  const tags = ["é", "Z", "a", "B"];
+  const expected = [...tags].sort();
+  expect(
+    parseBookmark(resourceUrl, buildBookmark(resourceUrl, { url: "https://example.org/", tags }))
+      ?.tags,
+  ).toEqual(expected);
+  const turtle = await serializeBookmark(resourceUrl, { url: "https://example.org/", tags });
+  expect((await parseBookmarkTtl(resourceUrl, turtle))?.tags).toEqual(expected);
+});
