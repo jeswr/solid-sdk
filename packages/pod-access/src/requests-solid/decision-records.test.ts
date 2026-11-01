@@ -251,6 +251,14 @@ describe("refused targets", () => {
       `${POD}settings`,
       `${POD}%73ettings/prefs.ttl`,
       `${POD}contacts/./../settings/prefs.ttl`,
+      `${POD}/settings/prefs.ttl`,
+      `${POD}contacts//alice.ttl`,
+      `${POD}Settings/prefs.ttl`,
+      `${POD}contacts/%61lice.ttl`,
+      `${POD}contacts/%2e%2e/settings/prefs.ttl`,
+      `${POD}contacts/a%00.ttl`,
+      `${POD}contacts/a%C3.ttl`,
+      `${POD}contacts/alice.ttl.ACL`,
     ]) {
       const pod = buildPod();
       await pinOnly(pod);
@@ -286,6 +294,17 @@ describe("refused targets", () => {
       );
       expect(puts(pod)).toEqual([]);
     }
+  });
+
+  it("still shares ordinary encoded names such as spaces and accented letters", async () => {
+    const pod = buildPod();
+    const spaced = `${POD}contacts/John%20Smith.ttl`;
+    const accented = `${POD}contacts/caf%C3%A9.ttl`;
+    pod.seed(spaced, `<${spaced}#me> a <${CONTACTS_CLASS}>.`);
+    pod.seed(accented, `<${accented}#me> a <${CONTACTS_CLASS}>.`);
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(result.status).toBe("approved");
+    for (const target of [spaced, accented]) expect(pod.body(`${target}.acl`)).toContain(REQUESTER);
   });
 
   it("compares normalised targets against storage below the origin root", async () => {

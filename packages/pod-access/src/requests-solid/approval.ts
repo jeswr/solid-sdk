@@ -378,27 +378,47 @@ async function validateSnapshot(
 
 /**
  * Targets an approval may never grant: anything outside storage, access-control documents,
- * queries, fragments, percent-encoded paths (which a server may decode into another name), the
- * storage root (with or without its trailing slash), and the owner's settings (type indexes,
- * preferences, records). `storage` is canonical and slash-terminated; the target is compared by
- * its parsed origin and path, never as a raw string.
+ * queries, fragments, empty path segments, percent-encodings a server may decode into another
+ * name (unreserved characters, `%`, `/`, `\`, control characters), the storage root (with or
+ * without its trailing slash), and the owner's settings (type indexes, preferences, records),
+ * compared case-insensitively. Ordinary encoded names (spaces, non-ASCII) stay grantable. The
+ * target is compared by its decoded path, never as a raw string.
  */
 function assertGrantable(target: string, storage: string): void {
-  const url = new URL(scoped(storage, target));
-  // scoped() already refused any other origin, so origin + path is where the target points.
-  const at = `${url.origin}${url.pathname}`;
-  const settings = `${storage}settings`;
+  // scoped() already refused any other origin, so the path is where the target points.
+  const { pathname } = new URL(scoped(storage, target));
+  const root = new URL(storage).pathname;
+  const ambiguous = [...pathname.matchAll(/%([0-9a-f]{2})/gi)].some(([, hex]) => {
+    const code = Number.parseInt(hex as string, 16);
+    return code < 0x20 || code === 0x7f || /[A-Za-z0-9\-._~%/\\]/.test(String.fromCharCode(code));
+  });
   if (
     target.includes("?") ||
     target.includes("#") ||
-    url.pathname.includes("%") ||
-    /\.(acl|acr)$/i.test(url.pathname) ||
-    at === storage ||
-    at === storage.slice(0, -1) ||
-    at === settings ||
-    at.startsWith(`${settings}/`)
+    pathname.includes("//") ||
+    ambiguous
   )
     throw new Error(`${target} can't be shared through an access request`);
+  const path = decoded(pathname);
+  const base = decoded(root) as string;
+  if (
+    path === undefined ||
+    /\.(acl|acr)$/.test(path) ||
+    path === base ||
+    path === base.slice(0, -1) ||
+    path === `${base}settings` ||
+    path.startsWith(`${base}settings/`)
+  )
+    throw new Error(`${target} can't be shared through an access request`);
+}
+
+/** The lower-cased decoded path, or undefined when its encoding is not valid UTF-8. */
+function decoded(path: string): string | undefined {
+  try {
+    return decodeURIComponent(path).toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 async function complete(

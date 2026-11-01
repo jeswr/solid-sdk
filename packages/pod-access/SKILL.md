@@ -53,8 +53,10 @@ key, the request URL, the requester, what was asked and a generation number, and
 `approved` or `denied`; a finished record only matches a request in the same state, so a new request
 at a reused URL starts a new generation. Grant and denial-receipt IDs derive from the record URL, so
 they are bound to the requester. Never grant the storage root (slashless form included) or anything
-under `<storage>settings/`, whether discovered or pinned; compare the parsed origin and path, never
-raw strings, and refuse any target with a query, fragment or `%` in its path. A resumed approval
+under `<storage>settings/`, whether discovered or pinned; compare the decoded path
+case-insensitively, never raw strings, and refuse any target with a query, fragment, empty segment
+or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls, invalid UTF-8);
+ordinary encoded names (spaces, non-ASCII) stay shareable. A resumed approval
 (pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
 the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier

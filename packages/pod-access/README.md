@@ -292,9 +292,11 @@ to registered instances and bounded, recursively listed instance-container membe
 and off-storage targets fail before the Approving CAS, and so do targets an approval may never
 share: the storage root itself (with or without its trailing slash) and anything under
 `<storage>settings/` (Type Indexes, preferences, the access records). Targets are compared by their
-parsed origin and path, never as raw strings, so dot segments cannot hide a refused path; a target
-with a query, a fragment or any `%` in its path is refused outright, because a server may decode
-it into another name. A requested type that grants no mode (it has no permission of its own, or
+decoded path, case-insensitively, never as raw strings, so dot segments, case or encoding cannot
+hide a refused path. A target with a query, a fragment, an empty path segment (`//`), or a
+percent-encoding a server may decode into another name (an unreserved character, `%`, `/`, `\`, a
+control character, or invalid UTF-8) is refused outright; ordinary encoded names such as
+`John%20Smith.ttl` or `caf%C3%A9.ttl` stay shareable. A requested type that grants no mode (it has no permission of its own, or
 `role: "viewer"` drops its only mode) is left out of the approval rather than blocking it. `options.typeIndex` accepts an owner-controlled
 dataset or in-storage index URL; otherwise discovery reads profile public/private links and
 `pim:preferencesFile` → private index. All authenticated discovered URLs stay in `storage`, with
