@@ -227,7 +227,10 @@ export function humanise(rule: RecurrenceRule, due: Date): string {
   if (rule.frequency === "YEARLY")
     text += ` on ${due.getDate()} ${due.toLocaleString("en-GB", { month: "short" })}`;
   if (rule.count !== undefined) text += ` (${rule.count} times)`;
-  if (rule.until !== undefined)
-    text += ` until ${typeof rule.until === "string" ? rule.until : rule.until.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  if (rule.until !== undefined) {
+    // An xsd:date is a calendar date; avoid parsing it as UTC and shifting it locally.
+    const end = typeof rule.until === "string" ? new Date(`${rule.until}T00:00:00`) : rule.until;
+    text += ` until ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  }
   return text;
 }
