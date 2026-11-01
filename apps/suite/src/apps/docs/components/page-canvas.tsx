@@ -16,6 +16,9 @@ export function PageCanvas({
   const [height, setHeight] = useState(1056);
   const scale = Math.min(200, Math.max(50, zoom)) / 100;
   useLayoutEffect(() => {
+    // Measuring is an enhancement: without ResizeObserver the page keeps its
+    // default Letter-height reservation instead of failing the whole editor.
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setHeight(entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height + 194);
     });

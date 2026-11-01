@@ -486,6 +486,15 @@ it("scales and reserves page geometry as content grows and bounds zoom to 50–2
   expect(scale.style.getPropertyValue("--docs-zoom")).toBe("0.5");
 });
 
+it("keeps the default page height where ResizeObserver is unavailable", () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  const view = render(h(PageCanvas, { zoom: 100, title: "" }, h("p", null, "Text")));
+  const scale = view.container.querySelector(".docs-page-scale") as HTMLElement;
+  expect(scale.style.getPropertyValue("--docs-page-height")).toBe("1056px");
+  expect(view.container.querySelector("h1")?.textContent).toBe("Untitled document");
+  view.unmount();
+});
+
 it("keeps checklist checkboxes on the same flex row as their text, including node views without data-type", () => {
   const css = readFileSync(resolve(process.cwd(), "src/apps/docs/components/docs.css"), "utf8");
   const style = document.createElement("style");
