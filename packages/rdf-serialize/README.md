@@ -38,6 +38,25 @@ const turtle = await serialize(
 `application/ld+json`, and set
 `emptyAsEmptyString: false` if an empty graph should retain its prefix preamble.
 
+Every N3 format (including the unknown-format Turtle fallback) rebuilds quads from validated
+RDF/JS fields before writing; caller methods and N3 private term IDs are never trusted.
+Named-node and datatype IRIs must be absolute and contain no IRIREF-forbidden characters
+(controls through U+0020, space, `< > " { } | ^`, backtick, backslash, or lone surrogates).
+Invalid fields, term positions, language tags, or inconsistent language/datatype/direction
+combinations reject with `TypeError`. Language tags must match
+`/^[a-zA-Z]+(-[a-zA-Z0-9]+)*$/`. Unsafe blank-node labels are consistently relabelled per input,
+avoiding existing labels. Valid lexical IRIs and N3 language-tag spelling remain unchanged.
+Validated N3 variables remain supported for patch formulas, including line-mode output;
+variable names must start with a PN_CHARS_BASE character or underscore and contain only
+SPARQL VARNAME characters. Direction is read only for language literals, since N3 also
+reports datatype suffixes containing `--` as directions.
+
+Invalid Turtle prefix names reject with `TypeError`. Prefixes are omitted when their label
+contains a dot, when `name:` starts any input IRI (including graph and literal datatype IRIs),
+or when their namespace contains regex metacharacters N3 does not escape. Other namespaces
+are lexically escaped. These filters preserve RDF identity and prevent prefix-based injection;
+they apply to both `serialize` and `legacySerialize` in every N3 format.
+
 JSON-LD always returns an array (`[]` for an empty dataset), ignoring prefixes and
 `emptyAsEmptyString`. Named graphs use `@id`/`@graph`; blank nodes receive stable document-local
 `_:bN` labels. Lists stay as RDF first/rest triples. Literal values remain strings: `xsd:string`
@@ -96,6 +115,9 @@ function describe(node: TermWrapper, homepage: string) {
 Predicates and optional datatype IRIs must be trusted vocabulary constants. Subjects must
 already be safe. The helpers preserve lexical IRI identity and leave literal escaping to the
 RDF writer. Keep application-specific alias, validation, and reject/drop policies at the caller.
+
+`pnpm run api:check` checks separate API Extractor reports for the root entry and `/wrapper`
+in `etc/rdf-serialize.api.md` and `etc/rdf-serialize-wrapper.api.md`.
 
 ## Links
 

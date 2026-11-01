@@ -45,5 +45,21 @@ export const atomNames = [
   "status-dot",
   "count-badge",
 ] as const;
-export const fixtureNames = ["primitives", "atoms", ...primitiveNames, ...atomNames] as const;
+export const syncFixtureNames = [
+  "offline-pill",
+  "sync-sheet",
+  "conflict-dialog",
+  "capability-gate",
+] as const;
+export type SyncFixtureName = (typeof syncFixtureNames)[number];
+export const fixtureNames = [
+  "primitives",
+  "atoms",
+  "global-search",
+  "command-palette",
+  "shortcut-help",
+  ...primitiveNames,
+  ...atomNames,
+  ...syncFixtureNames,
+] as const;
 export type FixtureName = (typeof fixtureNames)[number];

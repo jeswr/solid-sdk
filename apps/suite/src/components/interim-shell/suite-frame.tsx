@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * Interim suite frame for the Drive and Docs first cut: rail, top bar, app
@@ -16,17 +15,27 @@ import {
   CalendarDays,
   FileText,
   HardDrive,
+  HeartPulse,
   Images,
   Menu,
   Search,
   SquareCheckBig,
   Users,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "tasks";
+export type SuiteAppId =
+  | "drive"
+  | "docs"
+  | "calendar"
+  | "contacts"
+  | "photos"
+  | "money"
+  | "health"
+  | "tasks";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
@@ -34,6 +43,8 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
+  { id: "money", label: "Money", href: "/money", icon: Wallet },
+  { id: "health", label: "Health", href: "/health", icon: HeartPulse },
   { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
 ];
 

@@ -32,13 +32,22 @@ import {
   DpopApiVerifier,
   type DpopApiVerifierOptions,
   type RateLimiter,
+  type ReplayStore,
   type RequestLike,
   TokenBucketRateLimiter,
   verifyRequest,
 } from "@jeswr/solid-api-auth/next";
 import { notConfigured, type PodGuardConfig } from "./config.js";
 import { type OwnerBindingSeams, resolveAuthorizedPod } from "./owner.js";
-import { PodAccessError } from "./pod.js";
+import { isLoopback, PodAccessError } from "./pod.js";
+
+function isLoopbackUrl(value: string): boolean {
+  try {
+    return isLoopback(new URL(value));
+  } catch {
+    return false;
+  }
+}
 
 /** The verified caller of a pod route: token WebID + the ONE pod it binds to. */
 export interface AuthenticatedPodCaller {
@@ -58,6 +67,12 @@ export interface PodGuardOptions {
   readonly verifier?: DpopApiVerifier;
   /** Per-WebID rate limiter shared by the guarded routes. */
   readonly rateLimiter?: RateLimiter;
+  /**
+   * DPoP `jti` replay store for the default verifier. The default is in-process, so
+   * each serverless instance remembers only its own proofs; supply a shared store
+   * (for example backed by Redis) when requests can land on several instances.
+   */
+  readonly replayStore?: ReplayStore;
   /** Owner-binding seams (profile fetch) for tests. */
   readonly ownerSeams?: OwnerBindingSeams;
   /**
@@ -203,6 +218,7 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
       trustedIssuers: config.trustedOidcIssuers,
       allowInsecureLoopback: config.allowInsecureLoopback === true,
       trustForwardedHeaders: config.trustForwardedHeaders === true,
+      ...(options.replayStore !== undefined && { replayStore: options.replayStore }),
     });
     return verifier;
   };
@@ -214,6 +230,13 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
   async function authenticate(request: Request): Promise<{ webid: string } | Response> {
     if (config.trustedOidcIssuers.length === 0) {
       return notConfigured("the trustedOidcIssuers issuer allowlist is unset");
+    }
+    // The dev loopback flag relaxes transport rules; it must never reach a deployment
+    // that trusts a real issuer.
+    if (config.allowInsecureLoopback === true && !config.trustedOidcIssuers.every(isLoopbackUrl)) {
+      return notConfigured(
+        "allowInsecureLoopback is set but a trusted issuer is not loopback (dev flag in a real deployment)",
+      );
     }
     return verifyApiRequest(
       { headers: request.headers, method: request.method, url: publicRequestUrl(request) },
