@@ -312,6 +312,7 @@ function compileCompositeEntity(
   compConfig: CompositeEntityConfig,
   shapeByTarget: Map<string, NodeShapeModel>,
   shapes: NormalizedShapes,
+  typeAliases: ReadonlySet<string>,
   provenance: FieldProvenance[],
 ): CompositeManifestEntity {
   assertIdentifier(compConfig.name, "codegen composite entity name");
@@ -409,11 +410,7 @@ function compileCompositeEntity(
           );
         }
         const targetClass = compConfig.nodes[targetNode]?.targetClass;
-        const targetShape = targetClass === undefined ? undefined : shapeByTarget.get(targetClass);
-        if (
-          constraint.hasClass !== undefined &&
-          targetShape?.aliasTypeIris?.includes(constraint.hasClass)
-        ) {
+        if (constraint.hasClass !== undefined && typeAliases.has(constraint.hasClass)) {
           throw new Error(
             `composite ${compConfig.name} link ${shapeFieldName} sh:class ${constraint.hasClass} is a target type alias removed by migration`,
           );
@@ -496,6 +493,7 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
   }
   const provenance: FieldProvenance[] = [];
   const shapeByTarget = new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
+  const typeAliases = new Set(shapes.nodeShapes.flatMap((shape) => shape.aliasTypeIris ?? []));
 
   // Every target class a composite claims as a node — such a shape is NOT also compiled
   // to a flat entity (the composite owns it). A double-claim across composites is an error.
@@ -523,7 +521,7 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
     .map((shape) => compileEntity(shape, config, provenance));
   const compositeEntities: AnyManifestEntity[] = config.entities
     .filter(isCompositeConfig)
-    .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, provenance));
+    .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, typeAliases, provenance));
 
   const manifest: ModelManifest = validateManifest({
     manifestVersion: 1,

@@ -222,7 +222,7 @@ describe("R8 M3: accepted node types use data-graph subclass membership", () => 
   it.each([
     true,
     false,
-  ])("fails closed on unrecognized cyclic child types (required=%s)", (required) => {
+  ])("accepts unrelated cyclic child types when explicit sh:class is satisfied (required=%s)", (required) => {
     const input = composite(required);
     const tree = input.entities[0];
     if (tree?.kind !== "composite" || !tree.nodes[0]?.fields[0]) throw new Error("missing tree");
@@ -231,7 +231,7 @@ describe("R8 M3: accepted node types use data-graph subclass membership", () => 
     const ds =
       store(`<${DOC}#it> a ex:Thing; ex:link ex:child . ex:child a ex:Special, ex:Base; ex:p "child" .
       ex:Special rdfs:subClassOf ex:Other . ex:Other rdfs:subClassOf ex:Special .`);
-    expect(e?.parse(DOC, ds)).toEqual(required ? undefined : {});
+    expect(e?.parse(DOC, ds)).toEqual({ val: "child" });
   });
   it("bounds all accepted classes together at the existing 10000 raw-read budget", () => {
     const e = entity([]);

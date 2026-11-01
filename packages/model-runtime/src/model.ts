@@ -776,24 +776,72 @@ function writeIriLink(doc: TermWrapper, predicate: string, targetIri: string): v
   );
 }
 
-/** Canonicalise known aliases in a COPY; serialising never mutates the caller's store. */
-function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: DataFactory): Store {
-  const output = new Store([...store]);
-  const nodes = manifest.entities.flatMap<ManifestEntity | ManifestNode>((entity) =>
-    isCompositeEntity(entity) ? entity.nodes : [entity],
-  );
-  for (const node of nodes) {
-    for (const field of node.fields) {
-      if (!field.aliasPredicates?.length) continue;
-      const subjects = new Map<string, Term>();
-      for (const alias of field.aliasPredicates) {
-        for (const quad of output.getQuads(null, alias, null, null)) {
-          subjects.set(`${quad.subject.termType}:${quad.subject.value}`, quad.subject);
+/** Establish shape ownership against the original data, before any aliases change. */
+function aliasFocusNodes(
+  store: Store,
+  manifest: ModelManifest,
+  factory: DataFactory,
+): Map<ManifestEntity | ManifestNode, Set<string>> {
+  const scopes = new Map<ManifestEntity | ManifestNode, Set<string>>();
+  const candidates = new Set<string>();
+  for (const quad of store.getQuads(null, RDF_TYPE, null, null)) {
+    if (quad.subject.termType === "NamedNode" && isSafeAbsoluteIri(quad.subject.value)) {
+      candidates.add(quad.subject.value);
+    }
+  }
+  for (const entity of manifest.entities) {
+    const byName = new Map(
+      (isCompositeEntity(entity) ? entity.nodes : []).map((node) => [node.name, node]),
+    );
+    const root = isCompositeEntity(entity) ? byName.get(entity.root) : entity;
+    if (!root) continue;
+    const visit = (node: ManifestEntity | ManifestNode, iri: string): void => {
+      let subjects = scopes.get(node);
+      if (!subjects) {
+        subjects = new Set();
+        scopes.set(node, subjects);
+      }
+      if (subjects.has(iri)) return;
+      subjects.add(iri);
+      const doc = new TermWrapper(factory.namedNode(iri), store, factory);
+      for (const field of node.fields) {
+        if (field.kind !== "nested") continue;
+        const child = byName.get(field.node as string);
+        const link = resolveNestedTarget(doc, field.predicate);
+        if (
+          child &&
+          !link.reject &&
+          link.target !== undefined &&
+          (field.hasClass === undefined || hasDatasetClass(doc, link.target, [field.hasClass]))
+        ) {
+          // sh:node applies the child shape to this focus node regardless of its type.
+          visit(child, link.target);
         }
       }
+    };
+    for (const iri of candidates) {
+      const doc = new TermWrapper(factory.namedNode(iri), store, factory);
+      if (hasDatasetClass(doc, iri, [...root.typeIris, ...(root.aliasTypeIris ?? [])])) {
+        visit(root, iri);
+      }
+    }
+  }
+  return scopes;
+}
+
+/** Canonicalise aliases only at their owning shapes' focus nodes, in a COPY. */
+function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: DataFactory): Store {
+  const scopes = aliasFocusNodes(store, manifest, factory);
+  const output = new Store([...store]);
+  for (const [node, subjects] of scopes) {
+    for (const field of node.fields) {
+      if (!field.aliasPredicates?.length) continue;
       const plan = planField(field);
-      for (const subject of subjects.values()) {
-        const doc = new TermWrapper(subject, output, factory);
+      for (const subject of subjects) {
+        if (!field.aliasPredicates.some((alias) => output.countQuads(subject, alias, null, null))) {
+          continue;
+        }
+        const doc = new TermWrapper(factory.namedNode(subject), output, factory);
         const terms =
           field.collection === "set"
             ? retainedSetTerms(doc, plan)
@@ -805,16 +853,17 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
       }
     }
     for (const alias of node.aliasTypeIris ?? []) {
-      for (const quad of output.getQuads(null, RDF_TYPE, alias, null)) {
-        const doc = new TermWrapper(quad.subject, output, factory);
+      for (const subject of subjects) {
+        const doc = new TermWrapper(factory.namedNode(subject), output, factory);
         const types = SetFrom.subjectPredicate(
           doc,
           RDF_TYPE,
           NamedNodeAs.string,
           safeNamedNodeFrom,
         );
-        types.delete(alias);
-        for (const type of node.typeIris) types.add(type);
+        if (types.delete(alias)) {
+          for (const type of node.typeIris) types.add(type);
+        }
       }
     }
   }
@@ -1089,6 +1138,9 @@ function makeCompositeEntity(
     if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
     const rootIri = `${resourceUrl}#${rootRt.node.fragment}`;
     if (!isSafeAbsoluteIri(rootIri)) return undefined;
+    // Target classes select root resources; sh:node applies child property constraints
+    // without making the child shape's target classes an additional constraint.
+    if (!new rootRt.Wrapper(rootIri, dataset, factory).isInstance) return undefined;
     // Fail-closed budget on total sub-node parse attempts (bounds the graph-walk's
     // backtracking against a hostile document — see MAX_NODE_VISITS).
     let visits = 0;
@@ -1096,9 +1148,6 @@ function makeCompositeEntity(
       if (++visits > MAX_NODE_VISITS) return undefined;
       if (!isSafeAbsoluteIri(iri)) return undefined;
       const doc = new rt.Wrapper(iri, dataset, factory);
-      // A node's data-graph type must reach a canonical/alias target class;
-      // an untyped subject at a fragment is not a conforming node.
-      if (!doc.isInstance) return undefined;
       const data: EntityData = {};
       for (const plan of rt.plans) {
         if (readFlatFieldInto(doc, plan, data) === "reject") return undefined;
@@ -1131,7 +1180,7 @@ function makeCompositeEntity(
             : undefined;
         if (childData === undefined) {
           // Same grading: a Violation-graded cross-node MUST whose single target is
-          // absent or non-conforming (fails its own guards / type check) rejects the
+          // absent or non-conforming (fails its own property guards) rejects the
           // WHOLE composite. A Warning/Info link drops its sub-node's fields and admits.
           if (required) return undefined;
           continue;

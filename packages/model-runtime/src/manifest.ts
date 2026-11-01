@@ -595,6 +595,15 @@ function validateTypeAliases(entities: AnyManifestEntity[]): void {
       aliases.add(alias);
     }
   }
+  for (const node of nodes) {
+    for (const field of node.fields) {
+      if (field.hasClass !== undefined && aliases.has(field.hasClass)) {
+        fail(
+          `composite nested field "${field.name}" sh:class ${field.hasClass} is a target type alias removed by migration`,
+        );
+      }
+    }
+  }
 }
 
 /** Validate a non-empty, capped, control-char-free array of type IRIs. */
@@ -719,16 +728,6 @@ function validateCompositeEntity(raw: Record<string, unknown>): CompositeManifes
       const target = field.node as string;
       if (!seenNodeNames.has(target)) {
         fail(`composite nested field "${field.name}" targets unknown node "${target}"`);
-      }
-      if (
-        field.hasClass !== undefined &&
-        nodes
-          .find((candidate) => candidate.name === target)
-          ?.aliasTypeIris?.includes(field.hasClass)
-      ) {
-        fail(
-          `composite nested field "${field.name}" sh:class ${field.hasClass} is a target type alias removed by migration`,
-        );
       }
       if (target === root) fail(`composite nested field "${field.name}" links into the root node`);
       if (target === node.name)

@@ -409,6 +409,7 @@ function assertCompositeFidelity(
   shapes: NormalizedShapes,
   compiled: CompileResult,
   composite: CompositeManifestEntity,
+  typeAliases: ReadonlySet<string>,
 ): void {
   const shapeByTarget = shapeByTargetClass(shapes);
   const provByKey = provenanceIndex(compiled);
@@ -459,12 +460,7 @@ function assertCompositeFidelity(
           );
         }
         const target = composite.nodes.find((candidate) => candidate.name === field.node);
-        const targetShape = shapeByTarget.get(target?.typeIris[0] ?? "");
-        if (
-          constraint.hasClass !== undefined &&
-          (targetShape?.aliasTypeIris?.includes(constraint.hasClass) ||
-            target?.aliasTypeIris?.includes(constraint.hasClass))
-        ) {
+        if (constraint.hasClass !== undefined && typeAliases.has(constraint.hasClass)) {
           throw new FidelityError(
             `composite ${composite.name} link ${field.name} sh:class ${constraint.hasClass} is a target type alias removed by migration`,
           );
@@ -594,5 +590,15 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   assertPatternCoverage(flatShapes, flatCompiled);
   assertTraceability(flatCompiled, flatShapes);
 
-  for (const composite of composites) assertCompositeFidelity(shapes, compiled, composite);
+  const typeAliases = new Set([
+    ...shapes.nodeShapes.flatMap((shape) => shape.aliasTypeIris ?? []),
+    ...compiled.manifest.entities.flatMap((entity) =>
+      isCompositeEntity(entity)
+        ? entity.nodes.flatMap((node) => node.aliasTypeIris ?? [])
+        : (entity.aliasTypeIris ?? []),
+    ),
+  ]);
+  for (const composite of composites) {
+    assertCompositeFidelity(shapes, compiled, composite, typeAliases);
+  }
 }

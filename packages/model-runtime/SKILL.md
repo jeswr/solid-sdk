@@ -86,14 +86,19 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   equal JS projections. Revalidate raw terms, never re-project and rewrite retained values.
   Retained text is not sanitized during migration; explicitly supplied API values still pass
   through JS write guards and sanitization. Setters clear aliases even on `undefined`/invalid
-  input; `mark` clears explicit alias types. Serialization migrates known aliases in a copy
-  and writes canonical predicates/types only, preserving subclass type assertions.
+  input; `mark` clears explicit alias types. Serialization migrates aliases in a copy only
+  at their owning shape's focus nodes: recognised entity roots (including data-graph
+  subclasses) and composite nodes reached through bounded, unambiguous links satisfying
+  explicit link classes. Determine all ownership against the original data before any
+  mutation. Preserve unrelated subjects and unreached composite nodes, including their
+  alias predicates/types. Preserve subclass type assertions and never add target types
+  to untyped children during migration.
 - Deliberate G5 migration exception: for singleton `sh:alternativePath` fields, SHACL
   counts the union for `maxCount`, but runtime reads resolve canonical-first. A stale
   conflicting alias beside a valid canonical value can therefore parse even when the
   emitted SHACL rejects that union's cardinality. This preserves the reviewed bookmark
   oracle. Writes are canonical-only and clear aliases, so the runtime never produces
-  that conflicting data.
+  that conflicting data at the migrated field's focus nodes.
 - Composite entities graph-walk exact link terms from the root; never assume fragments.
   Count distinct raw object terms of every kind before filtering NamedNodes; more
   than one rejects a required link's record or drops an optional link's whole subtree.
@@ -104,13 +109,16 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   `rdf:type` values and `rdfs:subClassOf*` chains in the data graph, never the build-time
   ontology. Bound traversal to 10,000 raw reads per link and track visited class terms;
   absence, cycles without membership, and budget exhaustion fail the link closed with its
-  required/optional grading. Node-type recognition (flat entities, composite roots/children,
+  required/optional grading. Node-type recognition (flat entities, composite roots,
   and per-node wrappers) uses the same bounded walk to any canonical or alias target class,
   with one 10,000 raw-read budget across the accepted classes. Never add or delete subclass
   `rdf:type` assertions during recognition or serialization; `mark` retains its existing
   explicit alias-to-canonical type migration. Builds assert the explicit link class on
-  materialised children. Reject a link whose `hasClass` names an alias type of its target:
-  that assertion would be deleted by type migration.
+  materialised children. For composite children, validate the property constraints without
+  requiring the child shape's target type: `sh:targetClass` selects focus nodes,
+  while `sh:node` applies the child constraints directly. Explicit `hasClass` still applies.
+  Reject a link whose `hasClass` names a type alias owned by ANY entity or node in the
+  manifest, including optional links: type migration can delete that assertion.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
   belongs in the consuming package's facade, not in this runtime.
 - Changes here are security-critical: add an adversarial test that fails before the fix.

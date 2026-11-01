@@ -128,8 +128,13 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   Builds and setters write canonical predicates only; every setter, including `undefined`
   or an invalid value, clears all
   alias triples for its field.
-- `serialize` and `storeToTurtle` emit canonical field/type IRIs. `storeToTurtle` migrates
-  known aliases in a copy without mutating its input. Singleton migration retains the raw
+- `serialize` and `storeToTurtle` migrate field/type aliases only where their owning shape
+  applies. Roots must be recognised by their entity's canonical/alias types or data-graph
+  subclasses; composite children must be reached through that entity's bounded, unambiguous
+  links and satisfy any explicit link class. Migration determines all focus nodes from the
+  original data before changing predicates or types. Unrelated subjects and unreached
+  composite nodes retain their predicates and types, including known aliases.
+  `storeToTurtle` works in a copy without mutating its input. Singleton migration retains the raw
   term selected by canonical-first reads; sets and live-set mutations retain every guarded
   raw term, including distinct terms with equal JS projections. Migration changes predicates
   without normalizing IRI spellings, literal lexical forms or datatypes, sanitizing retained
@@ -170,9 +175,11 @@ field names are **globally unique** across the composite (the projection is one 
 - **`parse`** GRAPH-WALKS from the root: it follows the ACTUAL link triple (never assumes the fragment
   — an untrusted document may link anywhere), requiring an absolute http(s) NamedNode without
   IRIREF-forbidden characters and bounding the candidate scan. It follows the exact linked term
-  without URL canonicalisation. A sub-node must have a data-graph type reaching one of its
-  canonical or alias classes (fail-closed, using the same bounded class walk). Link-resolution
-  also enforces any retained `hasClass` (`sh:class`): the linked subject must have that type,
+  without URL canonicalisation. The root must have a data-graph type reaching one of its
+  canonical or alias classes. A child validated through `sh:node` must satisfy its shape's
+  property constraints; it need not carry the shape's target type. `sh:targetClass` selects
+  focus nodes and does not add a child constraint. Link-resolution
+  enforces any retained `hasClass` (`sh:class`): the linked subject must have that type,
   or a type reaching it through `rdfs:subClassOf*` in the **data graph**. Build-time ontology
   ancestry never proves data membership. Traversal is cycle-safe and capped at 10,000 raw
   type/subclass reads per link; exceeding the cap fails the link closed. Builds explicitly
@@ -186,7 +193,8 @@ field names are **globally unique** across the composite (the projection is one 
 
 The composite manifest is validated **fail-closed** (the tree invariant — one root, every non-root node
 exactly one incoming link, acyclic + spanning; a `nested` field may retain a safe absolute
-`hasClass` IRI, but cannot require a target node's alias class that type migration removes;
+`hasClass` IRI, but cannot require an alias class owned by any entity or node in the manifest,
+because type migration can remove that assertion;
 it carries no scalar data-shape key and only the `requiredFailClosed` guard; composite documents
 are http(s)-scoped, matching the suite IRI discipline).
 

@@ -107,8 +107,13 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
   omitted from a composite projection.
 - The runtime checks alias caps, distinctness, and absolute http(s) IRIs. Singleton reads
   try the guarded canonical predicate before ordered aliases; sets read a guarded union.
-  Writes remove aliases and use canonical predicates/types. Migration preserves each
-  retained raw RDF term's lexical form, datatype and IRI spelling, including distinct terms
+  Writes use canonical predicates/types. Store migration removes aliases only at focus
+  nodes of their owning shape: recognised entity roots (including data-graph subclasses)
+  and children reached through bounded, unambiguous composite links satisfying explicit
+  link classes. Ownership is established from the original data before migration; unrelated
+  subjects and unreached composite nodes retain their predicates/types, including aliases.
+  Migration preserves each retained raw RDF term's lexical form, datatype and IRI spelling,
+  including distinct terms
   whose JS projections are equal. Singleton selection stays canonical-first; explicit API
   writes still use the runtime's JS write guards and normalization. Node-type recognition
   accepts data-graph subclasses of canonical or alias classes through the runtime's bounded,
@@ -163,8 +168,13 @@ generates a single composite entity over the runtime's composite kind:
   Alias ancestry need not be declared in the ontology and ontology-only ancestry cannot
   admit a class violation. Builds assert the explicit link class on materialised children.
   Compilation and fidelity independently reject a link whose `sh:class` names an alias target
-  class of its child shape: type migration deletes that assertion, so the configuration is
-  contradictory. This rejection also applies to optional links; type migration is unchanged.
+  class owned by ANY entity or node in the manifest: type migration can delete that assertion,
+  so the configuration is contradictory. Runtime manifest validation independently enforces
+  this rule. This rejection also applies to optional links.
+  At runtime the root requires a recognised target type. A child reached through `sh:node`
+  is validated against its property constraints without requiring its shape's target type:
+  `sh:targetClass` selects focus nodes, rather than constraining a `sh:node` value.
+  Any explicit `sh:class` remains enforced. Builds still assert canonical child types.
   The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
 - Compilation and fidelity reject incompatible IRI/datatype constraints and impossible
   `minCount > maxCount` on every property before projection, including nested links.
