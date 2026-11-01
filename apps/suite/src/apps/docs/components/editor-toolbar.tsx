@@ -179,7 +179,13 @@ export function EditorToolbar({
           editor.commands.focus();
       })}
     >
-      {action.label} {action.keys && <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>}
+      {action.label}
+      {action.keys && (
+        <>
+          {" "}
+          <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>
+        </>
+      )}
     </DropdownMenuItem>
   );
   const dropdown = (label: string, icon: typeof AlignLeft, items: ReactNode) => {
