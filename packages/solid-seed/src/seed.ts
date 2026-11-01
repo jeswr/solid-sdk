@@ -350,10 +350,11 @@ async function put(
   url: string,
   body: string,
   contentType: string,
-  conditional: boolean,
+  conditional: boolean | { ifMatch: string },
 ): Promise<number> {
   const headers = new Headers({ "content-type": contentType });
-  if (conditional) headers.set("if-none-match", "*");
+  if (conditional === true) headers.set("if-none-match", "*");
+  else if (conditional !== false) headers.set("if-match", conditional.ifMatch);
   const response = await podFetch(target, url, { method: "PUT", headers, body });
   if (!response.ok)
     throw new HttpFailure("PUT", url, response.status, await responseDetail(response));
@@ -408,47 +409,124 @@ async function removeCreated(
 /** Upper bound on an existing ACL read back for comparison. */
 const MAX_ACL_BYTES = 1024 * 1024;
 
-/** The quads of a Turtle ACL as comparable keys, or undefined when it does not parse. */
-function aclKeys(turtle: string, aclUrl: string): Set<string> | undefined {
+const ACL_NS = "http://www.w3.org/ns/auth/acl#";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/**
+ * Predicates that only ever add to what an authorization grants. Any other
+ * statement about an authorization may restrict it (`acl:origin` does on servers
+ * that enforce it), and dropping it on a rewrite could widen access.
+ */
+const GRANT_PREDICATES = new Set([
+  RDF_TYPE,
+  ...["accessTo", "default", "agent", "agentClass", "agentGroup", "mode"].map((p) => ACL_NS + p),
+]);
+
+interface AclStatement {
+  subject: string;
+  predicate: string;
+  key: string;
+}
+
+/** The statements of a Turtle ACL with comparable keys, or undefined when it does not parse. */
+function aclStatements(turtle: string, aclUrl: string): AclStatement[] | undefined {
   try {
     const key = (t: Term) =>
       t.termType === "Literal"
         ? `L|${t.value}|${t.datatype.value}|${t.language}`
         : `${t.termType}|${t.value}`;
-    return new Set(
-      new Parser({ format: "text/turtle", baseIRI: aclUrl })
-        .parse(turtle)
-        .map((q) => `${key(q.subject)} ${key(q.predicate)} ${key(q.object)} ${key(q.graph)}`),
-    );
+    return new Parser({ format: "text/turtle", baseIRI: aclUrl }).parse(turtle).map((q) => ({
+      subject: key(q.subject),
+      predicate: q.predicate.value,
+      key: `${key(q.subject)} ${key(q.predicate)} ${key(q.object)} ${key(q.graph)}`,
+    }));
   } catch {
     return undefined;
   }
 }
 
+/** Read at most `limit` bytes of a body as UTF-8, or undefined when it is longer. */
+async function boundedText(response: Response, limit: number): Promise<string | undefined> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return undefined;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 /**
- * True when every statement of `desired` is already in the resource's ACL, so
- * writing it can only narrow access. WAC grants are monotone in the statements
- * (more agents, modes or resources only grant more), so a subset never broadens.
- * A missing, unreadable, oversized or non-Turtle ACL counts as granting nothing.
+ * Whether writing `desired` over the resource's current ACL can only narrow
+ * access, with the ETag to make that write conditional on (so an ACL narrowed in
+ * between is not overwritten). It can when every statement of `desired` is
+ * already in the ACL and the authorizations `desired` names carry only
+ * grant-adding statements there: WAC grants are monotone in those statements,
+ * while a restriction such as `acl:origin` would be dropped by the rewrite. A
+ * missing, unreadable, oversized or non-Turtle ACL counts as granting nothing.
  */
-async function grantsWithin(target: SeedTarget, aclUrl: string, desired: string): Promise<boolean> {
+async function narrowingAcl(
+  target: SeedTarget,
+  aclUrl: string,
+  desired: string,
+): Promise<{ narrowing: boolean; etag?: string }> {
   const response = await podFetch(target, aclUrl, {
     method: "GET",
     headers: { accept: "text/turtle" },
   });
   const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-  const length = Number(response.headers.get("content-length") ?? "0");
-  if (!response.ok || type !== "text/turtle" || length > MAX_ACL_BYTES) {
+  if (!response.ok || type !== "text/turtle") {
     await response.body?.cancel();
-    return false;
+    return { narrowing: false };
   }
-  const text = await response.text();
-  if (text.length > MAX_ACL_BYTES) return false;
-  const existing = aclKeys(text, aclUrl);
-  const wanted = aclKeys(desired, aclUrl);
-  if (existing === undefined || wanted === undefined) return false;
-  for (const key of wanted) if (!existing.has(key)) return false;
-  return true;
+  const etag = response.headers.get("etag") ?? undefined;
+  const text = await boundedText(response, MAX_ACL_BYTES);
+  const existing = text === undefined ? undefined : aclStatements(text, aclUrl);
+  const wanted = aclStatements(desired, aclUrl);
+  if (existing === undefined || wanted === undefined) return { narrowing: false };
+  const present = new Set(existing.map((statement) => statement.key));
+  const subjects = new Set(wanted.map((statement) => statement.subject));
+  const narrowing =
+    wanted.every((statement) => present.has(statement.key)) &&
+    existing.every(
+      (statement) => !subjects.has(statement.subject) || GRANT_PREDICATES.has(statement.predicate),
+    );
+  return etag === undefined ? { narrowing } : { narrowing, etag };
+}
+
+/**
+ * Before granting more than owner-only access over content this run did not
+ * write (the existing data of `ensure`, or the children an existing container's
+ * `acl:default` reaches), require that the grants only narrow the current ACL.
+ * Returns the ETag to condition the ACL write on.
+ */
+async function assertNarrowing(
+  target: SeedTarget,
+  resource: MaterializedResource,
+  why: string,
+): Promise<string | undefined> {
+  if (resource.aclBody === resource.ownerAclBody) return undefined;
+  const url = resource.outcome.url;
+  const { narrowing, etag } = await narrowingAcl(target, `${url}.acl`, resource.aclBody as string);
+  if (!narrowing) throw new Error(`${why} will not broaden access at ${url}`);
+  return etag;
 }
 
 /**
@@ -485,7 +563,7 @@ function placeholderBody(contentType: string): string {
 async function writeAcl(
   pod: MaterializedPod,
   resource: MaterializedResource,
-  conditional: boolean,
+  conditional: boolean | { ifMatch: string },
 ): Promise<void> {
   if (resource.aclBody === undefined) return;
   await put(
@@ -577,27 +655,40 @@ async function writeProtected(
       // ensure reconciles the ACL of content it did not write, so it may narrow
       // access but never broaden it: the existing data (perhaps the superseded
       // content of a failed replace) was never vetted for the new grants.
-      if (
-        resource.aclBody !== resource.ownerAclBody &&
-        !(await grantsWithin(pod.target, aclUrl, resource.aclBody as string))
-      ) {
-        throw new Error(
-          `ensure will not broaden access to existing content at ${url}; re-run with replace to rewrite it under the new grants`,
-        );
-      }
-      await writeAcl(pod, resource, false);
+      const etag = await assertNarrowing(
+        pod.target,
+        resource,
+        "ensure (re-run with replace to rewrite the content under the new grants)",
+      );
+      await writeAcl(pod, resource, etag === undefined ? false : { ifMatch: etag });
       return outcome;
     }
+    // An existing container's acl:default reaches children this run did not
+    // write, so replace may not broaden it either. Checked before the owner-only
+    // ACL overwrites the current one.
+    if (!createdPlaceholder && url.endsWith("/")) {
+      await assertNarrowing(
+        pod.target,
+        resource,
+        "replace of an existing container (its acl:default would reach children this run did not write)",
+      );
+    }
     // In create mode a stale ACL fails the seed (If-None-Match) rather than being
-    // overwritten. A PUT that errors may still have landed, so cleanup tries it.
+    // overwritten. A PUT that errors may still have landed, so cleanup tries it,
+    // unless the server refused it as a stale ACL this run did not write.
     aclAttempted = true;
-    await put(
-      pod.target,
-      aclUrl,
-      resource.ownerAclBody as string,
-      DEFAULT_CONTENT_TYPE,
-      mode === "create",
-    );
+    try {
+      await put(
+        pod.target,
+        aclUrl,
+        resource.ownerAclBody as string,
+        DEFAULT_CONTENT_TYPE,
+        mode === "create",
+      );
+    } catch (error) {
+      if (error instanceof HttpFailure && error.status === 412) aclAttempted = false;
+      throw error;
+    }
     try {
       await put(pod.target, url, body, contentType, false);
     } catch (error) {
@@ -669,12 +760,37 @@ async function processGroup(
       .filter((_, index) => present[index] !== true)
       .map((document) => document.path);
     if (mode === "ensure" && existing.length === documents.length) {
+      // As for a single resource, ensure never broadens access to content it did
+      // not write; every member is checked before any ACL is written, so the
+      // group converges entirely or not at all.
+      const etags = new Map<MaterializedResource, string | undefined>();
       for (const resource of action.resources) {
         try {
           if (resource.aclBody !== undefined) {
             await assertAclLocation(pod.target, resource.outcome.url);
+            etags.set(
+              resource,
+              await assertNarrowing(
+                pod.target,
+                resource,
+                "ensure (re-run with replace to rewrite the content under the new grants)",
+              ),
+            );
           }
-          await writeAcl(pod, resource, false);
+        } catch (cause) {
+          failResource(
+            `ACL convergence failed in expander group ${group.id} at ${resource.spec.path}`,
+            completed,
+            pod,
+            resource,
+            cause,
+          );
+        }
+      }
+      for (const resource of action.resources) {
+        try {
+          const etag = etags.get(resource);
+          await writeAcl(pod, resource, etag === undefined ? false : { ifMatch: etag });
           resource.outcome.status = "skipped";
         } catch (cause) {
           failResource(

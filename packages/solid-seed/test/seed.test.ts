@@ -877,10 +877,140 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     );
     const ensured = await seedPods({ layout: container(false), mode: "ensure" });
     expect(ensured.pods[0]?.resources[0]?.status).toBe("skipped");
-    const replaced = await seedPods({ layout: container(true), mode: "replace" });
+    const replaced = await seedPods({ layout: container(false), mode: "replace" });
     expect(replaced.pods[0]?.resources[0]?.status).toBe("replaced");
-    const acl = "https://pod.example/private/.acl";
-    expect(grantsPublicRead(pod.resources.get(acl)?.body, acl)).toBe(true);
+  });
+
+  it("replace will not broaden an existing container's acl:default over children it did not write", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.containerPutConflict = true;
+    const container = (publicRead: boolean): PodLayout => ({
+      pods: [
+        {
+          account: { target: pod },
+          resources: [
+            {
+              path: "/c/",
+              source: { body: "<> a <https://example.org/Box> ." },
+              access: { publicRead },
+            },
+          ],
+        },
+      ],
+    });
+    await seedPods({ layout: container(false) });
+    // Another client writes a child that inherits the container's ACL.
+    pod.resources.set("https://pod.example/c/diary", {
+      body: "dear diary",
+      contentType: "text/plain",
+    });
+    const before = pod.resources.get("https://pod.example/c/.acl")?.body;
+    const error = await seedPods({ layout: container(true), mode: "replace" }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(String((error as SeedError).cause)).toMatch(/will not broaden access/);
+    expect(pod.resources.get("https://pod.example/c/.acl")?.body).toBe(before);
+    // A container this run creates has no children yet, so its grants apply.
+    const fresh = new MemoryPod("https://pod.example");
+    await seedPods({
+      layout: {
+        pods: [
+          { ...container(true).pods[0], account: { target: fresh } } as PodLayout["pods"][number],
+        ],
+      },
+    });
+    const acl = "https://pod.example/c/.acl";
+    expect(grantsPublicRead(fresh.resources.get(acl)?.body, acl)).toBe(true);
+  });
+
+  it("ensure on an expander group never broadens, and checks every member before writing", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const group = (publicRead: boolean, body: string): PodLayout => ({
+      pods: [
+        {
+          account: { target: pod },
+          resources: [
+            () => [
+              { path: "/g/a", source: { body: `${body} a` }, access: { publicRead } },
+              { path: "/g/b", source: { body: `${body} b` }, access: { publicRead } },
+            ],
+          ],
+        },
+      ],
+    });
+    await seedPods({ layout: group(false, "old private") });
+    pod.failNextPut("/g/a", 500, 1);
+    await expect(
+      seedPods({ layout: group(true, "new public"), mode: "replace" }),
+    ).rejects.toBeInstanceOf(SeedError);
+    const aclPuts = pod.putRecords().filter((r) => r.url.endsWith(".acl")).length;
+    await expect(
+      seedPods({ layout: group(true, "new public"), mode: "ensure" }),
+    ).rejects.toBeInstanceOf(SeedError);
+    expect(pod.putRecords().filter((r) => r.url.endsWith(".acl")).length).toBe(aclPuts);
+    for (const path of ["/g/a", "/g/b"]) {
+      const acl = `https://pod.example${path}.acl`;
+      expect(grantsPublicRead(pod.resources.get(acl)?.body, acl)).toBe(false);
+    }
+    expect(pod.resources.get("https://pod.example/g/a")?.body).toBe("old private a");
+  });
+
+  it("ensure will not rewrite an ACL whose authorization carries a restriction such as acl:origin", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: access(pod, "data", true) });
+    const acl = `${Secret}.acl`;
+    const stored = pod.resources.get(acl);
+    pod.resources.set(acl, {
+      body: `${stored?.body}\n<${acl}#public> <http://www.w3.org/ns/auth/acl#origin> <https://trusted.app> .\n`,
+      contentType: "text/turtle",
+    });
+    const error = await seedPods({ layout: access(pod, "data", true), mode: "ensure" }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(String((error as SeedError).cause)).toMatch(/will not broaden access/);
+    expect(pod.resources.get(acl)?.body).toContain("trusted.app");
+  });
+
+  it("ensure reads at most 1 MiB of an existing ACL", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: access(pod, "data", true) });
+    const acl = `${Secret}.acl`;
+    const stored = pod.resources.get(acl)?.body ?? "";
+    pod.resources.set(acl, {
+      body: `${stored}\n# ${"x".repeat(1024 * 1024)}\n`,
+      contentType: "text/turtle",
+    });
+    await expect(
+      seedPods({ layout: access(pod, "data", true), mode: "ensure" }),
+    ).rejects.toBeInstanceOf(SeedError);
+  });
+
+  it("ensure conditions its ACL rewrite on the ETag it checked", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: access(pod, "data", true) });
+    const acl = `${Secret}.acl`;
+    const checked = pod.resources.get(acl);
+    // Someone narrows the ACL between the seeder's check and its write.
+    pod.afterGet = (url) => {
+      if (url === acl) {
+        pod.afterGet = undefined;
+        pod.resources.set(acl, { body: "# narrowed elsewhere\n", contentType: "text/turtle" });
+      }
+    };
+    await expect(
+      seedPods({ layout: access(pod, "data", true), mode: "ensure" }),
+    ).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.get(acl)?.body).toBe("# narrowed elsewhere\n");
+    expect(pod.putRecords("/public/secret.acl").at(-1)?.headers.get("if-match")).toMatch(/^"/);
+    expect(checked).toBeDefined();
+  });
+
+  it("create never deletes a stale ACL the server refused to overwrite", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.resources.set(`${Secret}.acl`, { body: "# stale\n", contentType: "text/turtle" });
+    await expect(seedPods({ layout: layout(pod) })).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.get(`${Secret}.acl`)?.body).toBe("# stale\n");
+    expect(pod.resources.has(Secret)).toBe(false);
   });
 
   it("every pod request refuses redirects", async () => {

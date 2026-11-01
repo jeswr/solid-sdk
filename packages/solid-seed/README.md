@@ -46,9 +46,16 @@ The main entry contains no Node built-ins.
 - `ensure` skips an existing primary resource but creates or rewrites its requested ACL so access
   policy converges, as long as that only narrows access: it refuses to grant more than the
   existing Turtle ACL already does (or anything beyond the owner when there is none), because it
-  did not write the existing content. Use `replace` to publish it. For an expander group it first requires every primary resource and requested
+  did not write the existing content. Use `replace` to publish it. The existing ACL counts as
+  narrower only when it holds every desired statement and the authorizations it shares with the
+  desired ACL carry nothing but grant statements (`rdf:type`, `acl:accessTo`, `acl:default`,
+  `acl:agent`, `acl:agentClass`, `acl:agentGroup`, `acl:mode`); a restriction such as `acl:origin`
+  would be lost, so it refuses. The rewrite is conditional on the ETag it checked. In a group,
+  every member is checked before any ACL is written. For an expander group it first requires every primary resource and requested
   ACL sidecar to exist or none to exist; partial groups fail before writes.
-- `replace` unconditionally rewrites every selected resource and ACL.
+- `replace` unconditionally rewrites every selected resource and ACL, except that it will not
+  broaden the ACL of an existing container: its `acl:default` reaches children this run did not
+  write. Delete the container first, or grant that access by hand.
 
 One `ResourceExpander` is called once per run and becomes a stable `group-<layout-index>` unit.
 Because LDP has no multi-resource transaction, a mid-group failure rejects with `SeedError`. Its
@@ -80,7 +87,8 @@ string templates.
 A resource with an `access` entry is written so that the seeder never puts content it has not just
 written under broader grants than it already had: an empty placeholder is created (or the existing resource
 found), an owner-only ACL is written, then the data, and only then the ACL with the requested grants.
-A replacement therefore never exposes the superseded content to the new grants. Before writing any
+A replacement therefore never exposes the superseded content to the new grants (and an existing
+container's grants may only narrow, since `acl:default` reaches its other children). Before writing any
 ACL the seeder requires the server to advertise it at `<resource>.acl` with `Link: rel="acl"`; a
 server that uses another location (ACP `.acr`) or none fails the seed rather than storing an ACL
 that grants nothing. If a later step fails, a failed replacement keeps the owner-only ACL, and a

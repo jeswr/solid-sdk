@@ -17,6 +17,9 @@ export interface RequestRecord {
 
 export class MemoryPod implements SeedTarget {
   readonly resources = new Map<string, StoredResource>();
+  /** Called after each GET is answered, to simulate a concurrent writer. */
+  afterGet?: (url: string) => void;
+
   readonly requests: RequestRecord[] = [];
   readonly webid: string;
   readonly baseUrl: string;
@@ -88,6 +91,8 @@ export class MemoryPod implements SeedTarget {
         if (suffix !== undefined && !request.url.endsWith(".acl")) {
           headers.set("link", `<${request.url}${suffix}>; rel="acl"`);
         }
+        headers.set("etag", this.etag(request.url));
+        this.afterGet?.(request.url);
         return new Response(request.method === "HEAD" ? null : stored.body, {
           status: 200,
           headers,
@@ -108,6 +113,10 @@ export class MemoryPod implements SeedTarget {
         if (request.headers.get("if-none-match") === "*" && existed && !this.ignoreIfNoneMatch) {
           return new Response("precondition failed", { status: 412 });
         }
+        const ifMatch = request.headers.get("if-match");
+        if (ifMatch !== null && (!existed || ifMatch !== this.etag(request.url))) {
+          return new Response("precondition failed", { status: 412 });
+        }
         this.resources.set(request.url, {
           body,
           contentType: request.headers.get("content-type") ?? "",
@@ -124,6 +133,15 @@ export class MemoryPod implements SeedTarget {
    */
   failNextPut(path: string, status = 500, skip = 0, partial = false): void {
     this.#failure = { path, status, remaining: 1, skip, partial };
+  }
+
+  /** A strong ETag that changes whenever the stored resource does. */
+  etag(url: string): string {
+    const stored = this.resources.get(url);
+    if (stored === undefined) return '"none"';
+    let hash = 0;
+    for (const char of stored.body) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+    return `"${stored.body.length}-${hash}"`;
   }
 
   putRecords(path?: string): RequestRecord[] {
