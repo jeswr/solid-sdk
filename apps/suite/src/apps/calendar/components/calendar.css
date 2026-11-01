@@ -632,9 +632,8 @@
   }
 }
 /* AUTHORED-BY Claude Opus 5.5 */
-/* Pointer drag-and-drop: drags start only on event chips, so the grid keeps native panning. */
+/* Mouse/pen drag-and-drop starts only on event chips; touch keeps native scrolling. */
 .cal-event[data-draggable] {
-  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }

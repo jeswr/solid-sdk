@@ -249,6 +249,8 @@ export function CalendarDragProvider({ children }: { children: ReactNode }) {
           ? active.kind
           : undefined,
       onPointerDown: (event) => {
+        // Mouse and pen only: touch swipes on chips keep scrolling; a tap still opens details.
+        if (event.pointerType === "touch") return;
         if (event.button !== 0 || !event.isPrimary || gesture.current || pending) return;
         const kind: DragKind =
           surface === "time" && (event.target as Element).closest(".cal-resize-handle")
