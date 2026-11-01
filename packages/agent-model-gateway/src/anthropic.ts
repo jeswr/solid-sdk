@@ -118,6 +118,7 @@ export async function anthropicPropose(
           strictMcpConfig: true,
           persistSession: false,
           includePartialMessages: true,
+          verbatimPrompts: true,
           cwd: directory,
           mcpServers: { gateway: server },
           maxTurns: config.maxTurns,

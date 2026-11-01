@@ -39,6 +39,8 @@ It exposes exactly `pod_read`, `pod_search` (the Solid MCP registry's read-only 
 `memory_recall` (injected until agent-memory is implemented), and `propose`. The SDK has no
 built-in tools, external MCP configuration, inherited credentials, project settings or persisted
 session. Its home and working directory are temporary and removed after the run.
+Prompts are delivered verbatim, disabling SDK file/resource mention expansion and command
+preprocessing of conversation text (requires Claude Agent SDK >=0.3.280).
 `propose` advertises and validates the agent-model ActionProposal fields with state `proposed`,
 excluding `wasGeneratedBy`, and returns the proposal locally. The gateway supplies
 `wasGeneratedBy` using the producing model-call UUID IRI. The runtime

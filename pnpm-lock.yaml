@@ -2281,7 +2281,7 @@ importers:
   packages/agent-model-gateway:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.201
+        specifier: ^0.3.280
         version: 0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@jeswr/agent-channels':
         specifier: workspace:*
