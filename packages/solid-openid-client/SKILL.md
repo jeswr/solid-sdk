@@ -2,6 +2,7 @@
 name: solid-openid-client
 description: Use when building server-side Node, CLI, bot, or agent Solid-OIDC flows with @jeswr/solid-openid-client, including issuer discovery, Client Identifier Documents, authorization-code plus PKCE callbacks, DPoP-bound refresh, and authenticated pod fetches.
 ---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # Work with `@jeswr/solid-openid-client`
@@ -27,6 +28,8 @@ const response = await client.fetch(resourceUrl);
 - Keep PKCE S256, state, nonce, and DPoP enabled on every flow.
 - Persist both the refresh token and `dpopKeyPair`; the refresh token is bound to that key's thumbprint.
 - Use `client.fetch` for protected resources so proofs carry `ath` and nonce challenges use the bounded retry path.
+- Resource redirects are always manual, including caller `redirect: "follow"`; caller `redirect: "error"` rejects a redirect response. An explicit `init.headers` replaces Request headers. Request uploads consume the original body and respect abort/size limits without waiting for cancellation.
+- Discovery/token/JWKS responses default to 1 MiB and 30 seconds, configurable through `maxResponseBytes` and `requestTimeoutMs`.
 - Reject cleartext issuer, discovered endpoint, and protected-resource URLs except explicit loopback development. A loopback redirect URI remains valid for native/CLI flows.
 - Inject a guarded fetch for server-side attacker-influenced URLs. The `fetch` option is a security seam, not only a test seam.
 - Never log authorization codes, tokens, state, nonce, or DPoP keys.

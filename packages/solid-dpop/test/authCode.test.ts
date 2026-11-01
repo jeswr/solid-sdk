@@ -1,11 +1,18 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Offline unit tests for the authorization-code + PKCE + DPoP flow. No CSS, no network: every
  * test either exercises pure functions (PKCE, URL construction, the issuer guard) or injects a
  * stub transport. The live CSS exercise lives in test/live-authcode.test.ts.
  */
 
+import { loopbackFetch } from "./loopbackMock.js";
+
+vi.mock("node:http", async () => ({
+  createServer: (await import("./loopbackMock.js")).createServer,
+}));
+
 import { decodeJwt, decodeProtectedHeader } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assertIssuerTransport,
   buildAuthorizationUrl,
@@ -25,10 +32,10 @@ import {
 } from "../src/index.js";
 
 const META: OidcProviderMetadata = {
-  issuer: "http://localhost:3086/",
-  authorization_endpoint: "http://localhost:3086/.oidc/auth",
-  token_endpoint: "http://localhost:3086/.oidc/token",
-  registration_endpoint: "http://localhost:3086/.oidc/reg",
+  issuer: "https://localhost:3086/",
+  authorization_endpoint: "https://localhost:3086/.oidc/auth",
+  token_endpoint: "https://localhost:3086/.oidc/token",
+  registration_endpoint: "https://localhost:3086/.oidc/reg",
 };
 
 const REDIRECT = "http://127.0.0.1:54321/callback";
@@ -42,9 +49,9 @@ describe("assertIssuerTransport — the reactive-auth 0.1.3 http-issuer bug clas
   });
 
   it("accepts http ONLY for loopback hosts (the fix reactive-auth 0.1.3 lacks)", () => {
-    expect(() => assertIssuerTransport("http://localhost:3086/")).not.toThrow();
-    expect(() => assertIssuerTransport("http://127.0.0.1:3000/")).not.toThrow();
-    expect(() => assertIssuerTransport("http://[::1]:3000/")).not.toThrow();
+    expect(() => assertIssuerTransport("http://localhost:3086/", true)).not.toThrow();
+    expect(() => assertIssuerTransport("http://127.0.0.1:3000/", true)).not.toThrow();
+    expect(() => assertIssuerTransport("http://[::1]:3000/", true)).not.toThrow();
   });
 
   it("REJECTS http for non-loopback hosts (must not regress to allowing real-domain http)", () => {
@@ -218,33 +225,33 @@ describe("discoverProvider", () => {
     );
   });
 
-  it("returns the metadata for a loopback http issuer", async () => {
+  it("returns the metadata for an HTTPS issuer", async () => {
     const fetchImpl: FetchLike = async (url) => {
       expect(url).toContain(".well-known/openid-configuration");
       return new Response(JSON.stringify(META), {
         headers: { "content-type": "application/json" },
       });
     };
-    const meta = await discoverProvider("http://localhost:3086/", fetchImpl);
+    const meta = await discoverProvider("https://localhost:3086/", fetchImpl);
     expect(meta.token_endpoint).toBe(META.token_endpoint);
   });
 
   it("throws when authorization_endpoint or token_endpoint is missing", async () => {
     const fetchImpl: FetchLike = async () =>
-      new Response(JSON.stringify({ issuer: "http://localhost:3086/" }));
-    await expect(discoverProvider("http://localhost:3086/", fetchImpl)).rejects.toThrow(/missing/);
+      new Response(JSON.stringify({ issuer: "https://localhost:3086/" }));
+    await expect(discoverProvider("https://localhost:3086/", fetchImpl)).rejects.toThrow(/missing/);
   });
 
   it("REJECTS a discovery doc whose issuer does not match the requested issuer (OIDC §4.3)", async () => {
     // A document that claims to speak for a DIFFERENT origin than the one we asked for.
     const evil: OidcProviderMetadata = {
       issuer: "http://localhost:9999/",
-      authorization_endpoint: "http://localhost:3086/.oidc/auth",
-      token_endpoint: "http://localhost:3086/.oidc/token",
+      authorization_endpoint: "https://localhost:3086/.oidc/auth",
+      token_endpoint: "https://localhost:3086/.oidc/token",
     };
     const fetchImpl: FetchLike = async () =>
       new Response(JSON.stringify(evil), { headers: { "content-type": "application/json" } });
-    await expect(discoverProvider("http://localhost:3086/", fetchImpl)).rejects.toThrow(
+    await expect(discoverProvider("https://localhost:3086/", fetchImpl)).rejects.toThrow(
       /issuer mismatch/,
     );
   });
@@ -289,11 +296,11 @@ describe("discoverProvider", () => {
     );
   });
 
-  it("ALLOWS discovered loopback http endpoints (the dx local-CSS case)", async () => {
-    // Every endpoint is loopback http — must pass, mirroring assertIssuerTransport's loopback rule.
+  it("ALLOWS discovered HTTPS endpoints", async () => {
+    // All advertised endpoints satisfy the HTTPS transport policy.
     const fetchImpl: FetchLike = async () =>
       new Response(JSON.stringify(META), { headers: { "content-type": "application/json" } });
-    const meta = await discoverProvider("http://localhost:3086/", fetchImpl);
+    const meta = await discoverProvider("https://localhost:3086/", fetchImpl);
     expect(meta.authorization_endpoint).toBe(META.authorization_endpoint);
     expect(meta.token_endpoint).toBe(META.token_endpoint);
     expect(meta.registration_endpoint).toBe(META.registration_endpoint);
@@ -342,11 +349,11 @@ describe("registerClient (DCR, RFC 7591) + staticClient", () => {
 
 describe("startLoopbackListener (RFC 8252 loopback redirect)", () => {
   it("binds 127.0.0.1 on an ephemeral port and resolves the code/state from the redirect", async () => {
-    const listener = await startLoopbackListener("/callback");
+    const listener = await startLoopbackListener("/callback", "xyz");
     try {
       expect(listener.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
       const codeP = listener.waitForCode(5000);
-      const res = await fetch(`${listener.redirectUri}?code=abc&state=xyz`);
+      const res = await loopbackFetch(`${listener.redirectUri}?code=abc&state=xyz`);
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("Login complete");
       const { code, state } = await codeP;
@@ -358,12 +365,12 @@ describe("startLoopbackListener (RFC 8252 loopback redirect)", () => {
   });
 
   it("rejects when the redirect carries an OAuth error", async () => {
-    const listener = await startLoopbackListener();
+    const listener = await startLoopbackListener("/callback", "xyz");
     try {
       // Attach the rejection assertion BEFORE triggering the redirect so there is no window in
       // which the rejected promise is momentarily unhandled.
-      const assertion = expect(listener.waitForCode(5000)).rejects.toThrow(/access_denied/);
-      await fetch(`${listener.redirectUri}?error=access_denied`);
+      const assertion = expect(listener.waitForCode(5000)).rejects.toThrow(/oauth_error/);
+      await loopbackFetch(`${listener.redirectUri}?error=access_denied&state=xyz`);
       await assertion;
     } finally {
       await listener.close();

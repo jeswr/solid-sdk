@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { clearTimeout as clearDeadline, setTimeout as deadline } from "node:timers";
 import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";
@@ -7,10 +8,6 @@ import { exclusiveLocks } from "./drive-locks";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
-vi.mock(
-  "@/apps/docs/lib/model/type-index",
-  async () => import("../src/apps/docs/lib/model/type-index"),
-);
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),

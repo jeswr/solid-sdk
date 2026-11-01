@@ -92,12 +92,12 @@ export async function loadCliConfig(
     normalizePodRoot(podRoot);
     const root = new URL(podRoot);
     if (root.username || root.password || root.search || root.hash) throw new Error();
-    if (clientId) assertEndpointTransport(podRoot, "podRoot");
+    if (clientId) assertEndpointTransport(podRoot, "podRoot", true);
     for (const value of [oidcIssuer, tokenUrl]) {
       if (!value) continue;
       const url = new URL(value);
       if (url.username || url.password || url.search || url.hash) throw new Error();
-      assertIssuerTransport(value);
+      assertIssuerTransport(value, true);
     }
   } catch {
     throw new Error("Invalid pod/auth URL; authenticated URLs require HTTPS or HTTP loopback.");
