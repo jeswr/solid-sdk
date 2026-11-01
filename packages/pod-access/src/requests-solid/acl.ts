@@ -8,7 +8,7 @@ import { DataFactory, Store } from "n3";
 import { put, read, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { turtle, values } from "./rdf.js";
-import { ACL } from "./vocab.js";
+import { ACL, LDP } from "./vocab.js";
 
 export class UnsupportedAccessModelError extends Error {
   constructor(readonly model: "acp" | "unknown") {
@@ -128,23 +128,20 @@ export async function applyGrant(
         const acl = new AclResource(parent.dataset, DataFactory);
         for (const auth of acl.authorizations) {
           const subject = authSubject(auth);
-          const inherits = [
-            ...values(parent.dataset, subject, ACL.default),
-            ...values(parent.dataset, subject, ACL.defaultForNew),
-          ];
-          if (!inherits.includes(current)) continue;
+          // CSS ignores the legacy acl:defaultForNew while NSS honours it; neither copying nor
+          // dropping such a rule is safe without knowing the server, so refuse to guess.
+          if (values(parent.dataset, subject, ACL.defaultForNew).includes(current))
+            throw new Error(
+              "This folder's sharing uses the legacy acl:defaultForNew rule; update it in your pod first",
+            );
+          if (!values(parent.dataset, subject, ACL.default).includes(current)) continue;
           const copy = new Authorization(
             `${ownUrl}#inherited-${dataset.size}`,
             dataset,
             DataFactory,
           );
           for (const q of parent.dataset.match(subject)) {
-            if (
-              q.predicate.value === ACL.accessTo ||
-              q.predicate.value === ACL.default ||
-              q.predicate.value === ACL.defaultForNew
-            )
-              continue;
+            if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
             dataset.add(DataFactory.quad(DataFactory.namedNode(copy.value), q.predicate, q.object));
           }
           copy.accessTo = target;
@@ -170,10 +167,13 @@ export async function applyGrant(
 }
 
 /**
- * Make sure a records container is readable by the owner alone before anything is written into
- * it. A missing container is created empty first (nothing is exposed while it inherits), then
- * given an owner-only ACL create-only. An existing ACL must name no one but the owner; otherwise
- * the decision stops, because grant records and receipts list recipients, purposes and targets.
+ * Make sure a records container is readable and writable by the owner alone before anything is
+ * written into, or trusted from, it. An existing ACL must name no one but the owner, and give the
+ * owner Read, Write and Control over the folder and everything in it; otherwise the decision
+ * stops, because grant records and receipts list recipients, purposes and targets, and pinned
+ * decisions are trusted on recovery. A folder without its own ACL may have inherited someone
+ * else's write access, so it is only made private while it is empty, and must still be empty
+ * once private: anything already inside could have been written by someone else.
  */
 export async function ensureOwnerOnlyContainer(
   container: string,
@@ -190,7 +190,8 @@ export async function ensureOwnerOnlyContainer(
     const existing = await read(url, fetchFn);
     if (existing) {
       const acl = new AclResource(existing.dataset, DataFactory);
-      let ownerControl = false;
+      const own = new Set<string>();
+      const inherited = new Set<string>();
       for (const auth of acl.authorizations) {
         const subject = authSubject(auth);
         const agents = values(existing.dataset, subject, ACL.agent);
@@ -201,11 +202,20 @@ export async function ensureOwnerOnlyContainer(
         ) {
           throw new Error("The access records folder is shared; make it private first");
         }
-        if (agents.includes(owner) && auth.mode.has(ACL.Control)) ownerControl = true;
+        if (!agents.includes(owner)) continue;
+        const modes = values(existing.dataset, subject, ACL.mode);
+        if (values(existing.dataset, subject, ACL.accessTo).includes(container))
+          for (const mode of modes) own.add(mode);
+        if (values(existing.dataset, subject, ACL.default).includes(container))
+          for (const mode of modes) inherited.add(mode);
       }
-      if (!ownerControl) throw new Error("The access records folder has no owner control");
+      const full = (modes: Set<string>) =>
+        [ACL.Read, ACL.Write, ACL.Control].every((mode) => modes.has(mode));
+      if (!full(own) || !full(inherited))
+        throw new Error("The access records folder does not give you full control");
       return;
     }
+    await assertEmpty(container, url, fetchFn);
     const dataset = new Store();
     const auth = new Authorization(`${url}#owner`, dataset, DataFactory);
     auth.type.add(ACL.Authorization);
@@ -213,7 +223,20 @@ export async function ensureOwnerOnlyContainer(
     auth.accessTo = container;
     auth.default = container;
     for (const mode of [ACL.Read, ACL.Write, ACL.Control]) auth.mode.add(mode);
-    if (await put(url, await turtle(dataset), fetchFn, null, true)) return;
+    if (await put(url, await turtle(dataset), fetchFn, null, true)) {
+      // Anything that arrived before the folder became private is untrusted.
+      await assertEmpty(container, url, fetchFn);
+      return;
+    }
   }
   throw new Error("The access records folder ACL kept changing");
+}
+
+async function assertEmpty(container: string, acl: string, fetchFn: typeof fetch): Promise<void> {
+  const listing = await read(container, fetchFn);
+  const members = listing ? values(listing.dataset, container, LDP.contains) : [];
+  if (members.some((member) => member !== acl))
+    throw new Error(
+      "The access records folder already has files but isn't private; review and clear it first",
+    );
 }

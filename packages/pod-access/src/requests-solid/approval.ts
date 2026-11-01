@@ -167,6 +167,21 @@ async function writeIntent(
   return put(url, await turtle(dataset), fetchFn, null, true);
 }
 
+/** Ignore all requester-supplied grant/receipt/snapshot IRIs and persist our own tuple. */
+async function moveToApproving(
+  request: ParsedRequest,
+  id: string,
+  snapshot: Snapshot,
+  fetchFn: typeof fetch,
+): Promise<void> {
+  set(request.dataset, id, ACCM.status, ACCM.Approving, true);
+  set(request.dataset, id, ACCM.grantId, snapshot.grantId);
+  set(request.dataset, id, ACCM.grantRef, undefined, true);
+  set(request.dataset, id, `${ACCM.ns}snapshot`, undefined);
+  set(request.dataset, id, `${ACCM.ns}decidedAt`, snapshot.decidedAt);
+  await cas(request, fetchFn);
+}
+
 async function receipt(
   url: string,
   id: string,
@@ -396,7 +411,15 @@ export async function decide(
   if (claimed) throw new Error("This request claims an approval that was never recorded");
   if (parsed.status !== "approved") requireStrongEtag(request.etag);
   let snapshot: Snapshot;
-  if (parsed.status === "pending") {
+  // A crash after pinning but before the Approving CAS leaves the request pending: resume the
+  // pinned decision without discovering targets again.
+  const pinned = parsed.status === "pending" ? await readIntent(intent, id, fetchFn) : undefined;
+  if (pinned !== undefined) {
+    snapshot = pinned;
+    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
+    await validateSnapshot(snapshot, id, options);
+    await moveToApproving(request, id, snapshot, fetchFn);
+  } else if (parsed.status === "pending") {
     const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)];
     if (dataTypes.length === 0 || !dataTypes.every((type) => parsed.dataTypes.includes(type)))
       throw new Error("Approved dataTypes must be a nonempty requested subset");
@@ -450,13 +473,7 @@ export async function decide(
       snapshot = (await readIntent(intent, id, fetchFn)) as Snapshot;
     }
     await validateSnapshot(snapshot, id, options);
-    // Ignore all requester-supplied grant/receipt/snapshot IRIs and persist our own tuple.
-    set(request.dataset, id, ACCM.status, ACCM.Approving, true);
-    set(request.dataset, id, ACCM.grantId, snapshot.grantId);
-    set(request.dataset, id, ACCM.grantRef, undefined, true);
-    set(request.dataset, id, `${ACCM.ns}snapshot`, undefined);
-    set(request.dataset, id, `${ACCM.ns}decidedAt`, snapshot.decidedAt);
-    await cas(request, fetchFn);
+    await moveToApproving(request, id, snapshot, fetchFn);
   } else {
     // Resume only from the owner's record, never from the requester-authored notification.
     snapshot = recorded as Snapshot;

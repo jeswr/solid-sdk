@@ -112,6 +112,20 @@ describe("owner-controlled approval records", () => {
     again.seed(`${RECORDS}.acl`, pod.body(`${RECORDS}.acl`) as string);
     await decide({ id: ID }, { approve: false }, opts(again));
     expect(again.etag(`${RECORDS}.acl`)).toBe('"v1"');
+    // A rule that names no agent grants nobody and is ignored.
+    const inert = buildPod();
+    inert.seed(RECORDS, "");
+    inert.seed(
+      `${RECORDS}.acl`,
+      `${pod.body(`${RECORDS}.acl`)}\n${PREFIXES}<#inert> a acl:Authorization; acl:origin <https://app.example>; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
+    );
+    expect((await decide({ id: ID }, { approve: true }, opts(inert))).status).toBe("approved");
+    // A server that answers HEAD but cannot list the new folder yet still gets it made private.
+    const unlisted = buildPod();
+    unlisted.intercept = (method, url) =>
+      method === "GET" && url === RECORDS ? new Response(null, { status: 404 }) : undefined;
+    await decide({ id: ID }, { approve: false }, opts(unlisted));
+    expect(unlisted.body(`${RECORDS}.acl`)).toContain(OWNER);
   });
 
   it("refuses to write records into a shared, uncontrolled or unstable records folder", async () => {
@@ -141,8 +155,19 @@ describe("owner-controlled approval records", () => {
       `${PREFIXES}<#o> a acl:Authorization; acl:agent <${OWNER}>; acl:default <${RECORDS}>; acl:mode acl:Read, acl:Write.`,
     );
     await expect(decide({ id: ID }, { approve: true }, opts(noControl))).rejects.toThrow(
-      "no owner control",
+      "full control",
     );
+    // Control over the folder alone leaves the records inside unreadable to the owner.
+    const noDefault = buildPod();
+    noDefault.seed(RECORDS, "");
+    noDefault.seed(
+      `${RECORDS}.acl`,
+      `${PREFIXES}<#o> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${RECORDS}>; acl:mode acl:Read, acl:Write, acl:Control.`,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(noDefault))).rejects.toThrow(
+      "full control",
+    );
+    expect(puts(noDefault)).toEqual([]);
     const racing = buildPod();
     racing.intercept = (method, url) =>
       method === "PUT" && url === `${RECORDS}.acl`
@@ -201,19 +226,53 @@ describe("owner-controlled approval records", () => {
     });
   });
 
-  it("keeps inherited acl:defaultForNew rules when materialising a resource ACL", async () => {
+  it("refuses to materialise from a legacy acl:defaultForNew rule rather than guess the server", async () => {
     const pod = buildPod();
     pod.seed(
       `${POD}.acl`,
-      `${PREFIXES}<${POD}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${POD}>; acl:defaultForNew <${POD}>; acl:mode acl:Read, acl:Write, acl:Control.
-<${POD}.acl#bob> a acl:Authorization; acl:agent <https://bob.example/#me>; acl:defaultForNew <${POD}>; acl:mode acl:Read.`,
+      `${PREFIXES}<${POD}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${POD}>; acl:default <${POD}>; acl:mode acl:Read, acl:Write, acl:Control.
+<${POD}.acl#legacy> a acl:Authorization; acl:agent <https://bob.example/#me>; acl:defaultForNew <${POD}>; acl:mode acl:Read, acl:Write, acl:Control.`,
     );
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
-    const body = pod.body(`${ALICE}.acl`) as string;
-    expect(body).toContain(OWNER);
-    expect(body).toContain("Control");
-    expect(body).toContain("bob.example");
-    expect(body).toContain(REQUESTER);
-    expect(body).not.toContain("defaultForNew");
+    await expect(applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch)).rejects.toThrow(
+      "defaultForNew",
+    );
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+  });
+
+  it("never trusts files that were in the records folder before it was private", async () => {
+    // A pinned decision planted while the folder inherited someone else's write access.
+    const planted = buildPod();
+    planted.seed(RECORDS, "");
+    const intent = await intentOf();
+    planted.seed(intent, `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot "{}" .`);
+    for (const approve of [true, false]) {
+      await expect(decide({ id: ID }, { approve }, opts(planted))).rejects.toThrow(
+        "already has files",
+      );
+    }
+    expect(planted.has(`${RECORDS}.acl`)).toBe(false);
+    expect(planted.has(`${ALICE}.acl`)).toBe(false);
+    // A file that lands while the folder is being made private is not trusted either.
+    const racing = buildPod();
+    racing.intercept = (method, url) => {
+      if (method === "PUT" && url === `${RECORDS}.acl`) racing.seed(`${RECORDS}stray.ttl`, "");
+      return undefined;
+    };
+    await expect(decide({ id: ID }, { approve: true }, opts(racing))).rejects.toThrow(
+      "already has files",
+    );
+    expect(racing.has(intent)).toBe(false);
+  });
+
+  it("resumes a pinned decision without rediscovering targets", async () => {
+    const pod = buildPod();
+    pod.intercept = (method, url) =>
+      method === "PUT" && url === ID ? new Response(null, { status: 500 }) : undefined;
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("500");
+    pod.intercept = undefined;
+    pod.seed(INDEX, "corrupted index @@@");
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(result.status).toBe("approved");
+    expect(pod.body(`${ALICE}.acl`)).toContain(REQUESTER);
   });
 });

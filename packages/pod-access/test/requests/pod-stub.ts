@@ -110,7 +110,11 @@ export function createPodStub(initial: Record<string, string> = {}): PodStub {
 
       if (method === "GET" || method === "HEAD") {
         if (existing) {
-          return new Response(method === "HEAD" ? null : existing.body, {
+          // A container created by an empty PUT lists its members, like a real server. Tests
+          // that seed a container body keep full control of its listing.
+          const body =
+            isContainer && existing.body === "" ? containerListing(url, resources) : existing.body;
+          return new Response(method === "HEAD" ? null : body, {
             status: 200,
             headers: baseHeaders(existing),
           });

@@ -139,8 +139,10 @@ Approval resolves once, then CASes Pending → Approving with a pinned snapshot 
 SHA-256 grant ID. It creates the ODRL grant and DPV receipt under `settings/access-records/` using
 `If-None-Match: *`, grants WAC access, then CASes to Approved. Existing ACL updates require a strong
 ETag and `If-Match`; missing own ACLs are materialised create-only from the nearest ancestor while
-preserving existing access and owner Control. Initial CAS races throw `RequestConflictError` with
-the re-read winner's status. Explicitly retrying Approving resumes the stored snapshot, ignoring new
+preserving existing access and owner Control. An ancestor rule that uses the legacy
+`acl:defaultForNew` stops the approval: CSS ignores it and NSS honours it, so it can be neither
+copied nor dropped safely. Initial CAS races throw `RequestConflictError` with
+the re-read winner's status. Explicitly retrying resumes the pinned decision, ignoring new
 overrides, without resolving again or rolling back ACLs. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
@@ -162,10 +164,13 @@ return `notified: false` without rollback.
 
 Grant records, consent receipts and each approval's pinned decision live in
 `<storage>settings/access-records/`. Before writing there, `decide` creates the folder with an
-owner-only ACL, or checks that its existing ACL names only the owner (with Control); a shared
-folder stops the decision. Approval first pins its decision (targets, modes, expiry) in a
+owner-only ACL, or checks that its existing ACL names only the owner and gives them Read, Write
+and Control over the folder and its contents; a shared folder stops the decision. A folder that
+exists without its own ACL is made private only while it is empty, because anything already in it
+may have been written by someone else. Approval first pins its decision (targets, modes, expiry) in a
 create-only record in that folder, then moves the request to Approving. A retry resumes only from
-that record: a notification that claims to be Approving or Approved without one was written by the
+that record (even when the crash came before the request changed state, so the Type Index is not
+read again): a notification that claims to be Approving or Approved without one was written by the
 requester, so `decide` refuses to approve it (it can still be denied).
 
 Every document the pipeline writes back (including the requester-authored request during CAS) is
