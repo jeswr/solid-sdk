@@ -792,7 +792,10 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
   function run(): Promise<WarmResult> {
     // Coalesce concurrent runs (e.g. login + reconnect racing).
     if (running) return running;
-    running = warm(opts.webId, { ...opts.deps, signal: abort.signal }, budget, opts.profileTurtle, {
+    const signal = opts.deps.signal
+      ? AbortSignal.any([opts.deps.signal, abort.signal])
+      : abort.signal;
+    running = warm(opts.webId, { ...opts.deps, signal }, budget, opts.profileTurtle, {
       ...(opts.seeds ? { seeds: opts.seeds } : {}),
     }).finally(() => {
       running = undefined;

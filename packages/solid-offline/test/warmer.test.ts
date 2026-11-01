@@ -817,6 +817,85 @@ describe('warmer-rdf: ACL URL derivation', () => {
   });
 });
 
+describe('warm controller cancellation', () => {
+  it.each([
+    { profile: 'fetched', profileTurtle: undefined },
+    { profile: 'provided', profileTurtle: PROFILE_TTL },
+  ])('skips all requests for an already-aborted caller signal ($profile profile)', async ({
+    profileTurtle,
+  }) => {
+    const caller = new AbortController();
+    caller.abort();
+    const r = routedFetch({
+      [PROFILE_DOC]: () => turtle(PROFILE_TTL),
+      [`${BASE}/doc`]: () => turtle(''),
+    });
+    const ctl = createWarmController({
+      webId: WEBID,
+      deps: { storage: r.storage, signal: caller.signal },
+      profileTurtle,
+      seeds: [`${BASE}/doc`],
+      warmOnLogin: false,
+      rewarmOnReconnect: false,
+    });
+    try {
+      const result = await ctl.run();
+      expect(r.calls).toEqual([]);
+      expect(result.warmed).toBe(0);
+    } finally {
+      ctl.stop();
+    }
+  });
+
+  it.each([
+    'caller',
+    'stop',
+  ] as const)('cancels an in-flight read and skips remaining seeds via %s', async (source) => {
+    const caller = new AbortController();
+    const reason = new Error('Caller cancelled warming');
+    let activeSignal: AbortSignal | null | undefined;
+    let started: () => void = () => undefined;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'HEAD') return turtle('');
+      activeSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        activeSignal?.addEventListener('abort', () => reject(activeSignal?.reason), {
+          once: true,
+        });
+        started();
+      });
+    });
+    const ctl = createWarmController({
+      webId: WEBID,
+      deps: { storage: storageFor(fetch), signal: caller.signal },
+      profileTurtle: '',
+      seeds: [`${BASE}/first`, `${BASE}/second`],
+      budget: { ...DEFAULT_WARM_BUDGET, concurrency: 1 },
+      warmOnLogin: false,
+      rewarmOnReconnect: false,
+    });
+    const running = ctl.run();
+    try {
+      await reading;
+      expect(fetch).toHaveBeenCalledTimes(2); // HEAD, then the pending GET.
+      if (source === 'caller') caller.abort(reason);
+      else ctl.stop();
+      expect(activeSignal?.aborted).toBe(true);
+      if (source === 'caller') expect(activeSignal?.reason).toBe(reason);
+      const result = await running;
+      expect(result.warmed).toBe(0);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(caller.signal.aborted).toBe(source === 'caller');
+    } finally {
+      ctl.stop();
+      await running;
+    }
+  });
+});
+
 describe('warmer triggers: onIdle + createWarmController', () => {
   const g = globalThis as Record<string, unknown>;
   let savedRic: unknown;
