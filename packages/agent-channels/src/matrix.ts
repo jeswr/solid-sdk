@@ -228,6 +228,17 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
         let bytes = 0;
         while (state.pending.length && items.length < maxItems) {
           const event = state.pending[0] as Record<string, unknown>;
+          const unsigned = event.unsigned;
+          if (
+            event.type === "m.room.encrypted" &&
+            unsigned !== null &&
+            typeof unsigned === "object" &&
+            Object.hasOwn(unsigned, "redacted_because")
+          ) {
+            // Redaction permanently removes ciphertext; key synchronization cannot recover it.
+            state.pending.shift();
+            continue;
+          }
           const raw = JSON.stringify(event);
           const size = Buffer.byteLength(raw);
           if (size > MATRIX_CONTENT.maxBytes || bytes + size > maxBytes) {

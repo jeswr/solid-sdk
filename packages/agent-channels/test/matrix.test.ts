@@ -97,6 +97,91 @@ it.each([
   });
 });
 
+it.each([
+  "join",
+  "leave",
+])("skips redacted ciphertext in %s rooms without decrypting or blocking later messages", async (membership) => {
+  const redacted = {
+    ...event("$redacted", {}),
+    type: "m.room.encrypted",
+    unsigned: {
+      redacted_because: {
+        ...event("$redaction", { redacts: "$redacted" }),
+        type: "m.room.redaction",
+      },
+    },
+  };
+  const later = event("$later");
+  const r = reader([
+    direct,
+    sync([], {
+      rooms: {
+        [membership]: { [roomId]: { timeline: { events: [redacted, later, event("$last")] } } },
+      },
+    }),
+    direct,
+    sync([], { next_batch: "s2" }),
+  ]);
+  r.crypto.decrypt.mockRejectedValue(new Error("ciphertext was removed"));
+  const first = await r.binding.ingest.list(account, undefined, {
+    ...limits,
+    maxItems: 1,
+  });
+  expect(first.items.map((item) => item.id)).toEqual(["$later"]);
+  expect(r.binding.ingest.parse(required(first.items[0])).textBody).toBe("Hello fixture");
+  expect(JSON.parse(first.next)).toMatchObject({ since: "s1", pending: [event("$last")] });
+  const drained = await r.binding.ingest.list(account, first.next, limits);
+  expect(drained.items.map((item) => item.id)).toEqual(["$last"]);
+  expect(JSON.parse(drained.next)).toMatchObject({ since: "s1", pending: [] });
+  expect(r.crypto.decrypt).not.toHaveBeenCalled();
+  expect(r.crypto.receiveSync).toHaveBeenCalledTimes(1);
+  expect(r.requests).toHaveLength(2);
+  const next = await r.binding.ingest.list(account, drained.next, limits);
+  expect(next.items).toEqual([]);
+  expect(required(r.requests[3]).url.searchParams.get("since")).toBe("s1");
+  expect(JSON.parse(next.next)).toMatchObject({ since: "s2", pending: [] });
+});
+
+it("drains redacted ciphertext already buffered in a cursor without crypto or network requests", async () => {
+  const redacted = {
+    ...event("$redacted", {}),
+    type: "m.room.encrypted",
+    unsigned: { redacted_because: { type: "m.room.redaction" } },
+  };
+  const r = reader([]);
+  r.crypto.decrypt.mockRejectedValue(new Error("ciphertext was removed"));
+  const page = await r.binding.ingest.list(account, cursor({ pending: [redacted] }), {
+    maxItems: 1,
+    maxBytes: 1,
+  });
+  expect(page.items).toEqual([]);
+  expect(JSON.parse(page.next)).toMatchObject({ since: "s0", pending: [] });
+  expect(r.crypto.decrypt).not.toHaveBeenCalled();
+  expect(r.crypto.receiveSync).not.toHaveBeenCalled();
+  expect(r.requests).toHaveLength(0);
+  expect(r.tokens.calls).toHaveLength(0);
+});
+
+it.each([
+  undefined,
+  null,
+  "malformed",
+  {},
+  { age: 1 },
+])("retains undecryptable ciphertext without a redaction marker for unsigned=%j", async (unsigned) => {
+  const pending = { ...event("$missing", {}), type: "m.room.encrypted", unsigned };
+  const previous = cursor({ pending: [pending] });
+  const r = reader([sync([])]);
+  r.crypto.decrypt.mockRejectedValue(new Error("missing ciphertext or key"));
+  await expect(r.binding.ingest.list(account, previous, limits)).rejects.toBeInstanceOf(
+    MatrixRoomError,
+  );
+  expect(r.crypto.decrypt).toHaveBeenCalledTimes(2);
+  expect(r.crypto.receiveSync).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(previous).pending).toHaveLength(1);
+  expect(required(r.requests[0]).url.searchParams.get("since")).toBe("s0");
+});
+
 it("handles the matrix-chat-to-pod fixture suite without interpreting edits/redactions as new statements", () => {
   const accepted = new Set([
     "plainMessage",
