@@ -42,6 +42,8 @@ export interface TaskDetails extends Omit<TaskData, "rank" | "priority"> {
   categoryTypes?: string[] | undefined;
   recurrence?: RecurrenceRule | undefined;
   reminders?: Reminder[] | undefined;
+  /** Durable identities of committed recurring completions; retained across later edits. */
+  completionOperations?: string[] | undefined;
 }
 export class TaskItem extends Task {
   private get extra() {
@@ -93,6 +95,9 @@ export class TaskItem extends Task {
   set reminders(value: Reminder[]) {
     writeReminders(this.extra, value, this.dueDate);
   }
+  get completionOperations(): Set<string> {
+    return this.extra.iris(`${SCHED}completionOperation`);
+  }
 }
 /** Local midnight paired with the date-only scheduling marker (§5.3). */
 function allDayDate(value: string): Date {
@@ -127,6 +132,7 @@ export function validateTask(data: TaskDetails): void {
     ...(data.categoryTypes ?? []),
     ...(data.blockedBy ?? []),
     ...(data.relatesTo ?? []),
+    ...(data.completionOperations ?? []),
   ])
     if (iri !== undefined) requireHttp(iri);
   if (data.rank !== undefined && !Number.isFinite(data.rank))
@@ -150,6 +156,7 @@ export function createTask(url: string, data: TaskDetails): Store {
   task.allDay = data.allDay;
   task.recurrence = data.recurrence;
   task.reminders = data.reminders ?? [];
+  for (const operation of data.completionOperations ?? []) task.completionOperations.add(operation);
   return dataset;
 }
 /** Project shared fields through the existing model, then read app extensions. */
@@ -167,6 +174,7 @@ export function taskDetails(url: string, dataset: DatasetCore): TaskDetails | un
     ),
     recurrence: task.recurrence,
     reminders: task.reminders,
+    completionOperations: [...task.completionOperations],
   };
 }
 /** Pure §5.5 plan. The store/hook applies both conditional writes and retains its undo snapshot. */
@@ -203,6 +211,7 @@ export function planCompletion(
     clonedFrom: originalId,
     recurrence: undefined,
     reminders: [],
+    completionOperations: [],
   };
   const original: TaskDetails = {
     ...data,
