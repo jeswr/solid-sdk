@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
+import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { act, click, h, key, mount } from "../drive-ui-dom";
+import { webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
@@ -33,6 +34,7 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
 
 import { TasksSidebar } from "../../src/apps/tasks/components/sidebar";
 import { TaskList } from "../../src/apps/tasks/components/task-list";
+import { ProjectView } from "../../src/apps/tasks/components/views/project-view";
 import { TodayView } from "../../src/apps/tasks/components/views/today-view";
 import { UpcomingView } from "../../src/apps/tasks/components/views/upcoming-view";
 import { useNow } from "../../src/apps/tasks/state/clock";
@@ -71,6 +73,54 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+it.each([
+  { view: "project", status: 503 },
+  { view: "cross-project", status: 503 },
+  { view: "project", status: 403 },
+  { view: "cross-project", status: 403 },
+  { view: "project", status: 401 },
+  { view: "cross-project", status: 401 },
+])("shows and retries a cold-load $status tracker failure in the $view view", async ({
+  view,
+  status,
+}) => {
+  const result = await frameCache();
+  const home = await result.store.createProject("Home");
+  await result.store.createTask(home, {
+    title: "Recovered task",
+    state: "open",
+    dueDate: new Date("2026-01-01T12:00:00Z"),
+  });
+  await result.cache.createTask(result.inbox, {
+    title: "Healthy project",
+    due: new Date("2026-01-01T12:00:00Z"),
+  });
+  result.pod.intercept = (request) =>
+    request.url === home.url && request.method === "GET"
+      ? new Response(null, { status })
+      : undefined;
+  cache = new TasksCache(result.store, vi.fn(), webId);
+  await cache.start();
+  await cache.loadTasks(result.inbox);
+  expect(cache.getSnapshot().projects.some((project) => project.url === home.url)).toBe(false);
+  expect(cache.getSnapshot().tasks[home.url]?.status).toBe("error");
+  const { host } = await mount(
+    h("main", null, view === "project" ? h(ProjectView, { projectUrl: home.url }) : h(TodayView)),
+  );
+  expect(button("Retry", host)).toBeTruthy();
+  expect(host.textContent).not.toContain("not found");
+  if (view === "cross-project") expect(host.textContent).toContain("Healthy project");
+  result.pod.intercept = undefined;
+  await click(button("Retry", host));
+  await act(async () => {
+    await vi.waitFor(() => expect(cache.getSnapshot().tasks[home.url]?.status).toBe("ready"));
+  });
+  expect(host.textContent).toContain("Recovered task");
+  expect(
+    [...host.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+  ).toBe(false);
 });
 
 describe("Tasks row deletion and focus", () => {

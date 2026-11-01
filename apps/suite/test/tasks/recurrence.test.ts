@@ -26,6 +26,17 @@ const isoDates = (dates: Date[]) =>
   );
 
 describe("recurrence expansion", () => {
+  it("preserves years below 100 when resolving calendar fields into local time", () => {
+    const start = new Date(0);
+    start.setFullYear(42, 0, 31);
+    start.setHours(9, 0, 0, 0);
+    const next = nextOccurrence({ frequency: "MONTHLY" }, start);
+    expect(next?.getFullYear()).toBe(42);
+    expect(next?.getMonth()).toBe(2);
+    expect(next?.getDate()).toBe(31);
+    expect(next?.getHours()).toBe(9);
+  });
+
   it("constructs monthly target dates without normalizing an intermediate DST gap", () => {
     const previousZone = process.env.TZ;
     try {

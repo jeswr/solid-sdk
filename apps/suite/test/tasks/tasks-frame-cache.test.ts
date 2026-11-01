@@ -6,6 +6,59 @@ import { frameCache } from "./tasks-frame-fixtures";
 
 describe("Tasks refresh isolation and project creation retry", () => {
   it.each([
+    "tracker",
+    "projects",
+  ])("reloads a changed stateStore after a %s notification", async (notification) => {
+    const { cache, store, pod, inbox } = await frameCache();
+    await cache.createTask(inbox, { title: "Old container" });
+    const container = `${store.projects}replacement/`;
+    await pod.emptyContainer(container);
+    const refreshed = await store.updateProject(inbox, (tracker) => {
+      tracker.stateStore = container;
+    });
+    await store.createTask(refreshed, { title: "New container", state: "open" }, "new");
+    await cache.invalidate(notification === "tracker" ? inbox.url : store.projects);
+    expect(cache.getSnapshot().projects[0]?.tracker.stateStore).toBe(container);
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["New container"]);
+    // A callback holding the previous tracker must also resolve its current container.
+    await cache.loadTasks(inbox, true);
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["New container"]);
+  });
+
+  it.each([
+    "success",
+    "failure",
+  ])("fences an old-container %s while stateStore refreshes", async (outcome) => {
+    const { cache, store, pod, inbox } = await frameCache();
+    const task = await cache.createTask(inbox, { title: "Old container" });
+    if (!task) throw new Error("Missing task");
+    let resolve!: (tasks: NonNullable<typeof task>[]) => void;
+    let reject!: (error: unknown) => void;
+    vi.spyOn(store, "listTasks").mockReturnValueOnce(
+      new Promise((yes, no) => {
+        resolve = yes;
+        reject = no;
+      }),
+    );
+    const reading = cache.loadTasks(inbox, true);
+    const container = `${store.projects}replacement/`;
+    await pod.emptyContainer(container);
+    const refreshed = await store.updateProject(inbox, (tracker) => {
+      tracker.stateStore = container;
+    });
+    await store.createTask(refreshed, { title: "New container", state: "open" }, "new");
+    await cache.refreshProjects();
+    expect(cache.getSnapshot().views).toEqual([]);
+    if (outcome === "success") resolve([task]);
+    else reject(new ModelError(403, inbox.tracker.stateStore as string));
+    await reading;
+    await vi.waitFor(() =>
+      expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["New container"]),
+    );
+    expect(cache.getSnapshot().tasks[inbox.url]?.status).toBe("ready");
+  });
+
+  it.each([
     401, 403,
   ])("clears private tasks when their tracker returns %s while other projects refresh", async (status) => {
     const { cache, store, pod, inbox } = await frameCache();

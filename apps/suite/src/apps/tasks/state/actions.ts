@@ -15,13 +15,15 @@ export async function completeTask(
   const result =
     plan.kind === "advance"
       ? await tasks.cache.advanceTask(stored, plan)
-      : await tasks.updateTask(stored, (task) => {
-          task.state = "closed";
-          task.endedAt = now;
-        });
+      : (await tasks.updateTask(stored, (task) => {
+            task.state = "closed";
+            task.endedAt = now;
+          }))
+        ? plan
+        : undefined;
   if (result) {
-    toast.success(toastCopy(plan, view));
-    return plan;
+    toast.success(toastCopy(result, view));
+    return result;
   }
 }
 export async function deleteTask(view: TaskView, tasks: TasksContextValue): Promise<void> {
