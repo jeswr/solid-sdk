@@ -183,6 +183,11 @@
       "slug": "pod-migrator",
       "name": "@jeswr/app-pod-migrator",
       "kind": "application"
+    },
+    {
+      "slug": "notification-relay",
+      "name": "@jeswr/app-notification-relay",
+      "kind": "application"
     }
   ],
   "dependsOn": [],
