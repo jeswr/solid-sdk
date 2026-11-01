@@ -39,8 +39,11 @@ export interface CommandPaletteProps {
   createActions?: readonly PaletteCreateAction[];
   recent?: readonly PaletteRecent[];
   onSearch: (query: string) => void;
-  /** Opens the keyboard-shortcut help, which holds the single-key on/off switch. */
-  onOpenHelp?: () => void;
+  /**
+   * Opens the keyboard-shortcut help, which holds the single-key on/off switch. Gets the
+   * element focused before the palette opened, so help can return focus there.
+   */
+  onOpenHelp?: (returnTo: HTMLElement | null) => void;
   showBacklog?: boolean;
 }
 export const appShortcutKeys: Partial<Record<AppSlug, string>> = {
@@ -151,7 +154,10 @@ export function CommandPalette({
             </CommandGroup>
             {onOpenHelp && (
               <CommandGroup heading="Help">
-                <CommandItem value="Keyboard shortcuts" onSelect={() => select(onOpenHelp)}>
+                <CommandItem
+                  value="Keyboard shortcuts"
+                  onSelect={() => select(() => onOpenHelp(returnFocus.current))}
+                >
                   Keyboard shortcuts
                   {characterKeys && <Kbd className="ml-auto">?</Kbd>}
                 </CommandItem>

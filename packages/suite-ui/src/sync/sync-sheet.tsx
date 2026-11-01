@@ -70,7 +70,14 @@ export function SyncSheet({
             Changes saved on this device and items that need your decision.
           </SheetDescription>
         </SheetHeader>
-        <div className="suite-sync-body">
+        {/* A scroll container: focusable and named so keyboard users can scroll a long
+            queue even when it holds no buttons (WCAG 2.1.1). */}
+        <section
+          className="suite-sync-body"
+          aria-label="Sync items"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable regions must be keyboard-reachable
+          tabIndex={0}
+        >
           {snapshot.pending.length === 0 && snapshot.conflicts.length === 0 && (
             <p role="status">Everything is saved</p>
           )}
@@ -130,7 +137,7 @@ export function SyncSheet({
               </ul>
             </section>
           )}
-        </div>
+        </section>
         <SheetFooter>
           {snapshot.pending.length > 0 && (
             <TooltipProvider>

@@ -40,6 +40,13 @@ describe("character shortcut setting", () => {
     };
     expect(characterShortcutsEnabled(broken)).toBe(true);
     expect(() => setCharacterShortcutsEnabled(false, broken, new EventTarget())).not.toThrow();
+    // The unsaved choice holds for this page; re-reading storage cannot turn keys back on.
+    expect(characterShortcutsEnabled(broken)).toBe(false);
+    expect(characterShortcutsEnabled(memory())).toBe(false);
+    // A later successful write hands the setting back to storage.
+    const storage = memory();
+    setCharacterShortcutsEnabled(true, storage, new EventTarget());
+    expect(characterShortcutsEnabled(storage)).toBe(true);
   });
   it("uses the browser globals by default", () => {
     const storage = memory();

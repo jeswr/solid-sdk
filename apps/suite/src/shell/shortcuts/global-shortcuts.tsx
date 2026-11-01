@@ -49,7 +49,12 @@ export function GlobalShortcuts({
   const [helpOpen, setHelpOpen] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
-  const openHelp = () => (onOpenHelp ? onOpenHelp() : setHelpOpen(true));
+  const [helpReturn, setHelpReturn] = useState<HTMLElement | null>(null);
+  const openHelp = (returnTo: HTMLElement | null = null) => {
+    setHelpReturn(returnTo);
+    if (onOpenHelp) onOpenHelp();
+    else setHelpOpen(true);
+  };
   useShortcut({
     id: "global.search",
     keys: "/",
@@ -66,7 +71,7 @@ export function GlobalShortcuts({
     keys: "?",
     label: "Keyboard shortcuts",
     group: "Global",
-    run: openHelp,
+    run: () => openHelp(),
   });
   useShortcut({
     id: "global.theme",
@@ -87,7 +92,9 @@ export function GlobalShortcuts({
       {destinations.map(([letter, name, href]) => (
         <GoToShortcut key={letter} letter={letter} name={name} href={href} />
       ))}
-      {!onOpenHelp && <ShortcutHelpSheet open={helpOpen} onOpenChange={setHelpOpen} />}
+      {!onOpenHelp && (
+        <ShortcutHelpSheet open={helpOpen} onOpenChange={setHelpOpen} returnFocusTo={helpReturn} />
+      )}
       {!onOpenPalette && (
         <CommandPalette
           open={paletteOpen}
