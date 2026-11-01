@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fromRdf } from "@jeswr/agent-model";
-import { AGENT, agent, DCT, PROV } from "@jeswr/agent-model/vocab";
+import { AGENT, agent, DCT, PROV, XSD } from "@jeswr/agent-model/vocab";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataIntegritySuite, type KeyPair, type WebIdKeyResolver } from "@jeswr/solid-vc";
-import type { Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { beforeAll, expect, it } from "vitest";
 import {
   type ControlStatementClaims,
@@ -11,7 +12,7 @@ import {
   readControlClaims,
   verifyControlStatement,
 } from "../src/index.js";
-import { node, RDF_TYPE, readProof, trig, writeProof } from "../src/rdf.js";
+import { Node, node, RDF_TYPE, readProof, trig, writeProof } from "../src/rdf.js";
 import {
   alterProofGraph,
   alterProofOptions,
@@ -232,8 +233,15 @@ it("rejects expiry at the boundary and invalid verification clocks", async () =>
     });
 });
 it.each(INVALID_INSTANTS)("rejects signed invalid/lossy expiry %s", async (expires) => {
-  const doc = await issueControlStatement({ ...statement, expires }, key, NOW);
-  expect(await verifyControlStatement(doc, options())).toEqual({ valid: false, reason: "expired" });
+  const doc = await signedChange((s) => {
+    remove(s, agent("expires"));
+    const a = node(s, statement.id);
+    a.setValue(
+      agent("expires"),
+      new Node(DataFactory.literal(expires, DataFactory.namedNode(`${XSD}dateTime`)), s, a.factory),
+    );
+  });
+  expect((await verifyControlStatement(doc, options())).valid).toBe(false);
 });
 it.each(MILLISECOND_FRACTIONS)("preserves lossless expiry fraction %s", async (fraction) => {
   const claims = { ...statement, expires: `2026-10-27T12:00:00.${fraction}Z` };
@@ -254,6 +262,18 @@ it.each([
     node(s, statement.id).setIri(agent("controlKind"), agent("Approval"));
   },
   (s: Store) => changeText(s, `${DCT}created`, "invalid"),
+  (s: Store) => {
+    remove(s, `${DCT}created`);
+    const a = node(s, statement.id);
+    a.setValue(
+      `${DCT}created`,
+      new Node(
+        DataFactory.literal("2026-10-26T12:00:00.0001Z", DataFactory.namedNode(`${XSD}dateTime`)),
+        s,
+        a.factory,
+      ),
+    );
+  },
   (s: Store) => changeText(s, agent("binding"), ""),
   (s: Store) => changeText(s, agent("binding"), "x".repeat(16385)),
   (s: Store) => changeText(s, agent("bindingState"), "unknown"),
@@ -276,6 +296,50 @@ it.each([
     reason: "malformed",
   });
   expect(await readControlClaims(doc, statement.id)).toBeUndefined();
+});
+it.each([
+  [agent("expires"), statement.expires, "en"],
+  [agent("expires"), statement.expires, DataFactory.namedNode(`${XSD}string`)],
+  [`${DCT}created`, statement.createdAt, DataFactory.namedNode(`${XSD}integer`)],
+  [`${DCT}created`, statement.createdAt, "en"],
+  [agent("binding"), "gmail", "en"],
+  [agent("bindingState"), "disabled", DataFactory.namedNode(`${XSD}token`)],
+] as const)("rejects signed control literal with invalid datatype/language: %s %#", async (predicate, value, datatype) => {
+  const doc = await signedChange((s) => {
+    remove(s, predicate);
+    const a = node(s, statement.id);
+    a.setValue(predicate, new Node(DataFactory.literal(value, datatype), s, a.factory));
+  });
+  expect(await verifyExportedRdf(doc, statement.id, key.publicKey)).toBe(true);
+  expect(await verifyControlStatement(doc, options())).toEqual({
+    valid: false,
+    reason: "malformed",
+  });
+  expect(await readControlClaims(doc, statement.id)).toBeUndefined();
+});
+it("rejects a valid agent-model approval record presented as a control statement", async () => {
+  const doc = await signedChange((s) => {
+    for (const predicate of [RDF_TYPE, "controlKind", "target", "binding", "bindingState"])
+      remove(s, predicate === RDF_TYPE ? predicate : agent(predicate));
+    const a = node(s, statement.id);
+    a.setIri(RDF_TYPE, agent("Approval"));
+    a.setIri(agent("approves"), statement.target as string);
+    a.setText(agent("termsDigest"), "sha256:test-terms");
+    a.setText(agent("decision"), "approve");
+  });
+  const { claims } = readProof(await parseRdf(doc, "application/trig"), statement.id);
+  expect(fromRdf(claims, statement.id).type).toBe("approval");
+  expect(await verifyControlStatement(doc, options())).toEqual({
+    valid: false,
+    reason: "malformed",
+  });
+  expect(await readControlClaims(doc, statement.id)).toBeUndefined();
+});
+it("reads a bare unsigned claims default graph and requires its record type", async () => {
+  const doc = await issueControlStatement(statement, key, NOW);
+  const { claims } = readProof(await parseRdf(doc, "application/trig"), statement.id);
+  expect(await readControlClaims(await trig(claims), statement.id)).toEqual(statement);
+  expect(await readControlClaims(doc, "urn:missing")).toBeUndefined();
 });
 it("returns malformed for garbage, missing subject and resolver errors", async () => {
   expect(await verifyControlStatement("garbage", options())).toEqual({

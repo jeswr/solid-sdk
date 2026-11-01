@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.
@@ -70,8 +71,6 @@ const EXTERNAL_TRANSITIVE = [
  * externals. Computed from
  * `package.json` so adding a dep automatically keeps it external (the
  * inline-only-the-off-npm-deps contract holds without editing this list).
- * This includes fflate: browsers resolve its browser build; Node consumers
- * resolve its Node build. Neither is inlined into the published artifact.
  */
 function externals() {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));

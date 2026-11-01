@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ControlStatement } from "@jeswr/agent-model";
-import { AGENT, agent, DCT, PROV, XSD } from "@jeswr/agent-model/vocab";
+// AUTHORED-BY Codex GPT-6
+import { type ControlStatement, fromRdf } from "@jeswr/agent-model";
+import { agent, DCT, PROV, XSD } from "@jeswr/agent-model/vocab";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   type DataIntegrityProof,
@@ -31,41 +32,12 @@ export type ControlStatementResult =
       readonly reason: "proof-type" | "key" | "signature" | "attribution" | "expired" | "malformed";
     };
 
-const KINDS = ["Halt", "Resume", "SetBindingState", "DispatchNow", "RevokeMandate", "Forget"];
-const STATES = ["none", "setup-required", "connected", "error", "disabled"];
-
 function controlClaims(store: Store, id: string): ControlStatementClaims {
-  const a = node(store, id);
-  if (a.iri(RDF_TYPE) !== agent("ControlStatement")) throw new Error("Expected control statement");
-  const kindIri = a.iri(agent("controlKind"));
-  const kind = kindIri.slice(AGENT.length) as ControlStatementClaims["kind"];
-  if (!kindIri.startsWith(AGENT) || !KINDS.includes(kind)) throw new Error("Invalid control kind");
-  const optional = (predicate: string, iri = false): string | undefined => {
-    if (a.values(predicate).length === 0) return undefined;
-    return iri ? a.iri(predicate) : a.text(predicate);
-  };
-  const target = optional(agent("target"), true);
-  const binding = optional(agent("binding"));
-  const bindingState = optional(agent("bindingState")) as ControlStatementClaims["bindingState"];
-  const createdAt = a.text(`${DCT}created`);
-  if (
-    !validInstant(createdAt) ||
-    (binding !== undefined && (binding.length === 0 || binding.length > 16384)) ||
-    (bindingState !== undefined && !STATES.includes(bindingState)) ||
-    (kind === "SetBindingState" && (!binding || !bindingState)) ||
-    (["DispatchNow", "RevokeMandate", "Forget"].includes(kind) && !target)
-  )
-    throw new Error("Malformed control claims");
-  return {
-    id,
-    kind,
-    attributedTo: a.iri(`${PROV}wasAttributedTo`),
-    createdAt,
-    expires: a.text(agent("expires")),
-    ...(target !== undefined ? { target } : {}),
-    ...(binding !== undefined ? { binding } : {}),
-    ...(bindingState !== undefined ? { bindingState } : {}),
-  };
+  const record = fromRdf(store, id);
+  if (record.type !== "control-statement") throw new Error("Expected control statement");
+  if (!validInstant(record.createdAt)) throw new Error("Invalid control creation instant");
+  const { type: _type, proof: _proof, ...claims } = record;
+  return claims;
 }
 
 /** Issue agent-model control RDF with ecdsa-rdfc-2019; accepts non-extractable P-256 keys. */
@@ -116,7 +88,17 @@ export async function readControlClaims(
   id: string,
 ): Promise<ControlStatementClaims | undefined> {
   try {
-    return controlClaims(await parseRdf(document, "application/trig"), id);
+    const store = await parseRdf(document, "application/trig");
+    // The unsigned reader accepts bare claims too. Proofs occupy named graphs;
+    // only the claims default graph is an agent-model record.
+    const claims = new Store(
+      [...store].filter(
+        (q) =>
+          q.graph.termType === "DefaultGraph" &&
+          !(q.subject.value === id && q.predicate.value === `${SEC}proof`),
+      ),
+    );
+    return controlClaims(claims, id);
   } catch {
     return undefined;
   }

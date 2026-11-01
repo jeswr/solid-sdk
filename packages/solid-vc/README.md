@@ -34,12 +34,19 @@ npm install github:jeswr/solid-vc#main
 ```
 
 Requires Node.js 24 or newer, or a browser with WebCrypto in a secure context. Hashing
-and random identifiers use `globalThis.crypto`; status-list compression uses fflate with
-strict base64url and streaming expansion bounds, member checksums and completeness checks.
+and random identifiers use `globalThis.crypto`; status-list compression requires the web-standard
+`CompressionStream("gzip")` and `DecompressionStream("gzip")` APIs. Decoding keeps strict
+base64url validation and the 16KB minimum, validates GZIP integrity, and cancels the stream
+as soon as its expansion exceeds `maxDecodedBytes` (16 MiB by default).
 The public entry bundles with esbuild's `platform: "browser"` without Node builtins.
 Browser WebID/status resolution requires an injected fetch; the DNS-pinned Node default
 is disabled by the package's browser mapping. Non-extractable P-256 private keys can be
 passed directly in a `KeyPair` to `DataIntegritySuite("ecdsa-rdfc-2019")` without export.
+
+Status-list compression is asynchronous. Await `encodeStatusList`, `decodeStatusList`,
+`buildBitstringStatusListCredential`, `statusListBitsOf`, `withStatusBit`, and `readStatusBit`.
+For example, `const bits = await decodeStatusList(await encodeStatusList(createStatusBitstring()))`.
+Concatenated GZIP members and trailing bytes are rejected by the platform decoder.
 
 ## Minimal usage
 

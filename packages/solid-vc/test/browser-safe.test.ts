@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fileURLToPath } from "node:url";
 import { crc32, gunzipSync, gzipSync as nodeGzipSync } from "node:zlib";
 import { build } from "esbuild";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BitstringDecodeError,
   createStatusBitstring,
@@ -30,7 +31,7 @@ it("bundles the full public entry for browsers without Node builtins and signs w
   const bundle = result.outputFiles[0]?.text as string;
   expect(bundle).not.toMatch(/["']node:[^"']+["']/);
   expect(Object.keys(result.metafile.inputs)).not.toContainEqual(expect.stringMatching(/^node:/));
-  // Exercise the browser-resolved code, including RDFC and fflate, with no Node globals.
+  // Exercise the browser-resolved code, including RDFC and GZIP streams, with no Node globals.
   const api = new Function("Buffer", "process", `${bundle}; return solidVc;`)(undefined, undefined);
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
     "sign",
@@ -53,11 +54,11 @@ it("bundles the full public entry for browsers without Node builtins and signs w
   expect(
     await suite.verify(api.credentialToRdf(vc), vc.proof, { resolveKey: () => key.publicKey }),
   ).toBe(true);
-  expect(api.decodeStatusList(api.encodeStatusList(api.createStatusBitstring()))).toEqual(
-    createStatusBitstring(),
-  );
+  expect(
+    await api.decodeStatusList(await api.encodeStatusList(api.createStatusBitstring())),
+  ).toEqual(createStatusBitstring());
   const listId = "https://owner.example/status/1";
-  const unsignedList = api.buildBitstringStatusListCredential({
+  const unsignedList = await api.buildBitstringStatusListCredential({
     id: listId,
     issuer: vc.issuer,
     statusPurpose: "revocation",
@@ -128,34 +129,63 @@ it("bundles the full public entry for browsers without Node builtins and signs w
 });
 
 describe("strict browser status-list codec", () => {
-  it("decodes standard GZIP and round trips set and cleared MSB-first bits", () => {
-    expect(decodeStatusList(encoded(compressed()))).toEqual(createStatusBitstring());
+  it("decodes standard GZIP and round trips set and cleared MSB-first bits", async () => {
+    expect(await decodeStatusList(encoded(compressed()))).toEqual(createStatusBitstring());
     const bits = createStatusBitstring();
     for (const index of [0, 7, 8, bits.length * 8 - 1]) setStatusBit(bits, index, true);
-    const encodedBits = encodeStatusList(bits);
-    // Preserve zlib's deterministic, zero-timestamp GZIP encoding.
-    expect(Buffer.from(encodedBits.slice(1), "base64url").subarray(4, 8)).toEqual(Buffer.alloc(4));
-    let decoded = decodeStatusList(encodedBits);
+    const encodedBits = await encodeStatusList(bits);
+    const gzip = Buffer.from(encodedBits.slice(1), "base64url");
+    expect(gzip.subarray(4, 8)).toEqual(Buffer.alloc(4));
+    expect(gunzipSync(gzip)).toEqual(Buffer.from(bits));
+    let decoded = await decodeStatusList(encodedBits);
     expect(decoded).toEqual(bits);
     for (const index of [0, 7, 8, bits.length * 8 - 1])
       expect(getStatusBit(decoded, index)).toBe(true);
     setStatusBit(decoded, 7, false);
-    decoded = decodeStatusList(encodeStatusList(decoded));
+    decoded = await decodeStatusList(await encodeStatusList(decoded));
     expect(getStatusBit(decoded, 7)).toBe(false);
     expect(getStatusBit(decoded, 0)).toBe(true);
   });
-  it("enforces the byte limit while inflating highly compressed and concatenated members", () => {
-    const bomb = nodeGzipSync(new Uint8Array(2 * 1024 * 1024));
-    expect(() => decodeStatusList(encoded(bomb), { maxDecodedBytes: 16384 })).toThrow(
-      /within 16384 bytes/,
-    );
-    const joined = Buffer.concat([compressed(), compressed()]);
-    expect(decodeStatusList(encoded(joined))).toHaveLength(32768);
-    expect(() => decodeStatusList(encoded(joined), { maxDecodedBytes: 16384 })).toThrow(
-      BitstringDecodeError,
-    );
+  it("rejects invalid DEFLATE stored-block LEN/NLEN complements", async () => {
+    const gzip = nodeGzipSync(new Uint8Array(16384), { level: 0 });
+    gzip[13] = (gzip[13] as number) ^ 1;
+    expect(() => gunzipSync(gzip)).toThrow("invalid stored block lengths");
+    await expect(decodeStatusList(encoded(gzip))).rejects.toThrow(BitstringDecodeError);
   });
-  it("validates optional GZIP extra fields, names, comments and header checksums", () => {
+  it("cancels oversized expansion immediately after bounded chunk reads", async () => {
+    const bomb = nodeGzipSync(new Uint8Array(8 * 1024 * 1024));
+    const read = vi.spyOn(ReadableStreamDefaultReader.prototype, "read");
+    const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    try {
+      await expect(decodeStatusList(encoded(bomb), { maxDecodedBytes: 16384 })).rejects.toThrow(
+        /within 16384 bytes/,
+      );
+      // Node 24 emits 16KB chunks. Read the first over-limit chunk, then cancel;
+      // the remaining 8MB expansion is never consumed or retained by the decoder.
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      const results = await Promise.all(read.mock.results.map((result) => result.value));
+      expect(results.map((result) => result.value.byteLength)).toEqual([16384, 16384]);
+    } finally {
+      read.mockRestore();
+      cancel.mockRestore();
+    }
+  });
+  it("rejects multiple GZIP members like node:zlib in its strict stream mode", async () => {
+    const joined = Buffer.concat([compressed(), compressed()]);
+    // DecompressionStream uses this strict zlib option in Node 24. The default
+    // gunzipSync instead accepts concatenated members (a 32KB expansion).
+    const strict = { rejectGarbageAfterEnd: true };
+    expect(gunzipSync(joined)).toHaveLength(32768);
+    expect(() => gunzipSync(joined, strict)).toThrow(/Trailing junk/);
+    await expect(
+      new Response(
+        new Blob([joined]).stream().pipeThrough(new DecompressionStream("gzip")),
+      ).arrayBuffer(),
+    ).rejects.toThrow(/Trailing junk/);
+    await expect(decodeStatusList(encoded(joined))).rejects.toThrow(BitstringDecodeError);
+  });
+  it("validates optional GZIP extra fields, names, comments and header checksums", async () => {
     const gzip = compressed();
     const header = Buffer.concat([
       gzip.subarray(0, 10),
@@ -167,28 +197,40 @@ describe("strict browser status-list codec", () => {
     checksum.writeUInt16LE(crc32(header) & 0xffff);
     const member = Buffer.concat([header, checksum, gzip.subarray(10)]);
     expect(gunzipSync(member)).toEqual(Buffer.from(createStatusBitstring()));
-    expect(decodeStatusList(encoded(member))).toEqual(createStatusBitstring());
+    expect(await decodeStatusList(encoded(member))).toEqual(createStatusBitstring());
     member[header.length] = (member[header.length] as number) ^ 1;
-    expect(() => decodeStatusList(encoded(member))).toThrow(BitstringDecodeError);
+    await expect(decodeStatusList(encoded(member))).rejects.toThrow(BitstringDecodeError);
   });
-  it("rejects missing member trailers and trailing garbage after a valid member", () => {
+  it("rejects missing member trailers and trailing bytes after a valid member", async () => {
     const gzip = compressed();
-    for (const trailing of [Buffer.from([1]), Buffer.alloc(8, 255), gzip.subarray(0, 10)])
-      expect(() => decodeStatusList(encoded(Buffer.concat([gzip, trailing])))).toThrow(
+    for (const trailing of [
+      Buffer.from([0]),
+      Buffer.from([1]),
+      Buffer.alloc(8, 255),
+      gzip.subarray(0, 10),
+    ])
+      await expect(decodeStatusList(encoded(Buffer.concat([gzip, trailing])))).rejects.toThrow(
         BitstringDecodeError,
       );
     // Removing only the trailer leaves a completely inflated body; it still must fail.
-    expect(() => decodeStatusList(encoded(gzip.subarray(0, -8)))).toThrow(BitstringDecodeError);
+    await expect(decodeStatusList(encoded(gzip.subarray(0, -8)))).rejects.toThrow(
+      BitstringDecodeError,
+    );
   });
-  it.each([1, 2, 4, 8, 9, 10, 20, 30])("rejects GZIP truncated by %i bytes", (cut) => {
+  it.each([1, 2, 4, 8, 9, 10, 20, 30])("rejects GZIP truncated by %i bytes", async (cut) => {
     const gzip = compressed();
-    expect(() => decodeStatusList(encoded(gzip.subarray(0, -cut)))).toThrow(BitstringDecodeError);
+    await expect(decodeStatusList(encoded(gzip.subarray(0, -cut)))).rejects.toThrow(
+      BitstringDecodeError,
+    );
   });
-  it.each([0, 2, 3, -8, -4, -1])("rejects corrupt GZIP headers and trailers at %i", (offset) => {
+  it.each([
+    0, 2, 3, -8, -4, -1,
+  ])("rejects corrupt GZIP headers, CRC or ISIZE at %i", async (offset) => {
     const gzip = compressed();
     const index = offset < 0 ? gzip.length + offset : offset;
     gzip[index] = (gzip[index] as number) ^ 255;
-    expect(() => decodeStatusList(encoded(gzip))).toThrow(BitstringDecodeError);
+    expect(() => gunzipSync(gzip)).toThrow();
+    await expect(decodeStatusList(encoded(gzip))).rejects.toThrow(BitstringDecodeError);
   });
   it.each([
     "uA",
@@ -200,13 +242,13 @@ describe("strict browser status-list codec", () => {
     "uabc/",
     "uabc\n",
     "u abc",
-  ])("rejects non-base64url or noncanonical input %j", (value) => {
-    expect(() => decodeStatusList(value)).toThrow(BitstringDecodeError);
+  ])("rejects non-base64url or noncanonical input %j", async (value) => {
+    await expect(decodeStatusList(value)).rejects.toThrow(BitstringDecodeError);
   });
-  it("rejects a final newline even though the regex end anchor permits it", () => {
-    expect(() => decodeStatusList(`${encodeStatusList(createStatusBitstring())}\n`)).toThrow(
-      /payload is not valid base64url/,
-    );
+  it("rejects a final newline even though the regex end anchor permits it", async () => {
+    await expect(
+      decodeStatusList(`${await encodeStatusList(createStatusBitstring())}\n`),
+    ).rejects.toThrow(/payload is not valid base64url/);
   });
   it.each([
     0,
@@ -214,8 +256,8 @@ describe("strict browser status-list codec", () => {
     1.5,
     Number.NaN,
     Number.POSITIVE_INFINITY,
-  ])("fails closed on invalid byte ceiling %s", (maxDecodedBytes) => {
-    expect(() => decodeStatusList(encoded(compressed()), { maxDecodedBytes })).toThrow(
+  ])("fails closed on invalid byte ceiling %s", async (maxDecodedBytes) => {
+    await expect(decodeStatusList(encoded(compressed()), { maxDecodedBytes })).rejects.toThrow(
       BitstringDecodeError,
     );
   });

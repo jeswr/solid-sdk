@@ -11,6 +11,7 @@ import { Store } from "n3";
 import { validInstant } from "./instant.js";
 import {
   matchesProofConfiguration,
+  type Node,
   node,
   RDF_TYPE,
   readProof,
@@ -43,6 +44,18 @@ export type ApprovalResult =
         | "decision"
         | "malformed";
     };
+
+/** Approval issuance uses xsd:string, unlike the richer agent-model approval record. */
+function claimText(a: Node, predicate: string): string {
+  const term = a.one(predicate);
+  if (
+    term.termType !== "Literal" ||
+    term.language !== "" ||
+    term.datatype.value !== "http://www.w3.org/2001/XMLSchema#string"
+  )
+    throw new Error("Expected an xsd:string claim without a language tag");
+  return term.value;
+}
 
 /** Constant-work comparison after hashing both arbitrary-length strings to fixed-size digests. */
 async function sameDigest(a: string, b: string): Promise<boolean> {
@@ -87,13 +100,13 @@ export async function readApprovalClaims(
   try {
     const a = node(await parseRdf(document, "application/trig"), id);
     if (a.iri(RDF_TYPE) !== `${AGENT}Approval`) return undefined;
-    const decision = a.text(`${AGENT}decision`);
+    const decision = claimText(a, `${AGENT}decision`);
     if (decision !== "approve" && decision !== "deny") return undefined;
     return {
       id,
       approves: a.iri(`${AGENT}approves`),
-      termsDigest: a.text(`${AGENT}termsDigest`),
-      expires: a.text(`${AGENT}expires`),
+      termsDigest: claimText(a, `${AGENT}termsDigest`),
+      expires: claimText(a, `${AGENT}expires`),
       decision,
     };
   } catch {
@@ -152,12 +165,12 @@ export async function verifyApproval(
       return fail("signature");
     if (a.iri(RDF_TYPE) !== `${AGENT}Approval` || a.iri(`${AGENT}approves`) !== options.proposal)
       return fail("proposal");
-    if (!(await sameDigest(a.text(`${AGENT}termsDigest`), options.termsDigest)))
+    if (!(await sameDigest(claimText(a, `${AGENT}termsDigest`), options.termsDigest)))
       return fail("terms-digest");
-    const expires = a.text(`${AGENT}expires`);
+    const expires = claimText(a, `${AGENT}expires`);
     if (!validInstant(expires) || !(Date.parse(expires) > options.now().getTime()))
       return fail("expired");
-    const decision = a.text(`${AGENT}decision`);
+    const decision = claimText(a, `${AGENT}decision`);
     if (decision !== "approve" && decision !== "deny") return fail("decision");
     return {
       valid: true,

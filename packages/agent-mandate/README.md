@@ -86,6 +86,10 @@ complete graph signature, exact owner attribution and expiry, and returns either
 `{ valid: true, statement }` or `{ valid: false, reason }`. Failures are `proof-type`,
 `key`, `signature`, `attribution`, `expired` or `malformed`. SetBindingState requires
 binding and bindingState; DispatchNow, RevokeMandate and Forget require a target.
+Control claims are decoded through agent-model's strict RDF mapping, including literal
+datatypes, language tags, and cardinalities. Approval claims retain their issued mapping:
+`approves` is an IRI; `termsDigest`, `expires`, and `decision` are `xsd:string` literals
+without language tags. Both verification and unsigned readers enforce these term shapes.
 
 `readApprovalClaims(document, id)` and `readControlClaims(document, id)` return unsigned
 claims or `undefined` for malformed input. They are **display only, never authority**:

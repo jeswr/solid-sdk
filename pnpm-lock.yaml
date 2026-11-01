@@ -4863,9 +4863,6 @@ importers:
       content-type:
         specifier: ^1.0.5
         version: 1.0.5
-      fflate:
-        specifier: 0.8.3
-        version: 0.8.3
       jose:
         specifier: ^6.0.0
         version: 6.2.3
