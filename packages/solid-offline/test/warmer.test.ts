@@ -18,7 +18,6 @@
 import type { StorageClient } from '@jeswr/storage-client';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createPolicyStorage } from '../src/storage.js';
 import {
   createWarmController,
   DEFAULT_WARM_BUDGET,
@@ -42,16 +41,7 @@ const WEBID = `${BASE}/profile/card#me`;
 const PROFILE_DOC = `${BASE}/profile/card`;
 
 function storageFor(fetch: typeof globalThis.fetch): StorageClient {
-  const base = createSolidBackend({ fetch, root: `${BASE}/` });
-  const observed = createPolicyStorage(
-    (fetch) => createSolidBackend({ fetch, root: `${BASE}/` }),
-    fetch,
-  );
-  return {
-    ...base,
-    read: async (url, opts) => (await observed).read(url, opts),
-    head: async (url, opts) => (await observed).head(url, opts),
-  };
+  return createSolidBackend({ fetch, root: `${BASE}/` });
 }
 
 /** A URL-routed mock fetch: map of url → responder. Records every call. */
@@ -319,7 +309,7 @@ describe('warmer: budget enforcement', () => {
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
     const result = await warm(WEBID, { storage }, resolveBudget({ maxBytes: 500_000 }));
-    expect(result.bytes).toBeLessThanOrEqual(500_000 + 200_000); // last over-budget read counted then stop
+    expect(result.bytes).toBeLessThanOrEqual(500_000);
     expect(result.budgetHit).toBe(true);
     // This case crawls 50 × 200 KB bodies; under full-suite CPU contention (now
     // incl. the jsdom React tests) it can brush the 5 s default. Give it headroom
@@ -455,6 +445,137 @@ describe('#9 large binaries are HEAD-probed, not GET-downloaded', () => {
       (c) => c.url === `${BASE}/photo.jpg` && c.method === 'HEAD',
     );
     expect(photoHeads.length).toBeGreaterThan(0);
+  });
+});
+
+describe('warmer: bounded public StorageClient reads', () => {
+  it.each([
+    undefined,
+    '9000000',
+    '1',
+  ])('cancels oversized streams with Content-Length %s on an unwrapped client', async (length) => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const storage = storageFor(async (input, init) => {
+      const request = new Request(input, init);
+      const headers = {
+        'content-type': 'text/plain',
+        ...(length ? { 'content-length': length } : {}),
+      };
+      if (request.method === 'HEAD') return new Response(null, { headers });
+      return new Response(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (pulls === 20) {
+                controller.close();
+                return;
+              }
+              pulls += 1;
+              controller.enqueue(new Uint8Array(1_000_000));
+            },
+            cancel,
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers },
+      );
+    });
+    const result = await warm(WEBID, { storage }, resolveBudget(), '', {
+      seeds: [`${BASE}/large`],
+    });
+    expect(result.warmed).toBe(0);
+    expect(result.visits[0]?.skipped).toBe('large-resource');
+    expect(pulls).toBe(6);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(result.budgetHit).toBe(false);
+  });
+
+  it('cancels as soon as a streamed body exceeds the remaining byte budget', async () => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const storage = storageFor(async (input, init) => {
+      if (new Request(input, init).method === 'HEAD') return new Response(null);
+      return new Response(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (pulls === 20) {
+                controller.close();
+                return;
+              }
+              pulls += 1;
+              controller.enqueue(new Uint8Array(512));
+            },
+            cancel,
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { 'content-type': 'text/plain' } },
+      );
+    });
+    const result = await warm(WEBID, { storage }, resolveBudget({ maxBytes: 1024 }), '', {
+      seeds: [`${BASE}/large`],
+    });
+    expect(result.warmed).toBe(0);
+    expect(result.budgetHit).toBe(true);
+    expect(result.bytes).toBe(1024);
+    expect(result.visits[0]?.skipped).toBe('large-resource');
+    expect(pulls).toBe(3);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('counts body failures as failed visits rather than warmed empty resources', async () => {
+    const storage = storageFor(async (input, init) => {
+      if (new Request(input, init).method === 'HEAD') return new Response(null);
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            controller.error(new Error('Connection lost'));
+          },
+        }),
+      );
+    });
+    const result = await warm(WEBID, { storage }, resolveBudget(), '', { seeds: [`${BASE}/doc`] });
+    expect(result.warmed).toBe(0);
+    expect(result.visits[0]?.skipped).toBe('fetch-error');
+  });
+
+  it('shares the byte allowance across concurrent unwrapped reads', async () => {
+    const cancel = vi.fn();
+    const storage = storageFor(async (input, init) => {
+      if (new Request(input, init).method === 'HEAD') return new Response(null);
+      let pulls = 0;
+      return new Response(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (pulls++ === 3) controller.close();
+              else controller.enqueue(new Uint8Array(600));
+            },
+            cancel,
+          },
+          { highWaterMark: 0 },
+        ),
+      );
+    });
+    const result = await warm(
+      WEBID,
+      { storage },
+      resolveBudget({ maxBytes: 1000, concurrency: 2 }),
+      '',
+      {
+        seeds: [`${BASE}/a`, `${BASE}/b`],
+      },
+    );
+    expect(result.bytes).toBeLessThanOrEqual(1000);
+    expect(result.budgetHit).toBe(true);
+    expect(result.warmed).toBe(0);
+    expect(result.visits.map((visit) => visit.skipped)).toEqual([
+      'large-resource',
+      'large-resource',
+    ]);
+    expect(cancel).toHaveBeenCalledTimes(2);
   });
 });
 

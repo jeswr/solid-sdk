@@ -176,13 +176,15 @@ export async function warm(
         signal: deps.signal,
       });
       if (res.status === 200) {
-        profile = await res.text();
+        const body = await boundedBody(res, state, budget, deps.signal);
+        if (body.skipped) throw new Error('Profile body was not warmed');
+        profile = decodeBody(body.buffer ?? null);
         recordVisit(state, deps, {
           url: webId,
           kind: 'profile',
           depth: 0,
           status: res.status,
-          bytes: byteLen(profile),
+          bytes: body.bytes,
         });
       }
       // else: profile unreadable → no DERIVED seeds, but still crawl custom seeds.
@@ -378,6 +380,7 @@ async function warmGetResponse(
   // Binary / declared-large: record metadata only, never pull the bytes.
   const skipReason = sizeSkipReason(contentType, contentLength);
   if (skipReason) {
+    void res.body?.cancel().catch(() => undefined);
     recordVisit(state, deps, {
       url: item.url,
       kind: item.kind,
@@ -391,27 +394,24 @@ async function warmGetResponse(
 
   // RDF / small resource: pull the bytes (this is what populates the SW cache).
   // The slot was already reserved before the GET (#10).
-  const buf = await safeArrayBuffer(res);
-  const bytes = bodyBytes(buf, contentLength);
+  const body = await boundedBody(res, state, budget, deps.signal);
+  const { bytes } = body;
 
-  // Over the byte budget — count it visited but not warmed; still enumerate a
-  // readable container listing (we already have the body).
-  if (state.bytes + bytes > budget.maxBytes) {
-    state.budgetHit = true;
+  // A partial/oversized body is not warmed or used to discover more resources.
+  if (body.skipped) {
     recordVisit(state, deps, {
       url: item.url,
       kind: item.kind,
       depth: item.depth,
       status: res.status,
       bytes,
-      skipped: 'large-resource',
+      skipped: body.skipped,
     });
-    if (container && canRead) await enumerateContainer(item, deps, discovered, budget);
     return discovered;
   }
 
+  const buf = body.buffer ?? null;
   state.warmed += 1;
-  state.bytes += bytes;
   if (canRead) {
     if (item.kind === 'typeIndex')
       for (const url of typeIndexTargets(item.url, decodeBody(buf)))
@@ -524,16 +524,50 @@ function budgetExceeded(state: CrawlState, budget: ResolvedWarmBudget): boolean 
   return false;
 }
 
-async function safeArrayBuffer(res: ReadResult): Promise<ArrayBuffer | null> {
+/** Bound the public ReadResult stream even when HTTP size evidence is unavailable. */
+async function boundedBody(
+  res: ReadResult,
+  state: CrawlState,
+  budget: ResolvedWarmBudget,
+  signal?: AbortSignal,
+): Promise<{ buffer?: ArrayBuffer; bytes: number; skipped?: 'large-resource' | 'fetch-error' }> {
+  if (!res.body) return { buffer: new ArrayBuffer(0), bytes: 0 };
+  const reader = res.body.getReader();
+  const cancel = () => void reader.cancel().catch(() => undefined);
+  signal?.addEventListener('abort', cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
   try {
-    return (await res.bytes()).slice().buffer as ArrayBuffer;
+    for (;;) {
+      signal?.throwIfAborted();
+      const chunk = await reader.read();
+      signal?.throwIfAborted();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      // Charge chunks synchronously across concurrent readers. Neither missing
+      // nor misleading Content-Length can permit unbounded buffering.
+      if (state.bytes + chunk.value.byteLength > budget.maxBytes) {
+        state.budgetHit = true;
+        return { bytes, skipped: 'large-resource' };
+      }
+      state.bytes += chunk.value.byteLength;
+      if (bytes > LARGE_RESOURCE_BYTES) return { bytes, skipped: 'large-resource' };
+      chunks.push(chunk.value);
+    }
+    const buffer = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      buffer.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { buffer: buffer.buffer, bytes };
   } catch {
-    return null;
+    return { bytes, skipped: 'fetch-error' };
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+    cancel();
+    reader.releaseLock();
   }
-}
-
-function byteLen(s: string): number {
-  return new TextEncoder().encode(s).byteLength;
 }
 
 function recordVisit(state: CrawlState, deps: WarmDeps, visit: WarmVisit): void {
