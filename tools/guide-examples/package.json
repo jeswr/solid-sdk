@@ -1,0 +1,34 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/guide-examples",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runnable reading-list tutorial and SDK developer guide sample checks.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-auth": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-bookmark": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

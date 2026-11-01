@@ -44,6 +44,45 @@ it("rejects semantic errors and reports the Markdown line instead of a generated
   expect(result.diagnostics[0]).toContain("not assignable to type 'number'");
 });
 
+it("checks the new bookmark and RDF packages while skipping raw Turtle exports", () => {
+  const file = fixture(
+    [
+      "```ts",
+      "import { serializeBookmark, parseBookmarkTtl, type BookmarkData } from '@jeswr/solid-bookmark';",
+      "import { BOOKMARK_CLASS } from '@jeswr/solid-bookmark/vocab';",
+      "import { parseRdf } from '@jeswr/fetch-rdf';",
+      "import { serialize } from '@jeswr/rdf-serialize';",
+      "import { NS } from '@jeswr/suite-vocab';",
+      "const url = 'https://pod.example/bookmark';",
+      "const data: BookmarkData = { url: 'https://example.org/', tags: ['solid'] };",
+      "const turtle: string = await serializeBookmark(url, data);",
+      "const bookmark = await parseBookmarkTtl(url, turtle);",
+      "const graph = await parseRdf(turtle, 'text/turtle', { baseIRI: url });",
+      "const serialized: string = await serialize([...graph]);",
+      "const iri: string = BOOKMARK_CLASS + NS.BOOKMARK;",
+      "```",
+    ].join("\n"),
+  );
+  expect(checkExamples([file])).toEqual({ examples: 1, diagnostics: [] });
+});
+
+it("resolves public external RDF declarations from installed workspace dependencies", () => {
+  const file = fixture(
+    [
+      "```ts",
+      "import { Container } from '@solid/object';",
+      "import { TermWrapper } from '@rdfjs/wrapper';",
+      "import { DataFactory, Store } from 'n3';",
+      "const graph = new Store();",
+      "const term = DataFactory.namedNode('https://pod.example/container/');",
+      "const container = new Container(term, graph, DataFactory);",
+      "const wrapper: TermWrapper = container;",
+      "```",
+    ].join("\n"),
+  );
+  expect(checkExamples([file])).toEqual({ examples: 1, diagnostics: [] });
+});
+
 it("does not supply undeclared app globals or accept unexported package APIs", () => {
   const file = fixture("```ts\nconst response = await authenticatedFetch('/');\n```\n");
   expect(checkExamples([file]).diagnostics.join("\n")).toContain(

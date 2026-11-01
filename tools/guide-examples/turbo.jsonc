@@ -1,0 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+{
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/guide/*.md",
+        "$TURBO_ROOT$/skills/build-solid-app/SKILL.md",
+        "$TURBO_ROOT$/scripts/check-sdk-skill-examples.mjs"
+      ]
+    }
+  }
+}
