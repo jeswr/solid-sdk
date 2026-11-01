@@ -14,6 +14,7 @@
  * ⇒ every pod route fails closed (503).
  */
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { DatasetCore } from "@rdfjs/types";
 import type { PodGuardConfig } from "./config.js";
 
@@ -29,9 +30,17 @@ export class PodAccessError extends Error {
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-function isLoopback(url: URL): boolean {
-  return LOOPBACK_HOSTS.has(url.hostname) || url.hostname === "::1";
+/** Whether a parsed URL's host is loopback (WHATWG brackets IPv6, so `[::1]`). */
+export function isLoopback(url: URL): boolean {
+  return LOOPBACK_HOSTS.has(url.hostname);
 }
+
+/** Pod reads and probes give up after this long; a stalled pod host must not hold a route. */
+const POD_IO_TIMEOUT_MS = 10_000;
+/** Owner profile cards are small; anything larger is not a legitimate card. */
+const POD_CARD_MAX_BYTES = 1024 * 1024;
+const POD_CARD_MAX_QUADS = 10_000;
+const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
 
 /**
  * Validate an untrusted pod base URL against the config allowlist. Returns
@@ -109,6 +118,9 @@ export async function readPodResource(
   try {
     const { dataset, etag } = await fetchRdf(iri, {
       fetch: (input, init) => podFetch(input, { ...init, redirect: "error" }),
+      signal: AbortSignal.timeout(POD_IO_TIMEOUT_MS),
+      maxBytes: POD_CARD_MAX_BYTES,
+      maxQuads: POD_CARD_MAX_QUADS,
     });
     return { dataset, etag };
   } catch (error) {
@@ -121,5 +133,44 @@ export async function readPodResource(
         `${(error as Error).message}`,
     );
     throw new PodAccessError(502, `could not read ${iri.replace(base, "<pod>/")}`);
+  }
+}
+
+/**
+ * Require `podBase` to be a storage root (Solid Protocol §4.1: the root advertises
+ * `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`). Without this, any
+ * container on an allowlisted host where a non-owner can create `profile/card` (a
+ * shared or append-only folder) could be claimed and acknowledged as that user's pod.
+ */
+export async function assertStorageRoot(
+  podBase: string,
+  podFetch: PodIoFetch = anonymousPodFetch,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await podFetch(podBase, {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(POD_IO_TIMEOUT_MS),
+    });
+  } catch {
+    throw new PodAccessError(502, "could not probe the claimed pod root");
+  }
+  try {
+    void response.body?.cancel().catch(() => {});
+  } catch {
+    // Nothing to release.
+  }
+  const isStorage =
+    response.ok &&
+    parseLinkHeaders(response.headers.get("link"), response.url || podBase).some(
+      (link) =>
+        link.rel.includes("type") && link.target === PIM_STORAGE && link.context === podBase,
+    );
+  if (!isStorage) {
+    throw new PodAccessError(
+      403,
+      "pod_binding: the claimed pod is not a storage root (no pim:Storage type link)",
+    );
   }
 }
