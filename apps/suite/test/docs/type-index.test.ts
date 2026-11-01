@@ -21,6 +21,7 @@ const WEBID = "https://alice.pod/profile/card#me";
 const PROFILE_DOC = "https://alice.pod/profile/card";
 const POD = "https://alice.pod/";
 const PRIVATE_INDEX = "https://alice.pod/settings/privateTypeIndex.ttl";
+const PREFERENCES = `${POD}settings/prefs.ttl`;
 const CONTAINER = "https://alice.pod/pod-docs/";
 
 const REG: DesiredRegistration = { forClass: DOCUMENT_CLASS, container: CONTAINER };
@@ -32,6 +33,8 @@ it.each([
   [true, undefined],
 ] as const)("rejects unusable profile/index validators (linked: %s, ETag: %j)", async (linked, etag) => {
   const transport = mockFetch({
+    [`PUT ${PREFERENCES}`]: { status: 201 },
+    ...privateIndexPolicy(PREFERENCES, WEBID),
     [`GET ${WEBID}`]: {
       body: profileWith(linked ? { privateIndex: PRIVATE_INDEX } : {}),
       etag,
@@ -255,8 +258,10 @@ describe("ensureTypeRegistrations", () => {
     ).toHaveLength(4);
   });
 
-  it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
+  it("bootstraps a private index in preferences, links preferences from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
+      [`PUT ${PREFERENCES}`]: { status: 201 },
+      ...privateIndexPolicy(PREFERENCES, WEBID),
       ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({}), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
@@ -313,6 +318,8 @@ describe("ensureTypeRegistrations", () => {
   it("bootstraps private storage even when a public index exists", async () => {
     const publicIndex = "https://alice.pod/public.ttl";
     const { fetch, calls } = mockFetch({
+      [`PUT ${PREFERENCES}`]: { status: 201 },
+      ...privateIndexPolicy(PREFERENCES, WEBID),
       ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ publicIndex }), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
@@ -361,6 +368,8 @@ describe("ensureTypeRegistrations", () => {
       <#reg> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .
     `;
     const { fetch } = mockFetch({
+      [`PUT ${PREFERENCES}`]: { status: 201 },
+      ...privateIndexPolicy(PREFERENCES, WEBID),
       ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({}), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 412 }, // create-only collision
@@ -500,6 +509,8 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
   let profilePuts = 0;
   const writes: { url: string; body: string; etag: string | null }[] = [];
   const { fetch: transport } = mockFetch({
+    [`PUT ${PREFERENCES}`]: { status: 201 },
+    ...privateIndexPolicy(PREFERENCES, WEBID),
     ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     ...privateIndexPolicy(concurrentIndex, WEBID),
     [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
@@ -542,6 +553,8 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
 
 it.each([412, 403])("bounds or propagates profile linking failures (%s)", async (status) => {
   const { fetch, calls } = mockFetch({
+    [`PUT ${PREFERENCES}`]: { status: 201 },
+    ...privateIndexPolicy(PREFERENCES, WEBID),
     ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     [`GET ${WEBID}`]: { body: profileWith({}), etag: '"profile"' },
     [`PUT ${PRIVATE_INDEX}`]: { status: 412 },

@@ -3,7 +3,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Parser, Store, Writer } from "n3";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DriveContainer, DriveResource } from "../../src/apps/drive/lib/model/model.js";
 import {
   DriveRootInitializationError,
@@ -23,6 +23,7 @@ const metadata = `${root}description`;
 const containerBody = containerDescription(root);
 const index = `${storage}settings/private.ttl`;
 const options = { storageUrl: storage, typeIndexUrl: index };
+afterEach(() => vi.restoreAllMocks());
 
 function containerDescription(url: string): string {
   const { namedNode, quad } = DataFactory;
@@ -38,6 +39,7 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
   const containerBody = containerDescription(root);
   const index = `${storageUrl}settings/private.ttl`;
   const files = new Map<string, { body: string; version: number }>([
+    [storageUrl, { body: "", version: 1 }],
     [index, { body: "", version: 1 }],
   ]);
   const calls: { url: string; method: string; headers: Headers; status: number }[] = [];
@@ -59,7 +61,12 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
       const preconditionFails = () =>
         (headers.get("If-None-Match") === "*" && files.has(url)) ||
         (headers.has("If-Match") && headers.get("If-Match") !== `"${files.get(url)?.version}"`);
-      if (method === "GET") {
+      if (method === "HEAD") {
+        response = new Response(null, {
+          status: file ? 200 : 404,
+          ...(file ? { headers: { etag: `"${file.version}"` } } : {}),
+        });
+      } else if (method === "GET") {
         response = file
           ? new Response(file.body, {
               headers: {
@@ -181,6 +188,7 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
         }
       } else throw new Error(`Unexpected method ${method}`);
     }
+    response.headers.set("x-solid-demo-access-control", "none");
     Object.defineProperty(response, "url", { value: url });
     calls.push({ url, method, headers, status: response.status });
     return response;
@@ -290,9 +298,9 @@ describe("ensureDriveRoot", () => {
     expect(await failure.resume()).toBe(root);
     expect(puts).toHaveLength(failures + 1);
     expect(puts.every((headers) => headers.get("If-None-Match") === "*")).toBe(true);
-    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(
-      failures,
-    );
+    expect(
+      m.calls.filter((call) => call.url === root && call.method === "GET" && call.status === 404),
+    ).toHaveLength(failures);
     expect(m.rootCreates).toBe(1);
     expect(m.indexWrites).toBe(1);
     expect(await failure.resume()).toBe(root);
@@ -375,7 +383,9 @@ describe("ensureDriveRoot", () => {
     const retried = await initializationFailure(failure.resume());
     expect(retried.cause).toMatchObject({ name: "RdfFetchError", status: 404, url: root });
     expect(m.calls.filter((call) => call.url === root && call.method === "PUT")).toHaveLength(2);
-    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(2);
+    expect(
+      m.calls.filter((call) => call.url === root && call.method === "GET" && call.status === 404),
+    ).toHaveLength(2);
     expect(m.indexWrites).toBe(0);
     m.setBefore(undefined);
     expect(await retried.resume()).toBe(root);
@@ -388,7 +398,7 @@ describe("ensureDriveRoot", () => {
     const cause = new TypeError("Disconnected while reading");
     let disconnected = true;
     const fetch: typeof globalThis.fetch = async (input, init) => {
-      if (String(input) === root && init?.method !== "PUT" && disconnected) throw cause;
+      if (String(input) === root && (init?.method ?? "GET") === "GET" && disconnected) throw cause;
       return m.fetch(input, init);
     };
     const failure = await initializationFailure(ensureDriveRoot(fetch, options));
@@ -645,14 +655,14 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(0);
   });
 
-  it("bounds container PATCH precondition retries and resumes", async () => {
+  it("refuses a container PATCH conflict and permits explicit resumption", async () => {
     const m = memory(409, storage, true);
     m.setBefore((url, method) =>
       url === root && method === "PATCH" ? new Response(null, { status: 412 }) : undefined,
     );
     const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
     expect(failure.cause).toMatchObject({ name: "DriveWriteError", status: 412, url: root });
-    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(2);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
     expect(m.indexWrites).toBe(0);
     m.setBefore(undefined);
     expect(await failure.resume()).toBe(root);
@@ -671,7 +681,7 @@ describe("ensureDriveRoot", () => {
   it.each([
     "create",
     "update",
-  ])("re-reads and retries once on a metadata %s race", async (operation) => {
+  ])("refuses a metadata %s race until explicit resumption", async (operation) => {
     const m = memory();
     if (operation === "update") m.files.set(metadata, { body: "", version: 1 });
     const unrelated = DataFactory.quad(
@@ -688,24 +698,29 @@ describe("ensureDriveRoot", () => {
       }
       return undefined;
     });
-    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(failure.cause).toMatchObject({ status: 412, url: metadata });
     const patches = m.calls.filter((call) => call.method === "PATCH");
-    expect(patches.map((call) => call.status)).toEqual([412, 205]);
+    expect(patches.map((call) => call.status)).toEqual([412]);
     expect(patches[0]?.headers.get(operation === "create" ? "If-None-Match" : "If-Match")).toBe(
       operation === "create" ? "*" : '"1"',
     );
-    expect(patches[1]?.headers.get("If-Match")).toBe('"12"');
+    expect(m.files.get(metadata)?.version).toBe(12);
     expect(turtle(m.files.get(metadata)?.body ?? "").has(unrelated)).toBe(true);
+    expect(await failure.resume()).toBe(root);
+    expect(m.calls.filter((call) => call.method === "PATCH")[1]?.headers.get("If-Match")).toBe(
+      '"12"',
+    );
   });
 
-  it("bounds metadata conflict retries and keeps the handle resumable", async () => {
+  it("refuses metadata conflicts and keeps the handle resumable", async () => {
     const m = memory();
     m.setBefore((url, method) =>
       url === metadata && method === "PATCH" ? new Response(null, { status: 412 }) : undefined,
     );
     const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
     expect(failure.cause).toMatchObject({ status: 412, url: metadata });
-    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(2);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
     expect(m.indexWrites).toBe(0);
     m.setBefore(undefined);
     expect(await failure.resume()).toBe(root);
@@ -826,7 +841,7 @@ describe("ensureDriveRoot", () => {
     expect(m.files.get(index)?.body).not.toContain("w3id.org");
   });
 
-  it("re-reads and reapplies once on an index ETag race", async () => {
+  it("refuses an index ETag race until a new initialization attempt", async () => {
     const m = memory();
     let conflict = true;
     m.setBefore((url, method) => {
@@ -840,9 +855,13 @@ describe("ensureDriveRoot", () => {
       }
       return undefined;
     });
-    await ensureDriveRoot(m.fetch, options);
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 412,
+      url: index,
+    });
     expect(m.files.get(index)?.body).toContain("Keep me");
-    expect(m.calls.filter((call) => call.url === index && call.method === "PUT")).toHaveLength(2);
+    expect(m.calls.filter((call) => call.url === index && call.method === "PUT")).toHaveLength(1);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
   });
 
   it("accepts another caller's registration on the conflict re-read", async () => {
@@ -859,7 +878,9 @@ describe("ensureDriveRoot", () => {
     expect(m.calls.filter((call) => call.url === index && call.method === "PUT")).toHaveLength(1);
   });
 
-  it.each([412, 403, 500])("bounds index retry and propagates status %s", async (status) => {
+  it.each([
+    412, 403, 500,
+  ])("refuses an index overwrite and propagates status %s", async (status) => {
     const m = memory();
     m.setBefore((url, method) =>
       url === index && method === "PUT" ? new Response(null, { status }) : undefined,
@@ -869,9 +890,7 @@ describe("ensureDriveRoot", () => {
       status,
       url: index,
     });
-    expect(m.calls.filter((call) => call.url === index && call.method === "PUT")).toHaveLength(
-      status === 412 ? 2 : 1,
-    );
+    expect(m.calls.filter((call) => call.url === index && call.method === "PUT")).toHaveLength(1);
   });
 
   it.each([
@@ -1266,4 +1285,140 @@ describe("ensureDriveRoot", () => {
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow();
     expect(m.calls).toHaveLength(1);
   });
+});
+
+it("round 61: root creation binds the successful PUT endpoint when 404 omits Link", async () => {
+  const { aclBody } = await import("../drive-wac-pod");
+  const m = memory();
+  const policy = await aclBody(storage, true);
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith(".policy"))
+      return new Response(url === `${storage}.policy` ? policy : null, {
+        status: url === `${storage}.policy` ? 200 : 404,
+        headers: { "content-type": "text/turtle", etag: '"policy"' },
+      });
+    const response = url === storage ? new Response(null) : await m.fetch(input, init);
+    response.headers.delete("x-solid-demo-access-control");
+    if (response.ok) response.headers.append("link", `<${url}.policy>; rel="acl"`);
+    return response;
+  };
+  expect(await ensureDriveRoot(http, options)).toBe(root);
+});
+
+it.each([
+  "index",
+  "container marker",
+  "description marker",
+])("round 64: root %s refuses a changed endpoint on its final HEAD", async (step) => {
+  const { aclBody } = await import("../drive-wac-pod");
+  const m = memory(409, storage, step === "container marker");
+  m.files.set(root, { body: containerBody, version: 1 });
+  m.files.set(metadata, { body: "", version: 1 });
+  const target = step === "index" ? index : step === "container marker" ? root : metadata;
+  const policies = new Map([[`${storage}.policy`, await aclBody(storage, true)]]);
+  const foreign = `${target}.foreign.policy`;
+  let changed = false;
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith(".policy")) {
+      const body = policies.get(url);
+      return new Response(init?.method === "HEAD" ? null : (body ?? null), {
+        status: body ? 200 : 404,
+        headers: { "content-type": "text/turtle", etag: body ? '"policy"' : '"absent"' },
+      });
+    }
+    const response = url === storage ? new Response(null) : await m.fetch(input, init);
+    response.headers.delete("x-solid-demo-access-control");
+    if (
+      !changed &&
+      url === target &&
+      init?.method === "HEAD" &&
+      new Headers(init.headers).has("if-match")
+    ) {
+      changed = true;
+      policies.set(foreign, await aclBody(target));
+    }
+    response.headers.append(
+      "link",
+      `<${changed && url === target ? foreign : `${url}.policy`}>; rel="acl"`,
+    );
+    return response;
+  };
+  await expect(ensureDriveRoot(http, options)).rejects.toThrow();
+  expect(changed).toBe(true);
+  expect(
+    m.calls.filter(
+      ({ url, method }) => url === target && method === (step === "index" ? "PUT" : "PATCH"),
+    ),
+  ).toEqual([]);
+  expect(m.files.get(target)?.version).toBe(1);
+  expect(policies.get(foreign)).toBe(await aclBody(target));
+});
+
+it.each([
+  "index",
+  "container marker",
+  "description marker",
+])("round 62 shape a: root %s never adopts a later validator", async (step) => {
+  const m = memory(409, storage, step === "container marker");
+  m.files.set(root, { body: containerBody, version: 1 });
+  m.files.set(metadata, { body: "", version: 1 });
+  const target = step === "index" ? index : step === "container marker" ? root : metadata;
+  let changed = false;
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const response = await m.fetch(input, init);
+    if (init?.method === "HEAD" && response.ok)
+      response.headers.set("etag", `"${m.files.get(url)?.version}"`);
+    if (!changed && url === target && (init?.method ?? "GET") === "GET") {
+      changed = true;
+      const file = m.files.get(target);
+      if (!file) throw new Error("Missing selected root resource");
+      m.files.set(target, { body: file.body, version: file.version + 1 });
+    }
+    return response;
+  };
+  await expect(ensureDriveRoot(http, options)).rejects.toMatchObject(
+    step === "index" ? { status: 412, url: target } : { cause: { status: 412, url: target } },
+  );
+  expect(changed).toBe(true);
+  expect(m.files.get(target)?.version).toBe(2);
+});
+
+it.each([
+  "index",
+  "container marker",
+  "description marker",
+])("round 62 shape b: root %s checks HTTP identity immediately before mutation", async (step) => {
+  const m = memory(409, storage, step === "container marker");
+  m.files.set(root, { body: containerBody, version: 1 });
+  m.files.set(metadata, { body: "", version: 1 });
+  const target = step === "index" ? index : step === "container marker" ? root : metadata;
+  const events: string[] = [];
+  const end = Writer.prototype.end;
+  vi.spyOn(Writer.prototype, "end").mockImplementation(function (this: Writer, ...args: unknown[]) {
+    events.push("serialization");
+    return Reflect.apply(end, this, args);
+  });
+  let checked = false;
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (url === target && method === (step === "index" ? "PUT" : "PATCH")) {
+      expect(events.at(-1)).toBe(`identity HEAD ${target}`);
+      checked = true;
+    }
+    const response = await m.fetch(input, init);
+    if (method === "HEAD" && response.ok)
+      response.headers.set("etag", `"${m.files.get(url)?.version}"`);
+    events.push(
+      method === "HEAD" && new Headers(init?.headers).has("if-match")
+        ? `identity HEAD ${url}`
+        : method,
+    );
+    return response;
+  };
+  await ensureDriveRoot(http, options);
+  expect(checked).toBe(true);
 });
