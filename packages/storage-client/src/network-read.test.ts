@@ -17,6 +17,48 @@ const factories = [
   { protocol: "lws", create: createLwsBackend },
 ] as const;
 
+describe.each(factories)("$protocol observation revalidation", ({ create, protocol }) => {
+  test.each([
+    undefined,
+    false,
+    true,
+  ])("forwards revalidate=%s to HEAD and every listing page", async (revalidate) => {
+    const signal = new AbortController().signal;
+    const fetch = vi.fn<AuthFetch>(async (input, init) => {
+      if (init?.method === "HEAD") return new Response(null);
+      if (protocol === "solid") {
+        return new Response("", { headers: { "content-type": "text/turtle" } });
+      }
+      const next = String(input) === ROOT;
+      return Response.json(
+        { type: "Container", items: [{ id: next ? "a" : "b", type: "DataResource" }] },
+        {
+          headers: {
+            "content-type": "application/lws+json",
+            ...(next ? { link: '<?page=2&opaque=a%2Fb>; rel="next"' } : {}),
+          },
+        },
+      );
+    });
+    const storage = create({ root: ROOT, fetch });
+    await storage.head(NOTE, { signal, revalidate });
+    await storage.list(ROOT, { signal, revalidate });
+    const entries = await Array.fromAsync(storage.listAll(ROOT, { signal, revalidate }));
+    expect(entries.map((entry) => entry.url)).toEqual(
+      protocol === "lws" ? [`${ROOT}a`, `${ROOT}b`] : [],
+    );
+    expect(fetch).toHaveBeenCalledTimes(protocol === "lws" ? 4 : 3);
+    for (const [, init] of fetch.mock.calls) {
+      expect(init?.cache).toBe(revalidate ? "no-cache" : undefined);
+      expect(init?.signal).toBe(signal);
+      expect(init?.redirect).toBe("manual");
+    }
+    if (protocol === "lws") {
+      expect(fetch.mock.calls.at(-1)?.[0]).toBe(`${ROOT}?page=2&opaque=a%2Fb`);
+    }
+  });
+});
+
 describe.each(factories)("$protocol request scope", ({ create, protocol }) => {
   test.each([
     "https://alice:SECRET@evil.example/",

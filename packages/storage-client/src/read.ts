@@ -92,9 +92,10 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     range = false,
+    revalidate = false,
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
-    const response = await send(fetch, "GET", target, headers, signal);
+    const response = await send(fetch, "GET", target, headers, signal, undefined, revalidate);
     const shape = await shapeOf("GET", target, response, {
       range,
       conditional: "If-None-Match" in headers,
@@ -104,9 +105,17 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
   }
   const operations = {
     get,
-    async head(url: string, opts: { signal?: AbortSignal } = {}) {
+    async head(url: string, opts: Parameters<StorageClient["head"]>[1] = {}) {
       const target = scoped(root, "HEAD", url);
-      const response = await send(fetch, "HEAD", target, { Accept: "*/*" }, opts.signal);
+      const response = await send(
+        fetch,
+        "HEAD",
+        target,
+        { Accept: "*/*" },
+        opts.signal,
+        undefined,
+        opts.revalidate,
+      );
       const shape = await shapeOf("HEAD", target, response, {
         range: false,
         conditional: false,

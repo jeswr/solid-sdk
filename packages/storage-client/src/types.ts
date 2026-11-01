@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
@@ -138,6 +139,13 @@ export interface MetadataOp {
   href: string;
 }
 
+/** Options for fresh HEAD and listing observations. */
+export interface ObservationOptions {
+  signal?: AbortSignal;
+  /** Revalidate HTTP cache entries before use (`cache: 'no-cache'`), on every listing page. */
+  revalidate?: boolean;
+}
+
 export interface StorageClient {
   readonly protocol: "solid" | "lws";
   readonly root: string;
@@ -145,10 +153,10 @@ export interface StorageClient {
 
   list(
     container: string,
-    opts?: { cursor?: PageCursor; signal?: AbortSignal },
+    opts?: ObservationOptions & { cursor?: PageCursor },
   ): Promise<Page<Entry>>;
-  listAll(container: string, opts?: { signal?: AbortSignal }): AsyncIterable<Entry>;
-  head(url: string, opts?: { signal?: AbortSignal }): Promise<ReadResult>;
+  listAll(container: string, opts?: ObservationOptions): AsyncIterable<Entry>;
+  head(url: string, opts?: ObservationOptions): Promise<ReadResult>;
   read(
     url: string,
     opts?: {
