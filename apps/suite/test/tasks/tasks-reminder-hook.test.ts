@@ -124,14 +124,39 @@ describe("fired reminder store", () => {
   });
 });
 
+function stubServiceWorker(registration?: { showNotification: ReturnType<typeof vi.fn> }) {
+  Object.defineProperty(navigator, "serviceWorker", {
+    configurable: true,
+    value: { controller: {}, getRegistration: vi.fn(async () => registration) },
+  });
+}
+afterEach(() => {
+  Reflect.deleteProperty(navigator, "serviceWorker");
+});
+const illegal = new TypeError("Illegal constructor");
+class ThrowingNotification {
+  static permission: NotificationPermission = "granted";
+  static requestPermission = vi.fn();
+  constructor() {
+    throw illegal;
+  }
+}
+const reminderToast = {
+  id: event.tag,
+  description: "Due today 10:00",
+  duration: Number.POSITIVE_INFINITY,
+  closeButton: true,
+  action: { label: "Open", onClick: expect.any(Function) },
+};
+
 describe("reminder delivery", () => {
-  it("shows a permitted notification and a toast that both open the task", async () => {
+  it("shows a permitted notification and a persistent toast that both open the task", async () => {
     vi.stubGlobal("Notification", FakeNotification);
     FakeNotification.permission = "granted";
     const focus = vi.spyOn(window, "focus").mockImplementation(() => {});
     const open = vi.fn();
     const { deliverReminder } = await load();
-    deliverReminder(event, open);
+    await deliverReminder(event, open);
     const [notification] = FakeNotification.instances;
     expect(notification?.title).toBe("Call mum");
     expect(notification?.options).toEqual({ body: "Due today 10:00", tag: event.tag });
@@ -139,36 +164,42 @@ describe("reminder delivery", () => {
     expect(focus).toHaveBeenCalled();
     expect(open).toHaveBeenCalledWith(url);
     expect(notification?.close).toHaveBeenCalled();
-    expect(toast).toHaveBeenCalledExactlyOnceWith("Reminder: Call mum", {
-      id: event.tag,
-      description: "Due today 10:00",
-      duration: 30_000,
-      action: { label: "Open", onClick: expect.any(Function) },
-    });
+    expect(toast).toHaveBeenCalledExactlyOnceWith("Reminder: Call mum", reminderToast);
     open.mockClear();
     action().onClick();
     expect(open).toHaveBeenCalledWith(url);
   });
+  it("uses the controlling service worker's registration when there is one", async () => {
+    vi.stubGlobal("Notification", ThrowingNotification);
+    const registration = { showNotification: vi.fn(async () => {}) };
+    stubServiceWorker(registration);
+    const { deliverReminder } = await load();
+    await deliverReminder(event, vi.fn());
+    expect(registration.showNotification).toHaveBeenCalledExactlyOnceWith("Call mum", {
+      body: "Due today 10:00",
+      tag: event.tag,
+      data: { taskUrl: url },
+    });
+    expect(warn).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledExactlyOnceWith("Reminder: Call mum", reminderToast);
+    // A controller without a registration falls back to the constructor.
+    stubServiceWorker();
+    vi.stubGlobal("Notification", FakeNotification);
+    FakeNotification.permission = "granted";
+    await deliverReminder(event, vi.fn());
+    expect(FakeNotification.instances).toHaveLength(1);
+  });
   it("falls back to the toast without permission, support, or a working constructor", async () => {
     const { deliverReminder } = await load();
     vi.stubGlobal("Notification", undefined);
-    deliverReminder(event, vi.fn());
+    await deliverReminder(event, vi.fn());
     vi.stubGlobal("Notification", FakeNotification);
     FakeNotification.permission = "denied";
-    deliverReminder(event, vi.fn());
+    await deliverReminder(event, vi.fn());
     expect(FakeNotification.instances).toEqual([]);
-    const failure = new TypeError("Illegal constructor");
-    vi.stubGlobal(
-      "Notification",
-      class {
-        static permission = "granted";
-        constructor() {
-          throw failure;
-        }
-      },
-    );
-    deliverReminder(event, vi.fn());
-    expect(warn).toHaveBeenCalledWith("Tasks reminders:", failure);
+    vi.stubGlobal("Notification", ThrowingNotification);
+    await deliverReminder(event, vi.fn());
+    expect(warn).toHaveBeenCalledWith("Tasks reminders:", illegal);
     expect(toast).toHaveBeenCalledTimes(3);
   });
 });
@@ -189,12 +220,39 @@ describe("notification permission offer", () => {
       duration: 10_000,
       action: { label: "Allow notifications", onClick: expect.any(Function) },
     });
+    // The feature check's probe notification is closed at once.
+    expect(FakeNotification.instances.every((probe) => probe.close.mock.calls.length)).toBe(true);
     expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
     action().onClick();
     expect(FakeNotification.requestPermission).toHaveBeenCalledOnce();
     // A reload in the same session does not ask again.
     const reloaded = await load();
     reloaded.offerNotificationPermission();
+    expect(toast).toHaveBeenCalledOnce();
+  });
+  it("does not offer when neither a service worker nor the constructor can notify", async () => {
+    ThrowingNotification.permission = "default";
+    vi.stubGlobal("Notification", ThrowingNotification);
+    const { offerNotificationPermission } = await load();
+    offerNotificationPermission();
+    expect(toast).not.toHaveBeenCalled();
+    stubServiceWorker({ showNotification: vi.fn() });
+    offerNotificationPermission();
+    expect(toast).toHaveBeenCalledOnce();
+    ThrowingNotification.permission = "granted";
+  });
+  it("treats a non-TypeError from the probe as a working constructor", async () => {
+    vi.stubGlobal(
+      "Notification",
+      class {
+        static permission = "default";
+        constructor() {
+          throw new DOMException("denied", "NotAllowedError");
+        }
+      },
+    );
+    const { offerNotificationPermission } = await load();
+    offerNotificationPermission();
     expect(toast).toHaveBeenCalledOnce();
   });
   it("reports a rejected request and still limits the offer when storage is blocked", async () => {
@@ -276,6 +334,30 @@ describe("useReminderScheduler", () => {
     await flush(15 * 60_000);
     expect(claim.mock.calls.length).toBe(calls + 2);
     expect(source.listeners.size).toBe(0);
+  });
+  it("leaves claims to a visible tab unless notifications are granted", async () => {
+    vi.useFakeTimers({ now });
+    setVisibility("hidden");
+    vi.stubGlobal("Notification", FakeNotification);
+    const { useReminderScheduler } = await load();
+    const source = new Source(snapshot([{ offset: "-PT1H" }]));
+    const store = createMemoryFiredStore();
+    const claim = vi.spyOn(store, "claim");
+    function Probe() {
+      useReminderScheduler(source, vi.fn(), store);
+      return null;
+    }
+    await act(async () => root.render(createElement(Probe)));
+    await flush(5 * 60_000);
+    expect(claim).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
+    // A system notification is visible from a hidden tab, so a granted tab may claim.
+    FakeNotification.permission = "granted";
+    await flush(5 * 60_000);
+    expect(claim).toHaveBeenCalledOnce();
+    expect(FakeNotification.instances).toHaveLength(1);
+    expect(toast).toHaveBeenCalledOnce();
+    setVisibility("visible");
   });
   it("delivers once across a strict-mode remount using the shared store", async () => {
     vi.stubGlobal("indexedDB", undefined);
