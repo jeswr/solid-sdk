@@ -112,6 +112,25 @@ type PendingFetch = Pending<Response> & {
   readonly init?: RequestInit;
 };
 
+/** Count UTF-8 bytes without allocating an encoded copy, including lone surrogates. */
+function assertTextBodySize(value: string): void {
+  let size = value.length;
+  assertBodySize(size);
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit < 0x80) continue;
+    if (unit < 0x800) size++;
+    else {
+      size += 2;
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        const next = value.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) i++;
+      }
+    }
+    assertBodySize(size);
+  }
+}
+
 /** Preserve the worker's final URL metadata through native body cloning. */
 function withResponseMetadata(response: Response, url: string, redirected: boolean): Response {
   const clone = response.clone;
@@ -268,36 +287,88 @@ function installSolidInjection(): void {
     autoDivert = false,
   ): Promise<Response> {
     const request = typeof input === 'object' && !urlLike(input) ? (input as Request) : null;
-    if (request && ((init?.mode ?? request.mode) === 'navigate' || !/^https?:/.test(request.url)))
+    if (
+      request &&
+      ((init?.mode === undefined && request.mode === 'navigate') || !/^https?:/.test(request.url))
+    )
       return PRISTINE_FETCH(input, init);
 
     // Snapshot mutable fields synchronously, BEFORE Blob/Request body reads yield.
+    // Web IDL dictionaries include inherited and non-enumerable members too.
     const snapInit = init
-      ? { ...init, ...(init.headers !== undefined ? { headers: new Headers(init.headers) } : {}) }
+      ? (Object.fromEntries(
+          [
+            'method',
+            'headers',
+            'body',
+            'mode',
+            'credentials',
+            'cache',
+            'redirect',
+            'referrer',
+            'referrerPolicy',
+            'integrity',
+            'keepalive',
+            'signal',
+            'duplex',
+            'priority',
+            'window',
+          ].map((key) => [key, Reflect.get(init, key)]),
+        ) as RequestInit)
       : undefined;
+    if (snapInit?.headers !== undefined) snapInit.headers = new Headers(snapInit.headers);
     // An explicit null signal clears the Request signal; undefined inherits it.
     const signal = snapInit?.signal === undefined ? request?.signal : snapInit.signal;
     signal?.throwIfAborted();
     const source = snapInit?.body;
-    // Reject structured/one-shot init bodies before constructing a Request can lock them.
-    if (source instanceof FormData || source instanceof ReadableStream) {
-      if (autoDivert) return PRISTINE_FETCH(input, snapInit);
-      throw new Error(
-        'window.solid.fetch does not support FormData or ReadableStream request bodies',
-      );
-    }
-    const snapInput = request
-      ? source != null
-        ? new Request(request, snapInit)
-        : request.clone()
-      : urlLike(input)
-        ? input.href
-        : input;
-    const method = snapInit?.method ?? request?.method ?? 'GET';
+    let snapInput = urlLike(input) ? input.href : input;
+    let method: string;
     const headers = new Headers(snapInit?.headers ?? request?.headers);
     let body: string | undefined;
     let bodyBase64: string | undefined;
     try {
+      // Reject this combination even for an oversized body, without copying it first.
+      const effectiveMethod =
+        snapInit?.method === undefined ? (request?.method ?? 'GET') : String(snapInit.method);
+      if ((source != null || request?.body != null) && /^(GET|HEAD)$/i.test(effectiveMethod))
+        throw new TypeError('Request with GET/HEAD method cannot have body');
+
+      // Request construction extracts/copies BodyInit. Bound all known sizes FIRST.
+      if (typeof source === 'string') assertTextBodySize(source);
+      else if (
+        ArrayBuffer.isView(source) ||
+        Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+      )
+        assertBodySize((source as ArrayBuffer | ArrayBufferView).byteLength);
+      else if (source instanceof Blob) assertBodySize(source.size);
+      else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
+        body = source!.toString();
+        assertBodySize(body.length); // Form encoding is ASCII.
+      }
+
+      const requestInput = request ?? new URL(snapInput.toString(), window.location.href).href;
+      if (source instanceof FormData || source instanceof ReadableStream) {
+        if (autoDivert) return PRISTINE_FETCH(snapInput, snapInit);
+        // Validate native errors before the explicit API's unsupported-body error.
+        // An empty placeholder avoids unbounded multipart encoding. A stream is not
+        // read/locked by construction, which also checks duplex and stream usability.
+        new Request(
+          requestInput,
+          source instanceof FormData ? { ...snapInit, body: new Uint8Array(0) } : snapInit,
+        );
+        throw new Error(
+          'window.solid.fetch does not support FormData or ReadableStream request bodies',
+        );
+      }
+
+      // Use the platform's effective-request validation for every input and override.
+      // Clone only inherited bodies: an override can replace a used/locked input body.
+      const normalized = new Request(
+        request && source == null ? request.clone() : requestInput,
+        snapInit,
+      );
+      if (request) snapInput = normalized;
+      method = normalized.method;
       if (source != null) {
         if (typeof source === 'string') {
           validateBodyFields(source, undefined);
@@ -314,8 +385,7 @@ function installSolidInjection(): void {
           if (snapInit) snapInit.body = copy;
           bodyBase64 = bytesToBase64(copy);
         } else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
-          body = source.toString();
-          validateBodyFields(body, undefined);
+          // Already serialized and size-checked before Request construction.
           if (snapInit) snapInit.body = new URLSearchParams(body);
           if (!headers.has('content-type'))
             headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
@@ -330,13 +400,9 @@ function installSolidInjection(): void {
             'window.solid.fetch does not support FormData or ReadableStream request bodies',
           );
         }
-      } else if (
-        request &&
-        !['GET', 'HEAD'].includes(method.toUpperCase()) &&
-        request.body !== null
-      ) {
+      } else if (request && normalized.body !== null) {
         const bytes = await readBodyBounded(
-          (snapInput as Request).clone().body,
+          normalized.clone().body,
           MAX_BODY_BYTES,
           REQUEST_BODY_LIMIT_ERROR,
           signal ?? undefined,

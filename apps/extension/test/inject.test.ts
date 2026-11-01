@@ -551,10 +551,11 @@ describe('inject — binary bodies and Request inputs', () => {
     await importInject();
     posted.length = 0;
     const body = makeBody();
-    const init = { method: 'POST', body };
+    const init = { method: 'POST', body, duplex: 'half' } as RequestInit;
     await expect(solidApi().fetch('https://pod.example/data', init)).rejects.toThrow(
       'does not support FormData or ReadableStream',
     );
+    if (body instanceof ReadableStream) expect(body.locked).toBe(false);
     // Replacing the global later cannot poison the captured fallback.
     const patch = dom.window.fetch;
     dom.window.fetch = vi.fn();
@@ -665,6 +666,215 @@ describe('inject — binary bodies and Request inputs', () => {
     expect(message).toMatchObject({ method });
     expect(message.body).toBeUndefined();
     expect(message.bodyBase64).toBeUndefined();
+    finishFetch(message);
+    await promise;
+  });
+
+  describe.each([false, true])('Request validation (patched=%s)', (patched) => {
+    it.each([
+      'GET',
+      'HEAD',
+      'get',
+      'head',
+    ])('rejects effective %s bodies, including inherited and empty bodies, before posting', async (method) => {
+      await importInject();
+      posted.length = 0;
+      for (const input of [
+        'https://pod.example/data',
+        new Request('https://pod.example/data', { method: 'POST', body: 'inherited' }),
+      ]) {
+        for (const body of [undefined, null, '', 'override', new Uint8Array(0)]) {
+          if (typeof input === 'string' && body == null) continue;
+          const init = { method, body };
+          expect(() => new Request(input, init)).toThrow(TypeError);
+          const nativeError = new TypeError('Native method/body rejection');
+          nativeFetch.mockRejectedValueOnce(nativeError);
+          const result = (patched ? dom.window.fetch : solidApi().fetch)(input, init);
+          if (patched) await expect(result).rejects.toBe(nativeError);
+          else await expect(result).rejects.toBeInstanceOf(TypeError);
+        }
+      }
+      expect(posted).toHaveLength(0);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 8 : 0);
+    });
+
+    it.each([
+      'GET',
+      'HEAD',
+    ])('rejects an oversized %s override with TypeError before size errors or copies', async (method) => {
+      await importInject();
+      posted.length = 0;
+      const request = new Request('https://pod.example/data', { method: 'POST', body: 'body' });
+      const body = new Uint8Array(MAX_BODY_BYTES + 1);
+      const nativeError = new TypeError('Native method/body rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const construct = vi.fn();
+      setGlobal(
+        'Request',
+        new Proxy(Request, {
+          construct(target, args) {
+            construct(...args);
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(request, { method, body });
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(construct).not.toHaveBeenCalled();
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+      expect(posted).toHaveLength(0);
+    });
+
+    it.each([
+      { mode: 'navigate' },
+      { method: 'CONNECT' },
+      { method: 'trace' },
+      { method: 'TrAcK' },
+      { method: 'BAD METHOD' },
+      { method: '' },
+      { cache: 'only-if-cached' },
+      { method: 'PUT', mode: 'no-cors' },
+      { credentials: 'invalid' },
+      { redirect: 'invalid' },
+      { referrer: 'https://[' },
+      { referrerPolicy: 'invalid' },
+      { duplex: 'full' },
+      { window: {} },
+    ])('rejects invalid constructor options %j for URLs and Request inputs', async (options) => {
+      await importInject();
+      posted.length = 0;
+      for (const input of ['https://pod.example/data', new Request('https://pod.example/data')]) {
+        const init = options as RequestInit;
+        expect(() => new Request(input, init)).toThrow(TypeError);
+        const nativeError = new TypeError('Native constructor rejection');
+        nativeFetch.mockRejectedValueOnce(nativeError);
+        const result = (patched ? dom.window.fetch : solidApi().fetch)(input, init);
+        if (patched) await expect(result).rejects.toBe(nativeError);
+        else await expect(result).rejects.toBeInstanceOf(TypeError);
+      }
+      expect(posted).toHaveLength(0);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 2 : 0);
+    });
+
+    it.each([
+      'used',
+      'locked',
+    ])('rejects an inherited %s Request body without posting or reading it', async (state) => {
+      await importInject();
+      posted.length = 0;
+      const request = new Request('https://pod.example/data', { method: 'POST', body: 'body' });
+      const reader = state === 'locked' ? request.body!.getReader() : undefined;
+      if (state === 'used') await request.text();
+      expect(() => new Request(request)).toThrow(TypeError);
+      const nativeError = new TypeError('Native unusable-body rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(request);
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+      expect(posted).toHaveLength(0);
+      reader?.releaseLock();
+    });
+
+    it.each([
+      'duplex',
+      'keepalive',
+      'mode',
+      'locked',
+      'used',
+    ])('rejects invalid init streams (%s) with the native error type', async (kind) => {
+      await importInject();
+      posted.length = 0;
+      const body = new ReadableStream<Uint8Array>({ start: (c) => c.close() });
+      const reader = kind === 'locked' ? body.getReader() : undefined;
+      if (kind === 'used') await new Response(body).text();
+      const init = {
+        method: 'POST',
+        body,
+        ...(kind !== 'duplex' ? { duplex: 'half' } : {}),
+        ...(kind === 'keepalive' ? { keepalive: true } : {}),
+        ...(kind === 'mode' ? { mode: 'no-cors' } : {}),
+      } as RequestInit;
+      expect(() => new Request('https://pod.example/data', init)).toThrow(TypeError);
+      const nativeError = new TypeError('Native stream rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(
+        'https://pod.example/data',
+        init,
+      );
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+      expect(posted).toHaveLength(0);
+      reader?.releaseLock();
+    });
+
+    it('rejects a no-cors override on an inherited stream', async () => {
+      await importInject();
+      posted.length = 0;
+      const request = new Request('https://pod.example/data', {
+        method: 'POST',
+        body: new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+        duplex: 'half',
+      } as RequestInit);
+      const init = { mode: 'no-cors' as const };
+      expect(() => new Request(request, init)).toThrow(TypeError);
+      const nativeError = new TypeError('Native stream mode rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(request, init);
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+      expect(posted).toHaveLength(0);
+      expect(request.bodyUsed).toBe(false);
+    });
+
+    it('rejects credential-bearing URLs before posting', async () => {
+      await importInject();
+      posted.length = 0;
+      const url = 'https://user:password@pod.example/data';
+      expect(() => new Request(url)).toThrow(TypeError);
+      const nativeError = new TypeError('Native URL rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(url);
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+      expect(posted).toHaveLength(0);
+    });
+
+    it.each([
+      'inherited',
+      'non-enumerable',
+    ])('validates %s init members as Web IDL dictionary members', async (kind) => {
+      await importInject();
+      posted.length = 0;
+      const request = new Request('https://pod.example/data', { method: 'POST', body: 'body' });
+      const init: RequestInit =
+        kind === 'inherited'
+          ? Object.create({ method: 'GET' })
+          : Object.defineProperty({}, 'method', { value: 'HEAD' });
+      expect(() => new Request(request, init)).toThrow(TypeError);
+      const nativeError = new TypeError('Native dictionary rejection');
+      nativeFetch.mockRejectedValueOnce(nativeError);
+      const result = (patched ? dom.window.fetch : solidApi().fetch)(request, init);
+      if (patched) await expect(result).rejects.toBe(nativeError);
+      else await expect(result).rejects.toBeInstanceOf(TypeError);
+      expect(posted).toHaveLength(0);
+      expect(nativeFetch).toHaveBeenCalledTimes(patched ? 1 : 0);
+    });
+  });
+
+  it.each([
+    ['post', 'POST'],
+    ['pAtCh', 'pAtCh'],
+  ])('uses native method normalization for %s', async (method, expected) => {
+    await importInject();
+    posted.length = 0;
+    const promise = solidApi().fetch('https://pod.example/data', { method, body: 'body' });
+    const message = await fetchMessage();
+    expect(message.method).toBe(expected);
     finishFetch(message);
     await promise;
   });
@@ -905,6 +1115,62 @@ describe('inject — binary bodies and Request inputs', () => {
     expect(nativeInit.credentials).toBe('include');
     expect(new Headers(nativeInit.headers).get('x-app')).toBe('original');
     if (read) expect(read).not.toHaveBeenCalled();
+    expect(posted).toHaveLength(0);
+  });
+
+  it.each([
+    ['ASCII', 'a'.repeat(MAX_BODY_BYTES)],
+    ['UTF-8', 'é'.repeat(MAX_BODY_BYTES / 2)],
+    ['surrogate pairs', '🌍'.repeat(MAX_BODY_BYTES / 4)],
+  ])('accepts %s text at the exact byte limit', async (_name, body) => {
+    await importInject();
+    posted.length = 0;
+    const promise = solidApi().fetch('https://pod.example/data', { method: 'POST', body });
+    const message = await fetchMessage();
+    expect(message.body).toBe(body);
+    finishFetch(message);
+    await promise;
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ArrayBuffer', () => new ArrayBuffer(MAX_BODY_BYTES + 1)],
+    ['typed array', () => new Uint8Array(MAX_BODY_BYTES + 1)],
+    ['DataView', () => new DataView(new ArrayBuffer(MAX_BODY_BYTES + 1))],
+    ['Blob', () => new Blob([new Uint8Array(MAX_BODY_BYTES + 1)])],
+    ['UTF-8 text', () => '\u0800'.repeat(Math.floor(MAX_BODY_BYTES / 3) + 1)],
+    ['unpaired surrogates', () => '\ud800'.repeat(Math.floor(MAX_BODY_BYTES / 3) + 1)],
+    ['URLSearchParams', () => new URLSearchParams({ data: 'a'.repeat(MAX_BODY_BYTES) })],
+  ] as const)('checks oversized %s overrides BEFORE constructing or copying a Request body', async (_name, makeBody) => {
+    await importInject();
+    posted.length = 0;
+    const body = makeBody();
+    const request = new Request('https://pod.example/data', { method: 'POST', body: 'original' });
+    const clone = vi.spyOn(request, 'clone');
+    const read = body instanceof Blob ? vi.spyOn(body, 'arrayBuffer') : undefined;
+    const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+    const construct = vi.fn();
+    setGlobal(
+      'Request',
+      new Proxy(Request, {
+        construct(target, args) {
+          construct(...args);
+          return Reflect.construct(target, args);
+        },
+      }),
+    );
+    for (const input of [request, request.url]) {
+      const init = { body, method: 'POST' };
+      await expect(solidApi().fetch(input, init)).rejects.toThrow(REQUEST_BODY_LIMIT_ERROR);
+      await dom.window.fetch(input, init);
+      expect(nativeFetch).toHaveBeenLastCalledWith(input, expect.objectContaining({ body }));
+    }
+    expect(nativeFetch).toHaveBeenCalledTimes(2);
+    expect(construct).not.toHaveBeenCalled();
+    expect(clone).not.toHaveBeenCalled();
+    expect(encode).not.toHaveBeenCalled();
+    if (read) expect(read).not.toHaveBeenCalled();
+    expect(request.bodyUsed).toBe(false);
     expect(posted).toHaveLength(0);
   });
 
