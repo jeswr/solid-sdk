@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { instantToWallClock, type OverlapChoice, wallClockToInstant } from "./conversion";
 import { assertInstant, CalendarTimeError, wallEpoch } from "./validation";
 

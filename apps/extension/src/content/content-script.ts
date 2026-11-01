@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The ISOLATED-world bridge between the page (MAIN-world `window.solid`) and the service
  * worker. It is the trust boundary: the page can only ASK; this script decides what to

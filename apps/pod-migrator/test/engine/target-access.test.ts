@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
 import { RdfNode, serialize } from "../../src/engine/rdf.js";

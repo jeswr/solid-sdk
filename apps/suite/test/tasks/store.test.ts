@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyError, ModelError } from "../../src/apps/tasks/lib/model/errors";

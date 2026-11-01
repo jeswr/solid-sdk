@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { z } from "zod";
 import { advanceReadMarker, type ReadMarker } from "../unread";
 import { roomContainer } from "./paths";

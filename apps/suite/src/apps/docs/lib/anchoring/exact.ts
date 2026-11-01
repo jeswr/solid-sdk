@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { TextRange } from "./types";
 
 /** KMP overlapping search in O(text + pattern) work; pattern must be non-empty.

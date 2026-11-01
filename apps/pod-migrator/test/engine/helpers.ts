@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { ownerPolicy, unionPolicies } from "../../src/engine/policy.js";
 import { writeAcp } from "../../src/engine/systems/acp.js";
 import { writeWac } from "../../src/engine/systems/wac.js";

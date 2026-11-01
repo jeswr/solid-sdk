@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, type Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";

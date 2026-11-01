@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export { AlbumError, type AlbumErrorCode } from "./error";
 export {
   type AlbumMember,

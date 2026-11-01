@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // Ported verbatim from create-solid-app's reference provider (which itself ports
 // the published 0.1.2 DPoPTokenProvider). The host shell uses its STATIC Client

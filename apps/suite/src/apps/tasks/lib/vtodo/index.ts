@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export { parseVTodo, serializeVTodo } from "./calendar";
 export { type TaskMappingContext, toTaskData } from "./model";
 export {

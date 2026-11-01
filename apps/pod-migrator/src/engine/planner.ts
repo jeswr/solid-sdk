@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, isWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { Container, Group } from "@solid/object";
 import { DataFactory } from "n3";

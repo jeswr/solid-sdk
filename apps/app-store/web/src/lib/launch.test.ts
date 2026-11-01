@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // launch.test.ts — exhaustive tests for the launch-URL seam, with the load-bearing
 // NO-TOKEN invariant front and centre: only the public WebID is ever placed in a

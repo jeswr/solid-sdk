@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { canonicalize, NS } from "@jeswr/suite-vocab";

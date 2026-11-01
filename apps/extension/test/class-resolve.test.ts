@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // Unit tests for the data-class → target resolver (design §2.3, Type-Index rung). Pure parse
 // helpers run against Turtle fixtures; the network walk runs against an injected fetch. Proves

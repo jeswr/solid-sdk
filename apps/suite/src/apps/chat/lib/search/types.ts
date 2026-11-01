@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export type SearchField = "from" | "in" | "before" | "after" | "on" | "has" | "is";
 
 export type SearchTerm =

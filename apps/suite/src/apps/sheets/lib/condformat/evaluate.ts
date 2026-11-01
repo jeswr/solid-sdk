@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { CellIsRule, CellRange, CellStyle, CellValue, ConditionalFormatRule } from "./model";
 import { colourScale } from "./scale";
 import { arrayItem, checkLimits, compare, validateCell, validateRule } from "./validation";

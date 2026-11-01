@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // gen-catalog.test.mjs — pins the DCAT catalog serializer: (1) the graph carries the
 // expected DCAT/schema shape for the catalog + each app, and (2) the Turtle and the

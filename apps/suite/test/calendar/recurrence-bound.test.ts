@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { RRule } from "rrule";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expandEvent } from "../../src/apps/calendar/lib/model/recurrence";

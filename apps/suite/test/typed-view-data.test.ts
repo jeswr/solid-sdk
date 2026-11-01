@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { TypedView } from "@jeswr/suite-ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

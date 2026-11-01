@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { VTodoError, type VTodoErrorCode } from "./types";
 
 export function requireValue(condition: unknown, code: VTodoErrorCode): asserts condition {

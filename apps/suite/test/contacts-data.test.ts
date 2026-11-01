@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
 import {
@@ -136,6 +137,7 @@ describe("contacts pure data", () => {
   });
 });
 
+// AUTHORED-BY Codex GPT-6
 test("renaming parsed contacts preserves every structured value node and its metadata", async () => {
   const dataset = await parse(
     `${fixture("alice")}

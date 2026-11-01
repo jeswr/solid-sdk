@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ExactValue } from "./types";
 import { requireValue } from "./validation";
 

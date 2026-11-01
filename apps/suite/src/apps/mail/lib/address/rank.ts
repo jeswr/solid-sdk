@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { caseFolding } from "../../../contacts/lib/dedupe/case-folding";
 import { requireAddress, text } from "./errors";
 import { recipient, unicodeEmail } from "./format";

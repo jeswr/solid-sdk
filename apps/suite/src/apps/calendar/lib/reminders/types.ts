@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 export type ReminderTrigger =
   | { readonly kind: "relative"; readonly offset: string; readonly related?: "start" | "end" }

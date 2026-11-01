@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Profile reading — the WebID profile as a plain, serialisable shape the UI
  * can render directly (the UI layer never touches RDF; AGENTS.md Part 2

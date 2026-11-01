@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { extractMediaType, fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";

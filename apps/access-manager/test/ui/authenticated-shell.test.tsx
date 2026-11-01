@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Regression guard for the P1 theme-mount bug: the REAL entry point

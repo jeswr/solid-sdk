@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { clearTimeout as clearDeadline, setTimeout as deadline } from "node:timers";
 import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";

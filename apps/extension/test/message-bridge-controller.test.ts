@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * Unit tests for the popup's MessageBridgeLoginController — the chrome.identity-backed
  * LoginController that bridges the panel's SYNCHRONOUS getter contract to the ASYNC

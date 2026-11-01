@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { CodedConcept, Quantity } from "./types";
 
 export const LOINC_SYSTEM = "http://loinc.org";

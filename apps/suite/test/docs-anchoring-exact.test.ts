@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { createSelectors, reanchor } from "../src/apps/docs/lib/anchoring";
 import { findExactRanges } from "../src/apps/docs/lib/anchoring/exact";

@@ -28,6 +28,7 @@ import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
 import { MemoryProfileDb } from './profile-fixtures';
 
+// AUTHORED-BY Codex GPT-6
 
 let profileDb: MemoryProfileDb;
 vi.mock('../src/background/profile-db', () => ({

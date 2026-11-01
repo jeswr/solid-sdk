@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { beforeEach, expect, it, vi } from "vitest";

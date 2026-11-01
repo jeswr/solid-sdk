@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { MigrationPlan, OptionId, ReportKind, Resolutions } from "../App.js";
 
 const kindLabels: Record<ReportKind, string> = {

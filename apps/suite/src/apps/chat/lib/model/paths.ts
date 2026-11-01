@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { ChatModelError, httpIri, isoDate, segment } from "./validation";
 

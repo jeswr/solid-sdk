@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { LiteralFrom, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 //
 // EXHAUSTIVE adversarial unit tests for the per-data-class grant gate — the Phase-2 security
 // heart (design §4). These prove the load-bearing enforcement as PURE functions:

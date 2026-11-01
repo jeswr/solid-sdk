@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // gen-catalog.mjs — emit the Solid App Store catalog as Linked Data BEFORE every
 // build/dev (wired INLINE at the front of the `build`/`dev` scripts in package.json —

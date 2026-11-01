@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";

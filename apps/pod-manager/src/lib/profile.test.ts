@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, it, expect, vi } from "vitest";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createFetchPodWriter } from "@jeswr/pod-connectors";

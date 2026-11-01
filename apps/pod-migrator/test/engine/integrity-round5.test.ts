@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";

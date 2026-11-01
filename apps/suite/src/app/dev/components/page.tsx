@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fixtureNames } from "./fixture-names";
 export default function ComponentsPage() {
   return (

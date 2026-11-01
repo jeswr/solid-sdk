@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { extractMediaType, parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import type { Store } from "n3";
 import { isomorphic } from "./isomorphism.js";

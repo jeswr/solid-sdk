@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 

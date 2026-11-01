@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { escapeIri, isHttpIri } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";

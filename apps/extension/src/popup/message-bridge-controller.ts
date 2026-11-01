@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * MessageBridgeLoginController — a chrome.identity-backed {@link LoginController} that
  * lets the popup adopt `<jeswr-login-panel>` (the suite-wide login surface, for visual

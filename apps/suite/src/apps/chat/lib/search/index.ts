@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export { evaluateQuery, searchMessages } from "./evaluate";
 export { parseQuery } from "./parse";
 export type {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChangeEvent, FileActivity } from "./types";
 import { isText, requireValid, validateTime, validateUrl } from "./validation";
 

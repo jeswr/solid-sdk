@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DocumentOutlineError, type NodePath } from "./types";
 
 /** Limits include metadata; the character budget measures input UTF-16 code units. */

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type DocsMark, type DocsNode, MarkdownError } from "./types";
 

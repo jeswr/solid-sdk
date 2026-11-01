@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every

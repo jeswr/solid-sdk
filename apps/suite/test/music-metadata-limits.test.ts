@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import * as parser from "music-metadata";
 import { describe, expect, it, vi } from "vitest";
 import { extractAudioMetadata } from "../src/apps/music/lib/metadata";

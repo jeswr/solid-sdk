@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { PodScopeError, RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import {

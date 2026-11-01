@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type PostalMime from "postal-mime";
 import type { Attachment } from "postal-mime";
 import { MimeParseError } from "./errors";

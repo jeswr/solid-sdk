@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Read-only port of PM type-index.ts. Index bootstrap/registration belongs to the later SDK.
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";

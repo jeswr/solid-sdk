@@ -144,6 +144,7 @@ export function validateContact(data: ContactData): void {
   }
 }
 
+// AUTHORED-BY Codex GPT-6
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 // Parsed RDF and shared packages can use separate N3 instances whose counters overlap.

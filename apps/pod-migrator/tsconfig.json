@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {

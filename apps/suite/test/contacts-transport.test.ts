@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
@@ -215,6 +216,7 @@ test("accepts a bodyless successful RDF response", async () => {
   expect((await transport.read(ALICE, (dataset) => dataset.size)).data).toBe(0);
 });
 
+// AUTHORED-BY Codex GPT-6
 test.each([
   null,
   '"1"',

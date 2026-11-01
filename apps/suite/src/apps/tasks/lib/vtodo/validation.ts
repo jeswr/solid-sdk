@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { requireValue, textValue } from "./content-lines";
 import { dateValue, utcValue } from "./dates";
 import type { VTodoTask } from "./types";

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { randomUUID } from "node:crypto";
 import { createPodHttp, type PodSide } from "../../src/engine/index.js";
 import { boundedFetch, createSession, localUrl } from "./auth.js";

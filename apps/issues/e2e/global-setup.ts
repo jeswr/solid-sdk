@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Runs once after webServer (CSS + Next) are up. Seeds Alice and Bob, including
 // private LDN inboxes with peer Append access, via client-credentials DPoP.
 // Self-contained: a cross-file .ts/.mjs

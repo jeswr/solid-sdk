@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { defineConfig } from "vitest/config";
 
 // Explicit integration gate; run against a disposable, writable CSS root.

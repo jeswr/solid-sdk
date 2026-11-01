@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // catalog.test.ts — the pure catalog helpers (live filter, query match, category
 // grouping) AND a consistency check of the committed apps.json against the spec.

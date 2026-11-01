@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RRule } from "rrule";
 import type { CalendarDate, CalendarEvent, RecurrenceRule } from "./types";
 import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";

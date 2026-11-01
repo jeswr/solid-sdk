@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Wire the suite auth stack (the @jeswr/solid-elements /auth adapter over

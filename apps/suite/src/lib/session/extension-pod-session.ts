@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Drive's token-free session over the browser extension's storage grant. */
 import { type DatasetCore, fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";

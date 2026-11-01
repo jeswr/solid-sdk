@@ -13,6 +13,7 @@
 // window, then re-import the module (which installs at import) under a reset module registry.
 
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR } from '../src/shared/body-codec';

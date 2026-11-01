@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { reminderKey } from "./state";
 import { triggerInstant } from "./triggers";
 import type { Clock, DueReminder, ReminderEvent, ReminderState, ReminderWindow } from "./types";

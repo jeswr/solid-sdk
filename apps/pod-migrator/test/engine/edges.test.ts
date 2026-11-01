@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { writeAccess } from "../../src/engine/access.js";

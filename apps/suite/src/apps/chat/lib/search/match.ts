@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseAutolink, trimLinkEnd } from "../text/links";
 import type { MatchRange } from "./types";
 import { fold } from "./validation";

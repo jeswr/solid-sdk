@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { PreviewError } from "./errors";
 
 export const MAX_PREVIEW_HTML_BYTES = 512 * 1024;

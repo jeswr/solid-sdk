@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
 

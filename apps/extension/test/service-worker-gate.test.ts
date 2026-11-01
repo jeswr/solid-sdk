@@ -1,5 +1,6 @@
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-0 per-requesting-origin gate AS WIRED INTO the service
 // worker. These drive the REAL `chrome.runtime.onMessage` listener the worker registers,

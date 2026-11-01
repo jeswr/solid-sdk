@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { once } from "node:events";
 import { createConnection } from "node:net";
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";

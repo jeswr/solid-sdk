@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** RFC 4180 text fields. Import never evaluates formulas or coerces identifiers. */
 export function parseCsv(csv: string): string[][] {
   const text = csv.replace(/^\uFEFF/, "");

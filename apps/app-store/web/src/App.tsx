@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // App — the Solid App Store root. Unlike the pod-apps, the store renders its FULL
 // catalog whether or not you are logged in (it is a public directory): logging in

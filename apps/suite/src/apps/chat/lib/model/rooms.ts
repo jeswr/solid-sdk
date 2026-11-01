@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported from apps/pod-chat/src/room.ts; suite layout and membership follow 07 §Chat.
 import type { DatasetCore } from "@rdfjs/types";
 import { Authorization } from "@solid/object";

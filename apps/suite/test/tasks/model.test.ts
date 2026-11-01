@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import {

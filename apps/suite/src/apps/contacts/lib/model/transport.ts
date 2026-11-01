@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
@@ -136,6 +137,7 @@ export class ContactsTransport {
         }
         let body: string | undefined;
         if (change.dataset !== undefined) {
+          // AUTHORED-BY Codex GPT-6
           if (change.dataset.size > MAX_RDF_QUADS) {
             throw new RangeError("Contacts RDF dataset exceeds the quad limit.");
           }

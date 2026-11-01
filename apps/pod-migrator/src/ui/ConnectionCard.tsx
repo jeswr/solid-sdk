@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { AccountMenu } from "@jeswr/app-shell";
 import { useState } from "react";
 import type { ConnectionState, PodConnection } from "../auth/connections.js";

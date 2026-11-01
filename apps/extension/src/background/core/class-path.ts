@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 
 /**
  * HTTP(S) URLs whose paths have one routing interpretation. Check the original path before

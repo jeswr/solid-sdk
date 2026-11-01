@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6
 
 import type { UserConfig } from "vite";
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { EMOJI_SHORTCODES } from "./emoji";
 import { parseAutolink, trimLinkEnd } from "./links";
 import type { InlineNode, TextOptions } from "./types";

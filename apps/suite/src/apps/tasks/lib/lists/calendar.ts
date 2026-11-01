@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type DueDate, type ListContext, TaskListError } from "./types";
 
 export const DAY = 86_400_000;

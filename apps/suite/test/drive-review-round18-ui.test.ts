@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { MusicQueueError } from "../src/apps/music/lib/queue/errors";

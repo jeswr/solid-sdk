@@ -53,6 +53,7 @@ describe("registerDiaryTypes", () => {
   });
 });
 
+// AUTHORED-BY Codex GPT-6
 it.each([false, true])("keeps existing diary registrations idempotent (legacy: %s)", async (legacy) => {
   const puts: string[] = [];
   const meal = legacy ? `${LEGACY_DIET_NS}Meal` : DIET_MEAL;

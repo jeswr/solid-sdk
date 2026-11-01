@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { FileError, validString } from "./errors";
 
 export const MAX_RESOURCE_NAME_LENGTH = 180;

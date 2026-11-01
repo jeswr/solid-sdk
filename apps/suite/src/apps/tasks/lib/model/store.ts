@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { appUrl } from "../auth/app-url";
 
 /** Both the hash route and the catalog document path render the catalog view. */

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { readResource } from "./rdf";
 
 export interface DiscoveryLimits {

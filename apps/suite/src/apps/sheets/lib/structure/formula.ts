@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Uses the same deliberately restricted formula dialect as ../refs/formula.ts.
 import {
   type CellPosition,

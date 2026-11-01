@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 const numbers: Record<string, number> = {
   one: 1,
   two: 2,

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appUrl } from "../../src/auth/app-url.js";
 

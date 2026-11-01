@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { QuoteError, validateBody } from "./validation";
 
 export type QuoteSegmentKind = "body" | "quote" | "attribution" | "signature" | "forwarded";

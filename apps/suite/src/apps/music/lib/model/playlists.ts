@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import { Recording, type Track } from "./entities";

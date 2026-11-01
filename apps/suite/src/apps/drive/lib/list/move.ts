@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { isRecord, isText, ListError, requireValid } from "./validation";
 
 export interface MoveEntry {

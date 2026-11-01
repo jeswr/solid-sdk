@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import type { BlankNode } from "@rdfjs/types";
 import {

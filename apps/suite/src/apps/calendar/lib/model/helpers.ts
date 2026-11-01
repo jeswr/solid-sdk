@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Agenda helpers ported from Pod Manager calendar.ts; civil dates retain their calendar fields.
 import type { CalendarDate, CalendarEvent, StoredItem } from "./types";
 import { asDate } from "./validation";

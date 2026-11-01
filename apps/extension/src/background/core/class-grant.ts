@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The PER-DATA-CLASS GRANT model + the pure enforcement logic — the security heart of
  * access-management Phase 2 (design `access-management-proposal.md` §4).

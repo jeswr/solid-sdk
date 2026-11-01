@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type IAudioMetadata, parseBuffer, UnexpectedFileContentError } from "music-metadata";
 
 // Match the pinned parser's default and share it with our normalization buffer.

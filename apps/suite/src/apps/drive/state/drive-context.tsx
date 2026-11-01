@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 /**

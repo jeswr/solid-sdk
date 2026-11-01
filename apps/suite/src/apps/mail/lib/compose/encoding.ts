@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { MailAddress } from "./types";
 import { headerText, requireInput } from "./validation";
 
