@@ -134,15 +134,24 @@ relay inbox and an SSE stream. Configure the relay origin and supply an applicat
 `getSessionIdToken(signal)` that obtains a current ID token and honors cancellation:
 
 ```ts
-const notifications = createNotifications({
-  fetch: authenticatedPodFetch,
-  storage,
-  relay: {
-    url: 'https://relay.example',
-    getIdToken: signal => getSessionIdToken(signal),
-    // fetch: relayFetch, // Optional separate transport; defaults to globalThis.fetch.
-  },
-});
+import { createNotifications } from '@jeswr/pod-notifications';
+import type { StorageClient } from '@jeswr/storage-client';
+
+export function notificationsWithRelay(
+  authenticatedPodFetch: typeof globalThis.fetch,
+  storage: StorageClient,
+  getSessionIdToken: (signal: AbortSignal) => Promise<string>,
+) {
+  return createNotifications({
+    fetch: authenticatedPodFetch,
+    storage,
+    relay: {
+      url: 'https://relay.example',
+      getIdToken: signal => getSessionIdToken(signal),
+      // fetch: relayFetch, // Optional separate transport; defaults to globalThis.fetch.
+    },
+  });
+}
 ```
 
 An actual webhook subscription requires `relay.getIdToken`; without it, a configured relay
@@ -210,7 +219,9 @@ validate topic syntax before constructing frames. Never interpret protocol banne
 Normalisation takes a canonical storage id separately from the URL scope predicate (LWS id
 and root may differ). Do not fetch JSON-LD contexts. Scope-filter objects before dedupe and
 scope-filter optional target/origin URLs. Never log raw frames or untrusted URL credentials.
-Dedupe is per normalizer, by accepted id, expiring at exactly five seconds.
+Dedupe is per normalizer, by accepted publisher-supplied id, expiring at exactly five seconds.
+Give each activity without a usable publisher id a fresh id within that normalizer; always
+deliver it, even when its object, timestamp and other fields match another activity.
 
 `./testing` provides fake timers, sockets and event sources without network or Node-only
 imports. Advance fake timers asynchronously to await complete channel cycles. Keep transport

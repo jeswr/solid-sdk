@@ -126,8 +126,10 @@ array; a foreign storage id drops the envelope. Objects, targets and origins mus
 credential-free, scoped HTTP(S) URLs. Unknown verbs/malformed activities are ignored; optional
 foreign target/origin values are omitted. Compact and expanded AS2 verbs are accepted.
 `published` defaults to the injected clock; invalid supplied dates are dropped. The normalizer
-preserves the raw message and ETag `state`, synthesises missing ids, and deduplicates accepted
-ids for exactly five seconds. Create a normalizer per subscription.
+preserves the raw message and ETag `state`, and deduplicates accepted publisher-supplied ids
+for exactly five seconds. Activities without a usable publisher id receive a fresh id within
+the normalizer and are always delivered, even when their object and timestamp match. Create
+a normalizer per subscription.
 
 `./testing` exports `FakeTimers` (`now`, async `advanceBy`, `pending`), `FakeWebSocket` and
 `FakeEventSource`. The transports expose explicit open/message/error/close events, listener

@@ -106,9 +106,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("the skill's relay recipe supplies an ID-token callback and connects the implemented transport", async () => {
+test.each([
+  "../../SKILL.md",
+  "../../../../skills/lws-vs-solid/SKILL.md",
+])("the relay recipe in %s supplies an ID-token callback and connects the implemented transport", async (skill) => {
   const f = fixture();
-  const markdown = readFileSync(new URL("../../SKILL.md", import.meta.url), "utf8");
+  const markdown = readFileSync(new URL(skill, import.meta.url), "utf8");
   const code = [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)]
     .map((match) => match[1]!)
     .find((example) => example.includes("getSessionIdToken"));
@@ -116,18 +119,18 @@ test("the skill's relay recipe supplies an ID-token callback and connects the im
   const { outputText } = ts.transpileModule(code, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   });
-  const client = new Function(
-    "createNotifications",
-    "authenticatedPodFetch",
-    "storage",
-    "getSessionIdToken",
-    `${outputText}\nreturn notifications;`,
-  )(
-    (deps: NotificationsDependencies) => createNotifications({ ...f.deps, ...deps }),
-    f.podFetch,
-    f.storage,
-    f.getIdToken,
-  );
+  const create = new Function(
+    "require",
+    "exports",
+    `${outputText}\nreturn notificationsWithRelay;`,
+  )((specifier: string) => {
+    expect(specifier).toBe("@jeswr/pod-notifications");
+    return {
+      createNotifications: (deps: NotificationsDependencies) =>
+        createNotifications({ ...f.deps, ...deps }),
+    };
+  }, {});
+  const client = create(f.podFetch, f.storage, f.getIdToken);
   vi.stubGlobal("fetch", f.relayFetch);
   expect(client.plan().channel).toBe("webhook-relay");
   const sub = await client.subscribe([f.root]);
