@@ -404,6 +404,14 @@ describe("error URL sanitisation", () => {
     const f = createGuardedFetch({ dnsLookup });
     expectSafe(await f(BASE, { referrer: malformed }).catch((e: unknown) => e));
   });
+  it.each([
+    "https:/alice:password@ho st/callback?code=oauth-secret#access-token",
+    "https:\\\\alice:password@ho st/callback?code=oauth-secret#access-token",
+    "https:\\alice:password@host/callback?code=oauth-secret#access-token",
+  ])("does not expose a single-slash or backslash malformed referrer %s", async (referrer) => {
+    const f = createGuardedFetch({ dnsLookup });
+    expectSafe(await f(BASE, { referrer }).catch((e: unknown) => e));
+  });
   it("does not expose a raw DNS failure cause", async () => {
     const f = createGuardedFetch({
       dnsLookup: async () => {

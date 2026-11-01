@@ -819,8 +819,9 @@ function message(cause: unknown): string {
     seen.add(current);
     const text = current instanceof Error ? current.message : String(current);
     // Consume the full URL suffix so malformed authorities with spaces in credentials
-    // cannot evade sanitisation.
-    const urlStart = text.search(/(?:[a-z][a-z\d+.-]*:)?\/\//i);
+    // cannot evade sanitisation. Any scheme followed by a slash or backslash counts, as
+    // WHATWG parsers accept "https:/host" and "https:\\host" for special schemes.
+    const urlStart = text.search(/[a-z][a-z\d+.-]*:[\\/]|[\\/]{2}/i);
     diagnostics.push(
       urlStart < 0 ? text : `${text.slice(0, urlStart)}${sanitizeUrl(text.slice(urlStart))}`,
     );
