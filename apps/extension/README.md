@@ -1,7 +1,8 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
-injects a `window.solid` consent stub into every page (`login` and `requestAccess`).
+injects a `window.solid` consent stub into every page (`login`, `requestAccess`, and `disconnect`).
 Explicit origin consent adds DPoP-authenticated `fetch`, the bound profile's `webId`,
 and class-management APIs. The toolbar account menu shows the signed-in WebID's avatar. The UI is built with
 [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)
@@ -10,8 +11,9 @@ and the rest of the [@jeswr Solid app suite](https://github.com/jeswr).
 
 > **Scope:** auth, `window.solid`, popup/side-panel account UI, a gated shared replica,
 > and per-data-class consent through `requestAccess` / `listGrants` / `revokeGrant` /
-> `resolveClass` are implemented. Class resolution currently uses Solid Type Indexes;
-> SAI registration discovery, SHACL validation, and offline write queues remain follow-ups.
+> `resolveClass` are implemented. Class resolution merges SAI registrations and Solid Type
+> Indexes, and the built-in `pim:Storage` class gives whole-pod access; SHACL member sampling
+> and offline write queues remain follow-ups.
 
 ## Architecture
 
@@ -66,7 +68,7 @@ WebID/origin-mismatch test that genuinely fails without the guard.
 ## `window.solid`
 
 ```ts
-// Ungranted origins receive only login() and requestAccess().
+// Ungranted origins receive login(), requestAccess(), and disconnect().
 // These additional properties become available after explicit origin consent.
 interface SolidExtension {
   readonly webId: string | null;
@@ -77,6 +79,7 @@ interface SolidExtension {
   requestAccess(request: AccessRequestArgs): Promise<{ ok: boolean; grants: SolidGrant[] }>;
   listGrants(): Promise<SolidGrant[]>;
   revokeGrant(grantId: string): Promise<boolean>;
+  disconnect(): Promise<boolean>;             // also available without a grant
   resolveClass(classIRI: string): Promise<{
     shape: string | null;
     targets: Array<{ url: string; kind: 'instance' | 'container' }>;
@@ -212,6 +215,7 @@ the pod and remain subject to the access gate on every hit. Writes go through to
 synchronously; logout purges the replica before further serving. Offline write queues and
 central WebSocket invalidation are follow-ups.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 ## Per-data-class access management
 
 After signing in through the extension, an app can request access from a click or keypress:
@@ -247,12 +251,52 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   Removal precedes replica-slice purging, so even a purge failure cannot keep access live.
   Cached bytes still covered by another live read grant of the same origin are retained.
   The parent origin binding is managed separately from its nested class records.
-- **`resolveClass`** walks the WebID's public/private Solid Type Indexes for `solid:forClass`
-  and returns `solid:instance` / `solid:instanceContainer` targets on allowed pod origins.
+  Removal broadcasts a state update to this origin's tabs so apps can re-read the remaining grants.
+- **`disconnect`** removes this origin's binding and every nested class grant, and purges their
+  replica slices, just like revoking the origin in the side panel. It broadcasts a state update
+  to this origin's tabs, removing `webId` and `fetch` from their stubs. It leaves other origins,
+  the extension's signed-in account and its DPoP key untouched. No consent or user gesture is
+  required. It returns `true` if a binding was removed, `false` if none existed (including a
+  repeated call), and remains callable on an ungranted stub.
+- **`resolveClass`** first walks the WebID's SAI registry set → data registries → data
+  registrations, then its public/private Solid Type Indexes for `solid:forClass`. It merges
+  and deduplicates container/instance targets by kind and URL on allowed pod origins.
+  SAI registrations must be containers strictly inside their registry on the same origin.
+  Their shape tree must match the class through the reviewed shipped table (currently
+  `vcard:Individual` via ActivityPods' profile tree) or an explicit SHACL `sh:NodeShape` with
+  `sh:targetClass`. Other ShEx-only trees do not match. SAI discovery is bounded to four
+  registries, 64 registrations and 16 public tree/shape documents per resolution; the internal
+  result reports truncation. Documents are memoised per resolution. Registry reads use
+  credentials only on authenticated pod origins; profile and tree/shape reads are public.
   It requires a verified, granted origin and an active session. Class-only origins can
   resolve only classes they currently hold beneath their parent origin grant.
-  It returns `shape: null` today: SAI discovery and SHACL validation are not implemented.
+  It returns `shape: null` today: SHACL member sampling remains a follow-up, and all discovered
+  targets are internally marked `unchecked`. Provenance stays internal; persisted grants and
+  page-visible targets still contain only URLs and kinds. Consent grouping is a later task.
   An unknown/unreachable class resolves to an empty target set.
+
+Storage-wide apps can request the built-in class
+`http://www.w3.org/ns/pim/space#Storage` alongside any other classes. It resolves directly
+to the WebID subject's `pim:storage` roots in the profile, without reading Type Indexes.
+Only HTTP(S) container URLs (ending in `/` after normalization) on allowed pod origins
+are included. Each root is pinned as a container covering itself and all its descendants;
+no storage roots means no access. For example:
+
+```js
+await window.solid.requestAccess({
+  classes: ['http://www.w3.org/ns/pim/space#Storage'],
+  modes: ['read', 'write'],
+  purpose: 'Manage your pod files',
+  duration: 'P30D',
+}); // Call from a click or keypress, as above.
+```
+
+Consent labels this class **Full access to your pod**, displays every resolved storage URL,
+and warns “This site can read and change everything in this pod” (or “This site can read
+everything in this pod” for read-only requests). It starts unchecked, including after an
+account change, and requires the person's selection and Share click. Sites with access
+lists the same label and storage URLs. Modes, expiry, origin/profile binding, revocation,
+and replica purging use the same class-grant enforcement as other classes.
 
 Class-only origins are confined to the targets pinned at consent, the granted modes, and
 expiry, including on cache hits. Instances cover an exact resource path; containers cover

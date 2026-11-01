@@ -2,6 +2,21 @@
 (async () => {
   const params = new URLSearchParams(location.search);
   const attempts = {};
+  if (params.get("platform") === "ios") {
+    const [webkitBridge, prompt] = await Promise.all([
+      window.__e2eIOS.webkit(`mob07-hostile-${params.get("nonce")}-webkit`),
+      window.__e2eIOS.prompt(),
+    ]);
+    parent.postMessage(
+      {
+        type: "mob07-hostile",
+        nonce: params.get("nonce"),
+        result: { origin: location.origin, attempts: { webkitBridge, prompt } },
+      },
+      params.get("parent"),
+    );
+    return;
+  }
   const message = JSON.stringify({
     callbackId: `mob07-hostile-${params.get("nonce")}`,
     pluginId: "SuiteShareIntake",

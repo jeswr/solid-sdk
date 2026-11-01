@@ -1,8 +1,9 @@
 ---
 name: rdf-serialize
-description: Use when working on @jeswr/rdf-serialize, the shared Turtle-family and context-free JSON-LD writer and IRI safety helpers.
+description: Use when working on @jeswr/rdf-serialize, the shared Turtle-family and context-free JSON-LD writer, IRI safety helpers, and typed graph helpers at /wrapper.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/rdf-serialize
 
@@ -26,6 +27,24 @@ dataset, ignoring `prefixes` and `emptyAsEmptyString`. Do not add a context opti
 
 The IRI helpers `escapeIri`, `safeHttpIri`, `safeIri` and `isHttpIri` retain their separate lexical
 safety contracts. JSON-LD validates absolute IRIs without URL normalization or silent escaping.
+
+Import typed graph helpers from `@jeswr/rdf-serialize/wrapper`, a separate subpath:
+
+- `objectTerms(node, ...predicates)` preserves RDF term types. One predicate returns the
+  live `SetFrom.subjectPredicate` set, including dataset mutations through `add`, `delete`,
+  and `clear`. Multiple predicates return a detached snapshot, unioned in predicate order
+  and de-duplicated by RDF equality with first-seen order. No predicates yields an empty set.
+- `addIriTriple(node, predicate, objectIri)` escapes object IRIs with `escapeIri` without
+  checking the scheme. Keep field-specific validation at the caller.
+- `addHttpIriTriple(node, predicate, objectIri)` uses `safeHttpIri`, returns false and writes
+  nothing for unsafe objects, and returns true after adding an escaped HTTP(S) object.
+- `addLiteralTriple(node, predicate, value, datatype?)` defaults to xsd:string and uses
+  `LiteralFrom.datatypeTuple` for an explicit datatype, preserving the lexical value.
+
+These writes use the node's factory and dataset. Predicates and optional datatype IRIs must
+be trusted vocabulary constants; subjects must already be safe. Do not use these helpers to
+replace a caller's stricter reject/drop policy or its canonical/legacy alias policy. A union
+snapshot cannot replace a mutable alias view. Never hand-build terms or Turtle.
 
 This package is security critical. Add behavioral and adversarial tests for every writer branch,
 including hand-checked expanded fixtures and round trips through the workspace devDependency

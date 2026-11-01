@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over an ANP-style Agent Description graph + the
@@ -8,12 +9,12 @@
 // SetFrom.subjectPredicate; writing uses NamedNodeFrom/Literal + the dataset add,
 // all from @rdfjs/wrapper.
 
-import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
+import { escapeIri } from "@jeswr/rdf-serialize";
+import { addHttpIriTriple, addLiteralTriple, objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
   DatasetWrapper,
-  LiteralFrom,
   NamedNodeFrom,
   SetFrom,
   TermAs,
@@ -40,16 +41,6 @@ import {
   RDF_TYPE,
   SUPPORTS_BINDING,
 } from "./vocab.js";
-
-/**
- * Read a property as a Set of the OBJECT TERMS themselves (not their lexical
- * `.value`) — so the term type survives the read and the validation layer can
- * reject malformed objects (e.g. a literal where an IRI is required). The factory
- * is shared so term identity / Set de-duplication hold.
- */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
 
 /** A typed view of an `ad:Skill` node. */
 export class SkillNode extends TermWrapper {
@@ -166,67 +157,35 @@ export function wrapProfile(dataset: DatasetCore): ProfileDataset {
 
 // --- the write path (describeAgent / buildAgentPointer) ------------------
 
-/**
- * Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory.
- *
- * IRI-INJECTION CHOKEPOINT. `n3.Writer` emits a NamedNode's value verbatim
- * between `<…>` (it does NOT escape `> < " { } SPACE | ^ \` \\`), so an untrusted
- * `objectIri` — any of the http(s) object fields (url / owner / protocolSource /
- * issuer / agent) that flow here — could break out and inject arbitrary triples.
- * The object is therefore validated + percent-encoded via {@link safeHttpIri} and
- * the triple is DROPPED if it is not a well-formed absolute http(s) IRI. The
- * predicate is a trusted vocab constant, but is defensively escaped too. The
- * SUBJECT (`node`) is sanitised at construction (see `AgentBuilder.agent` /
- * `PointerBuilder.link`), so its `.value` is already injection-safe here.
- */
-function addIri(node: TermWrapper, predicate: string, objectIri: string): void {
-  const object = safeHttpIri(objectIri);
-  if (object === undefined) return; // not a safe absolute http(s) IRI → drop the triple
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(escapeIri(predicate), factory);
-  const o = NamedNodeFrom.string(object, factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
-/** Add a single `(subject, predicate-IRI, string-literal)` triple through the factory. */
-function addLiteral(node: TermWrapper, predicate: string, value: string): void {
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = LiteralFrom.string(value, factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
 /** A `ad:Skill` node opened for writing. */
 class WritableSkill extends TermWrapper {
   typeSkill(): void {
-    addIri(this, RDF_TYPE, AD_SKILL_CLASS);
+    addHttpIriTriple(this, RDF_TYPE, AD_SKILL_CLASS);
   }
   setId(id: string): void {
-    addLiteral(this, AD_SKILL_ID, id);
+    addLiteralTriple(this, AD_SKILL_ID, id);
   }
   setName(name: string): void {
-    addLiteral(this, AD_NAME, name);
+    addLiteralTriple(this, AD_NAME, name);
   }
   setDescription(d: string): void {
-    addLiteral(this, AD_DESCRIPTION, d);
+    addLiteralTriple(this, AD_DESCRIPTION, d);
   }
 }
 
 /** A `ad:SecurityScheme` node opened for writing. */
 class WritableSecurityScheme extends TermWrapper {
   typeScheme(): void {
-    addIri(this, RDF_TYPE, AD_SECURITY_SCHEME_CLASS);
+    addHttpIriTriple(this, RDF_TYPE, AD_SECURITY_SCHEME_CLASS);
   }
   setType(t: string): void {
-    addLiteral(this, AD_SCHEME_TYPE, t);
+    addLiteralTriple(this, AD_SCHEME_TYPE, t);
   }
   setDescription(d: string): void {
-    addLiteral(this, AD_DESCRIPTION, d);
+    addLiteralTriple(this, AD_DESCRIPTION, d);
   }
   setIssuer(iri: string): void {
-    addIri(this, AD_URL, iri);
+    addHttpIriTriple(this, AD_URL, iri);
   }
 }
 
@@ -242,25 +201,25 @@ class WritableAgentDescription extends TermWrapper {
     ).add(iri);
   }
   typeAgentDescription(): void {
-    addIri(this, RDF_TYPE, AD_AGENT_DESCRIPTION);
+    addHttpIriTriple(this, RDF_TYPE, AD_AGENT_DESCRIPTION);
   }
   setName(name: string): void {
-    addLiteral(this, AD_NAME, name);
+    addLiteralTriple(this, AD_NAME, name);
   }
   setDescription(d: string): void {
-    addLiteral(this, AD_DESCRIPTION, d);
+    addLiteralTriple(this, AD_DESCRIPTION, d);
   }
   setUrl(iri: string): void {
-    addIri(this, AD_URL, iri);
+    addHttpIriTriple(this, AD_URL, iri);
   }
   setOwner(iri: string): void {
-    addIri(this, AD_OWNER, iri);
+    addHttpIriTriple(this, AD_OWNER, iri);
   }
   setDid(did: string): void {
-    addLiteral(this, AD_DID, did);
+    addLiteralTriple(this, AD_DID, did);
   }
   addProtocolSource(iri: string): void {
-    addIri(this, AD_PROTOCOL_SOURCE, iri);
+    addHttpIriTriple(this, AD_PROTOCOL_SOURCE, iri);
   }
 
   /** Link a fresh blank-node Skill node, typed `ad:Skill`. */
@@ -341,13 +300,13 @@ export class PointerBuilder {
   link(webId: string, agent: string, predicate: string): void {
     // Subject IRI (the WebID). Escape scheme-agnostically so an injection
     // break-out is neutralised without dropping the subject. The `agent` object
-    // is validated + dropped-if-invalid inside `addIri` (http(s) IRI field).
+    // is validated + dropped-if-invalid inside `addHttpIriTriple` (http(s) IRI field).
     const node = new TermWrapper(
       escapeIri(webId),
       this.store as unknown as DatasetCore,
       this.factory,
     );
-    addIri(node, predicate, agent);
+    addHttpIriTriple(node, escapeIri(predicate), agent);
   }
 
   /** The accumulated quads. */
