@@ -1,11 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseBoundedJson } from "@jeswr/agent-model";
-import { SsrfError } from "@jeswr/guarded-fetch";
 import type { ChannelBinding } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { assertEmailAddress, assertFooter, type EmailConfig, inspectEmail } from "./email-mime.js";
-import { ChannelParseError } from "./errors.js";
+import { ChannelParseError, ResponseSizeRefusedError } from "./errors.js";
 import {
   DELTA_INITIAL,
   deltaLink,
@@ -162,13 +161,9 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
             raw = await mimeBody(response);
           } catch (error) {
             // Definitive MIME size refusals skip one item; failed reads remain retryable.
-            // The transport uses SsrfError for size caps as well as unrelated guard refusals.
             if (
               !(error instanceof ChannelParseError) &&
-              !(
-                error instanceof SsrfError &&
-                /^Response body for .+ exceeds cap \(/.test(error.message)
-              )
+              !(error instanceof ResponseSizeRefusedError)
             )
               throw error;
             state.pending.shift();

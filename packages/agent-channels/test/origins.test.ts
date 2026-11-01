@@ -9,6 +9,7 @@ import { createServer } from "http";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { inspect } from "util";
 import { expect, expectTypeOf, it, vi } from "vitest";
+import { ResponseSizeRefusedError } from "../src/errors.js";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
 
 function deferred<T>() {
@@ -646,6 +647,35 @@ it.each([
       expect(inspect(error)).not.toMatch(/fixture-user|fixture-password/);
     }
     expect(requests).toBe(locations.length);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it.each([
+  "declared",
+  "streamed",
+])("preserves a sanitized typed %s size refusal through the default Node transport", async (kind) => {
+  const cap = 1024 * 1024;
+  const server = createServer((_req, res) => {
+    if (kind === "declared") res.writeHead(200, { "content-length": String(cap + 1) }).end();
+    else res.writeHead(200, { "transfer-encoding": "chunked" }).end(Buffer.alloc(cap + 1));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    const error: unknown = await scoped(`${origin}/private?opaque=fixture-value`).catch(
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(ResponseSizeRefusedError);
+    expect(error).toHaveProperty("message", "binding response body exceeds size cap");
+    expect(error).not.toHaveProperty("cause");
+    expect(inspect(error, { depth: null })).not.toMatch(/private|fixture-value|Content-Length/);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createGuardedFetch, SsrfError } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { readFileSync } from "fs";
 import { expect, it, vi } from "vitest";
@@ -14,6 +15,7 @@ import {
   responseBody,
 } from "../src/graph-mail/rest.js";
 import { createGraphMailReader, ORIGINS } from "../src/graph-mail.js";
+import type { OriginFetchOptions } from "../src/origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../src/profiles.js";
 import { RecordingTokenProvider } from "../src/testing.js";
 import { fixtureTransport, mime, raw, recipient } from "./fixtures/graph.js";
@@ -28,15 +30,27 @@ const link = (token = "delta1", kind = "$deltatoken") =>
   `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?${kind}=${token}`;
 const cursor = (extra: Record<string, unknown> = {}) =>
   JSON.stringify({ account: account.id, url: link(), pending: [], resume: "", ...extra });
-function reader(replies: unknown[]) {
+function reader(replies: unknown[], nestedGuard = false) {
   const fake = fixtureTransport([{ id: inboxId }, ...replies]);
   const tokens = new RecordingTokenProvider();
+  const transport: OriginFetchOptions = nestedGuard
+    ? {
+        ...fake.options,
+        createTransport: (options) =>
+          createGuardedFetch({
+            ...options,
+            pinningFetch: fake.options.createTransport(),
+            dnsLookup: fake.options.dnsLookup,
+            requireDnsPinning: true,
+          }),
+      }
+    : fake.options;
   const config = {
     tokens,
     parseEmail,
     recipient,
     ownAccounts: new Set([recipient]),
-    transport: fake.options,
+    transport,
   };
   return { ...fake, tokens, config, binding: createGraphMailReader(config) };
 }
@@ -107,7 +121,15 @@ it("keeps pending IDs and continuation links until item and aggregate-byte bound
   ).rejects.toThrow("byte bound");
 });
 
-const sizeRefusals = ["empty", "MIME cap", "declared transport cap", "streamed transport cap"];
+const sizeRefusals = [
+  "empty",
+  "MIME cap",
+  "declared transport cap",
+  "streamed transport cap",
+].flatMap((kind) => [
+  { kind, nestedGuard: false },
+  { kind, nestedGuard: true },
+]);
 function refusedMime(kind: string): Response {
   if (kind === "declared transport cap")
     return new Response(null, { headers: { "content-length": String(1024 * 1024 + 1) } });
@@ -118,15 +140,21 @@ function refusedMime(kind: string): Response {
 
 it.each(
   sizeRefusals,
-)("skips refused MIME (%s) without consuming bounds or retaining its pending ID", async (kind) => {
+)("skips refused MIME ($kind, nested guard: $nestedGuard) without consuming bounds or retaining its pending ID", async ({
+  kind,
+  nestedGuard,
+}) => {
   const next = link("page2", "$skiptoken");
-  const r = reader([
-    { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
-    refusedMime(kind),
-    mime(),
-    mime(),
-    fixtures.empty,
-  ]);
+  const r = reader(
+    [
+      { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
+      refusedMime(kind),
+      mime(),
+      mime(),
+      fixtures.empty,
+    ],
+    nestedGuard,
+  );
   const first = await r.binding.ingest.list(account, undefined, { ...bounds, maxItems: 1 });
   expect(first.items.map((item) => item.id)).toEqual(["a"]);
   expect(JSON.parse(first.next)).toEqual({
@@ -148,14 +176,20 @@ it.each(
 
 it.each(
   sizeRefusals,
-)("advances past a delta page containing only refused MIME (%s)", async (kind) => {
+)("advances past a delta page containing only refused MIME ($kind, nested guard: $nestedGuard)", async ({
+  kind,
+  nestedGuard,
+}) => {
   const next = link("after-refused");
-  const r = reader([
-    { value: [{ id: "refused" }], "@odata.deltaLink": next },
-    refusedMime(kind),
-    { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
-    mime(),
-  ]);
+  const r = reader(
+    [
+      { value: [{ id: "refused" }], "@odata.deltaLink": next },
+      refusedMime(kind),
+      { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
+      mime(),
+    ],
+    nestedGuard,
+  );
   const first = await r.binding.ingest.list(account, undefined, bounds);
   expect(first.items).toEqual([]);
   expect(JSON.parse(first.next)).toMatchObject({ url: next, pending: [], resume: "" });
@@ -165,13 +199,17 @@ it.each(
   expect(r.queue).toEqual([]);
 });
 
-it.each([
-  "HTTP 429",
-  "HTTP 503",
-  "transport",
-  "body stream",
-  "untyped size refusal",
-])("preserves pending IDs for retry after a transient MIME %s failure", async (failure) => {
+it.each(
+  ["HTTP 429", "HTTP 503", "transport", "guard", "body stream", "untyped size refusal"].flatMap(
+    (failure) => [
+      { failure, nestedGuard: false },
+      { failure, nestedGuard: true },
+    ],
+  ),
+)("preserves pending IDs for retry after MIME $failure (nested guard: $nestedGuard)", async ({
+  failure,
+  nestedGuard,
+}) => {
   const sizeMessage =
     "Response body for https://graph.microsoft.com exceeds cap (1048577 bytes > 1048576).";
   const stream = new Response(
@@ -186,13 +224,15 @@ it.each([
   const failed =
     failure === "transport"
       ? new Error("transport failed")
-      : failure === "body stream" || failure === "untyped size refusal"
-        ? stream
-        : new Response(null, { status: Number(failure.slice(5)) });
+      : failure === "guard"
+        ? new SsrfError("unrelated guard refusal")
+        : failure === "body stream" || failure === "untyped size refusal"
+          ? stream
+          : new Response(null, { status: Number(failure.slice(5)) });
   const saved = cursor({ pending: ["a", "b"], resume: link("resumed") });
-  const r = reader([failed, mime(), mime()]);
+  const r = reader([failed, mime(), mime()], nestedGuard);
   await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(
-    failure === "transport"
+    failure === "transport" || failure === "guard" || (nestedGuard && !failure.startsWith("HTTP"))
       ? "transport failed or refused redirect"
       : failure === "untyped size refusal"
         ? sizeMessage
