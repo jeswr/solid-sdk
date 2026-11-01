@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
 } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
@@ -38,7 +38,6 @@ export function HomePage({ domain }: { domain: string }) {
   const entry = DOMAINS.find((candidate) => candidate.id === domain) ?? UNCATEGORISED;
   const search = useSearchParams();
   const pathname = usePathname();
-  const router = useRouter();
   const selected = parseTypes(search.get("types"), entry);
   const [page, setPage] = useState({ domain, filter: search.get("types"), limit: 24 });
   const limit = page.domain === domain && page.filter === search.get("types") ? page.limit : 24;
@@ -64,7 +63,9 @@ export function HomePage({ domain }: { domain: string }) {
     const value = serializeTypes(types, entry);
     if (value === null) query.delete("types");
     else query.set("types", value);
-    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
+    // Shallow update: the app router syncs useSearchParams with history.replaceState,
+    // which (unlike router.replace) also works on a prerendered page opened with a query.
+    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
   };
   const connect = `/connect?domain=${entry.id}`;
   const retry = () => void data.refresh();
