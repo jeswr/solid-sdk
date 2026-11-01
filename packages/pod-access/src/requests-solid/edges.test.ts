@@ -31,6 +31,7 @@ import { resolveTargets } from "./targets.js";
 
 const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
+const CAROL = `${POD}contacts/carol.ttl`;
 const INDEX = `${POD}settings/publicTypeIndex.ttl`;
 const RECORDS = `${POD}settings/access-records/`;
 const opts = (pod = buildPod()) => ({
@@ -58,6 +59,34 @@ describe("protocol and RDF boundaries", () => {
       const dataset = new Store([quad(namedNode("urn:s"), namedNode("urn:p"), object)]);
       await expect(turtle(dataset)).rejects.toThrow("Unsafe RDF");
     }
+    await expect(
+      turtle(
+        new Store([
+          quad(namedNode("urn:s"), namedNode("urn:p"), literal("x", "en>bad <urn:a> <urn:b")),
+        ]),
+      ),
+    ).rejects.toThrow("Unsafe RDF language tag");
+    await expect(
+      turtle(
+        new Store([quad(namedNode("urn:s"), namedNode("urn:p"), literal("x"), namedNode("urn:g"))]),
+      ),
+    ).rejects.toThrow("Named graphs");
+    // JSON-LD lets a document choose any blank-node label; labels are regenerated, not echoed.
+    const hostile = DataFactory.blankNode("x> <http://bad/s> <http://bad/p> <http://bad/o> . #");
+    const written = await turtle(
+      new Store([
+        quad(namedNode("urn:s"), namedNode("urn:p"), hostile),
+        quad(hostile, namedNode("urn:q"), literal("v", "en-GB")),
+      ]),
+    );
+    expect(written).not.toContain("http://bad/");
+    const reparsed = await graph(written);
+    expect(reparsed.size).toBe(2);
+    const [link] = [...reparsed.match(namedNode("urn:s"), namedNode("urn:p"))];
+    expect(link?.object.termType).toBe("BlankNode");
+    expect(
+      [...reparsed.match(link?.object as never, namedNode("urn:q"))].map((q) => q.object),
+    ).toEqual([literal("v", "en-GB")]);
     const writer = vi.spyOn(Writer.prototype, "end").mockImplementation((callback) => {
       callback?.(new Error("writer failure"), "");
       return "";
@@ -386,6 +415,45 @@ describe("forward-only approval reconciliation", () => {
     };
   }
 
+  it("attributes no mode to an explicit data type no rule targets, and caps targets across types", async () => {
+    const Calendar = "http://www.w3.org/2002/12/cal/ical#Vevent";
+    const pod = buildPod();
+    pod.seed(
+      ID,
+      `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>; accm:dataClass <${CONTACTS_CLASS}>, <${Calendar}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ].`,
+    );
+    const listed = (await listRequests(opts(pod)))[0];
+    expect(listed).toMatchObject({ modesByType: { [CONTACTS_CLASS]: ["read"] } });
+    expect(Object.keys((listed as { modesByType: object }).modesByType)).toEqual([CONTACTS_CLASS]);
+    await expect(
+      decide({ id: ID }, { approve: true, dataTypes: [Calendar] }, opts(pod)),
+    ).rejects.toThrow("no requested modes");
+    expect(pod.log.some(({ method }) => method === "PUT")).toBe(false);
+
+    const big = buildPod();
+    const many = (folder: string) => {
+      for (let n = 0; n < 51; n++) big.seed(`${POD}${folder}/${n}.ttl`, `<#it> a <urn:x>.`);
+    };
+    many("contacts");
+    many("calendar");
+    big.seed(
+      INDEX,
+      `${PREFIXES}<${INDEX}#a> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instanceContainer <${POD}contacts/>.
+<${INDEX}#b> a solid:TypeRegistration; solid:forClass <${Calendar}>; solid:instanceContainer <${POD}calendar/>.`,
+    );
+    big.seed(
+      ID,
+      `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ],
+    [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${Calendar}> ].`,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(big))).rejects.toThrow(
+      "Invalid resolved target count",
+    );
+    expect(big.log.some(({ method }) => method === "PUT")).toBe(false);
+  });
+
   it("rejects corrupt or missing persisted snapshots before records or ACL writes", async () => {
     const pod = buildPod();
     const { dataset, snapshot } = await orphan(pod);
@@ -398,10 +466,19 @@ describe("forward-only approval reconciliation", () => {
       { grantId: "forged" },
       { targets: ["https://evil.example/x"] },
       { targets: [`${ALICE}.acl`] },
+      { targetModes: null },
+      { targetModes: undefined },
+      { targetModes: { [ALICE]: ["read"] } },
+      { targetModes: { [ALICE]: [], [CAROL]: ["read"] } },
+      { targetModes: { [ALICE]: ["write"], [CAROL]: ["read"] } },
+      { targetModes: { [ALICE]: "read", [CAROL]: ["read"] } },
+      { targetModes: { [ALICE]: ["read"], [`${CAROL}x`]: ["read"] } },
     ]) {
       const forged = { ...snapshot, ...change };
-      if (change.targets?.length === 1)
+      if (change.targets?.length === 1) {
         forged.grantId = await deriveGrantId(ID, forged.targets, OWNER);
+        forged.targetModes = { [change.targets[0] as string]: ["read"] };
+      }
       set(dataset, ID, `${ACCM.ns}snapshot`, JSON.stringify(forged));
       pod.seed(ID, await turtle(dataset));
       const before = pod.log.length;

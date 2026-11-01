@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import {
+  assertWithinPodScope,
+  classifyIpLiteral,
+  DEFAULT_HOSTNAME_DENYLIST,
+  isDeniedHostname,
+  isPublicAddress,
+  isWithinPodScope,
+  normalizeHostForClassification,
+} from "@jeswr/guarded-fetch";
 import { isHttpIri } from "@jeswr/rdf-serialize";
 
 /** Maximum inbox members visited in one listing. Listings may be incomplete at this cap. */
@@ -24,6 +32,55 @@ export function httpUrl(url: string): string {
   const parsed = new URL(url);
   if (parsed.username || parsed.password) throw new TypeError("URL credentials are forbidden");
   return url;
+}
+
+/** Names that resolve to the local machine or network; IP literals are classified separately. */
+const LOCAL_NAMES: readonly string[] = Object.freeze([
+  ...DEFAULT_HOSTNAME_DENYLIST,
+  "localhost",
+  ".localhost",
+  ".local",
+  ".home.arpa",
+]);
+
+/**
+ * A requester-supplied URL the owner's browser may contact without credentials: HTTPS only, and
+ * never a loopback, private, link-local or local-name host (no requests into the owner's network).
+ */
+export function publicHttpsUrl(url: string): string {
+  const parsed = new URL(httpUrl(url));
+  if (parsed.protocol !== "https:") throw new TypeError("Requester URLs must use HTTPS");
+  const host = normalizeHostForClassification(parsed.hostname);
+  const local =
+    classifyIpLiteral(host) === 0
+      ? isDeniedHostname(host, LOCAL_NAMES)
+      : !isPublicAddress(host, false);
+  if (local) throw new TypeError("Requester URL is not on the public web");
+  return url;
+}
+
+/** A transport that can never carry the owner's credentials or follow a redirect. */
+export function publicTransport(publicFetch: typeof fetch, signal?: AbortSignal): typeof fetch {
+  return transport(
+    (input, init) => publicFetch(input, { ...init, credentials: "omit", redirect: "error" }),
+    signal,
+  );
+}
+
+/**
+ * Read the owner's WebID profile. Inside storage it goes through the session transport; a
+ * profile hosted elsewhere is read only through the explicit unauthenticated transport, so the
+ * session's credentials never leave storage. Without one, an off-storage profile is not read.
+ */
+export async function readProfile(
+  webId: string,
+  storage: string,
+  sessionFetch: typeof fetch,
+  publicFetch: typeof fetch | undefined,
+) {
+  if (isWithinPodScope(storage, httpUrl(webId))) return read(webId, sessionFetch);
+  if (publicFetch === undefined) return null;
+  return read(publicHttpsUrl(webId), publicFetch);
 }
 
 export function scoped(storage: string, url: string): string {

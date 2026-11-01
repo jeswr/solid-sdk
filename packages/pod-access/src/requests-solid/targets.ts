@@ -2,7 +2,7 @@
 import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { MAX_MEMBERS, read, scoped } from "./http.js";
+import { MAX_MEMBERS, read, readProfile, scoped } from "./http.js";
 import { members } from "./inbox.js";
 import { values } from "./rdf.js";
 import { RDF, SOLID } from "./vocab.js";
@@ -12,6 +12,8 @@ export async function resolveTargets(
   dataTypes: readonly string[],
   options: { webId: string; storage: string; typeIndex?: string | DatasetCore },
   fetchFn: typeof fetch,
+  /** Already credential-free transport for an off-storage owner profile. */
+  publicFetch?: typeof fetch,
 ): Promise<string[]> {
   const indexes: DatasetCore[] = [];
   if (typeof options.typeIndex === "object") indexes.push(options.typeIndex);
@@ -19,7 +21,7 @@ export async function resolveTargets(
     const index = await read(scoped(options.storage, options.typeIndex), fetchFn);
     if (index) indexes.push(index.dataset);
   } else {
-    const profile = await read(options.webId, fetchFn);
+    const profile = await readProfile(options.webId, options.storage, fetchFn, publicFetch);
     if (profile) {
       const pointers = new Set([
         ...values(profile.dataset, options.webId, SOLID.publicTypeIndex),

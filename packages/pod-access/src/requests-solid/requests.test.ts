@@ -344,8 +344,20 @@ describe("decision state machine", () => {
     }
   });
 
-  it("default global public fetch omits credentials; delivery failure never rolls back", async () => {
+  it("never notifies through the global fetch; an explicit public fetch omits credentials and failure never rolls back", async () => {
     const pod = buildPod();
+    const global = vi.fn<typeof fetch>(async () => new Response(null, { status: 500 }));
+    vi.stubGlobal("fetch", global);
+    try {
+      const { publicFetch: _unused, ...opts } = options(pod);
+      const result = await decide({ id: ID }, { approve: true }, opts);
+      expect(result.notified).toBe(false);
+      expect(global).not.toHaveBeenCalled();
+      expect(await entry(pod)).toMatchObject({ status: "approved" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const other = buildPod();
     const calls: RequestInit[] = [];
     const publicFetch: typeof fetch = async (_input, init) => {
       calls.push(init as RequestInit);
@@ -355,20 +367,139 @@ describe("decision state machine", () => {
         { headers: { "content-type": "text/turtle" } },
       );
     };
-    vi.stubGlobal("fetch", publicFetch);
-    try {
-      const { publicFetch: _unused, ...opts } = options(pod);
-      const result = await decide({ id: ID }, { approve: true }, opts);
+    const result = await decide({ id: ID }, { approve: true }, { ...options(other), publicFetch });
+    expect(result.notified).toBe(false);
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.credentials === "omit" && call.redirect === "error")).toBe(
+      true,
+    );
+    expect(String(calls[1]?.body)).toContain("Accept");
+    expect(await entry(other)).toMatchObject({ status: "approved" });
+  });
+
+  it("never contacts a requester profile or inbox on a local, private or cleartext host", async () => {
+    const hosts = [
+      "http://app.example/inbox/",
+      "https://localhost/inbox/",
+      "https://printer.local/inbox/",
+      "https://127.0.0.1/inbox/",
+      "https://10.0.0.8/inbox/",
+      "https://192.168.1.1/inbox/",
+      "https://169.254.169.254/latest/",
+      "https://[::1]/inbox/",
+      "https://[fd00::1]/inbox/",
+      "https://metadata.google.internal/inbox/",
+    ];
+    for (const inbox of hosts) {
+      const pod = buildPod();
+      const posts: string[] = [];
+      const publicFetch: typeof fetch = async (input, init) => {
+        if (init?.method === "POST") posts.push(String(input));
+        return new Response(`<${REQUESTER}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`, {
+          headers: { "content-type": "text/turtle" },
+        });
+      };
+      const result = await decide({ id: ID }, { approve: false }, { ...options(pod), publicFetch });
       expect(result.notified).toBe(false);
-      expect(calls).toHaveLength(2);
-      expect(calls.every((call) => call.credentials === "omit" && call.redirect === "error")).toBe(
-        true,
-      );
-      expect(String(calls[1]?.body)).toContain("Accept");
-      expect(await entry(pod)).toMatchObject({ status: "approved" });
-    } finally {
-      vi.unstubAllGlobals();
+      expect(posts).toEqual([]);
     }
+    for (const requester of ["http://app.example/agent#it", "https://127.0.0.1/agent#it"]) {
+      const pod = buildPod();
+      pod.seed(ID, accessRequestTurtle(ID).replaceAll(REQUESTER, requester));
+      const publicFetch = vi.fn<typeof fetch>();
+      const result = await decide({ id: ID }, { approve: false }, { ...options(pod), publicFetch });
+      expect(result.notified).toBe(false);
+      expect(publicFetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reads an owner profile outside storage only through the public transport", async () => {
+    const webId = "https://id.example/alice#me";
+    const pod = buildPod();
+    const profile = `<${webId}> <http://www.w3.org/ns/ldp#inbox> <${INBOX}>; <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${POD}settings/publicTypeIndex.ttl>.`;
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const publicFetch: typeof fetch = async (input, init) => {
+      calls.push({ url: String(input), init: init as RequestInit });
+      return new Response(profile, { headers: { "content-type": "text/turtle" } });
+    };
+    const base = { ...options(pod), webId };
+    expect(await listRequests({ ...base, publicFetch: undefined })).toEqual([]);
+    const listed = await listRequests({ ...base, publicFetch });
+    expect(listed).toHaveLength(1);
+    const result = await decide({ id: ID }, { approve: true }, { ...base, publicFetch });
+    expect(result.status).toBe("approved");
+    expect(pod.log.some(({ url }) => url.startsWith("https://id.example/"))).toBe(false);
+    expect(calls.filter(({ url }) => url.startsWith("https://id.example/")).length).toBeGreaterThan(
+      0,
+    );
+    for (const { init } of calls) {
+      expect(init?.credentials).toBe("omit");
+      expect(init?.redirect).toBe("error");
+    }
+  });
+
+  it("grants each approved data type only its own requested modes", async () => {
+    const Calendar = "http://www.w3.org/2002/12/cal/ical#Vevent";
+    const Event = `${POD}calendar/event.ttl`;
+    const seed = (pod: ReturnType<typeof buildPod>) => {
+      pod.seed(
+        `${POD}settings/publicTypeIndex.ttl`,
+        `${PREFIXES}<${POD}settings/publicTypeIndex.ttl#contacts> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instanceContainer <${POD}contacts/>.
+<${POD}settings/publicTypeIndex.ttl#calendar> a solid:TypeRegistration; solid:forClass <${Calendar}>; solid:instance <${Event}>.`,
+      );
+      pod.seed(Event, `<${Event}#it> a <${Calendar}>.`);
+      pod.seed(
+        ID,
+        `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ],
+    [ odrl:assignee <${REQUESTER}>; odrl:action odrl:modify; odrl:target <${Calendar}> ].`,
+      );
+    };
+    const pod = buildPod();
+    seed(pod);
+    expect(await entry(pod)).toMatchObject({
+      modes: ["read", "write"],
+      modesByType: { [CONTACTS_CLASS]: ["read"], [Calendar]: ["write"] },
+    });
+    await decide({ id: ID }, { approve: true, dataTypes: [CONTACTS_CLASS] }, options(pod));
+    const contactsAcl = await graph(pod.body(`${ALICE}.acl`) as string);
+    expect(contactsAcl.match(null, null, DataFactory.namedNode(ACL.Write)).size).toBe(
+      (await graph(pod.body(`${POD}.acl`) as string)).match(
+        null,
+        null,
+        DataFactory.namedNode(ACL.Write),
+      ).size,
+    );
+    expect(pod.has(`${Event}.acl`)).toBe(false);
+    const both = buildPod();
+    seed(both);
+    const result = await decide({ id: ID }, { approve: true }, options(both));
+    const eventAcl = pod.body(`${Event}.acl`);
+    expect(eventAcl).toBeUndefined();
+    const grant = both.body(result.grantUrl as string) as string;
+    expect(grant).toContain(Event);
+    const aliceAcl = await graph(both.body(`${ALICE}.acl`) as string);
+    const requesterRules = [
+      ...aliceAcl.match(null, DataFactory.namedNode(ACL.agent), DataFactory.namedNode(REQUESTER)),
+    ].map((q) => q.subject);
+    const requesterModes = requesterRules.flatMap((subject) =>
+      [...aliceAcl.match(subject, DataFactory.namedNode(ACL.mode))].map((q) => q.object.value),
+    );
+    expect(requesterModes).toEqual([ACL.Read]);
+    const event = await graph(both.body(`${Event}.acl`) as string);
+    const eventRules = [
+      ...event.match(null, DataFactory.namedNode(ACL.agent), DataFactory.namedNode(REQUESTER)),
+    ].map((q) => q.subject);
+    expect(
+      eventRules.flatMap((subject) =>
+        [...event.match(subject, DataFactory.namedNode(ACL.mode))].map((q) => q.object.value),
+      ),
+    ).toEqual([ACL.Write]);
+    const viewer = buildPod();
+    seed(viewer);
+    await expect(
+      decide({ id: ID }, { approve: true, role: "viewer", dataTypes: [Calendar] }, options(viewer)),
+    ).rejects.toThrow("no requested modes");
   });
 
   it("delivers Reject; missing/unsafe requester inbox and network failures are best effort", async () => {

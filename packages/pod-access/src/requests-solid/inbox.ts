@@ -1,10 +1,19 @@
 // AUTHORED-BY Codex GPT-6
 import { policyFromRdf } from "@jeswr/solid-odrl";
+import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { accmTerm } from "./canonical-vocab.js";
-import { httpUrl, MAX_MEMBERS, read, scoped, transport } from "./http.js";
+import {
+  httpUrl,
+  MAX_MEMBERS,
+  publicTransport,
+  read,
+  readProfile,
+  scoped,
+  transport,
+} from "./http.js";
 import { values } from "./rdf.js";
 import { ACCM, DCT, DPV, FOAF, LDP } from "./vocab.js";
 
@@ -20,7 +29,13 @@ export type AccessRequestEntry =
       requesterName?: string;
       purpose?: string;
       dataTypes: string[];
+      /** Every requested mode, across all data types. */
       modes: RequestMode[];
+      /**
+       * Modes per requested data type. A rule that targets a data type applies to that type
+       * only; a rule with any other target applies to every requested type.
+       */
+      modesByType: Record<string, RequestMode[]>;
       requestedDuration?: string;
       expiresAt?: string;
       created?: string;
@@ -33,6 +48,12 @@ export interface ListRequestsOptions {
   storage: string;
   inbox?: string;
   profile?: DatasetCore;
+  /**
+   * Unauthenticated transport used only to read an owner profile hosted outside storage
+   * (forced to `credentials: "omit"` and `redirect: "error"`). Without it, such a profile is
+   * not read and the inbox must be supplied.
+   */
+  publicFetch?: typeof fetch;
   signal?: AbortSignal;
 }
 
@@ -72,6 +93,7 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
     const policy = policyFromRdf(dataset);
     if (policy === undefined) return unreadable;
     const modes = new Set<RequestMode>();
+    const rules: { mode: RequestMode; target: string }[] = [];
     const targets = new Set<string>();
     let requester = policy.assignee;
     let purpose: string | undefined;
@@ -80,8 +102,11 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
     for (const rule of policy.permissions ?? []) {
       requester ??= rule.assignee;
       const mode = ACTIONS[rule.action];
-      if (mode !== undefined) modes.add(mode);
       if (rule.target !== undefined) targets.add(httpUrl(rule.target));
+      if (mode !== undefined) {
+        modes.add(mode);
+        if (rule.target !== undefined) rules.push({ mode, target: rule.target });
+      }
       for (const constraint of rule.constraints ?? []) {
         if (constraint.leftOperand === "purpose" && typeof constraint.rightOperand === "string") {
           purpose = constraint.rightOperand;
@@ -112,12 +137,23 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
       values(dataset, requester, "http://www.w3.org/2006/vcard/ns#fn")[0];
     purpose ??= values(dataset, id, DPV.hasPurpose)[0];
     expiresAt ??= values(dataset, id, DPV.hasExpiryTime)[0];
+    const dataTypes = [...new Set(explicit.length ? explicit : targets)];
+    const modesByType: Record<string, RequestMode[]> = {};
+    for (const type of dataTypes) {
+      const own = new Set<RequestMode>();
+      for (const rule of rules) {
+        const typed = dataTypes.some((candidate) => termsEqual(candidate, rule.target));
+        if (!typed || termsEqual(type, rule.target)) own.add(rule.mode);
+      }
+      if (own.size > 0) modesByType[type] = [...own];
+    }
     const entry: AccessRequestEntry = {
       id,
       status,
       requester,
-      dataTypes: [...new Set(explicit.length ? explicit : targets)],
+      dataTypes,
       modes: [...modes],
+      modesByType,
       ...(requesterName !== undefined && { requesterName }),
       ...(purpose !== undefined && { purpose }),
       ...(expiresAt !== undefined && { expiresAt }),
@@ -156,7 +192,10 @@ export async function listRequests(options: ListRequestsOptions): Promise<Access
   const fetchFn = transport(options.fetch, options.signal);
   let inbox = options.inbox;
   if (inbox === undefined) {
-    const profile = options.profile ?? (await read(options.webId, fetchFn))?.dataset;
+    const publicFetch = options.publicFetch && publicTransport(options.publicFetch, options.signal);
+    const profile =
+      options.profile ??
+      (await readProfile(options.webId, options.storage, fetchFn, publicFetch))?.dataset;
     if (!profile) return [];
     inbox = values(profile, options.webId, LDP.inbox)[0];
   }

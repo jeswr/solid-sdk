@@ -113,18 +113,21 @@ if (request) {
 // Detect: await accessModel({ fetch: authenticatedFetch, storage, target? }).
 ```
 
-`listRequests({ fetch, webId, storage, inbox?, profile?, signal? })` discovers `ldp:inbox`
-unless supplied. It visits at most 100 inbox members and reads at most 256 KiB per RDF document,
+`listRequests({ fetch, webId, storage, inbox?, profile?, publicFetch?, signal? })` discovers
+`ldp:inbox` unless supplied. A WebID profile inside `storage` is read with `fetch`; one hosted
+elsewhere is read only through `publicFetch` (never the session), and is skipped without it. It visits at most 100 inbox members and reads at most 256 KiB per RDF document,
 including streamed responses. Results can be incomplete at these caps. A malformed, oversized,
 missing, or non-request member becomes `{ id, status: "unreadable" }`; containers and ACLs are skipped.
 Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
 notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
-(`read`, `write`, `append`), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
+(`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
 Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
-`dataTypes` must be a nonempty requested subset. `viewer` narrows to requested Read; `editor` and
+`dataTypes` must be a nonempty requested subset, and each approved type grants only its own
+`modesByType` entry on its own targets. `viewer` narrows to requested Read; `editor` and
 an omitted role retain only requested modes, never Control. The owner Type Index resolves classes
 to registered instances and bounded, recursively listed instance-container members. Unknown classes
 and off-storage targets fail before the Approving CAS. `options.typeIndex` accepts an owner-controlled
@@ -148,9 +151,15 @@ the recovery snapshot. It does not expire or automatically revoke WAC access; re
 metadata too; this client does not enforce purposes or authenticate the claimed requester identity.
 
 After committing, requester inbox discovery and ActivityStreams `Accept`/`Reject` delivery are best
-effort. They use `publicFetch`, defaulting to global fetch with `credentials: "omit"` and
-`redirect: "error"`. Failures return `notified: false` without rollback. Inject a pristine,
-unauthenticated `publicFetch` when the application patches global fetch with authentication.
+effort and happen only when the caller passes an unauthenticated `publicFetch` (forced to
+`credentials: "omit"` and `redirect: "error"`); global fetch is never used, since an application
+may have patched it with authentication. Requester profile and inbox URLs must be public HTTPS:
+loopback, private, link-local and local-name hosts are refused. Failures and a missing
+`publicFetch` return `notified: false` without rollback.
+
+Every document the pipeline writes back (including the requester-authored request during CAS) is
+serialised with regenerated blank-node labels, validated language tags and no named graphs, so a
+foreign JSON-LD label or tag cannot inject Turtle.
 
 `accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown` from Link
 relations; ACP wins if both are advertised. Decisions throw typed `UnsupportedAccessModelError` for

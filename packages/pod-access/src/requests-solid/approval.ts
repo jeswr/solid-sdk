@@ -12,6 +12,8 @@ import { accessModel, applyGrant, UnsupportedAccessModelError } from "./acl.js";
 import {
   httpUrl,
   MAX_MEMBERS,
+  publicHttpsUrl,
+  publicTransport,
   put,
   RequestConflictError,
   read,
@@ -39,7 +41,12 @@ export interface DecideOptions {
   storage: string;
   /** Owner Type Index URL or an already-read owner-controlled index dataset. */
   typeIndex?: string | DatasetCore;
-  /** Unauthenticated transport for requester discovery and delivery. */
+  /**
+   * Unauthenticated transport for requester discovery and delivery, and for an owner profile
+   * hosted outside storage; forced to `credentials: "omit"` and `redirect: "error"`. Without
+   * it the requester is not notified (`notified: false`). Requester profile and inbox URLs must
+   * be public HTTPS (no loopback, private or local-name hosts).
+   */
   publicFetch?: typeof fetch;
   now?: () => Date;
   signal?: AbortSignal;
@@ -58,7 +65,10 @@ interface Snapshot {
   grantId: string;
   targets: string[];
   agent: string;
+  /** Union of targetModes; kept for the receipt and older readers. */
   modes: RequestMode[];
+  /** Modes per target, derived only from the approved data types' own rules. */
+  targetModes: Record<string, RequestMode[]>;
   dataTypes: string[];
   schemaVersion: "1";
   purpose?: string;
@@ -147,6 +157,19 @@ async function validateSnapshot(
     snapshot.targets.length > MAX_MEMBERS ||
     snapshot.modes.length === 0 ||
     !snapshot.modes.every((mode) => ["read", "write", "append"].includes(mode)) ||
+    typeof snapshot.targetModes !== "object" ||
+    snapshot.targetModes === null ||
+    Object.keys(snapshot.targetModes).length !== snapshot.targets.length ||
+    !snapshot.targets.every((target) => {
+      const modes = Object.hasOwn(snapshot.targetModes, target)
+        ? snapshot.targetModes[target]
+        : undefined;
+      return (
+        Array.isArray(modes) &&
+        modes.length > 0 &&
+        modes.every((mode) => snapshot.modes.includes(mode))
+      );
+    }) ||
     snapshot.grantId !== (await deriveGrantId(id, snapshot.targets, options.webId))
   ) {
     throw new Error("Invalid persisted approval snapshot");
@@ -174,7 +197,7 @@ async function complete(
       assigner: options.webId,
       assignee: snapshot.agent,
       permissions: snapshot.targets.flatMap((target) =>
-        snapshot.modes.map((mode) => ({
+        (snapshot.targetModes[target] as RequestMode[]).map((mode) => ({
           type: "permission" as const,
           action: mode,
           target,
@@ -212,7 +235,7 @@ async function complete(
       options.storage,
       options.webId,
       snapshot.agent,
-      snapshot.modes,
+      snapshot.targetModes[target] as RequestMode[],
       fetchFn,
     );
   }
@@ -236,17 +259,16 @@ async function notify(
   approved: boolean,
   options: DecideOptions,
 ): Promise<boolean> {
+  // Only an explicitly supplied unauthenticated transport may contact the requester: a
+  // global fetch may have been patched to attach the owner's credentials.
+  if (options.publicFetch === undefined) return false;
   try {
-    const publicFetch = options.publicFetch ?? globalThis.fetch;
-    const fetchFn = transport(
-      (input, init) => publicFetch(input, { ...init, credentials: "omit", redirect: "error" }),
-      options.signal,
-    );
-    const profile = await read(httpUrl(requester), fetchFn);
+    const fetchFn = publicTransport(options.publicFetch, options.signal);
+    const profile = await read(publicHttpsUrl(requester), fetchFn);
     if (!profile) return false;
     const inbox = values(profile.dataset, requester, LDP.inbox)[0];
     if (inbox === undefined) return false;
-    httpUrl(inbox);
+    publicHttpsUrl(inbox);
     const activity = new Store();
     const subject = `${id}#decision`;
     const as = "https://www.w3.org/ns/activitystreams#";
@@ -323,9 +345,28 @@ export async function decide(
     for (const target of request.targets) {
       if (!parsed.dataTypes.some((type) => termsEqual(type, target))) scoped(storage, target);
     }
-    const targets = await resolveTargets(dataTypes, options, fetchFn);
-    const modes = parsed.modes.filter((mode) => decision.role !== "viewer" || mode === "read");
-    if (modes.length === 0) throw new Error("Decision grants no requested modes");
+    // Each approved type grants only its own requested modes, so narrowing the data types
+    // can never carry a mode that was requested for an excluded type.
+    const publicFetch = options.publicFetch && publicTransport(options.publicFetch, options.signal);
+    const perTarget = new Map<string, Set<RequestMode>>();
+    for (const type of dataTypes) {
+      const typeModes = (parsed.modesByType[type] ?? []).filter(
+        (mode) => decision.role !== "viewer" || mode === "read",
+      );
+      if (typeModes.length === 0) continue;
+      for (const target of await resolveTargets([type], options, fetchFn, publicFetch)) {
+        const modes = perTarget.get(target) ?? new Set<RequestMode>();
+        for (const mode of typeModes) modes.add(mode);
+        perTarget.set(target, modes);
+      }
+    }
+    if (perTarget.size === 0) throw new Error("Decision grants no requested modes");
+    if (perTarget.size > MAX_MEMBERS) throw new RangeError("Invalid resolved target count");
+    const targets = [...perTarget.keys()].sort();
+    const targetModes = Object.fromEntries(
+      targets.map((target) => [target, [...(perTarget.get(target) as Set<RequestMode>)].sort()]),
+    ) as Record<string, RequestMode[]>;
+    const modes = [...new Set(Object.values(targetModes).flat())].sort();
     for (const target of targets) {
       const targetModel = await accessModel({ fetch: fetchFn, storage, target });
       if (targetModel !== "wac") throw new UnsupportedAccessModelError(targetModel);
@@ -335,6 +376,7 @@ export async function decide(
       targets,
       agent: parsed.requester,
       modes,
+      targetModes,
       dataTypes,
       schemaVersion: "1",
       decidedAt: now,
