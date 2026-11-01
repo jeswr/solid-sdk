@@ -106,3 +106,9 @@ complete subscription example and the limits of `hot`, depth and disabled pollin
 `features.recursiveDelete` describes a separate POST service, not permission to add Depth to
 DELETE. Current `storage.delete(..., { recursive: true, ifMatch })` performs client traversal;
 it can fail after deleting some descendants. Do not automatically repeat destructive work.
+
+## Verify examples
+
+Build the documented packages and their dependencies, then run
+`node scripts/check-sdk-skill-examples.mjs` from the workspace root. The script typechecks
+each TypeScript fence independently against the packages' exported declarations.

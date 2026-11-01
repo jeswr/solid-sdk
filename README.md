@@ -74,9 +74,19 @@ Reusable agent guidance lives with the code it describes:
   [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
-  into this workspace (`@solid/object`, notifications, and Client Identifier
-  Documents). Move such a skill beside its package when that package joins the monorepo.
+  into this workspace (`@solid/object` and Client Identifier Documents). Move such a skill beside its
+  package when that package joins the monorepo.
 
 Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
 a package's public API, security boundary, or recommended workflow changes; avoid copying package
 guidance back into a central catch-all document.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+For apps using the storage SDK, start with [Solid and LWS differences](skills/lws-vs-solid/SKILL.md),
+which routes to the five package skills. The older notifications and reactive-authentication skills
+route to `pod-notifications` and `pod-auth`; package skills govern the implemented APIs.
+
+After building those packages and their dependencies, run
+`node scripts/check-sdk-skill-examples.mjs` to typecheck their TypeScript examples against public
+exports. W13 distribution uses the same canonical skill names in both `~/.claude/skills/` and
+`~/.codex/skills/`; real-home sync is a separate reviewed step, with validation in a temporary home.
