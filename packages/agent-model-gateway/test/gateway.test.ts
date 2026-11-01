@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import type { BridgeMessage } from "@jeswr/agent-channels";
-import type { ActionProposal } from "@jeswr/agent-model";
+import { type ActionProposal, canonicalJson, digestOf } from "@jeswr/agent-model";
 import * as guarded from "@jeswr/guarded-fetch";
 import type { PodPort } from "@jeswr/solid-mcp";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare builtin specifiers
@@ -47,6 +47,10 @@ const proposal: Omit<ActionProposal, "wasGeneratedBy"> = {
     conversation: "urn:conversation:1",
   },
 };
+const opaqueParameters = [
+  '{"__proto__":{"retained":true},"ordinary":"value"}',
+  '{"nested":{"__proto__":null},"items":[{"__proto__":"retained"}],"constructor":{"prototype":"opaque"},"values":[null,true,42,"text"]}',
+];
 const output = (data: unknown) => [
   { type: "message", content: [{ type: "output_text", text: JSON.stringify(data) }] },
 ];
@@ -455,6 +459,22 @@ describe("OpenAI Proposer tool boundary", () => {
     expect(action.properties.intent.properties.parameters.type).toBe("object");
     expect(advertised.description).toContain("gateway supplies wasGeneratedBy");
   });
+  it.each(
+    opaqueParameters,
+  )("preserves opaque proposal parameters and their digest: %s", async (json) => {
+    const parameters = JSON.parse(json);
+    const action = {
+      ...proposal,
+      intent: { ...proposal.intent, parameters, termsDigest: digestOf(parameters) },
+    };
+    const s = setup({}, [response([call("propose", { action })]), response()]);
+    const r = await s.gateway.proposer.propose([], context());
+    expect(r.proposals).toHaveLength(1);
+    const intent = r.proposals[0]?.intent;
+    expect(canonicalJson(intent?.parameters)).toBe(canonicalJson(parameters));
+    expect(intent?.termsDigest).toBe(action.intent.termsDigest);
+    expect(digestOf(intent?.parameters)).toBe(intent?.termsDigest);
+  });
   it.each([
     "send",
     "pod_write",
@@ -516,10 +536,19 @@ describe("OpenAI Proposer tool boundary", () => {
     { action: { ...proposal, intent: { ...proposal.intent, target: "relative" } } },
     { action: { ...proposal, intent: { ...proposal.intent, parameters: [] } } },
     { action: { ...proposal, intent: { ...proposal.intent, parameters: { invalid: "\uD800" } } } },
+    {
+      action: {
+        ...proposal,
+        intent: {
+          ...proposal.intent,
+          parameters: JSON.parse('{"__proto__":{"invalid":"\\uD800"}}'),
+        },
+      },
+    },
     { action: {} },
     { action: proposal, send: true },
   ])("refuses invalid or already-authorized proposals %o", async (args) => {
-    const s = setup({}, [response([call("propose", args)])]);
+    const s = setup({}, [response([call("propose", args)]), response()]);
     await failure(s.gateway.proposer.propose([], context()));
   });
   it("rejects malformed tool arguments, memory errors and exhausted turns", async () => {
@@ -557,6 +586,65 @@ function events(items: unknown[]) {
 }
 
 describe("Anthropic Proposer SDK isolation", () => {
+  it("rejects invalid opaque JSON before SDK parsing can discard it", async () => {
+    const input = {
+      action: {
+        ...proposal,
+        intent: {
+          ...proposal.intent,
+          parameters: JSON.parse('{"nested":{"__proto__":{"invalid":"\\uD800"}}}'),
+        },
+      },
+    };
+    sdk.query.mockImplementation(async function* ({ options }) {
+      const tool = sdk.tool.mock.results.map((r) => r.value).find((t) => t.name === "propose");
+      expect(await options.canUseTool("mcp__gateway__propose", input)).toMatchObject({
+        behavior: "deny",
+      });
+      expect(() => z.object(tool.shape).parse(input)).toThrow();
+      expect(await tool.handler(input)).toMatchObject({ isError: true });
+      yield assistant();
+      yield success;
+    });
+    const s = setup({ provider: "anthropic" });
+    expect((await s.gateway.proposer.propose([], context())).proposals).toEqual([]);
+  });
+  it.each(
+    opaqueParameters,
+  )("preserves opaque proposal parameters through SDK parsing: %s", async (json) => {
+    const parameters = JSON.parse(json);
+    const action = {
+      ...proposal,
+      intent: { ...proposal.intent, parameters, termsDigest: digestOf(parameters) },
+    };
+    sdk.query.mockImplementation(async function* ({ options }) {
+      const tool = sdk.tool.mock.results.map((r) => r.value).find((t) => t.name === "propose");
+      const input = { action };
+      expect(await options.canUseTool("mcp__gateway__propose", input)).toEqual({
+        behavior: "allow",
+        updatedInput: input,
+      });
+      const parsed = z.object(tool.shape).parse(input);
+      expect(await tool.handler(parsed)).not.toHaveProperty("isError");
+      expect(z.toJSONSchema(z.object(tool.shape))).toMatchObject({
+        properties: {
+          action: { properties: { intent: { properties: { parameters: { type: "object" } } } } },
+        },
+      });
+      yield assistant("opaque-proposal", [
+        { type: "tool_use", id: "opaque", name: "mcp__gateway__propose", input },
+      ]);
+      yield success;
+    });
+    const s = setup({ provider: "anthropic" });
+    const r = await s.gateway.proposer.propose([], context());
+    expect(r.proposals).toHaveLength(1);
+    const intent = r.proposals[0]?.intent;
+    expect(intent?.parameters).toBe(parameters);
+    expect(canonicalJson(intent?.parameters)).toBe(canonicalJson(parameters));
+    expect(intent?.termsDigest).toBe(action.intent.termsDigest);
+    expect(digestOf(intent?.parameters)).toBe(intent?.termsDigest);
+  });
   it("installs exactly four tools, disables ambient capabilities, and coalesces split message counters", async () => {
     const ctx = context();
     sdk.query.mockImplementation(async function* ({ options }) {

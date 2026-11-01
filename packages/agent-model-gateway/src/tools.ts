@@ -16,17 +16,21 @@ const proposalRecord = podRecordSchema.options.find(
   (schema): schema is ProposalSchema => schema.shape.type.value === "action-proposal",
 ) as ProposalSchema;
 const proposal = z.strictObject({
-  action: proposalRecord.omit({ wasGeneratedBy: true }).extend({
-    state: z.literal("proposed"),
+  action: proposalRecord.omit({ wasGeneratedBy: true }).extend({ state: z.literal("proposed") }),
+});
+const proposalInput = proposal.extend({
+  action: proposal.shape.action.extend({
     intent: proposalRecord.shape.intent.extend({
-      // Advertise an object schema while retaining agent-model's canonical JSON checks.
+      // Validate the original JSON; record/JSON parsers discard opaque own __proto__ keys.
+      // Supply the provider's object schema as metadata, without parsing through it.
       parameters: z
-        .record(z.string(), z.json())
+        .unknown()
         .refine(
           (parameters) =>
             proposalRecord.shape.intent.shape.parameters.safeParse(parameters).success,
           "Expected canonicalisable JSON object",
-        ),
+        )
+        .meta({ type: "object", additionalProperties: true }),
     }),
   }),
 });
@@ -60,7 +64,7 @@ export function proposerTools(ctx: ProposerContext, proposals: ProposalDraft[]):
       name: "propose",
       description:
         'Return a complete action-proposal with state "proposed" for runtime review. IDs and references must be absolute IRIs; timestamps must include seconds and an explicit timezone. The gateway supplies wasGeneratedBy; omit it. This grants no authority and executes nothing.',
-      schema: proposal,
+      schema: proposalInput,
       async run(input) {
         const { action } = proposal.parse(input);
         proposals.push(action);
