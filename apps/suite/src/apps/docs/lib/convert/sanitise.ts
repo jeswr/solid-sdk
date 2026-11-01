@@ -47,6 +47,8 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     ol: ["start", "type", "data-list-type"],
     ul: ["data-type"],
     li: ["data-type", "data-checked"],
+    // The suite's own indent marker; the editor validates its level on parse.
+    ...Object.fromEntries(["p", "h1", "h2", "h3"].map((tag) => [tag, ["data-indent"]])),
   };
   return sanitizeHtml(html, {
     allowedTags,

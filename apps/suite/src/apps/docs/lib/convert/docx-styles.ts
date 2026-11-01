@@ -5,6 +5,7 @@ import {
   fontSize,
   lineHeight,
   paragraphSpace,
+  textAlignment,
   textColour,
 } from "../editor/styles";
 import { WORD } from "./docx-xml";
@@ -14,6 +15,15 @@ const direct = (element: Element | null | undefined, name: string) =>
     (child) => child.namespaceURI === WORD && child.localName === name,
   );
 const value = (element: Element | undefined, key = "val") => element?.getAttributeNS(WORD, key);
+const ALIGNMENTS: Record<string, string> = {
+  start: "left",
+  left: "left",
+  center: "center",
+  right: "right",
+  end: "right",
+  both: "justify",
+  distribute: "justify",
+};
 
 /** Read native Word properties before Mammoth drops colour, shading and spacing. */
 export function docxStyles(document: Document, definitions: Document) {
@@ -56,6 +66,8 @@ export function docxStyles(document: Document, definitions: Document) {
           const space = value(spacing, word);
           if (space) set(property as string, paragraphSpace(`${Number(space) / 20}pt`));
         }
+        const alignment = value(direct(props, "jc"));
+        if (alignment) set("text-align", textAlignment(ALIGNMENTS[alignment]));
       } else {
         set("font-family", fontFamily(value(direct(props, "rFonts"), "ascii")));
         const size = value(direct(props, "sz"));

@@ -24,6 +24,7 @@ import {
   DOCUMENT_COLOURS,
   FONT_FAMILIES,
   fontFamily,
+  indentFromMargin,
   fontSize,
   lineHeight,
   paragraphSpace,
@@ -399,6 +400,88 @@ it("exports native Word run properties and recovers them in paragraphs and lists
       ],
     });
   }
+});
+
+it("keeps indent and alignment across the suite's own DOCX and HTML export and re-import", async () => {
+  const words = (text: string) => [{ type: "text", text }];
+  const json: JSONContent = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { indent: 1, textAlign: "center" }, content: words("Centred") },
+      {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [{ type: "paragraph", content: words("Item") }] }],
+      },
+      // Directly after a list: Word would otherwise read it as the list's continuation.
+      { type: "paragraph", attrs: { indent: 2 }, content: words("After list") },
+      {
+        type: "blockquote",
+        content: [
+          { type: "paragraph", attrs: { indent: 1 }, content: words("Quoted") },
+          { type: "paragraph", content: words("Plain quote") },
+        ],
+      },
+      {
+        type: "heading",
+        attrs: { level: 2, indent: 3, textAlign: "right" },
+        content: words("Heading"),
+      },
+      { type: "paragraph", attrs: { textAlign: "justify" }, content: words("Justified") },
+      { type: "paragraph", attrs: { textAlign: "left" }, content: words("Left") },
+    ],
+  };
+  const expected = [
+    { type: "paragraph", attrs: { indent: 1, textAlign: "center" } },
+    { type: "bulletList" },
+    { type: "paragraph", attrs: { indent: 2, textAlign: null }, content: words("After list") },
+    {
+      type: "blockquote",
+      content: [
+        { type: "paragraph", attrs: { indent: 1 }, content: words("Quoted") },
+        { type: "paragraph", attrs: { indent: null }, content: words("Plain quote") },
+      ],
+    },
+    { type: "heading", attrs: { level: 2, indent: 3, textAlign: "right" } },
+    { type: "paragraph", attrs: { textAlign: "justify" } },
+    { type: "paragraph", attrs: { textAlign: "left" } },
+  ];
+  const bytes = await Packer.toBuffer(await toDocx(json, vi.fn()));
+  const xml = await (await openArrayBuffer(Uint8Array.from(bytes).buffer)).read(
+    "word/document.xml",
+    "utf-8",
+  );
+  // The quote's own half inch plus the paragraph's indent.
+  expect(xml).toContain('w:left="1440"');
+  expect(xml).toContain('w:pStyle w:val="Indented"');
+  const imported = await importDocx(Uint8Array.from(bytes).buffer, {
+    uploadImage: vi.fn(),
+    progress: vi.fn(),
+  });
+  expect(imported.skipped.filter((item) => item.label.startsWith("Unsupported"))).toEqual([]);
+  const fromDocx = importHtml(imported.html).json;
+  expect(fromDocx.content).toHaveLength(expected.length);
+  expect(fromDocx).toMatchObject({ content: expected });
+  // HTML export carries data-indent, margin-left and text-align; import keeps all three.
+  const skipped: { label: string; count: number }[] = [];
+  const fromHtml = importHtml(generateHTML(json, baseExtensions(vi.fn())), skipped).json;
+  expect(skipped).toEqual([]);
+  expect(fromHtml).toMatchObject({ content: expected });
+  expect(indentFromMargin(36)).toBeNull();
+  expect(sanitiseStyles("margin-left: 0.5in; text-align: Justify; text-align: sideways")).toBe(
+    "margin-left: 36pt; text-align: justify",
+  );
+  // Word and Google Docs write indents as margins, in any CSS unit.
+  const pasted = importHtml(
+    '<p style="margin-left:.5in">A</p><p style="margin-left:96px;text-align:CENTER">B</p><p style="margin-left:2.54cm">C</p><p style="margin-left:10pt;text-align:start">D</p><p style="margin-left:1000pt">E</p><h2 style="margin-left: calc(1in)">F</h2>',
+  ).json;
+  expect(pasted.content?.map((block) => [block.attrs?.indent, block.attrs?.textAlign])).toEqual([
+    [1, null],
+    [2, "center"],
+    [2, null],
+    [null, null],
+    [null, null],
+    [null, null],
+  ]);
 });
 
 it("reads inherited Word properties safely, including absent, cyclic and unknown styles", () => {

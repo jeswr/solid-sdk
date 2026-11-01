@@ -115,6 +115,35 @@ export function indentLevel(value: unknown): number | null {
     : null;
 }
 
+/** One indent step is 0.5in (36pt), the step Word and Google Docs use. */
+export const INDENT_STEP_PT = 36;
+const POINTS_PER_UNIT: Record<string, number> = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54 };
+
+/** An indent level from a CSS margin-left, as Word and Google Docs HTML write it. */
+export function indentFromMargin(value: unknown): number | null {
+  const match = typeof value === "string" ? /^(\d*\.?\d+)(pt|px|in|cm)$/i.exec(value.trim()) : null;
+  if (!match) return null;
+  const points = Number(match[1]) * (POINTS_PER_UNIT[(match[2] as string).toLowerCase()] as number);
+  return indentLevel(Math.round(points / INDENT_STEP_PT));
+}
+
+export function indentMargin(value: unknown): string | null {
+  const level = indentFromMargin(value);
+  return level ? `${level * INDENT_STEP_PT}pt` : null;
+}
+
+export function textAlignment(value: unknown): string | null {
+  return typeof value === "string" && /^(left|center|right|justify)$/i.test(value.trim())
+    ? value.trim().toLowerCase()
+    : null;
+}
+
+/** Block layout that crosses the HTML boundary but lives in block attributes, not marks. */
+const BLOCK_STYLE_RULES = [
+  { css: "margin-left", sanitise: indentMargin },
+  { css: "text-align", sanitise: textAlignment },
+];
+
 export const STYLE_RULES = {
   fontFamily: { css: "font-family", sanitise: fontFamily },
   fontSize: { css: "font-size", sanitise: fontSize },
@@ -130,7 +159,9 @@ export function sanitiseStyles(source: string): string {
   for (const declaration of source.split(";")) {
     const colon = declaration.indexOf(":");
     const name = declaration.slice(0, colon).trim().toLowerCase();
-    const rule = Object.values(STYLE_RULES).find((rule) => rule.css === name);
+    const rule = [...Object.values(STYLE_RULES), ...BLOCK_STYLE_RULES].find(
+      (rule) => rule.css === name,
+    );
     const value = rule?.sanitise(declaration.slice(colon + 1).trim());
     if (value) declarations.set(name, value);
   }

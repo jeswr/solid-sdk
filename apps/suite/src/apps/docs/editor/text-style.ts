@@ -8,7 +8,7 @@ import {
   TextStyle,
 } from "@tiptap/extension-text-style";
 import { type CommandProps, Extension } from "@tiptap/react";
-import { indentLevel, STYLE_RULES } from "../lib/editor/styles";
+import { INDENT_STEP_PT, indentFromMargin, indentLevel, STYLE_RULES } from "../lib/editor/styles";
 
 function attributes(keys: (keyof typeof STYLE_RULES)[]) {
   return Object.fromEntries(
@@ -95,10 +95,16 @@ export const textStyleExtensions = [
             ...attributes(["spaceBefore", "spaceAfter"]),
             indent: {
               default: null,
-              parseHTML: (element: HTMLElement) => indentLevel(element.dataset.indent),
+              // The data attribute is the suite's own; margin-left is how Word,
+              // Google Docs and the suite's HTML export carry an indent.
+              parseHTML: (element: HTMLElement) =>
+                indentLevel(element.dataset.indent) ??
+                indentFromMargin(element.style.getPropertyValue("margin-left")),
               renderHTML: (attrs: Record<string, unknown>) => {
                 const level = indentLevel(attrs.indent);
-                return level ? { "data-indent": level, style: `margin-left: ${level * 36}pt` } : {};
+                return level
+                  ? { "data-indent": level, style: `margin-left: ${level * INDENT_STEP_PT}pt` }
+                  : {};
               },
             },
           },

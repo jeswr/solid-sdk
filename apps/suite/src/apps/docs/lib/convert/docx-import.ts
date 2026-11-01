@@ -6,6 +6,7 @@ import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageDestination } from "../editor/destination";
+import { indentLevel as blockIndent, INDENT_STEP_PT } from "../editor/styles";
 import { type DocxBlockMetadata, identifyDocxBlocks } from "./docx-metadata";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
@@ -27,6 +28,8 @@ const paragraphStyles = new Map<string, string>([
   ["Quote", "blockquote:fresh > p:fresh"],
   ["Intense Quote", "blockquote:fresh > p:fresh"],
   ["Code", "pre:separator('\n')"],
+  // The suite marks indented paragraphs so they never read as a list continuation.
+  ["Indented", "p:fresh"],
 ]);
 // Mammoth's style-name matching is case insensitive, including Word's built-in names.
 const paragraphPaths = new Map(
@@ -132,6 +135,8 @@ function mapLists(
           (!paragraphPaths.has(styleName ?? "") && child.styleId !== "Code")) &&
         indentLevel >= 0 &&
         ancestors.length > 0;
+      const paragraphCss = identity?.type === "paragraph" ? identity.css : "";
+      let css = paragraphCss;
       const mappedStyle = (ancestors: string[]) => {
         let block = table
           ? "table:fresh"
@@ -142,8 +147,7 @@ function mapLists(
             : quoted && blockStyle === "quote"
               ? "p:fresh"
               : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
-        if (identity?.type === "paragraph" && identity.css)
-          block = block.replace(/(p|h[1-3]):fresh$/, `$1[style='${identity.css}']:fresh`);
+        if (css) block = block.replace(/(p|h[1-3]):fresh$/, `$1[style='${css}']:fresh`);
         const styleId = `SuiteList${styleMap.length}`;
         // Mammoth uses the first matching rule. Every generated list/continuation
         // path must precede presets while retaining the paragraph's block style.
@@ -195,13 +199,17 @@ function mapLists(
         ancestors.push({ path: `${list} > ${item}`, key, list });
       } else {
         ancestors.length = 0;
+        // Outside lists, left indentation beyond the quote's own is the block's indent.
+        const indent =
+          child.type === "paragraph" && !continuationStyle
+            ? blockIndent(Math.round(Number(child.indent?.start) / 720) - quotes.length)
+            : null;
+        if (indent)
+          css = [paragraphCss, `margin-left: ${indent * INDENT_STEP_PT}pt`]
+            .filter(Boolean)
+            .join("; ");
         // A Word edit may remove the list that introduced this continuation.
-        if (
-          quoted ||
-          (child.type === "paragraph" && continuationStyle) ||
-          (identity?.type === "paragraph" && identity.css)
-        )
-          mappedStyle([]);
+        if (quoted || (child.type === "paragraph" && continuationStyle) || css) mappedStyle([]);
         container(child);
       }
     }
