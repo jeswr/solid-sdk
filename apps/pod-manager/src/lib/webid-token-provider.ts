@@ -186,6 +186,14 @@ export class IssuerForgottenError extends Error {
   }
 }
 
+/** Background authentication cannot replace an established account. */
+export class SessionIdentityChangedError extends Error {
+  constructor(issuer: string) {
+    super(`The authenticated account changed at ${issuer}; sign in explicitly to switch accounts.`);
+    this.name = "SessionIdentityChangedError";
+  }
+}
+
 /** The default issuer policy: single → it; several → throw (never pick silently). */
 function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
   return async (issuers: string[]) => {
@@ -457,11 +465,13 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * reschedule while it is still current (see {@link #begin}).
    */
   readonly #generations = new Map<string, { id: number; abort: AbortController }>();
-  // Resolution has no issuer yet, so every forget must invalidate its ownership.
+  // Explicit login and logout invalidate older pin attempts.
   #pinGeneration = 0;
   #issuerResolutionAbort = new AbortController();
   // A pending session has no token WebID yet; remember who started it to guard joins.
   readonly #pendingOwners = new Map<string, string | undefined>();
+  // Account continuity survives eviction of dead tokens.
+  readonly #confirmedOwners = new Map<string, string | undefined>();
   // Ordered writes prevent an old put reviving logout or an old delete erasing login.
   #storeMutations: Promise<void> = Promise.resolve();
   readonly #onProactiveRefreshSettled?: WebIdDPoPTokenProviderOptions["onProactiveRefreshSettled"];
@@ -571,19 +581,25 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   async login(
     issuer: URL,
     options: LoginOptions = {},
-  ): Promise<{ webId: string | undefined }> {
+  ): Promise<{ webId: string | undefined; ownership: number }> {
+    this.#invalidatePin();
     this.#pin(issuer);
     if (this.#belongsToAnotherWebId(issuer, options.expectedWebId)) {
-      // Same issuer, different account: never hand back the previous
-      // account's tokens. The persisted entry is overwritten by the new login.
       this.#forgetInMemory(issuer.href);
+      // Delete even when the replacement receives no durable credential.
+      void this.#clearPersisted(issuer);
+    } else if (!this.#pendingOwners.has(issuer.href)) {
+      // A new explicit attempt owns validation, even when reusing fresh tokens.
+      const old = this.#generationOf(issuer.href);
+      this.#generations.set(issuer.href, { id: old.id + 1, abort: new AbortController() });
+      old.abort.abort(new IssuerForgottenError(issuer.href));
     }
     const mode: AuthorizeMode =
       options.silentFirst === true ? "silent-first" : "interactive";
     const generation = this.#generationOf(issuer.href).id;
-    const session = await this.#getSession(issuer, generation, mode, options.expectedWebId);
+    const session = await this.#getSession(issuer, generation, mode, options.expectedWebId, true);
     this.#assertGeneration(issuer.href, generation);
-    return { webId: session.webId };
+    return { webId: session.webId, ownership: generation };
   }
 
   /**
@@ -696,12 +712,14 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     generation: number,
     mode: AuthorizeMode = "silent-first",
     expectedWebId?: string,
+    explicitLogin = false,
   ): Promise<IssuerSession> {
     this.#assertGeneration(issuer.href, generation);
     const cached = this.#sessions.get(issuer.href);
     if (cached === undefined) {
       return this.#begin(issuer, generation,
-        (signal) => this.#authenticate(issuer, signal, mode), expectedWebId);
+        (signal) => this.#authenticate(issuer, signal, mode), expectedWebId,
+        explicitLogin ? undefined : this.#confirmedOwners.get(issuer.href));
     }
 
     const session = await cached;
@@ -711,9 +729,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
     if (this.#sessions.get(issuer.href) === cached) {
       return this.#begin(issuer, generation,
-        (signal) => this.#renew(issuer, session, signal, mode, generation), expectedWebId);
+        (signal) => this.#renew(issuer, session, signal, mode, generation), session.webId,
+        explicitLogin ? undefined : session.webId);
     }
-    return this.#getSession(issuer, generation, mode, expectedWebId);
+    return this.#getSession(issuer, generation, mode, expectedWebId, explicitLogin);
   }
 
   /** Cache the fenced promise so every joined caller observes the same ownership checks. */
@@ -722,6 +741,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     generation: number,
     work: (signal: AbortSignal) => Promise<IssuerSession>,
     expectedWebId?: string,
+    establishedWebId?: string,
   ): Promise<IssuerSession> {
     const href = issuer.href;
     this.#assertGeneration(href, generation);
@@ -732,8 +752,16 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         this.#assertGeneration(href, generation);
         const session = await work(abort.signal);
         this.#assertGeneration(href, generation);
+        if (establishedWebId !== undefined && session.webId !== establishedWebId) {
+          throw new SessionIdentityChangedError(issuer.href);
+        }
+        if (this.#confirmedOwners.has(href) && this.#confirmedOwners.get(href) !== session.webId) {
+          await this.#clearPersisted(issuer);
+          this.#assertGeneration(href, generation);
+        }
         // Keep the same object so invalidate/renew staleness reaches the popup probe.
         this.#settledSessions.set(href, session);
+        this.#confirmedOwners.set(href, session.webId);
         await this.#persist(issuer, session, generation);
         this.#assertGeneration(href, generation);
         this.#scheduleProactive(issuer, session);
@@ -767,6 +795,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     if (this.#generationOf(href).id !== id) throw new IssuerForgottenError(href);
   }
 
+  #invalidatePin(): void {
+    this.#pinGeneration++;
+    this.#issuerResolutionAbort.abort(new IssuerForgottenError("pending issuer"));
+    this.#issuerResolutionAbort = new AbortController();
+  }
+
   #pin(issuer: URL): void {
     this.#issuer = Promise.resolve(issuer);
     this.#pinnedIssuerHref = issuer.href;
@@ -775,9 +809,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   /** Explicit account targets may only share credentials with a known matching owner. */
   #belongsToAnotherWebId(issuer: URL, expectedWebId: string | undefined): boolean {
     if (expectedWebId === undefined) return false;
+    if (this.#pendingOwners.has(issuer.href)) {
+      return this.#pendingOwners.get(issuer.href) !== expectedWebId;
+    }
     const settled = this.#settledSessions.get(issuer.href);
     if (settled !== undefined) return settled.webId !== expectedWebId;
-    return this.#sessions.has(issuer.href) && this.#pendingOwners.get(issuer.href) !== expectedWebId;
+    return this.#confirmedOwners.has(issuer.href) && this.#confirmedOwners.get(issuer.href) !== expectedWebId;
   }
 
   /** Drop ownership before aborting so even synchronous abort listeners see the new generation. */
@@ -787,6 +824,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#clearScheduler(href);
     this.#sessions.delete(href);
     this.#settledSessions.delete(href);
+    this.#confirmedOwners.delete(href);
     this.#pendingOwners.delete(href);
     old.abort.abort(new IssuerForgottenError(href));
   }
@@ -852,6 +890,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   /** Arm a timer to fire the proactive refresh at `fireAt` (clamped ≥ now). */
   #armTimer(issuer: URL, scheduler: IssuerScheduler, fireAt: number): void {
     const delay = Math.max(PROACTIVE_MIN_DELAY_MS, fireAt - Date.now());
+    if (scheduler.timer !== undefined) this.#clearTimeout(scheduler.timer);
     scheduler.fireAt = fireAt;
     scheduler.timer = this.#setTimeout(() => {
       scheduler.timer = undefined;
@@ -901,9 +940,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     try {
       const inFlight = this.#sessions.get(issuer.href);
       if (inFlight !== undefined) {
-        const joined = await inFlight;
+        const joined = await inFlight.catch(() => undefined);
         this.#assertGeneration(issuer.href, generation);
-        if (joined !== current && !hasExpired(joined)) return;
+        if (joined === undefined || (joined !== current && !hasExpired(joined))) return;
       }
       // A newer renewal owns its own persistence and rescheduling.
       if (this.#sessions.get(issuer.href) !== inFlight) return;
@@ -956,10 +995,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       scheduler.timer = undefined;
       return;
     }
-    scheduler.timer = this.#setTimeout(() => {
-      scheduler.timer = undefined;
-      void this.#fireProactive(issuer);
-    }, backoff);
+    this.#armTimer(issuer, scheduler, Date.now() + backoff);
   }
 
   /** Subscribe the shared visibility/focus listeners once (first scheduler). */
@@ -1113,13 +1149,18 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * token + non-extractable key and restoring via the refresh grant removes that
    * flash. Equivalent library change described in the task report.
    */
-  async restoreIssuer(issuer: URL): Promise<{ webId: string } | undefined> {
+  async restoreIssuer(issuer: URL): Promise<{ webId: string; ownership: number } | undefined> {
+    const pinGeneration = this.#pinGeneration;
     const generation = this.#generationOf(issuer.href).id;
     if (this.#sessionStore === undefined || this.#sessions.has(issuer.href)) return undefined;
 
     let stored: PersistedSession | undefined;
     try {
-      stored = await this.#sessionStore.get(issuer.href);
+      await this.#mutateStore(async (store) => {
+        if (this.#generationOf(issuer.href).id === generation && !this.#sessions.has(issuer.href)) {
+          stored = await store.get(issuer.href);
+        }
+      });
     } catch {
       return undefined;
     }
@@ -1130,11 +1171,13 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       const session = await this.#begin(
         issuer,
         generation,
-        (signal) => this.#restore(issuer, stored, signal),
+        (signal) => this.#restore(issuer, stored!, signal),
+        stored.webId,
+        stored.webId,
       );
       this.#assertGeneration(issuer.href, generation);
-      this.#pin(issuer);
-      return session.webId === undefined ? undefined : { webId: session.webId };
+      if (this.#pinGeneration === pinGeneration) this.#pin(issuer);
+      return session.webId === undefined ? undefined : { webId: session.webId, ownership: generation };
     } catch (e) {
       // Signed out while restoring: the logout already cleared the store, and
       // a newer login may have written its own entry since.
@@ -1197,14 +1240,18 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async forgetIssuer(issuer: URL): Promise<void> {
     this.#forgetInMemory(issuer.href);
-    this.#pinGeneration++;
-    this.#issuerResolutionAbort.abort(new IssuerForgottenError(issuer.href));
-    this.#issuerResolutionAbort = new AbortController();
+    this.#invalidatePin();
     if (this.#pinnedIssuerHref === undefined || this.#pinnedIssuerHref === issuer.href) {
       this.#issuer = undefined;
       this.#pinnedIssuerHref = undefined;
     }
     await this.#clearPersisted(issuer);
+  }
+
+  /** Clear only the session generation whose profile validation failed. */
+  async forgetIssuerIfOwned(issuer: URL, ownership: number): Promise<void> {
+    if (this.#generationOf(issuer.href).id !== ownership) return;
+    await this.forgetIssuer(issuer);
   }
 
   /**

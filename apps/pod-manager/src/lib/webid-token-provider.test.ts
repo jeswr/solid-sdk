@@ -624,7 +624,7 @@ describe("persisted refresh-token session: restore without a window", () => {
     const reloaded = makeProviderWith(store);
     const restored = await reloaded.restoreIssuer(new URL("https://as.test"));
 
-    expect(restored).toEqual({ webId: WEBID });
+    expect(restored).toMatchObject({ webId: WEBID });
     expect(noPopup).not.toHaveBeenCalled(); // NO window opened
     expect(as.authorizationRequests).toHaveLength(1); // still just the original
     expect(as.tokenRequests.at(-1)?.get("grant_type")).toBe("refresh_token");
@@ -671,7 +671,7 @@ describe("persisted refresh-token session: restore without a window", () => {
     // A SECOND reload restores from the rotated token, still no popup.
     const reloadedAgain = makeProviderWith(store);
     const restored = await reloadedAgain.restoreIssuer(new URL("https://as.test"));
-    expect(restored).toEqual({ webId: WEBID });
+    expect(restored).toMatchObject({ webId: WEBID });
     expect(noPopup).not.toHaveBeenCalled();
   });
 

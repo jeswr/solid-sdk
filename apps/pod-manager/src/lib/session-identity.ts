@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { DatasetCore } from "@rdfjs/types";
 import { resolveIssuers } from "./login-ux";
-import { fetchProfile, readProfile, type PodProfile } from "./profile";
+import { readProfile, type PodProfile } from "./profile";
 import { freshRdf } from "./rdf-read";
 
 /** Reconcile a remembered pointer with the identity actually authenticated on reload. */
@@ -35,24 +35,26 @@ export function assertIssuerAuthority(webId: string, issuer: string, dataset: Da
   throw new WebIdIssuerAuthorityError(webId, issuer);
 }
 
-/** Load the committed profile and clear credentials if a newly claimed identity fails validation. */
+/** Validate the published identity and clear only credentials owned by this operation. */
 export async function loginProfile(
   webId: string,
   issuer: string,
-  profileWebId: string | undefined,
-  provider: { forgetIssuer(issuer: URL): Promise<void> },
+  ownership: number | undefined,
+  provider: { forgetIssuerIfOwned(issuer: URL, ownership: number): Promise<void> },
   fetchImpl?: typeof fetch,
+  isCurrent: () => boolean = () => true,
 ): Promise<PodProfile> {
-  if (webId === profileWebId) return fetchProfile(webId, fetchImpl);
   try {
     const { dataset, url } = await freshRdf(webId, fetchImpl);
-    // A profile used to choose the issuer says nothing about a different claimed WebID.
+    if (!isCurrent()) throw new Error("Superseded profile validation");
     assertIssuerAuthority(webId, issuer, dataset);
     const document = new URL(url);
     document.hash = "";
     return { ...readProfile(webId, dataset), profileDocumentUrl: document.href };
   } catch {
-    await provider.forgetIssuer(new URL(issuer));
+    if (isCurrent() && ownership !== undefined) {
+      await provider.forgetIssuerIfOwned(new URL(issuer), ownership);
+    }
     throw new WebIdIssuerAuthorityError(webId, issuer);
   }
 }

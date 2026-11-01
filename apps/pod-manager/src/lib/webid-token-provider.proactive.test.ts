@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WebIdDPoPTokenProvider,
   type VisibilityLifecycle,
+  type WebIdDPoPTokenProviderOptions,
 } from "./webid-token-provider";
 import {
   createFakeAuthorizationServer,
@@ -86,7 +87,7 @@ interface Harness {
 /** Every provider built this run — torn down in afterEach (see below). */
 const providers: WebIdDPoPTokenProvider[] = [];
 
-function makeProvider(visibility = new FakeVisibility()): Harness {
+function makeProvider(visibility = new FakeVisibility(), options: WebIdDPoPTokenProviderOptions = {}): Harness {
   const getCode = vi.fn((url: URL) => as.authorize(url));
   const provider = new WebIdDPoPTokenProvider(CALLBACK, getCode, async () => WEBID, {
     clientId: CLIENT_ID,
@@ -95,6 +96,7 @@ function makeProvider(visibility = new FakeVisibility()): Harness {
     visibilityLifecycle: visibility,
     setTimeoutFn: (h, ms) => setTimeout(h, ms),
     clearTimeoutFn: (t) => clearTimeout(t),
+    ...options,
   });
   providers.push(provider);
   return { provider, getCode, visibility };
@@ -424,25 +426,92 @@ describe("proactive refresh: failure handling", () => {
     expect(getCode).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after the bounded retry budget (no infinite loop, no popup)", async () => {
+  it("gives up after exactly three proactive retries and leaves no timer", async () => {
     vi.useFakeTimers();
-    const { provider, getCode } = makeProvider();
+    const cycles = settlements();
+    const { provider, getCode, visibility } = makeProvider(undefined, { onProactiveRefreshSettled: cycles.settled });
     await provider.login(ISSUER);
+    let arrive!: () => void;
+    const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let attempts = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === "/token") {
+        attempts++;
+        if (attempts === 1) { arrive(); await released; }
+        throw new TypeError("network down");
+      }
+      return as.fetch(request);
+    });
+    const firstSettled = cycles.next(2);
+    await vi.advanceTimersToNextTimerAsync();
+    await arrived;
+    visibility.show(); // A failed focus join must not consume the owner's retry budget.
+    release();
+    await firstSettled;
+    expect(attempts).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+    for (let index = 1; index < 4; index++) {
+      const settled = cycles.next();
+      await vi.advanceTimersToNextTimerAsync();
+      expect(await settled).toBe("failed");
+      expect(attempts).toBe(index + 1);
+    }
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(attempts).toBe(4);
+    expect(getCode).toHaveBeenCalledTimes(1);
+  });
 
-    // Permanently transient: every token call rejects.
-    const realFetch = as.fetch;
-    vi.stubGlobal("fetch", ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.endsWith("/token")) return Promise.reject(new TypeError("network down"));
-      return realFetch(input, init);
-    }) as typeof fetch);
-
-    await tick(65_000); // attempt 1
-    await tick(60_000); // burn all backoff windows
-    const attempts = refreshGrants().length;
-
-    await tick(10 * 60_000); // long after the budget
-    expect(refreshGrants().length).toBe(attempts); // stopped — bounded
-    expect(getCode).toHaveBeenCalledTimes(1); // never a popup
+  it.each(["forget", "teardown"] as const)("failed proactive joiners do not spend retries or leak timers on %s", async (cleanup) => {
+    vi.useFakeTimers();
+    const cycles = settlements();
+    const { provider, visibility, getCode } = makeProvider(undefined, { onProactiveRefreshSettled: cycles.settled });
+    await provider.login(ISSUER);
+    let arrive!: () => void;
+    const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let attempts = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === "/token") {
+        attempts++;
+        arrive();
+        await released;
+        throw new TypeError("network down");
+      }
+      return as.fetch(request);
+    });
+    const settled = cycles.next(3); // owner plus two focus joins
+    await vi.advanceTimersByTimeAsync(65_000);
+    await arrived;
+    visibility.show();
+    visibility.show();
+    release();
+    await settled;
+    expect(attempts).toBe(1);
+    const timers = vi.getTimerCount();
+    if (cleanup === "forget") await provider.forgetIssuer(ISSUER);
+    else provider.teardown();
+    expect(timers).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(visibility.listenerCount).toBe(0);
+    expect(getCode).toHaveBeenCalledTimes(1);
   });
 });
+
+/** Await complete refresh cycles, including failure handling and timer cleanup. */
+function settlements() {
+  let remaining = 0;
+  let finish: (outcome: string) => void = () => {};
+  return {
+    settled: (_issuer: URL, outcome: string) => { if (--remaining === 0) finish(outcome); },
+    next(count = 1) {
+      remaining = count;
+      return new Promise<string>((resolve) => { finish = resolve; });
+    },
+  };
+}

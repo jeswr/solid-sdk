@@ -51,40 +51,56 @@ describe("issuer authority for the committed identity", () => {
     expect(() => assertIssuerAuthority(BOB, `${ISSUER}?tenant=`, dataset)).toThrow(WebIdIssuerAuthorityError);
   });
 
-  it.each([undefined, ALICE])("validates a delayed claimed profile before publishing issuer-first or switched login (%s)", async (profileWebId) => {
+  it("validates a delayed claimed profile before publication", async () => {
     const arrived = deferred();
     const release = deferred();
-    const provider = { forgetIssuer: vi.fn(async () => {}) };
+    const provider = { forgetIssuerIfOwned: vi.fn(async () => {}) };
     const fetchImpl = vi.fn<typeof fetch>(async () => {
       arrived.resolve();
       await release.promise;
       return turtle(issuerTriple(BOB, "https://unrelated.test/"));
     });
     const publish = vi.fn();
-    const login = loginProfile(BOB, ISSUER, profileWebId, provider, fetchImpl)
+    const login = loginProfile(BOB, ISSUER, 0, provider, fetchImpl)
       .then(publish).catch((e: unknown) => e);
     await arrived.promise;
     expect(publish).not.toHaveBeenCalled();
     release.resolve();
     expect(await login).toBeInstanceOf(WebIdIssuerAuthorityError);
-    expect(provider.forgetIssuer).toHaveBeenCalledWith(new URL(ISSUER));
+    expect(provider.forgetIssuerIfOwned).toHaveBeenCalledWith(new URL(ISSUER), 0);
     expect(publish).not.toHaveBeenCalled();
     expect(fetchImpl.mock.calls[0][0]).toBe(BOB);
   });
 
   it("forgets credentials when the claimed profile cannot be fetched", async () => {
-    const provider = { forgetIssuer: vi.fn(async () => {}) };
-    await expect(loginProfile(BOB, ISSUER, undefined, provider, async () => {
+    const provider = { forgetIssuerIfOwned: vi.fn(async () => {}) };
+    await expect(loginProfile(BOB, ISSUER, 0, provider, async () => {
       throw new Error("offline");
     })).rejects.toThrow(WebIdIssuerAuthorityError);
-    expect(provider.forgetIssuer).toHaveBeenCalledOnce();
+    expect(provider.forgetIssuerIfOwned).toHaveBeenCalledOnce();
   });
 
   it("allows a newly claimed WebID only when its own profile authorizes the issuer", async () => {
-    const provider = { forgetIssuer: vi.fn(async () => {}) };
-    const profile = await loginProfile(BOB, ISSUER, ALICE, provider,
+    const provider = { forgetIssuerIfOwned: vi.fn(async () => {}) };
+    const profile = await loginProfile(BOB, ISSUER, 0, provider,
       async () => turtle(issuerTriple(BOB, `${ISSUER}/`)));
     expect(profile.webId).toBe(BOB);
-    expect(provider.forgetIssuer).not.toHaveBeenCalled();
+    expect(provider.forgetIssuerIfOwned).not.toHaveBeenCalled();
   });
+});
+
+
+it("always validates a matching requested identity against its current issuer authority", async () => {
+  const provider = { forgetIssuerIfOwned: vi.fn(async () => {}) };
+  const arrived = deferred();
+  const release = deferred();
+  const validation = loginProfile(ALICE, ISSUER, 3, provider, async () => {
+    arrived.resolve();
+    await release.promise;
+    return turtle(issuerTriple(ALICE, "https://other.test/"));
+  }).catch((error: unknown) => error);
+  await arrived.promise;
+  release.resolve();
+  expect(await validation).toBeInstanceOf(WebIdIssuerAuthorityError);
+  expect(provider.forgetIssuerIfOwned).toHaveBeenCalledWith(new URL(ISSUER), 3);
 });
