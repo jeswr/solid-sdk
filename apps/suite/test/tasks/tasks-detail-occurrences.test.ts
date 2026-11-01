@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { planComplete } from "../../src/apps/tasks/lib/views/completion";
 import { frameCache } from "./tasks-frame-fixtures";
@@ -42,17 +41,17 @@ describe("moving recurring tasks with completed occurrences", () => {
     const offset = pod.mutations().length;
     const moving = cache.moveTaskToProject(original, target);
     const optimistic = cache.getSnapshot().views.find((view) => view.title === "Recurring task");
-    for (const copy of copies)
+    for (const copy of [...copies, openCopy])
       expect(cache.getSnapshot().views.find((view) => view.url === copy.url)?.derivedFrom).toBe(
         optimistic?.id,
       );
     const moved = await moving;
     if (!moved) throw new Error("Missing moved task");
-    for (const [index, copy] of copies.entries()) {
+    for (const [index, copy] of [...copies, openCopy].entries()) {
       const saved = await store.readTask(copy.url);
       expect(saved.task.clonedFrom).toBe(moved.task.id);
       expect(saved.task.parent).toBe(index === 0 ? moved.task.id : undefined);
-      expect(saved.task.state).toBe("closed");
+      expect(saved.task.state).toBe(copy.task.state);
       expect(saved.task.endedAt).toEqual(copy.task.endedAt);
       expect(cache.getSnapshot().views.find((view) => view.url === copy.url)?.derivedFrom).toBe(
         moved.task.id,
@@ -69,8 +68,40 @@ describe("moving recurring tasks with completed occurrences", () => {
           ?.headers.get("If-Match"),
       ).toBe(copy.etag);
     }
-    expect((await store.readTask(openCopy.url)).task.clonedFrom).toBe(original.task.id);
     expect(planComplete(moved, cache.getSnapshot().views, new Date())).toEqual({ kind: "close" });
+    expect(await cache.completeTask(moved)).toEqual({ kind: "close" });
+    expect((await store.readTask(moved.url)).task.state).toBe("closed");
+  });
+
+  it("keeps a reopened occurrence linked through moving and recompleting the original", async () => {
+    const { pod, cache, store, original, copies, target } = await setup();
+    const copy = copies[1];
+    if (!copy) throw new Error("Missing occurrence");
+    const reopened = await cache.updateTask(copy, (task) => {
+      task.state = "open";
+      task.endedAt = undefined;
+    });
+    if (!reopened) throw new Error("Missing reopened occurrence");
+    const moving = cache.moveTaskToProject(original, target);
+    const optimistic = cache.getSnapshot().views.find((view) => view.title === "Recurring task");
+    expect(cache.getSnapshot().views.find((view) => view.url === copy.url)?.derivedFrom).toBe(
+      optimistic?.id,
+    );
+    const moved = await moving;
+    if (!moved) throw new Error("Missing moved task");
+    expect(pod.files.has(original.url)).toBe(false);
+    expect((await store.readTask(copy.url)).task).toMatchObject({
+      state: "open",
+      clonedFrom: moved.task.id,
+      endedAt: undefined,
+    });
+    const cached = Object.values(cache.getSnapshot().tasks)
+      .flatMap((load) => load.items)
+      .find((item) => item.url === copy.url);
+    if (!cached) throw new Error("Missing cached occurrence");
+    expect(await cache.completeTask(cached)).toEqual({ kind: "close" });
+    expect((await store.readTask(copy.url)).task.clonedFrom).toBe(moved.task.id);
+    // Both closed occurrences now count towards the moved original's finite recurrence.
     expect(await cache.completeTask(moved)).toEqual({ kind: "close" });
     expect((await store.readTask(moved.url)).task.state).toBe("closed");
   });

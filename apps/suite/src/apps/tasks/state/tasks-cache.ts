@@ -546,6 +546,7 @@ export class TasksCache {
   ensureLabels(
     project: StoredProject,
     names: readonly string[],
+    onRetry?: () => void,
   ): Promise<StoredProject | undefined> {
     const current = this.baseline.projects.find((item) => item.url === project.url);
     if (!this.pending.length && current && !missingLabels(current, names).length)
@@ -558,7 +559,7 @@ export class TasksCache {
         tracker.defineCategory("Label", name, undefined, source?.color);
       }
     };
-    return this.updateProject(project, define);
+    return this.updateProject(project, define, onRetry);
   }
   updateTask(
     item: StoredTask,
@@ -607,11 +608,7 @@ export class TasksCache {
       for (const project of state.projects)
         for (const child of state.tasks[project.url]?.items ?? []) {
           const saved = confirmed ? operation?.references.get(child.url) : undefined;
-          if (
-            saved ||
-            child.task.parent === item.task.id ||
-            (child.task.state === "closed" && child.task.clonedFrom === item.task.id)
-          )
+          if (saved || child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
             next = replaceTask(
               next,
               project.url,
@@ -619,8 +616,7 @@ export class TasksCache {
               saved ??
                 changeTask(child, (task) => {
                   if (task.parent === item.task.id) task.parent = moved.task.id;
-                  if (task.state === "closed" && task.clonedFrom === item.task.id)
-                    task.clonedFrom = moved.task.id;
+                  if (task.clonedFrom === item.task.id) task.clonedFrom = moved.task.id;
                 }),
             );
         }
@@ -851,6 +847,13 @@ export class TasksCache {
     return run(false);
   }
   createProject(title: string): Promise<StoredProject | undefined> {
+    return this.prepareProjectCreate(title)();
+  }
+  /** Retain project ownership and its reservation when a composite submission retries. */
+  prepareProjectCreate(
+    title: string,
+    onRetry?: () => void,
+  ): () => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
     const optimistic = { url, tracker, dataset, etag: null };
@@ -871,12 +874,28 @@ export class TasksCache {
                 });
           return { result: project, commit: (state) => replaceProject(state, project) };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ?? (() => void run()),
         [url],
       );
-    return attempt();
+    let attempted = false;
+    let saved: StoredProject | undefined;
+    let running: Promise<StoredProject | undefined> | undefined;
+    const run = (): Promise<StoredProject | undefined> => {
+      if (saved) return Promise.resolve(saved);
+      if (running) return running;
+      const retry = attempted;
+      attempted = true;
+      running = attempt(retry)
+        .then((project) => {
+          saved = project;
+          return project;
+        })
+        .finally(() => {
+          running = undefined;
+        });
+      return running;
+    };
+    return run;
   }
   updateProject(
     project: StoredProject,

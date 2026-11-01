@@ -16,7 +16,12 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@jeswr/suite-ui";
-import { DateTimeField, type DateTimeValue, RecurrenceEditor } from "@jeswr/suite-ui/date-time";
+import {
+  DateTimeField,
+  type DateTimeValue,
+  parseDateTime,
+  RecurrenceEditor,
+} from "@jeswr/suite-ui/date-time";
 import { Flag, Repeat2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail/recurrence-map";
@@ -44,27 +49,32 @@ function CommitDateField({
 }) {
   const [draft, setDraft] = useState(value);
   const [referenceDate, setReferenceDate] = useState(() => new Date());
-  const editing = useRef(false);
   const dirty = useRef(false);
   const signature = JSON.stringify(value);
   useEffect(() => {
     if (!dirty.current) setDraft(JSON.parse(signature));
   }, [signature]);
   const commit = (form: HTMLFormElement) => {
-    editing.current = false;
-    if (!dirty.current || !form.checkValidity()) return;
+    const input = form.querySelector("input");
+    if (!dirty.current || !input) return;
+    // A focused draft may span midnight; resolve its raw phrase against the commit clock too.
+    const parsed = parseDateTime(input.value, "en-GB", new Date());
+    input.setCustomValidity(parsed.status === "invalid" ? parsed.message : "");
+    if (parsed.status === "invalid" || !form.checkValidity()) return;
+    const next = parsed.status === "valid" ? parsed.value : null;
     dirty.current = false;
-    if (JSON.stringify(draft) !== signature) onCommit(draft);
+    setDraft(next);
+    if (JSON.stringify(next) !== signature) onCommit(next);
   };
   return (
     <form
       className="tsk-detail-date"
       onInput={() => {
         dirty.current = true;
+        setReferenceDate(new Date());
       }}
       onFocus={() => {
-        if (!editing.current) setReferenceDate(new Date());
-        editing.current = true;
+        setReferenceDate(new Date());
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) commit(event.currentTarget);

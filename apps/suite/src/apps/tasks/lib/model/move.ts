@@ -99,8 +99,7 @@ export class TaskMove {
       const intended = new Store([...original.dataset]);
       const task = new TaskItem(original.task.id, intended, DataFactory);
       if (task.parent === this.source.task.id) task.parent = `${this.destination.url}#it`;
-      if (task.state === "closed" && task.clonedFrom === this.source.task.id)
-        task.clonedFrom = `${this.destination.url}#it`;
+      if (task.clonedFrom === this.source.task.id) task.clonedFrom = `${this.destination.url}#it`;
       task.modified = this.modified;
       return { original, intended };
     });

@@ -404,7 +404,7 @@ describe("detail edits", () => {
   it.each([
     "Due date",
     "Custom reminder",
-  ])("refreshes the clock for an idle %s edit", async (label) => {
+  ])("refreshes the clock for a %s edit that stays focused across midnight", async (label) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-01T10:00:00Z"));
     const { parent, store } = await setup();
@@ -424,13 +424,13 @@ describe("detail edits", () => {
       if (!custom) throw new Error("Missing Custom reminder");
       await click(custom);
     }
-    vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
     const fieldLabel = [...document.querySelectorAll("label")].find(
       (element) => element.textContent === label,
     );
     const field = fieldLabel && document.getElementById(fieldLabel.htmlFor);
     if (!(field instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
     await act(() => field.focus());
+    vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
     await act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
         field,
@@ -438,11 +438,25 @@ describe("detail edits", () => {
       );
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    expect(field.closest("form")?.textContent).toContain("3 November 2026");
     await act(() => field.blur());
     await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
     const task = (await store.readTask(parent.url)).task;
     if (label === "Due date") expect(task.allDay).toBe("2026-11-03");
     else expect(task.reminders[0]?.time).toEqual(new Date(2026, 10, 3, 9));
+  });
+  it("interprets a relative due-date draft at commit time after midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T23:59:00Z"));
+    const { parent, store } = await setup();
+    await mount(h(Detail, { url: parent.url }));
+    const field = input("Due date");
+    await act(() => field.focus());
+    await type(field, "tomorrow");
+    vi.setSystemTime(new Date("2026-11-02T00:01:00Z"));
+    await act(() => field.blur());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect((await store.readTask(parent.url)).task.allDay).toBe("2026-11-03");
   });
   it("saves yearly recurrence and humanises the date-only marker after a zone change", async () => {
     const { parent, store } = await setup();

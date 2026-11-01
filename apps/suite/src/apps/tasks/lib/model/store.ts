@@ -402,17 +402,14 @@ export class TaskStore {
       item,
       { url, dataset },
       async () => {
-        // Children and completed occurrences may remain in other projects.
+        // Children and occurrences (including reopened copies) may remain in other projects.
         const projects = new Map(
           [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
         );
         const references = new Map<string, StoredTask>();
         for (const project of projects.values())
           for (const child of await this.listTasks(project.tracker.stateStore as string))
-            if (
-              child.task.parent === item.task.id ||
-              (child.task.state === "closed" && child.task.clonedFrom === item.task.id)
-            )
+            if (child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
               references.set(child.url, child);
         return [...references.values()];
       },
