@@ -42,6 +42,7 @@ it("replays a prepared CSS pod with --base using anonymous reads and exact expec
   const { stdout } = await exec(process.execPath, [fixture], { cwd, timeout: 120000 });
   expect(stdout).toContain("READ-ONLY PASS:");
   expect(stdout).toContain("UNPREPARED PASS:");
+  expect(stdout).toContain("ADDITIONAL BREACH PASS:");
   expect(stdout).toContain("MISMATCH PASS:");
 }, 310000);
 

@@ -8,17 +8,17 @@ import { type AuditFetch, runAuditCli } from "../dist/index.js";
 
 const usage = "Usage: pnpm --filter @jeswr/agent-audit demo [--base <prepared-pod-root/>]";
 const scenarios = [
-  "approved",
-  "forged-approval",
-  "out-of-scope",
-  "revoked-at-time",
-  "missing-prov",
+  { name: "approved", breaches: [] },
+  { name: "forged-approval", breaches: ["forged-approval"] },
+  { name: "out-of-scope", breaches: ["out-of-scope"] },
+  { name: "revoked-at-time", breaches: ["revoked-at-time"] },
+  { name: "missing-prov", breaches: ["missing-prov"] },
 ];
 
-/** Public, read-only replay; require the named breach, not just any nonzero exit. */
+/** Public, read-only replay; require each case's exact breach set and exit code. */
 export async function replay(base: string, io: AuditFetch, print: (line: string) => void) {
   let ok = true;
-  for (const name of scenarios) {
+  for (const { name, breaches: expectedBreaches } of scenarios) {
     for (let number = 1; number <= (name === "approved" ? 2 : 1); number++) {
       const proposal = new URL(`demos/d3/${name}/agent/proposals/${number}.ttl`, base).href;
       print(`\nCASE ${name}${name === "approved" ? ` ${number}` : ""}: audit ${proposal}`);
@@ -31,8 +31,13 @@ export async function replay(base: string, io: AuditFetch, print: (line: string)
         },
         { fetch: io },
       );
+      const breaches = lines
+        .filter((line) => line.startsWith("BREACH "))
+        .map((line) => line.slice("BREACH ".length));
       const expected =
-        name === "approved" ? result === 0 : result === 1 && lines.includes(`BREACH ${name}`);
+        result === (expectedBreaches.length === 0 ? 0 : 1) &&
+        breaches.length === expectedBreaches.length &&
+        expectedBreaches.every((breach) => breaches.includes(breach));
       ok &&= expected;
       print(`${expected ? "EXPECTED" : "UNEXPECTED"} ${name}: audit exit ${result}`);
     }

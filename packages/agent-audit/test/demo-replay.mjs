@@ -65,6 +65,34 @@ try {
   if ((await runDemo(["--base", new URL("unprepared/", account.root).href], () => {})) !== 1)
     throw new Error("Unprepared base unexpectedly passed");
   console.log("UNPREPARED PASS: missing walkthrough fails without provisioning or login");
+  const approval = new URL("demos/d3/out-of-scope/agent/approvals/1.trig", account.root).href;
+  for (const [status, additional] of [
+    [403, "unwalkable"],
+    [404, "forged-approval"],
+  ]) {
+    const failedLines = [];
+    const result = await replay(
+      account.root,
+      (input, init) =>
+        String(input) === approval
+          ? Promise.resolve(new Response(null, { status }))
+          : css.anonymous(input, init),
+      (line) => failedLines.push(line),
+    );
+    if (
+      !failedLines.includes("BREACH out-of-scope") ||
+      !failedLines.includes(`BREACH ${additional}`)
+    )
+      throw new Error("Unreadable approval did not produce the expected additional breach");
+    if (
+      result !== 1 ||
+      !failedLines.includes("UNEXPECTED out-of-scope: audit exit 1") ||
+      !failedLines.includes("D-3 FAIL: unexpected audit result") ||
+      failedLines.some((line) => line.startsWith("D-3 PASS"))
+    )
+      throw new Error("Additional breach accepted alongside out-of-scope");
+  }
+  console.log("ADDITIONAL BREACH PASS: unreadable and missing approvals fail the walkthrough");
   // Replace missing PROV with unrelated, corrupt evidence: its different breach must fail the demo.
   const missing = new URL("demos/d3/missing-prov/agent/audit/3.ttl", account.root).href;
   const intact = new URL("demos/d3/approved/agent/audit/3.ttl", account.root).href;
