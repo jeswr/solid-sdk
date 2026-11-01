@@ -1,0 +1,38 @@
+// AUTHORED-BY Codex GPT-6
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { HomeHeader, type HomeHeaderProps } from "../src/apps/home/components/home-header";
+
+const base: HomeHeaderProps = {
+  displayName: "Alice Wilder",
+  items: [],
+  used: 1024,
+  status: "ready",
+  now: Date.parse("2026-11-01T09:00:00Z"),
+  onRetry: () => {},
+};
+const render = (props: Partial<HomeHeaderProps> = {}) =>
+  renderToStaticMarkup(createElement(HomeHeader, { ...base, ...props }));
+
+describe("Home header access seam", () => {
+  it("uses interim copy while access counts are unavailable", () => {
+    const html = render();
+    expect(html).toContain("See who has access");
+    expect(html).toContain("Checking who has access…");
+    expect(html).toContain('href="/permissions"');
+    expect(html).toContain("No changes yet");
+    expect(html).toContain("Your storage doesn&#x27;t report a limit");
+  });
+  it("pluralises app, person and public-item counts", () => {
+    const single = render({ access: { apps: 1, people: 1, publicItems: 1 } });
+    expect(single).toContain("1 app and 1 person have access");
+    expect(single).toContain("Anyone with the link can see 1 item");
+    const multiple = render({ access: { apps: 2, people: 3, publicItems: 4 } });
+    expect(multiple).toContain("2 apps and 3 people have access");
+    expect(multiple).toContain("Anyone with the link can see 4 items");
+    expect(render({ access: { apps: 0, people: 0, publicItems: 0 } })).not.toContain(
+      "Anyone with the link",
+    );
+  });
+});

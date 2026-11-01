@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * Sidebar shared by /home, /permissions and /connect (03-home-permissions §2.1):
@@ -6,10 +7,11 @@
  * same list is the drawer below 1024px.
  */
 
+import { CountBadge } from "@jeswr/suite-ui";
 import { Plug, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DOMAINS } from "../lib/model/domains";
+import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
 import { DomainIcon } from "./domain-icon";
 
 /** The route for a domain; Personal is the /home landing page. */
@@ -31,21 +33,26 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
     <div className="hm-sidebar">
       <nav aria-label="Your data">
         <ul>
-          {DOMAINS.map((domain) => (
-            <li key={domain.id}>
-              <Link
-                href={domainHref(domain.id)}
-                className="hm-nav-item"
-                aria-current={active === domain.id ? "page" : undefined}
-              >
-                <DomainIcon name={domain.icon} />
-                <span className="hm-nav-label">{domain.label}</span>
-                {counts?.has(domain.id) ? (
-                  <span className="hm-nav-count">{counts.get(domain.id)}</span>
-                ) : null}
-              </Link>
-            </li>
-          ))}
+          {[...DOMAINS, ...((counts?.get("other") ?? 0) > 0 ? [UNCATEGORISED] : [])].map(
+            (domain) => (
+              <li key={domain.id}>
+                <Link
+                  href={domainHref(domain.id)}
+                  className="hm-nav-item"
+                  aria-current={active === domain.id ? "page" : undefined}
+                >
+                  <DomainIcon name={domain.icon} />
+                  <span className="hm-nav-label">{domain.label}</span>
+                  {counts?.has(domain.id) ? (
+                    <CountBadge
+                      count={counts.get(domain.id) as number}
+                      label={`${domain.label} items`}
+                    />
+                  ) : null}
+                </Link>
+              </li>
+            ),
+          )}
         </ul>
       </nav>
       <nav aria-label="Manage">

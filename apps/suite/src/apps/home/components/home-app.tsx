@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * The frame for Home, Permissions and Connect services (03-home-permissions).
@@ -10,6 +11,7 @@ import { Toaster } from "@jeswr/suite-ui";
 import { createContext, type ReactNode, useContext } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { useDomainItems } from "../state/use-domain-items";
 import { HomeSidebar } from "./home-sidebar";
 
 const HomeSessionContext = createContext<PodSession | undefined>(undefined);
@@ -38,9 +40,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
+  return <HomeFrame session={state.session}>{children}</HomeFrame>;
+}
+
+function HomeFrame({ session, children }: { session: PodSession; children: ReactNode }) {
+  const { counts } = useDomainItems(session);
   return (
-    <HomeSessionContext value={state.session}>
-      <SuiteFrame app="home" sidebar={<HomeSidebar />}>
+    <HomeSessionContext value={session}>
+      <SuiteFrame app="home" sidebar={<HomeSidebar counts={counts} />}>
         {children}
       </SuiteFrame>
     </HomeSessionContext>

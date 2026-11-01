@@ -83,7 +83,9 @@ export async function discoverDomainItems(
 ): Promise<DomainItems> {
   const category =
     typeof domain === "string"
-      ? [...DOMAINS, UNCATEGORISED].find((item) => item.id === domain)
+      ? domain === "all"
+        ? { ...UNCATEGORISED, id: "all" }
+        : [...DOMAINS, UNCATEGORISED].find((item) => item.id === domain)
       : domain;
   if (!category) throw new TypeError("Unknown Home domain");
   const { storage, fetch, webId } = options;
@@ -126,7 +128,8 @@ export async function discoverDomainItems(
   };
 
   for (const location of options.typeIndex ?? []) {
-    if (category.id !== "other" && !category.classes.includes(location.forClass)) continue;
+    if (!["all", "other"].includes(category.id) && !category.classes.includes(location.forClass))
+      continue;
     const files =
       classificationForType("files").dataType?.classes.includes(location.forClass) === true;
     if (location.container)
@@ -141,8 +144,9 @@ export async function discoverDomainItems(
           : storage,
       });
   }
-  const known =
-    category.id === "other" ? DOMAINS.flatMap((item) => item.dataTypes) : category.dataTypes;
+  const known = ["all", "other"].includes(category.id)
+    ? DOMAINS.flatMap((item) => item.dataTypes)
+    : category.dataTypes;
   for (const type of known) {
     if (type.container)
       queue.push({
@@ -158,7 +162,7 @@ export async function discoverDomainItems(
     files: false,
     parent: storage,
   });
-  if (category.id === "personal" && webId) {
+  if (["all", "personal"].includes(category.id) && webId) {
     const documentUrl = resourceUrl(webId);
     if (options.profile) {
       addDataset(options.profile, documentUrl, storage, null);
@@ -248,7 +252,8 @@ export async function discoverDomainItems(
     // A direct registration may have been read before its container listing.
     const modified = item.modified ?? listedModified.get(item.url);
     if (modified) item.modified = modified;
-    if (item.domain.id === category.id) unique.set(`${item.url}|${item.dataType?.id}`, item);
+    if (category.id === "all" || item.domain.id === category.id)
+      unique.set(`${item.url}|${item.dataType?.id}`, item);
   }
   let fileCount = 0;
   result.items = sortItems([...unique.values()]).filter(
