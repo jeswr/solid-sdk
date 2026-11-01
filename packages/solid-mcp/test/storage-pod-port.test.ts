@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RdfLimitError } from "../src/bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
@@ -228,6 +230,98 @@ it("smokes sparq LWS through the shared storage wire fixtures, including all 150
   expect(calls.filter((r) => r.url.includes("?page="))).toHaveLength(2);
   expect(calls.every((r) => r.redirect === "manual")).toBe(true);
   expect(calls.every((r) => !r.headers.has("authorization"))).toBe(true);
+});
+
+it.each([
+  "pod_list",
+  "solid_list",
+  "resources/list",
+])("%s negotiates LWS-only container representations before paginating", async (operation) => {
+  const actual =
+    await vi.importActual<typeof import("@jeswr/storage-client")>("@jeswr/storage-client");
+  vi.mocked(createPodClient).mockImplementationOnce(actual.createPodClient);
+  const description = `${ROOT}storage-description`;
+  const next = `${ROOT}?page=2`;
+  const other = `${ROOT}other.txt`;
+  const calls: Request[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    calls.push(request);
+    if (request.method === "HEAD" && request.url === ROOT)
+      return new Response(null, {
+        headers: { link: `<${description}>; rel="https://www.w3.org/ns/lws#storage"` },
+      });
+    if (request.method === "GET" && request.url === description)
+      return Response.json(
+        {
+          "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
+          id: description,
+          type: "Storage",
+          service: [{ type: "StorageRoot", serviceEndpoint: ROOT }],
+        },
+        { headers: { "content-type": "application/lws+cid" } },
+      );
+    if (request.method === "GET" && [ROOT, next].includes(request.url)) {
+      const acceptsLws = request.headers
+        .get("accept")
+        ?.split(",")
+        .some((range) => {
+          const [type, quality] = range.trim().split(/;\s*q=/u);
+          return (
+            ["application/lws+json", "application/*", "*/*"].includes(type ?? "") &&
+            Number(quality ?? "1") > 0
+          );
+        });
+      if (!acceptsLws) return new Response(null, { status: 406 });
+      const first = request.url === ROOT;
+      return Response.json(
+        {
+          "@context": "https://www.w3.org/ns/lws/v1",
+          id: ROOT,
+          type: "Container",
+          totalItems: 2,
+          items: [{ id: first ? FILE : other, type: "DataResource", format: "text/plain" }],
+        },
+        {
+          headers: {
+            "content-type": "application/lws+json",
+            link: `<${ROOT}>; rel="first"${first ? `, <${next}>; rel="next"` : ""}`,
+          },
+        },
+      );
+    }
+    if (request.method === "GET" && [FILE, other].includes(request.url))
+      return new Response("note", { headers: { "content-type": "text/plain" } });
+    throw new Error("Unexpected LWS negotiation request");
+  };
+  const pod = createStoragePodPort({ fetch, podRoot: ROOT });
+  const server = createSolidMcpServer({ pod });
+  const client = new Client({ name: "lws-negotiation", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    if (operation === "resources/list") {
+      expect((await client.listResources()).resources).toEqual([
+        expect.objectContaining({ uri: FILE, name: "note.txt", mimeType: "text/plain" }),
+        expect.objectContaining({ uri: other, name: "other.txt", mimeType: "text/plain" }),
+      ]);
+    } else {
+      const result = await client.callTool({ name: operation, arguments: { container: ROOT } });
+      expect(result.isError).toBeFalsy();
+      const content = result.content as Array<{ text: string }>;
+      expect(JSON.parse(content[0]?.text ?? "")).toEqual([
+        expect.objectContaining({ url: FILE, mimeType: "text/plain" }),
+        expect.objectContaining({ url: other, mimeType: "text/plain" }),
+      ]);
+    }
+    expect(
+      calls.filter((request) => request.method === "GET" && request.url === ROOT),
+    ).toHaveLength(2);
+    expect(calls.filter((request) => request.url === next)).toHaveLength(1);
+  } finally {
+    await client.close();
+    await server.close();
+  }
 });
 
 it("gives storage read decorators complete bodies for fetch and listing authorization", async () => {

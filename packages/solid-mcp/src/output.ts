@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** The sole projection from caller-authorized PodPort data to public pod output. */
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
@@ -26,7 +27,7 @@ import {
 
 const LDP = "http://www.w3.org/ns/ldp#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+const CONTAINER_ACCEPT = "text/turtle, application/ld+json;q=0.9, application/lws+json;q=0.8";
 
 class ListedResource extends TermWrapper {
   set name(value: string) {
@@ -124,7 +125,7 @@ export class PodOutput {
     return withPodReadLimits(async () => {
       const target = requirePodScopedUrl({ podRoot: this.pod.root }, url);
       if (!this.authorized.has(documentUrl(target)))
-        await this.read(target, { accept: RDF_ACCEPT });
+        await this.read(target, { accept: CONTAINER_ACCEPT });
       const children: PodChild[] = [];
       for (const entry of await this.pod.list(target)) {
         const scoped = podScopedUrlOrUndefined({ podRoot: this.pod.root }, entry.url);
