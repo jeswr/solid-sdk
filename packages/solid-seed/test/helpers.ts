@@ -41,6 +41,8 @@ export class MemoryPod implements SeedTarget {
   deleteAclWithResource = false;
   /** Overwrite despite `If-None-Match: *`, answering 204, as a non-conforming server might. */
   ignoreIfNoneMatch = false;
+  /** Answer 201 to every successful PUT, even an overwrite. */
+  alwaysCreated = false;
   /** Paths whose DELETE is refused with the given status. */
   readonly deleteFailures = new Map<string, number>();
   #failure?: { path: string; remaining: number; status: number; skip: number; partial: boolean };
@@ -93,7 +95,17 @@ export class MemoryPod implements SeedTarget {
         }
         headers.set("etag", this.etag(request.url));
         this.afterGet?.(request.url);
-        return new Response(request.method === "HEAD" ? null : stored.body, {
+        let body = stored.body;
+        if (request.url.endsWith("/")) {
+          // List direct children, as LDP does.
+          for (const child of this.resources.keys()) {
+            const rest = child.startsWith(request.url) ? child.slice(request.url.length) : "";
+            if (rest !== "" && !rest.endsWith(".acl") && /^[^/]+\/?$/.test(rest)) {
+              body += `\n<${request.url}> <http://www.w3.org/ns/ldp#contains> <${child}> .`;
+            }
+          }
+        }
+        return new Response(request.method === "HEAD" ? null : body, {
           status: 200,
           headers,
         });
@@ -101,6 +113,13 @@ export class MemoryPod implements SeedTarget {
       if (request.method === "DELETE") {
         const refused = this.deleteFailures.get(path);
         if (refused !== undefined) return new Response("delete refused", { status: refused });
+        if (request.url.endsWith("/")) {
+          const children = [...this.resources.keys()].filter(
+            (child) =>
+              child !== request.url && child.startsWith(request.url) && !child.endsWith(".acl"),
+          );
+          if (children.length > 0) return new Response("container not empty", { status: 409 });
+        }
         const existed = this.resources.delete(request.url);
         if (existed && this.deleteAclWithResource) this.resources.delete(`${request.url}.acl`);
         return new Response(null, { status: existed ? 205 : 404 });
@@ -121,7 +140,7 @@ export class MemoryPod implements SeedTarget {
           body,
           contentType: request.headers.get("content-type") ?? "",
         });
-        return new Response(null, { status: existed ? 204 : 201 });
+        return new Response(null, { status: existed && !this.alwaysCreated ? 204 : 201 });
       }
       return new Response("method not allowed", { status: 405 });
     };

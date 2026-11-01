@@ -923,6 +923,57 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(grantsPublicRead(fresh.resources.get(acl)?.body, acl)).toBe(true);
   });
 
+  const containerLayout = (pod: MemoryPod, publicRead: boolean): PodLayout => ({
+    pods: [
+      {
+        account: { target: pod },
+        resources: [
+          {
+            path: "/c/",
+            source: { body: "<> a <https://example.org/Box> ." },
+            access: { publicRead },
+          },
+        ],
+      },
+    ],
+  });
+
+  it("a 201 does not prove a container new: grants apply only over an empty container", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: containerLayout(pod, false) });
+    pod.resources.set("https://pod.example/c/secret", {
+      body: "private",
+      contentType: "text/plain",
+    });
+    // A server that ignores If-None-Match and answers 201 to the overwrite.
+    pod.ignoreIfNoneMatch = true;
+    pod.alwaysCreated = true;
+    const error = await seedPods({ layout: containerLayout(pod, true), mode: "replace" }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(String((error as SeedError).cause)).toMatch(/not confirmed empty/);
+    const acl = "https://pod.example/c/.acl";
+    expect(grantsPublicRead(pod.resources.get(acl)?.body, acl)).toBe(false);
+    expect(pod.resources.get("https://pod.example/c/secret")?.body).toBe("private");
+  });
+
+  it("replace of an existing container writes its owner-only ACL only over the ACL it checked", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.containerPutConflict = true;
+    await seedPods({ layout: containerLayout(pod, true) });
+    const acl = "https://pod.example/c/.acl";
+    pod.afterGet = (url) => {
+      if (url === acl) {
+        pod.afterGet = undefined;
+        pod.resources.set(acl, { body: "# narrowed elsewhere\n", contentType: "text/turtle" });
+      }
+    };
+    await expect(
+      seedPods({ layout: containerLayout(pod, true), mode: "replace" }),
+    ).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.get(acl)?.body).toBe("# narrowed elsewhere\n");
+  });
+
   it("ensure on an expander group never broadens, and checks every member before writing", async () => {
     const pod = new MemoryPod("https://pod.example");
     const group = (publicRead: boolean, body: string): PodLayout => ({

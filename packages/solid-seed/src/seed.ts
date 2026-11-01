@@ -529,6 +529,41 @@ async function assertNarrowing(
   return etag;
 }
 
+const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
+
+/**
+ * Refuse unless the container lists no members, read as Turtle (bounded, as for
+ * an ACL). Anything that cannot be read that way counts as non-empty.
+ */
+async function assertEmptyContainer(target: SeedTarget, url: string): Promise<void> {
+  const response = await podFetch(target, url, {
+    method: "GET",
+    headers: { accept: "text/turtle" },
+  });
+  const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  let members: number | undefined;
+  if (response.ok && type === "text/turtle") {
+    const text = await boundedText(response, MAX_ACL_BYTES);
+    try {
+      members =
+        text === undefined
+          ? undefined
+          : new Parser({ format: "text/turtle", baseIRI: url })
+              .parse(text)
+              .filter((q) => q.subject.value === url && q.predicate.value === LDP_CONTAINS).length;
+    } catch {
+      members = undefined;
+    }
+  } else {
+    await response.body?.cancel();
+  }
+  if (members !== 0) {
+    throw new Error(
+      `${url} is not confirmed empty, so its acl:default grants would reach children this run did not write`,
+    );
+  }
+}
+
 /**
  * Confirm the server governs `url` with a WAC ACL at `${url}.acl` (`Link: rel="acl"`).
  * The ACL body names that document, and a server that uses another location (ACP's
@@ -616,7 +651,7 @@ async function writeResource(
  * run created the placeholder, the resource is removed and then its ACL (see
  * {@link removeCreated}), so a re-run starts again. `ensure` on an existing
  * resource leaves the data alone and reconciles the final ACL only when that
- * narrows access (see {@link grantsWithin}); broadening needs `replace`. A container's
+ * narrows access (see {@link assertNarrowing}); broadening needs `replace`. A container's
  * description is skipped when the server answers 409 to a PUT on an existing
  * container (CSS refuses it and ignores container bodies on creation).
  * A process that dies mid-way leaves the placeholder under the owner-only ACL;
@@ -666,12 +701,15 @@ async function writeProtected(
     // An existing container's acl:default reaches children this run did not
     // write, so replace may not broaden it either. Checked before the owner-only
     // ACL overwrites the current one.
+    let ownerCondition: boolean | { ifMatch: string } = mode === "create";
     if (!createdPlaceholder && url.endsWith("/")) {
-      await assertNarrowing(
+      const etag = await assertNarrowing(
         pod.target,
         resource,
         "replace of an existing container (its acl:default would reach children this run did not write)",
       );
+      // Narrowed elsewhere since the check? Then the owner-only write fails (412).
+      if (etag !== undefined) ownerCondition = { ifMatch: etag };
     }
     // In create mode a stale ACL fails the seed (If-None-Match) rather than being
     // overwritten. A PUT that errors may still have landed, so cleanup tries it,
@@ -683,7 +721,7 @@ async function writeProtected(
         aclUrl,
         resource.ownerAclBody as string,
         DEFAULT_CONTENT_TYPE,
-        mode === "create",
+        ownerCondition,
       );
     } catch (error) {
       if (error instanceof HttpFailure && error.status === 412) aclAttempted = false;
@@ -697,7 +735,13 @@ async function writeProtected(
       if (!(url.endsWith("/") && error instanceof HttpFailure && error.status === 409)) throw error;
     }
     // The grants go on only now that the data is in place (none to add for owner-only access).
-    if (resource.aclBody !== resource.ownerAclBody) await writeAcl(pod, resource, false);
+    if (resource.aclBody !== resource.ownerAclBody) {
+      // A 201 does not prove a container is new (a server may ignore If-None-Match,
+      // and another writer could add a child before the owner-only ACL landed), and
+      // its acl:default would reach every child. Grant only over an empty container.
+      if (createdPlaceholder && url.endsWith("/")) await assertEmptyContainer(pod.target, url);
+      await writeAcl(pod, resource, false);
+    }
     return outcome;
   } catch (error) {
     // A replacement that fails keeps its owner-only ACL over whichever data is there.
@@ -761,8 +805,9 @@ async function processGroup(
       .map((document) => document.path);
     if (mode === "ensure" && existing.length === documents.length) {
       // As for a single resource, ensure never broadens access to content it did
-      // not write; every member is checked before any ACL is written, so the
-      // group converges entirely or not at all.
+      // not write; every member is checked before any ACL is written, so a
+      // broadening is refused before any change. (A write that then fails, such as
+      // a 412 from a concurrent edit, can leave earlier members narrowed.)
       const etags = new Map<MaterializedResource, string | undefined>();
       for (const resource of action.resources) {
         try {

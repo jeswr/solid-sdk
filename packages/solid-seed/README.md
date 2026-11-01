@@ -50,12 +50,16 @@ The main entry contains no Node built-ins.
   narrower only when it holds every desired statement and the authorizations it shares with the
   desired ACL carry nothing but grant statements (`rdf:type`, `acl:accessTo`, `acl:default`,
   `acl:agent`, `acl:agentClass`, `acl:agentGroup`, `acl:mode`); a restriction such as `acl:origin`
-  would be lost, so it refuses. The rewrite is conditional on the ETag it checked. In a group,
-  every member is checked before any ACL is written. For an expander group it first requires every primary resource and requested
+  would be lost, so it refuses. The rewrite is conditional (`If-Match`) on the ETag it checked;
+  a server that sends no ETag gets an unconditional rewrite, and one that sends only weak ETags
+  always answers 412, so the rewrite fails closed. In a group, every member is checked before any
+  ACL is written, so a broadening is refused before any change. For an expander group it first requires every primary resource and requested
   ACL sidecar to exist or none to exist; partial groups fail before writes.
 - `replace` unconditionally rewrites every selected resource and ACL, except that it will not
   broaden the ACL of an existing container: its `acl:default` reaches children this run did not
-  write. Delete the container first, or grant that access by hand.
+  write. Delete the container first, or grant that access by hand. Grants on a container this run
+  created apply only once a Turtle read of it lists no members, since a 201 alone does not prove it
+  new.
 
 One `ResourceExpander` is called once per run and becomes a stable `group-<layout-index>` unit.
 Because LDP has no multi-resource transaction, a mid-group failure rejects with `SeedError`. Its
