@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
 /**
@@ -13,7 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-
 import { CalendarDays, FileText, HardDrive, Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
 export type SuiteAppId = "drive" | "docs" | "calendar";
 
@@ -36,6 +37,7 @@ export interface SuiteFrameProps {
   /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
   onDetailsClose?: () => void;
+  detailsReturnFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
@@ -101,6 +103,7 @@ export function SuiteFrame({
   search,
   details,
   onDetailsClose,
+  detailsReturnFocus,
   children,
 }: SuiteFrameProps) {
   const pathname = usePathname();
@@ -196,7 +199,7 @@ export function SuiteFrame({
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              const trigger = detailsTrigger.current;
+              const trigger = detailsReturnFocus?.current ?? detailsTrigger.current;
               (trigger?.isConnected ? trigger : document.getElementById("main-content"))?.focus();
             }}
           >

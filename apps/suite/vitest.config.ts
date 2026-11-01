@@ -17,7 +17,7 @@ export default defineConfig({
       include: [
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
-        "src/apps/calendar/state/{repository,view}.ts",
+        "src/apps/calendar/state/*.{ts,tsx}",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",

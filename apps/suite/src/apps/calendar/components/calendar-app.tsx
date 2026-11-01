@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -234,7 +235,7 @@ function Details() {
 }
 function CalendarChrome({ children }: { children: ReactNode }) {
   const { date, view, navigate, weekStart } = useCalendarNavigation();
-  const { selected, closeEvent } = useCalendarState();
+  const { selected, closeEvent, eventTrigger } = useCalendarState();
   const pathname = usePathname();
   const search = pathname === "/calendar/search";
   const [picker, setPicker] = useState(false);
@@ -286,6 +287,7 @@ function CalendarChrome({ children }: { children: ReactNode }) {
       }}
       details={selected ? <Details key={selected.id} /> : undefined}
       onDetailsClose={closeEvent}
+      detailsReturnFocus={eventTrigger}
     >
       {!search && (
         <div className="cal-toolbar" role="toolbar" aria-label="Calendar navigation">

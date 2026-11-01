@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,6 +8,7 @@ import {
   CALENDAR_CLASS,
   type CalendarEvent,
   calendarIO,
+  EVENT_CLASS,
   NS,
   serializeDataset,
 } from "../src/apps/calendar/lib/model";
@@ -21,10 +23,21 @@ import {
   eventMutations,
   loadRange,
 } from "../src/apps/calendar/state/repository";
-import { localDate, PALETTE } from "../src/apps/calendar/state/view";
-import { ProfileTypeIndexAnchor, TypeRegistration } from "../src/apps/docs/lib/model/type-index";
+import {
+  addDays,
+  dateKey,
+  localDate,
+  PALETTE,
+  visibleRange,
+} from "../src/apps/calendar/state/view";
+import {
+  ProfileTypeIndexAnchor,
+  TypeIndexDataset,
+  TypeRegistration,
+} from "../src/apps/docs/lib/model/type-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
+import { seedCalendar } from "../src/lib/demo-pod/seed-calendar";
 
 const now = Date.UTC(2026, 10, 1, 12);
 const root = DEMO_ROOT;
@@ -91,8 +104,10 @@ describe("Calendar repository discovery and demo", () => {
       "2026-10-30T09:30:00.000Z",
     ]);
     expect(standups.every((e) => e.calendar.title === "Work" && e.etag)).toBe(true);
-    expect(range.events.filter((e) => e.data.start === "2026-11-01")).toHaveLength(1);
-    expect(range.events.filter((e) => e.data.name.startsWith("Personal plan"))).toHaveLength(6);
+    expect(range.events.filter((e) => e.data.start === "2026-11-01")).toHaveLength(2);
+    expect(range.events.filter((e) => /busy-\d\.ttl$/.test(e.url)).map((e) => e.data.name)).toEqual(
+      ["Gym", "Call Mum", "Dentist", "Groceries", "Piano lesson", "Read in the park"],
+    );
     const hiddenWork = await loadRange(
       account,
       calendars.filter((c) => c.title !== "Work"),
@@ -285,7 +300,9 @@ describe("Calendar optimistic event writes", () => {
     await mutate({ kind: "delete", url: eventUrl, etag: saved?.etag as string });
     expect(invalidate).toHaveBeenCalledTimes(3);
     expect(failed).not.toHaveBeenCalled();
-    expect(changed.mock.lastCall?.[0]).toEqual([]);
+    expect(changed.mock.lastCall?.[0]).toEqual([
+      { kind: "delete", url: eventUrl, etag: saved?.etag, confirmation: { etag: null } },
+    ]);
     await expect(io.loadEvent(eventUrl)).rejects.toThrow();
   });
   it("rolls back failed intents without dropping newer updates, including two failures", async () => {
@@ -399,4 +416,133 @@ describe("Calendar optimistic event writes", () => {
     );
     await expect(noReadEtag({ kind: "create", url: eventUrl, data: event })).rejects.toThrow("412");
   });
+});
+
+it.each([
+  "container",
+  "index",
+  "registration",
+])("resumes calendar creation after a failed %s without overwriting existing resources", async (stage) => {
+  const { account, io } = await setup();
+  const puts: string[] = [];
+  let broken = true;
+  const recovering = altered(account, (url, init) => {
+    if (init?.method === "PUT") puts.push(url);
+    if (
+      broken &&
+      ((stage === "container" && url.endsWith("recover/") && init?.method === "PUT") ||
+        (stage === "index" && url.endsWith("privateTypeIndex.ttl") && init?.method !== "PUT") ||
+        (stage === "registration" &&
+          url.endsWith("privateTypeIndex.ttl") &&
+          init?.method === "PUT"))
+    )
+      return new Response(null, { status: 500 });
+    return undefined;
+  });
+  await expect(createCalendar(recovering, "Recover", PALETTE[0] as string)).rejects.toThrow();
+  const original = await io.loadCalendar(`${root}calendar/recover.ttl`);
+  broken = false;
+  await createCalendar(recovering, "Recover", PALETTE[0] as string);
+  expect(await io.loadCalendar(`${root}calendar/recover.ttl`)).toEqual(original);
+  expect(puts.filter((url) => url.endsWith("recover.ttl"))).toHaveLength(1);
+  expect((await discoverCalendars(account)).calendars.some((c) => c.title === "Recover")).toBe(
+    true,
+  );
+  await expect(createCalendar(recovering, "Recover", PALETTE[0] as string)).rejects.toThrow("412");
+});
+
+it("retains each confirmed write and its returned ETag until a range can acknowledge it", async () => {
+  const { account, io } = await setup();
+  const changed = vi.fn();
+  const mutate = eventMutations(account, changed, vi.fn(), vi.fn());
+  await mutate({ kind: "create", url: eventUrl, data: event });
+  const created = await io.loadEvent(eventUrl);
+  expect(changed.mock.lastCall?.[0]).toEqual([
+    { kind: "create", url: eventUrl, data: event, confirmation: { etag: created?.etag } },
+  ]);
+  await mutate({
+    kind: "update",
+    url: eventUrl,
+    data: { ...event, name: "Renamed" },
+    etag: created?.etag as string,
+  });
+  const updated = await io.loadEvent(eventUrl);
+  expect(changed.mock.lastCall?.[0]).toEqual([
+    {
+      kind: "update",
+      url: eventUrl,
+      data: { ...event, name: "Renamed" },
+      etag: created?.etag,
+      confirmation: { etag: updated?.etag },
+    },
+  ]);
+  await expect(
+    mutate({ kind: "update", url: eventUrl, data: event, etag: '"stale"' }),
+  ).rejects.toThrow("412");
+  expect(changed.mock.lastCall?.[0]).toEqual([]);
+});
+
+it.each([
+  "2026-11-01",
+  "2026-11-02",
+  "2026-11-03",
+  "2026-11-04",
+  "2026-11-05",
+  "2026-11-06",
+  "2026-11-07",
+  "2026-11-30",
+])("seeds a three-day trip intersecting the current week and month on %s", async (day) => {
+  const pod = createDemoPod({ root, seed: await buildDemoSeed(+localDate(day)) });
+  const io = calendarIO(pod.fetch, root);
+  const trip = await io.loadEvent(`${root}calendar/personal/trip.ttl`);
+  expect(trip?.data.start).toBe(day);
+  expect(trip?.data.end).toBe(addDays(day, 3));
+  for (let weekStart = 0; weekStart < 7; weekStart++) {
+    const range = visibleRange("week", day, weekStart);
+    expect(
+      (
+        await io.eventsInRange(
+          `${root}calendar/personal/`,
+          localDate(range.from),
+          localDate(range.to),
+        )
+      ).some((e) => e.data.name === "Three-day trip"),
+    ).toBe(true);
+  }
+  expect(dateKey(trip?.data.start as string).slice(0, 7)).toBe(day.slice(0, 7));
+});
+
+it("seeds both registrations through the model without removing another app's registration", async () => {
+  const { deserializeDataset } = await import("../src/apps/calendar/lib/model");
+  const files = await buildDemoSeed(now);
+  const indexUrl = `${root}settings/privateTypeIndex.ttl`;
+  const original = files.find((file) => file.path === "settings/privateTypeIndex.ttl");
+  const graph = await deserializeDataset(original?.body as string, indexUrl);
+  const reg = new TypeRegistration(`${indexUrl}#unrelated`, graph, DataFactory);
+  reg.markRegistration();
+  reg.forClass = "https://schema.org/TextDigitalDocument";
+  reg.instanceContainer = `${root}docs/`;
+  const awaitBody = await serializeDataset(graph);
+  const seeded = await seedCalendar(
+    files.map((file) => (file === original ? { ...file, body: awaitBody } : file)),
+    now,
+  );
+  const dataset = await deserializeDataset(
+    seeded.find((file) => file.path === "settings/privateTypeIndex.ttl")?.body as string,
+    indexUrl,
+  );
+  const entries = new TypeIndexDataset(dataset, DataFactory).all();
+  expect(
+    entries
+      .filter((r) => r.forClass === CALENDAR_CLASS)
+      .map((r) => r.instance)
+      .sort(),
+  ).toEqual([`${root}calendar/personal.ttl#it`, `${root}calendar/work.ttl#it`]);
+  expect(
+    entries
+      .filter((r) => r.forClass === EVENT_CLASS)
+      .map((r) => r.container)
+      .sort(),
+  ).toEqual([`${root}calendar/personal/`, `${root}calendar/work/`]);
+  expect(entries.some((r) => r.forClass === "https://schema.org/TextDigitalDocument")).toBe(true);
 });

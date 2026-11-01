@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -37,11 +38,13 @@ export function EventButton({
   style,
   className = "",
   tabIndex,
+  compact = false,
 }: {
   event: Occurrence;
   style?: CSSProperties;
   className?: string;
   tabIndex?: number;
+  compact?: boolean;
 }) {
   const { openEvent } = useCalendarState();
   return (
@@ -55,10 +58,15 @@ export function EventButton({
       aria-label={`${event.data.name}, ${eventTime(event.data)}, ${event.calendar.title}`}
       onClick={(e) => openEvent(event, e.currentTarget)}
     >
-      <span className="cal-event-title">{event.data.name}</span>
-      <span className="cal-event-time">
-        {eventTime(event.data)} · {event.calendar.title}
+      <span className="cal-event-title">
+        {event.data.name}
+        {compact && `, ${eventTime(event.data).split("–")[0]}`}
       </span>
+      {!compact && (
+        <span className="cal-event-time">
+          {eventTime(event.data)} · {event.calendar.title}
+        </span>
+      )}
     </button>
   );
 }
@@ -125,11 +133,12 @@ function MonthView({ events }: { events: Occurrence[] }) {
     }
   }
   return (
-    <table ref={root} className="cal-month" aria-label="Month calendar">
+    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: this table implements the ARIA grid keyboard pattern
+    <table ref={root} role="grid" className="cal-month" aria-label="Month calendar">
       <tbody>
         <tr className="cal-weekdays">
           {(grid[0] ?? []).map((cell) => (
-            <th key={cell.date}>
+            <th scope="col" key={cell.date}>
               {new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(localDate(cell.date))}
             </th>
           ))}
@@ -143,6 +152,8 @@ function MonthView({ events }: { events: Occurrence[] }) {
               );
               return (
                 <td
+                  // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: focusable cell in an interactive ARIA grid
+                  role="gridcell"
                   key={cell.date}
                   className="cal-month-day"
                   data-outside={!cell.inMonth || undefined}
@@ -218,6 +229,7 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
     count,
   );
   const [focus, setFocus] = useState({ day: date, slot: 14 });
+  const [eventMode, setEventMode] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const scrolled = useRef(false);
   const grid = useRef<HTMLDivElement>(null);
@@ -260,7 +272,9 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
       navigate(day, "day");
       return;
     } else if (event.key === "Tab" && !event.shiftKey) {
-      const allDayEvent = allDay.find((event) => occursOn(event.data, day));
+      const allDayEvent = bars.bars
+        .map((bar) => allDay.find((event) => event.id === bar.id) as Occurrence)
+        .find((event) => occursOn(event.data, day));
       const first = allDayEvent
         ? scroll.current?.querySelector<HTMLButtonElement>(
             `[data-occurrence="${CSS.escape(allDayEvent.id)}"]`,
@@ -282,7 +296,16 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
     }
   }
   return (
-    <div ref={scroll} className={`cal-time-scroll cal-time-${view}`}>
+    <div
+      ref={scroll}
+      className={`cal-time-scroll cal-time-${view}`}
+      onFocusCapture={(event) => {
+        if ((event.target as HTMLElement).closest("button.cal-event")) setEventMode(true);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setEventMode(false);
+      }}
+    >
       <div className="cal-time-content" style={{ minWidth: count * 88 + 48 }}>
         <div
           className="cal-time-header"
@@ -313,7 +336,7 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                   key={bar.id}
                   event={event}
                   className="cal-all-day-bar"
-                  tabIndex={occursOn(event.data, focus.day) ? 0 : -1}
+                  tabIndex={eventMode && occursOn(event.data, focus.day) ? 0 : -1}
                   style={{
                     left: `${bar.left * 100}%`,
                     width: `${bar.width * 100}%`,
@@ -333,6 +356,8 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
             ))}
           </div>
           <table
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: this table implements the ARIA grid keyboard pattern
+            role="grid"
             className="cal-slots"
             aria-label={`${view === "week" ? "Week" : "Day"} time grid`}
             style={{ gridTemplateColumns: `repeat(${count}, minmax(88px, 1fr))` }}
@@ -342,12 +367,17 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                 <tr className="cal-slot-row" key={String(slot)}>
                   {days.map((day) => (
                     <td
+                      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: focusable cell in an interactive ARIA grid
+                      role="gridcell"
                       key={day}
                       className="cal-slot"
                       data-slot={`${day}:${slot}`}
-                      tabIndex={focus.day === day && focus.slot === slot ? 0 : -1}
+                      tabIndex={!eventMode && focus.day === day && focus.slot === slot ? 0 : -1}
                       aria-label={`${new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(localDate(day))}, ${String(Math.floor(slot / 2)).padStart(2, "0")}:${slot % 2 ? "30" : "00"}`}
-                      onFocus={() => setFocus({ day, slot })}
+                      onFocus={() => {
+                        setFocus({ day, slot });
+                        setEventMode(false);
+                      }}
                       onKeyDown={(event) => move(event, day, slot)}
                     />
                   ))}
@@ -369,8 +399,9 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                       <EventButton
                         key={placement.id}
                         event={event}
-                        className="cal-timed-event"
-                        tabIndex={focus.day === day ? 0 : -1}
+                        className={`cal-timed-event${placement.height * 1152 < 40 ? " cal-compact-event" : ""}`}
+                        compact={placement.height * 1152 < 40}
+                        tabIndex={eventMode && focus.day === day ? 0 : -1}
                         style={{
                           left: `${placement.left * 100}%`,
                           width: `calc(${placement.width * 100}% - 3px)`,
@@ -395,11 +426,21 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
     </div>
   );
 }
-function Agenda({ events, from, to }: { events: Occurrence[]; from: string; to: string }) {
+function Agenda({
+  events,
+  from,
+  to,
+  incomplete,
+}: {
+  events: Occurrence[];
+  from: string;
+  to: string;
+  incomplete: boolean;
+}) {
   const groups = agendaGroups(events, from, to);
   return (
     <div className="cal-agenda">
-      {groups.length === 0 && (
+      {groups.length === 0 && !incomplete && (
         <EmptyState title="No events" body="There are no events in this date range." />
       )}
       {groups.map(({ day, events: dayEvents }) => (
@@ -429,6 +470,7 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
   const state = useEventsInRange(range.from, range.to);
   return (
     <div className="cal-screen">
+      <CalendarWarnings state={state} />
       {renderAsync({
         loading: (calendars.status === "loading" ||
           (calendars.status === "ready" && state.status === "loading")) && (
@@ -439,7 +481,9 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
             <ErrorState error="unreachable" actions={{ retry: calendars.reload }} />
           ) : undefined,
         empty:
-          calendars.status === "ready" && calendars.calendars.length === 0 ? (
+          calendars.status === "ready" &&
+          calendars.calendars.length === 0 &&
+          !calendars.warnings.length ? (
             <EmptyState
               title="Your calendar starts here"
               body="Create a calendar to keep your events together."
@@ -452,21 +496,16 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
               <div aria-live="polite" className="sr-only">
                 {state.events.length} events loaded
               </div>
-              {[...(calendars.status === "ready" ? calendars.warnings : []), ...state.warnings].map(
-                (warning, index) => (
-                  <div className="cal-warning" role="status" key={String(index)}>
-                    {warning.title}.{" "}
-                    <Button variant="ghost" onClick={state.reload}>
-                      Retry
-                    </Button>
-                  </div>
-                ),
-              )}
               {view === "month" ? (
                 <MonthView events={state.events} />
               ) : view === "agenda" ? (
                 <>
-                  <Agenda events={state.events} from={range.from} to={range.to} />
+                  <Agenda
+                    events={state.events}
+                    from={range.from}
+                    to={range.to}
+                    incomplete={Boolean(state.warnings.length)}
+                  />
                   <Button
                     className="cal-load-more"
                     variant="outline"
@@ -482,6 +521,19 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
           ),
       })}
     </div>
+  );
+}
+function CalendarWarnings({ state }: { state: ReturnType<typeof useEventsInRange> }) {
+  return (
+    state.status === "ready" &&
+    state.warnings.map((warning, index) => (
+      <div className="cal-warning" role="status" key={String(index)}>
+        {warning.title}.{" "}
+        <Button variant="ghost" onClick={state.reload}>
+          Retry
+        </Button>
+      </div>
+    ))
   );
 }
 export function CalendarSearch() {
@@ -505,26 +557,21 @@ export function CalendarSearch() {
       <p>
         Searching events from {format.format(localDate(from))} to {format.format(localDate(to))}
       </p>
+      <CalendarWarnings state={state} />
       {renderAsync({
         loading: state.status === "loading" && <LoadingSkeleton />,
         error: state.status === "error" && (
           <ErrorState error="unreachable" actions={{ retry: state.reload }} />
         ),
-        empty: state.status === "ready" && !matches.length && (
+        empty: state.status === "ready" && !state.warnings.length && !matches.length && (
           <EmptyState variant="no-results" query={q} />
         ),
         children: (
           <>
-            <p role="status">{matches.length} results</p>
-            {state.status === "ready" &&
-              state.warnings.map((w) => (
-                <p role="status" key={w.title}>
-                  {w.title}.{" "}
-                  <Button variant="ghost" onClick={state.reload}>
-                    Retry
-                  </Button>
-                </p>
-              ))}
+            <p role="status">{matches.length} results loaded</p>
+            {state.status === "ready" && Boolean(state.warnings.length) && (
+              <p>Search results may be incomplete.</p>
+            )}
             {matches.map((event) => (
               <div key={event.id}>
                 <p>{format.format(localDate(dateKey(event.data.start)))}</p>

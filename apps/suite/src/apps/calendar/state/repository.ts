@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch, podScopedUrl } from "@jeswr/guarded-fetch";
 import { termsEqual } from "@jeswr/suite-vocab";
@@ -17,6 +18,7 @@ export interface CalendarAccount {
   fetch: typeof globalThis.fetch;
 }
 export interface CalendarWarning {
+  calendarUrl: string;
   title: string;
   error: unknown;
 }
@@ -92,11 +94,13 @@ export async function discoverCalendars(
           container: eventContainer(item.url),
         });
     } catch (error) {
-      warnings.push({ title: "A calendar could not be loaded", error });
+      warnings.push({ calendarUrl: url, title: "A calendar could not be loaded", error });
     }
   }
   return { calendars, warnings };
 }
+// Only resume resources created by this account's own incomplete attempt.
+const creations = new WeakMap<CalendarAccount, Set<string>>();
 export async function createCalendar(
   account: CalendarAccount,
   title: string,
@@ -105,7 +109,16 @@ export async function createCalendar(
   const io = calendarIO(account.fetch, account.storageUrl);
   const url = new URL(`calendar/${calendarSlug(title)}.ttl`, account.storageUrl).href;
   const container = eventContainer(url);
-  await io.saveCalendar(url, { title: title.trim(), color: colour }, { create: true });
+  let attempts = creations.get(account);
+  if (!attempts) {
+    attempts = new Set();
+    creations.set(account, attempts);
+  }
+  const attempt = JSON.stringify([url, title.trim(), colour]);
+  if (!attempts.has(attempt)) {
+    await io.saveCalendar(url, { title: title.trim(), color: colour }, { create: true });
+    attempts.add(attempt);
+  }
   // An empty LDP BasicContainer is represented by the request Link header, no invented RDF.
   const response = await createPodScopedFetch(account.storageUrl, { fetch: account.fetch })(
     container,
@@ -128,6 +141,7 @@ export async function createCalendar(
     fetchImpl: account.fetch,
   });
   await io.registerCalendar(indexUrl, url, container);
+  attempts.delete(attempt);
 }
 export async function loadRange(
   account: CalendarAccount,
@@ -146,7 +160,11 @@ export async function loadRange(
         for (const item of await io.eventsInRange(calendar.container, from, to, timeZone))
           events.push({ ...item, id: JSON.stringify([item.url, item.data.start]), calendar });
       } catch (error) {
-        warnings.push({ title: `Could not load events from ${calendar.title}`, error });
+        warnings.push({
+          calendarUrl: calendar.url,
+          title: `Could not load events from ${calendar.title}`,
+          error,
+        });
       }
     }),
   );
@@ -155,10 +173,11 @@ export async function loadRange(
   );
   return { events, warnings };
 }
-export type EventWrite =
+export type EventWrite = (
   | { kind: "create"; url: string; data: CalendarEvent }
   | { kind: "update"; url: string; data: CalendarEvent; etag: string }
-  | { kind: "delete"; url: string; etag: string };
+  | { kind: "delete"; url: string; etag: string }
+) & { confirmation?: { etag: string | null } };
 /** Serial per resource; each queued intent remains visible when an older write fails. */
 export function eventMutations(
   account: CalendarAccount,
@@ -168,6 +187,9 @@ export function eventMutations(
 ) {
   const io = calendarIO(account.fetch, account.storageUrl);
   const pending = new Map<number, EventWrite>();
+  // A range acknowledges these by identity only after its own revalidation finishes.
+  const confirmed = new Map<string, EventWrite>();
+  const publish = () => changed([...confirmed.values(), ...pending.values()]);
   const tails = new Map<string, Promise<unknown>>();
   const etags = new Map<string, string>();
   const conflicts = new Map<string, number>();
@@ -175,7 +197,7 @@ export function eventMutations(
   return async (write: EventWrite): Promise<void> => {
     const id = ++next;
     pending.set(id, write);
-    changed([...pending.values()]);
+    publish();
     const queued = tails.has(write.url);
     const conflictVersion = conflicts.get(write.url) ?? 0;
     const prior = tails.get(write.url) ?? Promise.resolve();
@@ -184,6 +206,7 @@ export function eventMutations(
       try {
         if ((conflicts.get(write.url) ?? 0) !== conflictVersion)
           throw new CalendarHttpError(412, null);
+        let savedEtag: string | null = null;
         if (write.kind === "delete") {
           await io.removeEvent(write.url, etag ?? write.etag);
           etags.delete(write.url);
@@ -193,12 +216,15 @@ export function eventMutations(
             write.data,
             write.kind === "create" ? { create: true } : { etag: etag ?? write.etag },
           );
+          savedEtag = saved;
           if (saved) etags.set(write.url, saved);
           else etags.delete(write.url);
         }
+        confirmed.set(write.url, { ...write, confirmation: { etag: savedEtag } });
       } catch (error) {
         const conflict = error instanceof CalendarHttpError && error.status === 412;
         if (conflict) {
+          confirmed.delete(write.url);
           etags.delete(write.url);
           // Fetch the changed master; never replay a stale resource after a conflict.
           conflicts.set(write.url, conflictVersion + 1);
@@ -208,7 +234,7 @@ export function eventMutations(
         throw error;
       } finally {
         pending.delete(id);
-        changed([...pending.values()]);
+        publish();
         invalidate();
       }
     });

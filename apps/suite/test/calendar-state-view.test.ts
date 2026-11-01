@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { tokens } from "@jeswr/suite-ui/tokens";
 import { describe, expect, it } from "vitest";
@@ -24,6 +25,7 @@ import {
   rangeKey,
   rangeTitle,
   readPreferences,
+  reconcileOccurrence,
   recurrenceSummary,
   reminderSummary,
   stepDate,
@@ -223,4 +225,22 @@ it("checks palette and chip text contrast using the suite's own WCAG colour eval
     const background = tokens.find((token) => token.name === "--surface-2")?.[theme] as string;
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
   }
+});
+
+it("reconciles renamed/deleted occurrences only inside the refreshed range", () => {
+  const original = occurrence({ name: "Before", start: "2026-11-01" });
+  const renamed = { ...original, data: { ...original.data, name: "After" } };
+  const unrelated = { ...original, id: "other" };
+  expect(reconcileOccurrence(undefined, [], "2026-11-01", "2026-11-02")).toBeUndefined();
+  expect(reconcileOccurrence(original, [unrelated, renamed], "2026-11-01", "2026-11-02")).toBe(
+    renamed,
+  );
+  expect(reconcileOccurrence(original, [], "2026-11-01", "2026-11-02")).toBeUndefined();
+  expect(reconcileOccurrence(original, [], "2026-10-01", "2026-11-01")).toBe(original);
+  expect(reconcileOccurrence(original, [], "2026-11-02", "2026-11-03")).toBe(original);
+  expect(
+    reconcileOccurrence(original, [], "2026-11-01", "2026-11-02", [original.calendar.url]),
+  ).toBe(original);
+  const trip = occurrence({ name: "Trip", start: "2026-10-31", end: "2026-11-03" });
+  expect(reconcileOccurrence(trip, [], "2026-11-01", "2026-11-02")).toBeUndefined();
 });

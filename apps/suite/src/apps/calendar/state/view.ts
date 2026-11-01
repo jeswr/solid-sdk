@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type SuiteToken, tokens } from "@jeswr/suite-ui/tokens";
 import { type MonthCell, monthGrid } from "../lib/layout";
 import type {
@@ -257,4 +258,18 @@ export function reminderSummary(reminder: Reminder): string {
     }
   }
   return `${labels.join(" ")} ${seconds < 0 ? "before" : "after"}`;
+}
+
+/** Reconcile only a selection that intersects the refreshed range. */
+export function reconcileOccurrence(
+  selected: Occurrence | undefined,
+  events: Occurrence[],
+  from: string,
+  to: string,
+  failedCalendars: string[] = [],
+): Occurrence | undefined {
+  if (!selected || failedCalendars.includes(selected.calendar.url)) return selected;
+  const start = dateKey(selected.data.start);
+  if (start >= to || (start < from && !occursOn(selected.data, from))) return selected;
+  return events.find((event) => event.id === selected.id);
 }

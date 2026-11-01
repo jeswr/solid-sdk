@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   createContext,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -17,6 +19,7 @@ import {
   createCalendar,
   discoverCalendars,
   type EventWrite,
+  eventContainer,
   eventMutations,
   loadRange,
 } from "./repository";
@@ -30,13 +33,14 @@ import {
   preferencesKey,
   rangeKey,
   readPreferences,
+  reconcileOccurrence,
 } from "./view";
 
 type CalendarsState =
   | { status: "loading" }
   | { status: "error"; error: unknown }
   | ({ status: "ready" } & Awaited<ReturnType<typeof discoverCalendars>>);
-type RangeResult = Awaited<ReturnType<typeof loadRange>>;
+type RangeResult = Awaited<ReturnType<typeof loadRange>> & { acknowledged: EventWrite[] };
 type EventsState =
   | { status: "loading" }
   | { status: "error"; error: unknown }
@@ -56,6 +60,8 @@ interface CalendarContextValue {
   focusRequest: { current: { view: CalendarView; date: string; slot: number } | undefined };
   openEvent: (event: Occurrence, trigger: HTMLElement) => void;
   closeEvent: () => void;
+  eventTrigger: RefObject<HTMLElement | null>;
+  reconcile: (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => void;
 }
 const Context = createContext<CalendarContextValue | undefined>(undefined);
 function SessionCalendarProvider({
@@ -145,6 +151,12 @@ function SessionCalendarProvider({
     },
     [session, reload],
   );
+  const reconcile = useCallback(
+    (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => {
+      setSelected((current) => reconcileOccurrence(current, events, from, to, failedCalendars));
+    },
+    [],
+  );
   const openEvent = useCallback((event: Occurrence, element: HTMLElement) => {
     trigger.current = element;
     setSelected(event);
@@ -173,6 +185,8 @@ function SessionCalendarProvider({
         focusRequest,
         openEvent,
         closeEvent,
+        eventTrigger: trigger,
+        reconcile,
       }}
     >
       {children}
@@ -200,7 +214,10 @@ export function useCalendars() {
   return { ...calendars, reload };
 }
 export function useEventsInRange(from: string, to: string): EventsState & { reload: () => void } {
-  const { session, calendars, prefs, cache, revision, writes, reload } = useCalendarState();
+  const { session, calendars, prefs, cache, revision, writes, reload, reconcile } =
+    useCalendarState();
+  const latestWrites = useRef(writes);
+  latestWrites.current = writes;
   const visible =
     calendars.status === "ready"
       ? calendars.calendars.filter((c) => !prefs.hidden.includes(c.url))
@@ -222,7 +239,18 @@ export function useEventsInRange(from: string, to: string): EventsState & { relo
     let live = true;
     let request = cache.get(key);
     if (!request) {
-      request = loadRange(session, visible, localDate(from), localDate(to), zone);
+      const acknowledged = latestWrites.current.filter((write) => write.confirmation);
+      request = loadRange(session, visible, localDate(from), localDate(to), zone).then(
+        (result) => ({
+          ...result,
+          acknowledged: acknowledged.filter(
+            (write) =>
+              !result.warnings.some((warning) =>
+                write.url.startsWith(eventContainer(warning.calendarUrl)),
+              ),
+          ),
+        }),
+      );
       cache.set(key, request);
     }
     request.then(
@@ -236,25 +264,45 @@ export function useEventsInRange(from: string, to: string): EventsState & { relo
       live = false;
     };
   }, [session, key, revision, calendars.status, cache, from, to, zone]);
-  const state = snapshot.key === key ? snapshot.state : { status: "loading" as const };
-  if (state.status !== "ready") return { ...state, reload };
-  let events = state.events;
-  for (const write of writes) {
-    events = events.filter((e) => e.url !== write.url);
-    if (write.kind === "delete") continue;
-    const calendar = visible.find((c) => `${c.url}#it` === write.data.inCalendar);
-    if (calendar)
-      for (const data of expandEvent(write.data, localDate(from), localDate(to), zone))
-        events.push({
-          url: write.url,
-          etag: write.kind === "update" ? write.etag : null,
-          id: JSON.stringify([write.url, data.start]),
-          data,
-          calendar,
-        });
-  }
-  events = [...events].sort((a, b) => +new Date(a.data.start) - +new Date(b.data.start));
-  return { ...state, events, reload };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: key includes visible calendar metadata
+  const state: EventsState = useMemo(() => {
+    if (calendars.status === "error") return calendars;
+    if (calendars.status !== "ready" || snapshot.key !== key) return { status: "loading" };
+    const state = snapshot.state;
+    if (state.status !== "ready") return state;
+    let events = state.events;
+    for (const write of writes) {
+      if (state.acknowledged.includes(write)) continue;
+      events = events.filter((e) => e.url !== write.url);
+      if (write.kind === "delete") continue;
+      const calendar = visible.find((c) => `${c.url}#it` === write.data.inCalendar);
+      if (calendar)
+        for (const data of expandEvent(write.data, localDate(from), localDate(to), zone))
+          events.push({
+            url: write.url,
+            etag: write.confirmation
+              ? write.confirmation.etag
+              : write.kind === "update"
+                ? write.etag
+                : null,
+            id: JSON.stringify([write.url, data.start]),
+            data,
+            calendar,
+          });
+    }
+    events = [...events].sort((a, b) => +new Date(a.data.start) - +new Date(b.data.start));
+    return { ...state, events, warnings: [...calendars.warnings, ...state.warnings] };
+  }, [snapshot, key, writes, calendars, from, to, zone]);
+  useEffect(() => {
+    if (state.status === "ready")
+      reconcile(
+        state.events,
+        from,
+        to,
+        state.warnings.map((warning) => warning.calendarUrl),
+      );
+  }, [state, from, to, reconcile]);
+  return { ...state, reload };
 }
 export function useEventMutations() {
   const { mutate } = useCalendarState();
