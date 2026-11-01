@@ -90,10 +90,14 @@ public final class BundledServer {
             && (decodedPath.startsWith(NATIVE_FILE_PREFIX) || decodedPath.startsWith(NATIVE_CONTENT_PREFIX));
     }
 
-    /** Device files are served only as images, audio or video (E5); everything else is refused. */
+    /**
+     * Device files are served only as images, audio or video (E5); everything else is refused.
+     * SVG is a document format that can carry script, so it is refused too.
+     */
     public static boolean nativeFileTypeAllowed(String mimeType) {
         if (mimeType == null) return false;
         String type = mimeType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+        if (type.equals("image/svg+xml")) return false;
         return type.startsWith("image/") || type.startsWith("audio/") || type.startsWith("video/");
     }
 

@@ -5,7 +5,7 @@ import XCTest
 
 final class RouteResolverTests: XCTestCase {
     /// The simulator can read the host checkout, so the tests use the shared vectors in place.
-    private func vectors(file: StaticString = #filePath) throws -> [String: Any] {
+    private func loadVectors(file: StaticString = #filePath) throws -> [String: Any] {
         let url = URL(fileURLWithPath: "\(file)")
             .deletingLastPathComponent() // AppTests
             .deletingLastPathComponent() // App
@@ -16,13 +16,13 @@ final class RouteResolverTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
-    private func resolver() throws -> RouteResolver {
-        let manifest = try XCTUnwrap(vectors()["manifest"])
+    private func makeResolver() throws -> RouteResolver {
+        let manifest = try XCTUnwrap(loadVectors()["manifest"])
         return try RouteResolver(manifest: JSONSerialization.data(withJSONObject: manifest))
     }
 
     func testAgreesWithTheSharedVectors() throws {
-        let vectors = try vectors()
+        let vectors = try loadVectors()
         let resolver = try RouteResolver(
             manifest: JSONSerialization.data(withJSONObject: try XCTUnwrap(vectors["manifest"])))
         let cases = try XCTUnwrap(vectors["cases"] as? [[String: Any]])
@@ -39,7 +39,7 @@ final class RouteResolverTests: XCTestCase {
     }
 
     func testServesTheResolvedFilesTypeNotTheRequestedOne() throws {
-        let resolver = try resolver()
+        let resolver = try makeResolver()
         let dotted = resolver.resolve("/tasks/l/work.2026")
         XCTAssertEqual(dotted.path, "tasks/l/__/index.html")
         XCTAssertEqual(dotted.mimeType, "text/html")
@@ -66,6 +66,25 @@ final class RouteResolverTests: XCTestCase {
         XCTAssertNil(RouteResolver.decodeSegment("%zz"))
         XCTAssertNil(RouteResolver.decodeSegment("%C0%AF"), "overlong encoding")
         XCTAssertNil(RouteResolver.decodeSegment("%ED%A0%80"), "lone surrogate")
+    }
+
+    func testComparesCodeUnitsNotCanonicalEquivalence() throws {
+        // "é" precomposed (NFC) in the manifest; the request spells it decomposed (NFD).
+        let manifest: [String: Any] = [
+            "version": 1,
+            "assets": ["caf\u{e9}.png"],
+            "routes": [["segments": [["type": "static", "value": "caf\u{e9}"]], "directory": "cafe", "files": ["index.html"]]],
+        ]
+        let resolver = try RouteResolver(manifest: JSONSerialization.data(withJSONObject: manifest))
+        XCTAssertEqual(resolver.resolve("/caf%C3%A9").status, 200)
+        XCTAssertEqual(resolver.resolve("/cafe%CC%81").status, 404)
+        XCTAssertEqual(resolver.resolve("/caf%C3%A9.png").status, 200)
+        XCTAssertEqual(resolver.resolve("/cafe%CC%81.png").status, 404)
+        XCTAssertTrue(RouteResolver.reservedSuffix("__next.\u{301}.txt"))
+        XCTAssertTrue(RouteResolver.reservedSuffix("__next.\u{85}.txt"))
+        XCTAssertFalse(RouteResolver.reservedSuffix("__next.\n.txt"))
+        XCTAssertFalse(RouteResolver.reservedSuffix("__next.\u{2028}.txt"))
+        XCTAssertFalse(RouteResolver.reservedSuffix("__next..txt"))
     }
 
     func testRejectsMalformedManifests() {

@@ -25,12 +25,18 @@ scroll lock and Sonner insert them at runtime, and the scroll lock's body holds 
 pixel values, so no build-time hash could match. Zod runs jitless (`src/instrumentation-client.ts`)
 so its `Function` probe never meets the eval-free script policy.
 
-Staging excludes `src/app/dev/` and public fixtures. The web session uses the installed Solid
+Staging excludes `src/app/dev/`, the `src/app/.well-known/` route handlers (the deployed suite serves the Client ID Document, E7) and public fixtures. The web session uses the installed Solid
 extension's granted pod, falling back to a seeded demo pod. Native staging replaces the web
 session with a sign-in placeholder and omits the demo code. Native authentication is a later
 integration. Native `/` opens `/drive/my/`,
 and Drive preview interception falls back to `/drive/p/[ref]`. The manifest reports these
-adaptations. The native PDF handoff belongs to MOB-P3b.
+adaptations. 
+
+Before anything else renders, the root layout's startup check (MOB-P3 E6) requires a secure
+context, `crypto.subtle`, `navigator.locks` and IndexedDB. Without one of them the app shows an
+update screen and no provider, session restore or pod-auth runs; the exported HTML holds nothing
+below the check. In Drive, PDFs open in the platform viewer through the `SuiteFiles` plugin
+("Open PDF", E5); files over 25 MiB offer the download instead.
 
 `route-manifest.json` has `version: 1`, `routes`, `assets`, and `adaptations`. Each route has a
 source `pattern`, typed `segments` (`static` + `value`, `param` + `name`, or `catch-all` + `name`

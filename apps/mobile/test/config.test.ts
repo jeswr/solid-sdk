@@ -93,7 +93,11 @@ describe("bundled mode (MOB-P3 E6)", () => {
       iosScheme: "capacitor",
     });
     expect(config.loggingBehavior).toBe("none");
-    expect(config.android).toMatchObject({ allowMixedContent: false, useLegacyBridge: false });
+    expect(config.android).toMatchObject({
+      allowMixedContent: false,
+      useLegacyBridge: false,
+      resolveServiceWorkerRequests: false,
+    });
     expect(config.ios).toMatchObject({
       includePlugins: ["@capacitor/app"],
       limitsNavigationsToAppBoundDomains: false,

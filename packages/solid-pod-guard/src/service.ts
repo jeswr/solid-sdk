@@ -25,6 +25,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { base64url, exportJWK, generateKeyPair, type JWK, SignJWT } from "jose";
+import { isLoopback } from "./pod.js";
 
 /** Options for {@link createServicePodFetch}. */
 export interface ServicePodFetchOptions {
@@ -45,8 +46,6 @@ export interface ServicePodFetchOptions {
   refreshSkewSeconds?: number;
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
 /** Validate a URL the credentialed session may touch: https, or loopback http in dev. */
 function assertServiceUrl(value: string, label: string, allowInsecureLoopback: boolean): URL {
   let url: URL;
@@ -58,8 +57,7 @@ function assertServiceUrl(value: string, label: string, allowInsecureLoopback: b
   if (url.username !== "" || url.password !== "") {
     throw new Error(`${label} must not carry userinfo credentials`);
   }
-  const loopbackOk =
-    allowInsecureLoopback && url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+  const loopbackOk = allowInsecureLoopback && url.protocol === "http:" && isLoopback(url);
   if (url.protocol !== "https:" && !loopbackOk) {
     throw new Error(`${label} must be https (loopback http under allowInsecureLoopback only)`);
   }
@@ -93,7 +91,8 @@ export function createServicePodFetch(options: ServicePodFetchOptions): typeof f
   let keyPromise: Promise<DpopKey> | undefined;
   const getKey = (): Promise<DpopKey> => {
     keyPromise ??= (async () => {
-      const keys = await generateKeyPair("ES256", { extractable: true });
+      // Only the public JWK is ever exported; the private key never needs to be.
+      const keys = await generateKeyPair("ES256", { extractable: false });
       return { privateKey: keys.privateKey, publicJwk: await exportJWK(keys.publicKey) };
     })();
     return keyPromise;
@@ -122,7 +121,15 @@ export function createServicePodFetch(options: ServicePodFetchOptions): typeof f
       if (!response.ok) {
         throw new Error(`service issuer discovery failed (${response.status})`);
       }
-      const document = (await response.json()) as { token_endpoint?: unknown };
+      const document = (await response.json()) as { issuer?: unknown; token_endpoint?: unknown };
+      // RFC 8414 §3.3: the document must name the issuer it was fetched for, or the
+      // client secret could be posted to an endpoint another issuer chose.
+      if (
+        typeof document.issuer !== "string" ||
+        document.issuer.replace(/\/+$/u, "") !== issuerBase
+      ) {
+        throw new Error("service issuer discovery document names a different issuer");
+      }
       if (typeof document.token_endpoint !== "string") {
         throw new Error("service issuer discovery document has no token_endpoint");
       }
@@ -159,9 +166,17 @@ export function createServicePodFetch(options: ServicePodFetchOptions): typeof f
       // Status only — the response body may echo request material.
       throw new Error(`service token request was refused (${response.status})`);
     }
-    const body = (await response.json()) as { access_token?: unknown; expires_in?: unknown };
+    const body = (await response.json()) as {
+      access_token?: unknown;
+      expires_in?: unknown;
+      token_type?: unknown;
+    };
     if (typeof body.access_token !== "string" || body.access_token === "") {
       throw new Error("service token response carried no access token");
+    }
+    // A Bearer token sent as `DPoP <token>` would be a replayable bearer credential.
+    if (typeof body.token_type !== "string" || body.token_type.toLowerCase() !== "dpop") {
+      throw new Error("service token response is not a DPoP-bound token");
     }
     const lifetimeMs =
       typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in * 1000 : 60_000;

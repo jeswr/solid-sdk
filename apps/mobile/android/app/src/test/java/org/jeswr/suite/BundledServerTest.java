@@ -112,6 +112,8 @@ public class BundledServerTest {
         assertTrue(BundledServer.nativeFileTypeAllowed("Video/MP4; codecs=x"));
         assertTrue(BundledServer.nativeFileTypeAllowed("audio/mpeg"));
         assertFalse(BundledServer.nativeFileTypeAllowed("text/html"));
+        assertFalse(BundledServer.nativeFileTypeAllowed("image/svg+xml"));
+        assertFalse(BundledServer.nativeFileTypeAllowed("Image/SVG+XML; charset=utf-8"));
         assertFalse(BundledServer.nativeFileTypeAllowed("application/javascript"));
         assertFalse(BundledServer.nativeFileTypeAllowed("application/xhtml+xml"));
         assertFalse(BundledServer.nativeFileTypeAllowed(""));

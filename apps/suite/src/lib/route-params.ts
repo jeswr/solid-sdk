@@ -13,6 +13,19 @@ function useWebRouteParams<T extends Params>(): T {
   return useParams<T>();
 }
 
+/**
+ * The current pathname without a trailing slash. The native export uses `trailingSlash: true`,
+ * so `/photos/a/REF/` there is `/photos/a/REF` on the web; compare routes through this.
+ */
+export function useRoutePathname(): string {
+  return normalizePathname(usePathname() ?? "/");
+}
+
+/** Strip one trailing slash, keeping the root as `/`. */
+export function normalizePathname(pathname: string): string {
+  return pathname.replace(/(.)\/$/, "$1");
+}
+
 /** The export's router tree contains placeholders; only the pathname has the real values. */
 function useNativeRouteParams<T extends Params>(pattern: string): T | undefined {
   const pathname = usePathname();

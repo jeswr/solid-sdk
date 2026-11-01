@@ -11,6 +11,9 @@
 @import "@jeswr/suite-ui/styles/collections.css";
 @import "@jeswr/suite-ui/styles/sharing.css";
 @import "../components/interim-shell/shell.css";
+@import "@jeswr/suite-ui/styles/sync.css";
+@import "@jeswr/suite-ui/styles/sign-in.css";
+@import "../shell/shell.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -30,8 +33,11 @@ body {
   outline-offset: 2px;
   scroll-margin: var(--space-4);
 }
-a {
+/* Button-styled links keep their variant colours (unlayered rules beat Tailwind layers). */
+a:where(:not([data-slot="button"])) {
   color: var(--primary);
+}
+a {
   display: inline-flex;
   align-items: center;
   min-height: 24px;

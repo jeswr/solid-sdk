@@ -34,10 +34,10 @@ public class SuiteNavigationPlugin: CAPPlugin, CAPBridgedPlugin {
         return NSNumber(value: true)
     }
 
-    /// A Capacitor device-file URL on the app's local scheme and host (decoded-path prefix test).
+    /// A Capacitor device-file URL on the app's local scheme, whatever the host: Capacitor's
+    /// handler serves the scheme for every host (decoded-path prefix test).
     static func isLocalDeviceFile(_ url: URL, local: URL?) -> Bool {
-        guard let local = local, url.scheme?.lowercased() == local.scheme?.lowercased(),
-              url.host?.lowercased() == local.host?.lowercased() else {
+        guard let local = local, url.scheme?.lowercased() == local.scheme?.lowercased() else {
             return false
         }
         return SuiteSchemeHandler.isNativeFilePath(url.path)

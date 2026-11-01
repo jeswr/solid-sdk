@@ -62,6 +62,12 @@ function bundledConfig(env: MobileEnv): CapacitorConfig {
     ...remote,
     webDir: "www-bundled",
     server: { androidScheme: "https", hostname: "localhost", iosScheme: "capacitor" },
+    android: {
+      ...remote.android,
+      // Service-worker fetches would reach Capacitor's local server without SuiteWebViewClient's
+      // origin and device-file checks; bundled mode does not rely on a service worker (E8).
+      resolveServiceWorkerRequests: false,
+    },
     ios: {
       ...remote.ios,
       // App-bound domains name remote hosts; the local scheme needs none (E6).

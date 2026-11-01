@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { SaxesParser } from "saxes";
 import type { Measurement, MetricKind } from "./metrics.js";
@@ -69,7 +70,7 @@ function record(attributes: Record<string, string>, iri: string): Measurement | 
  */
 export async function* importAppleHealth(
   chunks: AsyncIterable<string>,
-  iriFor: (index: number) => string,
+  iriFor: (index: number, attributes: Readonly<Record<string, string>>) => string,
 ): AsyncGenerator<Measurement> {
   const parser = new SaxesParser();
   let index = 0;
@@ -79,7 +80,8 @@ export async function* importAppleHealth(
     root ??= tag.name;
     if (root !== "HealthData") throw new TypeError("Expected Apple Health HealthData root");
     if (tag.name === "Record") {
-      const item = record(tag.attributes as Record<string, string>, iriFor(index));
+      const attributes = tag.attributes as Record<string, string>;
+      const item = record(attributes, iriFor(index, attributes));
       if (item !== undefined) {
         pending.push(item);
         index++;

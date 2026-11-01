@@ -27,13 +27,14 @@ final class SuiteSchemeHandlerTests: XCTestCase {
             try Data(body.utf8).write(to: file)
         }
         try Data("secret".utf8).write(to: root.deletingLastPathComponent().appendingPathComponent("outside.txt"))
+        try Data("secret".utf8).write(to: root.deletingLastPathComponent().appendingPathComponent("index.html"))
     }
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: root.deletingLastPathComponent())
     }
 
-    private func handler(assets: [String] = ["_next/static/a.js", "logo.svg", "../outside.txt"]) throws -> SuiteSchemeHandler {
+    private func makeHandler(assets: [String] = ["_next/static/a.js", "logo.svg", "../outside.txt"]) throws -> SuiteSchemeHandler {
         let manifest: [String: Any] = [
             "version": 1,
             "assets": assets,
@@ -41,6 +42,8 @@ final class SuiteSchemeHandlerTests: XCTestCase {
                 ["segments": [], "directory": "", "files": ["index.html", "index.txt"]],
                 ["segments": [["type": "static", "value": "tasks"], ["type": "param"]],
                  "directory": "tasks/__", "files": ["index.html", "index.txt"]],
+                // A hostile manifest entry that points outside the bundle root.
+                ["segments": [["type": "static", "value": "escape"]], "directory": "..", "files": ["index.html"]],
             ],
         ]
         let resolver = try RouteResolver(manifest: JSONSerialization.data(withJSONObject: manifest))
@@ -48,7 +51,7 @@ final class SuiteSchemeHandlerTests: XCTestCase {
     }
 
     func testServesRoutesWithTheResolvedFilesTypeAndNosniff() throws {
-        let handler = try handler()
+        let handler = try makeHandler()
         let page = handler.respond(method: "GET", encodedPath: "/tasks/work.2026/")
         XCTAssertEqual(page.status, 200)
         XCTAssertEqual(page.headers["Content-Type"], "text/html; charset=utf-8")
@@ -64,7 +67,7 @@ final class SuiteSchemeHandlerTests: XCTestCase {
     }
 
     func testServesTheBundled404PageForUnknownOrInvalidPaths() throws {
-        let handler = try handler()
+        let handler = try makeHandler()
         for path in ["/unknown", "/tasks/a/../b", "/tasks/a%2Fb", "relative"] {
             let missing = handler.respond(method: "GET", encodedPath: path)
             XCTAssertEqual(missing.status, 404, path)
@@ -74,16 +77,19 @@ final class SuiteSchemeHandlerTests: XCTestCase {
 
     func testNeverReadsOutsideTheBundleOrAMissingFile() throws {
         // "../outside.txt" cannot even be requested (dot segments are rejected) and would escape the root.
-        let handler = try handler()
+        let handler = try makeHandler()
         XCTAssertEqual(handler.respond(method: "GET", encodedPath: "/../outside.txt").body,
                        Data("<html>missing</html>".utf8))
+        let escaped = handler.respond(method: "GET", encodedPath: "/escape")
+        XCTAssertEqual(escaped.status, 404)
+        XCTAssertEqual(escaped.body, Data(), "a resolution outside the root is never read")
         let missing = handler.respond(method: "GET", encodedPath: "/logo.svg")
         XCTAssertEqual(missing.status, 404)
         XCTAssertEqual(missing.body, Data())
     }
 
     func testServesOnlyGetAndHead() throws {
-        let handler = try handler()
+        let handler = try makeHandler()
         XCTAssertEqual(handler.respond(method: "POST", encodedPath: "/").status, 405)
         let head = handler.respond(method: "HEAD", encodedPath: "/")
         XCTAssertEqual(head.status, 200)
@@ -105,13 +111,16 @@ final class SuiteSchemeHandlerTests: XCTestCase {
             try XCTUnwrap(URL(string: "https://evil.example/_capacitor_file_/a")), local: local))
         XCTAssertFalse(SuiteNavigationPlugin.isLocalDeviceFile(
             try XCTUnwrap(URL(string: "capacitor://localhost/docs/")), local: local))
+        // Capacitor serves its scheme for any host, so every host is covered.
+        XCTAssertTrue(SuiteNavigationPlugin.isLocalDeviceFile(
+            try XCTUnwrap(URL(string: "capacitor://x/_capacitor_file_/var/a.html")), local: local))
         XCTAssertFalse(SuiteNavigationPlugin.isLocalDeviceFile(
             try XCTUnwrap(URL(string: "capacitor://localhost/_capacitor_file_/a")), local: nil))
     }
 
     func testTheConfigurationWrapsOnlyTheLocalSchemeHandler() throws {
         let config = SuiteBundledWebViewConfiguration()
-        let wrapped = try handler()
+        let wrapped = try makeHandler()
         config.wrapLocalHandler = { _ in wrapped }
         let capacitor = RecordingHandler()
         config.setURLSchemeHandler(capacitor, forURLScheme: "capacitor")
@@ -144,4 +153,84 @@ final class SuiteSchemeHandlerTests: XCTestCase {
         XCTAssertFalse(adopted.limitsNavigationsToAppBoundDomains)
         XCTAssertEqual(adopted.applicationNameForUserAgent, "Suite Test")
     }
+
+    func testAcceptsOnlyLocalhostWithoutAPort() throws {
+        XCTAssertTrue(SuiteSchemeHandler.isLocalHost(try XCTUnwrap(URL(string: "capacitor://localhost/a"))))
+        XCTAssertTrue(SuiteSchemeHandler.isLocalHost(try XCTUnwrap(URL(string: "capacitor://LOCALHOST/"))))
+        XCTAssertFalse(SuiteSchemeHandler.isLocalHost(try XCTUnwrap(URL(string: "capacitor://x/a"))))
+        XCTAssertFalse(SuiteSchemeHandler.isLocalHost(try XCTUnwrap(URL(string: "capacitor://localhost:8080/a"))))
+        XCTAssertFalse(SuiteSchemeHandler.isLocalHost(try XCTUnwrap(URL(string: "capacitor:///a"))))
+    }
+
+    func testAllowsOnlyMediaDeviceFiles() {
+        XCTAssertTrue(SuiteSchemeHandler.nativeFileTypeAllowed("image/png"))
+        XCTAssertTrue(SuiteSchemeHandler.nativeFileTypeAllowed("Video/MP4; codecs=x"))
+        XCTAssertTrue(SuiteSchemeHandler.nativeFileTypeAllowed("audio/mpeg"))
+        for type in ["text/html", "image/svg+xml", "Image/SVG+XML; charset=utf-8", "text/javascript",
+                     "application/xhtml+xml", "", nil] as [String?] {
+            XCTAssertFalse(SuiteSchemeHandler.nativeFileTypeAllowed(type), type ?? "nil")
+        }
+    }
+
+    func testSandboxesMediaAndRefusesOtherDeviceFiles() throws {
+        let url = try XCTUnwrap(URL(string: "capacitor://localhost/_capacitor_file_/var/a.png"))
+        let media = RecordingTask(url)
+        var closed = 0
+        let task = SandboxedFileTask(media) { closed += 1 }
+        task.didReceive(try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
+            "Content-Type": "image/png", "Content-Security-Policy": "default-src *",
+        ])))
+        task.didReceive(Data([1, 2]))
+        task.didFinish()
+        task.didReceive(Data([3]))
+        let response = try XCTUnwrap(media.responses.first as? HTTPURLResponse)
+        XCTAssertEqual(response.value(forHTTPHeaderField: "Content-Security-Policy"), "sandbox")
+        XCTAssertEqual(response.value(forHTTPHeaderField: "X-Content-Type-Options"), "nosniff")
+        XCTAssertEqual(response.value(forHTTPHeaderField: "Content-Type"), "image/png")
+        XCTAssertEqual(media.data, [Data([1, 2])])
+        XCTAssertEqual(media.finished, 1)
+        XCTAssertEqual(closed, 1)
+
+        let page = RecordingTask(url)
+        let refused = SandboxedFileTask(page) { closed += 1 }
+        refused.didReceive(try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                                         headerFields: ["Content-Type": "text/html"])))
+        refused.didReceive(Data("<script>".utf8))
+        refused.didFinish()
+        XCTAssertEqual((page.responses.first as? HTTPURLResponse)?.statusCode, 403)
+        XCTAssertEqual(page.responses.count, 1)
+        XCTAssertEqual(page.data, [])
+        XCTAssertEqual(page.finished, 1)
+        XCTAssertEqual(closed, 2)
+    }
+
+    func testNothingReachesAStoppedTask() throws {
+        let url = try XCTUnwrap(URL(string: "capacitor://localhost/_capacitor_file_/var/a.png"))
+        let inner = RecordingTask(url)
+        let task = SandboxedFileTask(inner) {}
+        task.stop()
+        task.didReceive(try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                                      headerFields: ["Content-Type": "image/png"])))
+        task.didReceive(Data([1]))
+        task.didFinish()
+        task.didFailWithError(URLError(.cancelled))
+        XCTAssertTrue(inner.responses.isEmpty)
+        XCTAssertTrue(inner.data.isEmpty)
+        XCTAssertEqual(inner.finished, 0)
+        XCTAssertEqual(inner.failed, 0)
+    }
+}
+
+private final class RecordingTask: NSObject, WKURLSchemeTask {
+    let request: URLRequest
+    var responses: [URLResponse] = []
+    var data: [Data] = []
+    var finished = 0
+    var failed = 0
+
+    init(_ url: URL) { request = URLRequest(url: url) }
+    func didReceive(_ response: URLResponse) { responses.append(response) }
+    func didReceive(_ data: Data) { self.data.append(data) }
+    func didFinish() { finished += 1 }
+    func didFailWithError(_ error: Error) { failed += 1 }
 }
