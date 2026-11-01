@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -25,6 +26,9 @@ import type { Row } from "../lib/views/project-groups";
 import { completeTask, deleteTask } from "../state/actions";
 import { useNow } from "../state/clock";
 import { useTasks } from "../state/tasks-context";
+import { reopenTask, rescheduleTasks } from "../state/view-actions";
+import { ReschedulePopover } from "./views/reschedule-popover";
+import "./views/views.css";
 export interface TaskRowProps {
   row: Row;
   showProject?: boolean | undefined;
@@ -45,6 +49,7 @@ export function TaskRow({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [slow, setSlow] = useState(false);
   const saving = tasks.saving.includes(task.url);
   useEffect(() => {
@@ -71,7 +76,9 @@ export function TaskRow({
       children.length ||
       orphanParentTitle ||
       labels.length ||
-      (showProject && task.projectTitle),
+      (showProject && task.projectTitle) ||
+      task.completedAt ||
+      task.derivedFrom,
   );
   return (
     <li
@@ -97,9 +104,9 @@ export function TaskRow({
           event.preventDefault();
           router.push(href);
         }
-        if (event.key === " " && !pending && task.state === "open") {
+        if (event.key === " " && !pending) {
           event.preventDefault();
-          void completeTask(task, tasks);
+          void (task.state === "closed" ? reopenTask(task, tasks) : completeTask(task, tasks));
         }
         if (event.key === "F10" && event.shiftKey) {
           event.preventDefault();
@@ -114,10 +121,10 @@ export function TaskRow({
           type="checkbox"
           tabIndex={-1}
           checked={task.state === "closed"}
-          disabled={pending || task.state === "closed"}
-          aria-label={`Complete '${task.title}'`}
+          disabled={pending}
+          aria-label={`${task.state === "closed" ? "Reopen" : "Complete"} '${task.title}'`}
           onChange={() => {
-            void completeTask(task, tasks);
+            void (task.state === "closed" ? reopenTask(task, tasks) : completeTask(task, tasks));
           }}
         />
       </label>
@@ -136,6 +143,19 @@ export function TaskRow({
               <span title="Recurring task">
                 <Repeat2 size={14} aria-label="Recurring task" />
               </span>
+            )}
+            {task.derivedFrom && (
+              <span title="Occurrence of a recurring task">
+                <Repeat2 size={14} aria-label="Occurrence of a recurring task" />
+              </span>
+            )}
+            {task.state === "closed" && task.completedAt && (
+              <time dateTime={task.completedAt.toISOString()} title="Completed at">
+                {task.completedAt.toLocaleTimeString("en-GB", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </time>
             )}
             {task.hasReminders && (
               <span title="Reminder set">
@@ -170,79 +190,108 @@ export function TaskRow({
           </div>
         )}
       </div>
-      <div className="tsk-row-actions">
-        <IconButton
-          className="tsk-wide-action"
-          label="Reschedule"
-          variant="ghost"
-          tabIndex={-1}
-          disabled
-        >
-          <CalendarDays size={16} aria-hidden="true" />
-        </IconButton>
-        <Link
-          className="tsk-wide-action tsk-icon-link"
-          href={href}
-          tabIndex={-1}
-          aria-label={`Edit '${task.title}'`}
-        >
-          <Pencil size={16} aria-hidden="true" />
-        </Link>
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <IconButton label={`Actions for '${task.title}'`} variant="ghost" tabIndex={-1}>
-              <Ellipsis size={18} aria-hidden="true" />
-            </IconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              if (confirmDelete) return;
-              document
-                .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
-                ?.focus();
-            }}
+      <ReschedulePopover
+        open={rescheduleOpen}
+        onOpenChange={setRescheduleOpen}
+        onSelect={(dayKey) => {
+          void rescheduleTasks([task], dayKey, tasks);
+        }}
+        onCloseFocus={() => {
+          document.querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)?.focus();
+        }}
+      >
+        <div className="tsk-row-actions">
+          <IconButton
+            className="tsk-wide-action"
+            label="Reschedule"
+            variant="ghost"
+            tabIndex={-1}
+            disabled={pending}
+            onClick={() => setRescheduleOpen(true)}
           >
-            <DropdownMenuItem asChild>
-              <Link href={href}>Edit</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>Reschedule</DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => {
-                setConfirmDelete(true);
+            <CalendarDays size={16} aria-hidden="true" />
+          </IconButton>
+          <Link
+            className="tsk-wide-action tsk-icon-link"
+            href={href}
+            tabIndex={-1}
+            aria-label={`Edit '${task.title}'`}
+          >
+            <Pencil size={16} aria-hidden="true" />
+          </Link>
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <IconButton label={`Actions for '${task.title}'`} variant="ghost" tabIndex={-1}>
+                <Ellipsis size={18} aria-hidden="true" />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                if (confirmDelete || rescheduleOpen) return;
+                document
+                  .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+                  ?.focus();
               }}
             >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-          <AlertDialogContent
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              document
-                .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
-                ?.focus();
-            }}
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete '{task.title}'?</AlertDialogTitle>
-              <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  void deleteTask(task, tasks);
+              <DropdownMenuItem asChild>
+                <Link href={href}>Edit</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => {
+                  setRescheduleOpen(true);
+                }}
+              >
+                Reschedule…
+              </DropdownMenuItem>
+              {task.state === "closed" && (
+                <DropdownMenuItem
+                  disabled={pending}
+                  onSelect={() => {
+                    void reopenTask(task, tasks);
+                  }}
+                >
+                  Reopen
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => {
+                  setConfirmDelete(true);
                 }}
               >
                 Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+            <AlertDialogContent
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                document
+                  .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+                  ?.focus();
+              }}
+            >
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete '{task.title}'?</AlertDialogTitle>
+                <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    void deleteTask(task, tasks);
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </ReschedulePopover>
       {saving && slow && <span className="tsk-saving" role="status" aria-label="Saving task" />}
     </li>
   );

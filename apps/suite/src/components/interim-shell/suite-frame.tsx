@@ -21,6 +21,7 @@ import {
   Music,
   Search,
   SquareCheckBig,
+  StickyNote,
   Table2,
   Users,
   Wallet,
@@ -39,6 +40,7 @@ export type SuiteAppId =
   | "health"
   | "tasks"
   | "music"
+  | "notes"
   | "sheets";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
@@ -46,6 +48,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
   { id: "sheets", label: "Sheets", href: "/sheets", icon: Table2 },
+  { id: "notes", label: "Notes", href: "/notes", icon: StickyNote },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
