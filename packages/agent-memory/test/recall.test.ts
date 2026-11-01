@@ -186,3 +186,75 @@ it("rejects wildcard scopes, invalid queries, malformed memory and bounded overf
     h.memory.recall({ ...QUERY, categories: ["pd:Preference"], limit: 100 }),
   ).rejects.toThrow();
 });
+
+it("excludes claims invalidated by a later revision even if their status remains Current", async () => {
+  const h = await harness();
+  const batch: Batch = {
+    batch_id: "revisions",
+    worker: { agent_id: AGENT, agent_label: "Fixture" },
+    sources: [{ id: "source", kind: "document", url: "https://example.org/source" }],
+    claims: [
+      {
+        id: "old",
+        assertion: createFactAssertion(OWNER, {
+          template: "preference",
+          value: { propertyID: "scheduling", value: "Mornings" },
+        }),
+        epistemic: "SelfReportedExplicit",
+        categories: ["pd:Preference"],
+      },
+      {
+        id: "new",
+        assertion: createFactAssertion(OWNER, {
+          template: "preference",
+          value: { propertyID: "scheduling", value: "Afternoons" },
+        }),
+        epistemic: "SelfReportedExplicit",
+        categories: ["pd:Preference"],
+        supersedes: ["old"],
+        evidence: [
+          { source: "source", timestamp: "2026-11-01T11:00:00Z", quote: "Now afternoons." },
+        ],
+      },
+    ],
+  };
+  const data = await buildNanopublications(batch, { owner: OWNER, generatedAt: NOW.toISOString() });
+  await h.storage.create(CONTAINER, await serializeNanopublications(data), {
+    name: "revisions.trig",
+    contentType: "application/trig",
+  });
+  expect((await h.memory.recall(QUERY)).map((result) => result.nanopubs[0]?.identifier)).toEqual([
+    "revisions/new",
+  ]);
+});
+
+it("bounds listings and rejects non-TriG resources before parsing", async () => {
+  const h = await harness();
+  await seed(h);
+  // pending/ itself counts toward the bounded container scan.
+  const limited = createAgentMemory({ ...h.options, maxResources: 1 });
+  await expect(limited.recall({ ...QUERY, about: "urn:example:absent" })).rejects.toThrow(
+    "resource limit",
+  );
+  await h.storage.create(CONTAINER, "not RDF", { name: "invalid.trig", contentType: "text/plain" });
+  await expect(h.memory.recall({ ...QUERY, limit: 100 })).rejects.toThrow("TriG resource");
+});
+
+it("snapshots query filters before an asynchronous mandate load", async () => {
+  let resolve: (() => void) | undefined;
+  const ready = new Promise<void>((done) => {
+    resolve = done;
+  });
+  const h = await harness({
+    loadMandate: async () => {
+      await ready;
+      return mandate;
+    },
+  });
+  await seed(h);
+  const query = { ...QUERY, about: "urn:example:absent" };
+  const recalling = h.memory.recall(query);
+  query.about = OWNER;
+  resolve?.();
+  expect(await recalling).toEqual([]);
+});

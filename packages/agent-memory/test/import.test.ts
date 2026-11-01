@@ -93,3 +93,37 @@ it("rejects unpinned sources and oversized import input", async () => {
     h.memory.importCommunicationRules({ ...input, yaml: " ".repeat(1_048_577) }),
   ).rejects.toThrow("size limit");
 });
+
+it("does not reimport if approval finishes between the existence check and pending create", async () => {
+  const h = await harness();
+  const original = await h.memory.importCommunicationRules(input);
+  const approval = await h.sign(original);
+  await h.memory.approveRemember(original.id, approval);
+  const existing = await h.storage.read(original.target);
+  const originalBytes = await existing.text();
+  const originalEtag = existing.etag as string;
+  // Simulate the approved copy appearing after this instance observed no previous import.
+  await h.storage.delete(original.target, { ifMatch: originalEtag });
+  const create = h.storage.create.bind(h.storage);
+  let restored = false;
+  h.storage.create = async (parent, body, options) => {
+    if (!restored && parent.endsWith("pending/")) {
+      restored = true;
+      await create(CONTAINER, originalBytes, {
+        name: original.target.split("/").at(-1),
+        contentType: "application/trig",
+      });
+    }
+    return create(parent, body, options);
+  };
+  const queue = vi.fn();
+  const restarted = createAgentMemory({ ...h.options, queueApproval: queue });
+  const actual = await restarted.importCommunicationRules({
+    ...input,
+    commit: "b".repeat(40),
+    yaml: "rules: [{id: changed, rule: Different rule}]",
+  });
+  expect(actual).toEqual(original);
+  expect(queue).not.toHaveBeenCalled();
+  expect((await h.storage.list(`${CONTAINER}pending/`)).items).toHaveLength(0);
+});

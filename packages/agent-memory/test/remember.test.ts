@@ -217,3 +217,39 @@ it("requires explicit source context, categories and health labels without writi
   ).rejects.toThrow("pd:Health");
   expect((await h.storage.list(`${CONTAINER}pending/`)).items).toHaveLength(0);
 });
+
+it("requires strong pending validators before SHACL or promotion", async () => {
+  const h = await harness();
+  const item = await h.memory.proposeRemember(claim);
+  const approval = await h.sign(item);
+  const read = h.storage.read.bind(h.storage);
+  h.storage.read = async (...args) => ({ ...(await read(...args)), etag: 'W/"weak"' });
+  const validate = vi.fn(async () => ({ conforms: true, results: [] }));
+  const memory = createAgentMemory({ ...h.options, validator: { validate } });
+  await expect(memory.approveRemember(item.id, approval)).rejects.toThrow("strong ETag");
+  expect(validate).not.toHaveBeenCalled();
+});
+
+it("still validates a completed promotion on retry", async () => {
+  const h = await harness();
+  const item = await h.memory.proposeRemember(claim);
+  const approval = await h.sign(item);
+  await h.memory.approveRemember(item.id, approval);
+  const retry = createAgentMemory({
+    ...h.options,
+    validator: { validate: async () => ({ conforms: false, results: [] }) },
+  });
+  await expect(retry.approveRemember(item.id, approval)).rejects.toThrow("SHACL");
+});
+
+it("rejects unscoped containers, missing shapes, unsupported backends and invalid bounds", async () => {
+  const h = await harness();
+  expect(() =>
+    createAgentMemory({ ...h.options, container: "https://foreign.example/memory/" }),
+  ).toThrow("scoped");
+  expect(() => createAgentMemory({ ...h.options, shapes: "" })).toThrow("SHACL shapes");
+  expect(() => createAgentMemory({ ...h.options, maxResourceBytes: 0 })).toThrow("positive");
+  expect(() =>
+    createAgentMemory({ ...h.options, storage: { ...h.storage, protocol: "lws" } }),
+  ).toThrow("scoped");
+});

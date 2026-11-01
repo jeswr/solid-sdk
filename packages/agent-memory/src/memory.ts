@@ -152,7 +152,7 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
     }
     return undefined;
   }
-  async function stage(batch: Batch, filename: string): Promise<RememberProposal> {
+  async function stage(batch: Batch, filename: string, once = false): Promise<RememberProposal> {
     const built = await buildNanopublications(batch, {
       owner: ownerWebId,
       generatedAt: now().toISOString(),
@@ -167,6 +167,26 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
       const previous = await existing(filename);
       if (previous) return previous;
       throw error;
+    }
+    if (once) {
+      // A previous approval can finish between the existence reads and conditional create.
+      // The approved resource wins; remove only the pending snapshot we just created.
+      let approved: Awaited<ReturnType<typeof read>> | undefined;
+      try {
+        approved = await read(new URL(filename, container).href);
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      if (approved) {
+        const staged = await read(new URL(filename, pending).href);
+        if (staged.trig !== trig) throw new Error("Concurrent communication rules edit");
+        await storage.delete(new URL(filename, pending).href, { ifMatch: strongEtag(staged.etag) });
+        return proposal(
+          new URL(filename, pending).href,
+          approved.trig,
+          await parseNanopublications(approved.trig),
+        );
+      }
     }
     const item = proposal(new URL(filename, pending).href, trig, built);
     await options.queueApproval(item);
@@ -378,6 +398,7 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
             })),
           },
           filename,
+          true,
         );
       });
     },
