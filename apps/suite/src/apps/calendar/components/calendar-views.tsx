@@ -39,12 +39,14 @@ export function EventButton({
   className = "",
   tabIndex,
   compact = false,
+  day,
 }: {
   event: Occurrence;
   style?: CSSProperties;
   className?: string;
   tabIndex?: number;
   compact?: boolean;
+  day?: () => HTMLElement | undefined;
 }) {
   const { openEvent } = useCalendarState();
   return (
@@ -56,7 +58,7 @@ export function EventButton({
       tabIndex={tabIndex}
       title={`${event.data.name} · ${eventTime(event.data)} · ${event.calendar.title}`}
       aria-label={`${event.data.name}, ${eventTime(event.data)}, ${event.calendar.title}`}
-      onClick={(e) => openEvent(event, e.currentTarget)}
+      onClick={(e) => openEvent(event, e.currentTarget, day?.())}
     >
       <span className="cal-event-title">
         {event.data.name}
@@ -77,7 +79,7 @@ function MonthView({ events }: { events: Occurrence[] }) {
   const [focused, setFocused] = useState(date);
   const root = useRef<HTMLTableElement>(null);
   const [limit, setLimit] = useState(2);
-  const { focusRequest } = useCalendarState();
+  const { focusRequest, selected, closeEvent } = useCalendarState();
   useEffect(() => {
     const element = root.current;
     if (!element) return;
@@ -190,11 +192,31 @@ function MonthView({ events }: { events: Occurrence[] }) {
                           aria-label={`${dayEvents.length - limit} more events on ${label}`}
                         >{`+${dayEvents.length - limit} more`}</button>
                       </PopoverTrigger>
-                      <PopoverContent className="cal-overflow" aria-label={`Events on ${label}`}>
+                      <PopoverContent
+                        className="cal-overflow"
+                        aria-label={`Events on ${label}`}
+                        onInteractOutside={(event) => {
+                          if (selected) event.preventDefault();
+                        }}
+                        onEscapeKeyDown={(event) => {
+                          if (selected) {
+                            event.preventDefault();
+                            closeEvent();
+                          }
+                        }}
+                      >
                         <h2>{label}</h2>
                         <Link href={calendarHref("day", cell.date)}>Open day</Link>
                         {dayEvents.map((event) => (
-                          <EventButton key={event.id} event={event} />
+                          <EventButton
+                            key={event.id}
+                            event={event}
+                            day={() =>
+                              root.current?.querySelector<HTMLElement>(
+                                `[data-day="${cell.date}"]`,
+                              ) ?? undefined
+                            }
+                          />
                         ))}
                       </PopoverContent>
                     </Popover>

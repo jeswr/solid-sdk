@@ -35,7 +35,13 @@ export const PALETTE = [
   "--app-notes",
   "--app-photos",
 ].map((name) => (tokens.find((token) => token.name === name) as SuiteToken).light);
-export function calendarColour(url: string): string {
+/** Only portable hex colours and our literal theme palette may reach CSS. */
+export function calendarColour(url: string, value?: string): string {
+  if (
+    value &&
+    (/^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value) || PALETTE.includes(value))
+  )
+    return value;
   let hash = 0;
   for (const char of url) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
   return PALETTE[hash % PALETTE.length] as string;

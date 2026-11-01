@@ -200,6 +200,93 @@ it("shows month overflow and searches loaded event fields", async () => {
   expect(search.host.textContent).toContain("Searching events from");
   expect(buttons(search.host, "Dinner with friends,")).toHaveLength(1);
 });
+
+it("renders an untrusted calendar colour with a safe swatch in navigation, events and Details", async () => {
+  const session = mocks.session as PodSession;
+  const io = calendarIO(session.fetch, session.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work.ttl`;
+  const work = await io.loadCalendar(url);
+  await io.saveCalendar(
+    url,
+    { title: "Work", color: "url(https://attacker.example/pixel)" },
+    { etag: work?.etag as string },
+  );
+  const mounted = await mount(screen());
+  await settle();
+  await click(buttons(mounted.host, "Team stand-up,")[0] as HTMLElement);
+  const swatches = mounted.host.querySelectorAll<HTMLElement>(".cal-swatch");
+  expect(swatches.length).toBeGreaterThan(1);
+  for (const swatch of swatches) {
+    expect(swatch.style.backgroundColor).not.toBe("");
+    expect(swatch.style.backgroundImage).toBe("");
+  }
+  expect(mounted.host.innerHTML).not.toContain("attacker.example");
+});
+
+it("keeps month overflow mounted while Details has focus and returns to its event", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const more = mounted.host.querySelector<HTMLElement>(
+    '[data-day="2026-11-01"] .cal-more',
+  ) as HTMLElement;
+  await click(more);
+  const event = document.querySelector<HTMLElement>(
+    '.cal-overflow button[aria-label^="Read in the park,"]',
+  ) as HTMLElement;
+  await act(() => event.focus());
+  await click(event);
+  await settle();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close event details");
+  expect(event.isConnected).toBe(true);
+  await click(document.activeElement as HTMLElement);
+  await settle();
+  expect(document.activeElement).toBe(event);
+});
+
+it.each([
+  "overflow",
+  "day",
+  "main",
+  "removed",
+])("restores a connected %s fallback when the event trigger is unmounted", async (fallback) => {
+  let context!: ReturnType<typeof useCalendarState>;
+  let events!: ReturnType<typeof useEventsInRange>;
+  function Probe() {
+    context = useCalendarState();
+    events = useEventsInRange("2026-11-01", "2026-11-02");
+    return null;
+  }
+  const mounted = await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const main = document.createElement("main");
+  main.id = "main-content";
+  main.tabIndex = -1;
+  const day = document.createElement("div");
+  day.dataset.day = "2026-11-01";
+  day.tabIndex = -1;
+  const more = document.createElement("button");
+  more.className = "cal-more";
+  const trigger = document.createElement("button");
+  day.append(more, trigger);
+  main.append(day);
+  mounted.host.append(main);
+  await act(() => {
+    if (events.status !== "ready") throw new Error("Events not ready");
+    context.openEvent(events.events[0] as Occurrence, trigger, day);
+  });
+  trigger.remove();
+  if (fallback !== "overflow") more.remove();
+  if (fallback === "main" || fallback === "removed") day.remove();
+  if (fallback === "removed") main.remove();
+  await act(() => context.closeEvent());
+  await settle();
+  if (fallback !== "removed")
+    expect(document.activeElement).toBe(
+      fallback === "overflow" ? more : fallback === "day" ? day : main,
+    );
+  else expect(context.eventTrigger.current).toBeNull();
+});
 it("renders agenda pagination, navigation shortcuts and input exclusions", async () => {
   mocks.path = "/calendar/agenda";
   const mounted = await mount(screen("agenda"));
@@ -594,6 +681,128 @@ it("keeps pending updates with their ETag, hides their calendar and closes its s
   await act(async () => {
     await expect(mutations.update(url, item.data, '"stale"')).rejects.toThrow("412");
   });
+});
+
+it("keeps legacy events without inCalendar and their open Details visible through optimistic success and rollback", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const original = await io.loadEvent(url);
+  if (!original) throw new Error("Missing stand-up fixture");
+  const { inCalendar: _calendar, ...legacy } = original.data;
+  const etag = await io.saveEvent(url, legacy, { etag: original.etag as string });
+  let writeGate = deferred<boolean>();
+  let readGate: ReturnType<typeof deferred<void>> | undefined;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (String(input) === url && init?.method === "PUT" && !(await writeGate.promise))
+        return new Response(null, { status: 500 });
+      if (String(input) === `${DEMO_ROOT}calendar/work/` && readGate) await readGate.promise;
+      return account.fetch(input, init);
+    },
+  };
+  let context!: ReturnType<typeof useCalendarState>;
+  let latest!: ReturnType<typeof useEventsInRange>;
+  let mutations!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    context = useCalendarState();
+    latest = useEventsInRange("2026-10-26", "2026-11-02");
+    mutations = useEventMutations();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const occurrences = () =>
+    latest.status === "ready" ? latest.events.filter((event) => event.url === url) : [];
+  expect(occurrences()).toHaveLength(3);
+  expect(occurrences()[0]?.data.inCalendar).toBeUndefined();
+  await act(() => context.openEvent(occurrences()[0] as Occurrence, document.body));
+  let task!: Promise<void>;
+  await act(() => {
+    task = mutations.update(url, { ...legacy, name: "Pending legacy rename" }, etag as string);
+  });
+  expect(occurrences()).toHaveLength(3);
+  expect(
+    occurrences().every((event) => event.calendar.title === "Work" && event.etag === etag),
+  ).toBe(true);
+  expect(context.selected?.data.name).toBe("Pending legacy rename");
+  await act(async () => {
+    writeGate.resolve(false);
+    await expect(task).rejects.toThrow("500");
+  });
+  await settle();
+  expect(occurrences()).toHaveLength(3);
+  expect(context.selected?.data.name).toBe(legacy.name);
+  writeGate = deferred<boolean>();
+  readGate = deferred<void>();
+  await act(() => {
+    task = mutations.update(url, { ...legacy, name: "Saved legacy rename" }, etag as string);
+  });
+  expect(context.selected?.data.name).toBe("Saved legacy rename");
+  await act(async () => {
+    writeGate.resolve(true);
+    await task;
+  });
+  await settle();
+  expect(occurrences()).toHaveLength(3);
+  expect(context.selected?.data.name).toBe("Saved legacy rename");
+  expect(context.selected?.etag).toBe((await io.loadEvent(url))?.etag);
+  await act(() => {
+    readGate?.resolve();
+    readGate = undefined;
+  });
+  await settle();
+  expect(context.selected?.data.name).toBe("Saved legacy rename");
+});
+
+it("derives a missing calendar association from the scoped event container when no occurrence is cached", async () => {
+  const account = mocks.session as PodSession;
+  const gate = deferred<void>();
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT") await gate.promise;
+      return account.fetch(input, init);
+    },
+  };
+  let latest!: ReturnType<typeof useEventsInRange>;
+  let mutations!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    latest = useEventsInRange("2026-11-01", "2026-11-02");
+    mutations = useEventMutations();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  let task!: Promise<void>;
+  const data = { name: "No predicate", start: "2026-11-01" };
+  const url = `${DEMO_ROOT}calendar/work/new-legacy.ttl`;
+  await act(() => {
+    task = mutations.create(url, data);
+  });
+  const current = () =>
+    latest.status === "ready" ? latest.events.find((event) => event.url === url) : undefined;
+  expect(current()?.calendar.title).toBe("Work");
+  expect(current()?.data.inCalendar).toBeUndefined();
+  await act(async () => {
+    gate.resolve();
+    await task;
+  });
+  await settle();
+  expect(current()?.calendar.title).toBe("Work");
+  let rejected!: Promise<void>;
+  await act(() => {
+    rejected = mutations.create("https://attacker.example/calendar/work/foreign.ttl", data);
+    void rejected.catch(() => undefined);
+  });
+  await act(async () => {
+    await expect(rejected).rejects.toThrow();
+  });
+  expect(
+    latest.status === "ready" &&
+      latest.events.some((event) => event.url.includes("attacker.example")),
+  ).toBe(false);
 });
 
 it("surfaces rejected cached ranges, retries them and ignores late failure after unmount", async () => {

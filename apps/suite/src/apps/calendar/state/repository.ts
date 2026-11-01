@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { createPodScopedFetch, podScopedUrl } from "@jeswr/guarded-fetch";
+import { createPodScopedFetch, podScopedUrl, refuseRedirects } from "@jeswr/guarded-fetch";
 import { termsEqual } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import {
@@ -16,7 +16,11 @@ export interface CalendarAccount {
   webId: string;
   storageUrl: string;
   fetch: typeof globalThis.fetch;
+  /** Pristine public transport, never an authenticated session fetch. */
+  publicFetch?: typeof globalThis.fetch;
 }
+// Capture before sign-in can patch the global. Foreign profile reads omit cookies and refuse redirects.
+const publicFetch = globalThis.fetch.bind(globalThis);
 export interface CalendarWarning {
   calendarUrl: string;
   title: string;
@@ -45,7 +49,13 @@ export async function discoverCalendars(
 ): Promise<{ calendars: CalendarInfo[]; warnings: CalendarWarning[] }> {
   const fetch = createPodScopedFetch(account.storageUrl, { fetch: account.fetch });
   const io = calendarIO(account.fetch, account.storageUrl);
-  const { dataset } = await fetchRdf(calendarDocument(account.webId), { fetch });
+  const profileUrl = calendarDocument(account.webId);
+  const profileFetch = podScopedUrl(account.storageUrl, profileUrl)
+    ? fetch
+    : refuseRedirects((input, init) =>
+        (account.publicFetch ?? publicFetch)(input, { ...init, credentials: "omit" }),
+      );
+  const { dataset } = await fetchRdf(profileUrl, { fetch: profileFetch });
   const anchor = new ProfileTypeIndexAnchor(account.webId, dataset, DataFactory);
   const indexes = new Set(anchor.privateIndexes);
   for (const prefs of anchor.preferencesFiles) {
@@ -89,7 +99,7 @@ export async function discoverCalendars(
         calendars.push({
           url: item.url,
           title: item.data.title,
-          colour: item.data.color ?? calendarColour(url),
+          colour: calendarColour(url, item.data.color),
           etag: item.etag,
           container: eventContainer(item.url),
         });

@@ -25,6 +25,7 @@ import {
 } from "../src/apps/calendar/state/repository";
 import {
   addDays,
+  calendarColour,
   dateKey,
   localDate,
   PALETTE,
@@ -70,6 +71,18 @@ async function putGraph(account: CalendarAccount, path: string, graph: Store) {
   });
 }
 describe("Calendar repository discovery and demo", () => {
+  it("sanitizes hostile RDF calendar colours before they enter view state", async () => {
+    const { account, io } = await setup();
+    const url = `${root}calendar/work.ttl`;
+    const item = await io.loadCalendar(url);
+    await io.saveCalendar(
+      url,
+      { title: "Work", color: "url(https://attacker.example/pixel)" },
+      { etag: item?.etag as string },
+    );
+    const { calendars } = await discoverCalendars(account);
+    expect(calendars.find((calendar) => calendar.url === url)?.colour).toBe(calendarColour(url));
+  });
   it("parses document/container URLs and safe slugs", () => {
     expect(calendarDocument(`${root}calendar/work.ttl?x=1#it`)).toBe(`${root}calendar/work.ttl`);
     expect(eventContainer(`${root}calendar/work.ttl#it`)).toBe(`${root}calendar/work/`);

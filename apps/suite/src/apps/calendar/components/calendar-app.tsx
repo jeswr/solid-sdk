@@ -111,7 +111,7 @@ export function CreateCalendar() {
                       checked={value === colour}
                       onChange={() => setColour(value)}
                     />
-                    <span className="cal-swatch" style={{ background: value }} />
+                    <span className="cal-swatch" style={{ backgroundColor: value }} />
                   </label>
                 ))}
               </div>
@@ -159,7 +159,7 @@ function Sidebar() {
               }
               aria-label={`Show ${calendar.title} calendar`}
             />
-            <span className="cal-swatch" style={{ background: calendar.colour }} />
+            <span className="cal-swatch" style={{ backgroundColor: calendar.colour }} />
             <span>{calendar.title}</span>
           </label>
         ))}
@@ -203,7 +203,7 @@ function Details() {
         </IconButton>
       </header>
       <p className="cal-calendar-name">
-        <span className="cal-swatch" style={{ background: selected.calendar.colour }} />
+        <span className="cal-swatch" style={{ backgroundColor: selected.calendar.colour }} />
         {selected.calendar.title}
       </p>
       <p>{eventDateRange(event)}</p>

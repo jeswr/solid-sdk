@@ -49,6 +49,21 @@ function occurrence(data: CalendarEvent): Occurrence {
   };
 }
 describe("Calendar view and preference pure logic", () => {
+  it("accepts only literal hex or palette colours, falling back for request-capable CSS", () => {
+    for (const colour of ["#abc", "#abcd", "#12ABef", "#12345678", ...PALETTE])
+      expect(calendarColour("work", colour)).toBe(colour);
+    for (const colour of [
+      undefined,
+      "",
+      "url(https://attacker.example/pixel)",
+      "image-set(url(https://attacker.example/pixel) 1x)",
+      "var(--untrusted)",
+      "#12345",
+      "#123456; background: url(https://attacker.example/pixel)",
+      "red",
+    ])
+      expect(calendarColour("work", colour)).toBe(calendarColour("work"));
+  });
   it("validates URL dates without accepting JS date overflow", () => {
     expect(dateKey(today)).toBe("2026-11-01");
     expect(dateKey("2026-11-02")).toBe("2026-11-02");
