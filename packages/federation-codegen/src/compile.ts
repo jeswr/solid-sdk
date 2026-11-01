@@ -468,6 +468,22 @@ function compileCompositeEntity(
 
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
+  // Check every property BEFORE any projection can discard datatype/cardinality,
+  // including nested links and optional properties omitted by a composite.
+  for (const shape of shapes.nodeShapes) {
+    for (const c of shape.properties) {
+      if (c.kind === "iri" && c.datatype !== undefined) {
+        throw new TypeError(
+          `property ${c.shapeIri} has an incompatible datatype and IRI node kind`,
+        );
+      }
+      if (c.minCount !== undefined && c.maxCount !== undefined && c.minCount > c.maxCount) {
+        throw new TypeError(
+          `property ${c.shapeIri} has impossible cardinality: minCount > maxCount`,
+        );
+      }
+    }
+  }
   const provenance: FieldProvenance[] = [];
   const shapeByTarget = new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
 

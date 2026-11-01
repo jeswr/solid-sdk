@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Parser, Writer } from "n3";
+import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
 import { type CodegenConfig, type GenerateInput, generateModel } from "../../src/index.js";
+import { serializeCanonicalTurtle } from "../../src/rdf.js";
 import { flat } from "../helpers.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,14 +34,7 @@ function input(): GenerateInput {
 /** Re-serialise a Turtle document with its triples in REVERSED order (N-Triples). */
 function permute(ttl: string): string {
   const quads = new Parser().parse(ttl).reverse();
-  const writer = new Writer({ format: "N-Triples" });
-  writer.addQuads(quads);
-  let out = "";
-  writer.end((err, result) => {
-    if (err) throw err;
-    out = result;
-  });
-  return out;
+  return serializeCanonicalTurtle(quads, {}, "N-Triples");
 }
 
 describe("generateModel — pilot generation", () => {

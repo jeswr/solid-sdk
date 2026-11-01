@@ -43,6 +43,10 @@ Every read/write goes through, in the load-bearing order:
   Closed `in` enums filter reads and writes, including live-set additions; invalid writes drop.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
+- **One serialization boundary**, after alias migration: `serializeTurtle` checks every
+  emitted NamedNode, literal datatype IRI, prefix label and namespace immediately before
+  `n3.Writer`. Unsafe IRIs throw `TypeError` without changing identity; invalid prefix
+  labels throw `ManifestError`. Public `types.add` also rejects unsafe IRIs before insertion.
 - **Fail-closed manifest validation** — unknown keys rejected, hard caps on bytes / field count /
   `sh:in` length / nesting depth, reserved field-name denylist (`__proto__`, prototype members …),
   schema version bound to the runtime major. **No manifest field may ever carry executable, regex-source,

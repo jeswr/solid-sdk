@@ -25,12 +25,11 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory as N3DataFactory, Store, Writer } from "n3";
+import { DataFactory as N3DataFactory, Store } from "n3";
 import { type DatatypeMapper, iriMapper, literalMapper } from "./datatypes.js";
 import {
   httpIriOrUndefined,
   isSafeAbsoluteIri,
-  isTurtlePrefixName,
   sanitizeText,
   subjectIri,
   tryRead,
@@ -39,14 +38,20 @@ import {
   type CompositeManifestEntity,
   isCompositeEntity,
   type ManifestEntity,
-  ManifestError,
   type ManifestField,
   type ManifestNode,
   type ModelManifest,
   validateManifest,
 } from "./manifest.js";
+import { serializeTurtle } from "./rdf.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+/** Defense in depth for public type mutations and structural NamedNode writes. */
+const safeNamedNodeFrom: ITermFromValueMapping<string> = (value, factory) => {
+  if (!isSafeAbsoluteIri(value)) throw new TypeError("NamedNode must be a safe absolute IRI");
+  return NamedNodeFrom.string(value, factory);
+};
 
 /** A plain, serialisable projection of an entity instance (field name → value). */
 export type EntityData = Record<string, unknown>;
@@ -403,6 +408,7 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
 /** Live set for a set field (mutations write through @rdfjs/wrapper's SetFrom). */
 function predicateSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
   const { field, mapper } = plan;
+  if (!isSafeAbsoluteIri(field.predicate)) throw new TypeError("unsafe field predicate");
   const base = SetFrom.subjectPredicate(
     doc,
     field.predicate,
@@ -504,6 +510,7 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
 /** Write a single (non-set) field's value, applying write-side guards, fail-closed. */
 function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   const { field, mapper } = plan;
+  if (!isSafeAbsoluteIri(field.predicate)) throw new TypeError("unsafe field predicate");
   clearAliases(doc, field);
   let v = value;
   if (field.kind === "iri") {
@@ -517,7 +524,7 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
       doc,
       field.predicate,
       v as never,
-      NamedNodeFrom.string as (value: never, f: DataFactory) => Term,
+      safeNamedNodeFrom as (value: never, f: DataFactory) => Term,
     );
     return;
   }
@@ -569,7 +576,7 @@ function makeWrapperClass(
       return this.value;
     }
     get types(): Set<string> {
-      return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
+      return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom);
     }
     get isInstance(): boolean {
       const types = this.types;
@@ -706,11 +713,12 @@ function readFlatFieldInto(doc: TermWrapper, plan: FieldPlan, data: EntityData):
 
 /** The single write-IRI-link primitive — routes through @rdfjs/wrapper (never a hand-built triple). */
 function writeIriLink(doc: TermWrapper, predicate: string, targetIri: string): void {
+  if (!isSafeAbsoluteIri(predicate)) throw new TypeError("unsafe link predicate");
   OptionalAs.object(
     doc,
     predicate,
     targetIri as never,
-    NamedNodeFrom.string as (value: never, f: DataFactory) => Term,
+    safeNamedNodeFrom as (value: never, f: DataFactory) => Term,
   );
 }
 
@@ -753,7 +761,7 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
           doc,
           RDF_TYPE,
           NamedNodeAs.string,
-          NamedNodeFrom.string,
+          safeNamedNodeFrom,
         );
         types.delete(alias);
         for (const type of node.typeIris) types.add(type);
@@ -777,13 +785,6 @@ function assembleEntity(
   factory: DataFactory,
 ): ModelEntity {
   const storeToTurtle = (store: Store): Promise<string> => {
-    // Recheck mutable manifests immediately before crossing the writer boundary.
-    for (const name of Object.keys(manifest.prefixes)) {
-      if (!isTurtlePrefixName(name)) throw new ManifestError("invalid Turtle prefix name");
-    }
-    for (const quad of store) {
-      if (quad.subject.termType === "NamedNode") subjectIri(quad.subject.value);
-    }
     const aliases = manifest.entities
       .flatMap<ManifestEntity | ManifestNode>((entity) =>
         isCompositeEntity(entity) ? entity.nodes : [entity],
@@ -792,16 +793,11 @@ function assembleEntity(
         ...(node.aliasTypeIris ?? []),
         ...node.fields.flatMap((field) => field.aliasPredicates ?? []),
       ]);
-    const prefixes = Object.fromEntries(
-      Object.entries(manifest.prefixes).filter(
-        ([, iri]) => !aliases.some((alias) => alias.startsWith(iri)),
-      ),
+    return serializeTurtle(
+      canonicalizeAliases(store, manifest, factory),
+      manifest.prefixes,
+      aliases,
     );
-    const writer = new Writer({ prefixes });
-    writer.addQuads([...canonicalizeAliases(store, manifest, factory)]);
-    return new Promise<string>((resolve, reject) => {
-      writer.end((error, result) => (error ? reject(error) : resolve(result)));
-    });
   };
   const serialize = (resourceUrl: string, data: EntityData): Promise<string> =>
     storeToTurtle(core.build(resourceUrl, data));

@@ -8,7 +8,7 @@
  * `n3.Writer`, reads go through `Store`.
  */
 
-import { isTurtlePrefixName } from "@jeswr/model-runtime";
+import { isSafeAbsoluteIri, isTurtlePrefixName } from "@jeswr/model-runtime";
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 
@@ -93,20 +93,38 @@ export function compareQuads(a: Quad, b: Quad): number {
  * Serialise quads to Turtle DETERMINISTICALLY: quads are sorted by canonical key
  * and prefixes emitted in sorted order, so (given skolemized nodes and stable
  * blank labels for complex-path roots) output is byte-reproducible regardless
- * of input quad order. Uses `n3.Writer` (never a bespoke serializer).
+ * of input quad order. The N-Triples mode preserves supplied quad order for
+ * permutation tooling, through the SAME validated writer boundary.
  */
 export function serializeCanonicalTurtle(
   quads: Iterable<Quad>,
   prefixes: Record<string, string>,
+  format: "Turtle" | "N-Triples" = "Turtle",
 ): string {
-  const sorted = [...quads].sort(compareQuads);
+  const output = [...quads];
+  if (format === "Turtle") output.sort(compareQuads);
   const orderedPrefixes: Record<string, string> = {};
   for (const key of Object.keys(prefixes).sort()) {
     if (!isTurtlePrefixName(key)) throw new TypeError("invalid Turtle prefix name");
-    orderedPrefixes[key] = prefixes[key] as string;
+    const iri = prefixes[key];
+    if (!isSafeAbsoluteIri(iri))
+      throw new TypeError("prefix namespace must be a safe absolute IRI");
+    orderedPrefixes[key] = iri;
   }
-  const writer = new Writer({ prefixes: orderedPrefixes });
-  writer.addQuads(sorted);
+  // This is the ONLY generator writer boundary, after shape rewriting. Never
+  // repair identity: N3 accepts unsafe lexical IRIs and would emit them verbatim.
+  for (const quad of output) {
+    for (const term of [quad.subject, quad.predicate, quad.object, quad.graph]) {
+      if (term.termType === "NamedNode" && !isSafeAbsoluteIri(term.value)) {
+        throw new TypeError("NamedNode must be a safe absolute IRI");
+      }
+      if (term.termType === "Literal" && !isSafeAbsoluteIri(term.datatype.value)) {
+        throw new TypeError("literal datatype must be a safe absolute IRI");
+      }
+    }
+  }
+  const writer = new Writer({ prefixes: orderedPrefixes, format });
+  writer.addQuads(output);
   let out = "";
   writer.end((error, result) => {
     if (error) throw error;

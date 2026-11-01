@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The Mode-A codegen CLI (design §3.1): `federation-codegen gen` runs the pipeline
  * in-repo and writes the artifacts into a committed, diffable output directory,
@@ -15,7 +16,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CodegenConfig } from "./config.js";
+import { type CodegenConfig, validateConfig } from "./config.js";
 import { emitLockfile, type GenerateInput, generateModel } from "./generate.js";
 
 interface Args {
@@ -77,6 +78,7 @@ function run(argv: string[]): void {
   const ontologyTtl = readFileSync(args.ontology, "utf8");
   const shapesTtl = readFileSync(args.shapes, "utf8");
   const config = JSON.parse(readFileSync(args.config, "utf8")) as CodegenConfig;
+  validateConfig(config);
 
   const input: GenerateInput = { ontologyTtl, shapesTtl, config };
   if (args.allowUnadmitted) input.allowUnadmitted = true;

@@ -278,6 +278,7 @@ export function parseShapes(
   ontologyOrQuads?: NormalizedOntology | Quad[],
   ontologyQuads: Quad[] = [],
 ): NormalizedShapes {
+  if (!isSafeAbsoluteIri(shapesBase)) throw new TypeError("shapesBase must be a safe absolute IRI");
   const ontology = Array.isArray(ontologyOrQuads)
     ? owlRdfsAdapter.adapt(ontologyOrQuads)
     : ontologyOrQuads;
@@ -320,7 +321,8 @@ export function parseShapes(
     rejectAlias(shapesBase, "multiple NodeShapes for one canonical targetClass");
   }
 
-  // Blank-node → skolem IRI map (deterministic from class + path local names).
+  // Blank-node → skolem IRI map. Full identities determine the hash; local names
+  // are only readable suffixes, never identity or a per-shape collision counter.
   const skolem = new Map<string, string>();
   // SHACL interprets an IRI-valued sh:path as a predicate, regardless of its
   // outgoing triples. Complex-path roots MUST stay blank, with stable labels.
@@ -329,10 +331,10 @@ export function parseShapes(
 
   for (const { subject, targetClass, aliasTypeIris } of nodeShapeSubjects) {
     const classLocal = localName(targetClass);
-    const shapeIri = `${shapesBase}${classLocal}Shape`;
+    const shapeIdentity = [targetClass, subject.termType === "NamedNode" ? subject.value : null];
+    const shapeIri = mintSkolem(shapesBase, ["node", ...shapeIdentity], `${classLocal}Shape`);
     if (subject.termType === "BlankNode") skolem.set(subject.value, shapeIri);
 
-    const usedPropIris = new Set<string>();
     const usedPaths = new Set<string>();
     const properties: ShapeConstraint[] = [];
     for (const propObj of graph.objects(subject, `${SH}property`)) {
@@ -355,12 +357,20 @@ export function parseShapes(
       const pathRoot = graph.object(propObj, `${SH}path`);
       if (aliasPredicates && pathRoot?.termType === "BlankNode") pathRoots.add(pathRoot.value);
       const pathLocal = localName(pathIri);
-      let propShapeIri = `${shapesBase}${classLocal}-${pathLocal}`;
-      let n = 2;
-      while (usedPropIris.has(propShapeIri))
-        propShapeIri = `${shapesBase}${classLocal}-${pathLocal}-${n++}`;
-      usedPropIris.add(propShapeIri);
-      if (propObj.termType === "BlankNode") skolem.set(propObj.value, propShapeIri);
+      const propShapeIri = mintSkolem(
+        shapesBase,
+        ["property", ...shapeIdentity, pathIri],
+        `${classLocal}-${pathLocal}`,
+      );
+      if (propObj.termType === "BlankNode") {
+        const prior = skolem.get(propObj.value);
+        if (prior !== undefined && prior !== propShapeIri) {
+          throw new TypeError(
+            "skolem identity collision: blank node has multiple shape identities",
+          );
+        }
+        skolem.set(propObj.value, propShapeIri);
+      }
 
       const nodeKind = graph.value(propObj, `${SH}nodeKind`);
       const datatype = graph.value(propObj, `${SH}datatype`);
@@ -443,6 +453,21 @@ export function parseShapes(
   // canonical key over the triples they participate in.
   skolemizeRemaining(quads, skolem, shapesBase);
 
+  // Fail closed even for a hash collision or an input that deliberately claims a
+  // minted identity. Include ALL named IRIs in the profile (including orphan
+  // shapes), not only the NodeShapes selected for the manifest.
+  const occupied = new Set<string>();
+  for (const q of quads) {
+    for (const term of [q.subject, q.predicate, q.object, q.graph]) {
+      if (term.termType === "NamedNode") occupied.add(term.value);
+    }
+  }
+  for (const iri of skolem.values()) {
+    if (!isSafeAbsoluteIri(iri)) throw new TypeError("unsafe skolem IRI");
+    if (occupied.has(iri)) throw new TypeError("skolem identity collision with an existing IRI");
+    occupied.add(iri);
+  }
+
   // Rewrite the graph: replace mapped blank nodes with their skolem IRIs.
   const rewritten: Quad[] = quads.map((q) => {
     const subject = rewriteTerm(q.subject, skolem, pathRoots);
@@ -452,6 +477,7 @@ export function parseShapes(
       subject as Quad_Subject,
       q.predicate as Quad["predicate"],
       object as Quad_Object,
+      q.graph,
     );
   });
 
@@ -485,6 +511,12 @@ export function parseShapes(
 
 function stablePathLabel(iri: string): string {
   return `path_${createHash("sha256").update(iri).digest("hex")}`;
+}
+
+/** Length-delimited JSON identities avoid ambiguous concatenations of full IRIs. */
+function mintSkolem(shapesBase: string, identity: unknown[], readable: string): string {
+  const hash = createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  return `${shapesBase}${hash}-${encodeURIComponent(readable)}`;
 }
 
 function rewriteTerm(term: Term, skolem: Map<string, string>, pathRoots: Set<string>): Term {
@@ -530,7 +562,7 @@ function skolemizeRemaining(quads: Quad[], skolem: Map<string, string>, shapesBa
   [...ids]
     .sort((a, b) => (colors.get(a) as string).localeCompare(colors.get(b) as string))
     .forEach((id, index) => {
-      skolem.set(id, `${shapesBase}n${index}`);
+      skolem.set(id, mintSkolem(shapesBase, ["remaining", colors.get(id), index], `n${index}`));
     });
 }
 

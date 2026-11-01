@@ -110,6 +110,10 @@ Shapes stay deterministic
 under triple permutation and blank-node relabelling. SHACL complex-path roots **remain blank
 nodes with deterministic labels**: turning one into an IRI would change its meaning to a
 predicate path and silently lose the constraints. Shape nodes and RDF-list cells are skolemized.
+Skolem IRIs hash full shape/class/path identities and retain readable suffixes; collisions
+with any existing named IRI or another minted identity fail closed. Config loading validates
+`shapesBase`, and the single Turtle/N-Triples writer boundary validates every emitted
+NamedNode, literal datatype, prefix label and namespace without rewriting identities.
 Hash artifacts intentionally retain hashes of the original input bytes.
 
 ## Composite (document-projection) entities
@@ -140,6 +144,8 @@ generates a single composite entity over the runtime's composite kind:
   target must conform to both `sh:class` and the exact referenced `sh:node` shape. Class checks
   accept only identity or explicit input-ontology `rdfs:subClassOf` ancestry (cycle-bounded);
   no inferred similarity or alignment is used. The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
+- Compilation and fidelity reject incompatible IRI/datatype constraints and impossible
+  `minCount > maxCount` on every property before projection, including nested links.
 - The **fidelity assertion** extends to the composite: every projected field traces to a shape
   property; a nested link maps an IRI-link property and a Violation link carries the required guard;
   and **every presence-MUST (`minCount ≥ 1`, Violation) of a node MUST be covered** — a

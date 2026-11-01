@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { defineModel } from "@jeswr/model-runtime";
-import { DataFactory, Parser, Store, Writer } from "n3";
+import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
   AdmissionError,
@@ -14,6 +14,7 @@ import {
   parseShapes,
   parseTurtle,
 } from "../../src/index.js";
+import { serializeCanonicalTurtle } from "../../src/rdf.js";
 import { flat } from "../helpers.js";
 
 const NS = "https://example.org/ns#";
@@ -51,14 +52,7 @@ function generated(shapesTtl = shape(), ontologyTtl = ONTOLOGY) {
   return generateModel({ ontologyTtl, shapesTtl, config: CONFIG });
 }
 function permute(ttl: string): string {
-  const writer = new Writer({ format: "N-Triples" });
-  writer.addQuads(new Parser().parse(ttl).reverse());
-  let output = "";
-  writer.end((error, result) => {
-    if (error) throw error;
-    output = result;
-  });
-  return output;
+  return serializeCanonicalTurtle(new Parser().parse(ttl).reverse(), {}, "N-Triples");
 }
 
 describe("shape-derived read aliases", () => {

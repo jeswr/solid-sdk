@@ -14,7 +14,7 @@ import { RUNTIME_MAJOR } from "@jeswr/model-runtime";
 import { type NormalizedOntology, type OntologyAdapter, owlRdfsAdapter } from "./adapter.js";
 import { AdmissionError, type AdmissionReport, admit } from "./admission.js";
 import { compileManifest } from "./compile.js";
-import type { CodegenConfig } from "./config.js";
+import { type CodegenConfig, validateConfig } from "./config.js";
 import { emitModelDts, emitModelJs, emitModelJson, emitShapesTtl } from "./emit.js";
 import { assertFidelity } from "./fidelity.js";
 import { deriveNodeViews } from "./nodeviews.js";
@@ -82,6 +82,7 @@ function emitCodegenManifest(
 
 /** Run the full pipeline. Throws {@link AdmissionError} / FidelityError fail-closed. */
 export function generateModel(input: GenerateInput): GenerateResult {
+  validateConfig(input.config);
   const adapter = input.adapter ?? owlRdfsAdapter;
 
   // [L0] adapt the ontology into the normalized description.

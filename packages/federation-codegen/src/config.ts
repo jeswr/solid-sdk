@@ -12,7 +12,7 @@
  * data-not-code invariant.
  */
 
-import type { ManifestScalar } from "@jeswr/model-runtime";
+import { isSafeAbsoluteIri, type ManifestScalar } from "@jeswr/model-runtime";
 
 /** Per-field guard configuration (only the flags SHACL cannot express live here). */
 export interface FieldConfig {
@@ -106,6 +106,13 @@ export interface CodegenConfig {
   /** Prefix map for the emitted `shapes.ttl` + the manifest / serializer. */
   prefixes: Record<string, string>;
   entities: AnyEntityConfig[];
+}
+
+/** Validate before any config namespace is used to parse, mint or emit RDF. */
+export function validateConfig(config: CodegenConfig): void {
+  if (!isSafeAbsoluteIri(config.shapesBase)) {
+    throw new TypeError("shapesBase must be a safe absolute IRI");
+  }
 }
 
 /** Look up the FLAT entity config for a target class (composite configs are excluded). */
