@@ -108,6 +108,11 @@ function AppleImport() {
         disabled={busy}
         onChange={(event) => void choose(event.target.files?.[0])}
       />
+      <p role="status" aria-label="Apple Health preview status" aria-atomic="true">
+        {phase === "preview" && preview
+          ? `Apple Health preview complete. ${preview.samplesRead} measurements ready to import.`
+          : ""}
+      </p>
       {phase === "idle" && (
         <EmptyState
           title="Preview before saving"
@@ -254,6 +259,11 @@ function GpxImport() {
           }
         }}
       />
+      <p role="status" aria-label="GPX preview status" aria-atomic="true">
+        {phase === "preview"
+          ? `GPX preview complete. ${previews.length} ${previews.length === 1 ? "workout" : "workouts"} ready to import.`
+          : ""}
+      </p>
       {phase === "idle" && (
         <EmptyState
           title="Your routes, without map tracking"

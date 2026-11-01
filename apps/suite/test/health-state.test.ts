@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
+import { writeSamples } from "../src/apps/health/lib/data/import";
 import { addMeasurement } from "../src/apps/health/lib/data/metrics";
 import { loadRecords, saveRecord } from "../src/apps/health/lib/data/records";
 import { createHealthDataStore } from "../src/apps/health/lib/data/store";
@@ -47,6 +48,107 @@ function sessionFor(pod: ReturnType<typeof createDemoPod>, fetch = pod.fetch): P
     reset: async () => {},
   };
 }
+it.each([
+  "",
+  "users/",
+  "users/alice/",
+  "users/alice/health/",
+  "users/alice/health/observations/",
+])("refreshes external record and trend edits after a notification for /%s", async (path) => {
+  const root = `${ROOT}users/alice/`;
+  const pod = createDemoPod({ root });
+  const store = createHealthDataStore(pod.fetch, root, OWNER);
+  const at = new Date();
+  const original = {
+    name: "Original medication",
+    dose: "As prescribed",
+    note: "",
+    date: at.toISOString().slice(0, 10),
+    frequency: "none" as const,
+    time: "08:00",
+    timeZone: "UTC",
+  };
+  await addMeasurement(store, "weight", "weight", 71, "kg", at);
+  await saveRecord(store, OWNER, "medications", "original", original, { create: true }, at);
+  let notify!: (url: string) => void;
+  const unsubscribe = vi.fn();
+  const view = await mount(
+    h(HealthProvider, {
+      session: {
+        mode: "extension",
+        webId: OWNER,
+        displayName: "Alice",
+        storageUrl: root,
+        fetch: pod.fetch,
+        publicFetch: pod.fetch,
+        disconnect: async () => {},
+        subscribe(listener) {
+          notify = listener;
+          return unsubscribe;
+        },
+      },
+      children: h(Probe),
+    }),
+  );
+  await eventually(() => {
+    expect(context.boot.status).toBe("ready");
+    if (metric.status !== "ready" || records.status !== "ready")
+      throw new Error("Health data not ready");
+    expect(metric.data.latest?.value).toBe(71);
+    expect(records.data[0]?.name).toBe("Original medication");
+  });
+  if (metric.status !== "ready" || records.status !== "ready")
+    throw new Error("Health data not ready");
+  const entry = metric.data.latest;
+  const record = records.data[0];
+  if (!entry || !record?.etag) throw new Error("Missing stored entries");
+  // The session intentionally emits no per-resource events, like extension focus sync.
+  await writeSamples(store, [{ ...entry, value: 83 }], OWNER, () => {});
+  await saveRecord(
+    store,
+    OWNER,
+    "medications",
+    record.id,
+    { ...original, name: "External edit" },
+    { etag: record.etag },
+    at,
+    record.iri,
+  );
+  expect(metric.data.latest?.value).toBe(71);
+  expect(records.data[0]?.name).toBe("Original medication");
+  const revision = context.revision;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await act(async () => {
+      for (const unrelated of [
+        `${root}drive/`,
+        `${ROOT}users/ali/`,
+        `${ROOT}users/alice`,
+        `${root}health-other/`,
+        "https://other.health.test/",
+      ])
+        notify(unrelated);
+      await vi.advanceTimersByTimeAsync(101);
+    });
+    expect(context.revision).toBe(revision);
+    await act(async () => {
+      notify(`${ROOT}${path}`);
+      notify(`${ROOT}${path}`);
+      await vi.advanceTimersByTimeAsync(101);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  await eventually(() => {
+    expect(context.revision).toBe(revision + 1);
+    if (metric.status !== "ready" || records.status !== "ready")
+      throw new Error("Health data not refreshed");
+    expect(metric.data.latest?.value).toBe(83);
+    expect(records.data[0]?.name).toBe("External edit");
+  });
+  await view.unmount();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+});
 it("rolls back only a failed queued entry, then reconciles external changes through the subscription", async () => {
   notifications.error.mockClear();
   notifications.success.mockClear();

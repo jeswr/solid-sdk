@@ -135,7 +135,9 @@ export function HealthProvider({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const off = session.subscribe((url) => {
-      if (url.startsWith(store.base)) {
+      // Focus reconciliation can invalidate the storage root or an ancestor
+      // container rather than a specific Health resource.
+      if (url.startsWith(store.base) || (url.endsWith("/") && store.base.startsWith(url))) {
         clearTimeout(timer);
         timer = setTimeout(invalidate, 100);
       }

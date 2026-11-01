@@ -127,6 +127,9 @@ test("previews fifty Apple Health measurements, imports them and opens a GPX wor
   await page
     .getByLabel("Choose or drop an XML file")
     .setInputFiles(fileURLToPath(new URL("fixtures/export.xml", import.meta.url)));
+  await expect(page.getByRole("status", { name: "Apple Health preview status" })).toHaveText(
+    "Apple Health preview complete. 50 measurements ready to import.",
+  );
   await expect(page.getByText("50 measurements", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Import 50 measurements", exact: true }),
@@ -138,6 +141,9 @@ test("previews fifty Apple Health measurements, imports them and opens a GPX wor
   await page
     .getByLabel("Choose or drop GPX files")
     .setInputFiles(fileURLToPath(new URL("fixtures/route.gpx", import.meta.url)));
+  await expect(page.getByRole("status", { name: "GPX preview status" })).toHaveText(
+    "GPX preview complete. 1 workout ready to import.",
+  );
   await expect(page.getByText(/4 points ·/)).toBeVisible();
   await page.getByRole("button", { name: "Import 1 workout", exact: true }).click();
   await page.getByRole("link", { name: "Open route.gpx", exact: true }).click();
@@ -214,3 +220,41 @@ test("rejects zipped exports and malformed GPX without saving", async ({ page })
   await expect(page.getByText(/Couldn't preview the route/)).toBeVisible();
   await accessible(page);
 });
+
+for (const { zone, now, todayTime } of [
+  { zone: "Pacific/Auckland", now: "2026-10-31T20:15:00Z", todayTime: "09:15" },
+  // The second 01:30 during the DST rollback must retain its exact instant.
+  { zone: "America/New_York", now: "2026-11-01T06:30:00Z", todayTime: "01:30" },
+])
+  test.describe(`date-only readings in ${zone}`, () => {
+    test.use({ timezoneId: zone });
+    test("uses the current time for today and local noon for historical dates", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date(now));
+      await ready(page, "/health", "Summary");
+      const addDatedWeight = async (value: string, date: string) => {
+        await page.getByRole("button", { name: "Add measurement", exact: true }).first().click();
+        const sheet = page.getByRole("dialog", { name: "Add measurement", exact: true });
+        await sheet.getByLabel("Metric", { exact: true }).selectOption("weight");
+        await sheet.getByLabel("Value", { exact: true }).fill(value);
+        await sheet.getByLabel("Date and time", { exact: true }).fill(date);
+        await sheet.getByRole("button", { name: "Save measurement", exact: true }).click();
+        await expect(sheet).toBeHidden();
+      };
+      await addDatedWeight("86.7", "today");
+      // A future timestamp would be omitted by the dashboard's as-of filter.
+      await expect(page.getByTestId("health-card-weight")).toContainText("86.7");
+      await page.reload();
+      await expect(page.getByTestId("health-card-weight")).toContainText("86.7");
+      await addDatedWeight("85.4", "31 Oct 2026");
+      await page.getByTestId("health-card-weight").getByRole("link", { name: "Weight" }).click();
+      await expect(page.locator(".hlt-entry").filter({ hasText: "86.7 kg" })).toContainText(
+        `1 Nov 2026, ${todayTime}`,
+      );
+      await expect(page.locator(".hlt-entry").filter({ hasText: "85.4 kg" })).toContainText(
+        "31 Oct 2026, 12:00",
+      );
+      await accessible(page);
+    });
+  });

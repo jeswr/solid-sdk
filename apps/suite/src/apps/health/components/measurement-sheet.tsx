@@ -10,10 +10,11 @@ import {
   SheetTitle,
   Textarea,
 } from "@jeswr/suite-ui";
-import { DateTimeField, type DateTimeValue } from "@jeswr/suite-ui/date-time";
+import { DateTimeField } from "@jeswr/suite-ui/date-time";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
+import { measurementTime } from "../lib/browser/measurement-time";
 import { CATALOGUE, type MetricId } from "../lib/data/metrics";
 import { useHealth } from "../state/health-context";
 
@@ -224,18 +225,14 @@ export function MeasurementSheet({
                 label="Date and time"
                 locale="en-GB"
                 value={field.value ? { kind: "dateTime", dateTime: field.value } : null}
-                onChange={(value: DateTimeValue | null) =>
-                  field.onChange(
-                    value?.kind === "dateTime"
-                      ? value.dateTime
-                      : value?.kind === "date"
-                        ? `${value.date}T12:00:00.000Z`
-                        : "",
-                  )
-                }
+                onChange={(value) => field.onChange(measurementTime(value))}
               />
             )}
           />
+          <p className="hlt-muted hlt-small">
+            Dates without a time use your current local time for today, or local noon for other
+            dates.
+          </p>
           <p role="alert">{form.formState.errors.at?.message}</p>
           <label htmlFor="hlt-note">Note (optional)</label>
           <Textarea id="hlt-note" {...form.register("note")} aria-describedby="hlt-note-error" />
