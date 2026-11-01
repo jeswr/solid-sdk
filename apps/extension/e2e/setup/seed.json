@@ -24,5 +24,19 @@
         }
       }
     ]
+  },
+  {
+    "email": "sai@example.com",
+    "password": "test-password-123",
+    "pods": [
+      {
+        "name": "sai-pod",
+        "settings": {
+          "name": "Riley Sato",
+          "privateNote": "Riley Sato note",
+          "saiRegistry": true
+        }
+      }
+    ]
   }
 ]
