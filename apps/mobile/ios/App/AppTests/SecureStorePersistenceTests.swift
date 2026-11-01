@@ -59,7 +59,12 @@ final class SecureStorePersistenceTests: XCTestCase {
         let directory = file.deletingLastPathComponent()
         XCTAssertTrue(try directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
         let protection = try FileManager.default.attributesOfItem(atPath: file.path)[.protectionKey] as? FileProtectionType
+        #if targetEnvironment(simulator)
+        // The simulator has no Data Protection, so it reports no class; a device must report this one.
+        XCTAssertTrue(protection == nil || protection == .completeUntilFirstUserAuthentication)
+        #else
         XCTAssertEqual(protection, .completeUntilFirstUserAuthentication)
+        #endif
         store = try makeStore()
         XCTAssertEqual(try get(store).value, "refresh-token-that-must-not-be-on-disk")
         XCTAssertEqual(try get(store).version, 1)
