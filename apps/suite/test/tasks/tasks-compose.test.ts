@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assert, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { needsConfirm, splitPaste } from "../../src/apps/tasks/lib/compose/paste";
 import {
-  type ChipKind,
+  type ChipId,
   type ComposeContext,
   parseQuickAdd,
   removeChip,
@@ -22,6 +22,7 @@ const ctx: ComposeContext = {
 };
 const parse = (text: string, extra: Partial<ComposeContext> = {}) =>
   parseQuickAdd(text, { ...ctx, ...extra });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("compose dates and times", () => {
   it.each([
@@ -66,10 +67,18 @@ describe("compose dates and times", () => {
       allDay: "2026-07-02",
     });
   });
-  it("rejects an all-day date whose midnight does not exist", () => {
+  it("resolves the first valid instant when DST skips midnight", () => {
+    const result = parse("Task 6 September 2026", { tz: "America/Santiago" });
+    expect(result).toMatchObject({
+      title: "Task",
+      due: { date: new Date("2026-09-06T04:00Z"), allDay: "2026-09-06" },
+    });
+    expect(result.chips[0]?.label).toBe("Due 6 Sept");
+  });
+  it("rejects an entirely skipped all-day date", () => {
     expect(() =>
       parse("Do it 30 December 2011", { tz: "Pacific/Apia", now: new Date("2011-12-28T12:00Z") }),
-    ).toThrow("midnight");
+    ).toThrow("Nonexistent local date");
   });
 });
 
@@ -127,6 +136,25 @@ describe("compose recurrence", () => {
   it("keeps the recurrence weekday when a lone time is present", () => {
     expect(parse("Call every monday 9am").due?.date).toEqual(new Date("2026-11-02T09:00Z"));
   });
+  it.each([
+    ["every month", "2026-10-30T12:00Z", "Every month on the 30th", "2026-10-30"],
+    ["every year", "2026-10-30T12:00Z", "Every year on 30 Oct", "2026-10-30"],
+    ["every year", "2026-11-01T12:00Z", "Every year on 1 Nov", "2026-11-01"],
+  ])("formats %s against the injected negative-offset zone", (phrase, now, copy, date) => {
+    vi.stubEnv("TZ", "America/New_York");
+    expect(new Date("2026-10-30T00:00Z").getDate()).toBe(29);
+    const result = parse(`Task ${phrase}`, { tz: "America/New_York", now: new Date(now) });
+    expect(result.due?.allDay).toBe(date);
+    expect(result.chips.find((chip) => chip.kind === "repeat")?.label).toBe(`Repeats ${copy}`);
+  });
+  it("formats a recurrence in a different zone from the host", () => {
+    vi.stubEnv("TZ", "America/New_York");
+    const result = parse("Task every year", { now: new Date("2026-11-01T00:30Z") });
+    expect(result.due?.allDay).toBe("2026-11-01");
+    expect(result.chips.find((chip) => chip.kind === "repeat")?.label).toBe(
+      "Repeats Every year on 1 Nov",
+    );
+  });
 });
 
 describe("projects, labels, priorities and literal text", () => {
@@ -157,6 +185,20 @@ describe("projects, labels, priorities and literal text", () => {
     const result = parse("Task #Unknown");
     expect(result.project).toEqual({ kind: "create", name: "Unknown" });
     expect(result.chips[0]?.label).toBe("Create project 'Unknown'");
+  });
+  it.each(["#Work", "#Unknown"])("clears a prefilled section when %s changes project", (token) => {
+    const result = parse(`Task ${token}`, {
+      defaults: { projectUrl: "https://pod.test/home", sectionId: "https://pod.test/home#doing" },
+    });
+    expect(result.sectionId).toBeUndefined();
+    expect(result.chips.some((chip) => chip.kind === "section")).toBe(false);
+  });
+  it("keeps the prefilled section when an explicit project resolves to the default", () => {
+    expect(
+      parse("Task #Ho", {
+        defaults: { projectUrl: "https://pod.test/home", sectionId: "https://pod.test/home#doing" },
+      }).sectionId,
+    ).toBe("https://pod.test/home#doing");
   });
   it.each([
     ["@bills", "bills"],
@@ -239,6 +281,50 @@ describe("reminders and keep-text", () => {
     expect(result.due?.date).toEqual(new Date("2026-10-31T17:00Z"));
     expect(result.reminders).toEqual([{ time: new Date("2026-10-31T09:00Z") }]);
   });
+  it("uses US calendar qualifiers for reminders", () => {
+    const result = parse("Task tomorrow 5pm !9am on 11/02/2026", { locale: "en-US" });
+    expect(result.title).toBe("Task");
+    expect(result.reminders).toEqual([{ time: new Date("2026-11-02T09:00Z") }]);
+  });
+  it.each([
+    "!9am on nonsense tomorrow 5pm",
+    "!29 March 2026 1:30am",
+  ])("keeps an unresolved reminder literal: %s", (reminder) => {
+    const result = parse(`Task ${reminder}`);
+    expect(result.title).toBe(`Task ${reminder}`);
+    expect(result.reminders).toEqual([]);
+    expect(result.due).toBeUndefined();
+  });
+  it.each([
+    "Task tomorrow 5pm !9am on Monday",
+    "Task !9am on Monday tomorrow 5pm",
+  ])("consumes the complete connected calendar qualifier in %s", (text) => {
+    const result = parse(text);
+    expect(result.title).toBe("Task");
+    expect(result.due?.date).toEqual(new Date("2026-10-31T17:00Z"));
+    expect(result.reminders).toEqual([{ time: new Date("2026-11-02T09:00Z") }]);
+    const chip = result.chips.find((chip) => chip.kind === "reminder");
+    assert.isDefined(chip);
+    expect(text.slice(chip.span.start, chip.span.end)).toBe("!9am on Monday");
+  });
+  it.each([
+    "Task @bills @shopping",
+    "Task tomorrow !1h before !9am",
+  ])("removes each repeatable chip independently in %s", (text) => {
+    const initial = parse(text);
+    const kind = text.includes("@") ? "label" : "reminder";
+    const chips = initial.chips.filter((chip) => chip.kind === kind);
+    expect(chips).toHaveLength(2);
+    for (const [index, chip] of chips.entries()) {
+      const removed = removeChip(text, chip);
+      const result = parse(text, { keepText: removed.keepText });
+      expect(result.title).toBe(`Task ${text.slice(chip.span.start, chip.span.end)}`);
+      expect(result.chips.filter((chip) => chip.kind === kind)).toEqual([chips[1 - index]]);
+      expect(kind === "label" ? result.labels : result.reminders).toEqual([
+        (kind === "label" ? initial.labels : initial.reminders)[1 - index],
+      ]);
+    }
+  });
   it.each([
     "!1h before",
     "!tomorrow 9am",
@@ -277,21 +363,21 @@ describe("reminders and keep-text", () => {
     if (kind === "repeat") expect(result.due).toBeUndefined();
   });
   it("keeps due and recurrence interpretations independent", () => {
-    const result = parse("Task tomorrow every monday", { keepText: new Set(["repeat"]) });
+    const result = parse("Task tomorrow every monday", { keepText: new Set(["repeat:14"]) });
     expect(result.title).toBe("Task every monday");
     expect(result.due?.allDay).toBe("2026-10-31");
     expect(result.recurrence).toBeUndefined();
-    const noDue = parse("Task every monday", { keepText: new Set(["due"]) });
+    const noDue = parse("Task every monday", { keepText: new Set(["due:0"]) });
     expect(noDue.recurrence?.frequency).toBe("WEEKLY");
     expect(noDue.due).toBeUndefined();
   });
   it("accumulates removals without mutating the previous set", () => {
-    const initial = new Set<ChipKind>(["due"]);
+    const initial = new Set<ChipId>(["due:0"]);
     const chip = parse("Task p1").chips[0];
     assert.isDefined(chip);
     const removed = removeChip("Task p1", chip, initial);
-    expect([...removed.keepText]).toEqual(["due", "priority"]);
-    expect([...initial]).toEqual(["due"]);
+    expect([...removed.keepText]).toEqual(["due:0", "priority:5"]);
+    expect([...initial]).toEqual(["due:0"]);
   });
   it("uses defaults and permits removing default interpretations", () => {
     const defaults = {
@@ -317,7 +403,7 @@ describe("reminders and keep-text", () => {
       )?.label,
     ).toBe("Doing");
     expect(
-      parse("Task", { defaults, keepText: new Set(["due", "project", "section"]) }),
+      parse("Task", { defaults, keepText: new Set(["due:0", "project:0", "section:0"]) }),
     ).toMatchObject({ title: "Task", chips: [] });
   });
 });

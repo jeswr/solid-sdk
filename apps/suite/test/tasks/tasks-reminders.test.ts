@@ -35,11 +35,9 @@ describe("reminder identity and memory store", () => {
       expect(reminderKey(task().url, reminder, new Date(fire.at.getTime() + 1))).not.toBe(fire.key);
     }
     const store = createMemoryFiredStore();
-    expect(await store.has("a")).toBe(false);
-    await store.add("a");
-    await store.add("a");
-    expect(await store.has("a")).toBe(true);
-    expect(await createMemoryFiredStore().has("a")).toBe(false);
+    expect(await store.claim("a")).toBe(true);
+    expect(await store.claim("a")).toBe(false);
+    expect(await createMemoryFiredStore().claim("a")).toBe(true);
   });
 });
 
@@ -54,14 +52,20 @@ describe("scheduler", () => {
         reminders: [{ time: new Date(now.getTime() - 60000) }],
       }),
     ];
-    expect(await collectDueReminders(tasks, now, store)).toEqual([
-      { taskUrl: "second", title: "Second", fireTime: new Date(now.getTime() - 60000) },
-      { taskUrl: task().url, title: "Task", fireTime: now },
-    ]);
+    expect(await collectDueReminders(tasks, now, store)).toEqual({
+      due: [
+        { taskUrl: "second", title: "Second", fireTime: new Date(now.getTime() - 60000) },
+        { taskUrl: task().url, title: "Task", fireTime: now },
+      ],
+      errors: [],
+    });
     expect(
-      await store.has(reminderKey(task().url, task().reminders[0] as { offset: string }, now)),
-    ).toBe(true);
-    expect(await collectDueReminders(tasks, new Date(now.getTime() + 60000), store)).toEqual([]);
+      await store.claim(reminderKey(task().url, task().reminders[0] as { offset: string }, now)),
+    ).toBe(false);
+    expect(await collectDueReminders(tasks, new Date(now.getTime() + 60000), store)).toEqual({
+      due: [],
+      errors: [],
+    });
   });
   it("uses an exclusive lower and inclusive upper bound", async () => {
     const reminders = [
@@ -72,9 +76,9 @@ describe("scheduler", () => {
       { time: new Date(now.getTime() + 1) },
     ];
     expect(
-      (await collectDueReminders([task({ reminders })], now, createMemoryFiredStore())).map(
-        (r) => r.fireTime,
-      ),
+      (
+        await collectDueReminders([task({ reminders })], now, createMemoryFiredStore(), 300000)
+      ).due.map((r) => r.fireTime),
     ).toEqual([reminders[2]?.time, now]);
   });
   it("skips closed, undated and reminder-free tasks", async () => {
@@ -86,7 +90,7 @@ describe("scheduler", () => {
         now,
         createMemoryFiredStore(),
       ),
-    ).toEqual([]);
+    ).toEqual({ due: [], errors: [] });
   });
   it("catches up missed ticks, capped at 24 hours", async () => {
     const store = createMemoryFiredStore();
@@ -98,51 +102,77 @@ describe("scheduler", () => {
       { time: new Date(now.getTime() - 3600000) },
     ];
     expect(
-      (await collectDueReminders([task({ reminders })], now, store)).map((r) => r.fireTime),
+      (await collectDueReminders([task({ reminders })], now, store)).due.map((r) => r.fireTime),
     ).toEqual([reminders[2]?.time, reminders[3]?.time]);
   });
   it("catches a reminder between the last tick and the normal window", async () => {
     const store = createMemoryFiredStore();
     await collectDueReminders([], new Date(now.getTime() - 3600000), store);
     expect(
-      await collectDueReminders(
-        [task({ reminders: [{ time: new Date(now.getTime() - 1800000) }] })],
-        now,
-        store,
-      ),
+      (
+        await collectDueReminders(
+          [task({ reminders: [{ time: new Date(now.getTime() - 1800000) }] })],
+          now,
+          store,
+        )
+      ).due,
     ).toHaveLength(1);
   });
   it("allows a custom window, clock rollback and zero window", async () => {
     const store = createMemoryFiredStore();
     await collectDueReminders([], new Date(now.getTime() + 3600000), store);
-    expect(await collectDueReminders([task()], now, store, 1)).toHaveLength(1);
-    expect(await collectDueReminders([task()], now, createMemoryFiredStore(), 0)).toEqual([]);
+    expect((await collectDueReminders([task()], now, store, 1)).due).toHaveLength(1);
+    expect(await collectDueReminders([task()], now, createMemoryFiredStore(), 0)).toEqual({
+      due: [],
+      errors: [],
+    });
     expect(
-      await collectDueReminders(
-        [task({ reminders: [{ time: new Date(now.getTime() - 600000) }] })],
-        now,
-        createMemoryFiredStore(),
-        900000,
-      ),
+      (
+        await collectDueReminders(
+          [task({ reminders: [{ time: new Date(now.getTime() - 600000) }] })],
+          now,
+          createMemoryFiredStore(),
+          900000,
+        )
+      ).due,
     ).toHaveLength(1);
   });
-  it("serialises concurrent ticks and deduplicates duplicate tasks/triggers", async () => {
+  it("atomically deduplicates concurrent ticks and duplicate tasks/triggers", async () => {
     const store = createMemoryFiredStore();
     const [a, b] = await Promise.all([
       collectDueReminders([task(), task()], now, store),
       collectDueReminders([task()], now, store),
     ]);
-    expect(a).toHaveLength(1);
-    expect(b).toEqual([]);
+    expect(a.due).toHaveLength(1);
+    expect(b).toEqual({ due: [], errors: [] });
   });
-  it("retries storage failures and does not advance the successful-tick cursor", async () => {
+  it("returns claimed events when the second reminder's storage claim fails, then retries it", async () => {
     const store = createMemoryFiredStore();
-    const add = vi.spyOn(store, "add").mockRejectedValueOnce(new Error("write failed"));
-    await expect(collectDueReminders([task()], now, store)).rejects.toThrow("write failed");
-    expect(await collectDueReminders([task()], now, store)).toHaveLength(1);
-    expect(add).toHaveBeenCalledTimes(2);
-    vi.spyOn(store, "has").mockRejectedValueOnce(new Error("read failed"));
-    await expect(collectDueReminders([task()], now, store)).rejects.toThrow("read failed");
+    const claim = store.claim.bind(store);
+    const error = new Error("claim failed");
+    vi.spyOn(store, "claim").mockImplementationOnce(claim).mockRejectedValueOnce(error);
+    const reminders = [{ time: new Date(now.getTime() - 60000) }, { time: now }];
+    const first = await collectDueReminders([task({ reminders })], now, store);
+    expect(first.due.map((event) => event.fireTime)).toEqual([reminders[0]?.time]);
+    expect(first.errors).toEqual([error]);
+    const retry = await collectDueReminders([task({ reminders })], now, store);
+    expect(retry.due.map((event) => event.fireTime)).toEqual([now]);
+    expect(retry.errors).toEqual([]);
+  });
+  it("isolates an invalid second reminder and continues with later reminders and tasks", async () => {
+    const result = await collectDueReminders(
+      [
+        task({
+          reminders: [{ time: now }, { offset: "invalid" }, { time: new Date(now.getTime() - 1) }],
+        }),
+        task({ url: "other" }),
+      ],
+      now,
+      createMemoryFiredStore(),
+    );
+    expect(result.due.map((event) => event.taskUrl)).toEqual([task().url, task().url, "other"]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toBeInstanceOf(TypeError);
   });
   it.each([[-1], [NaN], [Infinity]])("rejects invalid window %j", async (window) => {
     await expect(collectDueReminders([], now, createMemoryFiredStore(), window)).rejects.toThrow(
@@ -167,7 +197,7 @@ describe("scheduler", () => {
         fireTime,
         createMemoryFiredStore(),
       ),
-    ).toEqual([{ taskUrl: task().url, title: "Task", fireTime }]);
+    ).toEqual({ due: [{ taskUrl: task().url, title: "Task", fireTime }], errors: [] });
   });
   it("uses elapsed offsets over DST for timed tasks", async () => {
     const fireTime = new Date("2026-03-29T00:30Z");
@@ -177,12 +207,13 @@ describe("scheduler", () => {
         fireTime,
         createMemoryFiredStore(),
       ),
-    ).toEqual([{ taskUrl: task().url, title: "Task", fireTime }]);
+    ).toEqual({ due: [{ taskUrl: task().url, title: "Task", fireTime }], errors: [] });
   });
 });
 
 /** Minimal async fake: requests keep a transaction alive; completion follows its final request.
  * The fake also checks that writes are inside a readwrite transaction and that keys are out-of-line.
+ * Readwrite transactions serialize across connections sharing this factory, as in IndexedDB.
  */
 function fakeIndexedDB(existing = false, upgradeExisting = false) {
   const values = new Map<IDBValidKey, string>();
@@ -192,6 +223,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
   let resumeBlocked: (() => void) | undefined;
   let transactionFailure: "error" | "abort" | undefined;
   const databases: IDBDatabase[] = [];
+  let transactionTail = Promise.resolve();
   const factory = {
     open: vi.fn((name: string, nextVersion?: number) => {
       expect(name).toBe("tasks");
@@ -226,13 +258,21 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
             expect(name).toBe("firedReminders");
             expect(mode).toBe("readwrite");
             const tx = {} as IDBTransaction;
+            let release!: () => void;
+            const ready = transactionTail;
+            transactionTail = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            let finished = false;
             let pending = 0;
             const schedule = (callback: () => void) => {
               pending++;
-              queueMicrotask(() => {
+              void ready.then(() => {
                 if (transactionFailure) {
                   const failure = transactionFailure;
                   transactionFailure = undefined;
+                  finished = true;
+                  release();
                   Object.assign(tx, { error: new Error("transaction failed") });
                   if (failure === "error") tx.onerror?.({} as Event);
                   else tx.onabort?.({} as Event);
@@ -241,7 +281,11 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
                 callback();
                 pending--;
                 queueMicrotask(() => {
-                  if (!pending) tx.oncomplete?.({} as Event);
+                  if (!pending && !finished) {
+                    finished = true;
+                    tx.oncomplete?.({} as Event);
+                    release();
+                  }
                 });
               });
             };
@@ -320,35 +364,59 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
 }
 
 describe("IndexedDB fired store", () => {
+  it("atomically claims reminders across concurrent store instances", async () => {
+    const fake = fakeIndexedDB();
+    const a = createIndexedDbFiredStore(fake.factory);
+    const b = createIndexedDbFiredStore(fake.factory);
+    const results = await Promise.all([
+      collectDueReminders([task()], now, a),
+      collectDueReminders([task()], now, b),
+    ]);
+    expect(results.flatMap((result) => result.due)).toEqual([
+      { taskUrl: task().url, title: "Task", fireTime: now },
+    ]);
+    expect(results.flatMap((result) => result.errors)).toEqual([]);
+  });
+  it("catches an unfired reminder six minutes after reload and deduplicates another reload", async () => {
+    const fake = fakeIndexedDB();
+    const tasks = [task({ reminders: [{ time: new Date(now.getTime() - 6 * 60000) }] })];
+    const first = await collectDueReminders(tasks, now, createIndexedDbFiredStore(fake.factory));
+    expect(first.due).toHaveLength(1);
+    expect(first.errors).toEqual([]);
+    expect(await collectDueReminders(tasks, now, createIndexedDbFiredStore(fake.factory))).toEqual({
+      due: [],
+      errors: [],
+    });
+  });
   it("persists across store reload and scheduler reload", async () => {
     const fake = fakeIndexedDB();
     const a = createIndexedDbFiredStore(fake.factory);
-    expect(await a.has("missing")).toBe(false);
-    expect(await collectDueReminders([task()], now, a)).toHaveLength(1);
+    expect(await a.claim("missing")).toBe(true);
+    expect((await collectDueReminders([task()], now, a)).due).toHaveLength(1);
     const b = createIndexedDbFiredStore(fake.factory);
-    expect(await collectDueReminders([task()], now, b)).toEqual([]);
-    expect(fake.values.size).toBe(1);
+    expect(await collectDueReminders([task()], now, b)).toEqual({ due: [], errors: [] });
+    expect(fake.values.size).toBe(2);
     expect([...fake.values.values()][0]).toMatch(/^\d{4}-\d\d-\d\dT/);
   });
-  it("prunes only entries older than 30 days, on both reads and writes", async () => {
+  it("prunes only entries older than 30 days, on claims", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     const fake = fakeIndexedDB();
     fake.values.set("expired", new Date(now.getTime() - 30 * 86400000 - 1).toISOString());
     fake.values.set("boundary", new Date(now.getTime() - 30 * 86400000).toISOString());
     const store = createIndexedDbFiredStore(fake.factory);
-    expect(await store.has("expired")).toBe(false);
-    expect(await store.has("boundary")).toBe(true);
-    expect(fake.values.has("expired")).toBe(false);
+    expect(await store.claim("expired")).toBe(true);
+    expect(await store.claim("boundary")).toBe(false);
+    expect(fake.values.get("expired")).toBe(now.toISOString());
     vi.setSystemTime(new Date(now.getTime() + 1));
-    await store.add("fresh");
+    await store.claim("fresh");
     expect(fake.values.has("boundary")).toBe(false);
     expect(fake.values.get("fresh")).toBe(new Date(now.getTime() + 1).toISOString());
   });
   it("adds the object store to an existing tasks database without deleting other stores", async () => {
     const fake = fakeIndexedDB(true);
     fake.removeStore();
-    await createIndexedDbFiredStore(fake.factory).add("key");
+    await createIndexedDbFiredStore(fake.factory).claim("key");
     expect(fake.factory.open).toHaveBeenCalledWith("tasks", 4);
     expect(fake.databases[0]?.close).toHaveBeenCalled();
     expect(fake.values.has("key")).toBe(true);
@@ -357,41 +425,41 @@ describe("IndexedDB fired store", () => {
     const fake = fakeIndexedDB(true, true);
     fake.values.set("previous", now.toISOString());
     const store = createIndexedDbFiredStore(fake.factory);
-    expect(await store.has("previous")).toBe(true);
+    expect(await store.claim("previous")).toBe(false);
   });
   it("closes on version changes and reopens lazily", async () => {
     const fake = fakeIndexedDB();
     const store = createIndexedDbFiredStore(fake.factory);
-    await store.add("key");
+    await store.claim("key");
     fake.databases[0]?.onversionchange?.({} as IDBVersionChangeEvent);
     expect(fake.databases[0]?.close).toHaveBeenCalled();
-    expect(await store.has("key")).toBe(true);
+    expect(await store.claim("key")).toBe(false);
     expect(fake.factory.open).toHaveBeenCalledTimes(2);
   });
   it.each(["error", "blocked"] as const)("reports open %s and permits retry", async (mode) => {
     const fake = fakeIndexedDB();
     fake.failOpen(mode);
     const store = createIndexedDbFiredStore(fake.factory);
-    await expect(store.has("key")).rejects.toThrow(mode === "error" ? "open failed" : "blocked");
-    await store.add("key");
-    expect(await store.has("key")).toBe(true);
+    await expect(store.claim("key")).rejects.toThrow(mode === "error" ? "open failed" : "blocked");
+    await store.claim("key");
+    expect(await store.claim("key")).toBe(false);
   });
   it("closes a late successful open after a blocked upgrade", async () => {
     const fake = fakeIndexedDB();
     fake.failOpen("blocked");
     const store = createIndexedDbFiredStore(fake.factory);
-    await expect(store.has("key")).rejects.toThrow("blocked");
+    await expect(store.claim("key")).rejects.toThrow("blocked");
     fake.resumeBlocked();
     expect(fake.databases[0]?.close).toHaveBeenCalled();
-    await store.add("key");
-    expect(await store.has("key")).toBe(true);
+    await store.claim("key");
+    expect(await store.claim("key")).toBe(false);
   });
   it.each(["error", "abort"] as const)("reports transaction %s", async (mode) => {
     const fake = fakeIndexedDB();
     fake.failTransaction(mode);
     const store = createIndexedDbFiredStore(fake.factory);
-    await expect(store.add("key")).rejects.toThrow("transaction failed");
-    await store.add("key");
-    expect(await store.has("key")).toBe(true);
+    await expect(store.claim("key")).rejects.toThrow("transaction failed");
+    await store.claim("key");
+    expect(await store.claim("key")).toBe(false);
   });
 });

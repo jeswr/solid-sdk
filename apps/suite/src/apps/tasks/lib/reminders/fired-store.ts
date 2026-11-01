@@ -2,8 +2,8 @@
 import { computeFireTimes, type Reminder } from "../model/reminders";
 
 export interface FiredReminderStore {
-  has(key: string): Promise<boolean>;
-  add(key: string): Promise<void>;
+  /** Atomically record a new fire key; true only for the caller that claims it first. */
+  claim(key: string): Promise<boolean>;
 }
 
 /** Same trigger identity used by the RDF model, followed by the actual ISO fire time. */
@@ -16,11 +16,10 @@ export function reminderKey(taskUrl: string, reminder: Reminder, fireTime: Date)
 export function createMemoryFiredStore(): FiredReminderStore {
   const keys = new Set<string>();
   return {
-    async has(key) {
-      return keys.has(key);
-    },
-    async add(key) {
+    async claim(key) {
+      if (keys.has(key)) return false;
       keys.add(key);
+      return true;
     },
   };
 }
@@ -28,7 +27,7 @@ export function createMemoryFiredStore(): FiredReminderStore {
 const STORE = "firedReminders";
 const RETENTION = 30 * 86400000;
 
-/** Lazy storage; timestamps record when fired, with expired entries pruned on every access. */
+/** Lazy storage; one readwrite transaction prunes, reads and claims across tabs/connections. */
 export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderStore {
   let database: Promise<IDBDatabase> | undefined;
   function open(version?: number): Promise<IDBDatabase> {
@@ -63,7 +62,7 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
       };
     });
   }
-  async function access(key: string, add: boolean): Promise<boolean> {
+  async function claim(key: string): Promise<boolean> {
     database ??= open().catch((error: unknown) => {
       database = undefined;
       throw error;
@@ -74,8 +73,8 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
       const store = tx.objectStore(STORE);
       const now = new Date();
       const cutoff = new Date(now.getTime() - RETENTION).toISOString();
-      let found = false;
-      tx.oncomplete = () => resolve(found);
+      let claimed = false;
+      tx.oncomplete = () => resolve(claimed);
       tx.onerror = tx.onabort = () => reject(tx.error);
       const scan = store.openCursor();
       scan.onsuccess = () => {
@@ -83,20 +82,17 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
         if (cursor) {
           if (cursor.value < cutoff) cursor.delete();
           cursor.continue();
-        } else if (add) store.put(now.toISOString(), key);
-        else {
+        } else {
           const request = store.get(key);
           request.onsuccess = () => {
-            found = request.result !== undefined;
+            if (request.result === undefined) {
+              store.put(now.toISOString(), key);
+              claimed = true;
+            }
           };
         }
       };
     });
   }
-  return {
-    has: (key) => access(key, false),
-    async add(key) {
-      await access(key, true);
-    },
-  };
+  return { claim };
 }
