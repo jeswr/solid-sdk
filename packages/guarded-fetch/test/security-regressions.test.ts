@@ -414,10 +414,25 @@ describe("error URL sanitisation", () => {
       },
     });
     const error = await f(BASE).catch((e: unknown) => e);
-    expect(String(error)).toContain("invalid header value");
     for (const chunk of [credential.slice(0, 20), credential.slice(20)]) {
       expect(String(error)).not.toContain(chunk);
       expect(inspect(error, { depth: null })).not.toContain(chunk);
+    }
+  });
+  it("drops an echoed header value whose own quotes surround a credential", async () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJlLXNlY3JldA";
+    const f = createGuardedFetch({
+      dnsLookup,
+      fetch: async () => {
+        throw new TypeError(
+          `Headers.append: "session="${jwt}"; preferences=light\nmode" is an invalid header value.`,
+        );
+      },
+    });
+    const error = await f(BASE).catch((e: unknown) => e);
+    for (const part of jwt.split(".")) {
+      expect(String(error)).not.toContain(part);
+      expect(inspect(error, { depth: null })).not.toContain(part);
     }
   });
   it.each([

@@ -814,17 +814,16 @@ function isBrowserContext(): boolean {
  * Redact every URL-like token. Transport errors embed URLs in many malformed spellings
  * (no slashes, spaces inside the authority, relative paths), so rather than parse them,
  * any whitespace-separated token containing ':', '/', '\\', '?', '#' or '@' is replaced,
- * except a plain word ending in one colon ("RequestInit:", "loopback-only:"), and quoted
- * values are dropped whole.
+ * except a plain word ending in one colon ("RequestInit:", "loopback-only:"); a message
+ * containing any quote is replaced entirely.
  */
 function safeText(text: string): string {
-  // Quoted values (e.g. an invalid header value echoed by Headers.append) are dropped
-  // whole: a wrapped Basic credential splits into innocent-looking base64 tokens.
-  return text
-    .replace(/"[^"]*"?|'[^']*'?|`[^`]*`?/g, "(redacted)")
-    .replace(/\S+/g, (token) =>
-      /[:/\\?#@]/.test(token) && !/^[\w.-]+:$/.test(token) ? "(redacted)" : token,
-    );
+  // A message that quotes anything (e.g. Headers.append echoing an invalid header value,
+  // which may itself contain quotes and a wrapped credential) is replaced entirely.
+  if (/["'`]/.test(text)) return "(diagnostic redacted)";
+  return text.replace(/\S+/g, (token) =>
+    /[:/\\?#@]/.test(token) && !/^[\w.-]+:$/.test(token) ? "(redacted)" : token,
+  );
 }
 
 function message(cause: unknown): string {
