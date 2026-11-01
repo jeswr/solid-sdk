@@ -14,7 +14,7 @@ import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { StorageError } from "@jeswr/storage-client";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports require bare package names
 import { createHash, randomUUID } from "crypto";
-import { DataFactory as df, Store } from "n3";
+import { DataFactory as df, type Store } from "n3";
 import { communicationRules } from "./rules.js";
 import type { AgentMemory, AgentMemoryOptions, RecalledMemory, RememberProposal } from "./types.js";
 
@@ -259,7 +259,10 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
           results.push({
             resource: entry.url,
             nanopubs: [np],
-            dataset: new Store([...data.dataset].filter((q) => graphs.has(q.graph.value))),
+            // Keep the parser's literal factory: language-tag spelling is part of assertion IDs.
+            dataset: new (data.dataset.constructor as typeof Store)(
+              [...data.dataset].filter((q) => graphs.has(q.graph.value)),
+            ),
           });
           if (results.length === limit) return results;
         }

@@ -3,6 +3,7 @@ import {
   type Batch,
   buildNanopublications,
   createFactAssertion,
+  parseNanopublications,
   serializeNanopublications,
 } from "@jeswr/pkg-memory";
 import { expect, it, vi } from "vitest";
@@ -84,6 +85,47 @@ it("defaults to current preferences and removes every filtered sibling graph and
   expect(serialized).not.toContain("Secret health");
   expect(serialized).not.toContain("Mixed health");
   expect(new Set([...(results[0]?.dataset ?? [])].map((q) => q.graph.value)).size).toBe(4);
+});
+
+it.each([
+  "en-US",
+  "EN-US",
+  "zh-Hant-TW",
+])("preserves %s spelling and assertion identity through recall and reserialization", async (language) => {
+  const h = await harness();
+  const built = await buildNanopublications(
+    {
+      batch_id: "language-recall",
+      worker: { agent_id: AGENT, agent_label: "Fixture" },
+      claims: [
+        {
+          id: "preference",
+          assertion: `<${OWNER}> schema:name "Afternoons"@${language} .`,
+          epistemic: "SelfReportedExplicit",
+          categories: ["pd:Preference"],
+        },
+      ],
+    },
+    { owner: OWNER, generatedAt: NOW.toISOString() },
+  );
+  await h.storage.create(CONTAINER, await serializeNanopublications(built), {
+    name: "language.trig",
+    contentType: "application/trig",
+  });
+
+  const results = await h.memory.recall(QUERY);
+  expect(results).toHaveLength(1);
+  const recalled = results[0] as NonNullable<(typeof results)[0]>;
+  const serialized = await serializeNanopublications(recalled);
+  expect(serialized).toContain(`"Afternoons"@${language}`);
+  const reparsed = await parseNanopublications(serialized);
+  for (const result of [recalled, reparsed]) {
+    expect(result.nanopubs).toEqual(built.nanopubs);
+    expect([...result.dataset].find((q) => q.object.value === "Afternoons")?.object).toMatchObject({
+      termType: "Literal",
+      language,
+    });
+  }
 });
 
 it("requires every category in the mandate and permits health only when explicitly named", async () => {
