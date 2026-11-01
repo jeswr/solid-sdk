@@ -36,7 +36,7 @@ export interface DiscoveryFailure {
   error: unknown;
 }
 
-/** Read public + private profile links, once each; unreadable indexes remain explicit failures. */
+/** Read profile and preferences index links once each within the shared discovery budget. */
 export async function readTypeIndexes(
   fetch: typeof globalThis.fetch,
   webId: string,
@@ -49,16 +49,36 @@ export async function readTypeIndexes(
   const links = new Set(
     ["publicTypeIndex", "privateTypeIndex"].flatMap((name) => node.iris(NS.SOLID + name)),
   );
+  const pending = [
+    ...[...links].map((url) => ({ url, preferences: false })),
+    ...[...new Set(node.iris("http://www.w3.org/ns/pim/space#preferencesFile"))].map((url) => ({
+      url,
+      preferences: true,
+    })),
+  ];
   const locations: RegisteredLocation[] = [];
   const failures: DiscoveryFailure[] = [];
-  for (const url of links) {
+  for (const { url, preferences } of pending) {
     try {
       if (!inStorage(url, storage))
-        throw new TypeError("Type Index is outside the selected storage");
+        throw new TypeError(
+          `${preferences ? "Preferences Document" : "Type Index"} is outside the selected storage`,
+        );
       const resource = await budget.read(fetch, url);
       if (!resource) break;
       const { dataset } = resource;
-      locations.push(...registrationsFrom(dataset));
+      if (preferences) {
+        const preferencesNode = subjectOf(dataset, webId);
+        for (const name of ["publicTypeIndex", "privateTypeIndex"]) {
+          for (const indexUrl of preferencesNode.iris(NS.SOLID + name)) {
+            if (links.has(indexUrl)) continue;
+            links.add(indexUrl);
+            pending.push({ url: indexUrl, preferences: false });
+          }
+        }
+      } else {
+        locations.push(...registrationsFrom(dataset));
+      }
     } catch (error) {
       budget.throwIfCancelled();
       failures.push({ url, error });

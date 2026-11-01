@@ -46,6 +46,112 @@ describe("Type Index read model", () => {
     });
   });
 
+  it("follows preferences and reads WebID-subject index links once across both documents", async () => {
+    const prefs = `${STORAGE}settings/prefs.ttl`;
+    const publicIndex = `${STORAGE}public.ttl`;
+    const privateIndex = `${STORAGE}private.ttl`;
+    const profile = await rdf(
+      `<#me> solid:publicTypeIndex <${publicIndex}> ;
+      <http://www.w3.org/ns/pim/space#preferencesFile> <${prefs}>, "bad" .`,
+      WEB_ID,
+    );
+    const fetch = fixtureFetch({
+      [publicIndex]:
+        "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instance <books/one.ttl> .",
+      [prefs]: `<${WEB_ID}> solid:privateTypeIndex <${privateIndex}>, <${publicIndex}>, "bad" .
+        <#someoneElse> solid:privateTypeIndex <ignore.ttl> .`,
+      [privateIndex]:
+        "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instanceContainer <outside-fallback/> .",
+    });
+    const result = await readTypeIndexes(fetch, WEB_ID, profile, STORAGE);
+    expect(result).toEqual({
+      locations: [
+        { forClass: `${NS.SCHEMA}Book`, instance: `${STORAGE}books/one.ttl` },
+        { forClass: `${NS.SCHEMA}Book`, container: `${STORAGE}outside-fallback/` },
+      ],
+      failures: [],
+      truncated: false,
+    });
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
+      publicIndex,
+      prefs,
+      privateIndex,
+    ]);
+  });
+
+  it("counts preferences in the budget and keeps registrations already read", async () => {
+    const profile = await rdf(
+      `<#me> solid:publicTypeIndex <../public.ttl> ;
+      <http://www.w3.org/ns/pim/space#preferencesFile> <../prefs.ttl> .`,
+      WEB_ID,
+    );
+    const fetch = fixtureFetch({
+      [`${STORAGE}public.ttl`]:
+        "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instance <book.ttl> .",
+      [`${STORAGE}prefs.ttl`]: `<${WEB_ID}> solid:privateTypeIndex <private.ttl> .`,
+    });
+    const budget = new DiscoveryBudget({ maxRequests: 2 });
+    const result = await readTypeIndexes(fetch, WEB_ID, profile, STORAGE, { budget });
+    expect(result.locations).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const items = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      budget,
+      typeIndex: result.locations,
+    });
+    expect(items.truncated).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports unreadable and off-storage preferences and private index links without fetching foreign URLs", async () => {
+    const foreign = "https://foreign.example/prefs.ttl";
+    const missing = `${STORAGE}missing-prefs.ttl`;
+    const denied = `${STORAGE}denied-prefs.ttl`;
+    const prefs = `${STORAGE}prefs.ttl`;
+    const foreignIndex = "https://foreign.example/private.ttl";
+    const profile = await rdf(
+      `<#me> <http://www.w3.org/ns/pim/space#preferencesFile>
+      <${foreign}>, <${missing}>, <${denied}>, <${prefs}> .`,
+      WEB_ID,
+    );
+    const fetch = fixtureFetch({
+      [denied]: 403,
+      [prefs]: `<${WEB_ID}> solid:privateTypeIndex <${foreignIndex}>, <private.ttl> .`,
+      [`${STORAGE}private.ttl`]:
+        "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instance <book.ttl> .",
+    });
+    const result = await readTypeIndexes(fetch, WEB_ID, profile, STORAGE);
+    expect(result.locations).toHaveLength(1);
+    expect(result.truncated).toBe(false);
+    expect(result.failures.map(({ url }) => url)).toEqual([foreign, missing, denied, foreignIndex]);
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
+      missing,
+      denied,
+      prefs,
+      `${STORAGE}private.ttl`,
+    ]);
+  });
+
+  it("propagates caller cancellation during preferences discovery", async () => {
+    const profile = await rdf(
+      "<#me> <http://www.w3.org/ns/pim/space#preferencesFile> <../prefs.ttl> .",
+      WEB_ID,
+    );
+    const controller = new AbortController();
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      controller.abort();
+      init?.signal?.throwIfAborted();
+      throw new Error("unreachable");
+    });
+    await expect(
+      readTypeIndexes(fetch, WEB_ID, profile, STORAGE, { signal: controller.signal }),
+    ).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("caps many index links, retains partial registrations and shares requests with traversal", async () => {
     const profile = await rdf(
       `<#me> solid:publicTypeIndex ${Array.from({ length: 20 }, (_, i) => `<../index-${i}.ttl>`).join(", ")} .`,
@@ -187,6 +293,7 @@ describe("Type Index read model", () => {
 
   it.each([
     "indexes",
+    "preferences",
     "items",
   ])("aborts a pending %s read at the deadline and reports incomplete results", async (phase) => {
     const profile = await rdf("<#me> solid:publicTypeIndex <../index.ttl> .", WEB_ID);
@@ -199,8 +306,19 @@ describe("Type Index read model", () => {
         }),
     );
     const result =
-      phase === "indexes"
-        ? await readTypeIndexes(fetch, WEB_ID, profile, STORAGE, { timeoutMs: 10 })
+      phase !== "items"
+        ? await readTypeIndexes(
+            fetch,
+            WEB_ID,
+            phase === "preferences"
+              ? await rdf(
+                  "<#me> <http://www.w3.org/ns/pim/space#preferencesFile> <../prefs.ttl> .",
+                  WEB_ID,
+                )
+              : profile,
+            STORAGE,
+            { timeoutMs: 10 },
+          )
         : await discoverDomainItems("media", { storage: STORAGE, fetch, timeoutMs: 10 });
     expect(result.truncated).toBe(true);
     expect(result.failures).toEqual([]);
