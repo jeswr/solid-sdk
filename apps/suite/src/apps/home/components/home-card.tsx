@@ -77,8 +77,12 @@ export function HomeCard({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div className="hm-card-body">
-            <Link href={open} className="hm-card-open" aria-label={title}>
+            <div className="hm-card-content">
               <TypedView data={view} resolveImage={resolveImage} />
+            </div>
+            {/* Stretched link: its name is exactly the title; the card's text stays outside it. */}
+            <Link href={open} className="hm-card-open">
+              <span className="hm-sr-only">{title}</span>
             </Link>
             <footer className="hm-card-footer">
               {provenance.kind === "you" ? (

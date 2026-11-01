@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { CountBadge } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -63,8 +62,12 @@ export function DomainNavigation({
           >
             <DomainIcon name={domain.icon} />
             <span>{domain.label}</span>
-            {counts.has(domain.id) ? (
-              <CountBadge count={counts.get(domain.id) as number} label={`${domain.label} items`} />
+            {(counts.get(domain.id) ?? 0) > 0 ? (
+              <span className="hm-nav-count">
+                <span className="hm-sr-only">, </span>
+                {counts.get(domain.id)}
+                <span className="hm-sr-only"> items</span>
+              </span>
             ) : null}
           </Link>
         ))}

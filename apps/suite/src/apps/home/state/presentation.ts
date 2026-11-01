@@ -141,6 +141,12 @@ export function cardView(item: DomainItem, view: TypedViewData): TypedViewData {
         ...property,
         values: property.values.filter((value) => !/http/i.test(value)),
       }))
+      // Unlabelled predicates and unnamed links are noise on a card; the detail page keeps them.
+      .filter((property) => property.label !== "Other detail")
+      .map((property) => ({
+        ...property,
+        values: property.values.filter((value) => value !== "Linked item"),
+      }))
       .filter((property) => property.values.length)
       .slice(0, 3),
   };

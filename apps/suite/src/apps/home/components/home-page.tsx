@@ -112,7 +112,7 @@ export function HomePage({ domain }: { domain: string }) {
         />
         {connectorsForDomain(entry.id).length ? (
           <div className="hm-sources">
-            <span className="hm-muted">Connected</span>
+            {sources.length ? <span className="hm-muted">Connected</span> : null}
             <TooltipProvider>
               {sources.map((source) => (
                 <Tooltip key={source.id}>

@@ -7,7 +7,6 @@
  * same list is the drawer below 1024px.
  */
 
-import { CountBadge } from "@jeswr/suite-ui";
 import { Plug, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -43,11 +42,12 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
                 >
                   <DomainIcon name={domain.icon} />
                   <span className="hm-nav-label">{domain.label}</span>
-                  {counts?.has(domain.id) ? (
-                    <CountBadge
-                      count={counts.get(domain.id) as number}
-                      label={`${domain.label} items`}
-                    />
+                  {(counts?.get(domain.id) ?? 0) > 0 ? (
+                    <span className="hm-nav-count">
+                      <span className="hm-sr-only">, </span>
+                      {counts?.get(domain.id)}
+                      <span className="hm-sr-only"> items</span>
+                    </span>
                   ) : null}
                 </Link>
               </li>
