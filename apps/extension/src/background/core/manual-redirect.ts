@@ -6,7 +6,7 @@ export interface RedirectRequest {
   readonly url: string;
   readonly method: string;
   readonly headers: Record<string, string>;
-  readonly body?: string | null;
+  readonly body?: string | Uint8Array<ArrayBuffer> | null;
 }
 
 /**
