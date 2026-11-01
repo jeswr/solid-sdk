@@ -37,6 +37,16 @@ import {
   userCanRead,
 } from '../src/warmer-rdf.js';
 
+// Isolate crawl decisions from worker admission; warm-worker.test exercises the
+// real guard, including deferral when no worker controls the page.
+vi.mock('../src/warm-transport.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/warm-transport.js')>()),
+  warmStorage: async (storage: StorageClient) => ({
+    storage,
+    close: async () => undefined,
+  }),
+}));
+
 const BASE = 'https://alice.example';
 const WEBID = `${BASE}/profile/card#me`;
 const PROFILE_DOC = `${BASE}/profile/card`;
@@ -254,7 +264,7 @@ describe('warmer: BFS traversal', () => {
 });
 
 describe('warmer: budget enforcement', () => {
-  it('counts empty cursor pages against maxResources without a worker', async () => {
+  it('counts empty cursor pages against maxResources after listing admission', async () => {
     const calls: string[] = [];
     const storage = createLwsBackend({
       root: `${BASE}/`,

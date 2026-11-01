@@ -132,6 +132,49 @@ function streaming(length?: string, chunkSize = 1_000_000) {
   return { transport, cancel, pulls: () => pulls };
 }
 
+it.each([
+  'solid',
+  'lws',
+] as const)('defers %s listing bodies when no worker guard is active', async (protocol) => {
+  vi.stubGlobal('navigator', { serviceWorker: { controller: null } });
+  const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    return new Response(
+      request.method === 'HEAD'
+        ? null
+        : protocol === 'lws'
+          ? JSON.stringify({ type: 'ContainerPage', items: [{ id: url }] })
+          : `<> <http://www.w3.org/ns/ldp#contains> <${url}> .`,
+      { headers: { 'content-type': protocol === 'lws' ? 'application/lws+json' : 'text/turtle' } },
+    );
+  });
+  const storage = (protocol === 'lws' ? createLwsBackend : createSolidBackend)({
+    root,
+    fetch: transport,
+  });
+  const list = vi.spyOn(storage, 'list');
+  const listAll = vi.spyOn(storage, 'listAll');
+  const result = await warm(webId, { storage }, resolveBudget({ maxBytes: 1024 }), '', {
+    seeds: [root],
+  });
+  expect(result.warmed).toBe(1);
+  expect(result.budgetHit).toBe(false);
+  expect(result.bytes).toBeGreaterThan(0);
+  expect(transport.mock.calls.map(([input, init]) => new Request(input, init).method)).toEqual([
+    'HEAD',
+    'GET',
+  ]);
+  expect(list).not.toHaveBeenCalled();
+  expect(listAll).not.toHaveBeenCalled();
+
+  const session = await warmStorage(storage, resolveBudget());
+  await expect(session.storage.list(root)).rejects.toThrow('active worker guard');
+  expect(() => session.storage.listAll(root)).toThrow('active worker guard');
+  await session.close();
+  expect(list).not.toHaveBeenCalled();
+  expect(listAll).not.toHaveBeenCalled();
+});
+
 it('preserves public-client HEAD size evidence and skips the GET entirely', async () => {
   const body = streaming('9000000');
   const { storage, network, cache, put } = await worker(body.transport);

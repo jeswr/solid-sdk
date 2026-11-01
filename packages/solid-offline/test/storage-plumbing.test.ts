@@ -11,6 +11,16 @@ import { createPolicyStorage, policyResponse } from '../src/storage.js';
 import { resolveBudget, warm } from '../src/warmer.js';
 import { MockBroadcaster, MockByteCache, turtleResponse } from './mocks.js';
 
+// Memory-backend traversal tests assume listing admission. The real transport
+// guard and its worker requirement are covered in warm-worker.test.
+vi.mock('../src/warm-transport.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/warm-transport.js')>()),
+  warmStorage: async (storage: StorageClient) => ({
+    storage,
+    close: async () => undefined,
+  }),
+}));
+
 const ROOT = 'https://alice.example/';
 const DOC = `${ROOT}doc`;
 const stores: MetadataStore[] = [];

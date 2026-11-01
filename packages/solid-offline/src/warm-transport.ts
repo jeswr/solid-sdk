@@ -136,7 +136,21 @@ export async function warmStorage(
   signal?: AbortSignal,
 ): Promise<{ storage: StorageClient; close(): Promise<Snapshot | undefined> }> {
   const controller = typeof navigator !== 'undefined' ? navigator.serviceWorker?.controller : null;
-  if (!controller) return { storage, close: async () => undefined };
+  if (!controller) {
+    // Parsed listing pages expose no response sizes or streams to the crawler.
+    // Defer them until a worker can bound bytes at the transport boundary.
+    const deferListing = () => {
+      throw new Error('Listing warming requires an active worker guard');
+    };
+    return {
+      storage: {
+        ...storage,
+        list: async () => deferListing(),
+        listAll: deferListing,
+      },
+      close: async () => undefined,
+    };
+  }
   signal?.throwIfAborted();
   const { port1, port2 } = new MessageChannel();
   const token = crypto.randomUUID();
