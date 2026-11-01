@@ -14,6 +14,8 @@
  * - strong ETags, `If-Match` / `If-None-Match` preconditions (412);
  * - POST with `Slug` (and a BasicContainer `Link` type) mints a child;
  * - DELETE of a non-empty container is 409; the root cannot be deleted;
+ * - `.acl` documents are auxiliary resources: like CSS, they are never listed
+ *   in `ldp:contains` and are deleted together with their subject resource;
  * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type;
  * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
@@ -133,6 +135,11 @@ function parentOf(url: string): string | undefined {
   return trimmed.slice(0, trimmed.lastIndexOf("/") + 1);
 }
 
+/** Auxiliary (ACL) resources: addressable, but not members of their container. */
+function isAuxiliary(url: string): boolean {
+  return url.endsWith(".acl");
+}
+
 function isContainerUrl(url: string): boolean {
   return url.endsWith("/");
 }
@@ -239,7 +246,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   const children = (container: string): string[] => {
     const out: string[] = [];
     for (const url of [...containers.keys(), ...resources.keys()]) {
-      if (url !== container && parentOf(url) === container) out.push(url);
+      if (url !== container && parentOf(url) === container && !isAuxiliary(url)) out.push(url);
     }
     return out.sort();
   };
@@ -413,6 +420,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   const remove = (url: string): Response => {
     if (url === root) return respond(405);
     if (resources.delete(url)) {
+      if (!isAuxiliary(url)) resources.delete(`${url}.acl`);
       touch(parentOf(url) as string, now());
       const receipt = parentValidators(url);
       notify(url);
@@ -421,6 +429,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     if (containers.has(url)) {
       if (children(url).length > 0) return respond(409);
       containers.delete(url);
+      resources.delete(`${url}.acl`);
       touch(parentOf(url) as string, now());
       const receipt = parentValidators(url);
       notify(url);

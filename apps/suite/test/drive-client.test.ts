@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { Container } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,11 +16,7 @@ const NOW = Date.UTC(2026, 9, 26, 12);
 const DRIVE = `${DEMO_ROOT}drive/`;
 
 async function setup() {
-  // Keep the original private content fixture; Home tests cover the new shared grants.
-  const seed = (await buildDemoSeed(NOW)).filter(
-    (file) => !file.path.startsWith("drive/") || !file.path.endsWith(".acl"),
-  );
-  const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
   const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch: pod.fetch });
   return { pod, client };
 }
@@ -76,7 +71,11 @@ describe("Drive client against a seeded demo pod", () => {
       modified: new Date(NOW - 30 * 86_400_000),
     });
     expect(await client.list(`${DRIVE}Archive/`)).toEqual([]);
-    expect((await client.list(DEMO_ROOT)).some((item) => item.name === ".acl")).toBe(true);
+    await pod.fetch(`${DEMO_ROOT}.hidden`, { method: "PUT", body: "dot" });
+    const rootNames = (await client.list(DEMO_ROOT)).map((item) => item.name);
+    expect(rootNames).toContain(".hidden");
+    // ACL documents are auxiliary resources, never container members (as on CSS).
+    expect(rootNames).not.toContain(".acl");
     const signal = new AbortController().signal;
     const fetch = vi.fn<typeof globalThis.fetch>(pod.fetch);
     const withSignal = stubClient(fetch);

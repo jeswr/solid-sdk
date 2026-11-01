@@ -141,7 +141,6 @@ describe("demo pod HTTP contract", () => {
       "http://www.w3.org/ns/pim/space#Storage",
     ]);
     expect(objects(rootGraph, DEMO_ROOT, `${LDP}contains`)).toEqual([
-      `${DEMO_ROOT}.acl`,
       `${DEMO_ROOT}drive/`,
       `${DEMO_ROOT}health/`,
       `${DEMO_ROOT}profile/`,
@@ -150,7 +149,6 @@ describe("demo pod HTTP contract", () => {
     const work = `${DEMO_ROOT}drive/Work/`;
     const listing = await graph(await pod.fetch(work), work);
     expect(objects(listing, work, `${LDP}contains`)).toEqual([
-      `${work}.acl`,
       `${work}Budget%202026.csv`,
       `${work}Report.pdf`,
     ]);
@@ -305,6 +303,37 @@ describe("demo pod HTTP contract", () => {
     await pod.fetch(file, { method: "PUT" });
     await pod.fetch(file, { method: "DELETE" });
     expect(changed).toHaveBeenCalledTimes(5);
+  });
+
+  it("treats ACL documents as auxiliary: unlisted, readable, and deleted with their subject", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT, now: () => NOW });
+    const folder = `${DEMO_ROOT}shared/`;
+    const file = `${folder}file`;
+    await pod.fetch(file, { method: "PUT", body: "content" });
+    await pod.fetch(`${file}.acl`, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    await pod.fetch(`${folder}.acl`, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    const listing = await graph(await pod.fetch(folder), folder);
+    expect(objects(listing, folder, `${LDP}contains`)).toEqual([file]);
+    expect((await pod.fetch(`${file}.acl`)).status).toBe(200);
+    expect((await pod.fetch(`${file}.acl`, { method: "HEAD" })).headers.get("link")).not.toContain(
+      'rel="acl"',
+    );
+    expect((await pod.fetch(file, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(`${file}.acl`)).toBe(false);
+    expect((await pod.fetch(folder, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(`${folder}.acl`)).toBe(false);
+    await pod.fetch(file, { method: "PUT", body: "again" });
+    await pod.fetch(`${file}.acl`, { method: "PUT", body: "" });
+    expect((await pod.fetch(`${file}.acl`, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(file)).toBe(true);
   });
 
   it("handles missing/outside URLs, OPTIONS, unknown methods, queries and fragments", async () => {

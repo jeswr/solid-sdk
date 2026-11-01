@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -45,12 +44,7 @@ const INDEX = `${DRIVE}.trash/index.ttl`;
 const NOTES = `${DRIVE}notes.md`;
 
 async function setup() {
-  // These content-operation fixtures retain their original private Drive baseline.
-  // The shared seed's new grants are exercised by home-permissions-ui-demo.test.ts.
-  const seed = (await buildDemoSeed(NOW)).filter(
-    (file) => !file.path.startsWith("drive/") || !file.path.endsWith(".acl"),
-  );
-  const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
   // Every operation request goes through this spy, including recursive client moves.
   const fetch = vi.fn<typeof globalThis.fetch>(pod.fetch);
   const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch });
@@ -95,7 +89,8 @@ describe("Drive usage", () => {
     await trashOne(client);
     const expected = pod
       .snapshot()
-      .resources.filter(([url]) => url.startsWith(DRIVE))
+      // Auxiliary ACL documents are not container members, so they are not counted.
+      .resources.filter(([url]) => url.startsWith(DRIVE) && !url.endsWith(".acl"))
       .reduce((sum, [, resource]) => sum + resource.body.byteLength, 0);
     expect(expected).toBeGreaterThan(0);
     expect(await measureUsage(client, DRIVE)).toBe(expected);
