@@ -41,7 +41,14 @@ it("filters sync to m.direct rooms, bounds pages and commits the baseline only a
   const filter = JSON.parse(required(required(r.requests[1]).url.searchParams.get("filter")));
   expect(filter.room.rooms).toEqual([roomId]);
   expect(filter.room.include_leave).toBe(true);
-  expect(filter.room.timeline.types).toEqual(["m.room.message", "m.room.encrypted"]);
+  expect(filter.room.timeline.types).toEqual([
+    "m.room.message",
+    "m.room.encrypted",
+    "m.bridge",
+    "uk.half-shot.bridge",
+  ]);
+  expect(filter.room.state.types).toEqual(["m.bridge", "uk.half-shot.bridge"]);
+  expect(required(r.requests[1]).url.searchParams.get("full_state")).toBe("true");
   expect(r.crypto.receiveSync).toHaveBeenCalledTimes(1);
   const second = await r.binding.ingest.list(account, first.next, limits);
   expect(second.items.map((m) => m.id)).toEqual(["$two"]);

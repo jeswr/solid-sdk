@@ -6,6 +6,12 @@ import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { decodeEventContent, ENVELOPE_KEY, encodeEnvelope } from "./envelope.js";
 import { ChannelParseError } from "./errors.js";
+import {
+  bridgeChannel,
+  detectMatrixBridge,
+  MATRIX_BRIDGE_STATE,
+  type MatrixBridgeChannel,
+} from "./matrix/bridge.js";
 import type { MatrixCrypto } from "./matrix/crypto.js";
 import {
   identifier,
@@ -20,6 +26,11 @@ import type { OriginFetchOptions } from "./origins.js";
 import { MATRIX_CONTENT } from "./profiles.js";
 import type { AccountRef, TokenProvider } from "./types.js";
 
+export {
+  describeMatrixBridge,
+  detectMatrixBridge,
+  type MatrixBridgeChannel,
+} from "./matrix/bridge.js";
 export { createMatrixCrypto, type MatrixCrypto } from "./matrix/crypto.js";
 export { matrixOrigins } from "./matrix/shared.js";
 
@@ -37,6 +48,7 @@ interface State {
   userId: string;
   since: string;
   pending: Record<string, unknown>[];
+  bridges?: Record<string, MatrixBridgeChannel>;
 }
 /** Failed room/decryption never advances the caller's checkpoint or hides a gap. */
 export class MatrixRoomError extends ChannelParseError {
@@ -47,7 +59,10 @@ export class MatrixRoomError extends ChannelParseError {
 function cursorState(cursor: string, account: string, homeserver: string, userId: string): State {
   const state = json(cursor);
   if (
-    Object.keys(state).sort().join() !== "account,homeserver,pending,since,userId" ||
+    Object.keys(state)
+      .filter((key) => key !== "bridges")
+      .sort()
+      .join() !== "account,homeserver,pending,since,userId" ||
     state.account !== account ||
     state.homeserver !== homeserver ||
     state.userId !== userId ||
@@ -61,6 +76,15 @@ function cursorState(cursor: string, account: string, homeserver: string, userId
     identifier(event.room_id, "!");
     identifier(event.event_id, "$");
   });
+  if (state.bridges !== undefined) {
+    const bridges = record(state.bridges);
+    for (const [id, channel] of Object.entries(bridges)) {
+      identifier(id, "$");
+      bridgeChannel(channel);
+      if (!state.pending.some((event) => record(event).event_id === id))
+        throw new ChannelParseError("orphaned Matrix bridge hint");
+    }
+  }
   return state as unknown as State;
 }
 /** Pure parser: decrypted content is still untrusted, and never authenticates an agent. */
@@ -68,8 +92,24 @@ export function parseMatrixMessage(item: InboundRawMessage): import("./message.j
   const raw = json(item.raw, MATRIX_CONTENT.maxBytes);
   if (raw.type === "m.room.encrypted" && typeof item.native !== "string")
     throw new ChannelParseError("Matrix encrypted event requires bounded decrypted JSON");
-  const event =
-    raw.type === "m.room.encrypted" ? json(item.native as string, MATRIX_CONTENT.maxBytes) : raw;
+  const native = typeof item.native === "string" ? json(item.native) : undefined;
+  const hint = native && Object.hasOwn(native, "bridge") ? bridgeChannel(native.bridge) : undefined;
+  const decoded =
+    native === undefined
+      ? raw
+      : json(
+          hint === undefined ? (item.native as string) : JSON.stringify(record(native.event)),
+          MATRIX_CONTENT.maxBytes,
+        );
+  const event = raw.type === "m.room.encrypted" ? decoded : raw;
+  // The wrapper carries reader-side state without changing the raw provenance bytes.
+  if (
+    hint !== undefined &&
+    (decoded.event_id !== raw.event_id ||
+      decoded.room_id !== raw.room_id ||
+      decoded.sender !== raw.sender)
+  )
+    throw new ChannelParseError("Matrix bridge event identity mismatch");
   const roomId = identifier(raw.room_id, "!");
   const eventId = identifier(raw.event_id, "$");
   if (
@@ -87,12 +127,17 @@ export function parseMatrixMessage(item: InboundRawMessage): import("./message.j
   if (canonical.kind !== "message")
     throw new ChannelParseError("Matrix event is not a new text message");
   const content = record(event.content);
-  const blocks = Object.hasOwn(content, ENVELOPE_KEY)
-    ? [encodeEnvelope(decodeEventContent(content))]
-    : undefined;
+  const ghost = detectMatrixBridge(event.sender);
+  if (hint !== undefined && ghost !== undefined && hint !== ghost)
+    throw new ChannelParseError("conflicting Matrix bridge hints");
+  const channel = hint ?? ghost;
+  const blocks =
+    channel === undefined && Object.hasOwn(content, ENVELOPE_KEY)
+      ? [encodeEnvelope(decodeEventContent(content))]
+      : undefined;
   const bytes = typeof item.raw === "string" ? new TextEncoder().encode(item.raw) : item.raw;
   return {
-    channel: "matrix",
+    channel: channel ?? "matrix",
     ...(canonical.matrixSender === undefined
       ? {}
       : { sender: { handle: identifier(canonical.matrixSender, "@") } }),
@@ -178,13 +223,20 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
             room: {
               rooms: [...rooms],
               include_leave: true,
-              timeline: { limit: 512, types: ["m.room.message", "m.room.encrypted"] },
-              state: { types: [] },
+              timeline: {
+                limit: 512,
+                types: ["m.room.message", "m.room.encrypted", ...MATRIX_BRIDGE_STATE],
+              },
+              state: { types: MATRIX_BRIDGE_STATE },
               ephemeral: { types: [] },
             },
             presence: { types: [] },
           };
-          const params = new URLSearchParams({ filter: JSON.stringify(filter), timeout: "0" });
+          const params = new URLSearchParams({
+            filter: JSON.stringify(filter),
+            timeout: "0",
+            full_state: "true",
+          });
           if (state.since) params.set("since", state.since);
           const sync = await responseBody(await rest(`/sync?${params}`, account, tokens, "read"));
           const since = syncToken(sync.next_batch);
@@ -200,6 +252,7 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
           for (const room of rooms) if (!requestedRooms.has(room)) throw new MatrixRoomError(room);
           await crypto.receiveSync(sync);
           const pending: Record<string, unknown>[] = [];
+          const bridges: Record<string, MatrixBridgeChannel> = Object.create(null);
           const roomUpdates = record(sync.rooms ?? {});
           for (const membership of ["join", "leave"]) {
             for (const [roomId, data] of Object.entries(record(roomUpdates[membership] ?? {}))) {
@@ -209,10 +262,24 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
                 if (!Object.hasOwn(room, "timeline")) continue;
                 const timeline = record(room.timeline);
                 if (timeline.limited === true || !Array.isArray(timeline.events)) throw new Error();
+                const bridgeState = new Map<string, Record<string, unknown>>();
+                function updateBridge(value: unknown): boolean {
+                  const event = record(value);
+                  if (!MATRIX_BRIDGE_STATE.includes(event.type as string)) return false;
+                  if (typeof event.state_key !== "string") throw new Error();
+                  bridgeState.set(`${event.type}:${event.state_key}`, event);
+                  return true;
+                }
+                const stateEvents = record(room.state ?? {}).events ?? [];
+                if (!Array.isArray(stateEvents)) throw new Error();
+                stateEvents.forEach(updateBridge);
                 for (const value of timeline.events) {
                   const event = record(value);
+                  if (updateBridge(event)) continue;
                   identifier(event.event_id, "$");
                   if (event.room_id !== undefined && event.room_id !== roomId) throw new Error();
+                  const bridge = detectMatrixBridge(event.sender, [...bridgeState.values()]);
+                  if (bridge !== undefined) bridges[event.event_id as string] = bridge;
                   pending.push({ ...event, room_id: roomId });
                 }
               } catch {
@@ -222,6 +289,8 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
           }
           if (pending.length > 512) throw new ChannelParseError("Matrix sync item cap exceeded");
           state = { ...state, since, pending };
+          delete state.bridges;
+          if (Object.keys(bridges).length) state.bridges = bridges;
           json(JSON.stringify(state));
         }
         const items: InboundRawMessage[] = [];
@@ -237,6 +306,7 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
           ) {
             // Redaction permanently removes ciphertext; key synchronization cannot recover it.
             state.pending.shift();
+            if (state.bridges) delete state.bridges[event.event_id as string];
             continue;
           }
           const raw = JSON.stringify(event);
@@ -273,6 +343,15 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
                 throw new MatrixRoomError(event.room_id as string);
               }
             }
+          }
+          const bridge = state.bridges?.[event.event_id as string];
+          if (bridge !== undefined) {
+            native = JSON.stringify({
+              bridge,
+              event: typeof native === "string" ? json(native, MATRIX_CONTENT.maxBytes) : native,
+            });
+            json(native as string);
+            delete state.bridges?.[event.event_id as string];
           }
           items.push({ id: event.event_id as string, raw, native });
           bytes += size;

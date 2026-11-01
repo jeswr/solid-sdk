@@ -11,7 +11,7 @@ import type { Wire } from "../src/types.js";
 import { event, fixtureTransport, homeserver, roomId, userId } from "./fixtures/matrix.js";
 import { account, at, message, signed, verifyMessage } from "./fixtures/signed.js";
 
-const unencrypted = () => new Response(null, { status: 404 });
+const unencrypted = () => [];
 function sender(replies: unknown[] = [], patch: Partial<MatrixSendOptions> = {}) {
   const fake = fixtureTransport(replies);
   const tokens = new RecordingTokenProvider();
@@ -189,7 +189,7 @@ it("snapshots recipients and refuses modified routing, human text, digest, media
 
 it("requires current mandate/approval and refuses plaintext downgrade of encrypted or unknown rooms", async () => {
   for (const encryption of [
-    { algorithm: "m.megolm.v1.aes-sha2" },
+    [{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }],
     new Response(null, { status: 500 }),
     new Response(null, { status: 403 }),
   ]) {
