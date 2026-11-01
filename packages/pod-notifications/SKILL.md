@@ -30,21 +30,36 @@ export async function watchCollection(
     hot: [hotResource],
     pollIntervalMs: 30_000,
   });
+  let closed = false;
+  let closing: Promise<void> | undefined;
+  let reconciliation = Promise.resolve();
+  let reconciling = false;
+  const pendingInvalidations = new Set<string>();
   const stopChanges = subscription.on('change', event => {
+    if (closed) return;
     const affected = new Set([event.object]);
     if (event.type !== 'Update') {
       affected.add(storage.root);
       if (event.target) affected.add(event.target);
       if (event.origin) affected.add(event.origin);
     }
-    for (const url of affected) invalidate(url);
+    for (const url of affected) {
+      if (reconciling) pendingInvalidations.add(url);
+      else invalidate(url);
+    }
   });
-  let closed = false;
-  let closing: Promise<void> | undefined;
-  let reconciliation = Promise.resolve();
   const reconcileSerially = (since: Date) => {
-    reconciliation = reconciliation.then(() => {
-      if (!closed) return reconcile(since);
+    reconciliation = reconciliation.then(async () => {
+      if (closed) return;
+      reconciling = true;
+      try {
+        await reconcile(since);
+      } finally {
+        reconciling = false;
+        const affected = [...pendingInvalidations];
+        pendingInvalidations.clear();
+        if (!closed) for (const url of affected) invalidate(url);
+      }
     });
     return reconciliation;
   };
@@ -69,6 +84,7 @@ export async function watchCollection(
   const close = () => {
     if (!closing) {
       closed = true;
+      pendingInvalidations.clear();
       stopChanges();
       stopResync();
       stopState();
@@ -90,7 +106,10 @@ export async function watchCollection(
 Membership changes (`Create`, `Delete`, `Move`, `Add`, `Remove`) invalidate the object,
 normalized `target`/`origin` containers and the watched root. The root covers missing
 container hints; URL-keyed listings must refresh even when container ETags are absent.
-`Update` invalidates its object. Each affected URL is invalidated once per event.
+`Update` invalidates its object. Outside reconciliation, each affected URL is invalidated
+once per event. During reconciliation, invalidations are coalesced by URL and applied after
+the read settles to discard any older snapshot it committed, even if the read failed.
+Cleanup discards pending invalidations before waiting for the active read.
 
 Own the returned async cleanup in the application lifecycle, including logout. `subscribe`
 also accepts an abort signal. Alternatively iterate the subscription with `for await`; ending

@@ -242,3 +242,47 @@ test("the recipe invalidates URL-keyed listings on membership changes without co
   await cleanup();
   expect(timers.pending).toBe(0);
 });
+
+test("the recipe retains a polling invalidation when baseline reconciliation commits an older listing", async () => {
+  const timers = new FakeTimers(100);
+  const storage = createMemoryStorage();
+  const cache = new Map<string, string[]>();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let reads = 0;
+  const reconcile = vi.fn(async () => {
+    const members = [];
+    for await (const entry of storage.listAll(storage.root)) members.push(entry.url);
+    if (++reads === 2) {
+      started.resolve();
+      await release.promise;
+    }
+    cache.set(storage.root, members);
+  });
+  const invalidate = vi.fn((url: string) => cache.delete(url));
+  const reportError = vi.fn();
+  const cleanup = await notificationRecipe(timers)(
+    vi.fn(),
+    storage,
+    `${storage.root}missing`,
+    invalidate,
+    reconcile,
+    reportError,
+  );
+  await timers.advanceBy(0);
+  await started.promise;
+  const child = await storage.create(storage.root, "new", {
+    contentType: "text/plain",
+    name: "new",
+  });
+  await timers.advanceBy(30_000);
+  release.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(cache.has(storage.root)).toBe(false);
+  expect(invalidate).toHaveBeenCalledWith(child.url);
+  expect(invalidate).toHaveBeenCalledWith(storage.root);
+  expect(reconcile).toHaveBeenCalledTimes(2);
+  expect(reportError).not.toHaveBeenCalled();
+  await cleanup();
+  expect(timers.pending).toBe(0);
+});

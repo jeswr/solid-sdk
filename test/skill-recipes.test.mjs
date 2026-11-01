@@ -557,6 +557,54 @@ describe("reviewed recipe failure boundaries", () => {
     await cleanup();
   });
 
+  it.each([
+    "initial",
+    "live",
+    "resync",
+  ])("preserves change invalidations across an in-flight %s read", async (phase) => {
+    const { watch, handlers, transition, storage, hotResource, invalidate, reportError } =
+      await notificationRecipe();
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const target = `${storage.root}incoming/`;
+    const origin = `${storage.root}outgoing/`;
+    const urls = [hotResource, storage.root, target, origin];
+    const cache = new Map();
+    let authoritative = "old snapshot";
+    let holdRead = phase === "initial";
+    invalidate.mockImplementation((url) => cache.delete(url));
+    const reconcile = vi.fn(async () => {
+      const snapshot = authoritative;
+      if (holdRead) {
+        started.resolve();
+        await release.promise;
+      }
+      for (const url of urls) cache.set(url, snapshot);
+    });
+    const watching = watch(reconcile);
+    let cleanup;
+    if (phase !== "initial") {
+      cleanup = await watching;
+      holdRead = true;
+      if (phase === "live") transition("live");
+      else handlers.get("resync")(new Date());
+    }
+    await started.promise;
+    authoritative = "new snapshot";
+    handlers.get("change")({ type: "Update", object: hotResource });
+    handlers.get("change")({ type: "Move", object: hotResource, target, origin });
+    release.resolve();
+    cleanup ??= await watching;
+    await new Promise((resolve) => setImmediate(resolve));
+    // No later event or reconciliation is needed to discard the stale commit.
+    for (const url of urls) expect(cache.has(url)).toBe(false);
+    expect(reconcile).toHaveBeenCalledTimes(phase === "initial" ? 1 : 2);
+    handlers.get("change")({ type: "Update", object: `${storage.root}other` });
+    expect(invalidate).toHaveBeenLastCalledWith(`${storage.root}other`);
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+  });
+
   it("fences event reads queued before cleanup and ignores late callbacks", async () => {
     const { watch, handlers, transition, subscription, reportError } = await notificationRecipe();
     const reconcile = vi.fn();
@@ -574,6 +622,32 @@ describe("reviewed recipe failure boundaries", () => {
     expect(reportError).not.toHaveBeenCalled();
   });
 
+  it("invalidates a stale partial commit before reporting a failed reconciliation", async () => {
+    const { watch, handlers, hotResource, invalidate, subscription, reportError } =
+      await notificationRecipe("live");
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const failure = new Error("Reconciliation failed after a partial commit");
+    const cache = new Map();
+    invalidate.mockImplementation((url) => cache.delete(url));
+    const reconcile = vi.fn().mockImplementationOnce(() => {});
+    reconcile.mockImplementation(async () => {
+      started.resolve();
+      await release.promise;
+      cache.set(hotResource, "old snapshot");
+      throw failure;
+    });
+    const cleanup = await watch(reconcile);
+    handlers.get("resync")(new Date());
+    await started.promise;
+    handlers.get("change")({ type: "Update", object: hotResource });
+    release.resolve();
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(cache.has(hotResource)).toBe(false);
+    expect(subscription.close).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
   it.each([
     { readFails: false, closeFails: false },
     { readFails: true, closeFails: false },
@@ -583,7 +657,8 @@ describe("reviewed recipe failure boundaries", () => {
     readFails,
     closeFails,
   }) => {
-    const { watch, handlers, transition, subscription, reportError } = await notificationRecipe();
+    const { watch, handlers, transition, subscription, reportError, hotResource, invalidate } =
+      await notificationRecipe();
     const started = Promise.withResolvers();
     const release = Promise.withResolvers();
     const readFailure = new Error("Read failed during cleanup");
@@ -601,6 +676,8 @@ describe("reviewed recipe failure boundaries", () => {
     const cleanup = await watch(reconcile);
     handlers.get("resync")(new Date());
     await started.promise;
+    const lateChange = handlers.get("change");
+    lateChange({ type: "Update", object: hotResource });
     handlers.get("resync")(new Date());
     transition("live");
     if (closeFails) subscription.close.mockRejectedValue(closeFailure);
@@ -614,6 +691,7 @@ describe("reviewed recipe failure boundaries", () => {
     expect(settled).not.toHaveBeenCalled();
     expect(subscription.close).toHaveBeenCalledOnce();
     expect(handlers.size).toBe(0);
+    lateChange({ type: "Update", object: hotResource });
     release.resolve();
     expect(await closing).toEqual(
       Array.from({ length: 2 }, () =>
@@ -624,6 +702,7 @@ describe("reviewed recipe failure boundaries", () => {
     );
     expect(cached).toBe(readFails ? "initial" : "updated");
     expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(invalidate).not.toHaveBeenCalled();
     if (readFails) {
       await vi.waitFor(() =>
         expect(reportError).toHaveBeenCalledWith(closeFails ? closeFailure : readFailure),
