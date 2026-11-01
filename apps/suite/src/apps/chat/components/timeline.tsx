@@ -178,6 +178,7 @@ export function Timeline({
   const historyRequest = useRef(false);
   const [announcement, setAnnouncement] = useState("");
   const [focused, setFocused] = useState<string>();
+  const target = useRef<string | undefined>(undefined);
   const [windowStart, setWindowStart] = useState(0);
   const heights = useRef(new Map<string, number>());
   const all = useMemo(
@@ -294,18 +295,25 @@ export function Timeline({
     const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
     if (!row) return;
     setFocused(row.message.id);
+    target.current = row.message.id;
     if (virtual) setWindowStart(Math.max(0, Math.min(rows.length - 200, index - 30)));
     nearBottom.current = false;
-    requestAnimationFrame(() => {
-      const article = [
-        ...(scroll.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []),
-      ].find((node) => node.dataset.messageId === row.message.id);
-      article?.focus();
-    });
+    const article = () =>
+      [...(scroll.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [])].find(
+        (node) => node.dataset.messageId === row.message.id,
+      );
+    // Focus a rendered row now, so Enter right after an arrow key acts on the new row; a row
+    // outside the virtual window is focused once it has rendered.
+    const rendered = article();
+    if (rendered) rendered.focus();
+    else requestAnimationFrame(() => article()?.focus());
   };
   const keyboard = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof Element && event.target.closest("button,a,[role=menu]")) return;
-    const index = rows.findIndex((row) => row.message.id === focused);
+    // A fast second key press arrives before the first one's focus has rendered, so read the
+    // latest target from a ref rather than from state or the DOM.
+    const current = target.current ?? focused;
+    const index = rows.findIndex((row) => row.message.id === current);
     if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
       event.preventDefault();
       focusIndex(

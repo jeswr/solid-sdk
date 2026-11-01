@@ -183,6 +183,14 @@ it("windows long histories and can focus the actual first and last messages", as
   await key(document.activeElement as HTMLElement, "ArrowUp");
   await nextFrame();
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[238]?.id);
+  // Two presses before React renders still move two rows, and focus moves at once.
+  await act(async () => {
+    for (let press = 0; press < 2; press++)
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+      );
+  });
+  expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[236]?.id);
 });
 it("composer sends on Enter, preserves Shift+Enter, cancels edits and exposes the last-message shortcut", async () => {
   const pod = createDemoPod({ root: ROOT });
