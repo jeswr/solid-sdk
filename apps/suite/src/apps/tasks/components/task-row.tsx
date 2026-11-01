@@ -104,7 +104,17 @@ export function TaskRow({
       task.completedAt ||
       task.derivedFrom,
   );
-  const onKeyDown = useTasksShortcuts(!!focus?.selection.size, (command) => {
+  const selectedTasks = () => {
+    if (!focus?.selection.size) return [];
+    const selected = focus?.selectedUrls();
+    return tasks.views.filter(
+      (view) =>
+        selected?.has(view.url) &&
+        view.state === "open" &&
+        tasks.tasks[view.projectUrl]?.items.some((item) => item.url === view.url && item.etag),
+    );
+  };
+  const onKeyDown = useTasksShortcuts(selectedTasks().length > 0, (command) => {
     if (command.type === "focus") return onMove(command.direction);
     if (command.type === "open") return router.push(href);
     if (command.type === "clear") return focus?.clearSelection();
@@ -118,7 +128,7 @@ export function TaskRow({
     if (command.type === "menu") return setMenuOpen(true);
     if (pending) return;
     if (command.type === "complete") {
-      const selected = tasks.views.filter((view) => focus?.selection.has(view.url));
+      const selected = selectedTasks();
       focus?.clearSelection();
       void runBulk(selected, async (view) => {
         if (view.state === "open") await completeTask(view, tasks, { animate: true });

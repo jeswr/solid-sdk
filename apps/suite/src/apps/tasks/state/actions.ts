@@ -70,11 +70,13 @@ export async function deleteTask(view: TaskView, tasks: TasksContextValue): Prom
     .tasks[view.projectUrl]?.items.find((task) => task.url === view.url);
   if (!stored) return;
   const deletes = pendingDeletes(tasks.cache);
+  const toastId = crypto.randomUUID();
   if (
     !deletes.schedule(
       view.url,
       () => tasks.cache.hideTask(view.url, true),
       () => {
+        toast.dismiss(toastId);
         // Unhide only after the cache has installed its optimistic remove transform.
         const deleting = tasks.cache.deleteTask(stored);
         tasks.cache.hideTask(view.url, false);
@@ -85,6 +87,7 @@ export async function deleteTask(view: TaskView, tasks: TasksContextValue): Prom
   )
     return;
   toast.success(`Deleted '${view.title}'`, {
+    id: toastId,
     duration: UNDO_WINDOW,
     action: {
       label: "Undo",

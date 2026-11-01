@@ -333,3 +333,107 @@ test("delayed Delete supports Undo, expires after eight seconds, and flushes on 
   await expect.poll(async () => (await (await durablePod(page)).fetch(flushUrl)).status).toBe(404);
   await accessible(page);
 });
+
+test("a hovered delete toast keeps Undo usable beyond eight seconds", async ({ page }) => {
+  let url = "";
+  await seed(page, async (store, inbox) => {
+    url = (await store.createTask(inbox, { title: "Paused delete", state: "open" })).url;
+  });
+  await page.goto("/tasks/inbox");
+  const row = rowFor(page, "Paused delete");
+  await row.focus();
+  await row.press("Delete");
+  const toast = undoToast(page, "Deleted 'Paused delete'");
+  await expect(toast).toBeVisible();
+  await toast.hover();
+  await page.clock.fastForward(12_000);
+  await expect(toast.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+  expect((await (await durablePod(page)).fetch(url)).status).toBe(200);
+  await toast.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(row).toBeVisible();
+  expect((await readTask(page, url)).state).toBe("open");
+});
+
+test("navigating to Drive and closing the tab flushes a pending delete", async ({
+  page,
+  context,
+}) => {
+  let url = "";
+  await seed(page, async (store, inbox) => {
+    url = (await store.createTask(inbox, { title: "Delete on navigation", state: "open" })).url;
+  });
+  const observer = await context.newPage();
+  await observer.route("**/__delete-observer", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Observer</title>" }),
+  );
+  await observer.goto("/__delete-observer");
+  await page.goto("/tasks/inbox");
+  const row = rowFor(page, "Delete on navigation");
+  await row.focus();
+  await row.press("Delete");
+  await expect(undoToast(page, "Deleted 'Delete on navigation'")).toBeVisible();
+  expect((await (await durablePod(observer)).fetch(url)).status).toBe(200);
+  await page.getByRole("link", { name: "Drive", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/drive(?:\/my)?$/);
+  await expect(page.getByRole("heading", { name: "My Drive", exact: true })).toBeVisible();
+  await page.close();
+  await expect.poll(async () => (await (await durablePod(observer)).fetch(url)).status).toBe(404);
+  await observer.close();
+});
+
+test("a selection that leaves Today does not complete a hidden task", async ({ page }) => {
+  let url = "";
+  await seed(page, async (store, inbox) => {
+    url = (
+      await store.createTask(inbox, {
+        title: "Selected today",
+        state: "open",
+        allDay: "2026-11-02",
+      })
+    ).url;
+    await store.createTask(inbox, { title: "Still today", state: "open", allDay: "2026-11-02" });
+  });
+  await page.goto("/tasks/today");
+  const selected = rowFor(page, "Selected today");
+  await selected.focus();
+  await selected.press("Space");
+  await expect(selected).toHaveAttribute("aria-selected", "true");
+  await selected.press("m");
+  await expect(selected).toBeHidden();
+  const remaining = rowFor(page, "Still today");
+  await remaining.focus();
+  await remaining.press("e");
+  await expect(page.getByRole("textbox", { name: "Task title", exact: true })).toBeVisible();
+  expect((await readTask(page, url)).state).toBe("open");
+  await page.keyboard.press("Escape");
+});
+
+test.describe("touch targets and selection", () => {
+  test.use({ hasTouch: true });
+  test("due buttons are at least 44 by 44 and the selected check stays inside the row", async ({
+    page,
+  }, testInfo) => {
+    await seed(page, async (store, inbox) => {
+      await store.createTask(inbox, { title: "Touch task", state: "open", allDay: "2026-11-02" });
+    });
+    await page.goto("/tasks/inbox");
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+    const row = rowFor(page, "Touch task");
+    const bounds = await row.locator("button.tsk-due").boundingBox();
+    expect(bounds?.width).toBeGreaterThanOrEqual(44);
+    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    await row.focus();
+    await row.press("Space");
+    await expect(row).toHaveAttribute("aria-selected", "true");
+    const indicator = await row.locator(".tsk-check-target").boundingBox();
+    const rowBounds = await row.boundingBox();
+    if (!indicator || !rowBounds) throw new Error("Missing selected row");
+    expect(indicator.x).toBeGreaterThanOrEqual(rowBounds.x);
+    expect(indicator.x + indicator.width).toBeLessThanOrEqual(rowBounds.x + rowBounds.width);
+    expect(await row.evaluate((element) => getComputedStyle(element, "::before").content)).toBe(
+      "none",
+    );
+    expect(await row.evaluate((element) => getComputedStyle(element).boxShadow)).toBe("none");
+    await row.screenshot({ path: testInfo.outputPath("selected-row.png") });
+  });
+});

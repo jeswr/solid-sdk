@@ -354,6 +354,8 @@ export class TaskStore {
     project: StoredProject,
     data: TaskDetails,
     id = this.uuid(),
+    /** Capture the exact payload before a possibly ambiguous write, for ownership checks. */
+    onReserved?: (resource: Resource) => void,
   ): Promise<StoredTask> {
     const container = project.tracker.stateStore;
     if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
@@ -366,6 +368,7 @@ export class TaskStore {
       created: data.created ?? now,
       modified: now,
     });
+    onReserved?.({ url, dataset: new Store([...dataset]), etag: null });
     const resource = await this.io.write(url, dataset, { create: true });
     return { ...resource, task: new TaskItem(`${url}#it`, resource.dataset, DataFactory) };
   }

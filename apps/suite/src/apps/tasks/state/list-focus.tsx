@@ -17,6 +17,7 @@ interface ListFocus {
   onMove: (url: string, direction: -1 | 1) => void;
   refresh: () => void;
   selection: ReadonlySet<string>;
+  selectedUrls: () => ReadonlySet<string>;
   toggleSelection: (url: string) => void;
   clearSelection: () => void;
   announce: (message: string) => void;
@@ -47,6 +48,7 @@ export function TaskListFocus({
   const refresh = () => {
     const rows = visibleRows();
     const urls = rows.map((row) => row.dataset.tskRow as string);
+    dispatch({ type: "prune", visible: urls });
     setActive((active) => (active && urls.includes(active) ? active : urls[0]));
     const previous = focused.current;
     if (!previous) return;
@@ -87,6 +89,12 @@ export function TaskListFocus({
         activeUrl,
         refresh,
         selection,
+        selectedUrls: () =>
+          new Set(
+            visibleRows()
+              .map((row) => row.dataset.tskRow as string)
+              .filter((url) => selection.has(url)),
+          ),
         toggleSelection: (url) => dispatch({ type: "toggle", url }),
         clearSelection: () => dispatch({ type: "clear" }),
         announce,

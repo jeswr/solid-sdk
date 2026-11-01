@@ -52,7 +52,10 @@ function useTasksValue(session: PodSession) {
       pendingDeletes(cache).flush();
     };
     window.addEventListener("pagehide", flush);
-    return () => window.removeEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
   }, [cache]);
   useEffect(() => {
     void cache.start();

@@ -59,5 +59,10 @@ describe("Tasks shortcuts", () => {
     expect([...two]).toEqual(["a", "b"]);
     expect([...selectionReducer(two, { type: "toggle", url: "a" })]).toEqual(["b"]);
     expect([...selectionReducer(two, { type: "clear" })]).toEqual([]);
+    const pruned = selectionReducer(two, { type: "prune", visible: ["b", "c"] });
+    expect([...pruned]).toEqual(["b"]);
+    expect([...two]).toEqual(["a", "b"]);
+    expect(selectionReducer(pruned, { type: "prune", visible: ["b"] })).toBe(pruned);
+    expect(selectionReducer(empty, { type: "clear" })).toBe(empty);
   });
 });

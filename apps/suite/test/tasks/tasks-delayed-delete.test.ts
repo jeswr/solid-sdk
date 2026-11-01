@@ -4,7 +4,7 @@ import { DelayedDeletes } from "../../src/apps/tasks/state/delayed-delete";
 
 afterEach(() => vi.useRealTimers());
 describe("delayed delete", () => {
-  it("hides immediately, waits eight seconds, and commits exactly once", () => {
+  it("hides immediately and waits for toast expiry, including a paused toast", () => {
     vi.useFakeTimers();
     const queue = new DelayedDeletes();
     const hide = vi.fn();
@@ -12,14 +12,29 @@ describe("delayed delete", () => {
     expect(queue.schedule("a", hide, commit, vi.fn())).toBe(true);
     expect(queue.schedule("a", hide, commit, vi.fn())).toBe(false);
     expect(hide).toHaveBeenCalledOnce();
-    vi.advanceTimersByTime(7999);
+    vi.advanceTimersByTime(8000);
     expect(commit).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
+    // Hover, interaction and document hiding can keep Sonner's Undo visible indefinitely.
+    vi.advanceTimersByTime(60_000);
+    expect(commit).not.toHaveBeenCalled();
+    queue.finish("a");
     expect(commit).toHaveBeenCalledOnce();
     queue.finish("a");
     queue.flush();
     expect(commit).toHaveBeenCalledOnce();
     expect(queue.undo("a")).toBe(false);
+  });
+  it("can still Undo while the toast is paused past its original deadline", () => {
+    vi.useFakeTimers();
+    const queue = new DelayedDeletes();
+    const commit = vi.fn();
+    const restore = vi.fn();
+    queue.schedule("a", vi.fn(), commit, restore);
+    vi.advanceTimersByTime(60_000);
+    expect(queue.undo("a")).toBe(true);
+    queue.finish("a");
+    expect(commit).not.toHaveBeenCalled();
+    expect(restore).toHaveBeenCalledOnce();
   });
   it("Undo cancels and restores; dismissal and pagehide flush only pending resources", () => {
     vi.useFakeTimers();

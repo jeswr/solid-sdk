@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
 }));
 let cache: TasksCache;
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
@@ -125,6 +125,56 @@ it.each([
 });
 
 describe("Tasks row deletion and focus", () => {
+  it("prunes a selected task when rescheduling removes it from Today, so e edits the focused row", async () => {
+    const result = await frameCache();
+    cache = result.cache;
+    const today = new Date();
+    const dayKey = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const first = await cache.createTask(result.inbox, {
+      title: "Selected today",
+      allDay: dayKey(today),
+    });
+    const second = await cache.createTask(result.inbox, {
+      title: "Still today",
+      allDay: dayKey(today),
+    });
+    if (!first || !second) throw new Error("Missing tasks");
+    const { host } = await mount(h("main", null, h(TodayView)));
+    const row = host.querySelector<HTMLElement>(`[data-tsk-row="${first.url}"]`);
+    if (!row) throw new Error("Missing row");
+    await act(() => row.focus());
+    await key(row, " ");
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    await act(() =>
+      cache.updateTask(first, (task) => {
+        task.allDay = dayKey(tomorrow);
+      }),
+    );
+    expect(host.querySelector(`[data-tsk-row="${first.url}"]`)).toBeNull();
+    const remaining = host.querySelector<HTMLElement>("[data-tsk-row]");
+    if (!remaining) throw new Error("Missing remaining row");
+    await act(() => remaining.focus());
+    await key(remaining, "e");
+    await act(async () => {
+      await vi.waitFor(() => expect(host.querySelector(".tsk-inline-title input")).toBeTruthy());
+    });
+    expect((await result.store.readTask(first.url)).task.state).toBe("open");
+    expect((await result.store.readTask(second.url)).task.state).toBe("open");
+    // Returning to this view does not resurrect the old selection.
+    await key(host.querySelector(".tsk-inline-title input") as Element, "Escape");
+    await act(() =>
+      cache.updateTask(first, (task) => {
+        task.allDay = dayKey(today);
+      }),
+    );
+    expect(host.querySelector(`[data-tsk-row="${first.url}"]`)?.getAttribute("aria-selected")).toBe(
+      "false",
+    );
+  });
+
   it("hides immediately with Undo and only deletes on expiry or dismissal", async () => {
     const { host, store } = await populated(["Pay rent"]);
     const { toast } = await import("@jeswr/suite-ui");

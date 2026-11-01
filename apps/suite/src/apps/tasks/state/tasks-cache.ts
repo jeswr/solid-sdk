@@ -120,6 +120,7 @@ export class TasksCache {
   private hiddenTasks = new Set<string>();
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
+  private undoRepairs = new Map<string, () => Promise<boolean | undefined>>();
   readonly inboxUrl: string;
   constructor(
     readonly store: TaskStore,
@@ -697,6 +698,8 @@ export class TasksCache {
     now = new Date(),
     options: { forever?: boolean } = {},
   ): Promise<CompletionPlan | undefined> {
+    const repair = this.undoRepairs.get(item.url);
+    if (repair) return repair().then(() => undefined);
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
     const plan = planComplete(item, this.snapshot.views, now, options);
@@ -710,6 +713,8 @@ export class TasksCache {
   undoCompletion(item: StoredTask, plan: CompletionPlan): Promise<boolean | undefined> {
     const existing = this.undoOperations.get(plan);
     if (existing) return existing();
+    const repair = this.undoRepairs.get(item.url);
+    if (repair) return repair();
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -731,9 +736,38 @@ export class TasksCache {
     };
     const copyUrl = plan.kind === "advance" ? plan.copyUrl : undefined;
     const reservedCopy = this.completionCopies.get(plan);
-    let deleted = false;
     let finished = false;
+    let restorePending = false;
     let running: Promise<boolean | undefined> | undefined;
+    const copyMatches = (copy: StoredTask) =>
+      !!reservedCopy?.etag &&
+      copy.etag === reservedCopy.etag &&
+      isomorphic([...copy.dataset], [...reservedCopy.dataset]);
+    const forward = (task: TaskItem) => {
+      if (plan.kind !== "advance") return;
+      task.dueDate = plan.original.dueDate;
+      task.allDay = plan.original.allDay;
+      task.reminders = plan.original.reminders ?? [];
+    };
+    const rejectChangedCopy = async () => {
+      // A copy can change between the preflight read and its conditional DELETE.
+      // Compensate only our scheduling restore, preserving unrelated concurrent edits.
+      if (restorePending) {
+        let current = await this.store.readTask(item.url);
+        if (matches(current)) {
+          try {
+            current = await this.store.updateTask(current, forward);
+          } catch (error) {
+            current = await this.store.readTask(item.url);
+            if (!isomorphic([...current.dataset], [...changeTask(current, forward).dataset]))
+              throw error;
+          }
+        }
+        restorePending = false;
+        this.undoRepairs.delete(item.url);
+      }
+      throw new Error("Couldn't undo: the completed copy was changed elsewhere");
+    };
     const attempt = (): Promise<boolean | undefined> =>
       this.mutate(
         (state) => {
@@ -759,36 +793,44 @@ export class TasksCache {
             )
               throw new ModelError(409, item.url);
           }
-          if (plan.kind === "advance") {
-            if (!copyUrl || !reservedCopy?.etag) throw new ModelError(409, item.url);
-            if (!deleted) {
-              const copy = await this.optionalTask(copyUrl);
-              if (copy) {
-                // An edited/replaced copy is no longer ours to remove, even if its URL matches.
-                if (
-                  copy.etag !== reservedCopy.etag ||
-                  copy.task.clonedFrom !== item.task.id ||
-                  !copy.task.completionOperations.has(copyUrl)
-                )
-                  throw new ModelError(409, copyUrl);
-                try {
-                  await this.store.deleteTask(copy);
-                } catch (error) {
-                  if (await this.optionalTask(copyUrl)) throw error;
-                }
-              }
-              deleted = true;
-            }
+          let copy: StoredTask | undefined;
+          if (copyUrl) {
+            copy = await this.optionalTask(copyUrl);
+            if (copy && !copyMatches(copy)) await rejectChangedCopy();
           }
           if (!matches(current)) {
+            if (copyUrl) {
+              restorePending = true;
+              this.undoRepairs.set(item.url, run);
+            }
             try {
               current = await this.store.updateTask(current, restore);
             } catch (error) {
               const reconciled = await this.store.readTask(item.url);
-              if (!matches(reconciled)) throw error;
+              if (!matches(reconciled)) {
+                restorePending = false;
+                this.undoRepairs.delete(item.url);
+                throw error;
+              }
               current = reconciled;
             }
           }
+          // The original is confirmed restored before the irreversible copy removal.
+          if (copy) {
+            restorePending = true;
+            this.undoRepairs.set(item.url, run);
+            try {
+              await this.store.deleteTask(copy);
+            } catch (error) {
+              const reconciled = await this.optionalTask(copy.url);
+              if (reconciled) {
+                if (!copyMatches(reconciled)) await rejectChangedCopy();
+                throw error;
+              }
+            }
+          }
+          restorePending = false;
+          this.undoRepairs.delete(item.url);
           finished = true;
           const original = current;
           return {
@@ -806,8 +848,13 @@ export class TasksCache {
       );
     const run = (): Promise<boolean | undefined> => {
       if (finished) return Promise.resolve(true);
+      const repair = this.undoRepairs.get(item.url);
+      if (repair && repair !== run) return repair();
+      if (copyUrl) this.undoRepairs.set(item.url, run);
       running ??= attempt().finally(() => {
         running = undefined;
+        if (!restorePending && this.undoRepairs.get(item.url) === run)
+          this.undoRepairs.delete(item.url);
       });
       return running;
     };
@@ -819,6 +866,8 @@ export class TasksCache {
     item: StoredTask,
     initial: Extract<CompletionPlan, { kind: "advance" }>,
   ): Promise<CompletionPlan | undefined> {
+    const repair = this.undoRepairs.get(item.url);
+    if (repair) return repair().then(() => undefined);
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
     const project = this.snapshot.projects.find((project) =>
@@ -833,9 +882,10 @@ export class TasksCache {
     let copyPending = false;
     let compensating = false;
     let replan = false;
+    let reservedCopy: StoredTask | undefined;
     let settled: { result: CompletionPlan; commit: Patch } | undefined;
     const finish = (original: StoredTask, copy?: StoredTask) => {
-      if (copy) this.completionCopies.set(plan, copy);
+      if (reservedCopy) this.completionCopies.set(plan, reservedCopy);
       settled = {
         result: plan,
         commit: (state) =>
@@ -844,8 +894,27 @@ export class TasksCache {
       return settled;
     };
     const wasAdvanced = (original: StoredTask) => original.task.completionOperations.has(url);
-    const ownsCopy = (copy: StoredTask) =>
+    const isOccurrence = (copy: StoredTask) =>
       copy.task.clonedFrom === item.task.id && copy.task.completionOperations.has(url);
+    const confirmCopy = (copy: StoredTask) => {
+      // A read validator proves ownership only with the exact reserved payload.
+      // Never replace a known write validator with a newer client's revision.
+      if (
+        reservedCopy &&
+        !reservedCopy.etag &&
+        isomorphic([...copy.dataset], [...reservedCopy.dataset])
+      )
+        reservedCopy = { ...reservedCopy, etag: copy.etag };
+    };
+    const requireOwnedCopy = (copy: StoredTask) => {
+      confirmCopy(copy);
+      if (
+        !reservedCopy?.etag ||
+        copy.etag !== reservedCopy.etag ||
+        !isomorphic([...copy.dataset], [...reservedCopy.dataset])
+      )
+        throw new ModelError(409, url);
+    };
     const dataset = createTask(url, { ...initial.copy, completionOperations: [url] });
     const copy = {
       url,
@@ -884,13 +953,16 @@ export class TasksCache {
           if (copyPending) {
             const existing = await this.optionalTask(url);
             if (wasAdvanced(current)) {
-              if (existing && !ownsCopy(existing)) throw new ModelError(409, url);
+              if (existing && !isOccurrence(existing)) throw new ModelError(409, url);
+              if (existing) confirmCopy(existing);
               return finish(current, existing);
             }
             if (existing) {
-              if (!ownsCopy(existing)) throw new ModelError(409, url);
+              if (!isOccurrence(existing)) throw new ModelError(409, url);
+              confirmCopy(existing);
               if (compensating) {
                 // Only a definite rejection authorizes compensation, never a lost response.
+                requireOwnedCopy(existing);
                 await this.store.deleteTask(existing);
               } else existingCopy = existing;
             }
@@ -929,7 +1001,14 @@ export class TasksCache {
               currentProject,
               { ...plan.copy, completionOperations: [url] },
               id,
+              (resource) => {
+                reservedCopy = {
+                  ...resource,
+                  task: new TaskItem(`${url}#it`, resource.dataset, DataFactory),
+                };
+              },
             ));
+          confirmCopy(copy);
           const completion = plan;
           try {
             const original = await this.store.updateTask(current, (task) =>
@@ -946,6 +1025,7 @@ export class TasksCache {
             const original = await this.store.readTask(item.url);
             if (wasAdvanced(original)) return finish(original, copy);
             if (!compensating) throw error;
+            requireOwnedCopy(copy);
             await this.store.deleteTask(copy);
             copyPending = false;
             compensating = false;

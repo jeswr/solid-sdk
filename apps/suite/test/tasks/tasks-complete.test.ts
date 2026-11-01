@@ -47,6 +47,12 @@ describe("completion and Undo", () => {
     expect(pod.files.has(plan.copyUrl)).toBe(false);
     expect(cache.getSnapshot().tasks[project.url]?.items).toHaveLength(1);
     const writes = pod.requests.slice(start).filter((request) => request.method !== "GET");
+    expect(writes.map((request) => [request.method, request.url])).toEqual([
+      ["PUT", plan.copyUrl],
+      ["PUT", item.url],
+      ["PUT", item.url],
+      ["DELETE", plan.copyUrl],
+    ]);
     expect(writes[0]?.headers.get("If-None-Match")).toBe("*");
     expect(writes.slice(1).every((request) => request.headers.has("If-Match"))).toBe(true);
   });
@@ -109,21 +115,137 @@ it.each([
   expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
   expect(pod.files.has(plan.copyUrl)).toBe(false);
 });
-it("retains an unfinished Undo after the copy DELETE and resumes the original restore on Retry", async () => {
+it("keeps the copy when restoring is definitively rejected, then retries restore before DELETE", async () => {
   const { cache, store, item, pod, failures } = await setup();
   const plan = await cache.completeTask(item, now);
   if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
-  vi.spyOn(store, "updateTask").mockRejectedValueOnce(new Error("Disconnected"));
+  vi.spyOn(store, "updateTask").mockRejectedValueOnce(new ModelError(403, item.url));
   expect(await cache.undoCompletion(item, plan)).toBeUndefined();
-  expect(pod.files.has(plan.copyUrl)).toBe(false);
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
   expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-27");
   failures.mock.calls.at(-1)?.[1]();
-  await vi.waitFor(async () =>
-    expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25"),
-  );
+  await vi.waitFor(async () => expect(pod.files.has(plan.copyUrl as string)).toBe(false));
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
   expect(
     pod.requests.filter((request) => request.method === "DELETE" && request.url === plan.copyUrl),
   ).toHaveLength(1);
+});
+it("a completion after a rejected restore cannot strand a deleted occurrence or let old Retry undo the newer schedule", async () => {
+  const { cache, store, item, pod, failures } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  vi.spyOn(store, "updateTask").mockRejectedValueOnce(new ModelError(403, item.url));
+  await cache.undoCompletion(item, plan);
+  const retry = failures.mock.calls.at(-1)?.[1];
+  const next = await cache.completeTask(await store.readTask(item.url), now);
+  if (next?.kind !== "advance" || !next.copyUrl) throw new Error("Missing next plan");
+  retry?.();
+  await vi.waitFor(() => expect(failures).toHaveBeenCalledTimes(2));
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-29");
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(pod.files.has(next.copyUrl)).toBe(true);
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
+});
+it("does not adopt an edited copy's validator after losing its create response", async () => {
+  const { cache, store, item, pod, failures } = await setup();
+  const create = store.createTask.bind(store);
+  let copyUrl = "";
+  vi.spyOn(store, "createTask").mockImplementationOnce(async (...args) => {
+    const copy = await create(...args);
+    copyUrl = copy.url;
+    throw new Error("Lost copy response");
+  });
+  expect(await cache.completeTask(item, now)).toBeUndefined();
+  await store.updateTask(await store.readTask(copyUrl), (task) => {
+    task.title = "Other client's occurrence";
+  });
+  const resumed = await cache.completeTask(await store.readTask(item.url), now);
+  if (resumed?.kind !== "advance") throw new Error("Missing recovered plan");
+  expect(resumed.copyUrl).toBe(copyUrl);
+  const offset = pod.requests.length;
+  expect(await cache.undoCompletion(item, resumed)).toBeUndefined();
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-27");
+  expect((await store.readTask(copyUrl)).task.title).toBe("Other client's occurrence");
+  expect(pod.requests.slice(offset).filter((request) => request.method !== "GET")).toEqual([]);
+  expect(failures.mock.calls.at(-1)?.[0]).toMatchObject({
+    message: "Couldn't undo: the completed copy was changed elsewhere",
+  });
+});
+it("allows Undo after a lost create response only when the recovered payload matches the reservation", async () => {
+  const { cache, store, item, pod } = await setup();
+  const create = store.createTask.bind(store);
+  vi.spyOn(store, "createTask").mockImplementationOnce(async (...args) => {
+    await create(...args);
+    throw new Error("Lost copy response");
+  });
+  await cache.completeTask(item, now);
+  const plan = await cache.completeTask(await store.readTask(item.url), now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing recovered plan");
+  expect(await cache.undoCompletion(item, plan)).toBe(true);
+  expect(pod.files.has(plan.copyUrl)).toBe(false);
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
+});
+it("repairs a failed copy DELETE before accepting another completion", async () => {
+  const { cache, store, item, pod } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  vi.spyOn(store, "deleteTask").mockRejectedValueOnce(new ModelError(503, plan.copyUrl));
+  const undoing = cache.undoCompletion(item, plan);
+  const overlapping = cache.completeTask(item, now);
+  expect(await undoing).toBeUndefined();
+  expect(await overlapping).toBeUndefined();
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(await cache.completeTask(await store.readTask(item.url), now)).toBeUndefined();
+  expect(pod.files.has(plan.copyUrl)).toBe(false);
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
+  expect((await cache.completeTask(await store.readTask(item.url), now))?.kind).toBe("advance");
+});
+it("preserves a known copy-write validator when recovering a lost original-update confirmation", async () => {
+  const { cache, store, item, pod } = await setup();
+  const update = store.updateTask.bind(store);
+  vi.spyOn(store, "updateTask").mockImplementationOnce(async (...args) => {
+    await update(...args);
+    vi.spyOn(store, "readTask").mockRejectedValueOnce(new Error("Read-back disconnected"));
+    throw new Error("Lost advance response");
+  });
+  expect(await cache.completeTask(item, now)).toBeUndefined();
+  const copy = (
+    await store.listTasks(cache.getSnapshot().projects[0]?.tracker.stateStore as string)
+  ).find((task) => task.task.clonedFrom === item.task.id);
+  if (!copy) throw new Error("Missing copy");
+  // Even an identical replacement must not replace the validator returned by our PUT.
+  const replacement = await store.updateTask(copy, (task) => {
+    task.title = copy.task.title;
+  });
+  expect(replacement.etag).not.toBe(copy.etag);
+  const plan = await cache.completeTask(await store.readTask(item.url), now);
+  if (plan?.kind !== "advance") throw new Error("Missing recovered plan");
+  const offset = pod.requests.length;
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  expect(pod.files.has(copy.url)).toBe(true);
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-27");
+  expect(pod.requests.slice(offset).filter((request) => request.method !== "GET")).toEqual([]);
+});
+it("rolls the original forward again if the copy changes between restore and DELETE", async () => {
+  const { cache, store, item, pod, failures } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  const remove = store.deleteTask.bind(store);
+  vi.spyOn(store, "deleteTask").mockImplementationOnce(async (copy) => {
+    await store.updateTask(await store.readTask(copy.url), (task) => {
+      task.title = "Racing edit";
+    });
+    await remove(copy);
+  });
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-27");
+  expect((await store.readTask(plan.copyUrl)).task.title).toBe("Racing edit");
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(failures.mock.calls.at(-1)?.[0]).toMatchObject({
+    message: "Couldn't undo: the completed copy was changed elsewhere",
+  });
 });
 it("never deletes a copy edited by another client, even after the cache reloads it", async () => {
   const { cache, store, item, pod } = await setup();
