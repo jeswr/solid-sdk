@@ -11,9 +11,12 @@ const mocks = vi.hoisted(() => ({
   client: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  info: vi.fn(),
 }));
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
-vi.mock("@jeswr/suite-ui", () => ({ toast: { success: mocks.success, error: mocks.error } }));
+vi.mock("@jeswr/suite-ui", () => ({
+  toast: { success: mocks.success, error: mocks.error, info: mocks.info },
+}));
 vi.mock("../src/apps/home/lib/permissions", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   loadPermissions: mocks.load,
@@ -371,10 +374,10 @@ it("disables an Undo whose rules were changed elsewhere instead of suggesting a 
   expect(mocks.apply).toHaveBeenCalledTimes(2);
 });
 
-it("keeps only the unrestored documents after a partial Undo and names what came back", async () => {
+it("keeps only the unrestored documents after a partial Undo, offers Undo remaining, and retires the refused part", async () => {
   const line = bob.lines[0] as NonNullable<(typeof bob.lines)[0]>;
   const resource = line.resources[0] as NonNullable<(typeof line.resources)[0]>;
-  const names = ["a", "b", "c"];
+  const names = ["a", "b", "c", "d", "e"];
   const spread: AgentRow = {
     ...bob,
     lines: [
@@ -392,36 +395,94 @@ it("keeps only the unrestored documents after a partial Undo and names what came
   mocks.load.mockResolvedValue({ ...snapshot, rows: [spread] });
   await mount(h(Probe));
   const restore = names.map((name) => ({ source: `${ROOT}${name}/.acl`, remove: [], add: [] }));
-  const [a, b, c] = restore as [(typeof restore)[0], (typeof restore)[0], (typeof restore)[0]];
+  const [a, b, c, d, e] = restore as [
+    (typeof restore)[0],
+    (typeof restore)[0],
+    (typeof restore)[0],
+    (typeof restore)[0],
+    (typeof restore)[0],
+  ];
   mocks.apply.mockResolvedValueOnce({ undo: { changes: [], restore } });
   mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
-  await act(() => binding.revoke(spread));
+  await act(() => binding.revoke(spread.lines[0] as NonNullable<(typeof spread.lines)[0]>));
+  const token = binding.removed.files?.token as string;
+  expect(token).toBeTruthy();
   const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
+  const remainingAction = () => {
+    const options = mocks.error.mock.lastCall?.[1];
+    expect(options?.action.label).toBe("Undo remaining");
+    return options?.action.onClick as () => void;
+  };
+  // A failed write keeps the rest available, from the line and from the toast.
   mocks.apply.mockRejectedValueOnce(
     new PartialRevokeError({ changes: [], restore: [a] }, new Error("offline")),
   );
   await act(async () => toastUndo());
   expect(mocks.error).toHaveBeenLastCalledWith(
-    "Access restored for a/. Couldn't restore access to b/, c/. Refresh and try again.",
+    "Access restored for a/. Couldn't restore access to b/, c/, d/, e/. Refresh and try again.",
+    expect.anything(),
   );
+  expect(binding.removed.files?.stale).toBeUndefined();
+  expect(binding.busy).toBe(false);
+  // A refused document is retired: its line's Undo goes, the documents after it stay.
+  const conflict = new RestoreConflictError();
+  conflict.source = c.source;
   mocks.apply.mockRejectedValueOnce(
-    new PartialRevokeError({ changes: [], restore: [b] }, new RestoreConflictError()),
+    new PartialRevokeError({ changes: [], restore: [b] }, conflict),
   );
-  await act(async () => toastUndo());
-  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [b, c] });
+  await act(async () => remainingAction()());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [b, c, d, e] });
   expect(mocks.error).toHaveBeenLastCalledWith(
     "Access restored for b/. Access to c/ was changed elsewhere, so it can't be restored here",
+    expect.anything(),
   );
-  // The rest of the plan stays available; only a refusal of all of it retires the Undo.
-  mocks.apply.mockRejectedValueOnce(new RestoreConflictError());
-  await act(async () => toastUndo());
-  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [c] });
+  expect(binding.removed.files?.stale).toBe(true);
+  // Without a named document, the first unrestored one is the refused one.
+  mocks.apply.mockRejectedValueOnce(
+    new PartialRevokeError({ changes: [], restore: [d] }, new RestoreConflictError()),
+  );
+  await act(async () => remainingAction()());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [d, e] });
   expect(mocks.error).toHaveBeenLastCalledWith(
-    "This access was changed elsewhere, so it can't be restored here",
+    "Access restored for d/. Access to e/ was changed elsewhere, so it can't be restored here",
   );
   const calls = mocks.apply.mock.calls.length;
   await act(async () => toastUndo());
   expect(mocks.apply).toHaveBeenCalledTimes(calls);
+});
+
+it("shows the mounted page as saving while an earlier page's Undo holds the lock, and keeps a busy toast Undo open", async () => {
+  const { view } = await revokedToken();
+  const firstUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as (event?: {
+    preventDefault(): void;
+  }) => void;
+  await view.unmount();
+  mocks.load.mockResolvedValue(snapshot);
+  await mount(h(Probe));
+  expect(binding.busy).toBe(false);
+  // A second removal on this page, so a second toast Undo exists.
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(bob.lines[0] as NonNullable<(typeof bob.lines)[0]>));
+  const secondUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as (event?: {
+    preventDefault(): void;
+  }) => void;
+  expect(binding.busy).toBe(false);
+  const pending = deferred<{ undo: { changes: []; restore: [] } }>();
+  mocks.apply.mockReturnValueOnce(pending.promise);
+  await act(async () => firstUndo());
+  expect(binding.busy).toBe(true);
+  const click = { preventDefault: vi.fn() };
+  await act(async () => secondUndo(click));
+  expect(click.preventDefault).toHaveBeenCalledOnce();
+  expect(mocks.info).toHaveBeenCalledWith("Another change is saving. Try again in a moment.");
+  expect(mocks.apply).toHaveBeenCalledTimes(3);
+  await act(async () => pending.resolve({ undo: { changes: [], restore: [] } }));
+  expect(binding.busy).toBe(false);
+  // Once the lock is free the same toast Undo applies, and closes as usual.
+  const free = { preventDefault: vi.fn() };
+  await act(async () => secondUndo(free));
+  expect(free.preventDefault).not.toHaveBeenCalled();
+  expect(mocks.apply).toHaveBeenCalledTimes(4);
 });
 
 it("keeps the Undo and toast of a revoke that finishes after leaving the page", async () => {
