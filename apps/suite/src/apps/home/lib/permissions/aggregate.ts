@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Aggregation ported from apps/access-manager/src/lib/grants.ts (byAgent / shareLines).
 import type { Subject } from "@jeswr/pod-access";
+import { DataFactory } from "n3";
 import type { Classification } from "../model/domains";
 import { httpUrl } from "../model/rdf";
 import { mergeRecord, recordForGrant } from "./records";
@@ -12,6 +14,7 @@ import type {
   RoleId,
   WalkedAccess,
 } from "./types";
+import { authorizationTurtle, clauseSignature, grantSignature, isExposureCondition } from "./vocab";
 
 export function classifyAgent(subject: Subject): Pick<AgentRow, "kind" | "key" | "id"> | undefined {
   switch (subject.kind) {
@@ -66,7 +69,7 @@ export function aggregateHoldings(
     classify(url: string): Classification | undefined;
     records?: GrantRecordIndex;
   },
-): Omit<PermissionsSnapshot, "failures" | "truncated"> {
+): Omit<PermissionsSnapshot, "failures" | "truncated" | "warnings"> {
   nodes = nodes.map((node) => ({
     ...node,
     policy: {
@@ -92,13 +95,20 @@ export function aggregateHoldings(
         ? grant.appliesTo !== "resource"
         : grant.appliesTo !== "members";
       for (const clause of grant.who) {
-        if (clause.some((subject) => !classifyAgent(subject))) continue;
+        if (clause.some((subject) => !classifyAgent(subject) && !isExposureCondition(subject)))
+          continue;
         for (const subject of clause) {
-          const agent = classifyAgent(subject) as NonNullable<ReturnType<typeof classifyAgent>>;
-          if (agent.id === ctx.webId) continue;
-          if (agent.kind === "public" && applies && grant.modes.has("read"))
+          const agent = classifyAgent(subject);
+          if (!agent || agent.id === ctx.webId) continue;
+          if (
+            agent.kind === "public" &&
+            clause.every((atom) => atom.kind === "public" || isExposureCondition(atom)) &&
+            applies &&
+            grant.modes.has("read")
+          )
             publicItems.add(node.url);
-          // An ancestor's displayed default line covers its entire inherited subtree.
+          // Compact only descendants of the same data type. Other types still point
+          // at the governing parent when revoked, but must remain visible.
           if (
             node.inherited &&
             nodes.some(
@@ -106,6 +116,8 @@ export function aggregateHoldings(
                 ancestor.isContainer &&
                 ancestor.url !== node.url &&
                 node.url.startsWith(ancestor.url) &&
+                (!classification?.dataType ||
+                  ctx.classify(ancestor.url)?.dataType?.id === classification.dataType.id) &&
                 ancestor.policy.grants.some(
                   (other) =>
                     other.source.url === grant.source.url &&
@@ -128,6 +140,15 @@ export function aggregateHoldings(
               grant.modes,
             ),
           );
+          const conditions = clause.filter((atom) => atom !== subject);
+          const restrictions = conditions.filter(isExposureCondition);
+          const conditionEnforcement = restrictions.length
+            ? node.system === "wac" &&
+              node.implementation === "css" &&
+              restrictions.every((atom) => atom.kind === "origin")
+              ? ("ignored" as const)
+              : ("unknown" as const)
+            : undefined;
           let row = rows.get(agent.key);
           if (!row) {
             row = { ...agent, lines: [] };
@@ -142,6 +163,11 @@ export function aggregateHoldings(
             classification?.dataType?.id,
             grant.source.url,
             inheritedFrom,
+            record.purpose?.iri,
+            record.purpose?.label,
+            record.expiresAt,
+            clauseSignature(conditions),
+            conditionEnforcement,
           ]);
           let line = row.lines.find((line) => line.key === key);
           if (!line) {
@@ -155,6 +181,8 @@ export function aggregateHoldings(
               role: "viewer",
               modes: [],
               inherited,
+              ...(conditions.length ? { conditions } : {}),
+              ...(conditionEnforcement ? { conditionEnforcement } : {}),
               ...(record.purpose ? { purpose: record.purpose } : {}),
               ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
             };
@@ -166,8 +194,10 @@ export function aggregateHoldings(
               r.node === grant.source.node &&
               JSON.stringify(r.subject) === JSON.stringify(subject),
           );
-          if (existing) existing.modes = unionModes([...existing.modes, ...grant.modes]);
-          else
+          if (existing) {
+            existing.modes = unionModes([...existing.modes, ...grant.modes]);
+            existing.signature = grantSignature({ ...grant, modes: new Set(existing.modes) });
+          } else
             line.resources.push({
               url: node.url,
               isContainer: node.isContainer,
@@ -177,7 +207,20 @@ export function aggregateHoldings(
               source: grant.source.url,
               node: grant.source.node,
               subject,
+              clause,
+              signature: grantSignature(grant),
+              ...(node.dataset
+                ? {
+                    authorization: authorizationTurtle(
+                      node.dataset,
+                      grant.source.node.includes(":")
+                        ? DataFactory.namedNode(grant.source.node)
+                        : DataFactory.blankNode(grant.source.node),
+                    ),
+                  }
+                : {}),
               system: node.system,
+              ...(node.implementation ? { implementation: node.implementation } : {}),
               scope,
             });
           line.modes = unionModes([...line.modes, ...grant.modes]);

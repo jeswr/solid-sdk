@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Explicit fixtures and cardinality assertions establish these entries.
 import type { Grant, Subject } from "@jeswr/pod-access";
 import { describe, expect, it } from "vitest";
@@ -8,6 +9,7 @@ import {
   classifyAgent,
   type GrantRecord,
   modeLabel,
+  planRevoke,
   roleForModes,
   roleLabel,
   type WalkedAccess,
@@ -184,7 +186,8 @@ describe("Home permission holdings", () => {
       purpose: early.purpose,
       expiresAt: early.expiresAt,
     });
-    expect(row.lines[0]!.resources).toHaveLength(2);
+    expect(row.lines).toHaveLength(2);
+    expect(row.lines[0]!.resources).toHaveLength(1);
     expect(row.lines[0]!.resources[0]!.modes).toEqual(["read", "append", "write"]);
     expect(row.lines[0]!.dataType).toEqual({ id: "docs", label: "Documents" });
     expect(row.lines[0]!.dataType).not.toBe(classify().dataType);
@@ -209,12 +212,97 @@ describe("Home permission holdings", () => {
         ],
       ]),
     });
-    expect(updated.rows[0]!.lines[0]!.key).toBe(row.lines[0]!.key);
+    expect(updated.rows[0]!.lines[0]!.key).not.toBe(row.lines[0]!.key);
     const relabelled = aggregateHoldings(
       [node(grants.map((g) => ({ ...g, source: { ...g.source, node: "b99_parser-local" } })))],
-      { webId: owner, classify },
+      { webId: owner, classify, records: new Map([["b99_parser-local", early]]) },
     );
     expect(relabelled.rows[0]!.lines[0]!.key).toBe(row.lines[0]!.key);
+  });
+  it("keeps incompatible purposes and durations separate regardless of grant order", () => {
+    const source = "https://pod.test/docs/.acl";
+    const records = new Map<string, GrantRecord>([
+      ["temporary", { purpose: { label: "Preview" }, expiresAt: "2030-01-01" }],
+      ["permanent", { purpose: { label: "Preview" } }],
+      ["other-purpose", { purpose: { label: "Archive" } }],
+      ["other-iri", { purpose: { iri: "urn:archive", label: "Archive" } }],
+      ["other-expiry", { purpose: { label: "Preview" }, expiresAt: "2031-01-01" }],
+    ]);
+    const grants = [...records.keys()].map((id) =>
+      grant(person, { source: { url: source, node: id } }),
+    );
+    for (const ordered of [grants, [...grants].reverse()]) {
+      const result = aggregateHoldings([node(ordered)], { webId: owner, classify, records });
+      const lines = result.rows[0]!.lines;
+      expect(lines).toHaveLength(5);
+      expect(new Set(lines.map((line) => line.key)).size).toBe(5);
+      for (const line of lines) {
+        const changes = planRevoke(line, "line").changes;
+        expect(changes).toHaveLength(1);
+        expect(line.purpose).toEqual(records.get(changes[0]!.node)!.purpose);
+        expect(line.expiresAt).toBe(records.get(changes[0]!.node)!.expiresAt);
+      }
+    }
+  });
+  it("retains each covered data type in heterogeneous inherited subtrees and targets the parent", () => {
+    const root = "https://pod.test/";
+    const inherited = grant(person, { appliesTo: "members" });
+    const nodes = [
+      node([inherited], { url: root }),
+      ...["notes/", "notes/a", "photos/", "photos/a"].map((path) =>
+        node([inherited], {
+          url: root + path,
+          isContainer: path.endsWith("/"),
+          inherited: true,
+          inheritedFrom: root,
+        }),
+      ),
+    ];
+    for (const ordered of [nodes, [...nodes].reverse()]) {
+      const result = aggregateHoldings(ordered, {
+        webId: owner,
+        classify: (url) => classificationForType(url.includes("photos") ? "photos" : "notes"),
+      });
+      const lines = result.rows[0]!.lines;
+      expect(lines.map((line) => line.dataType?.id).sort()).toEqual(["notes", "photos"]);
+      expect(lines.every((line) => line.resources.length === 1)).toBe(true);
+      for (const line of lines)
+        expect(planRevoke(line, "line").changes).toEqual([
+          expect.objectContaining({ resource: root, scope: "members" }),
+        ]);
+      expect(planRevoke(result.rows[0]!, "all").changes).toHaveLength(1);
+    }
+  });
+  it("preserves condition metadata and counts the widest public Read exposure", () => {
+    const publicSubject: Subject = { kind: "public" };
+    const origin: Subject = { kind: "origin", origin: "https://app.test" };
+    const restricted = grant(publicSubject, { who: [[publicSubject, origin]] });
+    const result = aggregateHoldings([node([restricted])], { webId: owner, classify });
+    expect(result.summary).toEqual({ apps: 1, people: 0, publicItems: 1 });
+    expect(result.rows.find((row) => row.kind === "public")!.lines[0]).toMatchObject({
+      conditions: [origin],
+      resources: [expect.objectContaining({ clause: [publicSubject, origin] })],
+    });
+    expect(result.rows.find((row) => row.kind === "app")!.lines[0]!.conditions).toEqual([
+      publicSubject,
+    ]);
+    const mixed = aggregateHoldings([node([restricted, grant(publicSubject)])], {
+      webId: owner,
+      classify,
+    });
+    expect(mixed.summary.publicItems).toBe(1);
+    expect(mixed.rows[0]!.lines).toHaveLength(2);
+    const signedIn = aggregateHoldings(
+      [node([grant(publicSubject, { who: [[publicSubject, { kind: "authenticated" }]] })])],
+      { webId: owner, classify },
+    );
+    expect(signedIn.summary.publicItems).toBe(0);
+    const alternate = aggregateHoldings(
+      [node([grant(publicSubject, { who: [[publicSubject, origin], [publicSubject]] })])],
+      { webId: owner, classify },
+    );
+    expect(alternate.summary.publicItems).toBe(1);
+    expect(alternate.rows[0]!.lines).toHaveLength(2);
   });
   it("sorts recent grants before unknown dates, breaking ties by id; keeps Other data honest", () => {
     const nodes = [

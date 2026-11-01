@@ -4,7 +4,7 @@
 // ported from apps/access-manager/src/lib/acl.ts (readEffectiveAcl).
 import { RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { type EffectivePolicy, readAcp, readWac } from "@jeswr/pod-access";
+import { type EffectivePolicy, type PodImplementation, readAcp, readWac } from "@jeswr/pod-access";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { AclResource, ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
@@ -15,7 +15,7 @@ import type { RegisteredLocation } from "../model/type-index";
 import { aggregateHoldings, classifyAgent } from "./aggregate";
 import { readGrantRecords, recordsFrom } from "./records";
 import type { GrantRecordIndex, PermissionsSnapshot, WalkedAccess } from "./types";
-import { ACL, ACP, AccessNode, UnsupportedAccessError } from "./vocab";
+import { ACL, ACP, AccessNode, isExposureCondition, UnsupportedAccessError } from "./vocab";
 
 /** Only HTTP Link syntax is parsed here; RDF always goes through typed readers. */
 export function aclLink(headers: Headers, resource: string): string | undefined {
@@ -62,11 +62,33 @@ export function accessSystem(dataset: DatasetCore, url: string, headers: Headers
 function parent(url: string, storage: string): string | undefined {
   return url === storage ? undefined : new URL(url.endsWith("/") ? ".." : ".", url).href;
 }
+/** Retain origin-only app holdings alongside the neutral reader's principal clauses. */
+export function readWacPolicy(
+  dataset: DatasetCore,
+  resource: string,
+  endpoint: string,
+  implementation?: PodImplementation,
+): EffectivePolicy {
+  // Keep the original conjunction for display and surgical revocation. Exposure
+  // aggregation takes its widest reading instead of the migrator's source reading.
+  const policy = readWac(dataset, resource, endpoint, implementation);
+  for (const grant of policy.grants)
+    if (!grant.who.length) {
+      const authorization = [...new AclResource(dataset, DataFactory).authorizations].find(
+        (auth) => auth.value === grant.source.node,
+      );
+      const auth = new AccessNode(authorization as Term, dataset, DataFactory);
+      grant.who = auth.iris(`${ACL}origin`).map((origin) => [{ kind: "origin", origin }]);
+    }
+  return policy;
+}
 class BudgetError extends Error {}
 export interface LoadPermissionsOptions {
   fetch: typeof globalThis.fetch;
   storage: string;
   webId: string;
+  /** Independently established server implementation; editable RDF is not evidence. */
+  implementation?: PodImplementation;
   typeIndex?: readonly RegisteredLocation[];
   signal?: AbortSignal;
   maxDepth?: number;
@@ -99,6 +121,7 @@ export async function loadPermissions(
   let truncated = false;
   let exhausted = false;
   const failures: PermissionsSnapshot["failures"] = [];
+  const warnings: NonNullable<PermissionsSnapshot["warnings"]> = [];
   const memo = new Map<string, Promise<Response>>();
   const scoped: typeof globalThis.fetch = async (input, init) => {
     signal?.throwIfAborted();
@@ -127,6 +150,20 @@ export async function loadPermissions(
       return;
     failures.push({ url, reason: failureReason(error) });
   };
+  const inspect = async (url: string) => {
+    let headers = new Headers();
+    let readable = false;
+    try {
+      const head = await scoped(url, { method: "HEAD" });
+      headers = head.headers;
+      if (!head.ok)
+        throw new RdfFetchError("Resource could not be read", { url, status: head.status });
+      readable = true;
+    } catch (error) {
+      fail(url, error);
+    }
+    return { headers, readable };
+  };
   const classes = new Map<string, Classification>();
   for (const location of options.typeIndex ?? []) {
     const url = location.container ?? location.instance;
@@ -134,25 +171,24 @@ export async function loadPermissions(
   }
   const nodes: WalkedAccess[] = [];
   const aclDatasets = new Map<WalkedAccess, DatasetCore>();
+  // Reuse parsed documents as well as responses: reparsing changes blank-node
+  // identifiers and makes one inherited authorization look like separate rules.
+  const aclDocuments = new Map<string, ReturnType<typeof readResource>>();
   const seen = new Set<string>();
   const queue = [{ url: storage, depth: 0, isContainer: true }];
   for (const visit of queue) {
     if (exhausted) break;
     if (seen.has(visit.url)) continue;
     seen.add(visit.url);
-    let headers: Headers;
+    const inspection = await inspect(visit.url);
+    let headers = inspection.headers;
+    // Content is only needed for classification and discovering children. Its
+    // failure must not hide an independently readable access-control document.
     try {
-      const head = await scoped(visit.url, { method: "HEAD" });
-      if (!head.ok)
-        throw new RdfFetchError("Resource could not be read", {
-          url: visit.url,
-          status: head.status,
-        });
-      headers = head.headers;
       const rdf = SUPPORTED_RDF_MEDIA_TYPES.some(
         (type) => type === headers.get("content-type")?.split(";")[0],
       );
-      if (visit.isContainer || rdf) {
+      if (inspection.readable && (visit.isContainer || rdf)) {
         const resource = await readResource(scoped, visit.url, signal);
         const primary = primarySubject(resource.dataset, visit.url);
         if (!classes.get(visit.url)?.dataType && primary)
@@ -160,41 +196,41 @@ export async function loadPermissions(
         if (visit.isContainer) {
           const container = new ContainerDataset(resource.dataset, DataFactory).container;
           for (const member of container?.contains ?? []) {
-            const url = member.id;
-            if (typeof url !== "string" || /\.(?:acl|acr)\/?$/i.test(new URL(url).pathname))
-              continue;
-            const isContainer = url.endsWith("/") || member.isContainer;
-            const primary = subjectOf(resource.dataset, url);
-            if (!classes.has(url) && primary.types.length)
-              classes.set(url, classifySubject(primary, options.webId));
-            if (visit.depth >= maxDepth) truncated = true;
-            else queue.push({ url, depth: visit.depth + 1, isContainer });
+            try {
+              if (member.termType !== "NamedNode") throw new TypeError("Expected a member IRI");
+              const url = assertWithinPodScope(storage, new URL(member.id, visit.url).href);
+              if (/\.(?:acl|acr)\/?$/i.test(new URL(url).pathname)) continue;
+              const isContainer = new URL(url).pathname.endsWith("/") || member.isContainer;
+              const primary = subjectOf(resource.dataset, url);
+              if (!classes.has(url) && primary.types.length)
+                classes.set(url, classifySubject(primary, options.webId));
+              if (visit.depth >= maxDepth) truncated = true;
+              else queue.push({ url, depth: visit.depth + 1, isContainer });
+            } catch (error) {
+              fail(member.value, error);
+            }
           }
         }
       }
     } catch (error) {
       fail(visit.url, error);
-      continue;
     }
     let current: string | undefined = visit.url;
     let endpoint = visit.url;
     try {
       let found = false;
       while (current) {
-        if (current !== visit.url) {
-          const head = await scoped(current, { method: "HEAD" });
-          if (!head.ok)
-            throw new RdfFetchError("Parent could not be read", {
-              url: current,
-              status: head.status,
-            });
-          headers = head.headers;
-        }
+        if (current !== visit.url) headers = (await inspect(current)).headers;
         endpoint = aclLink(headers, current) ?? `${current}.acl`;
         if (acpHeaders(headers) && !aclLink(headers, current)) throw new UnsupportedAccessError();
         let document: Awaited<ReturnType<typeof readResource>>;
         try {
-          document = await readResource(scoped, endpoint, signal);
+          let pending = aclDocuments.get(endpoint);
+          if (!pending) {
+            pending = readResource(scoped, endpoint, signal);
+            aclDocuments.set(endpoint, pending);
+          }
+          document = await pending;
         } catch (error) {
           if (error instanceof RdfFetchError && error.status === 404) {
             current = parent(current, storage);
@@ -210,23 +246,17 @@ export async function loadPermissions(
         try {
           policy =
             system === "acp"
-              ? readAcp(document.dataset, current, endpoint, undefined, false, () => {
-                  inactive = true;
-                })
-              : readWac(document.dataset, current, endpoint);
-          if (system === "wac") {
-            // pod-access represents origin conditions on principals. Preserve an origin-only
-            // authorization as an app holding as well, using the same typed WAC mode reader.
-            for (const grant of policy.grants)
-              if (!grant.who.length) {
-                const authorization = [
-                  ...new AclResource(document.dataset, DataFactory).authorizations,
-                ].find((auth) => auth.value === grant.source.node);
-                // The neutral reader's source node comes from this same authorization set.
-                const auth = new AccessNode(authorization as Term, document.dataset, DataFactory);
-                grant.who = auth.iris(`${ACL}origin`).map((origin) => [{ kind: "origin", origin }]);
-              }
-          }
+              ? readAcp(
+                  document.dataset,
+                  current,
+                  endpoint,
+                  options.implementation === "nss" ? undefined : options.implementation,
+                  false,
+                  () => {
+                    inactive = true;
+                  },
+                )
+              : readWacPolicy(document.dataset, current, endpoint, options.implementation);
         } catch {
           throw new UnsupportedAccessError();
         }
@@ -237,11 +267,40 @@ export async function loadPermissions(
               .filter((g) => g.appliesTo !== "resource")
               .map((g) => ({ ...g, appliesTo: "members" })),
           };
+        // ACP's neutral reader elides the public tautology from conjunctions.
+        // A clause made only of client/issuer conditions still exposes its public
+        // principal when their enforcement has not been independently established.
+        if (system === "acp")
+          for (const grant of policy.grants)
+            grant.who = grant.who.map((clause) =>
+              clause.length && clause.every(isExposureCondition)
+                ? [{ kind: "public" }, ...clause]
+                : clause,
+            );
+        const uncertain = policy.grants
+          .flatMap((grant) => grant.who.flat())
+          .filter(
+            (atom) =>
+              isExposureCondition(atom) &&
+              !(system === "wac" && options.implementation === "css" && atom.kind === "origin"),
+          );
+        if (uncertain.length)
+          warnings.push({
+            url: visit.url,
+            reason: "condition-enforcement-unknown",
+            conditions: [
+              ...new Map(uncertain.map((atom) => [JSON.stringify(atom), atom])).values(),
+            ],
+          });
         if (
           inactive ||
           policy.denials.length ||
           policy.grants.some(
-            (g) => g.except.length || g.who.some((clause) => clause.some((s) => !classifyAgent(s))),
+            (g) =>
+              g.except.length ||
+              g.who.some((clause) =>
+                clause.some((s) => !classifyAgent(s) && !isExposureCondition(s)),
+              ),
           )
         )
           failures.push({ url: visit.url, reason: "unsupported" });
@@ -250,9 +309,11 @@ export async function loadPermissions(
           isContainer: visit.isContainer,
           policy,
           system,
+          ...(options.implementation ? { implementation: options.implementation } : {}),
           inherited,
           ...(inherited ? { inheritedFrom: current } : {}),
           records: recordsFrom(document.dataset),
+          dataset: document.dataset,
         };
         nodes.push(walked);
         aclDatasets.set(walked, document.dataset);
@@ -288,6 +349,7 @@ export async function loadPermissions(
       ...(records ? { records } : {}),
     }),
     failures,
+    warnings,
     truncated,
   };
 }

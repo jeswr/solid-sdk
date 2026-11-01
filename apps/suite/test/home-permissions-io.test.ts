@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Explicit fixtures and cardinality assertions establish these entries.
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyRevoke,
   dpvPurposeLabel,
   loadPermissions,
+  planRevoke,
   readGrantRecords,
   resolveClientName,
 } from "../src/apps/home/lib/permissions";
@@ -46,6 +49,12 @@ function fixture(entries: Record<string, Doc> = {}) {
     const url = String(input);
     expect(url.startsWith(ROOT)).toBe(true);
     const doc = docs.get(url);
+    if (init?.method === "PUT") {
+      expect(doc).toBeDefined();
+      expect(new Headers(init.headers).get("if-match")).toBe('"1"');
+      docs.set(url, { ...doc, body: String(init.body) });
+      return new Response(null, { status: 205 });
+    }
     return new Response(init?.method === "HEAD" ? null : (doc?.body ?? ""), {
       status: doc?.status ?? (doc ? 200 : 404),
       headers: {
@@ -96,6 +105,81 @@ describe("bounded Home permission discovery", () => {
     expect(pod.fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}.acl`)).toHaveLength(1);
     expect(pod.fetch.mock.calls.some(([url]) => String(url).includes("ignored.acr"))).toBe(false);
   });
+  it("loads, plans and revokes one blank-node default authorization inherited by a folder and file", async () => {
+    const folder = `${ROOT}docs/`;
+    const file = `${folder}book`;
+    const endpoint = `${ROOT}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [folder]) },
+      [folder]: { body: listing(folder, [file]) },
+      [file]: { type: "application/octet-stream" },
+      [endpoint]: {
+        body: acl(
+          ROOT,
+          `[] a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    // Distinct classifications keep all three holdings visible before planning.
+    const typeIndex = [
+      { forClass: `${NS.SCHEMA}Photograph`, container: ROOT },
+      { forClass: `${NS.SCHEMA}TextDigitalDocument`, container: folder },
+      { forClass: `${NS.SCHEMA}Book`, instance: file },
+    ];
+    const state = await pod.load({ typeIndex });
+    expect(state.failures).toEqual([]);
+    const resources = state.rows[0]!.lines.flatMap((line) => line.resources);
+    expect(resources.map((resource) => resource.url)).toEqual([ROOT, folder, file]);
+    expect(new Set(resources.map((resource) => resource.node)).size).toBe(1);
+    const plan = planRevoke(state, "all");
+    expect(plan.changes).toEqual([
+      expect.objectContaining({ source: endpoint, resource: ROOT, scope: "members" }),
+    ]);
+    expect(pod.fetch.mock.calls.filter(([url]) => String(url) === endpoint)).toHaveLength(1);
+    const { undo } = await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect(pod.fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+    expect((await pod.load({ typeIndex })).rows).toEqual([]);
+    await applyRevoke(undo, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect(planRevoke(await pod.load({ typeIndex }), "all").changes).toHaveLength(1);
+  });
+  it("loads and revokes NSS defaultForNew grants using the dialect retained in the plan", async () => {
+    const folder = `${ROOT}docs/`;
+    const endpoint = `${ROOT}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [folder]) },
+      [folder]: { body: listing(folder) },
+      [endpoint]: {
+        body: acl(
+          ROOT,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:defaultForNew <${ROOT}>; acl:mode acl:Read.`,
+        ).replace("acl:default ", "acl:defaultForNew "),
+      },
+    });
+    for (const implementation of [undefined, "css", "ess"] as const) {
+      const unsupported = await pod.load(implementation ? { implementation } : {});
+      expect(unsupported.rows).toEqual([]);
+      expect(unsupported.failures).toContainEqual({ url: endpoint, reason: "unsupported" });
+    }
+    const state = await pod.load({ implementation: "nss" });
+    expect(state.failures).toEqual([]);
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]!.lines[0]!.resources).toEqual([
+      expect.objectContaining({
+        url: ROOT,
+        inherited: true,
+        inheritedFrom: ROOT,
+        implementation: "nss",
+      }),
+    ]);
+    const plan = planRevoke(state, "all");
+    expect(plan.changes).toEqual([
+      expect.objectContaining({ source: endpoint, scope: "members", implementation: "nss" }),
+    ]);
+    const { undo } = await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load({ implementation: "nss" })).rows).toEqual([]);
+    await applyRevoke(undo, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load({ implementation: "nss" })).summary.people).toBe(1);
+  });
   it("uses each node's registered type, primary RDF type, or first known child class", async () => {
     const folder = `${ROOT}notes/`;
     const file = `${folder}one`;
@@ -120,6 +204,80 @@ describe("bounded Home permission discovery", () => {
     ).toBe("photos");
     expect((await pod.load({ typeIndex: [{ forClass: "urn:unknown" }] })).failures).toEqual([]);
   });
+  it("keeps Notes and Photos under one root default grant with root revocation targets", async () => {
+    const notes = `${ROOT}notes/`;
+    const photos = `${ROOT}photos/`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [notes, photos]) },
+      [notes]: { body: listing(notes) },
+      [photos]: { body: listing(photos) },
+      [`${ROOT}.acl`]: {
+        body: acl(
+          ROOT,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const snapshot = await pod.load({
+      typeIndex: [
+        { forClass: `${NS.SCHEMA}TextDigitalDocument`, container: notes },
+        { forClass: `${NS.SCHEMA}Photograph`, container: photos },
+      ],
+    });
+    expect(snapshot.failures).toEqual([]);
+    expect(snapshot.rows[0]!.lines.map((line) => line.dataType?.label).sort()).toEqual([
+      "Notes",
+      "Photos",
+    ]);
+    for (const line of snapshot.rows[0]!.lines)
+      expect(planRevoke(line, "line").changes).toEqual([
+        expect.objectContaining({ source: `${ROOT}.acl`, resource: ROOT, scope: "members" }),
+      ]);
+  });
+  it("discovers and revokes readable ACLs even when the resource Turtle is corrupt", async () => {
+    const file = `${ROOT}broken.ttl`;
+    const endpoint = `${ROOT}broken-access`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [file]) },
+      [file]: { body: "invalid turtle !!!", headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: acl(
+          file,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const snapshot = await pod.load();
+    expect(snapshot.failures).toEqual([{ url: file, reason: "unreadable" }]);
+    expect(snapshot.summary.people).toBe(1);
+    const line = snapshot.rows[0]!.lines[0]!;
+    expect(line.dataType).toBeUndefined();
+    expect(line.domainId).toBe("other");
+    const plan = planRevoke(line, "line");
+    expect(plan.changes[0]).toMatchObject({ source: endpoint, resource: file });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PUT") {
+        expect(String(input)).toBe(endpoint);
+        expect(new Headers(init.headers).get("if-match")).toBe('"1"');
+        pod.docs.set(endpoint, { body: String(init.body) });
+        return new Response(null, { status: 205 });
+      }
+      return pod.fetch(input, init);
+    };
+    await applyRevoke(plan, { fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load()).rows).toEqual([]);
+    // Known registrations survive content failures too.
+    pod.docs.set(endpoint, {
+      body: acl(
+        file,
+        `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+      ),
+    });
+    expect(
+      (await pod.load({ typeIndex: [{ forClass: `${NS.SCHEMA}Photograph`, instance: file }] }))
+        .rows[0]!.lines[0]!.dataType?.id,
+    ).toBe("photos");
+  });
   it("pins pseudo agents and recognizes an origin-only app rule", async () => {
     const pod = fixture({
       [`${ROOT}.acl`]: {
@@ -135,6 +293,115 @@ describe("bounded Home permission discovery", () => {
     const snapshot = await pod.load();
     expect(snapshot.rows.map((r) => r.kind)).toEqual(["public", "authenticated", "app"]);
     expect(snapshot.summary).toEqual({ apps: 1, people: 0, publicItems: 1 });
+  });
+  it("counts CSS public Read with acl:origin as public exposure and warns for unknown enforcement", async () => {
+    const pod = fixture({
+      [`${ROOT}.acl`]: {
+        body: acl(
+          ROOT,
+          `<#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const css = await pod.load({ implementation: "css" });
+    expect(css.summary.publicItems).toBe(1);
+    expect(css.failures).toEqual([]);
+    expect(css.warnings).toEqual([]);
+    expect(css.rows.find((row) => row.kind === "public")!.lines[0]).toMatchObject({
+      conditions: [{ kind: "origin", origin: "https://app.test" }],
+      conditionEnforcement: "ignored",
+    });
+    const unknown = await pod.load();
+    expect(unknown.summary.publicItems).toBe(1);
+    expect(unknown.rows[0]!.lines[0]!.conditionEnforcement).toBe("unknown");
+    expect(unknown.warnings).toEqual([
+      {
+        url: ROOT,
+        reason: "condition-enforcement-unknown",
+        conditions: [{ kind: "origin", origin: "https://app.test" }],
+      },
+    ]);
+  });
+  it("retains public exposure and metadata for ACP client and issuer conditions", async () => {
+    const endpoint = `${ROOT}policy.acr`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT), headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: `${PREFIX} <> a acp:AccessControlResource; acp:resource <${ROOT}>; acp:accessControl <#access>. <#access> acp:apply <#policy>. <#policy> acp:allow acl:Read; acp:anyOf <#match>. <#match> acp:agent acp:PublicAgent; acp:client <https://app.test/client.json>; acp:issuer <https://issuer.test/>.`,
+      },
+    });
+    const state = await pod.load();
+    expect(state.failures).toEqual([]);
+    expect(state.summary.publicItems).toBe(1);
+    const conditions = [
+      { kind: "client", clientId: "https://app.test/client.json" },
+      { kind: "issuer", issuer: "https://issuer.test/" },
+    ];
+    expect(state.rows[0]).toMatchObject({
+      kind: "public",
+      lines: [{ conditions, conditionEnforcement: "unknown" }],
+    });
+    expect(state.warnings).toEqual([
+      { url: ROOT, reason: "condition-enforcement-unknown", conditions },
+    ]);
+  });
+  it.each([
+    "linked",
+    "fallback",
+    "network",
+  ])("discovers and revokes Control-only ACLs after a failed resource HEAD (%s)", async (discovery) => {
+    const file = `${ROOT}private`;
+    const endpoint = discovery === "linked" ? `${ROOT}private-policy` : `${file}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [file]) },
+      [file]: {
+        status: 403,
+        headers: { link: discovery === "linked" ? `<${endpoint}>; rel="acl"` : "" },
+      },
+      [endpoint]: {
+        body: `${PREFIX} <#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${file}>; acl:mode acl:Control. <#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+      },
+    });
+    const transport = pod.fetch.getMockImplementation()!;
+    pod.fetch.mockImplementation(async (input, init) => {
+      if (String(input) === file && discovery === "network") throw new Error("offline");
+      if (init?.method === "PUT") {
+        expect(String(input)).toBe(endpoint);
+        pod.docs.set(endpoint, { body: String(init.body) });
+        return new Response(null, { status: 205 });
+      }
+      return transport(input, init);
+    });
+    const state = await pod.load();
+    expect(state.failures).toEqual([
+      { url: file, reason: discovery === "network" ? "unreadable" : "forbidden" },
+    ]);
+    expect(state.summary.people).toBe(1);
+    expect(pod.fetch.mock.calls.filter(([url]) => String(url) === file)).toHaveLength(1);
+    const plan = planRevoke(state.rows[0]!.lines[0]!, "line");
+    expect(plan.changes[0]).toMatchObject({ source: endpoint, resource: file });
+    await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load()).rows).toEqual([]);
+  });
+  it("skips malformed listing members independently before discovering valid children", async () => {
+    const file = `${ROOT}shared`;
+    const pod = fixture({
+      [ROOT]: {
+        body: `${listing(ROOT)} <${ROOT}> ldp:contains "bad", _:bad, <urn:bad>, <https://evil.test/item>, <${ROOT}%2Fescape>, <${file}>.`,
+      },
+      [file]: { type: "application/octet-stream" },
+      [`${file}.acl`]: {
+        body: acl(
+          file,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const state = await pod.load();
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]!.lines[0]!.resources[0]!.url).toBe(file);
+    expect(state.failures).toContainEqual({ url: "bad", reason: "unreadable" });
+    expect(pod.fetch.mock.calls.every(([url]) => String(url).startsWith(ROOT))).toBe(true);
   });
   it.each([
     401, 403, 404, 500,
@@ -278,6 +545,34 @@ describe("bounded Home permission discovery", () => {
       reason: "unsupported",
     });
   });
+  it("reads ESS ACP modes and a typed ACR without acp:resource only with an established ESS dialect", async () => {
+    const endpoint = `${ROOT}policy.acr`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT), headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: `${PREFIX} <> a acp:AccessControlResource; acp:accessControl <#access>. <#access> acp:apply <#policy>. <#policy> acp:allow acp:Read; acp:anyOf <#match>. <#match> acp:agent <${BOB}>.`,
+      },
+    });
+    for (const implementation of [undefined, "css", "nss"] as const) {
+      const unsupported = await pod.load(implementation ? { implementation } : {});
+      expect(unsupported.rows).toEqual([]);
+      expect(unsupported.failures).toEqual([{ url: endpoint, reason: "unsupported" }]);
+    }
+    const state = await pod.load({ implementation: "ess" });
+    expect(state.failures).toEqual([]);
+    expect(state.warnings).toEqual([]);
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]).toMatchObject({
+      kind: "person",
+      id: BOB,
+      lines: [{ modes: ["read"], resources: [{ source: endpoint, system: "acp" }] }],
+    });
+    // Reading ESS permissions does not make ACP mutation supported.
+    await expect(
+      applyRevoke(planRevoke(state, "all"), { fetch: pod.fetch, storage: ROOT, webId: OWNER }),
+    ).rejects.toThrow(UnsupportedAccessError);
+    expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
   it("parses multiple rel tokens and ignores unrelated Link relations", () => {
     expect(
       aclLink(
@@ -310,7 +605,10 @@ describe("bounded Home permission discovery", () => {
     const file = `${ROOT}unlisted/leaf`;
     pod.docs.set(ROOT, { body: listing(ROOT, [file]) });
     pod.docs.set(file, { type: "application/octet-stream" });
-    expect((await pod.load()).failures).toContainEqual({ url: `${file}.acl`, reason: "not-found" });
+    expect((await pod.load()).failures).toContainEqual({
+      url: `${ROOT}unlisted/`,
+      reason: "not-found",
+    });
   });
 });
 // An empty graph is deliberately not presumed to use WAC.
@@ -542,7 +840,7 @@ describe("public Client ID Document resolver", () => {
       Response.json(12),
       new Response("{}", { headers: { "content-type": "text/html" } }),
       new Response("", { status: 403 }),
-      new Response("{}"),
+      new Response(null),
       new Error("offline"),
     ];
     for (const [i, response] of responses.entries()) {
