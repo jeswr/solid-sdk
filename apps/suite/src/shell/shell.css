@@ -92,3 +92,14 @@
     padding: var(--space-4);
   }
 }
+
+/* The SignInCard is its own card: the public layout's card frame steps back. */
+.shell-public-card:has(.su-sign-in-card) {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.shell-public-note {
+  margin: 0;
+}

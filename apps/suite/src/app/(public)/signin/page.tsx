@@ -1,11 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, Input, Label } from "@jeswr/suite-ui";
+/**
+ * /signin (02-suite-shell §8.1) on the suite-ui SignInCard: Account ID first,
+ * then provider buttons (home provider first), another provider, and the
+ * accounts used on this device. Until pod-auth's provider directory lands,
+ * input is mapped to a WebID hint when it names a document, else an issuer.
+ */
+import { Button } from "@jeswr/suite-ui";
+import {
+  hostOf,
+  SignInCard,
+  type SignInProvider,
+  type SignInRecentAccount,
+} from "@jeswr/suite-ui/sign-in";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSolidExtension } from "@/lib/session/extension-session";
 import { useSuiteEnvironment } from "@/shell/environment";
 import { safeNext } from "@/shell/lib/next";
 import { RECENT_PROVIDERS_KEY, recentProviders } from "@/shell/lib/preferences";
+import { hintFor } from "@/shell/lib/sign-in-hint";
 import { DemoButton } from "@/shell/public/demo-button";
 import { PodExplainer } from "@/shell/public/pod-explainer";
 import { useAccounts } from "@/shell/session/accounts-provider";
@@ -18,15 +33,20 @@ export default function Page() {
     </Suspense>
   );
 }
+
+type Pending = { kind: "webid" | "provider" | "account" | "custom"; key: string } | null;
+
 function SignIn() {
   const env = useSuiteEnvironment();
-  const { signIn } = useAccounts();
+  const { signIn, signInWith, backendKinds, accounts, active } = useAccounts();
+  const extension = useSolidExtension();
   const router = useRouter();
-  const next = useSearchParams().get("next");
-  const [address, setAddress] = useState("");
+  const params = useSearchParams();
+  const next = params.get("next");
+  const adding = params.get("add") === "1" && active;
   const [recent, setRecent] = useState<string[]>([]);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending>(null);
   useEffect(() => {
     try {
       setRecent(recentProviders(localStorage.getItem(RECENT_PROVIDERS_KEY)));
@@ -34,90 +54,106 @@ function SignIn() {
       /* Known providers remain available. */
     }
   }, []);
-  const submit = async (hint: SignInHint) => {
-    setBusy(true);
-    setError("");
+  const providers = useMemo<SignInProvider[]>(() => {
+    const issuers = [
+      ...(env.NEXT_PUBLIC_SUITE_IDP ? [env.NEXT_PUBLIC_SUITE_IDP] : []),
+      ...env.NEXT_PUBLIC_SUITE_KNOWN_PROVIDERS,
+    ];
+    return [...new Set(issuers)].map((issuer, index) => ({
+      id: issuer,
+      issuer,
+      name:
+        index === 0 && env.NEXT_PUBLIC_SUITE_IDP ? env.NEXT_PUBLIC_SUITE_IDP_NAME : hostOf(issuer),
+    }));
+  }, [env]);
+  const recentAccounts: SignInRecentAccount[] = accounts
+    .filter((account) => account.kind === "solid" && account.id !== active?.id)
+    .map((account) => ({
+      webId: account.webId,
+      name: account.name,
+      ...(account.photoUrl ? { photoUrl: account.photoUrl } : {}),
+    }));
+  const remember = (provider: string) => {
+    const updated = recentProviders(JSON.stringify([provider, ...recent]));
+    setRecent(updated);
+    try {
+      localStorage.setItem(RECENT_PROVIDERS_KEY, JSON.stringify(updated));
+    } catch {
+      /* Memory-only. */
+    }
+  };
+  const submit = async (hint: SignInHint, state: NonNullable<Pending>) => {
+    setPending(state);
+    setError(null);
     try {
       await signIn(hint);
       router.replace(safeNext(next));
     } catch (cause) {
       if (cause instanceof SignInError) {
         setError(cause.message);
-        if (cause.code === "unavailable") {
-          const provider = "issuer" in hint ? hint.issuer : hint.webId;
-          const updated = recentProviders(JSON.stringify([provider, ...recent]));
-          setRecent(updated);
-          try {
-            localStorage.setItem(RECENT_PROVIDERS_KEY, JSON.stringify(updated));
-          } catch {
-            /* Memory-only. */
-          }
-        }
+        if (cause.code === "unavailable") remember("issuer" in hint ? hint.issuer : hint.webId);
       } else setError("We couldn't sign you in. Please try again.");
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
+  const useExtension = extension.present && backendKinds.includes("extension");
   return (
     <>
-      <h1>Sign in to Solid Suite</h1>
-      {env.NEXT_PUBLIC_SUITE_IDP && (
-        <Button
-          disabled={busy}
-          onClick={() => void submit({ issuer: env.NEXT_PUBLIC_SUITE_IDP as string })}
-        >
-          Continue with {env.NEXT_PUBLIC_SUITE_IDP_NAME}
-        </Button>
-      )}
-      <h2 className="shell-public-subtitle">Use a different account</h2>
-      <form
-        className="shell-public-actions"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const value = address.trim();
-          void submit(value.includes("#") ? { webId: value } : { issuer: value });
-        }}
-      >
-        <Label htmlFor="account-address">Your account ID or provider</Label>
-        <Input
-          id="account-address"
-          name="account"
-          autoComplete="url"
-          list="providers"
-          value={address}
-          onChange={(event) => {
-            setAddress(event.target.value);
-            setError("");
-          }}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "signin-error" : undefined}
-        />
-        <datalist id="providers">
-          {[...new Set([...recent, ...env.NEXT_PUBLIC_SUITE_KNOWN_PROVIDERS])].map((provider) => (
-            <option key={provider} value={provider} />
-          ))}
-        </datalist>
-        <Button type="submit" disabled={busy}>
-          Continue
-        </Button>
-      </form>
-      {error && (
-        <p id="signin-error" role="alert">
-          {error}
+      <h1 className="suite-sr-only">Sign in to Solid Suite</h1>
+      {adding && (
+        <p role="status" className="shell-public-note">
+          Adding another account — you stay signed in as {active.name}.
         </p>
       )}
-      <DemoButton next={next} />
-      <footer className="shell-public-footer">
-        {env.SUITE_TEST_CAPS.selfRegistration === true && (
-          <>
-            <span>
-              New here? <a href="/signup">Create an account</a>
-            </span>
-            <span aria-hidden="true"> · </span>
-          </>
-        )}
-        <PodExplainer />
-      </footer>
+      <SignInCard
+        title="Sign in to Solid Suite"
+        subtitle="Use your Account ID, or choose where your account lives."
+        providers={providers}
+        recentProviders={recent}
+        recentAccounts={recentAccounts}
+        pending={pending}
+        error={error}
+        onWebId={(input) => void submit(hintFor(input), { kind: "webid", key: input })}
+        onCustomProvider={(input) => void submit(hintFor(input), { kind: "custom", key: input })}
+        onProvider={(provider) =>
+          void submit({ issuer: provider.issuer }, { kind: "provider", key: provider.id })
+        }
+        onAccount={(account) =>
+          void submit({ webId: account.webId }, { kind: "account", key: account.webId })
+        }
+        footer={
+          <div className="shell-public-actions">
+            {useExtension && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await signInWith("extension", { webId: extension.webId ?? "" });
+                    router.replace(safeNext(next));
+                  } catch {
+                    setError("The Solid browser extension didn't sign you in. Please try again.");
+                  }
+                }}
+              >
+                Use the Solid extension
+              </Button>
+            )}
+            <DemoButton next={next} />
+            <p className="shell-public-footer">
+              {env.SUITE_TEST_CAPS.selfRegistration === true && (
+                <>
+                  <span>
+                    New here? <a href="/signup">Create an account</a>
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                </>
+              )}
+              <PodExplainer />
+            </p>
+          </div>
+        }
+      />
     </>
   );
 }

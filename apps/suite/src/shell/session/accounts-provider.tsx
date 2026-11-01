@@ -36,6 +36,10 @@ export interface AccountsContextValue {
   accounts: SuiteAccount[];
   signIn(hint: SignInHint): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
+  /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
+  signInWith(kind: SuiteAccount["kind"], hint: SignInHint): Promise<SuiteAccount>;
+  /** Backend kinds available in this deployment. */
+  backendKinds: readonly SuiteAccount["kind"][];
   add(hint: SignInHint): Promise<SuiteAccount>;
   switchTo(id: string): void;
   signOut(id?: string): Promise<void>;
@@ -205,6 +209,8 @@ export function AccountsProvider({
         accounts: state.accounts,
         signIn,
         signInDemo,
+        signInWith,
+        backendKinds: backends.map((backend) => backend.kind),
         add: signIn,
         switchTo: (id) => {
           ++generation.current;

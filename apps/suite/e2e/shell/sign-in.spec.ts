@@ -39,7 +39,7 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
 
 test("different-account validation and the provider preview seam", async ({ page }, info) => {
   await page.goto("/signin");
-  const address = page.getByLabel("Your account ID or provider");
+  const address = page.getByRole("textbox", { name: "Your WebID" });
   await expect(address).toBeVisible();
   await accessible(page);
   await screenshot(page, "signin", info.project.name);
@@ -48,19 +48,21 @@ test("different-account validation and the provider preview seam", async ({ page
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "We couldn't find a sign-in service at that address",
   );
-  await expect(address).toHaveAttribute("aria-describedby", "signin-error");
+  await expect(address).toHaveAttribute("aria-invalid", "true");
   await accessible(page);
-  await address.fill("https://example.org/");
+  await address.fill("https://example.org/profile/card#me");
   await address.press("Enter");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "Signing in with a Solid provider isn't switched on in this preview yet.",
   );
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem("suite.recentProviders.v1") ?? "[]")),
-  ).toEqual(["https://example.org/"]);
+  ).toEqual(["https://example.org/profile/card#me"]);
   await accessible(page);
-  await page.reload();
-  await expect(page.locator("#providers option[value='https://example.org/']")).toHaveCount(1);
+  // Provider buttons: the known community providers, each a real button.
+  await expect(page.getByRole("list", { name: "Providers" }).getByRole("button")).not.toHaveCount(
+    0,
+  );
 });
 
 test("pod explainer opens with the keyboard and returns focus", async ({ page }) => {
@@ -119,7 +121,7 @@ test("unsafe next cannot redirect the demo outside the suite", async ({ page }) 
 
 test("expired sessions keep content inert until reauthentication or signout", async ({ page }) => {
   await page.goto("/signin");
-  await page.getByLabel("Your account ID or provider").fill("https://example.org/");
+  await page.getByRole("textbox", { name: "Your WebID" }).fill("https://example.org/");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
   await page.evaluate(() =>
