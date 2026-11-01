@@ -101,6 +101,8 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
         `Automated message from ${message.from.actor}`,
         "",
         ...summaryLines(message),
+        // Bridges carry no envelope: retain every body value, including those the summary omits.
+        ...(bridge === undefined ? [] : [`Body: ${canonicalJson(message.body)}`]),
         "",
         footer,
       ].join("\n"),

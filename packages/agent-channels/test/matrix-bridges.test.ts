@@ -263,7 +263,16 @@ it.each(
   channels,
 )("renders, approves, transmits and looks up %s footer-only content", async (channel) => {
   const s = sender(channel, [[bridgeState(channel)], { event_id: "$sent" }]);
-  const proposal = signed();
+  const proposal = signed({
+    ...message,
+    kind: "deliver",
+    body: {
+      ref: "urn:example:invocation",
+      basis: { kind: "invocation", invocation: "urn:example:invocation" },
+      operation: { id: "urn:example:operation", version: "1" },
+      output: { answer: "15:00" },
+    },
+  });
   const wire = await s.send.render(proposal, CARRIAGE_PROFILES[channel]);
   const data = JSON.parse(wire.bytes);
   expect(Object.keys(data.content).sort()).toEqual(["body", "msgtype"]);
@@ -280,6 +289,7 @@ it.each(
   });
   const outbound = required(s.requests[1]).body;
   expect(JSON.parse(outbound)).toEqual(data.content);
+  expect(JSON.parse(outbound).body).toContain('"answer":"15:00"');
   expect(outbound).not.toContain(proposal.compactJws);
   expect(outbound).not.toContain("org.jeswr.agent.envelope");
   expect(required(s.requests[0]).url.pathname).toBe(
@@ -289,6 +299,61 @@ it.each(
   expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "found" });
   expect(s.tokens.calls.map((call) => call.access)).toEqual(["read", "send", "read"]);
   expect(s.send.finalAbsence).toBeUndefined();
+});
+
+it.each(
+  channels,
+)("preserves complete %s body values without summary truncation", async (channel) => {
+  const s = sender(channel);
+  const longText = `${"Full details ".repeat(40)}final value`;
+  const operation = { id: "urn:example:operation", version: "1" };
+  const terms = { details: longText, nested: { values: [null, false, 0, "15:00"] } };
+  for (const value of [
+    { kind: "describe", body: { want: ["operations", "bindings"] } },
+    { kind: "description", body: { description: terms } },
+    {
+      kind: "invoke",
+      body: {
+        operation,
+        basis: { kind: "grant", grant: "urn:example:grant" },
+        input: terms,
+        purpose: "urn:example:purpose",
+      },
+    },
+    {
+      kind: "propose",
+      body: { operation, terms, termsDigest: digestBytes(canonicalJson(terms)), round: 1 },
+    },
+    {
+      kind: "deliver",
+      body: { ref: "urn:example:invocation", basis: { kind: "public" }, operation, output: terms },
+    },
+  ]) {
+    const proposal = signed({ ...message, ...value });
+    const wire = await s.send.render(proposal, CARRIAGE_PROFILES[channel]);
+    const text: string = JSON.parse(wire.bytes).content.body;
+    const bodyLine = required(text.split("\n").find((line) => line.startsWith("Body: ")));
+    expect(JSON.parse(bodyLine.slice("Body: ".length))).toEqual(value.body);
+    expect(text.endsWith(AGENT_FOOTER)).toBe(true);
+    expect(await s.send.render(proposal, CARRIAGE_PROFILES[channel])).toEqual(wire);
+    expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
+  }
+  expect(s.requests).toEqual([]);
+  expect(s.tokens.calls).toEqual([]);
+});
+
+it.each(
+  channels,
+)("rejects oversized %s bodies instead of truncating their values", async (channel) => {
+  const s = sender(channel);
+  const proposal = signed({
+    ...message,
+    kind: "description",
+    body: { description: { a: "x".repeat(15000), b: "y".repeat(15000) } },
+  });
+  await expect(s.send.render(proposal, CARRIAGE_PROFILES[channel])).rejects.toThrow("byte cap");
+  expect(s.requests).toEqual([]);
+  expect(s.tokens.calls).toEqual([]);
 });
 
 it("snapshots trusted bridge pins and refuses different carriage, tampered local signatures and content", async () => {
