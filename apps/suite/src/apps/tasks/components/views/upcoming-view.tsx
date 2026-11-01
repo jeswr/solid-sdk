@@ -2,15 +2,22 @@
 "use client";
 import { Button, IconButton } from "@jeswr/suite-ui";
 import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { dateFromDayKey, localDayKey, shortDayLabel, startOfWeek } from "../../lib/views/days";
 import { agenda, shiftWeek, weekStrip } from "../../lib/views/upcoming";
 import { useNow } from "../../state/clock";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
+import { useDropTarget } from "../dnd/use-task-drag";
 import { CrossProjectView } from "./cross-project-view";
 import { ViewGroup } from "./view-group";
+
+/** A week-strip cell is also a drop target: dropping a row reschedules it to that day. */
+function DayCell({ dayKey, ...props }: ComponentProps<"button"> & { dayKey: string }) {
+  const drop = useDropTarget(`strip:${dayKey}`, { kind: "day", dayKey });
+  return <button ref={drop.ref} data-drop-over={drop.over || undefined} {...props} type="button" />;
+}
 
 export function UpcomingView() {
   const tasks = useTasks();
@@ -85,9 +92,9 @@ export function UpcomingView() {
           </div>
           <div className="tsk-week-strip" ref={stripRoot}>
             {strip.map((day) => (
-              <button
+              <DayCell
                 key={day.dayKey}
-                type="button"
+                dayKey={day.dayKey}
                 className="tsk-day-cell"
                 data-day-key={day.dayKey}
                 data-today={day.isToday || undefined}
@@ -109,7 +116,7 @@ export function UpcomingView() {
                   <span className="tsk-day-dot" data-empty={!day.count || undefined} />
                   {day.count}
                 </span>
-              </button>
+              </DayCell>
             ))}
           </div>
         </nav>
@@ -117,10 +124,22 @@ export function UpcomingView() {
     >
       <div ref={root}>
         {groups.overdue && groups.overdue.length > 0 && (
-          <ViewGroup title="Overdue" rows={groups.overdue} collapsible destructive />
+          <ViewGroup
+            title="Overdue"
+            rows={groups.overdue}
+            collapsible
+            destructive
+            container={{ kind: "day" }}
+          />
         )}
         {groups.days.map((day) => (
-          <ViewGroup key={day.dayKey} title={day.label} dayKey={day.dayKey} rows={day.tasks}>
+          <ViewGroup
+            key={day.dayKey}
+            title={day.label}
+            dayKey={day.dayKey}
+            rows={day.tasks}
+            container={{ kind: "day", dayKey: day.dayKey }}
+          >
             {project && (
               <AddTaskRow
                 project={project}
@@ -129,7 +148,13 @@ export function UpcomingView() {
             )}
           </ViewGroup>
         ))}
-        <ViewGroup title="Later" rows={groups.later} collapsible defaultCollapsed />
+        <ViewGroup
+          title="Later"
+          rows={groups.later}
+          collapsible
+          defaultCollapsed
+          container={{ kind: "day" }}
+        />
       </div>
     </CrossProjectView>
   );

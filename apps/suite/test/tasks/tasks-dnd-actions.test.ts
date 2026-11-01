@@ -1,0 +1,209 @@
+// AUTHORED-BY Claude Opus 5.5
+import { describe, expect, it, vi } from "vitest";
+import {
+  planDrop,
+  planMove,
+  planNest,
+  planPromote,
+  planToSection,
+} from "../../src/apps/tasks/lib/dnd/plan";
+import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
+import { applyDropPlan } from "../../src/apps/tasks/state/drop-actions";
+import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
+import { frameCache } from "./tasks-frame-fixtures";
+
+vi.mock("@jeswr/suite-ui", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+}));
+
+const writer = (cache: TasksCache) => ({
+  cache,
+  updateTask: cache.updateTask.bind(cache),
+  moveTaskToProject: cache.moveTaskToProject.bind(cache),
+});
+const viewOf = (cache: TasksCache, title: string) => {
+  const found = cache.getSnapshot().views.find((task) => task.title === title);
+  if (!found) throw new Error(`Missing ${title}`);
+  return found;
+};
+const projectOf = (cache: TasksCache, url: string) =>
+  cache.getSnapshot().projects.find((project) => project.url === url) as StoredProject;
+
+describe("applyDropPlan", () => {
+  it("writes renumber patches before the moved row, every write conditional", async () => {
+    const { cache, store, pod, inbox } = await frameCache();
+    for (const [title, rank] of [
+      ["a", 1],
+      ["b", 1 + 1e-9],
+      ["c", 2],
+    ] as const)
+      await store.createTask(inbox, { title, state: "open", rank });
+    await cache.loadTasks(inbox, true);
+    const views = cache.getSnapshot().views;
+    const plan = planDrop(
+      viewOf(cache, "c"),
+      {
+        kind: "task",
+        url: viewOf(cache, "a").url,
+        container: { kind: "section", projectUrl: inbox.url },
+        placement: "after",
+      },
+      views,
+    );
+    pod.requests.length = 0;
+    expect(await applyDropPlan(plan, writer(cache))).toBe(true);
+    const puts = pod.mutations();
+    expect(puts.map((request) => request.url)).toEqual(
+      ["a", "b", "c"].map((title) => viewOf(cache, title).url),
+    );
+    expect(puts.every((request) => request.headers.has("If-Match"))).toBe(true);
+    for (const [title, rank] of [
+      ["a", 1],
+      ["b", 2],
+      ["c", 1.5],
+    ] as const)
+      expect((await store.readTask(viewOf(cache, title).url)).task.rank).toBe(rank);
+    expect(
+      cache
+        .getSnapshot()
+        .views.sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+        .map((task) => task.title),
+    ).toEqual(["a", "c", "b"]);
+  });
+
+  it("changes the section class, moves back to No section, and reorders with Move up", async () => {
+    const { cache, store, inbox } = await frameCache();
+    await cache.addSection(inbox, "Doing");
+    const project = projectOf(cache, inbox.url);
+    const doing = project.tracker.sections[0]?.id as string;
+    await cache.createTask(project, { title: "Pay rent" });
+    await cache.createTask(project, { title: "Water plants" });
+    const rent = viewOf(cache, "Pay rent");
+    expect(
+      await applyDropPlan(planToSection(rent, doing, cache.getSnapshot().views), writer(cache)),
+    ).toBe(true);
+    expect((await store.readTask(rent.url)).task.types.has(doing)).toBe(true);
+    expect(viewOf(cache, "Pay rent").sectionId).toBe(doing);
+    expect(
+      await applyDropPlan(
+        planToSection(viewOf(cache, "Pay rent"), undefined, cache.getSnapshot().views),
+        writer(cache),
+      ),
+    ).toBe(true);
+    expect((await store.readTask(rent.url)).task.types.has(doing)).toBe(false);
+    // Back at the end of No section; Move up puts it first again.
+    const views = cache.getSnapshot().views;
+    expect(views.find((task) => task.url === rent.url)?.position).toBeGreaterThan(
+      views.find((task) => task.title === "Water plants")?.position ?? Infinity,
+    );
+    expect(await applyDropPlan(planMove(viewOf(cache, "Pay rent"), -1, views), writer(cache))).toBe(
+      true,
+    );
+    expect(viewOf(cache, "Pay rent").position).toBeLessThan(
+      viewOf(cache, "Water plants").position ?? -Infinity,
+    );
+  });
+
+  it("makes a sub-task (dct:isPartOf) and promotes it again", async () => {
+    const { cache, store, inbox } = await frameCache();
+    await cache.createTask(inbox, { title: "Garden" });
+    await cache.createTask(inbox, { title: "Buy soil" });
+    const parent = viewOf(cache, "Garden");
+    expect(
+      await applyDropPlan(
+        planNest(viewOf(cache, "Buy soil"), parent, cache.getSnapshot().views),
+        writer(cache),
+      ),
+    ).toBe(true);
+    const child = viewOf(cache, "Buy soil");
+    expect((await store.readTask(child.url)).task.parent).toBe(parent.id);
+    expect(await applyDropPlan(planPromote(child, cache.getSnapshot().views), writer(cache))).toBe(
+      true,
+    );
+    expect((await store.readTask(child.url)).task.parent).toBeUndefined();
+  });
+
+  it("reschedules a dropped row keeping its time, or its all-day marker", async () => {
+    const { cache, store, inbox } = await frameCache();
+    await cache.createTask(inbox, { title: "Timed", due: new Date("2026-11-02T17:00:00Z") });
+    await cache.createTask(inbox, {
+      title: "All day",
+      due: new Date("2026-11-02T00:00:00Z"),
+      allDay: "2026-11-02",
+    });
+    const views = cache.getSnapshot().views;
+    for (const title of ["Timed", "All day"])
+      expect(
+        await applyDropPlan(
+          planDrop(viewOf(cache, title), { kind: "day", dayKey: "2026-11-04" }, views),
+          writer(cache),
+        ),
+      ).toBe(true);
+    expect((await store.readTask(viewOf(cache, "Timed").url)).task.dueDate?.toISOString()).toBe(
+      "2026-11-04T17:00:00.000Z",
+    );
+    const allDay = (await store.readTask(viewOf(cache, "All day").url)).task;
+    expect(allDay.allDay).toBe("2026-11-04");
+  });
+
+  it("moves a row dropped on a sidebar project into that project", async () => {
+    const { cache, store, inbox } = await frameCache();
+    const home = (await cache.createProject("Home")) as StoredProject;
+    await cache.loadTasks(home);
+    await cache.createTask(inbox, { title: "Move me" });
+    const view = viewOf(cache, "Move me");
+    expect(
+      await applyDropPlan(
+        planDrop(view, { kind: "project", projectUrl: home.url }, cache.getSnapshot().views),
+        writer(cache),
+      ),
+    ).toBe(true);
+    const moved = viewOf(cache, "Move me");
+    expect(moved.projectUrl).toBe(home.url);
+    expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(0);
+    expect(await store.listTasks(home.tracker.stateStore as string)).toHaveLength(1);
+  });
+
+  it("reports nothing written for no-ops, vanished rows and failed writes", async () => {
+    const { cache, pod, inbox } = await frameCache();
+    expect(await applyDropPlan({ kind: "none" }, writer(cache))).toBe(false);
+    expect(
+      await applyDropPlan(
+        { kind: "reschedule", url: "missing", dayKey: "2026-11-04" },
+        writer(cache),
+      ),
+    ).toBe(false);
+    await cache.createTask(inbox, { title: "a", position: 1 });
+    await cache.createTask(inbox, { title: "b", position: 1 + 1e-9 });
+    await cache.createTask(inbox, { title: "c", position: 2 });
+    const a = viewOf(cache, "a");
+    expect(
+      await applyDropPlan(
+        { kind: "project", url: a.url, projectUrl: "https://pod.test/missing.ttl" },
+        writer(cache),
+      ),
+    ).toBe(false);
+    const plan = planDrop(
+      viewOf(cache, "c"),
+      {
+        kind: "task",
+        url: a.url,
+        container: { kind: "section", projectUrl: inbox.url },
+        placement: "after",
+      },
+      cache.getSnapshot().views,
+    );
+    if (plan.kind !== "position") throw new Error("Expected a renumbering plan");
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url === viewOf(cache, "b").url
+        ? new Response(null, { status: 500 })
+        : undefined;
+    expect(await applyDropPlan(plan, writer(cache))).toBe(false);
+    pod.intercept = undefined;
+    // The moved row keeps its old position when a renumber write fails.
+    expect(viewOf(cache, "c").position).toBe(2);
+    expect(
+      await applyDropPlan({ ...plan, renumber: [{ url: "missing", position: 1 }] }, writer(cache)),
+    ).toBe(false);
+  });
+});

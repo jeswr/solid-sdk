@@ -523,23 +523,6 @@
 .tsk-row[aria-selected="true"] {
   background: var(--primary-soft);
 }
-.tsk-row[aria-selected="true"] .tsk-check-target {
-  position: relative;
-}
-.tsk-row[aria-selected="true"] .tsk-check {
-  opacity: 0;
-}
-.tsk-row[aria-selected="true"] .tsk-check-target::after {
-  content: "✓";
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  color: var(--primary);
-  pointer-events: none;
-}
 .tsk-inline-title {
   width: 100%;
 }

@@ -1,0 +1,104 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+/* Drag handle: in the left gutter on fine pointers (06-tasks §2.2); touch long-presses the row. */
+.tsk-drag-cell {
+  display: none;
+  padding: 0;
+}
+.tsk-drag-handle {
+  display: none;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.tsk-drag-handle:hover {
+  background: var(--surface-3);
+  color: var(--foreground);
+}
+.tsk-drag-handle:active {
+  cursor: grabbing;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tsk-row .tsk-drag-cell {
+    display: block;
+    position: absolute;
+    inset-inline-start: -24px;
+    top: calc((var(--row-h, 44px) - 28px - 1px) / 2);
+  }
+  .tsk-row .tsk-drag-handle {
+    display: grid;
+    opacity: 0;
+  }
+  .tsk-row:hover .tsk-drag-handle,
+  .tsk-row:focus-within .tsk-drag-handle {
+    opacity: 1;
+  }
+}
+@media (pointer: coarse) {
+  /* A long-press drag must not open the callout or select the title. */
+  .tsk-row,
+  .tsk-card {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+}
+
+/* The source stays in place, dimmed, while the overlay follows the pointer. */
+.tsk-row[data-dragging],
+.tsk-card[data-dragging] {
+  opacity: 0.4;
+}
+.tsk-drag-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  cursor: grabbing;
+}
+.tsk-drag-overlay > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drop hints: an insertion line before/after, an outline to nest, a tint on zones. */
+.tsk-row[data-drop="before"],
+.tsk-card[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--primary);
+}
+.tsk-row[data-drop="after"],
+.tsk-card[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+.tsk-row[data-drop="child"] {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  background: var(--primary-soft);
+}
+[data-drop-over] {
+  background: var(--primary-soft);
+  border-radius: var(--radius-md);
+}
+.tsk-nav-list > li[data-drop-over] {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tsk-drag-overlay {
+    transition: none;
+  }
+}

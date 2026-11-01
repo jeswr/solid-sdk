@@ -3,6 +3,7 @@
 import { Button } from "@jeswr/suite-ui";
 import { Sun } from "lucide-react";
 import { useRef, useState } from "react";
+import { localDayKey } from "../../lib/views/days";
 import { todayGroups } from "../../lib/views/today";
 import type { TaskView } from "../../lib/views/types";
 import { openAddTask } from "../../state/add-focus";
@@ -44,6 +45,7 @@ export function TodayView() {
           rows={groups.overdue}
           collapsible
           destructive
+          container={{ kind: "day" }}
           actions={
             <ReschedulePopover
               open={reschedule}
@@ -87,7 +89,13 @@ export function TodayView() {
           </ul>
         </div>
       )}
-      {rows.length > 0 && <ViewGroup title="Today" rows={groups.today} />}
+      {rows.length > 0 && (
+        <ViewGroup
+          title="Today"
+          rows={groups.today}
+          container={{ kind: "day", dayKey: localDayKey(now) }}
+        />
+      )}
     </CrossProjectView>
   );
 }

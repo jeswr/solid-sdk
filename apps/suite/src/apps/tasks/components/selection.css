@@ -1,0 +1,147 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+/* Selection circles (06-tasks §4.5): hover-revealed on fine pointers, a column once selecting. */
+.tsk-select-cell {
+  display: none;
+  flex-shrink: 0;
+  padding: 0;
+}
+.tsk-row[data-selecting] .tsk-select-cell {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: calc(var(--row-h, 44px) - 1px);
+}
+.tsk-select {
+  display: grid;
+  place-content: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+}
+.tsk-select[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.tsk-select[aria-pressed="true"]::after {
+  content: "";
+  width: 6px;
+  height: 10px;
+  margin-top: -2px;
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+@media (hover: hover) and (pointer: fine) {
+  .tsk-row .tsk-select-cell {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: calc(var(--row-h, 44px) - 1px);
+    opacity: 0;
+  }
+  .tsk-row:hover .tsk-select-cell,
+  .tsk-row:focus-within .tsk-select-cell,
+  .tsk-row[data-selecting] .tsk-select-cell {
+    opacity: 1;
+  }
+}
+@media (pointer: coarse) {
+  .tsk-row[data-selecting] .tsk-select-cell {
+    width: 44px;
+  }
+}
+
+/* Bulk Toolbar: sticky above the list, fixed above the phone tab bar. */
+.tsk-bulk {
+  position: sticky;
+  top: 0;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.tsk-bulk-count {
+  flex-shrink: 0;
+  margin: 0 4px;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tsk-bulk > .suite-toolbar-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.tsk-bulk-anchor {
+  position: absolute;
+  inset: auto auto 0 50%;
+  width: 0;
+  height: 0;
+}
+.tsk-bulk-panel {
+  display: grid;
+  gap: 2px;
+  width: min(260px, calc(100vw - 32px));
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+.tsk-bulk-panel > button {
+  justify-content: flex-start;
+}
+.tsk-bulk-panel :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.tsk-flag[data-priority="1"] {
+  color: var(--destructive);
+}
+.tsk-flag[data-priority="2"] {
+  color: var(--warning);
+}
+.tsk-flag[data-priority="3"] {
+  color: var(--info);
+}
+.tsk-flag[data-priority="4"] {
+  color: var(--foreground-muted);
+}
+@media (max-width: 767px) {
+  .tsk-bulk {
+    position: fixed;
+    inset: auto 8px calc(var(--tsk-tabbar-h, 56px) + env(safe-area-inset-bottom, 0px) + 8px);
+    margin: 0;
+  }
+  :root:has(.tsk-bulk) .tsk-toaster[data-sonner-toaster][data-y-position="bottom"] {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 72px);
+  }
+}
+.tsk-view-toggle [data-slot="toggle-group-item"] {
+  gap: 6px;
+}
+@media (pointer: coarse) {
+  .tsk-view-toggle [data-slot="toggle-group-item"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+@media (max-width: 639px) {
+  .tsk-view-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}

@@ -1,0 +1,131 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+/* Project board (06-tasks §2.5): horizontal columns that scroll with snap on narrow screens. */
+.tsk-content.tsk-board-view {
+  max-width: none;
+  padding-bottom: 24px;
+}
+.tsk-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 12px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+}
+.tsk-board-column {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  width: min(280px, calc(100vw - 48px));
+  min-width: min(272px, calc(100vw - 48px));
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  scroll-snap-align: start;
+}
+.tsk-board-column > .tsk-section-header {
+  padding-inline: 4px;
+  border-bottom: 0;
+}
+.tsk-board-heading {
+  flex: 1;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.tsk-board-body {
+  min-height: 44px;
+}
+.tsk-board-cards {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tsk-card {
+  display: grid;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: grab;
+}
+.tsk-card:hover,
+.tsk-card:focus-within {
+  box-shadow: var(--shadow-1);
+}
+.tsk-card[data-priority="1"] {
+  border-inline-start-color: var(--destructive);
+}
+.tsk-card[data-priority="2"] {
+  border-inline-start-color: var(--warning);
+}
+.tsk-card[data-priority="3"] {
+  border-inline-start-color: var(--info);
+}
+.tsk-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.tsk-card .tsk-card-handle {
+  display: grid;
+  flex-shrink: 0;
+  width: 24px;
+  height: 32px;
+}
+.tsk-card-title {
+  flex: 1;
+  min-width: 0;
+  padding-block: 6px;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm, 1.25rem);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.tsk-card-title:hover {
+  text-decoration: underline;
+}
+.tsk-card .tsk-meta {
+  padding-inline-start: 28px;
+}
+.tsk-board-column .tsk-add-row {
+  margin: 0;
+  padding-inline-start: 0;
+}
+.tsk-board-add {
+  background: transparent;
+}
+.tsk-board-add .tsk-add-section {
+  margin-top: 0;
+}
+.tsk-board :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .tsk-card .tsk-card-handle,
+  .tsk-card-top > button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+@media (min-width: 1024px) {
+  .tsk-board {
+    scroll-snap-type: none;
+  }
+  .tsk-board-column {
+    width: 280px;
+    min-width: 280px;
+  }
+}
