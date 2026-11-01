@@ -404,6 +404,22 @@ describe("error URL sanitisation", () => {
     const f = createGuardedFetch({ dnsLookup });
     expectSafe(await f(BASE, { referrer: malformed }).catch((e: unknown) => e));
   });
+  it("drops a quoted header value echoed by a header-validation error", async () => {
+    const credential = Buffer.from("alice:password-that-is-long-enough-to-wrap").toString("base64");
+    const wrapped = `${credential.slice(0, 20)}\n${credential.slice(20)}`;
+    const f = createGuardedFetch({
+      dnsLookup,
+      fetch: async () => {
+        throw new TypeError(`Headers.append: "Basic ${wrapped}" is an invalid header value.`);
+      },
+    });
+    const error = await f(BASE).catch((e: unknown) => e);
+    expect(String(error)).toContain("invalid header value");
+    for (const chunk of [credential.slice(0, 20), credential.slice(20)]) {
+      expect(String(error)).not.toContain(chunk);
+      expect(inspect(error, { depth: null })).not.toContain(chunk);
+    }
+  });
   it.each([
     "https:/alice:password@ho st/callback?code=oauth-secret#access-token",
     "https:\\\\alice:password@ho st/callback?code=oauth-secret#access-token",
