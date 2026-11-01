@@ -14,3 +14,23 @@ readwrite transaction, resolving after commit, so independent tabs/connections d
 The memory implementation uses a Set scoped to its instance. Keys use the model's trigger
 identity and fire time, allowing the next recurrence to fire. IndexedDB claims expire after
 30 days.
+
+## Runner and app wiring
+
+`runner.ts` (framework-free) maps the cache snapshot to `ReminderTask`s: only visible views
+(hidden pending-delete and removed tasks are already absent), open, dated, with reminders;
+all-day markers are kept and unreadable reminder data is reported. `runReminderTick` claims,
+then hands each event (`tag` = task URL + fire time, `body` = due text) to a notifier, and
+returns `{ delivered, errors }` without throwing. `startReminderScheduler` ticks once every
+project load has settled, every 5 minutes and on `visibilitychange` to visible; ticks run
+serially. `fallbackFiredStore` keeps reminders firing, deduplicated per tab only, when
+IndexedDB claims fail.
+
+`state/reminders.ts` mounts it from the Tasks chrome with `useReminderScheduler`, sharing one
+fired store per tab (IndexedDB when available, else memory) so strict-mode remounts cannot
+deliver twice. Delivery shows a Web Notification only when permission is already `granted`
+and always a "Reminder: <title>" toast; both open `?task=<ref>`. The app never prompts on
+load: saving a reminder (detail pane or composer) offers "Allow notifications" once per
+session while permission is `default`. Dev fixture builds (`NEXT_PUBLIC_DEV_FIXTURES=1`)
+expose `window.tasksReminderTestHook.{setNow, tick}` for Playwright; `tick` resolves the
+delivered count, or -1 while tasks are still loading.
