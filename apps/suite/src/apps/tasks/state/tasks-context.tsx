@@ -43,6 +43,7 @@ function useTasksValue(session: PodSession) {
           );
         },
         session.webId,
+        (message) => toast.info(message),
       ),
   );
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);

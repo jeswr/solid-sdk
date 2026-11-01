@@ -16,7 +16,8 @@ async function setup(recurring = true) {
     ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
   });
   const failures = vi.fn();
-  const cache = new TasksCache(store, failures, webId);
+  const notices = vi.fn();
+  const cache = new TasksCache(store, failures, webId, notices);
   await cache.start();
   const project = cache.getSnapshot().projects[0];
   if (!project) throw new Error("Missing Inbox");
@@ -28,7 +29,7 @@ async function setup(recurring = true) {
     reminders: [{ offset: "-PT1H" }],
   });
   if (!item) throw new Error("Missing task");
-  return { cache, pod, store, failures, project, item };
+  return { cache, pod, store, failures, notices, project, item };
 }
 
 describe("completion and Undo", () => {
@@ -186,21 +187,154 @@ it("allows Undo after a lost create response only when the recovered payload mat
   expect(pod.files.has(plan.copyUrl)).toBe(false);
   expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
 });
-it("repairs a failed copy DELETE before accepting another completion", async () => {
-  const { cache, store, item, pod } = await setup();
+it.each([
+  false,
+  true,
+])("only retries copy cleanup after a confirmed restore (lost response: %s)", async (lostResponse) => {
+  const { cache, store, item, pod, failures, notices } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  if (lostResponse) {
+    const update = store.updateTask.bind(store);
+    vi.spyOn(store, "updateTask").mockImplementationOnce(async (...args) => {
+      await update(...args);
+      throw new Error("Lost restore response");
+    });
+  }
+  let deletes = 0;
+  pod.intercept = (request) =>
+    request.method === "DELETE" && request.url === plan.copyUrl && ++deletes <= 2
+      ? new Response(null, { status: 503 })
+      : undefined;
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  const restored = await store.readTask(item.url);
+  const offset = pod.requests.length;
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  expect(await cache.undoCompletion(item, plan)).toBe(true);
+  expect((await store.readTask(item.url)).etag).toBe(restored.etag);
+  const writes = pod.requests.slice(offset).filter((request) => request.method !== "GET");
+  expect(writes.map((request) => [request.method, request.url])).toEqual([
+    ["DELETE", plan.copyUrl],
+    ["DELETE", plan.copyUrl],
+  ]);
+  expect(writes.every((request) => request.headers.has("If-Match"))).toBe(true);
+  expect(pod.files.has(plan.copyUrl)).toBe(false);
+  expect(failures).toHaveBeenCalledTimes(2);
+  expect(notices).not.toHaveBeenCalled();
+});
+it("retires an Undo repair after another client completes the restored occurrence, so Retry cannot rewind it", async () => {
+  const { cache, store, item, pod, project, failures, notices } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  let failed = false;
+  pod.intercept = (request) => {
+    if (request.method !== "DELETE" || request.url !== plan.copyUrl || failed) return;
+    failed = true;
+    return new Response(null, { status: 503 });
+  };
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
+  const retry = failures.mock.calls.at(-1)?.[1];
+  const other = new TasksCache(store, vi.fn(), webId);
+  await other.start();
+  await other.loadTasks(project);
+  const next = await other.completeTask(await store.readTask(item.url), now);
+  if (next?.kind !== "advance" || !next.copyUrl) throw new Error("Missing next plan");
+  const advanced = await store.readTask(item.url);
+  expect(advanced.task.allDay).toBe("2026-10-27");
+  const offset = pod.requests.length;
+  retry?.();
+  await vi.waitFor(() => {
+    expect(notices).toHaveBeenCalledExactlyOnceWith("Undo was overtaken by a newer change");
+    expect(cache.getSnapshot().saving).toHaveLength(0);
+  });
+  expect(await cache.undoCompletion(item, plan)).toBe(false);
+  expect((await store.readTask(item.url)).etag).toBe(advanced.etag);
+  expect(cache.getSnapshot().views.find((task) => task.url === item.url)?.allDay).toBe(
+    "2026-10-27",
+  );
+  expect(pod.requests.slice(offset).filter((request) => request.method !== "GET")).toEqual([]);
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(pod.files.has(next.copyUrl)).toBe(true);
+  expect(failures).toHaveBeenCalledOnce();
+  expect(notices).toHaveBeenCalledOnce();
+});
+it.each([
+  "before Retry",
+  "during DELETE",
+])("keeps an edited copy %s without writing the original again", async (stage) => {
+  const { cache, store, item, pod, notices } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  vi.spyOn(store, "deleteTask").mockRejectedValueOnce(new ModelError(503, plan.copyUrl));
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  const restored = await store.readTask(item.url);
+  const editCopy = async () => {
+    await store.updateTask(await store.readTask(plan.copyUrl as string), (task) => {
+      task.title = "Another client's completion record";
+    });
+  };
+  if (stage === "before Retry") await editCopy();
+  else {
+    const remove = store.deleteTask.bind(store);
+    vi.spyOn(store, "deleteTask").mockImplementationOnce(async (copy) => {
+      await editCopy();
+      await remove(copy);
+    });
+  }
+  const offset = pod.requests.length;
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  expect((await store.readTask(item.url)).etag).toBe(restored.etag);
+  expect((await store.readTask(plan.copyUrl)).task.title).toBe(
+    "Another client's completion record",
+  );
+  expect(
+    pod.requests
+      .slice(offset)
+      .filter((request) => request.method === "PUT" && request.url === item.url),
+  ).toEqual([]);
+  expect(notices).not.toHaveBeenCalled();
+});
+it("allows rescheduling and completing with a pending Undo repair, retaining both completion records", async () => {
+  const { cache, store, item, pod, failures, notices } = await setup();
+  const plan = await cache.completeTask(item, now);
+  if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
+  vi.spyOn(store, "deleteTask").mockRejectedValueOnce(new ModelError(503, plan.copyUrl));
+  expect(await cache.undoCompletion(item, plan)).toBeUndefined();
+  const retry = failures.mock.calls.at(-1)?.[1];
+  expect(
+    await cache.updateTask(item, (task) => {
+      task.allDay = "2026-12-12";
+    }),
+  ).toBeDefined();
+  const next = await cache.completeTask(await store.readTask(item.url), now);
+  if (next?.kind !== "advance" || !next.copyUrl) throw new Error("Missing next plan");
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-12-14");
+  const offset = pod.requests.length;
+  retry?.();
+  expect(await cache.undoCompletion(item, plan)).toBe(false);
+  expect(pod.requests.slice(offset).filter((request) => request.method !== "GET")).toEqual([]);
+  expect(pod.files.has(plan.copyUrl)).toBe(true);
+  expect(pod.files.has(next.copyUrl)).toBe(true);
+  expect(failures).toHaveBeenCalledOnce();
+  expect(notices).toHaveBeenCalledExactlyOnceWith("Undo was overtaken by a newer change");
+});
+it("accepts a completion queued behind Undo even when copy cleanup fails", async () => {
+  const { cache, store, item, pod, failures, notices } = await setup();
   const plan = await cache.completeTask(item, now);
   if (plan?.kind !== "advance" || !plan.copyUrl) throw new Error("Missing plan");
   vi.spyOn(store, "deleteTask").mockRejectedValueOnce(new ModelError(503, plan.copyUrl));
   const undoing = cache.undoCompletion(item, plan);
   const overlapping = cache.completeTask(item, now);
   expect(await undoing).toBeUndefined();
-  expect(await overlapping).toBeUndefined();
-  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
+  const next = await overlapping;
+  if (next?.kind !== "advance" || !next.copyUrl) throw new Error("Missing next plan");
+  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-27");
   expect(pod.files.has(plan.copyUrl)).toBe(true);
-  expect(await cache.completeTask(await store.readTask(item.url), now)).toBeUndefined();
-  expect(pod.files.has(plan.copyUrl)).toBe(false);
-  expect((await store.readTask(item.url)).task.allDay).toBe("2026-10-25");
-  expect((await cache.completeTask(await store.readTask(item.url), now))?.kind).toBe("advance");
+  expect(pod.files.has(next.copyUrl)).toBe(true);
+  expect(await cache.undoCompletion(item, plan)).toBe(false);
+  expect(failures).toHaveBeenCalledOnce();
+  expect(notices).toHaveBeenCalledExactlyOnceWith("Undo was overtaken by a newer change");
 });
 it("preserves a known copy-write validator when recovering a lost original-update confirmation", async () => {
   const { cache, store, item, pod } = await setup();
