@@ -46,6 +46,8 @@
     "@tiptap/starter-kit": "3.31.4",
     "@tiptap/y-tiptap": "3.0.10",
     "@univerjs/core": "1.2.0",
+    "@univerjs/preset-sheets-core": "1.2.0",
+    "@univerjs/presets": "1.2.0",
     "@univerjs/sheets": "1.2.0",
     "chrono-node": "^2.10.3",
     "docx": "9.14.0",

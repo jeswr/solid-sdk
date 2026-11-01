@@ -9,7 +9,7 @@ import { DataFactory } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
-import { type CompletionPlan, planComplete } from "../lib/views/completion";
+import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
@@ -18,6 +18,8 @@ import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } 
 export interface TaskLoad {
   status: "loading" | "ready" | "error";
   items: StoredTask[];
+  /** Cached rows stay visible, but this load is incomplete until revalidation settles. */
+  refreshing?: boolean;
   /** Invalid RDF tasks skipped while projecting this project's last load. */
   warningCount?: number;
   error?: unknown;
@@ -62,6 +64,10 @@ interface Pending {
   apply: Patch;
   urls: string[];
 }
+interface UndoRepair {
+  run: () => Promise<boolean | undefined>;
+  supersede: (current: StoredTask) => boolean;
+}
 export type MutationFailure = (error: unknown, retry: () => void) => void;
 export interface TaskMoveMapping {
   from: string;
@@ -84,6 +90,7 @@ function replaceTask(
       ...state.tasks,
       [projectUrl]: {
         status: "ready",
+        refreshing: previous?.refreshing ?? false,
         warningCount: previous?.warningCount ?? 0,
         items: [
           ...(previous?.items ?? []).filter((item) => item.url !== url),
@@ -117,11 +124,16 @@ export class TasksCache {
   private projectFailures = new Map<string, unknown>();
   /** Keep the original URL reserved across failures and repeated completion actions. */
   private unresolvedCompletions = new Map<string, () => Promise<CompletionPlan | undefined>>();
+  private hiddenTasks = new Set<string>();
+  private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
+  private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
+  private undoRepairs = new Map<string, UndoRepair>();
   readonly inboxUrl: string;
   constructor(
     readonly store: TaskStore,
     private readonly onFailure: MutationFailure,
     private readonly webId: string,
+    private readonly onNotice: (message: string) => void = () => {},
   ) {
     this.inboxUrl = `${store.projects}inbox.ttl`;
   }
@@ -158,7 +170,10 @@ export class TasksCache {
         };
         continue;
       }
-      const projected = projectTasks(project, load.items);
+      const projected = projectTasks(
+        project,
+        load.items.filter((item) => !this.hiddenTasks.has(item.url)),
+      );
       tasks[project.url] = {
         ...load,
         items: projected.items,
@@ -277,6 +292,8 @@ export class TasksCache {
         ...this.baseline.tasks,
         [project.url]: {
           status: previous?.status === "ready" ? "ready" : "loading",
+          refreshing: true,
+          warningCount: previous?.warningCount ?? 0,
           items: previous?.items ?? [],
         },
       },
@@ -583,6 +600,7 @@ export class TasksCache {
       apply,
       async () => {
         const task = await this.store.updateTask(this.task(project.url, item.url), change);
+        this.undoRepairs.get(item.url)?.supersede(task);
         return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
       },
       onRetry ??
@@ -664,8 +682,8 @@ export class TasksCache {
     return attempt();
   }
   deleteTask(item: StoredTask): Promise<boolean | undefined> {
-    const project = this.snapshot.projects.find((project) =>
-      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    const project = this.baseline.projects.find((project) =>
+      this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
     if (!project) return Promise.resolve(undefined);
     const remove: Patch = (state) => replaceTask(state, project.url, item.url);
@@ -680,7 +698,17 @@ export class TasksCache {
       },
     );
   }
-  completeTask(item: StoredTask, now = new Date()): Promise<CompletionPlan | undefined> {
+  /** Temporary visibility owned by the delayed-delete controller, independent of pod writes. */
+  hideTask(url: string, hidden: boolean) {
+    if (hidden) this.hiddenTasks.add(url);
+    else this.hiddenTasks.delete(url);
+    this.emit();
+  }
+  completeTask(
+    item: StoredTask,
+    now = new Date(),
+    options: { forever?: boolean } = {},
+  ): Promise<CompletionPlan | undefined> {
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
     const project = this.snapshot.projects.find((project) =>
@@ -694,12 +722,192 @@ export class TasksCache {
         !item.task.completionOperations.has(copy.url),
     );
     if (project && orphans?.length) return this.recoverCompletion(project, item, orphans, now);
-    const plan = planComplete(item, this.snapshot.views, now);
+    const plan = planComplete(item, this.snapshot.views, now, options);
     if (plan.kind === "advance") return this.advanceTask(item, plan);
     return this.updateTask(item, (task) => {
       task.state = "closed";
       task.endedAt = now;
     }).then((task) => (task ? plan : undefined));
+  }
+  /** Undo retains occurrence ownership across lost responses and retries each write conditionally. */
+  undoCompletion(item: StoredTask, plan: CompletionPlan): Promise<boolean | undefined> {
+    const existing = this.undoOperations.get(plan);
+    if (existing) return existing();
+    const repair = this.undoRepairs.get(item.url);
+    if (repair) return repair.run();
+    const project = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!project) return Promise.resolve(undefined);
+    const undo = planUndo(plan);
+    const restore = (task: TaskItem) => {
+      if (undo.kind === "reopen") {
+        task.state = "open";
+        task.endedAt = undefined;
+      } else {
+        task.dueDate = undo.original.dueDate;
+        task.allDay = undo.original.allDay;
+        task.reminders = undo.original.reminders ?? [];
+      }
+    };
+    const matches = (task: StoredTask) => {
+      const intended = changeTask(task, restore);
+      return isomorphic([...task.dataset], [...intended.dataset]);
+    };
+    const copyUrl = plan.kind === "advance" ? plan.copyUrl : undefined;
+    const reservedCopy = this.completionCopies.get(plan);
+    let finished = false;
+    let superseded = false;
+    // Once confirmed, Retry owns only copy cleanup, never another scheduling restore.
+    let restored: StoredTask | undefined;
+    let restorePending = false;
+    let running: Promise<boolean | undefined> | undefined;
+    const repairOperation: UndoRepair = {
+      run: () => run(),
+      supersede: (current) => {
+        if (
+          finished ||
+          !restored ||
+          (current.etag === restored.etag &&
+            isomorphic([...current.dataset], [...restored.dataset]))
+        )
+          return false;
+        finished = true;
+        superseded = true;
+        restorePending = false;
+        this.undoRepairs.delete(item.url);
+        this.onNotice("Undo was overtaken by a newer change");
+        return true;
+      },
+    };
+    const copyMatches = (copy: StoredTask) =>
+      !!reservedCopy?.etag &&
+      copy.etag === reservedCopy.etag &&
+      isomorphic([...copy.dataset], [...reservedCopy.dataset]);
+    const forward = (task: TaskItem) => {
+      if (plan.kind !== "advance") return;
+      task.dueDate = plan.original.dueDate;
+      task.allDay = plan.original.allDay;
+      task.reminders = plan.original.reminders ?? [];
+    };
+    const rejectChangedCopy = async (compensate: boolean) => {
+      // A copy can change between the preflight read and its conditional DELETE.
+      // Compensate only our scheduling restore, preserving unrelated concurrent edits.
+      if (restorePending && compensate) {
+        let current = await this.store.readTask(item.url);
+        if (matches(current)) {
+          try {
+            current = await this.store.updateTask(current, forward);
+          } catch (error) {
+            current = await this.store.readTask(item.url);
+            if (!isomorphic([...current.dataset], [...changeTask(current, forward).dataset]))
+              throw error;
+          }
+        }
+      }
+      restorePending = false;
+      this.undoRepairs.delete(item.url);
+      throw new Error("Couldn't undo: the completed copy was changed elsewhere");
+    };
+    const attempt = (cleanupOnly = !!restored): Promise<boolean | undefined> =>
+      this.mutate(
+        (state) => {
+          if (cleanupOnly || finished) return state;
+          const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+          let next = current
+            ? replaceTask(state, project.url, item.url, changeTask(current, restore))
+            : state;
+          if (copyUrl) next = replaceTask(next, project.url, copyUrl);
+          return next;
+        },
+        async () => {
+          if (finished) return { result: !superseded, commit: (state) => state };
+          let current = await this.store.readTask(item.url);
+          if (repairOperation.supersede(current))
+            return {
+              result: false,
+              commit: (state) => replaceTask(state, project.url, item.url, current),
+            };
+          if (!restored && plan.kind === "advance" && !matches(current)) {
+            const expected = changeTask(current, (task) => {
+              task.dueDate = plan.original.dueDate;
+              task.allDay = plan.original.allDay;
+              task.reminders = plan.original.reminders ?? [];
+            });
+            if (
+              !current.task.completionOperations.has(copyUrl as string) ||
+              !isomorphic([...current.dataset], [...expected.dataset])
+            )
+              throw new ModelError(409, item.url);
+          }
+          let copy: StoredTask | undefined;
+          if (copyUrl) {
+            copy = await this.optionalTask(copyUrl);
+            if (copy && !copyMatches(copy)) await rejectChangedCopy(false);
+          }
+          if (!restored && !matches(current)) {
+            if (copyUrl) {
+              restorePending = true;
+              this.undoRepairs.set(item.url, repairOperation);
+            }
+            try {
+              current = await this.store.updateTask(current, restore);
+            } catch (error) {
+              const reconciled = await this.store.readTask(item.url);
+              if (!matches(reconciled)) {
+                restorePending = false;
+                this.undoRepairs.delete(item.url);
+                throw error;
+              }
+              current = reconciled;
+            }
+          }
+          // The original is confirmed restored before the irreversible copy removal.
+          restored = current;
+          if (copy) {
+            restorePending = true;
+            this.undoRepairs.set(item.url, repairOperation);
+            try {
+              await this.store.deleteTask(copy);
+            } catch (error) {
+              const reconciled = await this.optionalTask(copy.url);
+              if (reconciled) {
+                if (!copyMatches(reconciled)) await rejectChangedCopy(!cleanupOnly);
+                throw error;
+              }
+            }
+          }
+          restorePending = false;
+          this.undoRepairs.delete(item.url);
+          finished = true;
+          const original = current;
+          return {
+            result: true,
+            commit: (state) => {
+              const next = replaceTask(state, project.url, item.url, original);
+              return copyUrl ? replaceTask(next, project.url, copyUrl) : next;
+            },
+          };
+        },
+        () => {
+          void run();
+        },
+        [item.url, ...(copyUrl ? [copyUrl] : [])],
+      );
+    const run = (): Promise<boolean | undefined> => {
+      if (finished) return Promise.resolve(!superseded);
+      const repair = this.undoRepairs.get(item.url);
+      if (repair && repair !== repairOperation) return repair.run();
+      if (copyUrl) this.undoRepairs.set(item.url, repairOperation);
+      running ??= attempt().finally(() => {
+        running = undefined;
+        if (!restorePending && this.undoRepairs.get(item.url) === repairOperation)
+          this.undoRepairs.delete(item.url);
+      });
+      return running;
+    };
+    this.undoOperations.set(plan, run);
+    return run();
   }
   /** A persisted occurrence without its original's marker is the same completion after reload. */
   private recoverCompletion(
@@ -814,8 +1022,11 @@ export class TasksCache {
     let copyPending = false;
     let compensating = false;
     let replan = false;
+    let reservedCopy: StoredTask | undefined;
     let settled: { result: CompletionPlan; commit: Patch } | undefined;
     const finish = (original: StoredTask, copy?: StoredTask) => {
+      this.undoRepairs.get(item.url)?.supersede(original);
+      if (reservedCopy) this.completionCopies.set(plan, reservedCopy);
       settled = {
         result: plan,
         commit: (state) =>
@@ -824,8 +1035,27 @@ export class TasksCache {
       return settled;
     };
     const wasAdvanced = (original: StoredTask) => original.task.completionOperations.has(url);
-    const ownsCopy = (copy: StoredTask) =>
+    const isOccurrence = (copy: StoredTask) =>
       copy.task.clonedFrom === item.task.id && copy.task.completionOperations.has(url);
+    const confirmCopy = (copy: StoredTask) => {
+      // A read validator proves ownership only with the exact reserved payload.
+      // Never replace a known write validator with a newer client's revision.
+      if (
+        reservedCopy &&
+        !reservedCopy.etag &&
+        isomorphic([...copy.dataset], [...reservedCopy.dataset])
+      )
+        reservedCopy = { ...reservedCopy, etag: copy.etag };
+    };
+    const requireOwnedCopy = (copy: StoredTask) => {
+      confirmCopy(copy);
+      if (
+        !reservedCopy?.etag ||
+        copy.etag !== reservedCopy.etag ||
+        !isomorphic([...copy.dataset], [...reservedCopy.dataset])
+      )
+        throw new ModelError(409, url);
+    };
     const dataset = createTask(url, { ...initial.copy, completionOperations: [url] });
     const copy = {
       url,
@@ -864,13 +1094,16 @@ export class TasksCache {
           if (copyPending) {
             const existing = await this.optionalTask(url);
             if (wasAdvanced(current)) {
-              if (existing && !ownsCopy(existing)) throw new ModelError(409, url);
+              if (existing && !isOccurrence(existing)) throw new ModelError(409, url);
+              if (existing) confirmCopy(existing);
               return finish(current, existing);
             }
             if (existing) {
-              if (!ownsCopy(existing)) throw new ModelError(409, url);
+              if (!isOccurrence(existing)) throw new ModelError(409, url);
+              confirmCopy(existing);
               if (compensating) {
                 // Only a definite rejection authorizes compensation, never a lost response.
+                requireOwnedCopy(existing);
                 await this.store.deleteTask(existing);
               } else existingCopy = existing;
             }
@@ -909,7 +1142,14 @@ export class TasksCache {
               currentProject,
               { ...plan.copy, completionOperations: [url] },
               id,
+              (resource) => {
+                reservedCopy = {
+                  ...resource,
+                  task: new TaskItem(`${url}#it`, resource.dataset, DataFactory),
+                };
+              },
             ));
+          confirmCopy(copy);
           const completion = plan;
           try {
             const original = await this.store.updateTask(current, (task) =>
@@ -926,6 +1166,7 @@ export class TasksCache {
             const original = await this.store.readTask(item.url);
             if (wasAdvanced(original)) return finish(original, copy);
             if (!compensating) throw error;
+            requireOwnedCopy(copy);
             await this.store.deleteTask(copy);
             copyPending = false;
             compensating = false;
@@ -1029,6 +1270,59 @@ export class TasksCache {
             void attempt(true);
           }),
         [project.url],
+      );
+    return attempt();
+  }
+  /** Hold the mutation queue from the strict listing through task and class removal, on Retry too.
+   * Preflight items only identify saving indicators; queued writes may change the membership. */
+  deleteLabel(project: StoredProject, labelIds: readonly string[], preflight: StoredTask[]) {
+    const clearTypes = (task: TaskItem) => {
+      for (const id of labelIds) task.types.delete(id);
+    };
+    const attempt = (): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => state,
+        async () => {
+          // Always read back the tracker, including after a lost class-removal response.
+          const current = await this.store.readProject(project.url);
+          if (current.tracker.stateStore !== project.tracker.stateStore)
+            throw new ModelError(409, project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const confirmed: StoredTask[] = [];
+          for (const item of items)
+            confirmed.push(
+              labelIds.some((id) => item.task.types.has(id))
+                ? await this.store.updateTask(item, clearTypes)
+                : item,
+            );
+          // Conditional task writes must all succeed before the conditional tracker write.
+          const hasClass = labelIds.some(
+            (id) => current.dataset.match(DataFactory.namedNode(id)).size > 0,
+          );
+          const result = hasClass
+            ? await this.store.updateProject(current, (tracker) => {
+                for (const id of labelIds)
+                  for (const quad of tracker.dataset.match(DataFactory.namedNode(id)))
+                    tracker.dataset.delete(quad);
+              })
+            : current;
+          return {
+            result,
+            commit: (state) => {
+              let next = replaceProject(state, result);
+              for (const item of confirmed) next = replaceTask(next, project.url, item.url, item);
+              return next;
+            },
+          };
+        },
+        () => {
+          void attempt();
+        },
+        preflight
+          .filter((item) => labelIds.some((id) => item.task.types.has(id)))
+          .map((item) => item.url),
       );
     return attempt();
   }

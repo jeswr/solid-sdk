@@ -15,6 +15,7 @@ import type { StoredProject } from "../lib/model/store";
 import type { Category } from "../lib/model/tracker";
 import type { ProjectGroups, Row } from "../lib/views/project-groups";
 import { focusAddTask } from "../state/add-focus";
+import { TaskListFocus, useTaskListFocus } from "../state/list-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { AddTaskRow } from "./add-task-row";
@@ -108,8 +109,19 @@ function SectionHeader({
     </div>
   );
 }
+export function TaskList(props: Parameters<typeof TaskListBody>[0]) {
+  const focus = useTaskListFocus();
+  return focus ? (
+    <TaskListBody {...props} />
+  ) : (
+    <TaskListFocus>
+      <TaskListBody {...props} />
+    </TaskListFocus>
+  );
+}
+
 /** Sections and flat views share rows and one roving focus cursor across the visible list. */
-export function TaskList({
+function TaskListBody({
   project,
   groups,
   rows,
@@ -124,95 +136,31 @@ export function TaskList({
 }) {
   const { preferences } = useTasksPreferences();
   const { addSection } = useTasks();
-  const [active, setActive] = useState<string>();
+  const focus = useTaskListFocus();
   const [addingSection, setAddingSection] = useState(false);
   const [name, setName] = useState("");
   const sectionInput = useRef<HTMLInputElement>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const focused = useRef<{ url: string; order: string[] } | undefined>(undefined);
-  const visible = [
-    ...(rows ?? groups?.unsectioned ?? []),
-    ...(groups?.sections ?? [])
-      .filter(({ section }) => !preferences.collapsedSections.includes(section.id))
-      .flatMap(({ rows }) => rows),
-  ];
-  const activeUrl = visible.some((row) => row.task.url === active) ? active : visible[0]?.task.url;
-  useLayoutEffect(() => {
-    const previous = focused.current;
-    if (!previous) return;
-    const urls = visible.map((row) => row.task.url);
-    if (urls.includes(previous.url)) {
-      previous.order = urls;
-      return;
-    }
-    focused.current = undefined;
-    const current = document.activeElement;
-    if (current instanceof HTMLElement && current !== document.body && current.isConnected) return;
-    const index = previous.order.indexOf(previous.url);
-    const next =
-      [...previous.order.slice(index + 1), ...previous.order.slice(0, index).reverse()].find(
-        (url) => urls.includes(url),
-      ) ?? urls[0];
-    if (next) {
-      setActive(next);
-      root.current?.querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(next)}"]`)?.focus();
-    } else {
-      const add =
-        root.current?.querySelector<HTMLElement>(
-          "[data-tsk-add]:not([hidden]) button, [data-tsk-add] input",
-        ) ??
-        root.current?.closest(".tsk-content")?.querySelector<HTMLElement>(".tsk-empty-add") ??
-        document.querySelector<HTMLElement>(".tsk-primary-add");
-      add?.focus();
-    }
-  });
+  // A group can collapse without rerendering the persistent focus owner.
+  useLayoutEffect(() => focus?.refresh());
   const renderRows = (rows: Row[], label: string) => (
-    // biome-ignore lint/a11y/noRedundantRoles: explicit list role preserves Safari semantics when list markers are removed
-    <ul role="list" aria-label={label} className="tsk-list">
-      {rows.map((row) => (
-        <TaskRow
-          key={row.task.url}
-          row={row}
-          showProject={showProject}
-          tabIndex={row.task.url === activeUrl ? 0 : -1}
-          onFocus={() => setActive(row.task.url)}
-          onMove={(direction) => {
-            const index = visible.findIndex((item) => item.task.url === row.task.url);
-            const next = visible[Math.max(0, Math.min(visible.length - 1, index + direction))];
-            if (next) {
-              setActive(next.task.url);
-              root.current
-                ?.querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(next.task.url)}"]`)
-                ?.focus();
-            }
-          }}
-        />
-      ))}
-    </ul>
+    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the native table implements a grid with row selection and independent cell controls.
+    <table role="grid" aria-multiselectable="true" aria-label={label} className="tsk-list">
+      <tbody>
+        {rows.map((row) => (
+          <TaskRow
+            key={row.task.url}
+            row={row}
+            showProject={showProject}
+            tabIndex={row.task.url === focus?.activeUrl ? 0 : -1}
+            onFocus={() => focus?.onFocus(row.task.url)}
+            onMove={(direction) => focus?.onMove(row.task.url, direction)}
+          />
+        ))}
+      </tbody>
+    </table>
   );
   return (
-    <div
-      ref={root}
-      className="tsk-task-list"
-      onFocusCapture={(event) => {
-        const element = event.target as HTMLElement;
-        const row = element.closest<HTMLElement>("[data-tsk-row]");
-        if (row?.dataset.tskRow)
-          focused.current = {
-            url: row.dataset.tskRow,
-            order: visible.map((row) => row.task.url),
-          };
-      }}
-      onBlurCapture={(event) => {
-        const next = event.relatedTarget;
-        if (
-          next instanceof HTMLElement &&
-          !event.currentTarget.contains(next) &&
-          !next.closest('[role="menu"], [role="alertdialog"]')
-        )
-          focused.current = undefined;
-      }}
-    >
+    <div className="tsk-task-list">
       {renderRows(rows ?? groups?.unsectioned ?? [], "Tasks")}
       {project && <AddTaskRow project={project} hideTrigger={hideAddTaskTrigger} />}
       {project &&
