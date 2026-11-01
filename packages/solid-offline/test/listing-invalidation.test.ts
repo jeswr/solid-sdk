@@ -100,6 +100,58 @@ async function harness() {
 
 describe('paginated listing invalidation', () => {
   it.each([
+    { evicted: false, legacy: false },
+    { evicted: true, legacy: false },
+    { evicted: false, legacy: true },
+  ])('purges cursor pages on container Delete (evicted=$evicted, legacy=$legacy)', async ({
+    evicted,
+    legacy,
+  }) => {
+    const h = await harness();
+    const second = (await h.deps.meta.getByUrl(SECOND))[0];
+    const third = (await h.deps.meta.getByUrl(THIRD))[0];
+    if (!second || !third) throw new Error('missing cached cursor fixtures');
+    const extra = { ...second, key: `${SECOND} x-mode=other`, varyKey: 'x-mode=other' };
+    await h.deps.meta.put(extra);
+    h.deps.cache.seed(keyRequest(SECOND, extra.varyKey), listing([REMOVED]));
+    // Legacy Link traversal can cycle back to the container being deleted.
+    h.deps.cache.seed(keyRequest(THIRD, third.varyKey), listing([], CONTAINER));
+    const unrelated = `${ROOT}unrelated`;
+    await h.deps.meta.put({ ...third, url: unrelated, key: `${unrelated} ${third.varyKey}` });
+    h.deps.cache.seed(keyRequest(unrelated, third.varyKey), listing([KEPT]));
+    if (evicted) {
+      await h.deps.cache.delete(keyRequest(SECOND, second.varyKey));
+      await h.deps.cache.delete(keyRequest(SECOND, extra.varyKey));
+    }
+    if (legacy) {
+      for (const url of [CONTAINER, SECOND, THIRD]) {
+        for (const record of await h.deps.meta.getByUrl(url)) {
+          delete record.nextPages;
+          await h.deps.meta.put(record);
+        }
+      }
+    }
+    h.requests.length = 0;
+
+    expect(await handleNotification({ type: 'Delete', object: CONTAINER }, h.deps)).toEqual({
+      kind: 'deleted',
+    });
+    expect(h.requests).toEqual([]);
+    for (const url of [CONTAINER, SECOND, THIRD]) {
+      expect(await h.deps.meta.getByUrl(url)).toEqual([]);
+      expect(await h.deps.cache.match(keyRequest(url, second.varyKey))).toBeUndefined();
+    }
+    expect(await h.deps.cache.match(keyRequest(SECOND, extra.varyKey))).toBeUndefined();
+    expect(await h.deps.meta.getByUrl(unrelated)).toHaveLength(1);
+    expect(await h.deps.cache.match(keyRequest(unrelated, third.varyKey))).toBeDefined();
+    expect(h.deps.broadcast.messages).toEqual([{ url: CONTAINER, event: 'updated' }]);
+
+    h.offline();
+    // A caller retaining an opaque cursor must get an offline miss after Delete.
+    for (const url of [SECOND, THIRD]) await expect(h.storage.list(url)).rejects.toThrow();
+  });
+
+  it.each([
     { type: 'Add', evicted: false, legacy: false },
     { type: 'Remove', evicted: false, legacy: false },
     { type: 'Remove', evicted: true, legacy: false },

@@ -126,6 +126,8 @@ async function purge(
   records: CacheMetadata[],
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
+  // Retain the old pagination links until every associated cursor is evicted.
+  await evictListingPages(url, records, deps);
   // Delete EVERY cached variant's bytes for this URL (the #3 fix) + the defensive
   // canonical-Turtle orphan sweep — the shared coherence primitive (deleting only
   // a single synthetic key would leave other variants' bytes behind with no
