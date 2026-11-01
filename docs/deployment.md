@@ -45,22 +45,27 @@ records count. So every Vercel config, the suite's included, sets
 that deploys. It deploys the suite only, using `scripts/vercel-production.mjs`:
 
 - It runs on every push to `main` and every 30 minutes, always on the newest `main`.
-- It deploys when production serves an older commit, the suite's build inputs changed since
-  that commit (the same check as `scripts/vercel-ignore-build.mjs`), and the last deployment
-  this workflow made is at least two hours old. That is at most 12 deployments a day.
+- Each run first disconnects from Git any project in `scripts/vercel-apps.json` that is
+  still linked. This is idempotent; a project can be reconnected in its Vercel settings, but
+  the next run will unlink it again.
+- It deploys when the deployment production actually serves (the project's production
+  target, not merely the newest ready one) is for an older commit, the suite's build inputs
+  changed since that commit (the same check as `scripts/vercel-ignore-build.mjs`), and the
+  last deployment this workflow made is at least two hours old. That is at most 12
+  deployments a day.
 - A burst of merges therefore produces one deployment. The schedule deploys whatever `main`
   has gathered once the two-hour window reopens, so the newest commit always reaches
   production, even after a quiet day or week.
-- It skips while a deployment is building. It does not retry a commit whose deployment
-  failed; the next commit, or a forced run, does.
+- It skips while a deployment is building. A commit whose deployment failed, on Vercel or on
+  the runner (recorded as a failed `vercel-production` commit status), is retried once the
+  two-hour window has passed.
 - The build runs on the GitHub runner (`vercel build`) and uploads the output with
   `vercel deploy --prebuilt --prod`, so Vercel build minutes are not used.
 
 Setup needs a Vercel access token for the team in the repository secret `VERCEL_TOKEN`.
-Without it the workflow logs a warning and deploys nothing. Run the workflow by hand with
-**disconnect_git** once to unlink every project in `scripts/vercel-apps.json` from Git; a
-project can be reconnected in its Vercel settings. A manual run with **force** deploys at
-once, ignoring the window.
+Without it the workflow logs a warning and deploys nothing. A manual run with **force**
+deploys at once, even when production already serves `main`, ignoring the window; it still
+waits for a deployment that is already building.
 
 ## Building locally
 

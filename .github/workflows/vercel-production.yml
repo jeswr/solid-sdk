@@ -15,16 +15,14 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: Deploy main now, ignoring the two-hour window and the unchanged-inputs skip
-        type: boolean
-        default: false
-      disconnect_git:
-        description: Disconnect the Git integration from every project in scripts/vercel-apps.json
+        description: Deploy main now, even if production already serves it or the window is shut
         type: boolean
         default: false
 
 permissions:
   contents: read
+  # Records a failed deployment of a commit, so the next run waits a window before retrying.
+  statuses: write
 
 # Runs queue rather than cancel, so a deployment in progress is never interrupted.
 concurrency:
@@ -51,15 +49,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - name: Disconnect Git from the Vercel projects
-        if: inputs.disconnect_git
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: node scripts/vercel-production.mjs disconnect-git
+      # Also unlinks any Vercel project still connected to Git, so pushes create no records.
       - name: Decide whether to deploy
         id: plan
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force && 'true' || 'false' }}
         run: node scripts/vercel-production.mjs plan
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
@@ -87,3 +82,12 @@ jobs:
           url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz \
             --meta "suiteCommitSha=$SHA" --token "$VERCEL_TOKEN")
           echo "Deployed $SHA: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Record the failed deployment
+        if: failure() && steps.plan.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=failure \
+            -f context=vercel-production -f description="Vercel production deployment failed" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

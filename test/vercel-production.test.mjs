@@ -2,7 +2,12 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { commitMetaKey, decide, minIntervalMs } from "../scripts/vercel-production.mjs";
+import {
+  commitMetaKey,
+  decide,
+  minIntervalMs,
+  statusContext,
+} from "../scripts/vercel-production.mjs";
 
 const now = Date.parse("2026-11-01T12:00:00Z");
 const head = "h".repeat(40);
@@ -18,8 +23,19 @@ function deployment(state, commit, ageMs, own = true) {
   };
 }
 
-function plan(deployments, options = {}) {
-  return decide({ head, deployments, now, inputsChanged: () => true, ...options });
+// Production serves `serving` unless a test passes its own production target.
+function plan(
+  deployments,
+  { serving = deployments.find((d) => d.state === "READY"), ...options } = {},
+) {
+  return decide({
+    head,
+    production: serving ?? null,
+    deployments,
+    now,
+    inputsChanged: () => true,
+    ...options,
+  });
 }
 
 describe("vercel-production plan", () => {
@@ -29,7 +45,7 @@ describe("vercel-production plan", () => {
     expect(decision.reason).toContain(old);
   });
 
-  it("deploys a first time when there is no ready production deployment", () => {
+  it("deploys a first time when nothing is in production", () => {
     expect(plan([]).deploy).toBe(true);
   });
 
@@ -46,23 +62,33 @@ describe("vercel-production plan", () => {
   });
 
   it("skips when production already serves main", () => {
-    const decision = plan([deployment("READY", head, minIntervalMs * 3)], { force: true });
+    const decision = plan([deployment("READY", head, minIntervalMs * 3)]);
     expect(decision.deploy).toBe(false);
     expect(decision.reason).toContain("already serves");
+  });
+
+  it("trusts the production target over the newest READY deployment", () => {
+    const staged = deployment("READY", head, minIntervalMs * 3);
+    const live = deployment("READY", old, minIntervalMs * 4);
+    expect(plan([staged, live], { serving: live }).deploy).toBe(true);
+    expect(plan([staged, live], { serving: staged }).deploy).toBe(false);
   });
 
   it("recognises git-created production deployments by their GitHub commit", () => {
     expect(plan([deployment("READY", head, minutes(5), false)]).deploy).toBe(false);
   });
 
-  it("skips while a deployment is in flight", () => {
+  it("skips while a deployment is in flight, even when forced", () => {
     for (const state of ["BUILDING", "INITIALIZING", "QUEUED"]) {
-      const decision = plan([
+      const deployments = [
         deployment(state, head, minutes(1)),
         deployment("READY", old, minIntervalMs * 2),
-      ]);
-      expect(decision).toMatchObject({ deploy: false });
-      expect(decision.reason).toContain(state);
+      ];
+      for (const force of [false, true]) {
+        const decision = plan(deployments, { force });
+        expect(decision).toMatchObject({ deploy: false });
+        expect(decision.reason).toContain(state);
+      }
     }
   });
 
@@ -79,31 +105,38 @@ describe("vercel-production plan", () => {
     expect(decision.reason).toContain("no suite build inputs changed");
   });
 
-  it("does not retry a commit whose last deployment failed", () => {
-    const deployments = [
-      deployment("ERROR", head, minIntervalMs * 3),
-      deployment("READY", old, minIntervalMs * 4),
-    ];
-    expect(plan(deployments).deploy).toBe(false);
-    expect(plan(deployments, { head: "n".repeat(40) }).deploy).toBe(true);
+  it("retries a failed Vercel deployment of main once the window has passed", () => {
+    const live = deployment("READY", old, minIntervalMs * 10);
+    const recent = [deployment("ERROR", head, minutes(30)), live];
+    expect(plan(recent, { serving: live }).reason).toContain("retrying after");
+    expect(plan(recent, { serving: live }).deploy).toBe(false);
+    const stale = [deployment("ERROR", head, minIntervalMs * 3), live];
+    expect(plan(stale, { serving: live }).deploy).toBe(true);
+  });
+
+  it("waits a window after a runner-side failure recorded as a commit status", () => {
+    const live = deployment("READY", old, minIntervalMs * 10);
+    expect(plan([live], { headFailedAt: now - minutes(20) }).deploy).toBe(false);
+    expect(plan([live], { headFailedAt: now - minIntervalMs }).deploy).toBe(true);
   });
 
   it("throttles on workflow deployments only, never on cancelled git-created records", () => {
-    const deployments = [
-      deployment("CANCELED", head, minutes(1), false),
-      deployment("READY", old, minIntervalMs + minutes(5)),
-    ];
-    expect(plan(deployments).deploy).toBe(true);
+    const live = deployment("READY", old, minIntervalMs + minutes(5));
+    const deployments = [deployment("CANCELED", head, minutes(1), false), live];
+    expect(plan(deployments, { serving: live }).deploy).toBe(true);
     deployments.push(deployment("ERROR", "e".repeat(40), minutes(10)));
-    expect(plan(deployments).deploy).toBe(false);
+    expect(plan(deployments, { serving: live }).deploy).toBe(false);
   });
 
-  it("lets a forced run skip the window, unchanged-input and failed-commit checks", () => {
-    const deployments = [
-      deployment("ERROR", head, minutes(5)),
-      deployment("READY", old, minutes(10)),
-    ];
-    const decision = plan(deployments, { force: true, inputsChanged: () => false });
+  it("lets a forced run redeploy the live commit and skip the window and failure checks", () => {
+    const live = deployment("READY", head, minutes(10));
+    const deployments = [deployment("ERROR", head, minutes(5)), live];
+    const decision = plan(deployments, {
+      serving: live,
+      force: true,
+      headFailedAt: now - minutes(1),
+      inputsChanged: () => false,
+    });
     expect(decision.deploy).toBe(true);
     expect(decision.reason).toMatch(/^forced: /);
   });
@@ -122,8 +155,9 @@ describe("vercel-production workflow", () => {
     expect(workflow).toContain("    if: github.ref == 'refs/heads/main'");
   });
 
-  it("queues runs without cancelling and keeps repository credentials read-only", () => {
-    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  it("queues runs without cancelling and grants only read and status permissions", () => {
+    const permissions = /^permissions:\n((?: {2}.*\n)+)/m.exec(workflow)?.[1] ?? "";
+    expect(permissions.replace(/^ {2}#.*\n/gm, "")).toBe("  contents: read\n  statuses: write\n");
     expect(workflow).toMatch(/^ {2}cancel-in-progress: false$/m);
   });
 
@@ -131,6 +165,11 @@ describe("vercel-production workflow", () => {
     expect(workflow).toMatch(/ref: main\n {10}fetch-depth: 0/);
     expect(workflow).toContain(`--meta "${commitMetaKey}=$SHA"`);
     expect(workflow).toMatch(/VERCEL_CLI: vercel@\d+\.\d+\.\d+$/m);
+  });
+
+  it("records failed deployments under the status context the plan reads", () => {
+    expect(workflow).toContain("if: failure() && steps.plan.outputs.deploy == 'true'");
+    expect(workflow).toContain(`-f context=${statusContext}`);
   });
 
   it("keeps the token out of the build step", () => {
