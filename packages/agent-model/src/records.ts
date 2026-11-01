@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Strict channel-neutral pod records. Parsing establishes structure, never authority. */
 import { z } from "zod";
 import { isIri } from "./core/canonical.js";
@@ -58,18 +59,54 @@ export const actionIntentSchema = z.strictObject({
   conversation: iri,
 });
 
-const account = z.strictObject({
-  type: z.literal("account"),
-  id: iri,
-  channel: nonempty,
-  provider: nonempty,
-  organisation: text.optional(),
-  label: text.optional(),
-  channelHandleHash: nonempty,
-  bindingState: bindingStateSchema,
-  credentialRef: nonempty.optional(),
-  restrictions: restrictionsSchema,
+/** Registry observations are inventory, never owner settings or evidence of live access. */
+export const accountInventorySchema = z.strictObject({
+  channelHandles: z.array(nonempty).max(20),
+  credentialRefs: z.array(nonempty).max(20),
+  setupStatus: nonempty,
+  observedAt: text.optional(),
+  lastTested: text.optional(),
+  evidence: z
+    .array(
+      z.strictObject({
+        channel: nonempty,
+        provider: nonempty,
+        handleHash: nonempty,
+        observedOn: nonempty,
+        method: text,
+      }),
+    )
+    .max(512),
+  identityConflicts: z
+    .array(
+      z.strictObject({
+        kind: z.enum(["identity-mismatch", "provider-mismatch"]),
+        handleHashes: z.array(nonempty).max(512),
+      }),
+    )
+    .max(512),
 });
+export type AccountInventory = z.infer<typeof accountInventorySchema>;
+
+const account = z
+  .strictObject({
+    type: z.literal("account"),
+    id: iri,
+    channel: nonempty,
+    provider: nonempty,
+    organisation: text.optional(),
+    label: text.optional(),
+    channelHandleHash: nonempty.optional(),
+    bindingState: bindingStateSchema,
+    credentialRef: nonempty.optional(),
+    restrictions: restrictionsSchema,
+    inventory: accountInventorySchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.channelHandleHash !== undefined || value.inventory?.channelHandles.length === 0,
+    "an account without a handle must have an empty inventory handle list",
+  );
 const channelCapability = z.strictObject({
   type: z.literal("channel-capability"),
   id: iri,

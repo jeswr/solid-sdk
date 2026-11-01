@@ -1,6 +1,6 @@
 ---
 name: personal-agent
-description: Maintain the imported personal-agent M1 and September pilot, its Reader/Actor/outbox split, synthetic bindings, credentials seams, dashboard, and triage until extraction into agent-* packages.
+description: Use when maintaining the imported personal-agent M1 and September pilot, its Reader/Actor/outbox split, synthetic bindings, credentials seams, dashboard, and triage until extraction into agent-* packages.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

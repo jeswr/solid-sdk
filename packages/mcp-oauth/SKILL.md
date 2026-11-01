@@ -1,6 +1,6 @@
 ---
 name: mcp-oauth
-description: Implement or integrate the MCP OAuth authorization server, its metadata, public clients, consent callback, pod broker seam, signed tokens and grant stores.
+description: Use when implementing or integrating the MCP OAuth authorization server, its metadata, public clients, consent callback, pod broker seam, signed tokens and grant stores.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

@@ -21,7 +21,7 @@ For the component API, [packages/app-shell/SKILL.md](../../packages/app-shell/SK
 # App shell — optimistic, non-blocking pod mutations
 
 Read the companion [`AGENTS.md`](../../AGENTS.md)
-first; pairs with the [`solid-offline`](../solid-offline/SKILL.md)
+first; pairs with the [`solid-offline-patterns`](../solid-offline-patterns/SKILL.md)
 skill (instant-load reads) — this one is the **write** side of the same "the app feels instant" goal.
 
 A pod write is a network round-trip (often a conditional PUT/PATCH plus a refresh). Blocking the
