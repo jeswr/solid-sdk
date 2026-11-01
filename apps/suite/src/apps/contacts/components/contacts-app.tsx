@@ -16,6 +16,7 @@ import {
 } from "../state/contacts-context";
 import { encodeContactRef } from "../state/data";
 import { ContactDetail } from "./contact-detail";
+import { ContactExport } from "./contact-export";
 import { ContactsList } from "./contacts-list";
 
 const ignoreFailure = () => {}; // The controller reports and reconciles write errors.
@@ -150,6 +151,7 @@ function Sidebar() {
         </Button>
       )}
       {link("/contacts/import", "Import", <Download size={18} aria-hidden="true" />)}
+      <ContactExport contacts={data.people.map((person) => person.data)} all />
     </div>
   );
 }
@@ -199,6 +201,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
   const state = useAddressBook();
   const match = /^\/contacts\/c\/([^/]+)$/.exec(pathname);
   const ref = match?.[1];
+  const formRoute = pathname === "/contacts/new" || /^\/contacts\/c\/[^/]+\/edit$/.test(pathname);
   const [wide, setWide] = useState(false);
   const returnPath = useRef("/contacts");
   const openedId = useRef<string | null>(null);
@@ -215,9 +218,8 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     pathname === "/contacts" ||
     pathname === "/contacts/starred" ||
     pathname.startsWith("/contacts/label/");
-  if (listRoute)
-    returnPath.current =
-      pathname + (params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : "");
+  if (listRoute) returnPath.current = pathname + (params.toString() ? `?${params.toString()}` : "");
+  if (pathname === "/contacts/new") returnPath.current = "/contacts";
   const close = () => {
     restoreFocus.current = true;
     router.push(returnPath.current);
@@ -234,9 +236,9 @@ function ContactsChrome({ children }: { children: ReactNode }) {
       );
       const target =
         person?.closest<HTMLElement>("[data-collection-item]") ??
-        (!state.data.people.some((person) => `${person.url}#this` === openedId.current)
-          ? host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']")
-          : null);
+        host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']") ??
+        host?.querySelector<HTMLElement>("[data-collection-item]") ??
+        host?.querySelector<HTMLElement>(".con-list button, .con-list a");
       if (!target) return;
       target.focus({ preventScroll: true });
       restoreFocus.current = false;
@@ -248,7 +250,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [listRoute, state.data.people]);
+  }, [listRoute]);
   useEffect(() => {
     if (!ref) return;
     const key = (event: KeyboardEvent) => {
@@ -266,7 +268,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     return () => removeEventListener("keydown", key);
   });
   const detail = ref ? <ContactDetail contactRef={ref} onClose={close} /> : undefined;
-  const basePath = ref ? (returnPath.current.split("?")[0] as string) : pathname;
+  const basePath = ref || formRoute ? (returnPath.current.split("?")[0] as string) : pathname;
   return (
     <SuiteFrame
       app="contacts"
@@ -285,7 +287,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
         <div className="con-save" role="status" aria-live="polite">
           {state.saving ? "Saving…" : ""}
         </div>
-        {(listRoute || ref) && (
+        {(listRoute || ref || (formRoute && wide)) && (
           <>
             <div
               ref={listHost}
@@ -312,7 +314,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
                   if (!state.book) return;
                   openedId.current = contact.id;
                   router.push(
-                    `/contacts/c/${encodeContactRef(state.book.url, contact.id)}${params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : ""}`,
+                    `/contacts/c/${encodeContactRef(state.book.url, contact.id)}${params.toString() ? `?${params.toString()}` : ""}`,
                   );
                 }}
               />
