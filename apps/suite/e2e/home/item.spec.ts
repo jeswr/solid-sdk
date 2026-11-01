@@ -64,6 +64,8 @@ test("scenario 3: contact detail, saved name, and a concurrent demo pod write", 
   await page.getByRole("link", { name: "Socials", exact: true }).click();
   await expect(page.getByRole("link", { name: "Ada Lovelace", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Ada Lovelace", exact: true }).click();
+  await expect(page).toHaveURL(/\/home\/socials\/i\//);
+  await expect(page.getByRole("heading", { level: 1, name: "Ada Lovelace" })).toBeVisible();
   const route = page.url();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Name (required)", { exact: true }).fill("My Ada");
