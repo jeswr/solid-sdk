@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Owner dashboard
 
 A local web dashboard for the personal agent's owner: which accounts exist and what is known
@@ -209,74 +210,19 @@ Localhost is not authentication. The dashboard applies these protections:
 - **Files:** only four static files are served. Errors are short and contain no paths, stacks
   or secrets.
 
-## Optional hosted triage (TypeSafe Jev)
+## Local message triage
 
-Triage suggests a kind of message (needs_reply, action, waiting, read_later, fyi, noise) and,
-separately, urgency (urgent / not_urgent). Every axis can be "uncertain", which means the agent
-asks you. A suggestion never permits an action.
+A-011 retired the TypeSafe adapter and the dashboard's hosted triage path. Legacy
+`TYPESAFE_API_KEY` and `TYPESAFE_MODEL` values are ignored. Hosted requests return
+`not-allowed` and continue through the local deterministic baseline; no sample is transmitted.
 
-- Text carrying an agent-protocol marker is never classified. The marker proves nothing; the
-  agent's protocol validation decides what such a message is.
-- Local keyword rules always run. They are deliberately low-confidence, so they always ask.
-- The hosted classifier runs only when **all** of these hold:
-  - `TYPESAFE_API_KEY` is set in the environment of `npm run dashboard`;
-  - hosted triage is turned on in the dashboard;
-  - you confirm sending **this** sample;
-  - for a sample linked to an account, that account allows read, triage and hosted triage,
-    and the policy allows `classify`.
-- A sample linked to no account is a synthetic sandbox. In this version, samples must be
-  declared synthetic; no inbox is read.
+Local keyword rules remain deliberately low-confidence and never authorize an action.
+Agent-protocol markers bypass classification. Account restrictions still apply and samples
+must be declared synthetic. Provider-backed extraction belongs to `@jeswr/agent-model-gateway`.
 
-### Enabling it
-
-1. Create an account at the official console, <https://console.typesafe.ai>. Do not use
-   look-alike gateways. Read the [data processing terms](https://typesafe.ai/legal/data-processing)
-   first: TypeSafe says input is not used for training, but default retention for API input is
-   not stated, and zero retention is an enterprise option.
-2. Create an API key there and keep it in your own secret store. Never paste it into the page
-   or a chat.
-3. Start the dashboard with the key in its environment, without typing the key into the
-   command (to keep it out of shell history):
-
-   ```sh
-   read -rs TYPESAFE_API_KEY && export TYPESAFE_API_KEY && npm run dashboard
-   ```
-
-   Optionally pin another version with `TYPESAFE_MODEL=jev-X.Y.Z`. Aliases such as `jev-latest`
-   are refused; the default is `jev-1.13.0`.
-4. Turn hosted triage on in *Message triage*, and try a synthetic sample with "Send this sample
-   to TypeSafe" ticked.
-
-### What is sent
-
-Only the sample's sender, subject and body are sent, with the category descriptions, to the
-fixed endpoint `https://api.typesafe.ai/v1/systemone`. Each request is bounded to 10 seconds and
-a 64 KiB answer.
-
-Every answer is validated. The dashboard requires:
-
-- JSON content;
-- the pinned model version;
-- the exact answer set;
-- complete distributions that sum to one;
-- a chosen label with maximal probability.
-
-Failures, rate limits, invalid answers, low confidence or a low chosen-label probability all
-mean "ask the owner". The key is never shown, stored, logged or returned.
-
-### Evaluation
-
-```sh
-npm run triage:eval
-```
-
-This evaluates the local baseline on 24 labelled synthetic messages and writes
-`reports/triage-eval-report.json` (counts, confusion matrix, errors). The thresholds (0.8) are
-**uncalibrated**. No quality or cost claim follows from the tests or this corpus.
-
-A hosted run needs the key in the environment and the explicit flag
-`--send-synthetic-corpus-to-typesafe`. A real evaluation needs a larger, owner-labelled,
-held-out corpus (see `../reports/JEV-ASSESSMENT.md`).
+`pnpm run triage:eval` evaluates local rules on the 24 labelled synthetic messages and writes
+`reports/triage-eval-report.json`. Thresholds remain uncalibrated; no quality or cost claim
+follows from this corpus. Hosted evaluation is no longer available.
 
 ## Verification
 

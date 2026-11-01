@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-audit",
   "version": "0.1.0",
   "private": true,
-  "description": "System-written audit ledger (experimental scaffold).",
+  "description": "Hash-chained audit ledger, PROV pod mirror and independent auditor.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -24,7 +24,8 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "bin"
   ],
   "scripts": {
     "build": "pnpm -w exec tsc -p packages/agent-audit/tsconfig.json",
@@ -33,6 +34,23 @@
     "test": "pnpm -w exec vitest run --root packages/agent-audit --coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10"
+    "@vitest/coverage-v8": "^4.1.10",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@solid/community-server": "7.2.0",
+    "componentsjs": "5.5.1"
+  },
+  "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/agent-mandate": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "bin": {
+    "audit": "./bin/audit.mjs"
   }
 }

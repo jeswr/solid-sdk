@@ -2,7 +2,7 @@
   "name": "@jeswr/app-agent-daemon",
   "version": "0.1.0",
   "private": true,
-  "description": "Host-neutral daemon composition (experimental scaffold).",
+  "description": "Host-neutral agent daemon, control watcher, scheduler and awp CLI.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -24,12 +24,41 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "bin"
   ],
   "scripts": {
     "build": "pnpm -w exec tsc -p apps/agent-daemon/tsconfig.json",
     "typecheck": "pnpm -w exec tsc -p apps/agent-daemon/tsconfig.json --noEmit && pnpm -w exec tsc -p apps/agent-daemon/tsconfig.test.json",
     "lint": "pnpm -w exec biome check apps/agent-daemon",
     "test": "pnpm -w exec vitest run --root apps/agent-daemon"
+  },
+  "dependencies": {
+    "@jeswr/agent-audit": "workspace:*",
+    "@jeswr/agent-channels": "workspace:*",
+    "@jeswr/agent-credentials": "workspace:*",
+    "@jeswr/agent-executor": "workspace:*",
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/agent-model-gateway": "workspace:*",
+    "@jeswr/agentic-legacy-bridge": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-auth": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1",
+    "@jeswr/agent-mandate": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@solid/community-server": "7.2.0",
+    "componentsjs": "5.5.1",
+    "@jeswr/guarded-fetch": "workspace:*"
+  },
+  "bin": {
+    "awp": "./bin/awp.mjs"
   }
 }

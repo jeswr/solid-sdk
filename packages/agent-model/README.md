@@ -8,6 +8,11 @@
 Channel-neutral interaction types, bounded message validation, conversation transitions,
 canonical digests and RDF mappings for the ten pod record families in agent DESIGN §2.4.
 
+The local `transmission-settled` conversation event records executor delivery evidence by
+action proposal in `state.transmissions`, including after conversation closure. It does not
+consume a protocol message or change agreement performance outcomes or phase. Protocol
+`receipt` messages must reference the active agreement and remain the performance contract.
+
 ```ts
 import { toRdf, fromRdf, recordToTurtle, recordFromTurtle } from '@jeswr/agent-model';
 import { exampleRecords } from '@jeswr/agent-model/testing';

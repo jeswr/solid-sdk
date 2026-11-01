@@ -37,7 +37,7 @@ export type ProviderLookupResult =
 /** No effect occurs unless the executor explicitly enables the injected transport. */
 export interface TransmissionIo {
   readonly account: AccountRef;
-  readonly tokens: TokenProvider;
+  readonly tokens: Pick<TokenProvider, "send">;
   readonly dryRun?: boolean;
 }
 /** Scope-separated grants, obtained through different provider consent paths. */
