@@ -4,7 +4,7 @@ import { PodScopeError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
 import { expect, it } from "vitest";
 import { PhotoIoError, photoStorage } from "../../src/apps/photos/lib/model/io.js";
-import { purgePhoto, trashPhoto } from "../../src/apps/photos/lib/model/trash.js";
+import { purgePhoto, restorePhoto, trashPhoto } from "../../src/apps/photos/lib/model/trash.js";
 import type { ImageEncoder } from "../../src/apps/photos/lib/model/upload.js";
 import { tiffFixture } from "./fixtures.js";
 import { mockPod } from "./pod.js";
@@ -63,6 +63,59 @@ it("creates containers safely and reads typed LDP listings", async () => {
   pod.failures.set(`PUT ${root}thumbs/`, 403);
   await expect(io.ensureContainers(["thumbs/"])).rejects.toMatchObject({ status: 403 });
 });
+it.each([
+  "BasicContainer",
+  "Container",
+])("accepts a container PUT conflict only after reading its LDP %s type", async (type) => {
+  const pod = mockPod({ existingContainerStatus: 409 });
+  const io = photoStorage(pod.fetch, storage);
+  const existing = {
+    body: `<> a <http://www.w3.org/ns/ldp#${type}>.`,
+    type: "text/turtle",
+    etag: '"container"',
+  };
+  pod.files.set(io.root, existing);
+  await io.ensureContainers([""]);
+  expect(pod.files.get(io.root)).toBe(existing);
+  expect(pod.fetch.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["PUT", "GET"]);
+  expect(new Headers(pod.fetch.mock.calls[1]?.[1]?.headers).get("cache-control")).toBe("no-cache");
+});
+it.each([
+  "",
+  "<> a <http://www.w3.org/ns/ldp#Resource>.",
+  "<other/> a <http://www.w3.org/ns/ldp#Container>.",
+])("preserves a container conflict for a non-container representation (%j)", async (body) => {
+  const pod = mockPod({ existingContainerStatus: 409 });
+  const io = photoStorage(pod.fetch, storage);
+  const existing = { body, type: "text/turtle", etag: '"resource"' };
+  pod.files.set(io.root, existing);
+  await expect(io.ensureContainers(["", "thumbs/"])).rejects.toMatchObject({ status: 409 });
+  expect(pod.files.get(io.root)).toBe(existing);
+  expect(pod.files.has(`${io.root}thumbs/`)).toBe(false);
+});
+it.each([
+  404, 410, 403, 503,
+])("refuses a container conflict when its read-back fails with %s", async (status) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  pod.failures.set(`PUT ${io.root}`, 409);
+  pod.failures.set(`GET ${io.root}`, status);
+  await expect(io.ensureContainers(["", "thumbs/"])).rejects.toMatchObject({
+    status: status === 404 || status === 410 ? 409 : status,
+  });
+  expect(pod.files.size).toBe(0);
+});
+it("refuses malformed container RDF types after a PUT conflict", async () => {
+  const pod = mockPod({ existingContainerStatus: 409 });
+  const io = photoStorage(pod.fetch, storage);
+  pod.files.set(io.root, {
+    body: '<> a "container".',
+    type: "text/turtle",
+    etag: '"malformed"',
+  });
+  await expect(io.ensureContainers(["", "thumbs/"])).rejects.toThrow();
+  expect(pod.files.size).toBe(1);
+});
 it("uses ETags for deletion and exposes fetch/HTTP errors", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);
@@ -118,6 +171,29 @@ it("uploads original, thumbnail, then metadata with create-only preconditions", 
   pod.failures.set(`PUT ${storage}photos/thumbs/b.webp`, 507);
   await expect(io.uploadPhotos([next], encoder, now)).rejects.toMatchObject({ status: 507 });
   expect(pod.files.has(`${storage}photos/items/b.ttl`)).toBe(false);
+});
+
+it("uploads batches and later photos, then recovers trash with CSS response behavior", async () => {
+  const pod = mockPod({ existingContainerStatus: 409, putEtags: false });
+  const io = photoStorage(pod.fetch, storage);
+  const input = {
+    id: "a",
+    name: "TIFF",
+    original: new Blob([tiffFixture()], { type: "image/tiff" }),
+    stripLocation: false,
+  };
+  expect(await io.uploadPhotos([input, { ...input, id: "b" }], encoder, now)).toHaveLength(2);
+  expect(await io.uploadPhotos([{ ...input, id: "c" }], encoder, now)).toHaveLength(1);
+  const actor = `${storage}profile/card#me`;
+  const trash = await trashPhoto(io, url, "a", actor, now);
+  expect(await restorePhoto(io, trash)).toBe(url);
+  await trashPhoto(io, url, "a", actor, now);
+  await purgePhoto(io, trash);
+  expect(pod.files.has(trash)).toBe(false);
+  expect(pod.files.has(`${io.root}originals/a.tif`)).toBe(false);
+  expect(pod.files.has(`${io.root}thumbs/a.webp`)).toBe(false);
+  for (const id of ["b", "c"])
+    expect((await io.loadPhoto(`${io.root}items/${id}.ttl`)).photo?.name).toBe("TIFF");
 });
 
 it.each([

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
@@ -48,6 +49,15 @@ export const RECORD_MAPPINGS: Readonly<
       channelHandleHash: f("channelHandle"),
       bindingState: f("bindingState"),
       credentialRef: f("credentialRef"),
+      inventory: object("inventory", {
+        channelHandles: sequence("channelHandles", "string"),
+        credentialRefs: sequence("credentialRefs", "string"),
+        setupStatus: f("setupStatus"),
+        observedAt: f("observedAt"),
+        lastTested: f("lastTested"),
+        evidence: sequence("historicEvidence", "json"),
+        identityConflicts: sequence("identityConflict", "json"),
+      }),
       restrictions: object("restrictions", {
         read: f("read", "boolean"),
         triage: f("triage", "boolean"),

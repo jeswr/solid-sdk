@@ -201,13 +201,10 @@ export async function seedSource(
     "private/caf%C3%A9%20%E6%BC%A2%E5%AD%97.txt",
     encode("spaces and Unicode: café 漢字 🌱\n"),
   );
-  // CSS 7.2 sends a Content-Length counted in characters, not bytes, for Turtle it re-serialises
-  // after a PATCH, truncating non-ASCII documents. The append probe PATCHes shared.ttl, so keep
-  // it ASCII; note.ttl and the Unicode file name still cover non-ASCII content.
   const sharedStore = new Store();
   const shared = new FixtureNode("urn:migration:shared", sharedStore, DataFactory);
   shared.iri(`${RDF}type`, "http://schema.org/Note");
-  shared.text("http://schema.org/text", "Shared with the stranger\nsecond line");
+  shared.text("http://schema.org/text", "Shared café — 漢字 🌱 with the stranger\nsecond line");
   files.set("shared.ttl", encode(await turtle(sharedStore)));
   files.set("authenticated/info.json", encode('{"authenticated":true}\n'));
   files.set("conflict.json", encode('{"version":"source"}\n'));

@@ -69,6 +69,30 @@ CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBi
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
 to create-only, and replace only under a strong ETag.
 
+CON-15 makes `@jeswr/pod-connectors/mail` the shared source for framework-free MAI-01
+paths, vocabulary IRIs (`src/mail/constants.ts`), `htmlToText`/`htmlToTextResult`, and MIME
+address conversion (`mailtos`). Keep constants separate from typed wrappers and keep
+`./mail` imports free of `core/` and `node/` at module load; the writer defers its existing
+provenance import to collision checks. Preserve `./mail` writer exports and `./mail/*`.
+The suite adapts relative slugs with its existing validation, including dot document IDs
+and loose attachment validation. The standalone pod-mail app shares only identical IRIs:
+never migrate its account-free percent-encoded layout here. Keep app wrappers, store,
+operations, importer orchestration and Type Index code local. MIME ID/date/References
+policies diverge and must not be merged. Contract tests cover layout, escaping, exact
+IRIs, address groups, hostile HTML search bounds and a fresh public-entry import that
+refuses framework/Node-only modules. Build before testing that published entry.
+
+HTML keyword matching must fold ASCII only and preserve offsets; never lowercase Unicode
+input then reuse original offsets. `htmlToTextResult` reports `{ text, truncated }`, scanning
+at most `MAX_HTML_INPUT_CHARS` (8,388,608 UTF-16 code units), then normalizing whitespace and
+capping visible text at `MAX_HTML_CHARS` (1,048,576 UTF-16 code units). Preserve surrogate
+pairs at both boundaries. Keep work and intermediate storage linear in the bounded window;
+leading comments/skipped blocks must not consume the visible allowance. Stored HTML-derived
+bodies append `HTML_TEXT_TRUNCATION_NOTICE` as a separate paragraph when truncated; Suite's
+per-message results also expose `bodyTruncated: true`. Keep full HTML/raw bytes and prefer
+plain MIME text. Regressions must cover Unicode around/inside skipped blocks, both bounds
+and a long leading comment through Suite's parseEmail/importMbox and connector MailWriter.
+
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
 vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Gmail supplies
 `documentId: "gmail-" + id` and a source-native thread key; validate opaque ids against
