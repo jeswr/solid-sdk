@@ -16,22 +16,13 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 
-export const MAIL_SCHEMA = "http://schema.org/";
-const SIOC = "http://rdfs.org/sioc/ns#";
-const DCT = "http://purl.org/dc/terms/";
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+import { MAIL_PREDICATES as P } from "./constants.js";
 
-export const MAIL_CLASSES = {
-  EmailMessage: `${MAIL_SCHEMA}EmailMessage`,
-  Conversation: `${MAIL_SCHEMA}Conversation`,
-  SiocThread: `${SIOC}Thread`,
-  Folder: `${MAIL_SCHEMA}Collection`,
-  MediaObject: `${MAIL_SCHEMA}MediaObject`,
-} as const;
+export { MAIL_CLASSES, MAIL_SCHEMA } from "./constants.js";
 
 class Typed extends TermWrapper {
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(this, P.type, NamedNodeAs.string, NamedNodeFrom.string);
   }
   protected iris(predicate: string): Set<string> {
     return SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string);
@@ -40,115 +31,115 @@ class Typed extends TermWrapper {
 
 export class MailMessage extends Typed {
   get subjectLine(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}headline`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.headline, LiteralAs.string);
   }
   set subjectLine(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}headline`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.headline, value, LiteralFrom.string);
   }
   get body(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}text`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.text, LiteralAs.string);
   }
   set body(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}text`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.text, value, LiteralFrom.string);
   }
   /** Decoded HTML kept as inert data; readers sanitise before rendering. */
   get bodyHtml(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}articleBody`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.articleBody, LiteralAs.string);
   }
   set bodyHtml(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}articleBody`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.articleBody, value, LiteralFrom.string);
   }
   get sender(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}sender`, NamedNodeAs.string);
+    return OptionalFrom.subjectPredicate(this, P.sender, NamedNodeAs.string);
   }
   set sender(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}sender`, value, NamedNodeFrom.string);
+    OptionalAs.object(this, P.sender, value, NamedNodeFrom.string);
   }
   get to(): Set<string> {
-    return this.iris(`${MAIL_SCHEMA}toRecipient`);
+    return this.iris(P.toRecipient);
   }
   get cc(): Set<string> {
-    return this.iris(`${MAIL_SCHEMA}ccRecipient`);
+    return this.iris(P.ccRecipient);
   }
   get bcc(): Set<string> {
-    return this.iris(`${MAIL_SCHEMA}bccRecipient`);
+    return this.iris(P.bccRecipient);
   }
   get dateSent(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}dateSent`, LiteralAs.date);
+    return OptionalFrom.subjectPredicate(this, P.dateSent, LiteralAs.date);
   }
   set dateSent(value: Date | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}dateSent`, value, LiteralFrom.dateTime);
+    OptionalAs.object(this, P.dateSent, value, LiteralFrom.dateTime);
   }
   get dateReceived(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}dateReceived`, LiteralAs.date);
+    return OptionalFrom.subjectPredicate(this, P.dateReceived, LiteralAs.date);
   }
   set dateReceived(value: Date | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}dateReceived`, value, LiteralFrom.dateTime);
+    OptionalAs.object(this, P.dateReceived, value, LiteralFrom.dateTime);
   }
   /** Presence is the read flag (pod-mail convention). */
   get dateRead(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}dateRead`, LiteralAs.date);
+    return OptionalFrom.subjectPredicate(this, P.dateRead, LiteralAs.date);
   }
   set dateRead(value: Date | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}dateRead`, value, LiteralFrom.dateTime);
+    OptionalAs.object(this, P.dateRead, value, LiteralFrom.dateTime);
   }
   get partOfThread(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}isPartOf`, NamedNodeAs.string);
+    return OptionalFrom.subjectPredicate(this, P.partOf, NamedNodeAs.string);
   }
   set partOfThread(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}isPartOf`, value, NamedNodeFrom.string);
+    OptionalAs.object(this, P.partOf, value, NamedNodeFrom.string);
   }
   get inReplyTo(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}replyToUrl`, NamedNodeAs.string);
+    return OptionalFrom.subjectPredicate(this, P.inReplyTo, NamedNodeAs.string);
   }
   set inReplyTo(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}replyToUrl`, value, NamedNodeFrom.string);
+    OptionalAs.object(this, P.inReplyTo, value, NamedNodeFrom.string);
   }
   /** The original RFC 822 source stored beside the message document. */
   get encoding(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}encoding`, NamedNodeAs.string);
+    return OptionalFrom.subjectPredicate(this, P.encoding, NamedNodeAs.string);
   }
   set encoding(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}encoding`, value, NamedNodeFrom.string);
+    OptionalAs.object(this, P.encoding, value, NamedNodeFrom.string);
   }
   get identifier(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}identifier`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.identifier, LiteralAs.string);
   }
   set identifier(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}identifier`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.identifier, value, LiteralFrom.string);
   }
   get folderIris(): Set<string> {
-    return this.iris(`${SIOC}has_container`);
+    return this.iris(P.container);
   }
   get attachments(): Set<string> {
-    return this.iris(`${MAIL_SCHEMA}messageAttachment`);
+    return this.iris(P.messageAttachment);
   }
 }
 
 /** Shared by threads (`schema:Conversation`) and folders (`schema:Collection`). */
 export class MailCollection extends Typed {
   get title(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${DCT}title`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.title, LiteralAs.string);
   }
   set title(value: string | undefined) {
-    OptionalAs.object(this, `${DCT}title`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.title, value, LiteralFrom.string);
   }
   get members(): Set<string> {
-    return this.iris(`${MAIL_SCHEMA}hasPart`);
+    return this.iris(P.hasPart);
   }
 }
 
 export class MailAttachment extends Typed {
   get name(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}name`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.name, LiteralAs.string);
   }
   set name(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}name`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.name, value, LiteralFrom.string);
   }
   get contentType(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}encodingFormat`, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, P.encodingFormat, LiteralAs.string);
   }
   set contentType(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}encodingFormat`, value, LiteralFrom.string);
+    OptionalAs.object(this, P.encodingFormat, value, LiteralFrom.string);
   }
 }

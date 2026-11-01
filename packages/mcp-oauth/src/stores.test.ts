@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { fixture, RESOURCE, SESSION } from "../test/fixtures.js";
 import { mediaType, object, parameter, readBody, secureUrl } from "./protocol.js";
@@ -47,6 +48,15 @@ describe("memory store atomicity and isolation", () => {
     await store.revoke("grant");
     expect((await store.get("grant"))?.revoked).toBe(true);
     await expect(store.put("grant", value)).rejects.toThrow("exists");
+  });
+
+  it("retains idempotent session tombstones independently of grant records", async () => {
+    const store = new MemoryGrantStore();
+    expect(await store.isSessionRevoked(SESSION.id)).toBe(false);
+    await Promise.all([store.revokeSession(SESSION.id), store.revokeSession(SESSION.id)]);
+    await store.revoke("missing");
+    expect(await store.isSessionRevoked(SESSION.id)).toBe(true);
+    expect(await store.isSessionRevoked("other-session")).toBe(false);
   });
 });
 

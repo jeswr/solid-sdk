@@ -1,5 +1,5 @@
 ---
-name: solid-fetch-rdf
+name: fetch-rdf
 description: Use when fetching or parsing RDF with @jeswr/fetch-rdf, handling RdfFetchError, retaining ETags for conditional writes, or choosing the sanctioned Solid RDF read path.
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: rdf-serialize
-description: Work on @jeswr/rdf-serialize, the shared Turtle-family and context-free JSON-LD writer and IRI safety helpers.
+description: Use when working on @jeswr/rdf-serialize, the shared Turtle-family and context-free JSON-LD writer and IRI safety helpers.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

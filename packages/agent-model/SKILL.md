@@ -1,6 +1,6 @@
 ---
 name: agent-model
-description: Use the channel-neutral agent core, canonical digests, vocabulary and typed pod record RDF mappings.
+description: Use when working with the channel-neutral agent core, its canonical digests, vocabulary and typed pod record RDF mappings.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->

@@ -1,5 +1,5 @@
 ---
-name: solid-offline
+name: solid-offline-patterns
 description: Use when a Solid app flashes a loading screen on reopen, needs a durable WebID-scoped snapshot with background revalidation, leaks cached data across account switches, or must round-trip Date/Set/Map values safely. The package skill governs the solid-offline service-worker API; this skill supplies app caching patterns.
 ---
 

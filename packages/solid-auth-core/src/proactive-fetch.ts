@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported verbatim — plus the pristine-brand integration — from
 // @jeswr/solid-elements `src/auth/proactive-fetch.ts` (Opus 4.8-authored original,
 // task #123); this package is now its home, solid-elements will re-export.)
@@ -76,8 +77,14 @@
 // PUBLIC profile read that must stay credential-free.)
 
 import { computeAllowedOrigins, isOriginAllowed, isUseDpopNonceChallenge } from "./controller.js";
+import {
+  type CredentialedHopResult,
+  fetchPassthrough,
+  fetchWithCredentialedRedirects,
+  hasCredentialHeaders,
+} from "./credentialed-redirects.js";
 import { brandFetchWrapper, resolvePristineFetch } from "./pristine.js";
-import { requestHref } from "./request.js";
+import { deriveRequest, requestHref } from "./request.js";
 
 /**
  * The structural TokenProvider surface this wrapper drives. The consuming app supplies its
@@ -314,6 +321,8 @@ export interface ProactiveFetchConfig {
 function shouldAttachToken(state: ProactiveFetchState, request: Request): boolean {
   const href = requestHref(request);
   if (href === undefined || !isOriginAllowed(state.allowedOrigins, href)) return false;
+  // Browser no-cors header guards cannot carry the SDK's Authorization/DPoP.
+  if (request.mode === "no-cors") return false;
   // OPTIONAL OAuth bypass (#123 PM parity): when issuer origins are supplied, never wrap the
   // provider's OWN discovery/token/refresh calls (would clobber oauth4webapi's headers / recurse).
   if (state.issuerOrigins && isProviderOAuthRequest(request, state.issuerOrigins)) return false;
@@ -360,15 +369,37 @@ export async function proactiveAuthenticatedFetch(
   init?: RequestInit,
   config?: ProactiveFetchConfig,
 ): Promise<Response> {
+  const request = deriveRequest(input as RequestInfo, init);
+  if (!state.provider || !shouldAttachToken(state, request)) {
+    return fetchPassthrough(base, request);
+  }
+  return fetchWithCredentialedRedirects(
+    request,
+    init,
+    (next) => !!state.provider && shouldAttachToken(state, next),
+    (hop) => proactiveAuthenticatedHop(state, base, hop, config),
+  );
+}
+
+/** One checked hop, including the existing bounded 401 re-upgrade. */
+async function proactiveAuthenticatedHop(
+  state: ProactiveFetchState,
+  base: typeof fetch,
+  request: Request,
+  config?: ProactiveFetchConfig,
+): Promise<CredentialedHopResult> {
   const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
-  const request = new Request(input as RequestInfo, init);
+  const fallback = async (source: Request): Promise<CredentialedHopResult> => ({
+    response: await fetchPassthrough(base, source),
+    followRedirects: false,
+  });
   const { provider } = state;
   // The credential gate — re-evaluated live every request, fail-closed for an empty set or
   // an unparseable URL (delegated to the seam's `isOriginAllowed`), plus the two OPTIONAL
   // #123-PM seams (the provider-internal-OAuth bypass + the session-liveness gate). When
   // neither optional seam is supplied this is EXACTLY the prior pod-drive gate.
   if (!provider || !shouldAttachToken(state, request)) {
-    return base(request);
+    return fallback(request);
   }
   // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the body, but
   // request streams are single-use once fetched. clone() tees the stream while bodyUsed is
@@ -385,11 +416,13 @@ export async function proactiveAuthenticatedFetch(
   try {
     upgraded = await provider.upgrade(request);
   } catch (e) {
-    if (isSuperseded(e)) return base(retrySource);
+    if (isSuperseded(e)) return fallback(retrySource);
     throw e;
   }
-  const response = await base(upgraded);
-  if (response.status !== 401) return response;
+  const response = await fetchPassthrough(base, upgraded);
+  if (response.status !== 401) {
+    return { response, followRedirects: upgraded !== request && hasCredentialHeaders(upgraded) };
+  }
   // ONE bounded retry. The single re-`upgrade()` re-mints a FRESH DPoP proof (new jti/iat)
   // for the same request — recovering the common case where the first proof was stale (clock
   // skew / a server that wants a fresh proof). `pureNonce` records whether the 401 was an
@@ -407,7 +440,7 @@ export async function proactiveAuthenticatedFetch(
   // bypass + the liveness gate are re-evaluated on the retry too (the live state may have
   // changed mid-flight). `retrySource` carries the same URL/headers as the original request.
   if (!state.provider || !shouldAttachToken(state, retrySource)) {
-    return base(retrySource);
+    return fallback(retrySource);
   }
   // Tee the body ONCE MORE before the retry upgrade: `upgrade` builds a new Request from its
   // argument, which can consume the source body stream — so if the retry upgrade itself
@@ -420,13 +453,16 @@ export async function proactiveAuthenticatedFetch(
   try {
     retried = await state.provider.upgrade(retrySource);
   } catch (e) {
-    if (isSuperseded(e)) return base(retryFallback);
+    if (isSuperseded(e)) return fallback(retryFallback);
     throw e;
   }
   // (pureNonce is currently informational — see the NOTE above; referenced so a future
   // nonce-aware retry can branch on it without an unused-variable churn.)
   void pureNonce;
-  return base(retried);
+  return {
+    response: await fetchPassthrough(base, retried),
+    followRedirects: retried !== retrySource && hasCredentialHeaders(retried),
+  };
 }
 
 /**
