@@ -19,6 +19,9 @@ export function createPodToolRegistry(pod: PodPort, readOnly?: boolean, clientIn
 export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer;
 
 // @public
+export function createStoragePodPort(input: SolidMcpConfig, discoveryFetch?: typeof fetch): PodPort;
+
+// @public
 export function fetchDocument(source: PodSource, id: string): Promise<FetchResult>;
 
 // @public
@@ -177,7 +180,9 @@ export interface SolidMcpConfig {
 }
 
 // @public
-export type SolidMcpServerConfig = (SolidMcpConfig | {
+export type SolidMcpServerConfig = ((SolidMcpConfig & {
+    pod?: PodPort;
+}) | {
     pod: PodPort;
     readOnly?: boolean;
 }) & {

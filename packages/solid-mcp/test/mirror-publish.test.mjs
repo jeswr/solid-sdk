@@ -18,6 +18,7 @@ describe("MCP mirror artifacts", () => {
     const mirror = rewriteManifest(manifest, new Map(external.map((name) => [name, sha])));
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/mcp-oauth");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/pkg-memory");
+    expect(mirror.dependencies).not.toHaveProperty("@jeswr/storage-client");
     for (const name of external) {
       expect(mirror.dependencies[name]).toBe(`github:jeswr/${name.slice("@jeswr/".length)}#${sha}`);
     }
@@ -31,6 +32,9 @@ describe("MCP mirror artifacts", () => {
       for (const name of artifacts) {
         expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain("@jeswr/mcp-oauth");
         expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain("@jeswr/pkg-memory");
+        expect(readFileSync(new URL(name, dist), "utf8"), name).not.toContain(
+          "@jeswr/storage-client",
+        );
       }
     }
   });

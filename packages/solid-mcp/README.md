@@ -43,7 +43,7 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 - Server: `createSolidMcpServer`, `SolidMcpServerConfig`, `SolidMcpConfig`, `MemoryClientInfo`.
 - Operations: `listContainer`, `readResource`, `readRdf`, `search`, `writeResource`.
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
-- Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
+- Data seam: `PodPort`, `createStoragePodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
 - MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`;
   `memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get`,
@@ -55,9 +55,9 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 ## Portable pod access
 
 ```ts
-import { createFetchPodPort, createSolidMcpServer } from "@jeswr/solid-mcp";
+import { createStoragePodPort, createSolidMcpServer } from "@jeswr/solid-mcp";
 
-const pod = createFetchPodPort({
+const pod = createStoragePodPort({
   fetch: authenticatedFetch,
   podRoot: "https://alice.example/",
   webId: "https://alice.example/profile/card#me",
@@ -65,6 +65,20 @@ const pod = createFetchPodPort({
 });
 const server = createSolidMcpServer({ pod });
 ```
+
+`createStoragePodPort(config, discoveryFetch?)` uses `@jeswr/storage-client` to discover
+Solid or LWS and paginate listings. A separate trusted, guarded anonymous `discoveryFetch`
+can read same-origin storage descriptions outside the pod root; resource credentials stay
+within the pod. Discovery failures propagate without choosing a fallback backend.
+The adapter refuses redirects. Solid create-only writes keep their exact URL and
+`If-None-Match: *`; LWS create-only writes fail before mutation because LWS names are
+hints. Updates preserve `ifMatch`; deletion without a supplied validator first reads
+an ETag and refuses deletion when none is available. Container writes require create-only
+conditions and accept empty bodies or LDP container types; other container metadata
+is refused before mutation. Exact named creates reject URL spellings the backend would rewrite.
+The legacy `createFetchPodPort` and fetch-based server configuration remain
+supported. Supplying both `fetch` and `pod` to the server keeps chat ACL discovery through
+the fetch capability while pod operations use the supplied port.
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Optional `PodReadOptions.accept` selects a representation; generic reads keep

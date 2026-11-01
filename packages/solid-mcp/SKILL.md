@@ -7,8 +7,11 @@ description: Use when implementing Solid MCP tools, portable pod data access, or
 # Solid MCP
 
 Read README.md and the W9 `specs/mcp/DESIGN.md` in the planning repository.
-All server/tool data access uses PodPort; createFetchPodPort retains the guarded
-fetch implementation until MCP-15 supplies storage-client. Do not create sdk-core
+All server/tool data access uses PodPort. createStoragePodPort discovers Solid or LWS
+through storage-client; createFetchPodPort retains the guarded legacy implementation.
+Storage discovery may use an explicitly injected anonymous same-origin transport outside
+the pod root; never send pod credentials there. Propagate discovery failures. LWS exact
+create-only writes are unsupported because Slug is only a hint; refuse before mutation. Do not create sdk-core
 packages in this package. The legacy fetch configuration remains supported.
 
 Register tools through createPodToolRegistry/registerPodTools. Each entry owns its

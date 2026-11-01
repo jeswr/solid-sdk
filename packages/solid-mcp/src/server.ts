@@ -27,7 +27,7 @@ import { createPodToolRegistry, registerPodTools } from "./tools.js";
 
 /** Server construction over a portable pod, or the existing fetch configuration. */
 export type SolidMcpServerConfig = (
-  | SolidMcpConfig
+  | (SolidMcpConfig & { pod?: PodPort })
   | {
       /** All pod data access goes through this injected capability. */
       pod: PodPort;
@@ -45,7 +45,7 @@ export type SolidMcpServerConfig = (
  * misconfiguration fails fast rather than at first request.
  */
 export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
-  const pod = "pod" in config ? config.pod : createFetchPodPort(config);
+  const pod = config.pod ?? createFetchPodPort(config as SolidMcpConfig);
   const podRoot = normalizePodRoot(pod.root);
   const cfg = { podRoot };
 
@@ -137,6 +137,6 @@ export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
     createPodToolRegistry(pod, config.readOnly !== false, config.clientInfo),
   );
   // Chat ACL discovery requires the original authenticated fetch capability.
-  if (!("pod" in config)) registerChatTools(server, { ...config, podRoot }, pod);
+  if ("fetch" in config) registerChatTools(server, { ...config, podRoot }, pod);
   return server;
 }

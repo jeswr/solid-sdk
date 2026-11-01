@@ -15,6 +15,7 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.d.ts", "src/cli.ts"],
       thresholds: {
+        "src/storage-pod-port.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/http.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/memory-tools.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/memory-context.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
