@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 // (Ported from @jeswr/solid-elements test/auth-controller.test.ts — the exhaustive
 // adversarial suite guarding the engine's roborev-hardened invariants; only the
 // import paths + factory name changed in the port.)
@@ -14,6 +15,7 @@
 import type { SessionStore } from "@jeswr/solid-session-restore";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SolidAuthController as LoginController } from "../src/types.js";
+import { FOREIGN, POD, spoofedRequests } from "./request-fixtures.js";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // Issuer resolution: the WebID profile always advertises one issuer. A test can gate
@@ -2665,6 +2667,97 @@ describe("createSolidAuth — the auth seam", () => {
 });
 
 describe("createSolidAuth — the token provider (origin gate + refresh)", () => {
+  for (const [name, makeRequest] of spoofedRequests) {
+    for (const patchGlobalFetch of [false, true]) {
+      it(`keeps ${name} public through ${patchGlobalFetch ? "global" : "owned"} fetch`, async () => {
+        const originalFetch = globalThis.fetch;
+        const sent: Request[] = [];
+        const base: typeof fetch = async (input, init) => {
+          const request = new Request(input, init);
+          sent.push(request);
+          return new Response(null, {
+            status: request.url === FOREIGN ? 401 : 200,
+            headers: request.url === FOREIGN ? { "DPoP-Nonce": "foreign-nonce" } : {},
+          });
+        };
+        const controller = createSolidAuth({
+          authFlow,
+          callbackUri: "https://app.example/callback",
+          clientId: "https://app.example/clientid.jsonld",
+          store: new RecordingStore(),
+          allowedOrigins: [new URL(POD).origin],
+          patchGlobalFetch,
+          publicFetch: base,
+        });
+        try {
+          await controller.login("https://alice.pod.example/profile/card#me");
+          const wrapped = patchGlobalFetch ? globalThis.fetch : controller.authenticatedFetch;
+          expect((await wrapped(makeRequest())).status).toBe(401);
+          expect(sent).toHaveLength(1);
+          expect(sent[0].url).toBe(FOREIGN);
+          expect(sent[0].headers.has("Authorization")).toBe(false);
+          expect(sent[0].headers.has("DPoP")).toBe(false);
+          expect(lastDpopHtu).toBeUndefined();
+          expect(refreshGrantCalls).toBe(0);
+          await wrapped(POD);
+          expect(sent[1].headers.get("Authorization")).toBe("DPoP access-token");
+          expect(lastDpopHtu).toBe(POD);
+          expect(lastDpopNonce).toBeUndefined();
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+    }
+  }
+
+  for (const pureNonce of [false, true]) {
+    it(`uses the native URL for nonce caching and 401 retry, pureNonce=${pureNonce}`, async () => {
+      loginExpiresIn = 3600;
+      const getter = Object.getOwnPropertyDescriptor(Request.prototype, "url")?.get;
+      const sent: { url: string; htu?: string; nonce?: string; body: string }[] = [];
+      const base: typeof fetch = async (input, init) => {
+        const request = new Request(input, init);
+        sent.push({
+          url: Reflect.apply(getter as () => string, request, []),
+          htu: lastDpopHtu,
+          nonce: lastDpopNonce,
+          body: await request.text(),
+        });
+        if (sent.length > 1) return new Response("ok");
+        vi.spyOn(Request.prototype, "url", "get").mockReturnValue(FOREIGN);
+        return new Response(null, {
+          status: 401,
+          headers: {
+            "DPoP-Nonce": "pod-nonce",
+            "WWW-Authenticate": pureNonce
+              ? 'DPoP error="use_dpop_nonce"'
+              : 'DPoP error="invalid_token"',
+          },
+        });
+      };
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store: new RecordingStore(),
+        allowedOrigins: [new URL(POD).origin],
+        publicFetch: base,
+      });
+      try {
+        await controller.login("https://alice.pod.example/profile/card#me");
+        const response = await controller.authenticatedFetch(POD, { method: "POST", body: "ABC" });
+        expect(response.status).toBe(200);
+        expect(sent).toEqual([
+          { url: POD, htu: POD, nonce: undefined, body: "ABC" },
+          { url: POD, htu: POD, nonce: "pod-nonce", body: "ABC" },
+        ]);
+        expect(refreshGrantCalls).toBe(pureNonce ? 0 : 1);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+  }
+
   // baseFetch chooses the pristine fetch the controller's authenticatedFetch runs over:
   //  - "401-then-200" (default): recordingBaseFetch — 401s the FIRST call (to exercise
   //    the 401-retry path) then 200s the retry, capturing the retry's auth header.

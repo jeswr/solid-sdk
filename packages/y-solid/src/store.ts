@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `SolidUpdateStore` — the persistence layer for {@link ../provider.js | SolidPersistence}.
@@ -42,15 +43,14 @@
  *
  * **RDF discipline (house rule).** The ONLY RDF the store touches is the
  * container LISTING, parsed (read-only) via `@jeswr/fetch-rdf` `parseRdf` +
- * `@solid/object` `ContainerDataset`. The CRDT payload itself is BINARY and is
+ * `@jeswr/ldp-container` membership filtering. The CRDT payload itself is BINARY and is
  * stored as `application/octet-stream` — we do NOT invent an RDF encoding for it.
  * No triples are ever hand-built.
  */
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { assertWithinPodScope, isContainerUrl, normalizePodBase } from "@jeswr/guarded-fetch";
-import { ContainerDataset } from "@solid/object";
-import { DataFactory } from "n3";
+import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { parseContainerMembers } from "@jeswr/ldp-container";
 
 /** The media type every update resource is stored with. */
 export const UPDATE_CONTENT_TYPE = "application/octet-stream";
@@ -274,46 +274,10 @@ export class SolidUpdateStore {
     const dataset = await parseRdf(body, res.headers.get("content-type"), {
       baseIRI: this.container,
     });
-    const container = new ContainerDataset(dataset, DataFactory).container;
-    if (!container) {
-      // A valid but empty / non-container document — no members.
-      return [];
-    }
-    const urls: string[] = [];
-    // The container lists ITSELF as a member; skip it. Compare on the normalised
-    // origin + pathname (ignoring any query/fragment) so a root ALIAS a hostile
-    // or buggy server might list — `…/doc/?x=1`, `…/doc/#frag` — is skipped too.
-    const base = new URL(this.container);
-    for (const resource of container.contains) {
-      // Every per-entry step is wrapped: a hostile/buggy server can list a
-      // non-URL, an unparseable IRI, a foreign-origin, or an escaping member —
-      // any of which must SKIP that one entry, never throw out of the listing
-      // (fail closed per-entry).
-      try {
-        // resource.id may be relative or malformed; resolving against a valid
-        // base rarely throws, but a pathological id can — hence the wrap.
-        const absolute = new URL(resource.id, this.container).toString();
-        const member = new URL(absolute);
-        // The container lists ITSELF as a member; skip it (origin+pathname only,
-        // ignoring any query/fragment a hostile server might append).
-        if (member.origin === base.origin && member.pathname === base.pathname) {
-          continue;
-        }
-        // An update resource is never a (sub-)container.
-        if (isContainerUrl(absolute)) {
-          continue;
-        }
-        // Defence in depth: never surface a member that escapes the container —
-        // an attacker-controlled `ldp:contains` entry must not pull the client
-        // to a foreign origin or outside the sub-tree.
-        assertWithinPodScope(this.container, absolute, { allowRoot: true });
-        urls.push(absolute);
-      } catch {
-        // Skip this one entry; keep processing the rest of the listing.
-      }
-    }
-    urls.sort();
-    return urls;
+    return parseContainerMembers(dataset, this.container, { scope: this.container })
+      .filter((member) => !member.container)
+      .map((member) => member.url)
+      .sort();
   }
 
   /**

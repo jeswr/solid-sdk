@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // <jeswr-bookmark-list> — a READ-ONLY list of `book:Bookmark` items, bound to
@@ -17,13 +18,13 @@ import { Bookmark } from "@jeswr/solid-bookmark";
 import { html, type TemplateResult } from "lit";
 import { DataFactory, Store } from "n3";
 import type { DataController } from "../data-controller.js";
-import { BOOKMARK_CLASS, RDF_TYPE } from "../vocab.js";
+import { BOOKMARK_CLASS, LEGACY_BOOKMARK_CLASS, RDF_TYPE } from "../vocab.js";
 import { AbstractReadElement, formatDate, safeHref } from "./shared.js";
 
 /**
  * A read-only `book:Bookmark` list element.
  *
- * @solid-class https://w3id.org/jeswr/bookmark#Bookmark
+ * @solid-class https://jeswr.org/ns/bookmark#Bookmark
  * @solid-mode view
  * @solid-cardinality container
  *
@@ -102,7 +103,9 @@ function collectBookmarks(graph: Store): Bookmark[] {
   const seen = new Set<string>();
   const out: Bookmark[] = [];
   for (const quad of graph.getQuads(null, DataFactory.namedNode(RDF_TYPE), null, null)) {
-    if (quad.object.value !== BOOKMARK_CLASS) continue;
+    if (quad.object.termType !== "NamedNode") continue;
+    if (quad.object.value !== BOOKMARK_CLASS && quad.object.value !== LEGACY_BOOKMARK_CLASS)
+      continue;
     const subject = quad.subject.value;
     if (seen.has(subject)) continue;
     seen.add(subject);

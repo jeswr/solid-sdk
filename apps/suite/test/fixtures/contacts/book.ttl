@@ -1,0 +1,10 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# SolidOS minter-compatible fixture: DC Elements title, extension index links, #this subject.
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+<#this> a vcard:AddressBook;
+  dc:title "Personal contacts";
+  vcard:nameEmailIndex <people.ttl>;
+  vcard:groupIndex <groups.ttl>;
+  acl:owner <../profile/card#me> .

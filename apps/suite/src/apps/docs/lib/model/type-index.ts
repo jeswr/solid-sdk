@@ -224,7 +224,7 @@ export async function ensureTypeRegistrations(opts: {
     new ProfileTypeIndexAnchor(webId, profileDs, DataFactory).privateIndex = indexUrl;
     try {
       await writeRdf(documentUrl(webId), profileDs, {
-        etag: profileEtag ?? "*",
+        etag: profileEtag,
         fetchImpl: profileFetch,
       });
       break;

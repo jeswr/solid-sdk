@@ -1,0 +1,21 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Copy files between Solid pods and review permission changes before your migration starts." />
+    <meta name="theme-color" content="#147c86" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
+    <title>Pod Migrator — A new home for your Solid data</title>
+    <script>
+      // AUTHORED-BY Codex GPT-6
+      // Matches app-shell's themeScript() and the app's ThemeProvider storage key.
+      (() => { try { const t = localStorage.getItem("pod-migrator:app-shell-theme"); const d = t === "dark" || ((t === null || t === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.classList.toggle("dark", d); document.documentElement.style.colorScheme = d ? "dark" : "light"; } catch {} })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

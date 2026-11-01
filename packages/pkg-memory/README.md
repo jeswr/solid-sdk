@@ -112,3 +112,11 @@ committed canonicalization edge cases. RDFlib 7.1.4 itself can choose different
 canonical IDs across runs on some highly symmetric regular blank-node graphs;
 byte parity on those graphs is not a stable reference contract. Templates use
 plain-string literals (RDF/JS merges plain strings and explicit `xsd:string`).
+
+New typed facts use `https://jeswr.org/ns/sectors/health#` and
+`https://jeswr.org/ns/core#`. Parsing, hashing and reserializing supplied assertion
+graphs preserve their IRIs, including legacy and mixed data, because rewriting an
+assertion would invalidate its content-derived identifier. The reference builder's
+implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
+same reason. Use typed templates or explicitly declare canonical prefixes when
+authoring new Turtle assertions. Existing Python fixture identifiers remain valid.

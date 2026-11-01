@@ -15,3 +15,4 @@ coverage/
 
 # Playwright screenshots / traces written by lanes and e2e runs
 /artifacts/
+.pages/

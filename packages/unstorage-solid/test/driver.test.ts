@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 
 import { createStorage } from "unstorage";
@@ -165,6 +166,24 @@ describe("getKeys", () => {
     await storage.setItem("my docs:report #1", "x");
     const keys = await storage.getKeys();
     expect(keys).toContain("my docs:report #1");
+  });
+
+  it("getKeys skips encoded delimiters and malformed listing URLs without throwing", async () => {
+    const requests: string[] = [];
+    const fetch: typeof globalThis.fetch = async (input) => {
+      requests.push(String(input));
+      return new Response(
+        `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${BASE}> ldp:contains <${BASE}ok>, <${BASE}a%2Fb>, <${BASE}a%2fb>,
+  <${BASE}a%5Cb>, <${BASE}a%5cb/>, <http://[>, <${BASE}?self>, <${BASE}#self> .`,
+        {
+          headers: { "content-type": "text/turtle" },
+        },
+      );
+    };
+    const driver = solidDriver({ base: BASE, fetch });
+    expect(await driver.getKeys("", {})).toEqual(["ok"]);
+    expect(requests).toEqual([BASE]);
   });
 
   it("returns [] for a missing base container", async () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { DataFactory, Parser } from "n3";
 import { describe, expect, it } from "vitest";
@@ -27,7 +28,7 @@ describe("round-trip (build → serialize → parseMemoryTtl)", () => {
       created: new Date("2026-06-01T10:00:00.000Z"),
       modified: new Date("2026-06-02T11:30:00.000Z"),
       keywords: ["preference", "ui"],
-      categories: ["https://w3id.org/jeswr/memory#cat-personal", "http://schema.org/Preference"],
+      categories: ["https://jeswr.org/ns/memory#cat-personal", "http://schema.org/Preference"],
       about: "https://example.org/topics/dark-mode",
       attributedTo: "https://agent.pod/profile/card#me",
       generatedBy: "https://alice.pod/chat/room1#it",
@@ -61,7 +62,7 @@ describe("prov:invalidatedAtTime soft-forget tombstone (model layer)", () => {
     expect(ttl).toContain("http://www.w3.org/ns/prov#");
     // A pod body that uses the WRONG predicate (prov:invalidatedAt) must NOT be read
     // as a tombstone — only the standard term counts.
-    const wrong = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+    const wrong = `@prefix mem: <https://jeswr.org/ns/memory#> .
 @prefix schema: <http://schema.org/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -111,7 +112,7 @@ describe("prov:invalidatedAtTime soft-forget tombstone (model layer)", () => {
   });
 
   it("round-trips a tombstone read back from a pod body", async () => {
-    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+    const body = `@prefix mem: <https://jeswr.org/ns/memory#> .
 @prefix schema: <http://schema.org/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -235,7 +236,7 @@ describe("http(s)-IRI scope filtering on object properties", () => {
     // Two DISTINCT stored terms that canonicalise to the same value must not be
     // returned twice: <https://example.com> and <https://example.com/> both map
     // to https://example.com/, so parseMemory dedupes after canonicalising.
-    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+    const body = `@prefix mem: <https://jeswr.org/ns/memory#> .
 @prefix schema: <http://schema.org/> .
 <${URL_}#it> a mem:MemoryItem ;
   schema:text "x" ;
@@ -282,7 +283,7 @@ describe("http(s)-IRI scope filtering on object properties", () => {
     // graph (bypassing buildMemory's write-side filter). parseMemory must apply the
     // SAME http(s)-only filter on read so it never surfaces a javascript:/mailto:/urn:
     // IRI to a consumer (which might render it as a link).
-    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+    const body = `@prefix mem: <https://jeswr.org/ns/memory#> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix schema: <http://schema.org/> .
@@ -340,11 +341,11 @@ describe("class guard + defaults", () => {
 
   it("buildMemory writes the mem:MemoryItem type into the graph", async () => {
     const ttl = await serializeMemory(URL_, { text: "typed" });
-    expect(ttl).toContain(MEMORY_CLASS.replace("https://w3id.org/jeswr/memory#", "mem:"));
+    expect(ttl).toContain(MEMORY_CLASS.replace("https://jeswr.org/ns/memory#", "mem:"));
   });
 
   it("text defaults to empty string when absent on a typed subject", async () => {
-    const body = `@prefix mem: <https://w3id.org/jeswr/memory#> .
+    const body = `@prefix mem: <https://jeswr.org/ns/memory#> .
 <${URL_}#it> a mem:MemoryItem .`;
     const parsed = await parseMemoryTtl(URL_, body, "text/turtle");
     expect(parsed).toBeDefined();

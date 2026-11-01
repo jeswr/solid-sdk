@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported from apps/pod-docs/src/errors.ts.
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -12,6 +13,14 @@ export class PodDocsError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "PodDocsError";
+  }
+}
+
+/** A replacement has no single strong ETag; reject before sending a PUT. */
+export class ConcurrencyValidatorError extends PodDocsError {
+  constructor(readonly url: string) {
+    super(`A strong ETag is required to replace ${url}; reload before saving`);
+    this.name = "ConcurrencyValidatorError";
   }
 }
 

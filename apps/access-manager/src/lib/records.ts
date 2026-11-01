@@ -6,16 +6,13 @@
 // ONLY write paths — every mutation goes through these wrapper setters (the
 // house RDF discipline: typed accessors + n3.Writer, never hand-built triples).
 
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
+import { accmTerm } from "./canonical-vocab.js";
 import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+  AliasOptionalAs as OptionalAs,
+  AliasOptionalFrom as OptionalFrom,
+  AliasSetFrom as SetFrom,
+} from "./legacy.js";
 import { ACCM, DCT, DPV } from "./vocab.js";
 
 /** The request lifecycle status values (proposal §3.5 state machine). */
@@ -32,7 +29,7 @@ const IRI_STATUS: Record<string, RequestStatus> = Object.fromEntries(
 );
 
 export function statusFromIri(iri: string | undefined): RequestStatus | undefined {
-  return iri === undefined ? undefined : IRI_STATUS[iri];
+  return iri === undefined ? undefined : IRI_STATUS[accmTerm(iri)];
 }
 export function statusToIri(status: RequestStatus): string {
   return STATUS_IRI[status];
@@ -45,10 +42,16 @@ export function statusToIri(status: RequestStatus): string {
  */
 export class AccmRecord extends TermWrapper {
   get statusIri(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
+    const iri = OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
+    return iri === undefined ? undefined : accmTerm(iri);
   }
   set statusIri(value: string | undefined) {
-    OptionalAs.object(this, ACCM.status, value, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      ACCM.status,
+      value === undefined ? undefined : accmTerm(value),
+      NamedNodeFrom.string,
+    );
   }
 
   get status(): RequestStatus | undefined {
@@ -111,10 +114,16 @@ export class AccmRecord extends TermWrapper {
   }
 
   get dataClass(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
+    const iri = OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
+    return iri === undefined ? undefined : accmTerm(iri);
   }
   set dataClass(value: string | undefined) {
-    OptionalAs.object(this, ACCM.dataClass, value, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      ACCM.dataClass,
+      value === undefined ? undefined : accmTerm(value),
+      NamedNodeFrom.string,
+    );
   }
 
   get created(): Date | undefined {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The RDF CLASS IRIs the read components bind to — the keys of the resolver map and
@@ -35,7 +36,11 @@ export const VCARD_INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individual";
 export const VCARD_ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
 
 /** `book:Bookmark` — a bookmark / read-it-later item (`@jeswr/solid-bookmark`). */
-export const BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
+// Canonical source: @jeswr/suite-vocab NS.BOOKMARK
+export const BOOKMARK_CLASS = "https://jeswr.org/ns/bookmark#Bookmark";
+
+/** Read-only legacy bookmark class alias. */
+export const LEGACY_BOOKMARK_CLASS = "https://w3id.org/jeswr/bookmark#Bookmark";
 
 /** `as:Note` — the canonical chat message class (`@jeswr/solid-chat-interop`). */
 export const AS_NOTE = "https://www.w3.org/ns/activitystreams#Note";

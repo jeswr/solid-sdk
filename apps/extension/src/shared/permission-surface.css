@@ -1,0 +1,137 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+/* Shared ConsentSheet and form-fill cards. Never redefine component theme tokens. */
+:root { color-scheme: light; }
+html.dark { color-scheme: dark; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--background);
+  color: var(--foreground);
+  font: var(--weight-base) var(--text-base)/var(--lh-base) var(--font-ui);
+}
+.permission-skip-link {
+  position: absolute;
+  top: calc(-1 * var(--space-16));
+  left: var(--space-4);
+  z-index: 1;
+  padding: var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--primary);
+}
+.permission-skip-link:focus { top: var(--space-1); }
+.permission-skip-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.permission-surface {
+  max-width: var(--dialog-md);
+  min-width: 0;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+}
+.permission-surface h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--weight-xl);
+  letter-spacing: var(--tracking-xl);
+}
+.permission-surface p { margin: var(--space-2) 0 var(--space-4); }
+.permission-surface .eyebrow {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+.permission-surface .hint, .permission-surface .meta {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+.permission-surface :is(button, select) {
+  min-height: var(--control-h, 36px);
+  min-width: var(--space-6);
+  max-width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.permission-surface select { display: block; width: 100%; margin: var(--space-2) 0 var(--space-4); }
+.permission-surface button { cursor: pointer; }
+.permission-surface button:hover { background: var(--surface-2); }
+.permission-surface button:disabled { cursor: default; color: var(--foreground-muted); }
+.permission-surface input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  flex: none;
+  width: var(--space-6);
+  height: var(--space-6);
+  margin: 0;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.permission-surface input[type="radio"] { border-radius: var(--radius-full); }
+.permission-surface input:is(:checked, :indeterminate) { background: var(--primary); border-color: var(--primary); }
+.permission-surface input:checked::after {
+  content: '';
+  width: var(--space-1\.5);
+  height: var(--space-3);
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
+}
+.permission-surface input:indeterminate::after {
+  content: '';
+  width: var(--space-3);
+  border-top: 2px solid var(--primary-foreground);
+}
+.permission-surface input[type="radio"]:checked::after {
+  width: var(--space-2);
+  height: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--primary-foreground);
+  transform: none;
+}
+.permission-surface :is(.card-check, .remember) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-h, 36px);
+  cursor: pointer;
+}
+.permission-surface .data-card {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.permission-surface .data-card:has(input:checked) { border-color: var(--input); }
+.permission-surface .card-title { font-weight: var(--weight-lg); }
+.permission-surface .card-description { display: block; margin-top: var(--space-1); }
+.permission-surface .actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+/* Equal size, border and fill for both decisions, scoped to these surfaces. */
+.permission-surface .actions button { padding: var(--space-2) var(--space-4); }
+.permission-surface .error { color: var(--destructive); }
+.permission-surface :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  scroll-margin-block: var(--space-3);
+}
+@media (pointer: coarse) {
+  .permission-surface :is(button, select, .card-check, .remember, summary) { min-height: 44px; }
+  .permission-surface :is(input, summary) { min-width: 44px; min-height: 44px; }
+}

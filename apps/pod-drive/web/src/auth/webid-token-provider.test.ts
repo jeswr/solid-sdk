@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Regression test for the CROSS-USER SESSION LEAK (the HIGH roborev finding).
@@ -923,6 +924,40 @@ describe("AUTOLOGIN — two-phase full-page redirect login (beginRedirectLogin /
     dpopMock.onEnter = null;
     dpopMock.lastKeyPair = null;
     store = installSessionStorage();
+  });
+
+  it("leaves Drive's abandoned OAuth/PKCE/DPoP flow isolated when opening Docs in the same tab", async () => {
+    const drive = makeProvider();
+    await drive.beginRedirectLogin("https://jeswr.github.io/solid-sdk/pod-drive/");
+    const pendingDrive = store.get(REDIRECT_FLOW_KEY);
+    const driveSession = await import("./SessionProvider");
+    sessionStorage.setItem(driveSession.AUTOLOGIN_SENTINEL_KEY, WEBID_A);
+    const docs = await import("../../../../pod-docs/web/src/auth/webid-token-provider");
+    const docsSession = await import("../../../../pod-docs/web/src/auth/SessionProvider");
+    const { planAutologin } = await import("../../../../pod-docs/web/src/auth/autologin-plan");
+    expect(
+      planAutologin({
+        ready: true,
+        hasProvider: true,
+        loggedIn: false,
+        effectAlreadyRan: false,
+        hasPendingRedirect: docs.hasPendingRedirectLogin(),
+        pendingRedirectWebId: docs.consumePendingRedirectWebId(),
+        hasCodeParams: false,
+        hasErrorParams: false,
+        fragmentWebId: WEBID_A,
+        sentinel: docsSession.readAutologinSentinel(),
+        webIdsEqual,
+      }),
+    ).toEqual({ kind: "begin", webId: WEBID_A });
+    new docs.WebIdDPoPTokenProvider(
+      "https://jeswr.github.io/solid-sdk/pod-docs/callback.html",
+      async () => "",
+      async () => WEBID_A,
+    ).reset();
+    expect(store.get(REDIRECT_FLOW_KEY)).toBe(pendingDrive);
+    expect(driveSession.readAutologinSentinel()).toBe(WEBID_A);
+    expect(hasPendingRedirectLogin()).toBe(true);
   });
 
   it("beginRedirectLogin persists a record with the expected fields + returns an auth URL with the right params", async () => {

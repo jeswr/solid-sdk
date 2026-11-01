@@ -11,7 +11,10 @@
  * maintainer's token proxy as well as the client id.
  */
 import { DataFactory, Store } from "n3";
+import { RunBudget, type RunLimits } from "../core/budget.js";
+import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { copyDataset } from "../core/incremental.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, OnlineAccount, SoftwareSourceCode } from "../core/vocab.js";
@@ -22,94 +25,183 @@ const ID = "github";
 const API = "https://api.github.com";
 const SCOPES = ["read:user", "repo"] as const;
 
-export const githubAdapter: IntegrationAdapter = {
-  vocabMap,
-  metadata: {
-    id: ID,
-    name: "GitHub",
-    tier: "A",
-    authKind: "oauth-pkce",
-    scopes: SCOPES,
-    categories: ["work-education"],
-    whatYouGet: "Your developer profile and your repositories, filed under Work & education.",
-    requirements: [
-      "Register an OAuth App at github.com/settings/developers.",
-      "Add <app-origin>/oauth-callback.html as the Authorization callback URL.",
-      "Set NEXT_PUBLIC_GITHUB_CLIENT_ID.",
-      "GitHub's token endpoint requires the client secret (no public PKCE): deploy the token-exchange proxy and set NEXT_PUBLIC_GITHUB_TOKEN_PROXY.",
-    ],
-  },
-  oauth: {
-    clientId: undefined,
-    authorizationEndpoint: "https://github.com/login/oauth/authorize",
-    tokenEndpoint: "https://github.com/login/oauth/access_token",
-    scopes: SCOPES,
-    tokenExchange: "proxy",
-    tokenProxyUrl: undefined,
-  },
-  apiHeaders: { accept: "application/vnd.github+json" },
-  fixtures: () => GITHUB_FIXTURES,
+/** Create an adapter with host-selected per-run source limits. */
+export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
+  return {
+    vocabMap,
+    metadata: {
+      id: ID,
+      name: "GitHub",
+      tier: "A",
+      authKind: "oauth-pkce",
+      scopes: SCOPES,
+      categories: ["work-education"],
+      whatYouGet: "Your developer profile and your repositories, filed under Work & education.",
+      requirements: [
+        "Register an OAuth App at github.com/settings/developers.",
+        "Add <app-origin>/oauth-callback.html as the Authorization callback URL.",
+        "Set NEXT_PUBLIC_GITHUB_CLIENT_ID.",
+        "GitHub's token endpoint requires the client secret (no public PKCE): deploy the token-exchange proxy and set NEXT_PUBLIC_GITHUB_TOKEN_PROXY.",
+      ],
+    },
+    oauth: {
+      clientId: undefined,
+      authorizationEndpoint: "https://github.com/login/oauth/authorize",
+      tokenEndpoint: "https://github.com/login/oauth/access_token",
+      scopes: SCOPES,
+      tokenExchange: "proxy",
+      tokenProxyUrl: undefined,
+    },
+    apiHeaders: { accept: "application/vnd.github+json" },
+    fixtures: () => GITHUB_FIXTURES,
 
-  async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const skipped = new SkipCounter();
+    async import(ctx: ImportContext): Promise<ImportOutcome> {
+      const budget = new RunBudget(ID, limits);
+      const skipped = new SkipCounter();
 
-    ctx.progress({ label: "Fetching your GitHub profile…", done: 0, total: 2 });
-    const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`)) ?? {};
+      ctx.progress({ label: "Fetching your GitHub profile…", done: 0, total: 2 });
+      budget.request();
+      const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`, undefined, budget)) ?? {};
+      budget.items(1);
 
-    const profileDoc = ctx.resolve("work/profile.ttl");
-    const profile = new Store();
-    const account = new OnlineAccount(`${profileDoc}#account`, profile, DataFactory).mark();
-    const login = optionalText(user.login);
-    account.accountName = login;
-    account.name = optionalText(user.name) ?? login;
-    // description, html_url, bio are all commonly null on the live API.
-    account.description = optionalText(user.bio);
-    account.sourceUrl = optionalText(user.html_url);
-    account.accountServiceHomepage = "https://github.com/";
-    account.dateCreated = optionalDate(user.created_at);
-    await ctx.write({
-      slug: "work/profile.ttl",
-      category: "work-education",
-      forClass: CLASSES.OnlineAccount,
-      dataset: profile,
-      // Companion doc: it rides along in the registered work container —
-      // registering OnlineAccount would misfile GitHub under Social.
-      skipRegistration: true,
-    });
+      const profileDoc = ctx.resolve("work/profile.ttl");
+      const profile = new Store();
+      const account = new OnlineAccount(`${profileDoc}#account`, profile, DataFactory).mark();
+      const login = optionalText(user.login);
+      account.accountName = login;
+      account.name = optionalText(user.name) ?? login;
+      // description, html_url, bio are all commonly null on the live API.
+      account.description = optionalText(user.bio);
+      account.sourceUrl = optionalText(user.html_url);
+      account.accountServiceHomepage = "https://github.com/";
+      account.dateCreated = optionalDate(user.created_at);
+      await ctx.write({
+        slug: "work/profile.ttl",
+        category: "work-education",
+        forClass: CLASSES.OnlineAccount,
+        dataset: profile,
+        sourceUrl: `${API}/user`,
+        // Companion doc: it rides along in the registered work container —
+        // registering OnlineAccount would misfile GitHub under Social.
+        skipRegistration: true,
+      });
 
-    ctx.progress({ label: "Fetching your repositories…", done: 1, total: 2 });
-    const repos = await getJson<GitHubRepo[] | null>(
-      ID,
-      ctx.api,
-      `${API}/user/repos?sort=pushed&per_page=100`,
-    );
-
-    const reposDoc = ctx.resolve("work/repositories.ttl");
-    const dataset = new Store();
-    for (const r of arr(repos)) {
-      // A repo with no id has no stable fragment IRI — skip it.
-      if (!r || r.id === undefined || r.id === null) {
-        skipped.skip();
-        continue;
+      ctx.progress({ label: "Fetching your repositories…", done: 1, total: 2 });
+      const repos: (GitHubRepo | null)[] = [];
+      const seen = new Set<number>();
+      for (let page = 1; ; page += 1) {
+        budget.request();
+        const batch = arr(
+          await getJson<GitHubRepo[] | null>(
+            ID,
+            ctx.api,
+            // Pushes must not move unseen repositories ahead of a page already read.
+            `${API}/user/repos?sort=created&direction=asc&per_page=100&page=${page}`,
+            undefined,
+            budget,
+          ),
+        );
+        budget.items(batch.length);
+        const previousSize = seen.size;
+        let identified = 0;
+        for (const repo of batch) {
+          if (repo?.id !== undefined && repo.id !== null) {
+            identified += 1;
+            if (seen.has(repo.id)) continue;
+            seen.add(repo.id);
+          }
+          repos.push(repo);
+        }
+        if (identified > 0 && seen.size === previousSize) {
+          throw new IntegrationSyncError(
+            ID,
+            "The platform returned a non-advancing repository page.",
+          );
+        }
+        if (batch.length < 100) break;
       }
-      const repo = new SoftwareSourceCode(`${reposDoc}#repo-${r.id}`, dataset, DataFactory).mark();
-      repo.name = optionalText(r.full_name) ?? optionalText(r.name);
-      repo.identifier = String(r.id);
-      // description, homepage, language are null for a large fraction of repos.
-      repo.description = optionalText(r.description);
-      repo.programmingLanguage = optionalText(r.language);
-      repo.codeRepository = optionalText(r.html_url);
-      repo.sourceUrl = optionalText(r.html_url);
-      repo.dateModified = optionalDate(r.pushed_at);
-    }
-    await ctx.write({
-      slug: "work/repositories.ttl",
-      category: "work-education",
-      forClass: CLASSES.SoftwareSourceCode,
-      dataset,
-    });
 
-    ctx.progress({ label: "Done", done: 2, total: 2 });
-    return { skipped: skipped.value };
-  },
-};
+      const reposDoc = ctx.resolve("work/repositories.ttl");
+      const previous = copyDataset(await ctx.read("work/repositories.ttl"));
+      // A deletion can shift an unseen repository into a numbered page already read.
+      // Verify omissions before replacing the snapshot; only a 404 confirms removal.
+      for (const subject of previous.getSubjects(null, null, null)) {
+        if (subject.termType !== "NamedNode") continue;
+        const previousRepo = new SoftwareSourceCode(subject.value, previous, DataFactory);
+        if (!previousRepo.types.has(CLASSES.SoftwareSourceCode)) continue;
+        const identifier = previousRepo.identifier;
+        if (!identifier || !/^\d+$/.test(identifier)) continue;
+        const id = Number(identifier);
+        if (!Number.isSafeInteger(id) || seen.has(id)) continue;
+        seen.add(id);
+        const url = `${API}/repositories/${id}`;
+        budget.request();
+        let repo: GitHubRepo | null;
+        try {
+          repo = await getJson<GitHubRepo | null>(
+            ID,
+            async (input, init) => {
+              const response = await ctx.api(input, init);
+              // getJson maps errors (including 429); verification requires exactly 200.
+              if (response.ok && response.status !== 200) {
+                throw new IntegrationSyncError(
+                  ID,
+                  `The platform answered ${response.status} for ${url}.`,
+                  { url, status: response.status },
+                );
+              }
+              return response;
+            },
+            url,
+            undefined,
+            budget,
+          );
+        } catch (error) {
+          if (error instanceof IntegrationSyncError && error.status === 404) continue;
+          throw error;
+        }
+        budget.items(1);
+        if (!repo || repo.id !== id) {
+          throw new IntegrationSyncError(ID, "The platform returned an invalid repository.", {
+            url,
+          });
+        }
+        repos.push(repo);
+      }
+
+      const dataset = new Store();
+      for (const r of repos) {
+        // A repo with no id has no stable fragment IRI — skip it.
+        if (!r || r.id === undefined || r.id === null) {
+          skipped.skip();
+          continue;
+        }
+        const repo = new SoftwareSourceCode(
+          `${reposDoc}#repo-${r.id}`,
+          dataset,
+          DataFactory,
+        ).mark();
+        repo.name = optionalText(r.full_name) ?? optionalText(r.name);
+        repo.identifier = String(r.id);
+        // description, homepage, language are null for a large fraction of repos.
+        repo.description = optionalText(r.description);
+        repo.programmingLanguage = optionalText(r.language);
+        repo.codeRepository = optionalText(r.html_url);
+        repo.sourceUrl = optionalText(r.html_url);
+        repo.dateModified = optionalDate(r.pushed_at);
+      }
+      await ctx.write({
+        slug: "work/repositories.ttl",
+        category: "work-education",
+        forClass: CLASSES.SoftwareSourceCode,
+        dataset,
+        sourceUrl: `${API}/user/repos`,
+      });
+
+      ctx.progress({ label: "Done", done: 2, total: 2 });
+      return { skipped: skipped.value };
+    },
+  };
+}
+
+export const githubAdapter: IntegrationAdapter = createGithubAdapter();

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -337,6 +338,23 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
 });
 
 describe("hostile container listing — fail closed per entry", () => {
+  it("skips malformed ids, self aliases and encoded delimiters, deduplicates, then sorts", async () => {
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      expect(init?.redirect).toBe("manual");
+      return new Response(
+        `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${CONTAINER}> ldp:contains <${CONTAINER}z>, <http://[>, <${CONTAINER}a>,
+  <${CONTAINER}x/../z>, <${CONTAINER}?self>, <${CONTAINER}#self>,
+  <${CONTAINER}sub/>, <${CONTAINER}a%2Fb>, <${CONTAINER}a%5cb> .`,
+        {
+          headers: { "content-type": "text/turtle" },
+        },
+      );
+    };
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch });
+    expect(await store.listUpdateUrls()).toEqual([`${CONTAINER}a`, `${CONTAINER}z`]);
+  });
+
   it("skips foreign-origin, sub-container, and non-http contains entries; keeps valid ones", async () => {
     const hostileFetch: typeof globalThis.fetch = async (input, init) => {
       const url = typeof input === "string" ? input : (input as URL | Request).toString();

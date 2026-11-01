@@ -4,6 +4,7 @@
     {
       "fedapp": "https://jeswr.org/ns/fed#",
       "acl": "http://www.w3.org/ns/auth/acl#",
+      "fedapp:access": { "@type": "@id" },
       "health": "https://jeswr.org/ns/sectors/health#",
       "ph": "https://jeswr.org/ns/pod-health#",
       "sector": {

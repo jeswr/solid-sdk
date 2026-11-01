@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { demoImport, expectCleanTurtle, sparseImport, TEST_POD_ROOT } from "../core/testing.js";
@@ -84,6 +85,7 @@ describe("strava adapter contract", () => {
           { id: 3, name: "Bad Date", sport_type: "Run", start_date: "not-a-date" },
         ],
       },
+      { url: "https://www.strava.com/api/v3/athlete/activities", json: [] },
     ]);
 
     expect(report.written.map((w) => w.url).sort()).toEqual([WORKOUTS_DOC, RIDES_DOC]);

@@ -106,6 +106,85 @@ describe("Type Index read model", () => {
     expect(pendingFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("carries caller cancellation from completed index reads into traversal", async () => {
+    const controller = new AbortController();
+    const budget = new DiscoveryBudget({ signal: controller.signal });
+    const profile = await rdf("<#me> solid:publicTypeIndex <../index.ttl> .", WEB_ID);
+    const fetch = fixtureFetch({
+      [`${STORAGE}index.ttl`]:
+        "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instance <book.ttl> .",
+    });
+    const indexes = await readTypeIndexes(fetch, WEB_ID, profile, STORAGE, { budget });
+    expect(indexes.truncated).toBe(false);
+    expect(indexes.failures).toEqual([]);
+    expect(indexes.locations).toHaveLength(1);
+
+    const reason = new Error("Discovery cancelled");
+    fetch.mockImplementationOnce(async () => {
+      controller.abort(reason);
+      throw reason;
+    });
+    await expect(
+      discoverDomainItems("media", {
+        storage: STORAGE,
+        fetch,
+        typeIndex: indexes.locations,
+        budget,
+      }),
+    ).rejects.toBe(reason);
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      `${STORAGE}index.ttl`,
+      `${STORAGE}book.ttl`,
+    ]);
+    expect(fetch.mock.calls.every(([, init]) => init?.signal === budget.signal)).toBe(true);
+  });
+
+  it("retains completed registrations when a later index reaches the shared deadline", async () => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+    try {
+      const budget = new DiscoveryBudget();
+      const profile = await rdf(
+        "<#me> solid:publicTypeIndex <../public.ttl> ; solid:privateTypeIndex <../private.ttl> .",
+        WEB_ID,
+      );
+      const fixtures = fixtureFetch({
+        [`${STORAGE}public.ttl`]:
+          "<#r> a solid:TypeRegistration ; solid:forClass schema:Book ; solid:instance <book.ttl> .",
+      });
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        if (String(input) === `${STORAGE}private.ttl`) {
+          deadline.abort();
+          throw deadline.signal.reason;
+        }
+        return fixtures(input, init);
+      });
+      const indexes = await readTypeIndexes(fetch, WEB_ID, profile, STORAGE, { budget });
+      expect(indexes).toEqual({
+        locations: [{ forClass: `${NS.SCHEMA}Book`, instance: `${STORAGE}book.ttl` }],
+        failures: [],
+        truncated: true,
+      });
+      const result = await discoverDomainItems("media", {
+        storage: STORAGE,
+        fetch,
+        typeIndex: indexes.locations,
+        budget,
+      });
+      expect(result.items).toEqual([]);
+      expect(result.failures).toEqual([]);
+      expect(result.truncated).toBe(true);
+      expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+        `${STORAGE}public.ttl`,
+        `${STORAGE}private.ttl`,
+      ]);
+      expect(fetch.mock.calls.every(([, init]) => init?.signal === budget.signal)).toBe(true);
+      expect(timeout).toHaveBeenCalledTimes(1);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it.each([
     "indexes",
     "items",

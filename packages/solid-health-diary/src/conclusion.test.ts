@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 
 import { describe, expect, it } from "vitest";
@@ -150,9 +151,24 @@ describe("buildDietPlan fail-closed on non-canonical excludes", () => {
     // A DietPlan is a SAFETY document. A hostile/corrupt excludes IRI must NOT be
     // silently dropped to yield a plan with fewer restrictions — reject the whole plan.
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${PLAN_URL}#it> a diet:DietPlan ;
         diet:excludes diet:gluten , diet:notARealTrigger .`;
     expect(await parseDietPlanTtl(PLAN_URL, ttl)).toBeUndefined();
   });
+});
+
+// AUTHORED-BY Codex GPT-6
+it("deduplicates excluded trigger slugs after decoding both namespaces", async () => {
+  const diet = "https://jeswr.org/ns/sectors/health/diet#";
+  const legacy = "https://w3id.org/jeswr/sectors/health/diet#";
+  const parsed = await parseDietPlanTtl(
+    PLAN_URL,
+    `
+    <${PLAN_URL}#it> a <${diet}DietPlan> ;
+      <${diet}excludes> <${diet}gluten>, <${diet}lactose>, <${diet}sulphites> ;
+      <${legacy}excludes> <${legacy}gluten>, <${legacy}lactose>, <${legacy}sulphites> .
+  `,
+  );
+  expect(parsed?.excludes).toEqual(["gluten", "lactose", "sulphites"]);
 });

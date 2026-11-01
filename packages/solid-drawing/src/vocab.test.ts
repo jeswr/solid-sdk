@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import {
@@ -23,8 +24,8 @@ import {
 } from "./vocab.js";
 
 describe("vocab — minted draw: IRIs (must match the spec EXACTLY)", () => {
-  it("the namespace base is the dereferenceable w3id.org/jeswr/drawing#", () => {
-    expect(DRAW).toBe("https://w3id.org/jeswr/drawing#");
+  it("the namespace base is the dereferenceable jeswr.org/ns/drawing#", () => {
+    expect(DRAW).toBe("https://jeswr.org/ns/drawing#");
   });
 
   // The exact five IRIs the federation-vocab drawing# alignments reference.
@@ -34,8 +35,8 @@ describe("vocab — minted draw: IRIs (must match the spec EXACTLY)", () => {
     ["schemaVersion", DRAW_SCHEMA_VERSION_IRI],
     ["viewBackgroundColor", DRAW_VIEW_BACKGROUND_COLOR_IRI],
     ["thumbnail", DRAW_THUMBNAIL_IRI],
-  ])("draw:%s = w3id.org/jeswr/drawing#%s", (local, iri) => {
-    expect(iri).toBe(`https://w3id.org/jeswr/drawing#${local}`);
+  ])("draw:%s = jeswr.org/ns/drawing#%s", (local, iri) => {
+    expect(iri).toBe(`https://jeswr.org/ns/drawing#${local}`);
     expect(draw(local)).toBe(iri);
   });
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // gen-clientid.mjs — emit the per-origin static auth artifacts BEFORE every
@@ -143,13 +144,18 @@ function readEnvFile(name) {
  *    `beginRedirectLogin` uses `${origin}/` as both the authorization redirect_uri
  *    AND the token-exchange redirect_uri — they must match this registered value.
  */
-export function clientIdDocument(origin) {
+// CLIENT_BASE_PATH defaults to / for existing local and Vercel deployments.
+export function clientIdDocument(origin, basePath = "/") {
+  if (!/^\/(?:[^?#\\]*\/)?$/.test(basePath) || basePath.startsWith("//")) {
+    throw new Error("CLIENT_BASE_PATH must be an absolute path ending in /");
+  }
+  const appUrl = new URL(basePath, `${origin}/`).href;
   return {
     "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-    client_id: `${origin}/clientid.jsonld`,
+    client_id: `${appUrl}clientid.jsonld`,
     client_name: "Pod Music",
-    client_uri: `${origin}/`,
-    redirect_uris: [`${origin}/callback.html`, `${origin}/`],
+    client_uri: appUrl,
+    redirect_uris: [`${appUrl}callback.html`, appUrl],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
@@ -198,17 +204,24 @@ function callbackHtml(origin) {
 
 async function main() {
   // Files first (`.env`, `.env.local`), shell origin vars overlaid by priority.
+  const envFile = readEnvFile(".env");
+  const envLocalFile = readEnvFile(".env.local");
+  const basePath =
+    process.env.CLIENT_BASE_PATH ||
+    envLocalFile.CLIENT_BASE_PATH ||
+    envFile.CLIENT_BASE_PATH ||
+    "/";
   const origin = normaliseOrigin(
     resolveOriginValue({
       shellEnv: process.env,
-      envFile: readEnvFile(".env"),
-      envLocalFile: readEnvFile(".env.local"),
+      envFile,
+      envLocalFile,
     }),
   );
   await mkdir(publicDir, { recursive: true });
   await writeFile(
     resolve(publicDir, "clientid.jsonld"),
-    `${JSON.stringify(clientIdDocument(origin), null, 2)}\n`,
+    `${JSON.stringify(clientIdDocument(origin, basePath), null, 2)}\n`,
   );
   await writeFile(resolve(publicDir, "callback.html"), callbackHtml(origin));
   console.log(`gen-clientid: wrote clientid.jsonld + callback.html for origin ${origin}`);

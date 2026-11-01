@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Strava API v3 shapes (www.strava.com/api/v3) — trimmed to the
  * fields the adapter reads. Source: GET /athlete/activities.
@@ -44,4 +45,5 @@ export const ACTIVITIES: StravaActivity[] = [
 
 export const STRAVA_FIXTURES: readonly FixtureRoute[] = [
   { url: "https://www.strava.com/api/v3/athlete/activities", json: ACTIVITIES },
+  { url: "https://www.strava.com/api/v3/athlete/activities", json: [] },
 ];

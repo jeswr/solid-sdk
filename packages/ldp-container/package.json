@@ -1,0 +1,64 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/ldp-container",
+  "version": "0.1.0",
+  "securityCritical": true,
+  "description": "Browser-safe LDP container listing reads with fail-closed pod-scope filtering.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/ldp-container"
+  },
+  "homepage": "https://github.com/jeswr/solid-sdk/tree/main/packages/ldp-container#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-sdk/issues"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "ldp",
+    "container"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src test vitest.config.ts",
+    "lint:fix": "biome check --write src test vitest.config.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.26.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

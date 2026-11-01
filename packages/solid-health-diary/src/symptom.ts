@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:Symptom` (⊑ `health:Observation`) — a symptom the pod owner logged
@@ -17,19 +18,11 @@
  */
 
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { symptomTypeCodec } from "./concepts.js";
 import { httpIriOrUndefined } from "./iri.js";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
@@ -99,7 +92,12 @@ export class Symptom extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   /** Stamp as `diet:Symptom` + `health:Observation`. Idempotent; returns `this`. */
   mark(): this {
@@ -108,17 +106,17 @@ export class Symptom extends TermWrapper {
     return this;
   }
   get isSymptom(): boolean {
-    return this.types.has(DIET_SYMPTOM);
+    return hasType(this, DIET_SYMPTOM);
   }
 
   /** `diet:symptomType` → `diet:{concept}`; read back as the friendly token. */
   get symptomType(): SymptomType | undefined {
     return symptomTypeCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("symptomType"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("symptomType"), NamedNodeAs.string),
     );
   }
   set symptomType(value: SymptomType | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("symptomType"),
       value ? symptomTypeCodec.toIri(value) : undefined,
@@ -128,40 +126,40 @@ export class Symptom extends TermWrapper {
 
   /** `schema:startTime` — onset time. */
   get onset(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, schema("startTime"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, schema("startTime"), LiteralAs.date);
   }
   set onset(value: Date | undefined) {
-    OptionalAs.object(this, schema("startTime"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, schema("startTime"), value, LiteralFrom.dateTime);
   }
 
   /** `diet:severity` — ordinal 0–10. */
   get severity(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("severity"), LiteralAs.number);
+    return AliasOptionalFrom.subjectPredicate(this, diet("severity"), LiteralAs.number);
   }
   set severity(value: number | undefined) {
-    OptionalAs.object(this, diet("severity"), value, LiteralFrom.integer);
+    AliasOptionalAs.object(this, diet("severity"), value, LiteralFrom.integer);
   }
 
   get note(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
   }
   set note(value: string | undefined) {
-    OptionalAs.object(this, diet("note"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("note"), value, LiteralFrom.string);
   }
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 }
 

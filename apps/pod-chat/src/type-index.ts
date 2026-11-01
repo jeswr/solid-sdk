@@ -9,7 +9,9 @@
  * CSS does not seed these files, so reads tolerate their absence and the app
  * bootstraps a private index when missing.
  */
+
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
@@ -33,7 +35,12 @@ export class TypeRegistration extends TermWrapper {
     return OptionalFrom.subjectPredicate(this, `${SOLID}forClass`, NamedNodeAs.string);
   }
   set forClass(v: string | undefined) {
-    OptionalAs.object(this, `${SOLID}forClass`, v, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      `${SOLID}forClass`,
+      v === undefined ? undefined : canonicalize(v),
+      NamedNodeFrom.string,
+    );
   }
   get instance(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SOLID}instance`, NamedNodeAs.string);
@@ -77,7 +84,7 @@ export class TypeIndexDataset extends DatasetWrapper {
     return out;
   }
   locate(classIri: string): RegisteredLocation[] {
-    return this.all().filter((l) => l.forClass === classIri);
+    return this.all().filter((l) => termsEqual(l.forClass, classIri));
   }
 }
 

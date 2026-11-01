@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported Pod Docs regression tests.
 import { describe, expect, it } from "vitest";
 import {
+  ConcurrencyValidatorError,
   OutOfScopeError,
   PodDocsError,
   ResourceDeleteError,
@@ -9,6 +11,15 @@ import {
 } from "../../src/apps/docs/lib/model/errors.js";
 
 describe("errors", () => {
+  it("ConcurrencyValidatorError carries the url and is a PodDocsError without an HTTP status", () => {
+    const e = new ConcurrencyValidatorError("https://pod/x.ttl");
+    expect(e).toBeInstanceOf(PodDocsError);
+    expect(e.name).toBe("ConcurrencyValidatorError");
+    expect(e.url).toBe("https://pod/x.ttl");
+    expect(e.message).toContain("strong ETag");
+    expect(e).not.toHaveProperty("status");
+  });
+
   it("ResourceWriteError carries url + status and is a PodDocsError", () => {
     const cause = new Error("root");
     const e = new ResourceWriteError("https://pod/x.ttl", 412, { cause });

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Spotify Web API shapes (api.spotify.com/v1) — trimmed to the
  * fields the adapter reads. Sources: GET /me/top/tracks, GET /me/playlists.
@@ -9,6 +10,8 @@ import type { FixtureRoute } from "../core/types.js";
 // be absent and arrays can carry null entries.
 export interface SpotifyTrack {
   id: string;
+  type?: string;
+  is_local?: boolean;
   name?: string | null;
   duration_ms?: number | null;
   artists?: ({ name?: string | null } | null)[] | null;
@@ -22,10 +25,13 @@ export interface SpotifyTopTracks {
 
 export interface SpotifyPlaylist {
   id: string;
+  owner?: { id?: string | null } | null;
+  collaborative?: boolean | null;
   name?: string | null;
   description?: string | null;
   /** Absent on some live playlist items — the source of the live `.total` crash. */
   tracks?: { total?: number | null } | null;
+  items?: { total?: number | null } | null;
   external_urls?: { spotify?: string | null } | null;
 }
 
@@ -66,6 +72,7 @@ export const PLAYLISTS: SpotifyPlaylists = {
   items: [
     {
       id: "37i9dQZF1DXcBWIGoYBM5M",
+      owner: { id: "fixture-user" },
       name: "Focus Flow",
       description: "Instrumentals to keep you in the zone.",
       tracks: { total: 74 },
@@ -73,6 +80,8 @@ export const PLAYLISTS: SpotifyPlaylists = {
     },
     {
       id: "5ABHKGoOzxkaa28ttQV9sE",
+      owner: { id: "fixture-other-user" },
+      collaborative: true,
       name: "Sunday Morning",
       description: "Slow starts and coffee.",
       tracks: { total: 41 },
@@ -82,6 +91,34 @@ export const PLAYLISTS: SpotifyPlaylists = {
 };
 
 export const SPOTIFY_FIXTURES: readonly FixtureRoute[] = [
+  { url: "https://api.spotify.com/v1/me", json: { id: "fixture-user" } },
   { url: "https://api.spotify.com/v1/me/top/tracks", json: TOP_TRACKS },
   { url: "https://api.spotify.com/v1/me/playlists", json: PLAYLISTS },
+  {
+    url: "https://api.spotify.com/v1/me/tracks",
+    json: { items: [{ track: TOP_TRACKS.items?.[0] }] },
+  },
+  {
+    url: "https://api.spotify.com/v1/me/top/artists",
+    json: { items: [{ id: "artist1", name: "Synthetic Artist" }] },
+  },
+  {
+    url: "https://api.spotify.com/v1/me/following",
+    json: { artists: { items: [{ id: "artist1", name: "Synthetic Artist" }] } },
+  },
+  ...(PLAYLISTS.items ?? []).flatMap((playlist) =>
+    playlist
+      ? [
+          {
+            url: `https://api.spotify.com/v1/playlists/${playlist.id}/items`,
+            json: { items: [{ item: TOP_TRACKS.items?.[0] }, { track: TOP_TRACKS.items?.[1] }] },
+          },
+        ]
+      : [],
+  ),
+  { url: "https://api.spotify.com/v1/playlists", json: { items: [] } },
+  {
+    url: "https://api.spotify.com/v1/me/player/recently-played",
+    json: { items: [{ track: TOP_TRACKS.items?.[0], played_at: "2026-10-25T12:00:00Z" }] },
+  },
 ];

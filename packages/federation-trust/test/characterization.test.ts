@@ -92,7 +92,10 @@ function normalizeCredential(vc: VerifiableCredential): unknown {
     try {
       const jwk = JSON.parse(dk) as Record<string, unknown>;
       if ("x" in jwk) jwk.x = "<x>";
-      subj["https://w3id.org/jeswr/fedtrust#delegateKey"] = JSON.stringify(jwk);
+      // Sort keys: the runtime's JWK export order varies across Node versions.
+      subj["https://w3id.org/jeswr/fedtrust#delegateKey"] = JSON.stringify(
+        Object.fromEntries(Object.entries(jwk).sort(([a], [b]) => (a < b ? -1 : 1))),
+      );
     } catch {
       /* leave as-is */
     }
@@ -197,7 +200,7 @@ describe("characterization — emitted credential shape (every IRI pinned)", () 
       {
         "credentialSubject": {
           "https://w3id.org/jeswr/fedtrust#delegate": "https://sub.example/card#me",
-          "https://w3id.org/jeswr/fedtrust#delegateKey": "{"crv":"Ed25519","x":"<x>","kty":"OKP"}",
+          "https://w3id.org/jeswr/fedtrust#delegateKey": "{"crv":"Ed25519","kty":"OKP","x":"<x>"}",
           "https://w3id.org/jeswr/fedtrust#federation": "https://registry.example/federation",
           "id": "https://sub.example/card#me",
         },

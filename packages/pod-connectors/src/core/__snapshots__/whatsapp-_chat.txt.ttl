@@ -1,0 +1,11 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/whatsapp/social/whatsapp-chat.ttl#msg-synthetic-peer-dc970942> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://jeswr.org/ns/sectors/social#content> "Hi";
+    <https://schema.org/dateCreated> "2026-01-20T12:01:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/sender> "Synthetic Peer";
+    <https://schema.org/text> "Hi".
+<https://pod.test/alice/integrations/whatsapp/social/whatsapp-chat.ttl#msg-synthetic-sender-c375ded9> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://jeswr.org/ns/sectors/social#content> "Hello \U0001f30d\ncontinued";
+    <https://schema.org/dateCreated> "2026-01-20T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/sender> "Synthetic Sender";
+    <https://schema.org/text> "Hello \U0001f30d\ncontinued".

@@ -14,9 +14,12 @@ import {
   isWithinPodScope,
   PodScopeError,
   refuseRedirects,
+  snapshotFetchInput,
 } from "@jeswr/guarded-fetch";
+import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { canonicalJeswrIri } from "../core/canonical-vocab.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import {
@@ -44,6 +47,24 @@ export interface EnsureRegistrationsResult {
 }
 
 const PREFIXES = { solid: "http://www.w3.org/ns/solid/terms#" };
+
+/** Select exactly one profile-linked index (or bootstrap target) inside advertised storage. */
+export function validatedTypeIndexTarget(webId: string, profile: DatasetCore, podRoot: string) {
+  const links = typeIndexLinks(webId, profile);
+  const target =
+    links.privateIndex ??
+    links.publicIndex ??
+    new URL("settings/privateTypeIndex.ttl", podRoot).href;
+  const storageRoots = new Agent(webId, profile, DataFactory).storageUrls;
+  const storageRoot = [...storageRoots].find((root) =>
+    isWithinPodScope(root, target, { allowRoot: false }),
+  );
+  if (!storageRoot) throw new PodScopeError("Type Index is outside every advertised storage root.");
+  return {
+    indexUrl: documentUrl(assertWithinPodScope(storageRoot, target, { allowRoot: false })),
+    storageRoot,
+  };
+}
 
 /**
  * Ensure every desired registration exists in the user's type index.
@@ -82,25 +103,19 @@ export async function ensureTypeRegistrations(opts: {
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
-  const indexTarget = indexUrl ?? new URL("settings/privateTypeIndex.ttl", podRoot).href;
   // The profile's trusted storage roots are independent of the import destination.
-  const storageRoots = new Agent(webId, profileDs, DataFactory).storageUrls;
-  const indexStorage = [...storageRoots].find((root) =>
-    isWithinPodScope(root, indexTarget, { allowRoot: false }),
+  const { indexUrl: selectedIndex, storageRoot: indexStorage } = validatedTypeIndexTarget(
+    webId,
+    profileDs,
+    podRoot,
   );
-  if (!indexStorage) {
-    throw new PodScopeError("Type Index is outside every advertised storage root.");
-  }
   // Bind index access to the one profile-linked document (or bootstrap target).
   // A valid Pod URL alone does not grant access to unrelated Pod documents.
-  const selectedIndex = documentUrl(
-    assertWithinPodScope(indexStorage, indexTarget, { allowRoot: false }),
-  );
   const indexFetch = documentFetch(selectedIndex, authenticatedFetch);
   const fetchImpl: typeof fetch = (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    assertWithinPodScope(indexStorage, url, { allowRoot: false });
-    return indexFetch(input, init);
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "direct" });
+    assertWithinPodScope(indexStorage, snapshot.url, { allowRoot: false });
+    return indexFetch(snapshot.input, snapshot.init);
   };
 
   if (!indexUrl) {
@@ -120,7 +135,8 @@ export async function ensureTypeRegistrations(opts: {
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
-  for (const desired of registrations) {
+  for (const registration of registrations) {
+    const desired = { ...registration, forClass: canonicalJeswrIri(registration.forClass) };
     const exists = index.locate(desired.forClass).some((l) => l.container === desired.container);
     if (exists) continue;
     const reg = new TypeRegistration(
@@ -147,11 +163,11 @@ export async function ensureTypeRegistrations(opts: {
 /** Pin authenticated access to exactly one document, independently of its RDF subjects. */
 function documentFetch(document: string, fetchImpl: typeof fetch): typeof fetch {
   return (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (documentUrl(url) !== document) {
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "direct" });
+    if (documentUrl(snapshot.url) !== document) {
       throw new PodScopeError("Type Index request is outside the selected document.");
     }
-    return fetchImpl(input, init);
+    return fetchImpl(snapshot.input, snapshot.init);
   };
 }
 

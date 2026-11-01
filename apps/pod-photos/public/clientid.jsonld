@@ -2,10 +2,11 @@
   "@context": [
     "https://www.w3.org/ns/solid/oidc-context.jsonld",
     {
-      "fedapp": "https://w3id.org/jeswr/fed#",
+      "fedapp": "https://jeswr.org/ns/fed#",
       "schema": "https://schema.org/",
       "acl": "http://www.w3.org/ns/auth/acl#",
-      "sectors": "https://w3id.org/jeswr/sectors/",
+      "fedapp:access": { "@type": "@id" },
+      "sectors": "https://jeswr.org/ns/sectors/",
       "App": "fedapp:App",
       "sector": { "@id": "fedapp:sector", "@type": "@id" },
       "access": { "@id": "fedapp:access", "@type": "@id", "@container": "@set" },
@@ -23,7 +24,7 @@
   "token_endpoint_auth_method": "none",
 
   "@type": "App",
-  "sector": "https://w3id.org/jeswr/sectors/media#sector",
+  "sector": "https://jeswr.org/ns/sectors/media#sector",
   "access": ["acl:Read", "acl:Write", "acl:Append"],
   "produces": ["schema:Photograph", "schema:ImageGallery"],
   "consumes": ["schema:Photograph", "schema:ImageGallery"]

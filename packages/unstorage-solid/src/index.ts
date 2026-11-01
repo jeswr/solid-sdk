@@ -545,6 +545,7 @@ function toBodyInit(value: unknown): BodyInit {
 /**
  * Thrown when the driver refuses to follow a redirect on a pod request (the
  * credential-leak / SSRF guard — see the Security section of the README).
+ * @deprecated Use `RedirectRefusedError` from `@jeswr/guarded-fetch`.
  */
 export { SolidRedirectError } from "./scope.js";
 /**

@@ -106,6 +106,7 @@ export const LEGACY_NAMESPACES: Readonly<Record<string, string>> = {
   "https://w3id.org/jeswr/pod-drive#": NS.POD_DRIVE,
   "https://w3id.org/jeswr/pod-chat#": NS.POD_CHAT,
   "https://w3id.org/jeswr/pod-health#": NS.POD_HEALTH,
+  // DECISIONS V9: read-only legacy; the app also retires Category and parent.
   "https://w3id.org/jeswr/pod-money#": NS.POD_MONEY,
   "https://w3id.org/jeswr/solid-sd#": NS.SOLID_SD,
   "https://w3id.org/jeswr/agent#": NS.AGENT,

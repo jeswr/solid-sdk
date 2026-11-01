@@ -18,3 +18,9 @@ Use only fictional `example.org` identities in fixtures. The five synthetic clai
 and Python-generated expected outputs in `test/fixtures` replace private pilot data.
 Supply source digests explicitly; this data-model package never reads source files.
 Belief classification, purpose filtering, and pod storage belong to MCP-05.
+
+New templates write canonical `https://jeswr.org/ns/sectors/health#` and
+`https://jeswr.org/ns/core#` terms. Keep supplied assertion graphs and the
+reference parser's implicit legacy prefixes unchanged: they are hash inputs.
+For new Turtle bodies, declare canonical prefixes explicitly. Read legacy and
+mixed graphs without rewriting the terms or their content-derived identifiers.

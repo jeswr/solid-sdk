@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // gen-catalog.test.mjs — pins the DCAT catalog serializer: (1) the graph carries the
 // expected DCAT/schema shape for the catalog + each app, and (2) the Turtle and the
@@ -163,4 +164,14 @@ describe("Turtle ⇄ JSON-LD isomorphism", () => {
     expect(jsonldQuads.length).toBe(quads.length);
     expect(signature(ttlQuads)).toEqual(signature(jsonldQuads));
   });
+});
+
+it("keeps catalog and app client identifiers under their Pages paths", () => {
+  const base = "https://jeswr.github.io/solid-sdk/app-store";
+  const deployedUrl = "https://jeswr.github.io/solid-sdk/pod-drive/";
+  const quads = buildCatalogQuads(base, [{ ...APPS[0], deployedUrl }]);
+  expect(quads.some((q) => q.subject.value === `${base}/catalog#it`)).toBe(true);
+  expect(
+    quads.find((q) => q.predicate.value === "https://schema.org/identifier")?.object.value,
+  ).toBe(`${deployedUrl}clientid.jsonld`);
 });

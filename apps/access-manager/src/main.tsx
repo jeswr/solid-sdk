@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 // Entry point: register the web components, then EITHER mount the ?demo-gated
 // read-only demo (the real views over an inert in-browser fixture pod — no
@@ -24,14 +25,14 @@ if (demoView !== null) {
   });
 } else {
   // ThemeProvider wraps the real app (suite convention — pod-drive/pod-photos
-  // parity): defaults to "system", persists to localStorage "app-shell-theme",
+  // parity): defaults to "system", persists to localStorage "access-manager:app-shell-theme",
   // and toggles the `.dark` class on <html>. Without it the logged-in Shell's
   // ThemeToggle (useTheme) throws and the post-login UI white-screens. The
   // ?demo branch above is mutually exclusive and DemoApp mounts its OWN
   // provider (it must stay self-contained — tests render it directly), so
   // there is never a double wrap.
   root.render(
-    <ThemeProvider>
+    <ThemeProvider storageKey="access-manager:app-shell-theme">
       <App controller={buildController()} />
     </ThemeProvider>,
   );

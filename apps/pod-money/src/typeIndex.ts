@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Solid Type Index — read + register so other apps can discover where Pod Money
 // stores its primary class (fin:Transaction). Pattern follows the
@@ -8,6 +9,7 @@
 // through our own TermWrapper subclasses — never inline quads, never
 // string-concatenated Turtle.
 
+import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import {
   DatasetWrapper,
   NamedNodeAs,
@@ -17,6 +19,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
+import { categoryClass } from "./canonical-vocab.js";
 import { RDF_TYPE, SolidTerm } from "./vocab.js";
 
 /** A single location a class is registered at. */
@@ -73,9 +76,10 @@ export class TypeIndexDataset extends DatasetWrapper {
 
   /** The location(s) registered for a class IRI. */
   locate(classIri: string): RegistrationLocation[] {
+    const requestedClass = categoryClass(classIri);
     const out: RegistrationLocation[] = [];
     for (const reg of this.registrations) {
-      if (reg.forClass === classIri) {
+      if (reg.forClass !== undefined && termsEqual(categoryClass(reg.forClass), requestedClass)) {
         const loc: RegistrationLocation = {};
         if (reg.instance !== undefined) loc.instance = reg.instance;
         if (reg.instanceContainer !== undefined) loc.container = reg.instanceContainer;
@@ -107,18 +111,21 @@ export class TypeIndexDataset extends DatasetWrapper {
     classIri: string,
     location: RegistrationLocation,
   ): TypeRegistration {
+    const requestedClass = canonicalize(categoryClass(classIri));
     for (const reg of this.registrations) {
       if (
-        reg.forClass === classIri &&
+        reg.forClass !== undefined &&
+        termsEqual(categoryClass(reg.forClass), requestedClass) &&
         reg.instance === location.instance &&
         reg.instanceContainer === location.container
       ) {
+        reg.forClass = requestedClass;
         return reg;
       }
     }
     const reg = new TypeRegistration(indexUrl + fragment, this, this.factory);
     reg.markRegistration();
-    reg.forClass = classIri;
+    reg.forClass = requestedClass;
     if (location.instance !== undefined) reg.instance = location.instance;
     if (location.container !== undefined) reg.instanceContainer = location.container;
     return reg;

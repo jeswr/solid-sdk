@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ContainerMember } from '@jeswr/ldp-container';
 import type { DatasetCore } from '@rdfjs/types';
 import { Store } from 'n3';
 import { TermWrapper } from '@rdfjs/wrapper';
@@ -14,7 +15,7 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 // @public
 export const as: (local: string) => string;
 
-// @public
+// @public @deprecated
 export function assertWithinBase(container: string, url: string, opts?: {
     allowRoot?: boolean;
 }): void;
@@ -22,11 +23,7 @@ export function assertWithinBase(container: string, url: string, opts?: {
 // @public
 export function buildMemory(resourceUrl: string, data: MemoryData): Store;
 
-// @public
-export interface ContainerMember {
-    readonly container: boolean;
-    readonly url: string;
-}
+export { ContainerMember }
 
 // @public
 export const DCT = "http://purl.org/dc/terms/";
@@ -47,7 +44,13 @@ export function isContainerUrl(url: string): boolean;
 export function isHttpIri(value: string | undefined): value is string;
 
 // @public
-export const MEM = "https://w3id.org/jeswr/memory#";
+export const LEGACY_MEMORY_NS = "https://w3id.org/jeswr/memory#";
+
+// @public (undocumented)
+export const LEGACY_POD_CHAT_NS = "https://w3id.org/jeswr/pod-chat#";
+
+// @public
+export const MEM = "https://jeswr.org/ns/memory#";
 
 // @public
 export const mem: (local: string) => string;
@@ -177,20 +180,20 @@ export function parseMemory(resourceUrl: string, dataset: DatasetCore): MemoryDa
 export function parseMemoryTtl(url: string, body: string, contentType?: string | null): Promise<MemoryData | undefined>;
 
 // @public
-export const PC = "https://w3id.org/jeswr/pod-chat#";
+export const PC = "https://jeswr.org/ns/pod-chat#";
 
 // @public
 export const pc: (local: string) => string;
 
 // @public
 export const PREFIXES: {
-    readonly mem: "https://w3id.org/jeswr/memory#";
+    readonly mem: "https://jeswr.org/ns/memory#";
     readonly schema: "http://schema.org/";
     readonly dct: "http://purl.org/dc/terms/";
     readonly prov: "http://www.w3.org/ns/prov#";
     readonly rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     readonly as: "https://www.w3.org/ns/activitystreams#";
-    readonly pc: "https://w3id.org/jeswr/pod-chat#";
+    readonly pc: "https://jeswr.org/ns/pod-chat#";
     readonly xsd: "http://www.w3.org/2001/XMLSchema#";
 };
 

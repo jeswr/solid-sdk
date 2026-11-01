@@ -1,3 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
+
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The IRI table for Pod Music's RDF model. Two complementary vocabularies:
@@ -25,8 +28,9 @@ export const SOLID = "http://www.w3.org/ns/solid/terms#" as const;
 export const ACL = "http://www.w3.org/ns/auth/acl#" as const;
 export const MO = "http://purl.org/ontology/mo/" as const;
 export const SCHEMA = "http://schema.org/" as const;
-export const FEDAPP = "https://w3id.org/jeswr/fed#" as const;
-export const SECTORS = "https://w3id.org/jeswr/sectors/" as const;
+export const FEDAPP = NS.FED;
+// Sector root from @jeswr/suite-vocab (NS.MEDIA supplies the media namespace).
+export const SECTORS = "https://jeswr.org/ns/sectors/" as const;
 
 // --- rdf / rdfs / dcterms ---
 export const RDF_TYPE = `${RDF}type` as const;
@@ -90,7 +94,7 @@ export const FEDAPP_SECTOR = `${FEDAPP}sector` as const;
 export const FEDAPP_ACCESS = `${FEDAPP}access` as const;
 export const FEDAPP_CONSUMES = `${FEDAPP}consumes` as const;
 export const FEDAPP_PRODUCES = `${FEDAPP}produces` as const;
-export const SECTOR_MEDIA = `${SECTORS}media#sector` as const;
+export const SECTOR_MEDIA = `${NS.MEDIA}sector` as const;
 export const ACL_READ = `${ACL}Read` as const;
 export const ACL_WRITE = `${ACL}Write` as const;
 export const ACL_APPEND = `${ACL}Append` as const;

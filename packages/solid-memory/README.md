@@ -1,8 +1,13 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-memory
 
 A typed RDF memory model, Solid-pod store, and client-side search layer for portable agent memory.
+
+Writers use `https://jeswr.org/ns/memory#` and the canonical pod-chat namespace
+`https://jeswr.org/ns/pod-chat#`. Readers also accept the read-only legacy memory namespace
+exported as `LEGACY_MEMORY_NS`; `LEGACY_POD_CHAT_NS` identifies the legacy chat vocabulary.
 
 ## Install
 
@@ -48,7 +53,14 @@ memories are excluded from search unless `includeForgotten: true` is requested.
 - Focused entries: `@jeswr/solid-memory/memory`, `/store`, and `/search`.
 
 Pass an authenticated fetch and protect the memory container with an owner-only policy by default.
-The library does not manage credentials or access control.
+The library does not manage credentials or access control. Scope checks delegate to
+`@jeswr/guarded-fetch` and reject encoded path delimiters (`%2F` / `%5C`). The exported
+`assertWithinBase` is deprecated; it retains absolute-target and strict-resource defaults
+for compatibility. New callers may use `assertWithinPodScope` with `{ allowRoot: false }`.
+
+Container listing reads and safe membership parsing use `@jeswr/ldp-container`.
+The store retains its stricter compatibility scope checks and redirect refusal; `list()`
+still returns an empty array for missing containers.
 
 ## Links
 

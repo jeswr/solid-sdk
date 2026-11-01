@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // SessionProvider — the ONE place auth is wired for the Pod Health static host.
@@ -66,6 +67,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { appUrl } from "./app-url";
 import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth-flow-holder";
 import { planAutologin } from "./autologin-plan";
 import { assessLoginProbe } from "./login-result";
@@ -241,10 +243,11 @@ const AUTOLOGIN_FRAGMENT_PREFIX = "#autologin/";
  * the already-set sentinel makes us fall through to the login screen instead of
  * looping. Cleared on a successful completion, and on a non-code bounce.
  */
-const AUTOLOGIN_SENTINEL_KEY = "autologin-attempted";
+// App-scoped on shared origins. Never read the former unscoped key.
+export const AUTOLOGIN_SENTINEL_KEY = "pod-health:autologin-attempted";
 
 /** Read the one-shot autologin sentinel (the WebID we last attempted), or null. */
-function readAutologinSentinel(): string | null {
+export function readAutologinSentinel(): string | null {
   try {
     return globalThis.sessionStorage?.getItem(AUTOLOGIN_SENTINEL_KEY) ?? null;
   } catch {
@@ -806,8 +809,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const getCode: GetCodeCallback = lazyElementGetCode(ui);
     authFlowHolder.current = getCode;
     getAuthRuntime({
-      callbackUri: new URL("/callback.html", location.href).toString(),
-      clientId: new URL("/clientid.jsonld", location.href).toString(),
+      callbackUri: appUrl("callback.html"),
+      clientId: appUrl("clientid.jsonld"),
       // Only a localhost deployment may target an HTTP/loopback issuer.
       allowInsecureLoopback: isLoopbackOrigin(origin),
       // Read the latest pending WebID through the module-level holder (not a
@@ -1505,7 +1508,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAutologinPending(true);
     setError(null);
 
-    const redirectReturnUri = new URL("/", location.href).toString();
+    const redirectReturnUri = appUrl();
     provider
       .beginRedirectLogin(redirectReturnUri)
       .then(({ authorizationUrl }) => {

@@ -87,7 +87,7 @@ pass the resource's ETag.
 
 Pod Music ships a Client Identifier Document at
 [`public/clientid.jsonld`](./public/clientid.jsonld) that publishes the
-`fedapp:` block from <https://w3id.org/jeswr/fed> — declaring it as a **media**-sector
+`fedapp:` block from <https://jeswr.org/ns/fed> — declaring it as a **media**-sector
 `fedapp:App` that produces/consumes the music classes above and requests
 `acl:Read` / `acl:Write` / `acl:Append`. This makes the app
 **federation-registry-ready**: once the federation registry runs a signed
@@ -153,7 +153,7 @@ These are deliberate next steps, tracked outside this README:
 - **Coverage ratchet** — a CI ratchet that keeps coverage at 100% against every
   well-known server target as the matrix grows.
 - **Sector-vocab ADR** — if the `media` sector definition under
-  <https://w3id.org/jeswr/sectors/> needs to be frozen/extended for Pod Music's
+  <https://jeswr.org/ns/sectors/> needs to be frozen/extended for Pod Music's
   shapes, that is a federation-vocab ADR.
 
 ## Provenance

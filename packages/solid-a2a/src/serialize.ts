@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Turtle / N-Triples serialisation of an intent / SHACL-shape / Protocol-Document
@@ -15,11 +16,11 @@
 
 import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { A2A, ACL, DCTERMS, LDP, RDF, RDFS, SCHEMA, SH, XSD } from "./vocab.js";
+import { ACL, DCTERMS, LDP, LEGACY_A2A_NS, RDF, RDFS, SCHEMA, SH, XSD } from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
 const PREFIXES = {
-  a2a: A2A,
+  a2a: LEGACY_A2A_NS,
   schema: SCHEMA,
   acl: ACL,
   ldp: LDP,

@@ -20,6 +20,7 @@
  * @see https://developer.mozilla.org/docs/Web/HTTP/Caching#heuristic_caching
  */
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
 import { RemoteContextRefusedError } from "../core/errors.js";
 
@@ -29,6 +30,8 @@ export const REVALIDATE_HEADERS = { "cache-control": "no-cache" } as const;
 /**
  * Fetch + parse a pod RDF document, always revalidating any cached copy.
  * JSON-LD supports inline contexts only: this package bundles no context URLs.
+ * Preserve raw vocabulary so mutations of shared profiles and Type Index documents
+ * retain other apps' terms. Import sessions normalize connector-owned documents.
  *
  * Same contract as `fetchRdf` (errors propagate as `RdfFetchError`; keep the
  * returned `etag` for conditional writes).

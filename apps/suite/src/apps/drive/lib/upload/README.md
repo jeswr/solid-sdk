@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Upload planning (DRV-L4)
 
@@ -43,7 +44,8 @@ no deletes. `diffFolderTree(entries, existing)` returns the folder-only diff.
 C0/C1 controls become `-`, names are trimmed and capped at 180 Unicode code points,
 case/spaces/Unicode are preserved. Files preserve their complete extension chain
 (the first dot after any leading dots starts the chain); folders are capped as a
-whole. An extension leaving no room for a stem is rejected. `encodeUploadPath`
+whole. An extension leaving no room for a stem is rejected, as is capping that
+would change which dots start the file's extension chain. `encodeUploadPath`
 applies that policy to each segment and uses `encodeURIComponent`, adding `/`
 for folders. There is no lowercase slug conversion.
 

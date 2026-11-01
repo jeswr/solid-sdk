@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -9,6 +10,12 @@ import { parseTurtle } from "./helpers.js";
 
 const INDEX_URL = "https://pod.example/settings/publicTypeIndex.ttl";
 const CONTAINER = "https://pod.example/finance/";
+const CATEGORY_CLASSES = [
+  "https://w3id.org/jeswr/pod-money#Category",
+  "https://jeswr.org/ns/pod-money#Category",
+  "https://w3id.org/jeswr/sectors/finance#BudgetCategory",
+  FinClass.BudgetCategory,
+];
 
 function emptyIndex(): TypeIndexDataset {
   return new TypeIndexDataset(new Store(), DataFactory);
@@ -64,6 +71,55 @@ describe("TypeIndexDataset", () => {
     expect([...index.registrations]).toHaveLength(1);
   });
 
+  describe.each(CATEGORY_CLASSES)("category registration stored as %s", (storedClass) => {
+    it.each(CATEGORY_CLASSES)("locates and reuses the registration requested as %s", (requestedClass) => {
+      const index = new TypeIndexDataset(
+        parseTurtle(
+          `@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+          <#category> a solid:TypeRegistration ;
+            solid:forClass <${storedClass}> ;
+            solid:instanceContainer <${CONTAINER}> .`,
+          INDEX_URL,
+        ),
+        DataFactory,
+      );
+
+      expect(index.locate(requestedClass)).toEqual([{ container: CONTAINER }]);
+      // Discovery alone leaves the stored class intact until registration/save.
+      expect([...index.registrations][0]?.forClass).toBe(storedClass);
+
+      const reg = index.register(INDEX_URL, "#new-category", requestedClass, {
+        container: CONTAINER,
+      });
+      expect(reg.value).toBe(`${INDEX_URL}#category`);
+      expect(reg.forClass).toBe(FinClass.BudgetCategory);
+      expect([...index.registrations]).toHaveLength(1);
+      expect(index.locate(FinClass.BudgetCategory)).toEqual([{ container: CONTAINER }]);
+    });
+  });
+
+  it.each(CATEGORY_CLASSES)("registers a new category requested as %s canonically", (classIri) => {
+    const index = emptyIndex();
+    const instance = `${CONTAINER}categories.ttl`;
+    const reg = index.register(INDEX_URL, "#category", classIri, { instance });
+
+    expect(reg.forClass).toBe(FinClass.BudgetCategory);
+    expect(index.locate(classIri)).toEqual([{ instance }]);
+    expect(index.locate(FinClass.BudgetCategory)).toEqual([{ instance }]);
+  });
+
+  it("keeps category registrations at different locations distinct", () => {
+    const index = emptyIndex();
+    index.register(INDEX_URL, "#category-container", "https://w3id.org/jeswr/pod-money#Category", {
+      container: CONTAINER,
+    });
+    const instance = `${CONTAINER}categories.ttl`;
+    index.register(INDEX_URL, "#category-instance", FinClass.BudgetCategory, { instance });
+
+    expect([...index.registrations]).toHaveLength(2);
+    expect(index.locate(FinClass.BudgetCategory)).toEqual([{ container: CONTAINER }, { instance }]);
+  });
+
   it("does NOT dedupe a different location for the same class", () => {
     const index = emptyIndex();
     index.register(INDEX_URL, "#r1", FinClass.Transaction, { container: CONTAINER });
@@ -84,7 +140,7 @@ describe("TypeIndexDataset", () => {
     expect(index.locate(FinClass.Holding)).toEqual([]);
   });
 
-  it("reads a hand-written index parsed from Turtle", () => {
+  it("reads a legacy namespace index parsed from Turtle", () => {
     const turtle = `
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
       @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .

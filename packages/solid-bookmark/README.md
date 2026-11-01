@@ -1,8 +1,19 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-bookmark
 
 A browser-safe RDF vocabulary and typed model for bookmarks and read-it-later data on Solid pods.
+
+Writers and the shipped ontology use `https://jeswr.org/ns/bookmark#`
+(source: `@jeswr/suite-vocab` NS.BOOKMARK), with core references under NS.CORE,
+`https://jeswr.org/ns/core#`. Readers also accept the read-only legacy bookmark
+namespace exported as `LEGACY_BOOK_NS`; `LEGACY_CORE_NS` exposes the legacy core base.
+Canonical notes and archived values take precedence when both aliases are present.
+Setting either property removes its legacy alias and writes the canonical predicate.
+The shipped SHACL shape targets both bookmark classes and checks both property aliases.
+Notes and archived each permit at most one distinct value across their aliases: identical
+duplicates conform, while conflicting or malformed values fail validation on either class.
 
 ## Install
 

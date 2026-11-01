@@ -47,3 +47,25 @@ if (typeof G.CSSStyleSheet === "undefined") {
     Object.defineProperty(proto, "cssRules", { configurable: true, get: () => [] });
   }
 }
+
+// jsdom's ElementInternals lacks the form-association methods. @ro-kit/ui-widgets
+// (pulled in by shacl-form) calls `setFormValue` from a Lit `updated()` hook, which
+// can run after a test finished and then surfaces as an unhandled rejection that
+// fails the run. Stub the missing methods; form participation is a browser concern.
+const EI = (globalThis as unknown as { ElementInternals?: { prototype: Record<string, unknown> } })
+  .ElementInternals;
+if (EI) {
+  const internals = EI.prototype;
+  if (typeof internals.setFormValue !== "function")
+    internals.setFormValue = function setFormValue(): void {};
+  if (typeof internals.setValidity !== "function")
+    internals.setValidity = function setValidity(): void {};
+  if (typeof internals.checkValidity !== "function")
+    internals.checkValidity = function checkValidity(): boolean {
+      return true;
+    };
+  if (typeof internals.reportValidity !== "function")
+    internals.reportValidity = function reportValidity(): boolean {
+      return true;
+    };
+}

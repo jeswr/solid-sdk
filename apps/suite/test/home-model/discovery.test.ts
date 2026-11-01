@@ -10,9 +10,62 @@ import {
 } from "../../src/apps/home/lib/model/discovery";
 import { DOMAINS } from "../../src/apps/home/lib/model/domains";
 import { provenanceOf } from "../../src/apps/home/lib/model/provenance";
+import { readTypeIndexes } from "../../src/apps/home/lib/model/type-index";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it.each([
+    "http",
+    "https",
+  ])("deduplicates %s URLs across parsed indexes and container listings", async (scheme) => {
+    const storage = `${scheme}://pod.example/alice/`;
+    const webId = `${storage}profile/card#me`;
+    const container = `${storage}integrations/netflix/`;
+    const url = `${container}one.ttl`;
+    const aliasRoot = `${scheme}://POD.example:${scheme === "https" ? 443 : 80}/alice/`;
+    const alias = `${aliasRoot}integrations/netflix/one.ttl`;
+    const profile = await rdf(
+      "<#me> solid:publicTypeIndex <../public.ttl> ; solid:privateTypeIndex <../private.ttl> .",
+      webId,
+    );
+    const fetch = fixtureFetch({
+      [`${storage}public.ttl`]: `<#r> a solid:TypeRegistration ; solid:forClass schema:Movie ; solid:instance <${alias}#it> .`,
+      [`${storage}private.ttl`]: `<#r> a solid:TypeRegistration ; solid:forClass schema:Movie ; solid:instance <${url}> ; solid:instanceContainer <${aliasRoot}integrations/netflix/> .`,
+      [`${storage}integrations/`]: "<> ldp:contains <netflix/> .",
+      [container]: '<> ldp:contains <one.ttl> . <one.ttl> dct:modified "2026-02-01" .',
+      [url]: `<${alias}#it> a schema:Movie ; schema:name "A film" .`,
+      [alias]: `<${alias}#it> a schema:Movie ; schema:name "A film" .`,
+    });
+    const indexes = await readTypeIndexes(fetch, webId, profile, storage);
+    expect(indexes.failures).toEqual([]);
+    expect(indexes.truncated).toBe(false);
+    expect(indexes.locations).toContainEqual({
+      forClass: `${NS.SCHEMA}Movie`,
+      instance: `${alias}#it`,
+    });
+    const result = await discoverDomainItems("media", {
+      storage,
+      fetch,
+      typeIndex: indexes.locations,
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.truncated).toBe(false);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      url,
+      containerUrl: container,
+      title: "A film",
+      subject: { value: `${alias}#it` },
+      modified: "2026-02-01",
+      etag: '"/alice/integrations/netflix/one.ttl"',
+    });
+    expect(result.etags.get(url)).toBe('"/alice/integrations/netflix/one.ttl"');
+    expect(result.etags.has(alias)).toBe(false);
+    for (const resource of [url, container])
+      expect(fetch.mock.calls.filter(([input]) => String(input) === resource)).toHaveLength(1);
+    expect(fetch.mock.calls.some(([input]) => String(input).includes("POD.example"))).toBe(false);
+  });
+
   it.each([
     "http",
     "https",

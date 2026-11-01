@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `solid-agent-notify` — SSRF-hardened cross-pod Linked Data Notifications (LDN)
@@ -67,7 +68,7 @@ export type {
   TaskNotification,
   TaskState,
 } from "./task.js";
-// ── Shared federation task model (https://w3id.org/jeswr/task — wf:Task + dct:) ──
+// ── Shared federation task model (https://jeswr.org/ns/task# — wf:Task + dct:) ──
 export {
   buildTaskNotification,
   notifyTaskAssigned,

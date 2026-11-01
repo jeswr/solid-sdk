@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // App — the Solid App Store root. Unlike the pod-apps, the store renders its FULL
 // catalog whether or not you are logged in (it is a public directory): logging in
@@ -19,17 +20,9 @@ import { CatalogView } from "./components/CatalogView";
 import { SignInDialog } from "./components/SignInDialog";
 import { StoreGrid } from "./components/StoreGrid";
 import { type AppEntry, isLive } from "./lib/catalog";
+import { isCatalogRoute } from "./lib/catalog-route";
 
 const APPS = appsData as AppEntry[];
-
-/** Whether the URL requests the human catalog (LD) view. */
-function isCatalogRoute(): boolean {
-  if (typeof window === "undefined") return false;
-  // Reachable two ways, both must render CatalogView: the hash route (#/catalog) AND the
-  // server-routed text/html path (/catalog or /catalog/) the static host rewrites to the SPA.
-  if (window.location.hash.replace(/^#/, "") === "/catalog") return true;
-  return /^\/catalog\/?$/.test(window.location.pathname);
-}
 
 export function App() {
   const { webId, session, logout, login, loggingIn, error, ready, restoringSession } = useSession();

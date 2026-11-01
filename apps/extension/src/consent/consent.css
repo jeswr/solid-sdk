@@ -1,0 +1,38 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+@import url('../shared/permission-surface.css');
+.consent-sheet .classes { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.consent-sheet .class-head { align-items: flex-start; }
+.consent-sheet .class-head > span { min-width: 0; }
+.consent-sheet .chips { display: flex; flex-wrap: wrap; gap: var(--space-1\.5); margin-top: var(--space-3); }
+.consent-sheet .chip {
+  border-radius: var(--radius-sm);
+  padding: var(--space-0\.5) var(--space-2);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-xs);
+}
+.consent-sheet .meta { margin-bottom: 0; }
+.consent-sheet .targets { margin-bottom: 0; padding-left: var(--space-5); }
+.consent-sheet .targets li { overflow-wrap: anywhere; }
+.consent-sheet .scope-details { margin-top: var(--space-3); }
+.consent-sheet summary { cursor: pointer; color: var(--primary); min-height: var(--space-6); }
+.consent-sheet .duration-chips { min-width: 0; margin: var(--space-5) 0 0; padding: 0; border: 0; }
+.consent-sheet .duration-chips legend { font-weight: var(--weight-lg); margin-bottom: var(--space-2); }
+.consent-sheet .duration-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-height: var(--control-h, 36px);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.consent-sheet #account-switcher { margin-block: var(--space-4); }
+@media (pointer: coarse) {
+  .consent-sheet .duration-chip, .consent-sheet summary { min-height: 44px; }
+}

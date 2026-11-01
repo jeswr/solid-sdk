@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
 // AUTHORED-BY Claude Fable 5
 //
 // Vocabulary IRIs used by the access manager. Everything here is an EXISTING
 // published vocabulary (WAC, LDP, Solid, FOAF, ODRL 2.2, DPV 2.2, DCT, PROV-O)
 // except the three `accm:` UX/status labels, which live under the suite
-// namespace per the access-management proposal §2.2 (w3id.org/jeswr — ADR-0013).
+// namespace at https://jeswr.org/ns/; w3id.org/jeswr is a read-only legacy alias.
 
 export const ACL = {
   ns: "http://www.w3.org/ns/auth/acl#",
@@ -102,24 +104,24 @@ export const ODRL = {
 /**
  * The three suite-minted `accm:` terms (proposal §2.2: labels + server/app-derived
  * state, never enforcement weight) plus the request state machine of §3.5.
- * Home: https://w3id.org/jeswr/accm# (w3id redirect is a standing needs:user).
+ * Home: https://jeswr.org/ns/accm#; w3id.org/jeswr/accm# is a read-only legacy alias.
  */
 export const ACCM = {
-  ns: "https://w3id.org/jeswr/accm#",
-  DataClass: "https://w3id.org/jeswr/accm#DataClass",
-  dataClass: "https://w3id.org/jeswr/accm#dataClass",
-  resolvesTo: "https://w3id.org/jeswr/accm#resolvesTo",
+  ns: NS.ACCESS_MANAGER,
+  DataClass: `${NS.ACCESS_MANAGER}DataClass`,
+  dataClass: `${NS.ACCESS_MANAGER}dataClass`,
+  resolvesTo: `${NS.ACCESS_MANAGER}resolvesTo`,
   // Request/grant lifecycle state (client-side pipeline, §3.5).
-  status: "https://w3id.org/jeswr/accm#status",
-  Pending: "https://w3id.org/jeswr/accm#Pending",
-  Approving: "https://w3id.org/jeswr/accm#Approving",
-  Approved: "https://w3id.org/jeswr/accm#Approved",
-  Denied: "https://w3id.org/jeswr/accm#Denied",
-  grantId: "https://w3id.org/jeswr/accm#grantId",
-  grantRef: "https://w3id.org/jeswr/accm#grantRef",
-  requestRef: "https://w3id.org/jeswr/accm#requestRef",
-  revokedAt: "https://w3id.org/jeswr/accm#revokedAt",
-  schemaVersion: "https://w3id.org/jeswr/accm#schemaVersion",
-  mode: "https://w3id.org/jeswr/accm#mode",
-  agent: "https://w3id.org/jeswr/accm#agent",
+  status: `${NS.ACCESS_MANAGER}status`,
+  Pending: `${NS.ACCESS_MANAGER}Pending`,
+  Approving: `${NS.ACCESS_MANAGER}Approving`,
+  Approved: `${NS.ACCESS_MANAGER}Approved`,
+  Denied: `${NS.ACCESS_MANAGER}Denied`,
+  grantId: `${NS.ACCESS_MANAGER}grantId`,
+  grantRef: `${NS.ACCESS_MANAGER}grantRef`,
+  requestRef: `${NS.ACCESS_MANAGER}requestRef`,
+  revokedAt: `${NS.ACCESS_MANAGER}revokedAt`,
+  schemaVersion: `${NS.ACCESS_MANAGER}schemaVersion`,
+  mode: `${NS.ACCESS_MANAGER}mode`,
+  agent: `${NS.ACCESS_MANAGER}agent`,
 } as const;

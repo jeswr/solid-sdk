@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/solid-drawing` — the RDF vocabulary + types for vector drawings /
@@ -8,7 +9,7 @@
  * is stored as an OPAQUE JSON blob; only the lightweight metadata (title,
  * timestamps, format version, background colour, thumbnail, provenance) is RDF.
  *
- * The five minted terms live under `https://w3id.org/jeswr/drawing#` (prefix
+ * The five minted terms live under `https://jeswr.org/ns/drawing#` (prefix
  * `draw:`); everything else is re-used from Dublin Core Terms, schema.org and
  * W3C PROV-O. `draw:Scene` is `rdfs:subClassOf schema:CreativeWork` and rooted
  * into the suite Core ontology as a `gufo:SubKind` of `core:InformationResource`
@@ -55,6 +56,7 @@ export {
   DRAW_VIEW_BACKGROUND_COLOR_IRI,
   dct,
   draw,
+  LEGACY_DRAW_NS,
   PREFIXES,
   PROV,
   PROV_WAS_GENERATED_BY,

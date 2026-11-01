@@ -93,7 +93,18 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  if (![".", "./testing", "./direct", "./direct/send"].includes(subpath))
+  if (
+    ![
+      ".",
+      "./testing",
+      "./direct",
+      "./direct/send",
+      "./email-mime",
+      "./email-mime/send",
+      "./gmail",
+      "./gmail/send",
+    ].includes(subpath)
+  )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
 });
 
@@ -103,4 +114,12 @@ it("keeps send factories out of root and reader exports", () => {
   expect(entry17).not.toHaveProperty("createDirectSend");
   expect(entry32).toHaveProperty("createDirectSend");
   expect(entry1).toHaveProperty("createInMemoryDirectBinding");
+});
+
+it("keeps Gmail send and MIME render factories out of read surfaces", () => {
+  expect(entry0).not.toHaveProperty("createGmailSend");
+  expect(entry3).not.toHaveProperty("createGmailSend");
+  expect(entry2).not.toHaveProperty("createEmailRenderer");
+  expect(entry19).toHaveProperty("createGmailSend");
+  expect(entry18).toHaveProperty("createEmailRenderer");
 });

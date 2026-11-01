@@ -35,10 +35,12 @@
  * hand-concatenated into triples.
  */
 
+import { NS } from "@jeswr/suite-vocab";
+
 /** ActivityStreams 2.0 — the canonical chat room/message model (matches pod-chat). */
 export const AS = "https://www.w3.org/ns/activitystreams#";
 /** Pod-Chat application vocabulary — `pc:ChatRoom` (the suite room class). Re-used, not minted. */
-export const PC = "https://w3id.org/jeswr/pod-chat#";
+export const PC = NS.POD_CHAT;
 /** SIOC — `sioc:Note` + `sioc:content`, the SolidOS LongChat message body. */
 export const SIOC = "http://rdfs.org/sioc/ns#";
 /** FOAF — `foaf:maker`, the SolidOS LongChat author. */

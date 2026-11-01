@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Twitch Helix shapes (api.twitch.tv/helix) — trimmed to the fields
  * the adapter reads. Sources: GET /users, GET /channels/followed.

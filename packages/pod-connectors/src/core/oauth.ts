@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The shared end-user OAuth2 engine: authorization-code + PKCE (S256) in a
  * popup. Generic — adapters supply only endpoints/scopes/params via
@@ -133,6 +134,9 @@ export async function exchangeCodeForToken(
     client_id: cfg.clientId,
     code_verifier: params.verifier,
   });
+  if (cfg.tokenExchange === "public" && cfg.clientSecret) {
+    body.set("client_secret", cfg.clientSecret);
+  }
   const headers: Record<string, string> = {
     "content-type": "application/x-www-form-urlencoded",
   };
@@ -140,7 +144,7 @@ export async function exchangeCodeForToken(
     // Reddit installed-app convention: Basic auth with an empty secret.
     headers.authorization = `Basic ${btoa(`${cfg.clientId}:`)}`;
   }
-  const init: RequestInit = { method: "POST", headers, body: body.toString() };
+  const init: RequestInit = { method: "POST", headers, body: body.toString(), redirect: "error" };
   const res = await fetchImpl(endpoint, init);
   if (!res.ok) {
     throw new IntegrationAuthError(

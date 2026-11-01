@@ -42,7 +42,7 @@ describe("WIP limits — persistence round-trip on the wf:State class (#111)", (
     const iri = `${DOC}#status-in-progress`;
     const objs = (pred: string) =>
       [...store.match(DataFactory.namedNode(iri), DataFactory.namedNode(pred))].map((q) => q.object);
-    const TM = "https://w3id.org/jeswr/task#";
+    const TM = "https://jeswr.org/ns/task#";
     const min = objs(`${TM}wipMin`)[0];
     expect(min?.value).toBe("1");
     expect((min as { datatype?: { value: string } })?.datatype?.value).toBe("http://www.w3.org/2001/XMLSchema#nonNegativeInteger");

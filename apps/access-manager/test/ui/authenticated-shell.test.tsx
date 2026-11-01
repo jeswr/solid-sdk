@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Regression guard for the P1 theme-mount bug: the REAL entry point
@@ -154,7 +155,12 @@ describe("main.tsx — the REAL authenticated Shell mounts (theme provider prese
   }, 30_000);
 
   it("persists a selected theme and restores it after the entry point reloads", async () => {
+    window.localStorage.removeItem("access-manager:app-shell-theme");
+    window.localStorage.setItem("app-shell-theme", "dark");
+    window.localStorage.setItem("pod-drive:app-shell-theme", "dark");
     await loadEntryAndLogIn();
+    // Other apps and the legacy shared key cannot choose Access Manager's theme.
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
 
     const toggle = await screen.findByRole("button", { name: "Change colour theme" }, FIND);
     await act(async () => {
@@ -170,7 +176,7 @@ describe("main.tsx — the REAL authenticated Shell mounts (theme provider prese
     });
 
     await waitFor(() => {
-      expect(window.localStorage.getItem("app-shell-theme")).toBe("dark");
+      expect(window.localStorage.getItem("access-manager:app-shell-theme")).toBe("dark");
     });
 
     // Simulate a page reload: discard the mounted DOM and reload the real entry
@@ -181,7 +187,9 @@ describe("main.tsx — the REAL authenticated Shell mounts (theme provider prese
     await waitFor(() => {
       expect(document.documentElement.classList.contains("dark")).toBe(true);
     });
+    expect(window.localStorage.getItem("access-manager:app-shell-theme")).toBe("dark");
     expect(window.localStorage.getItem("app-shell-theme")).toBe("dark");
+    expect(window.localStorage.getItem("pod-drive:app-shell-theme")).toBe("dark");
     expect(renderErrors).toEqual([]);
   }, 30_000);
 });

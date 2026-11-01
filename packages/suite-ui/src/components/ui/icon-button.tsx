@@ -10,6 +10,7 @@ export type IconButtonProps = Omit<
 > & {
   label: string;
   size?: "icon" | "icon-sm";
+  "data-slot"?: string;
 };
 
 function preventActivation(event: SyntheticEvent) {
@@ -23,7 +24,14 @@ function preventKeyboardActivation(event: KeyboardEvent) {
 }
 
 /** The label is shared by the accessible name and the hover/focus tooltip. */
-export function IconButton({ label, size = "icon", disabled, ...props }: IconButtonProps) {
+export function IconButton({
+  label,
+  size = "icon",
+  disabled,
+  children,
+  "data-slot": dataSlot = "button",
+  ...props
+}: IconButtonProps) {
   if (!label.trim()) throw new Error("IconButton requires a non-empty label");
   return (
     <TooltipProvider>
@@ -31,6 +39,7 @@ export function IconButton({ label, size = "icon", disabled, ...props }: IconBut
         <TooltipTrigger asChild>
           <Button
             {...props}
+            asChild
             size={size}
             aria-label={label}
             aria-disabled={disabled || undefined}
@@ -42,7 +51,12 @@ export function IconButton({ label, size = "icon", disabled, ...props }: IconBut
             onPointerUp={disabled ? preventActivation : props.onPointerUp}
             onMouseDown={disabled ? preventActivation : props.onMouseDown}
             onMouseUp={disabled ? preventActivation : props.onMouseUp}
-          />
+          >
+            {/* Slot preserves shell/navigation slots without changing Button's default slot. */}
+            <button type={props.type ?? "button"} data-slot={dataSlot}>
+              {children}
+            </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>

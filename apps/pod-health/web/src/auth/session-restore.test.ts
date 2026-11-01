@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // session-restore.test.ts — the SILENT SESSION RESTORE wiring around
@@ -454,7 +455,7 @@ describe("4. NO credential/token in localStorage — durable secrets live ONLY i
 
     // And sessionStorage carries no durable refresh token: the redirect-flow record is
     // cleared after completion (single-use; see completeRedirectLogin's finally).
-    expect(sessionStorage.getItem("pss.autologin.flow")).toBeNull();
+    expect(sessionStorage.getItem("pod-health:pss.autologin.flow")).toBeNull();
   });
 
   it("the persisted public key is USABLE for DPoP (extractable) — restore would not throw (roborev HIGH)", async () => {

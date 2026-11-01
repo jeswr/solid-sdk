@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Client entry. Wraps the app in the SessionProvider (the one auth seam) and
@@ -18,12 +19,12 @@ if (!rootEl) throw new Error("Missing #root element");
 createRoot(rootEl).render(
   <StrictMode>
     {/* ThemeProvider wraps everything (theme is session-independent). It defaults
-        to "system" and persists to localStorage key "app-shell-theme" — the SAME
+        to "system" and persists to localStorage key "pod-mail:app-shell-theme" — the SAME
         key the no-flash <script> in index.html reads, so the pre-paint class and
         the React state always agree. The `.dark` class it toggles on <html> drives
         both the app-shell components' `dark:` utilities and the host chrome (whose
         --bg/--ink/… aliases map onto the OKLCH tokens in styles.css). */}
-    <ThemeProvider>
+    <ThemeProvider storageKey="pod-mail:app-shell-theme">
       <SessionProvider>
         {/* Crash-resilience boundary (#72/#73 parity): INSIDE the Theme/Session
             providers (the fallback themes; the resetKey reads the session) but
