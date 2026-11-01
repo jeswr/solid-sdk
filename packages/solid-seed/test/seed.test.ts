@@ -151,9 +151,12 @@ describe("expander groups", () => {
         status: "written",
       },
     ]);
-    expect(pod.putRecords().every((record) => record.headers.get("if-none-match") === "*")).toBe(
-      true,
-    );
+    // Every creating PUT (placeholder, ACL) is conditional; the data PUT then
+    // fills the placeholder this run just created.
+    for (const record of pod.putRecords()) {
+      const conditional = record.headers.get("if-none-match") === "*";
+      expect(conditional).toBe(record.url.endsWith(".acl") || record.body === "");
+    }
 
     const ensured = await seedPods({ layout, mode: "ensure" });
     expect(count.value).toBe(2);
@@ -460,4 +463,101 @@ describe("RDF rebasing and typed ACLs", () => {
     ).rejects.toThrow("injection-safe absolute HTTP(S) IRI");
     expect(pod.putRecords()).toHaveLength(0);
   });
+});
+
+describe("access-controlled resources: the ACL lands before any data", () => {
+  const Secret = "https://pod.example/public/secret";
+  const layout = (pod: MemoryPod): PodLayout => ({
+    pods: [
+      {
+        account: { target: pod },
+        resources: [
+          {
+            path: "/public/secret",
+            source: { body: "private data" },
+            access: { publicRead: false },
+          },
+        ],
+      },
+    ],
+  });
+
+  it("creates an empty placeholder, writes the ACL, then writes the data", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: layout(pod) });
+    const writes = pod.requests
+      .filter((r) => r.method === "PUT")
+      .map((r) => [new URL(r.url).pathname, r.body === "" ? "empty" : "data"]);
+    expect(writes).toEqual([
+      ["/public/secret", "empty"],
+      ["/public/secret.acl", "data"],
+      ["/public/secret", "data"],
+    ]);
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+  });
+
+  it("a failed ACL write removes the placeholder and never writes the data", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret.acl", 500);
+    await expect(seedPods({ layout: layout(pod) })).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.has(Secret)).toBe(false);
+    expect(pod.putRecords("/public/secret").every((r) => r.body === "")).toBe(true);
+  });
+
+  it("a stale ACL in create mode fails without leaving data behind", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.resources.set(`${Secret}.acl`, { body: "# stale", contentType: "text/turtle" });
+    await expect(seedPods({ layout: layout(pod) })).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.has(Secret)).toBe(false);
+  });
+
+  it("a server that advertises no ACL fails closed instead of reporting success", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.aclLink = "none";
+    await expect(seedPods({ layout: layout(pod) })).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.has(Secret)).toBe(false);
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(false);
+  });
+
+  it("a server whose ACL lives elsewhere (ACP .acr) fails closed", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.aclLink = { suffix: ".acr" };
+    await expect(seedPods({ layout: layout(pod) })).rejects.toThrow(SeedError);
+    expect(pod.resources.has(Secret)).toBe(false);
+  });
+
+  it("replace mode writes the new ACL before the new data over an existing resource", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: layout(pod) });
+    pod.requests.length = 0;
+    await seedPods({ layout: layout(pod), mode: "replace" });
+    const order = pod.requests
+      .filter((r) => r.method === "PUT")
+      .map((r) => new URL(r.url).pathname);
+    expect(order.indexOf("/public/secret.acl")).toBeLessThan(order.lastIndexOf("/public/secret"));
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+  });
+
+  it("every pod request refuses redirects", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: layout(pod) });
+    expect(pod.requests.length).toBeGreaterThan(0);
+    expect(pod.requests.every((r) => r.redirect === "error")).toBe(true);
+  });
+});
+
+describe("resource path guard", () => {
+  for (const path of ["/x%2Eacl", "/x%2eacl", "/x.acr", "/x.meta", "/a%2Fb", "/a%2fb", "/a%5Cb"]) {
+    it(`refuses ${path}`, async () => {
+      const pod = new MemoryPod("https://pod.example");
+      await expect(
+        seedPods({
+          layout: {
+            pods: [{ account: { target: pod }, resources: [{ path, source: { body: "x" } }] }],
+          },
+        }),
+      ).rejects.toThrow();
+      expect(pod.putRecords()).toHaveLength(0);
+    });
+  }
 });

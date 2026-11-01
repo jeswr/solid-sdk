@@ -74,3 +74,14 @@ An `access` entry creates a sibling `.acl` resource. Every such ACL always grant
 read, write, and control, then adds the requested public or named-agent rules. ACL RDF is built
 with `@solid/object`'s `Authorization` wrapper and serialized with `n3.Writer`; there are no Turtle
 string templates.
+
+A resource with an `access` entry is written in three steps so its data never sits under an
+inherited (possibly public) container ACL: an empty placeholder is created, its ACL is written, and
+only then is the data written. Before writing the ACL the seeder requires the server to advertise
+it at `<resource>.acl` with `Link: rel="acl"`; a server that uses another location (ACP `.acr`) or
+none fails the seed rather than storing an ACL that grants nothing. If the ACL write fails, a
+placeholder created by this run is deleted.
+
+`baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
+auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode `.`, `/` or `\`. Every request is
+sent with `redirect: "error"`, and error details read at most 4 KiB of a response.

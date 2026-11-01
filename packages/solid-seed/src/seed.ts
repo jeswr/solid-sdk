@@ -1,5 +1,7 @@
 // AUTHORED-BY GPT-5.6 Sol via codex
+// AUTHORED-BY Claude Opus 5.5
 
+import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { GeneratedInstance } from "@jeswr/synthetic-rdf";
 import type { Quad } from "@rdfjs/types";
 import { assertHttpIri } from "./iri.js";
@@ -56,8 +58,12 @@ function instanceKey(shape: string, index = 0): string {
 
 function resolveResource(baseUrl: string, path: string): string {
   const base = assertHttpIri(baseUrl, "SeedTarget.baseUrl", { requireOrigin: true });
-  if (!path.startsWith("/") || path.endsWith(".acl")) {
-    throw new Error(`resource path must start with "/" and must not target .acl: ${path}`);
+  // Auxiliary resources (.acl, .acr, .meta) are never seeded as data, including
+  // through a percent-encoded dot a server may decode before mapping the path.
+  if (!path.startsWith("/") || /\.(acl|acr|meta)$/i.test(path) || /%(2e|2f|5c)/i.test(path)) {
+    throw new Error(
+      `resource path must start with "/", must not target an auxiliary resource and must not encode ".", "/" or "\\": ${path}`,
+    );
   }
   // biome-ignore lint/suspicious/noControlCharactersInRegex: reject every IRIREF control/space byte
   if (path.includes("?") || path.includes("#") || /[\u0000-\u0020<>"{}|^`\\]/u.test(path)) {
@@ -260,14 +266,49 @@ async function materializePod(
   };
 }
 
+/** Error detail from a failed response: the first few KiB only, never the whole body. */
+const MAX_DETAIL_BYTES = 4096;
+
 async function responseDetail(response: Response): Promise<string> {
-  return (await response.text().catch(() => "")).trim();
+  const reader = response.body?.getReader();
+  if (reader === undefined) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size < MAX_DETAIL_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+    }
+  } catch {
+    // A detail is best effort.
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(Math.min(size, MAX_DETAIL_BYTES));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const part = chunk.subarray(0, bytes.length - offset);
+    bytes.set(part, offset);
+    offset += part.byteLength;
+    if (offset >= bytes.length) break;
+  }
+  return new TextDecoder().decode(bytes).trim();
+}
+
+/**
+ * Every pod request refuses redirects: a cross-origin 307/308 would re-send a PUT
+ * body, and an auth fetch's DPoP proof, to another origin.
+ */
+function podFetch(target: SeedTarget, url: string, init: RequestInit): Promise<Response> {
+  return target.authFetch(url, { ...init, redirect: "error" });
 }
 
 async function exists(target: SeedTarget, url: string): Promise<boolean> {
-  let response = await target.authFetch(url, { method: "HEAD" });
+  let response = await podFetch(target, url, { method: "HEAD" });
   if (response.status === 405 || response.status === 501) {
-    response = await target.authFetch(url, { method: "GET" });
+    response = await podFetch(target, url, { method: "GET" });
   }
   if (response.ok) {
     await response.body?.cancel();
@@ -289,10 +330,44 @@ async function put(
 ): Promise<void> {
   const headers = new Headers({ "content-type": contentType });
   if (conditional) headers.set("if-none-match", "*");
-  const response = await target.authFetch(url, { method: "PUT", headers, body });
+  const response = await podFetch(target, url, { method: "PUT", headers, body });
   if (!response.ok)
     throw new HttpFailure("PUT", url, response.status, await responseDetail(response));
   await response.body?.cancel();
+}
+
+/** Best-effort removal of a placeholder this run created; the original error wins. */
+async function removePlaceholder(target: SeedTarget, url: string): Promise<void> {
+  try {
+    const response = await podFetch(target, url, { method: "DELETE" });
+    await response.body?.cancel();
+  } catch {
+    // The caller rethrows the failure that made the removal necessary.
+  }
+}
+
+/**
+ * Confirm the server governs `url` with a WAC ACL at `${url}.acl` (`Link: rel="acl"`).
+ * The ACL body names that document, and a server that uses another location (ACP's
+ * `.acr`) or none would otherwise store it as an ordinary resource that grants nothing.
+ */
+async function assertAclLocation(target: SeedTarget, url: string): Promise<void> {
+  const response = await podFetch(target, url, { method: "HEAD" });
+  await response.body?.cancel();
+  if (!response.ok) throw new HttpFailure("HEAD", url, response.status, "");
+  const acls = parseLinkHeaders(response.headers.get("link"), url)
+    .filter((link) => link.rel.includes("acl") && link.context === url)
+    .map((link) => link.target);
+  if (acls.length !== 1 || acls[0] !== `${url}.acl`) {
+    throw new Error(
+      `${url} does not advertise a WAC ACL at ${url}.acl (Link rel="acl": ${acls.join(", ") || "none"}); the requested access cannot be applied`,
+    );
+  }
+}
+
+/** A minimal valid body for a placeholder of this content type. */
+function placeholderBody(contentType: string): string {
+  return /json/i.test(contentType) ? "{}" : "";
 }
 
 async function writeAcl(
@@ -317,6 +392,7 @@ async function writeResource(
 ): Promise<"created" | "skipped" | "replaced"> {
   if (resource.body === undefined)
     throw new Error(`resource ${resource.spec.path} has no materialized body`);
+  if (resource.aclBody !== undefined) return writeProtected(pod, resource, resource.body, mode);
   const conditional = mode !== "replace";
   let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
   try {
@@ -334,9 +410,42 @@ async function writeResource(
       throw error;
     }
   }
-  if (resource.aclBody !== undefined) {
-    await writeAcl(pod, resource, mode === "create");
+  return outcome;
+}
+
+/**
+ * Write a resource that carries an access spec so its data never sits under an
+ * inherited (possibly public) ACL: create an empty placeholder, confirm the
+ * server's ACL location, write the ACL, and only then write the data. If the ACL
+ * cannot be written, a placeholder this run created is removed.
+ */
+async function writeProtected(
+  pod: MaterializedPod,
+  resource: MaterializedResource,
+  body: string,
+  mode: SeedMode,
+): Promise<"created" | "skipped" | "replaced"> {
+  const url = resource.outcome.url;
+  const contentType = resource.spec.contentType ?? DEFAULT_CONTENT_TYPE;
+  let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
+  let createdPlaceholder = false;
+  try {
+    await put(pod.target, url, placeholderBody(contentType), contentType, true);
+    createdPlaceholder = true;
+  } catch (error) {
+    if (!(error instanceof HttpFailure && error.status === 412) || mode === "create") throw error;
+    // The resource exists: ensure leaves its data alone; replace keeps the old data
+    // under its old ACL until the new ACL is in place.
+    if (mode === "ensure") outcome = "skipped";
   }
+  try {
+    await assertAclLocation(pod.target, url);
+    await writeAcl(pod, resource, mode === "create");
+  } catch (error) {
+    if (createdPlaceholder) await removePlaceholder(pod.target, url);
+    throw error;
+  }
+  if (outcome !== "skipped") await put(pod.target, url, body, contentType, false);
   return outcome;
 }
 
@@ -396,6 +505,9 @@ async function processGroup(
     if (mode === "ensure" && existing.length === documents.length) {
       for (const resource of action.resources) {
         try {
+          if (resource.aclBody !== undefined) {
+            await assertAclLocation(pod.target, resource.outcome.url);
+          }
           await writeAcl(pod, resource, false);
           resource.outcome.status = "skipped";
         } catch (cause) {

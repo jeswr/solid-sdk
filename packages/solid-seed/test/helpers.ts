@@ -12,6 +12,7 @@ export interface RequestRecord {
   url: string;
   headers: Headers;
   body: string;
+  redirect: RequestRedirect;
 }
 
 export class MemoryPod implements SeedTarget {
@@ -20,6 +21,12 @@ export class MemoryPod implements SeedTarget {
   readonly webid: string;
   readonly baseUrl: string;
   readonly authFetch: typeof fetch;
+  /**
+   * How the pod advertises a resource's ACL (`Link: rel="acl"`): the WAC `.acl`
+   * suffix by default, `"none"` for a server without WAC, or a fixed suffix
+   * (e.g. `.acr` for an ACP server).
+   */
+  aclLink: "suffix" | "none" | { suffix: string } = "suffix";
   #failure?: { path: string; remaining: number; status: number };
 
   constructor(origin: string, webid = `${origin}/profile/card#me`) {
@@ -33,6 +40,7 @@ export class MemoryPod implements SeedTarget {
         url: request.url,
         headers: new Headers(request.headers),
         body,
+        redirect: request.redirect,
       });
       const path = new URL(request.url).pathname;
       if (
@@ -47,16 +55,24 @@ export class MemoryPod implements SeedTarget {
       if (request.method === "HEAD" || request.method === "GET") {
         const stored = this.resources.get(request.url);
         if (stored === undefined) return new Response(null, { status: 404 });
-        if (request.method === "HEAD") {
-          return new Response(null, {
-            status: 200,
-            headers: { "content-type": stored.contentType },
-          });
+        const headers = new Headers({ "content-type": stored.contentType });
+        const suffix =
+          this.aclLink === "suffix"
+            ? ".acl"
+            : this.aclLink === "none"
+              ? undefined
+              : this.aclLink.suffix;
+        if (suffix !== undefined && !request.url.endsWith(".acl")) {
+          headers.set("link", `<${request.url}${suffix}>; rel="acl"`);
         }
-        return new Response(stored.body, {
+        return new Response(request.method === "HEAD" ? null : stored.body, {
           status: 200,
-          headers: { "content-type": stored.contentType },
+          headers,
         });
+      }
+      if (request.method === "DELETE") {
+        const existed = this.resources.delete(request.url);
+        return new Response(null, { status: existed ? 205 : 404 });
       }
       if (request.method === "PUT") {
         if (request.headers.get("if-none-match") === "*" && this.resources.has(request.url)) {
