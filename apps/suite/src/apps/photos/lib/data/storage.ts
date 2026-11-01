@@ -3,8 +3,9 @@ import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { PhotoIoError, type PreparedPhoto, photoStorage, type UploadInput } from "../model";
 import { googlePhotosStorage } from "./google-photos";
 import { requireEtag } from "./shared";
-/** Validators from successful create-only binary PUTs prove which partial writes
- * this adapter may clean up. A failed request alone never establishes ownership. */
+/** Strong validators prove which partial writes this adapter may clean up.
+ * Successful creates without validators and lost responses both retain their
+ * prepared bytes for the same byte-verified resume path. */
 export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string) {
   const root = new URL("photos/", storage).href;
   const createdBinaries = new Map<string, string>();
@@ -21,8 +22,8 @@ export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string
     const owned = createdBinaries.get(url);
     const expected = ambiguousBinaries.get(url);
     if (binaryCreate && expected) {
-      // A rejected PUT may already have committed. Compare the exact prepared
-      // bytes and use the validator from that same fresh GET before resuming.
+      // A PUT may have committed without returning a usable validator. Compare
+      // exact prepared bytes and use that same fresh GET's strong ETag to resume.
       const current = await scoped(url, { headers: { "cache-control": "no-cache" } });
       if (current.status !== 404) {
         if (!current.ok) throw new PhotoIoError(url, current.status);
@@ -61,6 +62,7 @@ export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string
     const etag = response.headers.get("etag");
     if (binaryCreate && response.ok && etag && !etag.startsWith("W/"))
       createdBinaries.set(url, etag);
+    else if (binaryCreate && response.ok) ambiguousBinaries.set(url, init?.body as Blob);
     return response;
   };
   return {
@@ -68,6 +70,10 @@ export function photoDataStorage(fetch: typeof globalThis.fetch, storage: string
     googlePhotos: googlePhotosStorage(fetch, storage),
     createdBinaries,
     uploads,
+    forgetBinary(url: string) {
+      createdBinaries.delete(url);
+      ambiguousBinaries.delete(url);
+    },
     async ownsBinary(url: string) {
       const owned = createdBinaries.get(url);
       if (!owned) return false;

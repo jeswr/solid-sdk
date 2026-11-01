@@ -213,3 +213,48 @@ it("creates an album populated with the selection when PUT supplies no ETag", as
   expect(s.state.albums).toHaveLength(1);
   expect(s.state.albums[0]?.members).toEqual(refs);
 });
+
+it.each([
+  false,
+  true,
+])("deletes after delayed queued renames using this client's latest revision (missing PUT ETag: %s)", async (missingEtag) => {
+  const s = await setup();
+  await act(async () => {
+    await s.state.newAlbum("Before");
+  });
+  const album = s.state.albums[0];
+  if (!album) throw new Error("Missing fixture");
+  if (missingEtag) s.omitEtags.add(album.url);
+  const started = deferred<void>();
+  const release = deferred<void>();
+  s.intercept(async (url, method) => {
+    if (url === album.url && method === "PUT") {
+      s.intercept(undefined);
+      started.resolve();
+      await release.promise;
+    }
+    return undefined;
+  });
+  let first!: Promise<boolean>;
+  let second!: Promise<boolean>;
+  let removed!: Promise<boolean>;
+  await act(async () => {
+    first = s.state.editAlbum(album.url, (value) => ({ ...value, name: "Renamed" }));
+    second = s.state.editAlbum(album.url, (value) => ({ ...value, name: "Renamed again" }));
+    await started.promise;
+  });
+  expect(s.state.albums[0]?.name).toBe("Renamed again");
+  await act(async () => {
+    removed = s.state.removeAlbum(s.state.albums[0] as typeof album);
+  });
+  expect(s.state.albums).toHaveLength(0);
+  await act(async () => {
+    release.resolve();
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(await removed).toBe(true);
+  });
+  expect(messages.error).not.toHaveBeenCalled();
+  expect((await s.pod.fetch(album.url)).status).toBe(404);
+  expect(s.state.albums).toHaveLength(0);
+});

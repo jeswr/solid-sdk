@@ -7,7 +7,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  EditableText,
   EmptyState,
   ErrorState,
   LoadingSkeleton,
@@ -21,7 +20,7 @@ import { decodeRef, encodeRef } from "@/lib/refs";
 import { changeMembers, type StoredAlbum } from "../lib/data/albums";
 import { type LibraryPhoto, searchPhotos } from "../lib/data/library";
 import { usePhotos } from "../state/photos-context";
-import { AlbumDialog, ConfirmDialog } from "./album-dialogs";
+import { AlbumDialog, ConfirmDialog, RenameAlbumDialog } from "./album-dialogs";
 import { useDialogFocus } from "./dialog-focus";
 import { PhotoGrid } from "./photo-grid";
 import { PhotoImage } from "./photo-image";
@@ -66,6 +65,7 @@ export function CollectionScreen({
   const [selected, setSelected] = useState(new Set<string>());
   const [add, setAdd] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const pickerFocus = useDialogFocus();
   const [picked, setPicked] = useState(new Set<string>());
   const [confirmation, setConfirmation] = useState<"album" | "empty" | "purge" | null>(null);
@@ -88,7 +88,7 @@ export function CollectionScreen({
       ? state.trash.map((item) => ({
           ...item.photo,
           url: item.url,
-          ref: `${item.record.originalUrl}#it`,
+          ref: item.url,
           etag: item.etag,
           readOnly: true,
         }))
@@ -142,14 +142,16 @@ export function CollectionScreen({
   return (
     <div className="pho-page">
       <header className="pho-page-header">
-        <div>
-          <p className="pho-eyebrow">
-            {kind === "album" ? "Your collection" : "Your memories, in your hands"}
-          </p>
+        <div className="pho-header-text">
+          {kind !== "trash" && kind !== "favourites" && (
+            <p className="pho-eyebrow">
+              {kind === "album" ? "Your collection" : "Your memories, in your hands"}
+            </p>
+          )}
           <h1>{title}</h1>
           <p>
             {kind === "trash"
-              ? "App-managed trash. Originals stay in your pod until you delete them forever."
+              ? "Photos in Trash stay in your pod until you delete them forever."
               : kind === "album"
                 ? `${photos.length} photos · Use Alt + ↑ / ↓ to reorder`
                 : `${photos.length} photo${photos.length === 1 ? "" : "s"}`}
@@ -190,14 +192,9 @@ export function CollectionScreen({
       </header>
       {album && (
         <div className="pho-album-settings">
-          <EditableText
-            label="Album title"
-            value={album.name}
-            validate={(value) => (value.trim() ? undefined : "Enter a name")}
-            onCommit={(name) => {
-              void state.editAlbum(album.url, (value) => ({ ...value, name }));
-            }}
-          />
+          <Button variant="outline" onClick={() => setRenaming(true)}>
+            Rename
+          </Button>
           <Button variant="ghost" onClick={() => setConfirmation("album")}>
             Delete album
           </Button>
@@ -385,6 +382,7 @@ export function CollectionScreen({
         refs={selectedPhotos.map((photo) => photo.ref)}
         onClose={() => setAdd(false)}
       />
+      {renaming && album && <RenameAlbumDialog album={album} onClose={() => setRenaming(false)} />}
       <Dialog open={picker} onOpenChange={setPicker}>
         <DialogContent className="pho-picker" {...pickerFocus}>
           <DialogHeader>
@@ -462,7 +460,7 @@ export function AlbumsScreen() {
   return (
     <div className="pho-page">
       <header className="pho-page-header">
-        <div>
+        <div className="pho-header-text">
           <p className="pho-eyebrow">Stories worth keeping together</p>
           <h1>Albums</h1>
           <p>{state.albums.length} collections</p>

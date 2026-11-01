@@ -3,6 +3,7 @@ import { isomorphic } from "rdf-isomorphic";
 import { buildPhoto, groupPhotos, type Photo, PhotoIoError, type PhotoStorage } from "../model";
 import type { StoredAlbum } from "./albums";
 import type { googlePhotosStorage } from "./google-photos";
+import { confirmedRevisions } from "./revisions";
 import { children, collect, requireEtag } from "./shared";
 
 export interface LibraryPhoto extends Photo {
@@ -79,10 +80,9 @@ export async function saveKeywords(io: PhotoStorage, photo: LibraryPhoto, keywor
 }
 /** Follow only this client's successful revisions; external changes still fail If-Match. */
 export function createKeywordWriter(io: PhotoStorage) {
-  const revisions = new Map<string, { known: Set<string | null>; current: LibraryPhoto }>();
+  const revisions = confirmedRevisions<LibraryPhoto>();
   return async (photo: LibraryPhoto, keywords: string[]): Promise<LibraryPhoto> => {
-    const previous = revisions.get(photo.ref);
-    const source = previous?.known.has(photo.etag) ? previous.current : photo;
+    const source = revisions.latest(photo);
     const result = await saveKeywords(io, source, keywords);
     let etag = result.etag;
     if (!etag) {
@@ -97,11 +97,6 @@ export function createKeywordWriter(io: PhotoStorage) {
         throw new PhotoIoError(photo.url, 412);
       etag = loaded.etag;
     }
-    const current = { ...source, keywords: [...new Set(keywords)], etag: requireEtag(etag) };
-    const known = new Set(previous?.known);
-    known.add(photo.etag);
-    known.add(current.etag);
-    revisions.set(photo.ref, { known, current });
-    return current;
+    return revisions.confirm(source, { ...source, keywords: [...new Set(keywords)], etag });
   };
 }

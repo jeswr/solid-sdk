@@ -57,8 +57,8 @@ export async function uploadFiles(
       };
       await io.uploadPhotos([input], encoder, now);
       options.onProgress?.(index, 100);
-      io.createdBinaries.delete(prepared.photo.contentUrl);
-      io.createdBinaries.delete(prepared.photo.thumbnailUrl as string);
+      io.forgetBinary(prepared.photo.contentUrl);
+      io.forgetBinary(prepared.photo.thumbnailUrl as string);
       io.uploads.delete(id);
       results.push({ ok: true, url: prepared.itemUrl, id });
     } catch (error) {
@@ -76,8 +76,8 @@ export async function uploadFiles(
             (await io.ownsBinary(prepared.photo.thumbnailUrl as string)) &&
             isomorphic([...existing.dataset], [...buildPhoto(prepared.itemUrl, prepared.photo)])
           ) {
-            io.createdBinaries.delete(prepared.photo.contentUrl);
-            io.createdBinaries.delete(prepared.photo.thumbnailUrl as string);
+            io.forgetBinary(prepared.photo.contentUrl);
+            io.forgetBinary(prepared.photo.thumbnailUrl as string);
             io.uploads.delete(id);
             options.onProgress?.(index, 100);
             results.push({ ok: true, url: prepared.itemUrl, id });
@@ -88,7 +88,7 @@ export async function uploadFiles(
               const etag = io.createdBinaries.get(url);
               if (etag) {
                 await io.remove(url, etag);
-                io.createdBinaries.delete(url);
+                io.forgetBinary(url);
               }
             }
           }

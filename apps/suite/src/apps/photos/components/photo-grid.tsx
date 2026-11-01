@@ -116,6 +116,11 @@ export function PhotoGrid({
       toggle(photo, event.shiftKey);
       return;
     }
+    if (itemActions && event.key === "Enter") {
+      event.preventDefault();
+      toggle(photo, event.shiftKey);
+      return;
+    }
     if (event.key === "Escape") {
       onSelection(new Set());
       return;
@@ -291,10 +296,12 @@ export function PhotoGrid({
                           <Heart size={16} fill="currentColor" aria-label="Favourite" />
                         </span>
                       )}
-                      <span className="pho-tile-caption" data-source={photo.source}>
-                        <span className="pho-tile-name">{photo.name}</span>
-                        {photo.source === "google-photos" && <Badge>From Google Photos</Badge>}
-                      </span>
+                      {!itemActions && (
+                        <span className="pho-tile-caption" data-source={photo.source}>
+                          <span className="pho-tile-name">{photo.name}</span>
+                          {photo.source === "google-photos" && <Badge>From Google Photos</Badge>}
+                        </span>
+                      )}
                       {album && (
                         <div className="pho-tile-menu">
                           <DropdownMenu>
@@ -346,7 +353,12 @@ export function PhotoGrid({
                           </DropdownMenu>
                         </div>
                       )}
-                      {itemActions && <div className="pho-tile-actions">{itemActions(photo)}</div>}
+                      {itemActions && (
+                        <div className="pho-card-body">
+                          <p className="pho-card-name">{photo.name}</p>
+                          <div className="pho-tile-actions">{itemActions(photo)}</div>
+                        </div>
+                      )}
                     </li>
                   );
                 }),

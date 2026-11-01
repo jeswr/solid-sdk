@@ -35,6 +35,11 @@ async function capture(page: Page, info: TestInfo, screen: string) {
   ).violations;
   expect(violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page
+      .locator(".pho-page")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
   const directory = resolve("../../artifacts/screens/photos");
   await mkdir(directory, { recursive: true });
   await page.screenshot({
@@ -195,7 +200,37 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
     .click();
   await navigate(page, "Trash");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
+  const trashCard = page.locator(".pho-tiles[data-actions=true] .pho-tile").first();
+  await expect(trashCard).toBeVisible();
+  for (const name of ["Restore", "Delete forever"]) {
+    const button = trashCard.getByRole("button", { name, exact: true });
+    await expect(button).toBeVisible();
+    await expect(button).toBeInViewport({ ratio: 1 });
+    // Visibility alone does not detect clipped controls inside overflow:hidden.
+    expect(
+      await button.evaluate((element) => {
+        const card = element.closest(".pho-tile");
+        if (!card) return false;
+        const bounds = card.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
+        return (
+          rect.top >= bounds.top &&
+          rect.bottom <= bounds.bottom &&
+          rect.left >= bounds.left &&
+          rect.right <= bounds.right &&
+          element.contains(
+            document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
+          )
+        );
+      }),
+    ).toBe(true);
+  }
+  await expect(
+    page.getByText("Photos in Trash stay in your pod until you delete them forever.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".pho-eyebrow")).toHaveCount(0);
   await capture(page, info, "trash");
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await saved(page);
@@ -229,10 +264,17 @@ test.describe("browser locale", () => {
 
 test("search, selection, direct lightbox reload and album deletion keep originals", async ({
   page,
-}) => {
+}, info) => {
   await page.goto("/photos");
   await expect(opens(page)).toHaveCount(12);
   const search = page.getByRole("searchbox", { name: "Search in Photos", exact: true });
+  const longName = "W".repeat(100);
+  await search.fill(longName);
+  await search.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Results for “${longName}”`, exact: true }),
+  ).toBeVisible();
+  await capture(page, info, "search-long-term");
   await search.fill("Ghent trip");
   await search.press("Enter");
   await expect(opens(page)).toHaveCount(3);
@@ -254,6 +296,28 @@ test("search, selection, direct lightbox reload and album deletion keep original
   await page.getByRole("button", { name: "Close photo", exact: true }).click();
   await navigate(page, "Albums");
   await page.getByRole("link", { name: /Ghent trip/ }).click();
+  await expect(page.getByLabel("Album title", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Share album", exact: true })).toBeDisabled();
+  const rename = page.getByRole("button", { name: "Rename", exact: true });
+  await rename.click();
+  const renameDialog = page.getByRole("dialog", { name: "Rename album", exact: true });
+  await expect(renameDialog.getByLabel("Album name", { exact: true })).toBeFocused();
+  await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(rename).toBeFocused();
+  await rename.click();
+  await renameDialog.getByLabel("Album name", { exact: true }).fill(longName);
+  expect(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
+      .violations,
+  ).toEqual([]);
+  await renameDialog.getByRole("button", { name: "Save name", exact: true }).click();
+  await expect(renameDialog).toBeHidden();
+  await expect(rename).toBeFocused();
+  await expect(page.getByRole("heading", { level: 1, name: longName, exact: true })).toBeVisible();
+  await saved(page);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: longName, exact: true })).toBeVisible();
+  await capture(page, info, "album-long-name");
   await page.getByRole("button", { name: "Delete album", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Delete this album?", exact: true });
   await confirm.getByRole("button", { name: "Cancel", exact: true }).click();

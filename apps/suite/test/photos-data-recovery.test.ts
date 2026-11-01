@@ -3,7 +3,7 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { scenes } from "../src/apps/photos/demo/images";
 import { browserEncoder, LocationStripError } from "../src/apps/photos/lib/browser/encoder";
-import { createAlbum } from "../src/apps/photos/lib/data/albums";
+import { createAlbum, createAlbumWriter } from "../src/apps/photos/lib/data/albums";
 import { createKeywordWriter, listLibrary } from "../src/apps/photos/lib/data/library";
 import { photoDataStorage } from "../src/apps/photos/lib/data/storage";
 import { listTrash, purgePhoto, restorePhoto, trashPhoto } from "../src/apps/photos/lib/data/trash";
@@ -28,6 +28,7 @@ function setup() {
   const fail = new Map<string, number>();
   const lost = new Set<string>();
   const noEtag = new Set<string>();
+  const weakEtag = new Set<string>();
   let afterPut: ((url: string) => Promise<void>) | undefined;
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -37,6 +38,7 @@ function setup() {
     const response = await pod.fetch(input, init);
     if (init?.method === "PUT") await afterPut?.(url);
     if (noEtag.has(key)) response.headers.delete("etag");
+    if (weakEtag.has(key)) response.headers.set("etag", 'W/"weak"');
     if (lost.has(key)) throw new Error("Lost response");
     return response;
   };
@@ -54,6 +56,7 @@ function setup() {
     fail,
     lost,
     noEtag,
+    weakEtag,
     upload,
     afterPut: (callback: typeof afterPut) => {
       afterPut = callback;
@@ -68,6 +71,119 @@ async function photo(s: ReturnType<typeof setup>) {
 }
 
 describe("Photos recovery regressions", () => {
+  it.each([
+    "originals/photo.png",
+    "thumbs/photo.webp",
+  ])("resumes a successful %s PUT without a strong ETag by verifying bytes on read", async (path) => {
+    for (const weak of [false, true]) {
+      const s = setup();
+      const url = `${s.io.root}${path}`;
+      (weak ? s.weakEtag : s.noEtag).add(`PUT ${url}`);
+      const failure = path.startsWith("originals")
+        ? `${s.io.root}thumbs/photo.webp`
+        : `${s.io.root}items/photo.ttl`;
+      s.fail.set(`PUT ${failure}`, 500);
+      expect((await s.upload())[0]?.ok).toBe(false);
+      expect(s.io.createdBinaries.has(url)).toBe(false);
+      const before = await s.pod.fetch(url);
+      const bytes = await before.arrayBuffer();
+      s.fail.clear();
+      expect((await s.upload("photo", "2026-11-02T12:00:00Z"))[0]?.ok).toBe(true);
+      const after = await s.pod.fetch(url);
+      expect(after.headers.get("etag")).toBe(before.headers.get("etag"));
+      expect(await after.arrayBuffer()).toEqual(bytes);
+      expect((await listLibrary(s.io)).items).toHaveLength(1);
+      expect(s.io.uploads.size).toBe(0);
+    }
+  });
+  it("preserves successful unvalidated creates across unreadable or unvalidated reads, and refuses changed bytes", async () => {
+    for (const scenario of ["unreadable", "no-etag", "weak-etag", "changed"]) {
+      const s = setup();
+      const url = `${s.io.root}originals/photo.png`;
+      s.noEtag.add(`PUT ${url}`);
+      s.fail.set(`PUT ${s.io.root}thumbs/photo.webp`, 500);
+      expect((await s.upload())[0]?.ok).toBe(false);
+      s.fail.clear();
+      if (scenario === "unreadable") s.fail.set(`GET ${url}`, 500);
+      if (scenario === "no-etag") s.noEtag.add(`GET ${url}`);
+      if (scenario === "weak-etag") s.weakEtag.add(`GET ${url}`);
+      if (scenario === "changed")
+        await s.pod.fetch(url, { method: "PUT", body: "Another client's bytes" });
+      expect((await s.upload())[0]?.ok).toBe(false);
+      expect((await s.pod.fetch(url)).status).toBe(200);
+      expect((await s.pod.fetch(`${s.io.root}items/photo.ttl`)).status).toBe(404);
+      s.fail.clear();
+      s.noEtag.clear();
+      s.weakEtag.clear();
+      expect((await s.upload())[0]?.ok).toBe(scenario !== "changed");
+    }
+  });
+  it("uses confirmed album revisions for stale queued deletes, including read-back validators", async () => {
+    for (const validator of ["strong", "missing", "weak"]) {
+      const s = setup();
+      const album = await createAlbum(s.io, "Before", NOW);
+      const writer = createAlbumWriter(s.io);
+      if (validator === "missing") s.noEtag.add(`PUT ${album.url}`);
+      if (validator === "weak") s.weakEtag.add(`PUT ${album.url}`);
+      const renamed = await writer.edit(album.url, (value) => ({ ...value, name: "Renamed" }));
+      expect(renamed.etag).not.toBe(album.etag);
+      await writer.edit(album.url, (value) => ({
+        ...value,
+        members: ["https://pod.example/p#it"],
+      }));
+      await writer.remove(album);
+      expect((await s.pod.fetch(album.url)).status).toBe(404);
+    }
+  });
+  it("rejects external album changes and starts a new ownership chain after a fresh read", async () => {
+    const s = setup();
+    const album = await createAlbum(s.io, "Before", NOW);
+    const writer = createAlbumWriter(s.io);
+    const renamed = await writer.edit(album.url, (value) => ({ ...value, name: "Renamed" }));
+    await s.io.saveAlbum(
+      album.url,
+      { ...renamed, name: "Elsewhere" },
+      { etag: renamed.etag as string },
+    );
+    await expect(writer.remove(album)).rejects.toMatchObject({ status: 412 });
+    const latest = await s.io.loadAlbum(album.url);
+    await writer.edit(album.url, (value) => ({ ...value, name: "Edited after refresh" }));
+    await expect(writer.remove(album)).rejects.toMatchObject({ status: 412 });
+    await writer.remove({ ...renamed, etag: latest.etag });
+    expect((await s.pod.fetch(album.url)).status).toBe(404);
+  });
+  it("never claims an album revision without matching read-back content and a strong validator", async () => {
+    for (const scenario of ["empty", "changed", "no-etag", "weak-etag"]) {
+      const s = setup();
+      const album = await createAlbum(s.io, "Before", NOW);
+      s.noEtag.add(`PUT ${album.url}`);
+      s.afterPut(async (url) => {
+        if (url !== album.url) return;
+        s.afterPut(undefined);
+        if (scenario === "empty")
+          await s.io.write(url, new Store(), { etag: (await s.io.read(url)).etag as string });
+        if (scenario === "changed")
+          await s.io.saveAlbum(
+            url,
+            { ...album, name: "Elsewhere" },
+            { etag: (await s.io.read(url)).etag as string },
+          );
+        if (scenario === "no-etag") s.noEtag.add(`GET ${url}`);
+        if (scenario === "weak-etag") s.weakEtag.add(`GET ${url}`);
+      });
+      const writer = createAlbumWriter(s.io);
+      await expect(
+        writer.edit(album.url, (value) => ({ ...value, name: "Renamed" })),
+      ).rejects.toThrow();
+      await expect(writer.remove(album)).rejects.toMatchObject({ status: 412 });
+    }
+    const s = setup();
+    const url = `${s.io.root}albums/empty.ttl`;
+    await s.io.write(url, new Store(), { create: true });
+    await expect(createAlbumWriter(s.io).edit(url, (value) => value)).rejects.toThrow(
+      "unavailable",
+    );
+  });
   it("refuses animated PNG stripping before any write, and preserves every original byte when stripping is off", async () => {
     const s = setup();
     const original = animatedPng();

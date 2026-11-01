@@ -1,5 +1,15 @@
 // AUTHORED-BY Codex GPT-6
-import { type Album, addMember, type PhotoStorage, removeMember, reorderMembers } from "../model";
+import { isomorphic } from "rdf-isomorphic";
+import {
+  type Album,
+  addMember,
+  buildAlbum,
+  PhotoIoError,
+  type PhotoStorage,
+  removeMember,
+  reorderMembers,
+} from "../model";
+import { confirmedRevisions } from "./revisions";
 import { children, collect, requireEtag, statusOf } from "./shared";
 
 export interface StoredAlbum extends Album {
@@ -45,6 +55,34 @@ export async function saveAlbum(io: PhotoStorage, album: StoredAlbum) {
 }
 export async function deleteAlbum(io: PhotoStorage, album: StoredAlbum) {
   await io.remove(album.url, requireEtag(album.etag));
+}
+/** Shared by all queued album edits and deletions for one client session. */
+export function createAlbumWriter(io: PhotoStorage) {
+  const revisions = confirmedRevisions<StoredAlbum>();
+  return {
+    async edit(url: string, transform: (album: StoredAlbum) => StoredAlbum) {
+      const loaded = await io.loadAlbum(url);
+      if (!loaded.album) throw new Error("Album is unavailable");
+      const source = revisions.latest({ ...loaded.album, url, etag: loaded.etag });
+      const changed = transform(source);
+      const result = await saveAlbum(io, changed);
+      let etag = result.etag;
+      if (!etag || etag.startsWith("W/")) {
+        const current = await io.loadAlbum(url);
+        if (
+          !current.album ||
+          !isomorphic([...buildAlbum(url, changed)], [...buildAlbum(url, current.album)])
+        )
+          throw new PhotoIoError(url, 412);
+        etag = current.etag;
+      }
+      return revisions.confirm(source, { ...changed, etag });
+    },
+    async remove(album: StoredAlbum) {
+      await deleteAlbum(io, revisions.latest(album));
+      revisions.forget(album.url);
+    },
+  };
 }
 export function changeMembers(
   album: StoredAlbum,

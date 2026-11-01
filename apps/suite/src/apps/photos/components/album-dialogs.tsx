@@ -11,7 +11,7 @@ import {
   Input,
 } from "@jeswr/suite-ui";
 import { useState } from "react";
-import { changeMembers } from "../lib/data/albums";
+import { changeMembers, type StoredAlbum } from "../lib/data/albums";
 import { usePhotos } from "../state/photos-context";
 import { useDialogFocus } from "./dialog-focus";
 
@@ -165,6 +165,59 @@ export function ConfirmDialog({
             {busy ? "Saving…" : action}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function RenameAlbumDialog({ album, onClose }: { album: StoredAlbum; onClose: () => void }) {
+  const photos = usePhotos();
+  const focus = useDialogFocus();
+  const [name, setName] = useState(album.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="pho-dialog" {...focus}>
+        <DialogHeader>
+          <DialogTitle>Rename album</DialogTitle>
+          <DialogDescription>Choose a name for this collection.</DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            setBusy(true);
+            setError(false);
+            void photos
+              .editAlbum(album.url, (value) => ({ ...value, name: name.trim() }))
+              .then((ok) => {
+                setBusy(false);
+                if (ok) onClose();
+                else setError(true);
+              });
+          }}
+        >
+          <label className="pho-field" htmlFor="pho-rename-album">
+            Album name
+            <Input
+              id="pho-rename-album"
+              value={name}
+              required
+              maxLength={100}
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          {error && <p role="alert">Couldn't rename the album. Please try again.</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? "Saving…" : "Save name"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

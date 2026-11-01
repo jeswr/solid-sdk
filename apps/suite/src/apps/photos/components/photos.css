@@ -10,6 +10,7 @@
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: var(--space-1) 0 var(--space-2);
+  overflow-wrap: anywhere;
 }
 .pho-page-header {
   display: flex;
@@ -23,6 +24,9 @@
 .pho-album-card p {
   color: var(--foreground-muted);
   font-size: var(--text-sm);
+}
+.pho-header-text {
+  min-width: 0;
 }
 .pho-eyebrow {
   font-size: var(--text-xs);
@@ -246,10 +250,6 @@
   right: var(--space-2);
 }
 .pho-tile-actions {
-  position: absolute;
-  bottom: var(--space-1);
-  left: var(--space-1);
-  right: var(--space-1);
   display: flex;
   gap: var(--space-1);
   flex-wrap: wrap;
@@ -261,6 +261,9 @@
   gap: var(--space-4);
 }
 .pho-tiles[data-actions="true"] .pho-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   position: relative;
   inset: auto;
   width: auto;
@@ -268,10 +271,15 @@
 }
 .pho-tiles[data-actions="true"] .pho-tile > a {
   height: 180px;
+  flex-shrink: 0;
 }
-.pho-tiles[data-actions="true"] .pho-tile-actions {
-  position: static;
+.pho-card-body {
   padding: var(--space-2);
+}
+.pho-card-name {
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
 }
 .pho-selection {
   position: sticky;
@@ -324,6 +332,7 @@
   font-size: var(--text-lg);
   font-weight: 600;
   margin: var(--space-4) var(--space-4) var(--space-1);
+  overflow-wrap: anywhere;
 }
 .pho-album-card p {
   margin: 0 var(--space-4);
@@ -331,14 +340,10 @@
 }
 .pho-album-settings {
   display: flex;
-  align-items: end;
+  align-items: center;
   gap: var(--space-4);
   flex-wrap: wrap;
   margin-bottom: var(--space-6);
-}
-.pho-album-settings .suite-field {
-  flex: 1;
-  min-width: 180px;
 }
 .pho-field {
   display: grid;

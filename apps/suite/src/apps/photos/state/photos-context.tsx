@@ -14,13 +14,7 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
 import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
-import {
-  createAlbum,
-  deleteAlbum,
-  listAlbums,
-  type StoredAlbum,
-  saveAlbum,
-} from "../lib/data/albums";
+import { createAlbum, createAlbumWriter, listAlbums, type StoredAlbum } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
 import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
 import { statusOf } from "../lib/data/shared";
@@ -50,6 +44,7 @@ function usePhotosState(session: PodSession) {
   const io = useMemo(() => photoDataStorage(session.fetch, session.storageUrl), [session]);
   const preferences = useMemo(() => preferenceStore(session.fetch, session.storageUrl), [session]);
   const writeKeywords = useMemo(() => createKeywordWriter(io), [io]);
+  const writeAlbum = useMemo(() => createAlbumWriter(io), [io]);
   const trashOperations = useRef(new Map<string, string>());
   const [snapshot, setSnapshot] = useState<Snapshot>(empty);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
@@ -162,15 +157,15 @@ function usePhotosState(session: PodSession) {
         albums: state.albums.map((album) => (album.url === url ? transform(album) : album)),
       });
       return run(patch, async () => {
-        const loaded = await io.loadAlbum(url);
-        if (!loaded.album) throw new Error("Album is unavailable");
-        const changed = transform({ ...loaded.album, url, etag: loaded.etag });
-        await saveAlbum(io, changed);
+        const saved = await writeAlbum.edit(url, transform);
         announce(message);
-        return patch;
+        return (state) => ({
+          ...state,
+          albums: state.albums.map((album) => (album.url === url ? saved : album)),
+        });
       });
     },
-    [io, run],
+    [writeAlbum, run],
   );
   const newAlbum = useCallback(
     (name: string, refs: string[] = []) => {
@@ -201,11 +196,11 @@ function usePhotosState(session: PodSession) {
         albums: s.albums.filter((value) => value.url !== album.url),
       });
       return run(patch, async () => {
-        await deleteAlbum(io, album);
+        await writeAlbum.remove(album);
         return patch;
       });
     },
-    [io, run],
+    [writeAlbum, run],
   );
   const favourite = useCallback(
     (refs: string[], enabled: boolean) => {
