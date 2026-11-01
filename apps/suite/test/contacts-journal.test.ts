@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { newIntent } from "../src/apps/contacts/state/intents";
 import { browserIntentStorage, IntentJournal } from "../src/apps/contacts/state/journal";
@@ -82,6 +83,44 @@ describe("Contacts durable journal storage", () => {
     expect(unavailable.list()).toEqual([intent]);
     unavailable.remove(intent);
     expect(warn).toHaveBeenCalledOnce();
+  });
+  it.each([
+    "new",
+    "checkpoint",
+    "remove",
+  ])("preserves %s fallback records across remounts when storage writes fail but reads succeed", (change) => {
+    const webId = `https://${crypto.randomUUID()}.example/#me`;
+    const storage = new MemoryIntentStorage();
+    const warn = vi.fn();
+    const journal = new IntentJournal(webId, BOOK, warn, () => storage);
+    const existing = newIntent("book", BOOK, BOOK);
+    journal.put(existing);
+    expect(journal.list()).toEqual([existing]);
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new Error("quota");
+    });
+    vi.spyOn(storage, "removeItem").mockImplementation(() => {
+      throw new Error("read only");
+    });
+    const dirty = change === "new" ? newIntent("book", BOOK, BOOK) : existing;
+    dirty.completed.push("book");
+    if (change === "remove") journal.remove(dirty);
+    else journal.put(dirty);
+    const expected = change === "remove" ? [] : change === "new" ? [existing, dirty] : [dirty];
+    const remountWarning = vi.fn();
+    const remounted = new IntentJournal(webId, BOOK, remountWarning, () => storage);
+    expect(remounted.list()).toEqual(expected);
+    expect(journal.list()).toEqual(expected);
+    // Persistent storage still holds its old checkpoint; it must not replace dirty memory.
+    expect(JSON.parse(storage.getItem(journal.prefix + existing.id) as string).completed).toEqual(
+      [],
+    );
+    for (const intent of expected) remounted.remove(intent);
+    expect(new IntentJournal(webId, BOOK, vi.fn(), () => storage).list()).toEqual([]);
+    expect(journal.list()).toEqual([]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(remountWarning).not.toHaveBeenCalled();
+    expect(new IntentJournal(`${webId}-other`, BOOK, vi.fn(), () => storage).list()).toEqual([]);
   });
   it("refuses corrupted or mismatched recovery instead of abandoning it", () => {
     const storage = new MemoryIntentStorage();

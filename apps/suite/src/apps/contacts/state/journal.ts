@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { SavedDocument } from "../lib/model/intent";
 
 export interface Intent {
@@ -30,10 +31,11 @@ export function journalPrefix(webId: string, bookUrl: string) {
 
 // Survives provider remounts when browser storage is unavailable. Never claim reload durability.
 const memory = new Map<string, string>();
+// Share fallback mode too: readable storage may contain stale checkpoints after quota failures.
+const volatile = new Set<string>();
 const queues = new Map<string, Promise<unknown>>();
 export class IntentJournal {
   readonly prefix: string;
-  private volatile = false;
   constructor(
     webId: string,
     readonly bookUrl: string,
@@ -43,11 +45,11 @@ export class IntentJournal {
     this.prefix = journalPrefix(webId, bookUrl);
   }
   private access<T>(persistent: (storage: IntentStorage) => T, fallback: () => T): T {
-    if (!this.volatile) {
+    if (!volatile.has(this.prefix)) {
       try {
         return persistent(this.storage());
       } catch {
-        this.volatile = true;
+        volatile.add(this.prefix);
         this.warn(
           "This browser cannot save Contacts recovery. Keep this tab open until saving finishes; recovery will be lost on reload.",
         );

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ContactsModel } from "../lib/model/book";
 import { registerAddressBook } from "../lib/model/discovery";
 import {
@@ -10,13 +11,22 @@ import {
   personLink,
   type SavedDocument,
 } from "../lib/model/intent";
-import { PartialWriteError } from "../lib/model/transport";
+import { ContactsWriteError, PartialWriteError } from "../lib/model/transport";
 import type { Intent, IntentJournal } from "./journal";
 import { ensureBook, ensurePrivateIndex } from "./recovery";
 
 export interface DeleteToken {
   person: SavedDocument;
   labels: string[];
+}
+export class IntentConflictError extends ContactsWriteError {
+  constructor(cause: ContactsWriteError) {
+    super(cause.status, cause.url, cause.etag);
+    this.name = "IntentConflictError";
+    this.message =
+      "Contacts changed elsewhere, so an unfinished operation was stopped. Existing contacts and any created copies were kept; you may see duplicates.";
+    this.cause = cause;
+  }
 }
 export function newIntent(
   kind: Intent["kind"],
@@ -47,6 +57,26 @@ export class IntentRunner {
     private deleted: (token: DeleteToken) => void,
   ) {}
   async run(journal: IntentJournal, intent: Intent): Promise<void> {
+    try {
+      await this.replay(journal, intent);
+    } catch (error) {
+      let cause = error;
+      while (cause instanceof PartialWriteError) cause = cause.cause;
+      if (!(cause instanceof ContactsWriteError && cause.status === 412)) throw error;
+      if (intent.kind === "delete" && intent.phase === "reconcile") {
+        // Try the existing non-destructive repair once. A conflicting repair must not block loading.
+        try {
+          await this.replay(journal, intent);
+        } catch {
+          // Keep the surviving document even when its links cannot safely be repaired.
+        }
+      }
+      // Never clean up a created destination or retry a stale source DELETE after a conflict.
+      journal.remove(intent);
+      throw new IntentConflictError(cause);
+    }
+  }
+  private async replay(journal: IntentJournal, intent: Intent): Promise<void> {
     const checkpoint = (step: string) => {
       if (!intent.completed.includes(step)) intent.completed.push(step);
       if (/^https?:/.test(step) && !intent.destinations.includes(step))

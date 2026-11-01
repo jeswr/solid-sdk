@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -10,7 +11,7 @@ import { discoverContacts } from "../lib/model/discovery";
 import { openDocument, saveDocument } from "../lib/model/intent";
 import { ContactsWriteError, PartialWriteError, type Snapshot } from "../lib/model/transport";
 import { applyContactPatch, type ContactPatch, decodeContactRef, encodeContactRef } from "./data";
-import { type DeleteToken, IntentRunner, newIntent } from "./intents";
+import { type DeleteToken, IntentConflictError, IntentRunner, newIntent } from "./intents";
 import { browserIntentStorage, type Intent, IntentJournal, type IntentStorage } from "./journal";
 import { optionalDocument } from "./recovery";
 
@@ -56,6 +57,7 @@ export async function mapContacts<T, R>(
 }
 
 export function writeMessage(error: unknown): string {
+  if (error instanceof IntentConflictError) return error.message;
   if (error instanceof PartialWriteError) return writeMessage(error.cause);
   return error instanceof ContactsWriteError && error.status === 412
     ? "This contact changed elsewhere. The latest version has been loaded; try again."
@@ -154,7 +156,12 @@ export class ContactsController {
       await journal.lock(async () => {
         for (const intent of journal.list()) {
           recovered = true;
-          await this.runner.run(journal, intent);
+          try {
+            await this.runner.run(journal, intent);
+          } catch (error) {
+            if (!(error instanceof IntentConflictError)) throw error;
+            this.onError(writeMessage(error));
+          }
         }
       });
     }

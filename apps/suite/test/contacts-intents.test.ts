@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { describe, expect, it, vi } from "vitest";
 import { openDocument, saveDocument } from "../src/apps/contacts/lib/model/intent";
-import { PartialWriteError } from "../src/apps/contacts/lib/model/transport";
+import { ContactsWriteError, PartialWriteError } from "../src/apps/contacts/lib/model/transport";
 import { ContactsController } from "../src/apps/contacts/state/controller";
 import { type DeleteToken, IntentRunner, newIntent } from "../src/apps/contacts/state/intents";
 import { type Intent, IntentJournal } from "../src/apps/contacts/state/journal";
@@ -24,7 +25,7 @@ import {
 const WEBID = `${ROOT}profile/card#me`;
 const PROFILE = `${ROOT}profile/card`;
 const PREFS = `${ROOT}settings/prefs.ttl`;
-async function harness() {
+async function harness(webId = WEBID) {
   const { pod } = await setup();
   pod.seed(
     PEOPLE,
@@ -42,7 +43,7 @@ async function harness() {
   const errors = vi.fn();
   const deleted = vi.fn<(token: DeleteToken) => void>();
   const fresh = () =>
-    new ContactsController(pod.fetch, ROOT, WEBID, errors, () => storage, deleted);
+    new ContactsController(pod.fetch, ROOT, webId, errors, () => storage, deleted);
   const controller = fresh();
   await controller.refresh();
   const intents = () => [...storage.values.values()].map((value) => JSON.parse(value) as Intent);
@@ -54,7 +55,7 @@ function ready(controller: ContactsController) {
 
 describe("Contacts durable intent recovery across controller lifetimes", () => {
   it.each([
-    "412",
+    "503",
     "lost-person-response",
   ])("CON-01: recovers an unindexed creation (%s) at its original URL and UID", async (failure) => {
     const { pod, controller, fresh, intents, storage } = await harness();
@@ -68,7 +69,7 @@ describe("Contacts durable intent recovery across controller lifetimes", () => {
           throw new Error("connection lost after PUT");
         }
       }
-      if (url === PEOPLE && method === "PUT") return new Response(null, { status: 412 });
+      if (url === PEOPLE && method === "PUT") return new Response(null, { status: 503 });
       return undefined;
     };
     await expect(controller.create({ name: "Mira", note: "Keep" }, destination)).rejects.toThrow();
@@ -94,6 +95,186 @@ describe("Contacts durable intent recovery across controller lifetimes", () => {
     expect(storage.length).toBe(0);
     await fresh().refresh();
     expect(pod.writes.filter((write) => write.url === destination)).toHaveLength(1);
+  });
+
+  it("recovers an interrupted write after remount when journal writes fail but reads work", async () => {
+    const { controller, pod, storage, fresh, errors } = await harness(
+      `${WEBID}-${crypto.randomUUID()}`,
+    );
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new Error("quota");
+    });
+    const destination = `${ROOT}contacts/people/quota.ttl`;
+    pod.fail = (url, method) =>
+      url === PEOPLE && method === "PUT" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.create({ name: "Quota recovery" }, destination)).rejects.toThrow();
+    expect(storage.length).toBe(0);
+    expect(pod.files.has(destination)).toBe(true);
+    pod.fail = undefined;
+    const reopened = fresh();
+    await reopened.refresh();
+    ready(reopened);
+    expect(reopened.getSnapshot().data.people.map((person) => person.url)).toContain(destination);
+    expect(pod.writes.filter((write) => write.url === destination)).toHaveLength(1);
+    expect(
+      errors.mock.calls.filter(([message]) => message.includes("lost on reload")),
+    ).toHaveLength(1);
+    const writes = pod.writes.length;
+    await fresh().refresh();
+    expect(pod.writes).toHaveLength(writes);
+  });
+
+  it("releases a stale migration after remount, retaining the changed source and visible copy with one toast", async () => {
+    const { controller, pod, fresh, intents, storage, errors, deleted } = await harness();
+    pod.fail = (url, method) =>
+      url === PM && method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    const pending = intents()[0] as Intent;
+    const destination = pod.files.get(pending.destination);
+    const edited = String(pod.files.get(PM)?.body).replace("Original note", "Concurrent edit");
+    pod.seed(PM, edited, '"concurrent"');
+    pod.fail = undefined;
+    errors.mockClear();
+    const reopened = fresh();
+    await reopened.refresh();
+    ready(reopened);
+    expect(reopened.getSnapshot().data.people.map((person) => person.data.name)).toEqual([
+      "Alice",
+      "Pat Morgan",
+    ]);
+    expect(reopened.getSnapshot().data.flat[0]?.data.note).toBe("Concurrent edit");
+    expect(pod.files.get(PM)).toEqual({ body: edited, etag: '"concurrent"' });
+    expect(pod.files.get(pending.destination)).toEqual(destination);
+    expect(storage.length).toBe(0);
+    expect(deleted).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("created copies were kept"));
+    const writes = pod.writes.length;
+    await reopened.refresh();
+    const again = fresh();
+    await again.refresh();
+    ready(again);
+    expect(pod.writes).toHaveLength(writes);
+    expect(errors).toHaveBeenCalledOnce();
+    await again.create({ name: "Still usable" }, `${ROOT}contacts/people/usable.ttl`);
+    ready(again);
+    expect(again.getSnapshot().data.people).toHaveLength(3);
+  });
+
+  it.each([
+    "create",
+    "restore",
+    "migrate",
+    "delete",
+    "book",
+  ] as const)("releases an unresolved %s conflict during remount and continues subsequent intents and loading", async (kind) => {
+    const { controller, pod, fresh, storage, errors, deleted } = await harness();
+    const journal = new IntentJournal(WEBID, BOOK, vi.fn(), () => storage);
+    const destination = kind === "delete" ? ALICE : `${ROOT}contacts/people/conflict.ttl`;
+    const plan = await controller.model.planContact(
+      await controller.model.loadAddressBook(),
+      { name: "Kept copy" },
+      destination,
+    );
+    const intent = newIntent(kind, BOOK, kind === "book" ? INDEX : destination, {
+      person: await saveDocument(
+        kind === "delete" ? await controller.model.loadContact(ALICE) : plan.document,
+      ),
+      source: await saveDocument(await controller.model.loadFlatContacts(PM)),
+      labels: kind === "delete" ? [FRIENDS] : [],
+    });
+    intent.startedAt = "2026-01-01";
+    journal.put(intent);
+    const next = newIntent("book", BOOK, INDEX);
+    next.completed = ["done"];
+    journal.put(next);
+    const source = pod.files.get(PM);
+    const alice = pod.files.get(ALICE);
+    pod.fail = (url, method) =>
+      url === (kind === "book" ? INDEX : PEOPLE) && method === "PUT"
+        ? new Response(null, { status: 412 })
+        : undefined;
+    const reopened = fresh();
+    await reopened.refresh();
+    ready(reopened);
+    expect(reopened.getSnapshot().data.people[0]?.data.name).toBe("Alice");
+    expect(pod.files.get(ALICE)).toEqual(alice);
+    expect(pod.files.get(PM)).toEqual(source);
+    if (kind !== "delete" && kind !== "book") expect(pod.files.has(destination)).toBe(true);
+    expect(pod.writes.filter((write) => write.method === "DELETE")).toEqual([]);
+    expect(storage.length).toBe(0);
+    expect(deleted).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining("unfinished operation was stopped"),
+    );
+    const writes = pod.writes.length;
+    await reopened.refresh();
+    const again = fresh();
+    await again.refresh();
+    ready(again);
+    expect(pod.writes).toHaveLength(writes);
+    expect(errors).toHaveBeenCalledOnce();
+  });
+
+  it("releases nested partial-write conflicts during a mutation without replaying or showing a second toast", async () => {
+    const { controller, pod, storage, errors, fresh } = await harness();
+    vi.spyOn(controller.model.transport, "commit").mockRejectedValueOnce(
+      new PartialWriteError(
+        [PEOPLE],
+        new PartialWriteError([], new ContactsWriteError(412, PEOPLE, null)),
+      ),
+    );
+    await expect(controller.create({ name: "Conflict" })).rejects.toBeInstanceOf(
+      ContactsWriteError,
+    );
+    ready(controller);
+    expect(storage.length).toBe(0);
+    expect(errors).toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining("unfinished operation was stopped"),
+    );
+    const writes = pod.writes.length;
+    await fresh().refresh();
+    expect(pod.writes).toHaveLength(writes);
+    expect(errors).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "forward",
+    "rollback",
+  ] as const)("releases a delete whose %s repair conflicts, retaining the source without a deletion toast", async (phase) => {
+    const { controller, pod, storage, fresh, errors, deleted } = await harness();
+    const journal = new IntentJournal(WEBID, BOOK, vi.fn(), () => storage);
+    const person = await saveDocument(await controller.model.loadContact(ALICE));
+    const intent = newIntent("delete", BOOK, ALICE, { person, labels: [FRIENDS] });
+    intent.phase = phase;
+    if (phase === "rollback") {
+      intent.completed = ["index"];
+      intent.repairs = ["index"];
+      pod.seed(PEOPLE, "");
+    }
+    journal.put(intent);
+    pod.fail = (url, method) => {
+      if (url === ALICE && method === "DELETE") return new Response(null, { status: 412 });
+      if (
+        url === PEOPLE &&
+        method === "PUT" &&
+        (phase === "rollback" || !pod.files.get(PEOPLE)?.body.includes("Alice"))
+      )
+        return new Response(null, { status: 412 });
+      return undefined;
+    };
+    const reopened = fresh();
+    await reopened.refresh();
+    ready(reopened);
+    expect((await reopened.model.loadContact(ALICE)).data.name).toBe("Alice");
+    expect(storage.length).toBe(0);
+    expect(deleted).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledOnce();
+    const writes = pod.writes.length;
+    await fresh().refresh();
+    expect(pod.writes).toHaveLength(writes);
   });
 
   it("persists failed-delete repairs, their RDF and fresh memberships before any destructive write", async () => {

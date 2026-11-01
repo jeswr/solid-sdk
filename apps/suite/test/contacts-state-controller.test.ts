@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { describe, expect, it, vi } from "vitest";
@@ -457,7 +458,8 @@ describe("Contacts optimistic conditional mutations", () => {
     pod.fail = (url, method) =>
       url === INDEX && method === "PUT" ? new Response(null, { status: 412 }) : undefined;
     await expect(controller.createBook()).rejects.toThrow();
-    expect(controller.getSnapshot().status).toBe("error");
+    expect(controller.getSnapshot().status).toBe("ready");
+    expect(controller.getSnapshot().data.registrationPending).toBe(true);
     expect(pod.files.has(BOOK)).toBe(true);
     pod.fail = undefined;
     await controller.createBook();
@@ -537,7 +539,7 @@ describe("Contacts optimistic conditional mutations", () => {
     );
     pod.fail = undefined;
     await controller.refresh();
-    expect(controller.getSnapshot().status).toBe("error");
+    expect(controller.getSnapshot().status).toBe("ready");
     expect(pod.files.has(PM)).toBe(true);
     expect(
       pod.writes
