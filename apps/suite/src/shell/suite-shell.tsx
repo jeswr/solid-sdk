@@ -3,8 +3,6 @@
 import {
   AppRail,
   type AppSlug,
-  Avatar,
-  AvatarFallback,
   BottomTabBar,
   type RailPreferences,
   RailPreferencesProvider,
@@ -19,6 +17,7 @@ import {
 import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
 import type { SearchSource } from "./lib/search-results";
@@ -96,23 +95,7 @@ function Frame({
       /* Memory-only preferences. */
     }
   };
-  const account = active && (
-    <a className="suite-shell-icon-button" href="/settings/account">
-      <span className="suite-sr-only">Account: {active.name}</span>
-      {/* Initials are decoration; the link's name is the sentence above (WCAG 2.5.3). */}
-      <span aria-hidden="true">
-        <Avatar>
-          <AvatarFallback>
-            {active.name
-              .split(/\s+/u)
-              .map((part) => part[0])
-              .slice(0, 2)
-              .join("")}
-          </AvatarFallback>
-        </Avatar>
-      </span>
-    </a>
-  );
+  const account = active && <AccountMenu />;
   const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
   return (
     <RailPreferencesProvider
