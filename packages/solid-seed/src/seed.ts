@@ -3,7 +3,8 @@
 
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { GeneratedInstance } from "@jeswr/synthetic-rdf";
-import type { Quad } from "@rdfjs/types";
+import type { Quad, Term } from "@rdfjs/types";
+import { Parser } from "n3";
 import { assertHttpIri } from "./iri.js";
 import { rebaseQuads, serializeAcl, serializeRdf } from "./rdf.js";
 import {
@@ -350,13 +351,14 @@ async function put(
   body: string,
   contentType: string,
   conditional: boolean,
-): Promise<void> {
+): Promise<number> {
   const headers = new Headers({ "content-type": contentType });
   if (conditional) headers.set("if-none-match", "*");
   const response = await podFetch(target, url, { method: "PUT", headers, body });
   if (!response.ok)
     throw new HttpFailure("PUT", url, response.status, await responseDetail(response));
   await response.body?.cancel();
+  return response.status;
 }
 
 /**
@@ -370,7 +372,7 @@ async function put(
 async function removeCreated(
   target: SeedTarget,
   url: string,
-  aclWritten: boolean,
+  aclAttempted: boolean,
   original: unknown,
 ): Promise<unknown> {
   const gone = async (resource: string): Promise<string | undefined> => {
@@ -385,12 +387,13 @@ async function removeCreated(
   const failure = await gone(url);
   if (failure !== undefined) {
     return new Error(
-      `${original instanceof Error ? original.message : String(original)}; could not remove ${url} (${failure}), so its ACL was kept`,
+      `${original instanceof Error ? original.message : String(original)}; could not remove ${url} (${failure}), so its ACL was left in place`,
       { cause: original },
     );
   }
-  // Not every server deletes a resource's ACL with it.
-  if (aclWritten) {
+  // Not every server deletes a resource's ACL with it; a 404 means it did (or the
+  // ACL PUT never landed).
+  if (aclAttempted) {
     const aclFailure = await gone(`${url}.acl`);
     if (aclFailure !== undefined) {
       return new Error(
@@ -400,6 +403,52 @@ async function removeCreated(
     }
   }
   return original;
+}
+
+/** Upper bound on an existing ACL read back for comparison. */
+const MAX_ACL_BYTES = 1024 * 1024;
+
+/** The quads of a Turtle ACL as comparable keys, or undefined when it does not parse. */
+function aclKeys(turtle: string, aclUrl: string): Set<string> | undefined {
+  try {
+    const key = (t: Term) =>
+      t.termType === "Literal"
+        ? `L|${t.value}|${t.datatype.value}|${t.language}`
+        : `${t.termType}|${t.value}`;
+    return new Set(
+      new Parser({ format: "text/turtle", baseIRI: aclUrl })
+        .parse(turtle)
+        .map((q) => `${key(q.subject)} ${key(q.predicate)} ${key(q.object)} ${key(q.graph)}`),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * True when every statement of `desired` is already in the resource's ACL, so
+ * writing it can only narrow access. WAC grants are monotone in the statements
+ * (more agents, modes or resources only grant more), so a subset never broadens.
+ * A missing, unreadable, oversized or non-Turtle ACL counts as granting nothing.
+ */
+async function grantsWithin(target: SeedTarget, aclUrl: string, desired: string): Promise<boolean> {
+  const response = await podFetch(target, aclUrl, {
+    method: "GET",
+    headers: { accept: "text/turtle" },
+  });
+  const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  const length = Number(response.headers.get("content-length") ?? "0");
+  if (!response.ok || type !== "text/turtle" || length > MAX_ACL_BYTES) {
+    await response.body?.cancel();
+    return false;
+  }
+  const text = await response.text();
+  if (text.length > MAX_ACL_BYTES) return false;
+  const existing = aclKeys(text, aclUrl);
+  const wanted = aclKeys(desired, aclUrl);
+  if (existing === undefined || wanted === undefined) return false;
+  for (const key of wanted) if (!existing.has(key)) return false;
+  return true;
 }
 
 /**
@@ -488,7 +537,8 @@ async function writeResource(
  * and a failed replacement leaves the owner-only ACL. If a step fails after this
  * run created the placeholder, the resource is removed and then its ACL (see
  * {@link removeCreated}), so a re-run starts again. `ensure` on an existing
- * resource leaves the data alone and reconciles the final ACL only. A container's
+ * resource leaves the data alone and reconciles the final ACL only when that
+ * narrows access (see {@link grantsWithin}); broadening needs `replace`. A container's
  * description is skipped when the server answers 409 to a PUT on an existing
  * container (CSS refuses it and ignores container bodies on creation).
  * A process that dies mid-way leaves the placeholder under the owner-only ACL;
@@ -506,22 +556,41 @@ async function writeProtected(
   let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
   let createdPlaceholder = false;
   try {
-    await put(pod.target, url, placeholderBody(contentType), contentType, true);
-    createdPlaceholder = true;
+    // Only a 201 proves this run created the resource, and so may remove it again.
+    createdPlaceholder =
+      (await put(pod.target, url, placeholderBody(contentType), contentType, true)) === 201;
   } catch (error) {
-    if (!(error instanceof HttpFailure && error.status === 412) || mode === "create") throw error;
-    // The resource exists: ensure leaves its data alone; replace keeps the old data
-    // under its old ACL until the owner-only ACL is in place.
+    // The resource exists: 412, or 409 for a container on CSS, which refuses any PUT
+    // to an existing container before evaluating If-None-Match.
+    const exists =
+      error instanceof HttpFailure &&
+      (error.status === 412 || (error.status === 409 && url.endsWith("/")));
+    if (!exists || mode === "create") throw error;
+    // ensure leaves its data alone; replace keeps the old data under its old ACL
+    // until the owner-only ACL is in place.
     if (mode === "ensure") outcome = "skipped";
   }
-  let aclWritten = false;
+  let aclAttempted = false;
   try {
     await assertAclLocation(pod.target, url);
     if (outcome === "skipped") {
+      // ensure reconciles the ACL of content it did not write, so it may narrow
+      // access but never broaden it: the existing data (perhaps the superseded
+      // content of a failed replace) was never vetted for the new grants.
+      if (
+        resource.aclBody !== resource.ownerAclBody &&
+        !(await grantsWithin(pod.target, aclUrl, resource.aclBody as string))
+      ) {
+        throw new Error(
+          `ensure will not broaden access to existing content at ${url}; re-run with replace to rewrite it under the new grants`,
+        );
+      }
       await writeAcl(pod, resource, false);
       return outcome;
     }
-    // In create mode a stale ACL fails the seed (If-None-Match) rather than being overwritten.
+    // In create mode a stale ACL fails the seed (If-None-Match) rather than being
+    // overwritten. A PUT that errors may still have landed, so cleanup tries it.
+    aclAttempted = true;
     await put(
       pod.target,
       aclUrl,
@@ -529,7 +598,6 @@ async function writeProtected(
       DEFAULT_CONTENT_TYPE,
       mode === "create",
     );
-    aclWritten = true;
     try {
       await put(pod.target, url, body, contentType, false);
     } catch (error) {
@@ -542,7 +610,7 @@ async function writeProtected(
     return outcome;
   } catch (error) {
     // A replacement that fails keeps its owner-only ACL over whichever data is there.
-    if (createdPlaceholder) throw await removeCreated(pod.target, url, aclWritten, error);
+    if (createdPlaceholder) throw await removeCreated(pod.target, url, aclAttempted, error);
     throw error;
   }
 }

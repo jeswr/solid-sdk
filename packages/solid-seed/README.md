@@ -44,7 +44,9 @@ The main entry contains no Node built-ins.
 
 - `create` uses `If-None-Match: *` and treats existing state as an error.
 - `ensure` skips an existing primary resource but creates or rewrites its requested ACL so access
-  policy converges. For an expander group it first requires every primary resource and requested
+  policy converges, as long as that only narrows access: it refuses to grant more than the
+  existing Turtle ACL already does (or anything beyond the owner when there is none), because it
+  did not write the existing content. Use `replace` to publish it. For an expander group it first requires every primary resource and requested
   ACL sidecar to exist or none to exist; partial groups fail before writes.
 - `replace` unconditionally rewrites every selected resource and ACL.
 
@@ -75,8 +77,8 @@ read, write, and control, then adds the requested public or named-agent rules. A
 with `@solid/object`'s `Authorization` wrapper and serialized with `n3.Writer`; there are no Turtle
 string templates.
 
-A resource with an `access` entry is written so that neither its new nor its old data is ever
-governed by broader grants than intended: an empty placeholder is created (or the existing resource
+A resource with an `access` entry is written so that the seeder never puts content it has not just
+written under broader grants than it already had: an empty placeholder is created (or the existing resource
 found), an owner-only ACL is written, then the data, and only then the ACL with the requested grants.
 A replacement therefore never exposes the superseded content to the new grants. Before writing any
 ACL the seeder requires the server to advertise it at `<resource>.acl` with `Link: rel="acl"`; a
@@ -86,8 +88,11 @@ resource this run created is deleted while its ACL still protects it; the ACL is
 once the resource is confirmed gone (a successful DELETE or 404). If the resource cannot be removed,
 the ACL is kept and the error says so. A container's description is skipped when the server answers
 409 to a PUT on an existing container, as CSS does (CSS also ignores a container body on creation).
-A process that dies between placeholder and data leaves the empty placeholder under the owner-only
-ACL, which `ensure` cannot tell from real data; re-run with `replace` after a crash.
+Only a 201 to the placeholder PUT counts as this run creating the resource, and on a container
+CSS answers 409 rather than 412 to that conditional PUT, which counts as existing. A process that
+dies between placeholder and data leaves the empty placeholder under the owner-only ACL, which
+`ensure` cannot tell from real data (nor will it broaden that ACL); re-run with `replace` after a
+crash or a failed replacement.
 
 `baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
 auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/`, `\` or `%`

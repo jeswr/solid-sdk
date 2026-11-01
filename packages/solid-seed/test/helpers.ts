@@ -29,8 +29,15 @@ export class MemoryPod implements SeedTarget {
   aclLink: "suffix" | "none" | { suffix: string } = "suffix";
   /** Refuse HEAD with 405, as some servers do. */
   headUnsupported = false;
-  /** Refuse a PUT to an existing container with 409, as CSS does. */
+  /**
+   * Refuse a PUT to an existing container with 409, as CSS does, before
+   * evaluating If-None-Match (so a conditional PUT gets 409, not 412).
+   */
   containerPutConflict = false;
+  /** Delete a resource's `.acl` along with it, as CSS does. */
+  deleteAclWithResource = false;
+  /** Overwrite despite `If-None-Match: *`, answering 204, as a non-conforming server might. */
+  ignoreIfNoneMatch = false;
   /** Paths whose DELETE is refused with the given status. */
   readonly deleteFailures = new Map<string, number>();
   #failure?: { path: string; remaining: number; status: number; skip: number; partial: boolean };
@@ -90,24 +97,22 @@ export class MemoryPod implements SeedTarget {
         const refused = this.deleteFailures.get(path);
         if (refused !== undefined) return new Response("delete refused", { status: refused });
         const existed = this.resources.delete(request.url);
+        if (existed && this.deleteAclWithResource) this.resources.delete(`${request.url}.acl`);
         return new Response(null, { status: existed ? 205 : 404 });
       }
       if (request.method === "PUT") {
-        if (request.headers.get("if-none-match") === "*" && this.resources.has(request.url)) {
-          return new Response("precondition failed", { status: 412 });
-        }
-        if (
-          this.containerPutConflict &&
-          request.url.endsWith("/") &&
-          this.resources.has(request.url)
-        ) {
+        const existed = this.resources.has(request.url);
+        if (this.containerPutConflict && request.url.endsWith("/") && existed) {
           return new Response("Existing containers cannot be updated via PUT.", { status: 409 });
+        }
+        if (request.headers.get("if-none-match") === "*" && existed && !this.ignoreIfNoneMatch) {
+          return new Response("precondition failed", { status: 412 });
         }
         this.resources.set(request.url, {
           body,
           contentType: request.headers.get("content-type") ?? "",
         });
-        return new Response(null, { status: 201 });
+        return new Response(null, { status: existed ? 204 : 201 });
       }
       return new Response("method not allowed", { status: 405 });
     };

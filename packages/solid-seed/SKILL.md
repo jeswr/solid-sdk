@@ -27,7 +27,8 @@ harness or server package into application code that defines a layout.
 
 Use `create` for fresh e2e pods, `ensure` for long-lived development pods, and `replace` for a
 deliberate deterministic rewrite. `ensure` leaves an existing primary resource unchanged but
-creates or rewrites its requested ACL so policy converges. It treats expander groups as all-or-none:
+creates or rewrites its requested ACL so policy converges, but only to narrow access: it never
+grants more than the existing ACL does over content it did not write (use `replace` for that). It treats expander groups as all-or-none:
 if every primary resource and requested ACL sidecar exists, primary resources skip while ACLs
 converge; if none exists, the whole group is created; a partial set errors. `create` also preflights
 the group and keeps `If-None-Match: *` on every actual write.
