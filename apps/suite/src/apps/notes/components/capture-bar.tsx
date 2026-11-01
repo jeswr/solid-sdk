@@ -31,6 +31,8 @@ const captureDraft = z.object({
   tabId: z.string().optional(),
   updatedAt: z.number().finite().optional(),
   submitting: z.boolean().optional(),
+  /** Its create may have reached the pod before the page closed: never save it without asking. */
+  maybeSaved: z.boolean().optional(),
 });
 
 export function CaptureBar({ label }: { label?: string }) {
@@ -48,6 +50,7 @@ export function CaptureBar({ label }: { label?: string }) {
   const [colour, setColour] = useState<NoteColour>("default");
   const [busy, setBusy] = useState(() => submitting.has(captureKey));
   const [error, setError] = useState<string>();
+  const [maybeSaved, setMaybeSaved] = useState(false);
   const recovery = useRef<string | null>(null);
   const captureSnapshot = useRef<string | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -63,6 +66,7 @@ export function CaptureBar({ label }: { label?: string }) {
         error,
         tabId,
         submitting: busy,
+        maybeSaved,
       })
     : null;
   captureSnapshot.current = captureText;
@@ -87,8 +91,15 @@ export function CaptureBar({ label }: { label?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const opening = useRef<HTMLInputElement>(null);
   const latestClose = useRef(() => {});
-  const finish = async () => {
+  const finish = async (confirmed = false) => {
     if (submitted.current || submitting.has(captureKey)) return;
+    if (maybeSaved && !confirmed) {
+      // Closing must not create a capture that may already exist: keep it
+      // stored and offered until the user picks Save anyway or Discard.
+      persistCapture();
+      if (mounted.current) setExpanded(false);
+      return;
+    }
     let input: ReturnType<typeof captureToNote>;
     let settled = false;
     try {
@@ -187,6 +198,7 @@ export function CaptureBar({ label }: { label?: string }) {
     setColour("default");
     setBusy(false);
     setError(undefined);
+    setMaybeSaved(false);
     submitted.current = false;
     announce();
   };
@@ -229,7 +241,10 @@ export function CaptureBar({ label }: { label?: string }) {
             const saved = captureDraft.parse(JSON.parse(text));
             if (saved.webId !== session.webId || key !== `${capturePrefix}:${saved.tabId}`)
               continue;
-            if (key !== captureKey && heartbeatLive(localStorage, saved.tabId as string, Date.now()))
+            if (
+              key !== captureKey &&
+              heartbeatLive(localStorage, saved.tabId as string, Date.now())
+            )
               continue;
             drafts.push({ key, text, saved });
           } catch {
@@ -252,7 +267,8 @@ export function CaptureBar({ label }: { label?: string }) {
             own.text = text;
           }
           // Copy before removing an orphan so the restored form remains durable.
-          const text = JSON.stringify({ ...saved, tabId, submitting: false });
+          const flagged = Boolean(saved.submitting || saved.maybeSaved);
+          const text = JSON.stringify({ ...saved, tabId, submitting: false, maybeSaved: flagged });
           localStorage.setItem(captureKey, text);
           if (newest.key !== captureKey) removeExact(newest.key, newest.text);
           recovery.current = text;
@@ -263,13 +279,14 @@ export function CaptureBar({ label }: { label?: string }) {
           setPinned(saved.pinned);
           setColour(saved.colour);
           // The page closed while this capture's create was in flight; it may exist already.
-          setError(saved.submitting ? MAYBE_SAVED : saved.error);
+          setMaybeSaved(flagged);
+          setError(flagged ? MAYBE_SAVED : saved.error);
           setExpanded(true);
         }
         for (const orphan of drafts) {
           // Never auto-create a capture that may already have been saved; it
           // waits to be offered in the bar with a warning.
-          if (orphan.saved.submitting) continue;
+          if (orphan.saved.submitting || orphan.saved.maybeSaved) continue;
           recovering.add(orphan.key);
           // Preserve checklist syntax literally; recovery must not reject unique text.
           const raw = [
@@ -531,6 +548,37 @@ export function CaptureBar({ label }: { label?: string }) {
             </IconButton>
             <ColourPicker value={colour} onChange={setColour} disabled={busy} />
             <LabelPicker value={labels} onChange={setLabels} disabled={busy} />
+            {maybeSaved && (
+              <>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem(captureKey);
+                    } catch {
+                      // Nothing stored to discard.
+                    }
+                    captureSnapshot.current = null;
+                    clearTimeout(persistTimer.current);
+                    setExpanded(false);
+                    setTitle("");
+                    setBody("");
+                    setItems(undefined);
+                    setLabels(label ? [label] : []);
+                    setPinned(false);
+                    setColour("default");
+                    setError(undefined);
+                    setMaybeSaved(false);
+                  }}
+                >
+                  Discard
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => void finish(true)}>
+                  Save anyway
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               className="notes-close-capture"

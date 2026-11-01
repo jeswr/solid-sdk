@@ -334,9 +334,10 @@ export function getPendingDrafts(webId: string): DraftRegistry {
   if (typeof window !== "undefined") {
     setInterval(pending.heartbeat, 10_000);
     window.addEventListener("online", retry);
-    window.addEventListener("pagehide", () => {
+    window.addEventListener("pagehide", (event) => {
       retry();
-      pending.release();
+      // A page entering the back/forward cache is still alive: keep its heartbeat.
+      if (!event.persisted) pending.release();
     });
     window.addEventListener("pageshow", (event) => {
       // Restored from the back/forward cache: this page is live again.

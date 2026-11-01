@@ -397,8 +397,11 @@ it("gives a duplicated tab a fresh ID, keeps a reloaded tab's ID, and never over
   await b.retry();
   const bKey = `${key}:${note.url}:${b.tabId}`;
   expect(JSON.parse(localStorage.getItem(bKey) as string).snapshot.draft).toEqual(bDraft);
+  // Entering the back/forward cache keeps the page alive, so its heartbeat stays.
+  releaseB?.(Object.assign(new Event("pagehide"), { persisted: true }));
+  expect(localStorage.getItem(`suite.notes.heartbeat:${b.tabId}`)).not.toBeNull();
   // B reloads: its pagehide releases the heartbeat, so the reload keeps B's id and its conflict.
-  releaseB?.(new Event("pagehide"));
+  releaseB?.(Object.assign(new Event("pagehide"), { persisted: false }));
   await b.retry();
   expect(localStorage.getItem(`suite.notes.heartbeat:${b.tabId}`)).toBeNull();
   vi.resetModules();

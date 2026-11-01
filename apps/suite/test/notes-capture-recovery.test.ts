@@ -347,7 +347,7 @@ it("never auto-creates a capture that was in flight when its page closed, and wa
     JSON.stringify({ ...base, body: "Newest", tabId: "gone-2", updatedAt: 2 }),
   );
   const create = mocks.context.create as ReturnType<typeof vi.fn>;
-  const { CaptureBar } = await page();
+  const { CaptureBar, key } = await page();
   const ui = await mount(h(CaptureBar));
   expect(ui.host.querySelector("textarea")?.value).toBe("Newest");
   expect(create).not.toHaveBeenCalled();
@@ -357,5 +357,64 @@ it("never auto-creates a capture that was in flight when its page closed, and wa
   expect(ui.host.querySelector('[role="alert"]')?.textContent).toContain(
     "may already have been saved",
   );
+  expect(create).toHaveBeenCalledTimes(1);
+  // Closing, clicking outside, Escape and unmounting keep it stored instead of creating it.
+  await close(ui.host);
+  expect(ui.host.querySelector("textarea")).toBeNull();
+  await act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
   await ui.unmount();
+  expect(create).toHaveBeenCalledTimes(1);
+  const stored = JSON.parse(localStorage.getItem(key) as string);
+  expect(stored).toMatchObject({ body: "Maybe saved", maybeSaved: true });
+  // A flagged record is never auto-created as an orphan either.
+  localStorage.setItem(
+    "notes-capture-draft:gone-3",
+    JSON.stringify({ ...base, body: "Newer", tabId: "gone-3", updatedAt: 3 }),
+  );
+  localStorage.setItem(
+    "notes-capture-draft:gone-4",
+    JSON.stringify({ ...stored, tabId: "gone-4", updatedAt: 1 }),
+  );
+  localStorage.removeItem(key);
+  const { CaptureBar: Again } = await page();
+  const again = await mount(h(Again));
+  expect(again.host.querySelector("textarea")?.value).toBe("Newer");
+  expect(create).toHaveBeenCalledTimes(1);
+  await again.unmount();
+});
+
+it("offers Save anyway and Discard for a capture that may already have been saved", async () => {
+  const base = { webId, title: "", labels: [], pinned: false, colour: "default" };
+  const record = { ...base, body: "Check me", tabId: "gone", updatedAt: 1, maybeSaved: true };
+  localStorage.setItem("notes-capture-draft:gone", JSON.stringify(record));
+  const create = mocks.context.create as ReturnType<typeof vi.fn>;
+  const { CaptureBar, key } = await page();
+  const ui = await mount(h(CaptureBar));
+  const button = (name: string) =>
+    [...ui.host.querySelectorAll("button")].find(
+      (b) => b.textContent === name,
+    ) as HTMLButtonElement;
+  expect(ui.host.querySelector("textarea")?.value).toBe("Check me");
+  await click(button("Discard"));
+  expect(ui.host.querySelector("textarea")).toBeNull();
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(create).not.toHaveBeenCalled();
+  await ui.unmount();
+  expect(create).not.toHaveBeenCalled();
+  localStorage.setItem("notes-capture-draft:gone", JSON.stringify(record));
+  const second = await mount(h(CaptureBar));
+  await click(
+    [...second.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save anyway",
+    ) as HTMLButtonElement,
+  );
+  expect(create).toHaveBeenCalledExactlyOnceWith(
+    { title: "Check me", body: "<p>Check me</p>", labels: [] },
+    false,
+    "default",
+  );
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(second.host.querySelector("textarea")).toBeNull();
+  await second.unmount();
+  expect(create).toHaveBeenCalledTimes(1);
 });
