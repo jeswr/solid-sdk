@@ -13,8 +13,8 @@ and the rest of the [@jeswr Solid app suite](https://github.com/jeswr).
 > **Scope:** auth, `window.solid`, popup/side-panel account UI, a gated shared replica,
 > and per-data-class consent through `requestAccess` / `listGrants` / `revokeGrant` /
 > `resolveClass` are implemented. Class resolution merges SAI registrations and Solid Type
-> Indexes, and the built-in `pim:Storage` class gives whole-pod access; SHACL member sampling
-> and offline write queues remain follow-ups.
+> Indexes, then checks candidates with bounded SHACL member sampling. The built-in
+> `pim:Storage` class gives whole-pod access; offline write queues remain a follow-up.
 
 ## Architecture
 
@@ -297,8 +297,18 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   index reads omit credentials, including public indexes hosted on foreign origins.
   It requires a verified, granted origin and an active session. Class-only origins can
   resolve only classes they currently hold beneath their parent origin grant.
-  It returns `shape: null` today: SHACL member sampling remains a follow-up, and all discovered
-  targets are internally marked `unchecked`. Provenance stays internal; persisted grants and
+  Candidate containers are sampled through the same private read capability: up to eight RDF
+  direct members, newest `dcterms:modified` first, skipping non-RDF responses. Instances are
+  checked directly. Positive `rdf:type` evidence for the requested class is required; every
+  focus node must validate against the exact discovered C3 shape. Without a shape, only the
+  type evidence is checked. The bounded built-in validator supports targetClass, property
+  paths (one IRI or inverse IRI), class, datatype, nodeKind, minCount, maxCount, in and hasValue.
+  Unsupported or malformed constraints make a sample incomplete. All passing samples mark
+  a target `conforms`; a mix of passing and failing samples marks it `mixed`; complete samples
+  with no pass drop it. Empty/non-RDF-only, unreadable or incomplete samples stay `unchecked`.
+  Deadline or budget exhaustion retains the original candidates as unchecked. No sampled
+  bytes enter the replica, extension storage or page responses. `shape` is the check's SHACL
+  shape IRI, or `null` for the type-only fallback. Provenance stays internal; persisted grants and
   page-visible targets still contain only URLs and kinds. Consent grouping is a later task.
   An unknown/unreachable class resolves to an empty target set.
 
