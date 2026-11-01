@@ -163,7 +163,7 @@ export function ContactImport() {
               disabled={busy}
               readOptions={{ maxEntries: 100, maxDepth: 0 }}
             >
-              <p>
+              <p className="con-drop-help">
                 Drop .vcf files here, or choose Upload files. Multiple vCard 3.0 and 4.0 files are
                 supported.
               </p>
