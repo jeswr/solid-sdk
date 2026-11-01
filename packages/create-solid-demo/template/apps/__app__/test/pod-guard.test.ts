@@ -29,3 +29,12 @@ test("unconfigured issuer allowlist fails closed with 503", async () => {
   const response = await POST(new Request(ROUTE_URL, { method: "POST" }));
   expect(response.status).toBe(503);
 });
+
+test("the DPoP htu sees the public URL, with the basePath Next.js strips", async () => {
+  const { publicRequestUrl } = await import("../lib/server/public-url");
+  expect(publicRequestUrl(new Request(ROUTE_URL))).toBe(
+    "https://__CSD_APP_SLUG__.example/__CSD_APP_SLUG__/api/pod/example",
+  );
+  const already = "https://__CSD_APP_SLUG__.example/__CSD_APP_SLUG__/api/pod/example";
+  expect(publicRequestUrl(new Request(already))).toBe(already);
+});

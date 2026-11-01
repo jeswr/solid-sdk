@@ -1,0 +1,22 @@
+// AUTHORED-BY Codex GPT-6
+import { toast } from "@jeswr/suite-ui";
+import { type CompletionPlan, toastCopy } from "../lib/views/completion";
+import type { TaskView } from "../lib/views/types";
+import type { TasksContextValue } from "./tasks-context";
+/** Completion and deletion seams for TSK-06's undo-aware actions. */
+export async function completeTask(
+  view: TaskView,
+  tasks: TasksContextValue,
+): Promise<CompletionPlan | undefined> {
+  const stored = tasks.tasks[view.projectUrl]?.items.find((task) => task.url === view.url);
+  if (!stored) return;
+  const result = await tasks.cache.completeTask(stored);
+  if (result) {
+    toast.success(toastCopy(result, view));
+    return result;
+  }
+}
+export async function deleteTask(view: TaskView, tasks: TasksContextValue): Promise<void> {
+  const stored = tasks.tasks[view.projectUrl]?.items.find((task) => task.url === view.url);
+  if (stored && (await tasks.deleteTask(stored))) toast.success(`Deleted '${view.title}'`);
+}

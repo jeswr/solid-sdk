@@ -455,9 +455,14 @@ describe('the merged resolution ladder', () => {
       { classes: [CLASS], modes: ['read'], purpose: null, expiresAt: 100 },
       new Map([[CLASS, result]]),
       0,
+      (() => {
+        let n = 0;
+        return () => `t${++n}`;
+      })(),
     );
-    const grants = consentDecisionToGrants(pending, [CLASS], () => 'g');
-    expect(JSON.parse(JSON.stringify(grants[0].targets))).toEqual([
+    const ids = pending.classes[0].targets.map((t) => t.id);
+    const grants = consentDecisionToGrants(pending, { [CLASS]: ids }, () => 'g');
+    expect(JSON.parse(JSON.stringify(grants?.[0].targets))).toEqual([
       { url: CONTACTS, kind: 'container' },
       { url: CONTACTS, kind: 'instance' },
       { url: `${POD}/other/`, kind: 'container' },

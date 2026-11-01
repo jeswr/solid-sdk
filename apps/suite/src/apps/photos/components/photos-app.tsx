@@ -17,9 +17,9 @@ import {
 } from "@jeswr/suite-ui";
 import { Album, Heart, Images, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { PhotosProvider, usePhotos } from "../state/photos-context";
 
@@ -29,7 +29,7 @@ export function useRequestUpload() {
 }
 function Chrome({ children }: { children: ReactNode }) {
   const photos = usePhotos();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const picker = useRef<HTMLInputElement>(null);
   const folderPicker = useRef<HTMLInputElement>(null);
   const [strip, setStrip] = useState(true);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { useEffect, useSyncExternalStore } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, h, mount } from "./drive-ui-dom";
@@ -144,4 +145,26 @@ describe("matchRouteParams agrees with the native resolver vectors", async () =>
   )("rejects $request like the resolver", ({ request }) => {
     for (const route of routes) expect(matchRouteParams(route.pattern, request)).toBeUndefined();
   });
+});
+
+it("normalises the native export's trailing slash for route comparisons", async () => {
+  const { normalizePathname } = await import("../src/lib/route-params");
+  expect(normalizePathname("/")).toBe("/");
+  expect(normalizePathname("/photos/a/REF/")).toBe("/photos/a/REF");
+  expect(normalizePathname("/photos/favourites")).toBe("/photos/favourites");
+});
+
+it("reads the pathname without the trailing slash, and the root before the router has one", async () => {
+  const { useRoutePathname } = await import("../src/lib/route-params");
+  const seen: string[] = [];
+  function Probe() {
+    seen.push(useRoutePathname());
+    return null;
+  }
+  navigation.pathname = "/photos/a/REF/";
+  await mount(h(Probe));
+  navigation.pathname = null;
+  await mount(h(Probe));
+  expect(seen.at(0)).toBe("/photos/a/REF");
+  expect(seen.at(-1)).toBe("/");
 });

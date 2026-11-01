@@ -1,0 +1,19 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Signing in · Solid Suite</title></head>
+<body><main><h1>Signing you in…</h1></main>
+<script>
+// AUTHORED-BY Codex GPT-6.1-Sol
+(() => {
+  try {
+    if (window.opener && window.opener.location.origin === location.origin) {
+      window.opener.postMessage({ type: "solid-suite:auth-callback", url: location.href }, location.origin);
+      window.close();
+      return;
+    }
+  } catch { /* A cross-origin opener must use the redirect fallback. */ }
+  try { sessionStorage.setItem("suite.auth.callback", location.href); } catch { /* Sign-in can explain unavailable storage. */ }
+  location.replace("/signin?callback=1");
+})();
+</script></body></html>
