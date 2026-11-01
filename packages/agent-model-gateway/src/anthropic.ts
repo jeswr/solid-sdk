@@ -35,9 +35,18 @@ export async function anthropicPropose(
     const server = sdk.createSdkMcpServer({
       name: "gateway",
       tools: tools.map((tool) =>
-        sdk.tool(tool.name, tool.description, tool.schema.shape, async (input) => ({
-          content: [{ type: "text" as const, text: JSON.stringify(await tool.run(input)) }],
-        })),
+        sdk.tool(tool.name, tool.description, tool.schema.shape, async (input) => {
+          try {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify(await tool.run(input)) }],
+            };
+          } catch {
+            return {
+              isError: true,
+              content: [{ type: "text" as const, text: "Tool request failed" }],
+            };
+          }
+        }),
       ),
     });
     const names = tools.map((tool) => `mcp__gateway__${tool.name}`);
@@ -83,7 +92,13 @@ export async function anthropicPropose(
           },
         },
       })) {
-        if (event.type === "system" && event.subtype === "api_retry") retries++;
+        if (event.type === "system" && event.subtype === "api_retry") {
+          retries++;
+          if (retries > config.maxRetries) {
+            controller.abort();
+            throw new Error("Provider retry budget exceeded");
+          }
+        }
         if (event.type === "assistant") {
           if (event.error) throw new Error("Provider failed");
           const message = assistant.parse(event.message);

@@ -47,7 +47,8 @@ retry count. SDK fragments sharing a provider message ID produce one record; its
 result is not counted again. HTTP retries share one record. `GatewayError.calls` preserves
 completed/failed-request counters without provider error text, prompts or secrets. The caller
 owns audit persistence. Latency includes transport and local tool time between SDK responses;
-SDK retry counts come from `api_retry` events.
+SDK retry counts come from `api_retry` events; the gateway aborts when that budget is exceeded.
+Tool exceptions are redacted before they reach the SDK.
 
 `./testing` exports a scripted fake fetch that never falls through to the network.
 Tests use only synthetic credentials, fake fetch/SDK sessions and an in-memory PodPort.
