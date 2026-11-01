@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Tests for proactive-fetch — the generic, reusable proactive authenticated-fetch
@@ -83,7 +84,7 @@ afterEach(() => {
 });
 
 describe("deriveProactiveAllowedOrigins — the credential boundary (delegates to the seam)", () => {
-  it("includes the pod root, WebID, and issuer origins (https)", () => {
+  it("includes pod root and WebID origins but excludes the issuer by default", () => {
     const allowed = deriveProactiveAllowedOrigins({
       podRoot: "https://pod.example/alice/",
       webId: "https://id.example/alice#me",
@@ -92,7 +93,39 @@ describe("deriveProactiveAllowedOrigins — the credential boundary (delegates t
     });
     expect(allowed.has("https://pod.example")).toBe(true);
     expect(allowed.has("https://id.example")).toBe(true);
-    expect(allowed.has("https://op.example")).toBe(true);
+    expect(allowed.has("https://op.example")).toBe(false);
+  });
+
+  it("is empty when only an issuer is supplied", () => {
+    expect(deriveProactiveAllowedOrigins({ issuer: "https://op.example/" }).size).toBe(0);
+  });
+
+  it("includes the issuer only under an explicit opt-in", () => {
+    const allowed = deriveProactiveAllowedOrigins({
+      podRoot: "https://pod.example/alice/",
+      issuer: "https://op.example/",
+      includeIssuerOrigin: true,
+    });
+    expect([...allowed]).toEqual(["https://pod.example", "https://op.example"]);
+  });
+
+  it.each([
+    {},
+    { includeIssuerOrigin: false },
+  ])("keeps a podRoot on the issuer origin allowed with options %j", (options) => {
+    const allowed = deriveProactiveAllowedOrigins({
+      podRoot: "https://op.example/alice/",
+      issuer: "https://op.example/",
+      ...options,
+    });
+    expect([...allowed]).toEqual(["https://op.example"]);
+  });
+
+  it.each([
+    "http://op.example/",
+    "not a URL",
+  ])("does not bypass origin validation when opting in to issuer %s", (issuer) => {
+    expect(deriveProactiveAllowedOrigins({ issuer, includeIssuerOrigin: true }).size).toBe(0);
   });
 
   it("DROPS a cleartext http:// non-loopback pod origin (no token over cleartext)", () => {
@@ -137,7 +170,7 @@ describe("deriveProactiveAllowedOrigins — the credential boundary (delegates t
     expect(allowed.has("http://cleartext.example")).toBe(false);
   });
 
-  it("can drop the WebID / issuer defaults (rely solely on podRoot + extraOrigins)", () => {
+  it("can exclude both WebID and issuer origins explicitly", () => {
     const allowed = deriveProactiveAllowedOrigins({
       podRoot: "https://pod.example/alice/",
       webId: "https://id.example/alice#me",
@@ -438,6 +471,54 @@ describe("proactiveAuthenticatedFetch — ONE bounded 401 retry", () => {
 });
 
 describe("installProactiveAuthFetch — the global patch (once-only + live state)", () => {
+  it.each([
+    200, 401,
+  ])("does not send credentials to a non-OIDC issuer request returning %i", async (issuerStatus) => {
+    const provider = fakeProvider();
+    const issuer = "https://op.example";
+    const requests: Request[] = [];
+    const base: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      return new Response(null, {
+        status: new URL(request.url).origin === issuer ? issuerStatus : 200,
+      });
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = base;
+    try {
+      const install = installProactiveAuthFetch();
+      install.setState({
+        provider,
+        allowedOrigins: deriveProactiveAllowedOrigins({
+          podRoot: `${POD}/alice/`,
+          webId: `${POD}/alice/profile#me`,
+          issuer,
+        }),
+        // The non-OIDC path below must be rejected by the origin boundary,
+        // even when the optional OAuth bypass knows the issuer.
+        issuerOrigins: new Set([issuer]),
+      });
+      const issuerUrl = `${issuer}/account/settings`;
+      expect(isProviderOAuthRequest(new Request(issuerUrl), new Set([issuer]))).toBe(false);
+      const response = await globalThis.fetch(issuerUrl);
+      expect(response.status).toBe(issuerStatus);
+      expect(requests).toHaveLength(1);
+      expect(requests[0].headers.get("Authorization")).toBeNull();
+      expect(requests[0].headers.get("DPoP")).toBeNull();
+      expect(provider.upgradeCalls).toEqual([]);
+
+      // Positive control: the same installed wrapper and provider authenticate the pod.
+      await globalThis.fetch(`${POD}/alice/private`);
+      expect(requests).toHaveLength(2);
+      expect(requests[1].headers.get("Authorization")).toBe("DPoP tok-abc");
+      expect(requests[1].headers.get("DPoP")).toBe("proof-jwt");
+      expect(provider.upgradeCalls).toEqual([`${POD}/alice/private`]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("patches globalThis.fetch and proactively authenticates an allowed origin", async () => {
     const provider = fakeProvider();
     const original = globalThis.fetch;

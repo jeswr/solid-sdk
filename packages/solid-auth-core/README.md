@@ -102,6 +102,16 @@ also return Requests with manual redirect mode; the fetch wrappers own the hop l
 - `reArmAllowedOrigins`, `rememberAccount`, `dropLiveSession`, `recentAccounts`.
 - React: `SessionProvider` and `useSolidSession` from `@jeswr/solid-auth-core/react`.
 
+## Proactive resource origins
+
+`deriveProactiveAllowedOrigins({ podRoot, webId, issuer })` includes the pod/storage origin
+and the WebID origin by default. Set `includeWebIdOrigin: false` when the WebID document is
+not served by the pod. The issuer origin is excluded unless `includeIssuerOrigin: true`
+explicitly opts in. A pod on the issuer origin stays allowed through `podRoot`.
+
+`computeAllowedOrigins` keeps its separate default of including the issuer origin. See the
+[proactive API behavior report](./etc/proactive-fetch.api.md) for the helper's contract.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-auth-core)

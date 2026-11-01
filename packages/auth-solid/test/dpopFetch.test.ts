@@ -93,6 +93,25 @@ describe("buildDpopCustomFetch — leg discrimination", () => {
 });
 
 describe("buildDpopCustomFetch — §8 nonce retry", () => {
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  it("does not replay an invalid_grant response carrying a nonce header", async () => {
+    const underlying = vi.fn(async () =>
+      Response.json(
+        { error: "invalid_grant" },
+        { status: 400, headers: { "dpop-nonce": "irrelevant-nonce-fixture" } },
+      ),
+    );
+    const cf = buildDpopCustomFetch(await generateDpopKeyPair(), underlying, false);
+    const res = await cf(`${ISSUER}/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "refresh-fixture" }),
+    });
+    expect(res.status).toBe(400);
+    expect(underlying).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toEqual({ error: "invalid_grant" });
+  });
+
   it("retries the use_dpop_nonce challenge exactly once and succeeds; token-leg proof has no ath", async () => {
     const op = await createMockOp({ issuer: ISSUER, clientId: CLIENT_ID, webId: WEBID });
     const kp = await generateDpopKeyPair();
