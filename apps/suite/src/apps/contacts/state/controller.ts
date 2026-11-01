@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -9,10 +10,16 @@ import type { AddressBookData, ContactData, ContactGroupData } from "../lib/mode
 import { ContactsModel } from "../lib/model/book";
 import { discoverContacts } from "../lib/model/discovery";
 import { openDocument, saveDocument } from "../lib/model/intent";
-import { ContactsWriteError, PartialWriteError, type Snapshot } from "../lib/model/transport";
+import {
+  ContactsWriteError,
+  PartialWriteError,
+  replacement,
+  type Snapshot,
+} from "../lib/model/transport";
 import { applyContactPatch, type ContactPatch, decodeContactRef, encodeContactRef } from "./data";
 import { type DeleteToken, IntentConflictError, IntentRunner, newIntent } from "./intents";
 import { browserIntentStorage, type Intent, IntentJournal, type IntentStorage } from "./journal";
+import { applyMerge, type MergeSelection, mergeContactData, mergedDocument } from "./merge";
 import { optionalDocument } from "./recovery";
 
 export interface ContactsData {
@@ -406,6 +413,53 @@ export class ContactsController {
             return newIntent("restore", book.url, person.url, {
               person: await saveDocument(person),
               labels: labels.map((label) => label.replace(/#this$/, "")),
+            });
+          },
+        );
+      },
+    });
+  }
+  /**
+   * Merge duplicates into the primary as one journaled intent: the merged primary is written
+   * first (from its reviewed revision), then label memberships, then each duplicate is removed.
+   * Contact points and labels are unioned from fresh RDF when the queued write starts.
+   */
+  merge(primary: string, duplicates: readonly string[], selection: MergeSelection) {
+    const others = [...new Set(duplicates)].filter((other) => other !== primary);
+    return this.mutate({
+      apply: (data) => applyMerge(data, primary, others, selection),
+      write: async (data) => {
+        const book = this.book(data);
+        if (!others.length) throw new Error("Choose at least two contacts to merge.");
+        for (const id of [primary, ...others]) this.person(data, id);
+        await this.perform(
+          book.url,
+          (intent) => intent.kind === "merge" && `${intent.destination}#this` === primary,
+          async () => {
+            const person = await this.model.loadContact(primary);
+            const copies = await mapContacts(others, (id) => this.model.loadContact(id));
+            // Every document must be conditionally writable before anything is journaled.
+            for (const snapshot of [person, ...copies]) replacement(snapshot);
+            const merged = mergeContactData(
+              person.data,
+              copies.map((copy) => copy.data),
+              selection,
+            );
+            const index = await this.model.loadGroups(book);
+            const groups = await mapContacts(index.data, (entry) => this.model.loadGroup(entry.id));
+            const labelsOf = (id: string) =>
+              groups.filter((group) => group.data.members?.includes(id)).map((group) => group.url);
+            const own = labelsOf(primary);
+            return newIntent("merge", book.url, person.url, {
+              person: await saveDocument({ ...person, dataset: mergedDocument(person, merged) }),
+              labels: [...new Set(others.flatMap(labelsOf))].filter((url) => !own.includes(url)),
+              duplicates: await Promise.all(
+                copies.map(async (copy) => ({
+                  person: await saveDocument(copy),
+                  labels: labelsOf(`${copy.url}#this`),
+                })),
+              ),
+              destinations: [person.url, ...copies.map((copy) => copy.url)],
             });
           },
         );

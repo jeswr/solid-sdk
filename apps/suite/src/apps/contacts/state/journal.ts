@@ -1,21 +1,28 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { SavedDocument } from "../lib/model/intent";
 
 export interface Intent {
   id: string;
-  kind: "create" | "delete" | "restore" | "migrate" | "book";
+  kind: "create" | "delete" | "restore" | "migrate" | "book" | "merge";
   startedAt: string;
   bookUrl: string;
   destination: string;
   destinations: string[];
   person?: SavedDocument;
   source?: SavedDocument;
+  /** Merge only: each duplicate's pre-merge RDF and the labels it must leave. */
+  duplicates?: MergeDuplicate[];
   labels: string[];
   completed: string[];
   repairs: string[];
   attempting?: string;
   phase: "forward" | "reconcile" | "rollback";
+}
+export interface MergeDuplicate {
+  person: SavedDocument;
+  labels: string[];
 }
 export interface IntentStorage {
   readonly length: number;
