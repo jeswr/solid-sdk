@@ -122,7 +122,7 @@ export function childUrl(folderUrl: string, name: string, folder = false): strin
 
 /** Names that Drive never lists (`.trash/`, `.acl`, `.meta`, …). */
 export function isHidden(item: Pick<DriveItem, "name">): boolean {
-  return item.name.startsWith(".");
+  return item.name.startsWith(".") || /\.(acl|acr)$/i.test(item.name);
 }
 
 export function contentTypeFor(name: string, declared?: string): string {

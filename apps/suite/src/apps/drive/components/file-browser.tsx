@@ -1075,7 +1075,8 @@ function SelectionBar({
     (entry) => entry === "separator" || entry.id !== "open",
   );
   const primary = entries.filter(
-    (entry) => entry !== "separator" && ["download", "move", "star", "trash"].includes(entry.id),
+    (entry) =>
+      entry !== "separator" && ["share", "download", "move", "star", "trash"].includes(entry.id),
   );
   return (
     <div

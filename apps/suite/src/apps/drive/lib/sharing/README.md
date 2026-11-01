@@ -54,3 +54,24 @@ The core targets the ACP authorization graph exposed by `@solid/object` 0.6.0.
 Tests use fictional `example.org` identities and typed writers. The app's normal Vitest
 command enforces 100% statements, branches, functions and lines for every `.ts` file here,
 including the barrel and type declarations in the coverage include glob.
+
+<!-- AUTHORED-BY Codex -->
+
+## Drive persistence adapter
+
+`apply.ts` adds `loadSharing(session, resource)` and `applySharing(session, snapshot,
+selection)`. The session supplies authenticated fetch, the selected storage root and
+signed-in WebID. Reads use advertised endpoints and stay inside that storage. WAC
+resolves the nearest ACL (including legacy `defaultForNew`); ACP loads the own ACR
+and ancestors. Unsupported graphs still fail closed through `readSharing`.
+
+Before creating an own WAC ACL, the adapter copies every effective inherited grant,
+including Control, and retains child defaults when the resource is a folder.
+Changes preserve other principals, targets, defaults and metadata. Ancestors are
+never written. Sources and discovery are revalidated, and PUT uses the captured
+strong ETag or `If-None-Match: *`. A 412 produces `SharingConflictError` with a fresh
+snapshot and the message “Sharing changed elsewhere, review and try again”. Existing
+owners and inherited rows remain immutable; a non-owner cannot save changes.
+
+The Drive dialog uses Viewer and Editor. Commenter stays disabled until Drive has a
+separate comments resource; it never substitutes Append on the file for commenting.

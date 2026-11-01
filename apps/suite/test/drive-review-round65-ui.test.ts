@@ -28,6 +28,7 @@ import { DriveUiProvider, useDriveActions, useDriveUi } from "../src/apps/drive/
 
 let ui: ReturnType<typeof useDriveUi>;
 let details: (() => void) | undefined;
+let share: (() => void) | undefined;
 const drive = {
   client: undefined as unknown as DriveClient,
   driveRoot: DRIVE,
@@ -44,6 +45,9 @@ function Probe({ items }: { items: DriveItem[] }) {
   const menu = useItemMenu(useDriveActions(), items.slice(0, 1), items);
   details = menu.flatMap((entry) =>
     entry !== "separator" && entry.id === "details" ? [entry.onSelect] : [],
+  )[0];
+  share = menu.flatMap((entry) =>
+    entry !== "separator" && entry.id === "share" ? [entry.onSelect] : [],
   )[0];
   return ui.detailsOpen ? h(DetailsPane, { onClose: () => ui.setDetailsOpen(false) }) : null;
 }
@@ -136,4 +140,45 @@ it.each([
   expect(node?.tabIndex).toBe(0);
   await key(node as Element, "ArrowRight");
   await vi.waitFor(() => expect(document.querySelector(`[data-node="${child}"]`)).not.toBeNull());
+});
+
+it.each([
+  "Details",
+  "item menu",
+  "selection toolbar",
+])("opens sharing from %s and closes with Escape", async (entry) => {
+  const f = await rdfPod();
+  drive.client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
+  drive.session.fetch = f.fetch;
+  const items = await drive.client.list(PRIVATE);
+  const view = await mount(tree(items));
+  if (entry === "Details") {
+    await act(async () => details?.());
+    const trigger = [...view.host.querySelectorAll<HTMLButtonElement>(".drv-details button")].find(
+      (button) => button.textContent === "Share",
+    );
+    if (!trigger) throw new Error("Missing Details Share button");
+    await click(trigger);
+  } else if (entry === "item menu") await act(async () => share?.());
+  else {
+    const row = view.host.querySelector<HTMLElement>(`[data-url="${PRIVATE}secret"]`);
+    if (!row) throw new Error("Missing file");
+    await click(row);
+    const trigger = view.host.querySelector<HTMLElement>(
+      '[aria-label="Selection actions"] [aria-label="Share"]',
+    );
+    if (!trigger) throw new Error("Missing selection Share button");
+    await click(trigger);
+  }
+  expect(ui.dialog?.kind).toBe("share");
+  await vi.waitFor(() =>
+    expect(document.querySelector(".drv-share-dialog")?.textContent).toContain(
+      "People with access",
+    ),
+  );
+  const dialog = document.querySelector<HTMLElement>(".drv-share-dialog");
+  if (!dialog) throw new Error("Missing share dialog");
+  expect(dialog.textContent).toContain("Share “secret”");
+  await key(dialog, "Escape");
+  expect(ui.dialog).toBeUndefined();
 });

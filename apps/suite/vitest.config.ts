@@ -7,7 +7,7 @@ process.env.TZ = "Europe/London";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
     setupFiles: ["test/drive-locks.setup.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
@@ -44,6 +44,7 @@ export default defineConfig({
         "src/apps/calendar/lib/quickadd/**/*.ts",
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
+        "src/apps/drive/components/share-dialog.tsx",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/chat/lib/model/**/*.ts",
