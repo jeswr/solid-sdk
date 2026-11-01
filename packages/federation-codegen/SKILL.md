@@ -57,6 +57,10 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   separate `iriScheme` guard applies scheme policy and normalization. Fidelity
   requires both guards for these patterns. `sh:minLength` derives only `minLength`;
   `nonBlank` requires the supported `\\S` pattern or explicit field config policy.
+  All admitted shape-derived read constraints, including length and enum membership, run
+  against original RDF terms before JS projection. IRI enums preserve exact identities on
+  reads and writes; scheme policy filters them without rewriting. Set minimum cardinality
+  counts distinct guarded raw terms before JS deduplication; required sets reject invalid terms.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
   for string-valued nonblank fields. Advisory flat class hints may only be omitted with
@@ -67,10 +71,12 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   runtime's `readLiteral` reader.
   Admission rejects every `sh:datatype` outside model-runtime's exported immutable
   `VALIDATED_DATATYPES` inventory; there is no opaque-string fallback.
-  For composite `sh:class` links, generation rejects a target if any accepted child
-  type alias lacks identity or explicit ontology subclass ancestry to that class.
-  Every accepted alias must preserve the class constraint; aliases alone grant no
-  class membership. Compilation and fidelity both enforce this restriction.
+  For composite `sh:class` links, retain the class as `hasClass` and fidelity-check it
+  exactly. Canonical target compatibility remains a structural mapping check; generation
+  never treats ontology ancestry as proof for an alias. At runtime require class membership
+  through the linked subject's actual `rdf:type` and `rdfs:subClassOf*` in the data graph.
+  Aliases may supply that ancestry in the data alone. Builds assert the explicit link class
+  on materialised children; runtime traversal is cycle-safe, bounded and fails closed.
   Decimal/integer bounds and enums must preserve canonical decimal spelling through
   JS number conversion. Reject noncanonical literal enum members that the runtime
   writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.

@@ -59,7 +59,9 @@ describe("aliases retain closed admission and composite target checks", () => {
     const ds = new Store(
       new Parser().parse(
         `<https://pod.example/doc#it> a <${OLD}Root> ; <${NS}link> <https://pod.example/child> .
-         <https://pod.example/child> a <${OLD}Child> ; <${OLD}label> "legacy" .`,
+         <https://pod.example/child> a <${OLD}Child> ; <${OLD}label> "legacy" .
+         <${OLD}Child> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <${NS}Child> .
+         <${NS}Child> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:Base> .`,
       ),
     );
     expect(tree.parse("https://pod.example/doc", ds)).toEqual({ label: "legacy" });
