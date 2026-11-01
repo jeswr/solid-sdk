@@ -25,9 +25,8 @@ import { DataFactory } from "n3";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePodSessionState } from "@/lib/session/pod-session";
-import { formatPhoneNumber } from "../lib/phone";
 import { useContact, useContactMutations, useStarred } from "../state/contacts-context";
-import { contactLabels, projectContact } from "../state/data";
+import { contactLabels, displayPhone, projectContact } from "../state/data";
 import { ContactAvatar } from "./contacts-list";
 
 export function ContactDetail({ contactRef, onClose }: { contactRef: string; onClose(): void }) {
@@ -74,13 +73,6 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
       signal.abort();
     };
   }, [webId, session]);
-  const displayPhone = (phone: string) => {
-    try {
-      return formatPhoneNumber(phone.replace(/^tel:/, ""), "international");
-    } catch {
-      return phone.replace(/^tel:/, "");
-    }
-  };
   return (
     <section className="con-detail" aria-label="Contact details">
       <Button variant="ghost" onClick={onClose} ref={back}>

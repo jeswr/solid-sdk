@@ -41,7 +41,7 @@ function Sidebar() {
   );
   return (
     <div className="con-sidebar">
-      <Button asChild>
+      <Button variant="outline" asChild>
         <Link href="/contacts/new">
           <Plus size={18} aria-hidden="true" />
           New contact
@@ -201,7 +201,9 @@ function ContactsChrome({ children }: { children: ReactNode }) {
   const ref = match?.[1];
   const [wide, setWide] = useState(false);
   const returnPath = useRef("/contacts");
-  const trigger = useRef<HTMLElement | null>(null);
+  const openedId = useRef<string | null>(null);
+  const restoreFocus = useRef(false);
+  const listHost = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const query = matchMedia("(min-width: 1024px)");
     const change = () => setWide(query.matches);
@@ -217,23 +219,44 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     returnPath.current =
       pathname + (params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : "");
   const close = () => {
+    restoreFocus.current = true;
     router.push(returnPath.current);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const target =
-          trigger.current ??
-          document.querySelector<HTMLElement>("[data-collection-item][tabindex='0']");
-        target?.focus({ preventScroll: true });
-      }),
-    );
   };
+  // Route completion makes the mobile list visible. Its virtual rows may arrive after layout;
+  // find the contact by identity rather than focusing a detached or still-hidden trigger.
+  useEffect(() => {
+    const host = listHost.current;
+    if (!listRoute || !restoreFocus.current || !host) return;
+    const observer = new MutationObserver(focus);
+    function focus() {
+      const person = [...(host?.querySelectorAll<HTMLElement>("[data-contact-id]") ?? [])].find(
+        (element) => element.dataset.contactId === openedId.current,
+      );
+      const target =
+        person?.closest<HTMLElement>("[data-collection-item]") ??
+        (!state.data.people.some((person) => `${person.url}#this` === openedId.current)
+          ? host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']")
+          : null);
+      if (!target) return;
+      target.focus({ preventScroll: true });
+      restoreFocus.current = false;
+      observer.disconnect();
+    }
+    observer.observe(host, { childList: true, subtree: true });
+    const frame = requestAnimationFrame(focus);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [listRoute, state.data.people]);
   useEffect(() => {
     if (!ref) return;
     const key = (event: KeyboardEvent) => {
       if (
         event.key === "Escape" &&
+        !event.defaultPrevented &&
         !document.querySelector("[role='alertdialog']") &&
-        !(event.target as HTMLElement).closest("[role='combobox']")
+        !(event.target as HTMLElement).closest("[role='combobox'][aria-expanded='true']")
       ) {
         event.preventDefault();
         close();
@@ -264,14 +287,30 @@ function ContactsChrome({ children }: { children: ReactNode }) {
         </div>
         {(listRoute || ref) && (
           <>
-            <div className={ref && !wide ? "con-list-host con-hidden" : "con-list-host"}>
+            <div
+              ref={listHost}
+              className={ref && !wide ? "con-list-host con-hidden" : "con-list-host"}
+            >
               <MigrationBanner />
+              {state.book && state.data.registrationPending && (
+                <section className="con-migration" aria-label="Address book registration">
+                  <p>Your address book is ready. Finish setup so other apps can find it.</p>
+                  <Button
+                    variant="outline"
+                    disabled={state.saving}
+                    onClick={() => {
+                      void state.createAddressBook().catch(ignoreFailure);
+                    }}
+                  >
+                    Retry registration
+                  </Button>
+                </section>
+              )}
               <ContactsList
                 path={basePath}
                 onOpen={(contact) => {
                   if (!state.book) return;
-                  trigger.current =
-                    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                  openedId.current = contact.id;
                   router.push(
                     `/contacts/c/${encodeContactRef(state.book.url, contact.id)}${params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : ""}`,
                   );

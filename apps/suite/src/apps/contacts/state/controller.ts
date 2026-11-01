@@ -7,8 +7,14 @@ import type { AddressBookData, ContactData, ContactGroupData } from "../lib/mode
 // on its client-safe modules so bundlers never pull in Node's HTTP implementation.
 import { ContactsModel } from "../lib/model/book";
 import { discoverContacts, registerAddressBook } from "../lib/model/discovery";
-import { ContactsWriteError, PartialWriteError, type Snapshot } from "../lib/model/transport";
+import {
+  ContactsWriteError,
+  PartialWriteError,
+  replacement,
+  type Snapshot,
+} from "../lib/model/transport";
 import { applyContactPatch, type ContactPatch, decodeContactRef, encodeContactRef } from "./data";
+import { ensureBook, ensurePrivateIndex, optionalDocument, restoreLinks } from "./recovery";
 
 export interface ContactsData {
   book: Snapshot<AddressBookData> | null;
@@ -16,6 +22,7 @@ export interface ContactsData {
   groups: Snapshot<ContactGroupData>[];
   flat: { id: string; data: ContactData }[];
   incomplete: boolean;
+  registrationPending: boolean;
 }
 export interface ContactsState {
   status: "loading" | "ready" | "error";
@@ -29,6 +36,7 @@ const empty = (): ContactsData => ({
   groups: [],
   flat: [],
   incomplete: false,
+  registrationPending: false,
 });
 
 /** Six workers, preserving input order. Rejections stop the load rather than hiding contacts. */
@@ -71,6 +79,16 @@ export class ContactsController {
   private tail: Promise<unknown> = Promise.resolve();
   private indexUrl: string;
   private bookUrl: string;
+  private registrationPending = false;
+  // Keep these until all recovery writes finish, including across a failed reconciliation.
+  private deletionRepairs = new Map<
+    string,
+    { person: Snapshot<ContactData>; labels: string[]; people: boolean }
+  >();
+  private migrations = new Map<
+    string,
+    { destination: string; source: Snapshot<unknown>; completed: readonly string[] }
+  >();
   private current: ContactsState = { status: "loading", data: this.baseline, saving: false };
   constructor(
     fetch: typeof globalThis.fetch,
@@ -108,20 +126,22 @@ export class ContactsController {
         ),
       );
     const profile = await pointer(this.webId, "http://www.w3.org/ns/pim/space#preferencesFile");
-    const index = await pointer(
-      profile.data ?? this.webId,
-      "http://www.w3.org/ns/solid/terms#privateTypeIndex",
+    const index = await optionalDocument(() =>
+      pointer(profile.data ?? this.webId, "http://www.w3.org/ns/solid/terms#privateTypeIndex"),
     );
-    this.indexUrl = this.model.transport.url(index.data ?? this.indexUrl);
+    this.indexUrl = this.model.transport.url(index?.data ?? this.indexUrl);
     try {
       // AddressBook registrations precede the potentially large Individual containers. Discovery
       // is bounded independently of the full people index load and reports truncation to the UI.
       const found = await discoverContacts(this.model, this.indexUrl);
       this.bookUrl = found.books[0] ?? this.model.bookUrl;
+      this.registrationPending = !found.books.length;
       return found;
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404)
+      if (error instanceof RdfFetchError && error.status === 404) {
+        this.registrationPending = true;
         return { flat: [], incomplete: false };
+      }
       throw error;
     }
   }
@@ -136,6 +156,12 @@ export class ContactsController {
       if (error instanceof RdfFetchError && error.status === 404) return { ...empty(), ...found };
       throw error;
     }
+    for (const [id, repair] of this.deletionRepairs) {
+      // A 412 can mean the surviving person changed. Restore links to its current document.
+      const person = await this.model.loadContact(repair.person.url);
+      await restoreLinks(this.model, book, person, repair.labels, repair.people);
+      this.deletionRepairs.delete(id);
+    }
     const [people, groups] = await Promise.all([
       this.model.loadPeople(book),
       this.model.loadGroups(book),
@@ -145,6 +171,7 @@ export class ContactsController {
     return {
       book,
       ...found,
+      registrationPending: this.registrationPending,
       people: await mapContacts(people.data, (entry) => this.model.loadContact(safe(entry.id))),
       groups: await mapContacts(groups.data, (entry) => this.model.loadGroup(safe(entry.id))),
     };
@@ -216,10 +243,11 @@ export class ContactsController {
     await this.mutate({
       apply: (data) => data,
       write: async () => {
-        // A registration failure may follow a successful create; a retry only registers it.
-        if (!this.baseline.book)
-          await this.model.createAddressBook({ title: "Contacts", owner: this.webId });
+        this.registrationPending = true;
+        if (!this.baseline.book) await ensureBook(this.model, this.webId);
+        this.indexUrl = await ensurePrivateIndex(this.model, this.webId);
         await registerAddressBook(this.model, this.indexUrl);
+        this.registrationPending = false;
       },
     });
   }
@@ -263,7 +291,27 @@ export class ContactsController {
           data: { ...g.data, members: (g.data.members ?? []).filter((member) => member !== id) },
         })),
       }),
-      write: (data) => this.model.deleteContact(this.book(data), this.person(data, id)),
+      write: async (data) => {
+        const book = this.book(data);
+        const person = this.person(data, id);
+        try {
+          await this.model.deleteContact(book, person);
+        } catch (error) {
+          if (error instanceof PartialWriteError) {
+            const peopleUrl = book.data.nameEmailIndex ?? new URL("people.ttl", book.url).href;
+            this.deletionRepairs.set(id, {
+              person,
+              // The model writes a group only when it actually removed this person. Its fresh
+              // reads may include memberships added since our last UI snapshot.
+              labels: error.completed
+                .filter((url) => url !== peopleUrl)
+                .map((url) => `${url}#this`),
+              people: error.completed.includes(peopleUrl),
+            });
+          }
+          throw error;
+        }
+      },
     });
   }
   /** Preserve the document identity and memberships; If-None-Match protects an occupied URL. */
@@ -280,11 +328,11 @@ export class ContactsController {
         ),
       }),
       write: async (data) => {
-        await this.model.createContact(this.book(data), person.data, person.url);
-        for (const label of labels) {
-          const group = data.groups.find((g) => `${g.url}#this` === label);
-          if (group) await this.model.setGroupMembers(group, [...(group.data.members ?? []), id]);
-        }
+        this.book(data);
+        await this.model.transport.commit([
+          { url: person.url, dataset: person.dataset, etag: null },
+        ]);
+        this.deletionRepairs.set(id, { person, labels: [...labels], people: true });
       },
     });
   }
@@ -356,7 +404,29 @@ export class ContactsController {
         await this.mutate({
           apply: (data) => data,
           write: async (data) => {
-            await this.model.migrateToBook(this.book(data), source.id);
+            const book = this.book(data);
+            let progress = this.migrations.get(source.id);
+            if (!progress) {
+              progress = {
+                destination: new URL(`people/${crypto.randomUUID()}.ttl`, book.url).href,
+                source: await this.model.loadFlatContacts(source.id),
+                completed: [],
+              };
+              this.migrations.set(source.id, progress);
+            }
+            if (progress.completed.includes(progress.destination)) {
+              const person = await this.model.loadContact(progress.destination);
+              await restoreLinks(this.model, book, person, []);
+              await this.model.transport.commit([replacement(progress.source)]);
+            } else {
+              try {
+                await this.model.migrateToBook(book, source.id, progress.destination);
+              } catch (error) {
+                if (error instanceof PartialWriteError) progress.completed = error.completed;
+                throw error;
+              }
+            }
+            this.migrations.delete(source.id);
             this.baseline = {
               ...this.baseline,
               flat: this.baseline.flat.filter((item) => item.id !== source.id),

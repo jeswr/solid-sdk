@@ -167,13 +167,7 @@
   display: grid;
 }
 .con-name {
-  border: 0;
-  color: inherit;
-  background: transparent;
   padding: 4px 0;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
   font-weight: 500;
   overflow: hidden;
   white-space: nowrap;
@@ -297,7 +291,14 @@
   }
   .con-table tr {
     /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
-    grid-template-columns: minmax(0, 1fr) 40px !important;
+    grid-template-columns: minmax(0, 1fr) 44px !important;
+  }
+  .con-table tr > :last-child {
+    padding: 0;
+    justify-content: center;
+  }
+  .con-section-letter {
+    display: none;
   }
   .con-table tr > :nth-child(3),
   .con-table tr > :nth-child(4),

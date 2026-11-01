@@ -8,6 +8,7 @@ import {
   ContactBook,
   ContactGroup,
 } from "@jeswr/solid-task-model/contacts";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { TypeRegistration } from "../../apps/contacts/lib/model/discovery";
 import type { DemoSeedFile } from "./pod";
@@ -151,25 +152,31 @@ export async function seedContacts(
   await add("contacts/people.ttl", people);
   await add("contacts/groups.ttl", groups);
   // Legacy PM contacts use direct IRIs, exactly the subset that can migrate losslessly.
-  const { namedNode, literal, quad } = DataFactory;
   const Vcard = "http://www.w3.org/2006/vcard/ns#";
   for (const [i, name] of ["Pax Orchard", "Tess Harbor"].entries()) {
-    const id = namedNode(`${ROOT}contacts-pm/person-${i}.ttl#it`);
-    await add(
-      `contacts-pm/person-${i}.ttl`,
-      new Store([
-        quad(
-          id,
-          namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-          namedNode(`${Vcard}Individual`),
-        ),
-        quad(id, namedNode(`${Vcard}fn`), literal(name)),
-        quad(id, namedNode(`${Vcard}hasEmail`), namedNode(`mailto:legacy${i}@example.org`)),
-        quad(id, namedNode(`${Vcard}hasTelephone`), namedNode("tel:+442079460123")),
-        quad(id, namedNode(`${Vcard}organization-name`), literal("Fictional Bookshop")),
-        quad(id, namedNode(`${Vcard}note`), literal("A friend from Pod Manager.")),
-      ]),
-    );
+    const dataset = new Store();
+    const person = new Contact(
+      `${ROOT}contacts-pm/person-${i}.ttl#it`,
+      dataset,
+      DataFactory,
+    ).mark();
+    person.name = name;
+    person.organization = "Fictional Bookshop";
+    person.note = "A friend from Pod Manager.";
+    // Typed direct-IRI accessors retain PM's flat shape (the normal setters build value nodes).
+    SetFrom.subjectPredicate(
+      person,
+      `${Vcard}hasEmail`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    ).add(`mailto:legacy${i}@example.org`);
+    SetFrom.subjectPredicate(
+      person,
+      `${Vcard}hasTelephone`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    ).add("tel:+442079460123");
+    await add(`contacts-pm/person-${i}.ttl`, dataset);
   }
   return [
     ...files.filter((file) => file.path !== "settings/privateTypeIndex.ttl"),

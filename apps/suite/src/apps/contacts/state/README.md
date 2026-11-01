@@ -22,6 +22,20 @@ server's state, including partial writes and conflicts. Callers can catch a reje
 without displaying a duplicate error. Shared-index writes are queued in intent order; the
 visible state applies every pending intention over the confirmed baseline.
 
+Failed deletes retain their completed index/membership steps in the controller. Reconciliation
+repairs those links against fresh ETags before displaying the list; a failed repair exposes the
+normal Retry state and retains the recovery information. Undo creates the original RDF dataset
+with `If-None-Match: *`, preserving UID, extra properties and contact-point metadata, then merges
+the index and surviving memberships. Migration retries retain the destination and original source
+ETag for the controller's lifetime, so a partial migration resumes without creating a second person.
+Creation checks for completed empty indexes, and `data.registrationPending` exposes registration
+retry separately from creating the book. A missing private Type Index is created and linked through
+preferences using conditional writes; unreadable documents are never treated as missing.
+
+The list projection flattens control characters in display text and omits unsupported email/phone
+values. Supported phone extensions contribute their base number to list search; details keep the
+original values. Phone display uses the same formatter in the list and detail.
+
 Routes use `encodeContactRef(book.url, contactId)` and `decodeContactRef(book.url, ref)` from
 `data.ts`. These references contain only canonical document paths inside the book container.
 

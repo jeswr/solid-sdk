@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
+import { isomorphic } from "rdf-isomorphic";
 import { describe, expect, it, vi } from "vitest";
 import { ContactsWriteError, PartialWriteError } from "../src/apps/contacts/lib/model";
 import {
@@ -11,6 +12,7 @@ import {
   ALICE,
   BOOK,
   FRIENDS,
+  GROUPS,
   INDEX,
   PEOPLE,
   PM,
@@ -232,7 +234,142 @@ describe("Contacts optimistic conditional mutations", () => {
     expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
     await undo;
     expect((await controller.model.loadContact(ALICE)).data).toEqual(person.data);
+    expect(
+      isomorphic([...(await controller.model.loadContact(ALICE)).dataset], [...person.dataset]),
+    ).toBe(true);
     expect((await controller.model.loadGroup(FRIENDS)).data.members).toContain(`${ALICE}#this`);
+  });
+  it.each([
+    412, 503,
+  ])("repairs memberships and the index after a final DELETE %s, preserving current person RDF", async (status) => {
+    const { controller, pod } = await controllerSetup();
+    const original = pod.files.get(ALICE)?.body as string;
+    pod.fail = (url, method) => {
+      if (url !== ALICE || method !== "DELETE") return undefined;
+      // A concurrent writer may have changed the document before the failed DELETE.
+      pod.seed(ALICE, original.replace('"Alice"', '"Alice changed elsewhere"'), '"new"');
+      return new Response(null, { status });
+    };
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(PartialWriteError);
+    expect(controller.getSnapshot().status).toBe("ready");
+    expect(controller.getSnapshot().data.people[0]?.data.name).toBe("Alice changed elsewhere");
+    expect(
+      (await controller.model.loadPeople(await controller.model.loadAddressBook())).data[0]?.name,
+    ).toBe("Alice changed elsewhere");
+    expect((await controller.model.loadGroup(FRIENDS)).data.members).toContain(`${ALICE}#this`);
+    expect(pod.writes.filter((r) => r.url === ALICE && r.method === "PUT")).toEqual([]);
+  });
+  it("retains recovery through a failed repair and retries it before rendering the list", async () => {
+    const { controller, pod } = await controllerSetup();
+    let removedIndex = false;
+    pod.fail = (url, method) => {
+      if (url === PEOPLE && method === "PUT") {
+        if (removedIndex) return new Response(null, { status: 503 });
+        removedIndex = true;
+      }
+      return url === ALICE && method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    };
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toThrow();
+    expect(controller.getSnapshot().status).toBe("error");
+    pod.fail = undefined;
+    await controller.refresh();
+    expect(controller.getSnapshot().status).toBe("ready");
+    expect(controller.getSnapshot().data.people[0]?.url).toBe(ALICE);
+    expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
+  });
+  it("repairs only completed membership removals when the people-index write fails", async () => {
+    const { controller, pod } = await controllerSetup();
+    pod.fail = (url, method) =>
+      url === PEOPLE && method === "PUT" ? new Response(null, { status: 412 }) : undefined;
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(PartialWriteError);
+    expect(controller.getSnapshot().data.people).toHaveLength(1);
+    expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
+  });
+  it("repairs memberships the model removed even when they were absent from the last UI snapshot", async () => {
+    const { controller, pod } = await controllerSetup();
+    const actualGroup = pod.files.get(FRIENDS)?.body as string;
+    pod.seed(FRIENDS, `${VCARD_PREFIX} <#this> a vcard:Group; vcard:fn "Friends".`);
+    await controller.refresh(false);
+    expect(controller.getSnapshot().data.groups[0]?.data.members ?? []).toEqual([]);
+    pod.seed(FRIENDS, actualGroup);
+    pod.fail = (url, method) =>
+      url === ALICE && method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toThrow();
+    expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
+  });
+  it("rolls back an unstarted delete and refuses Undo over an occupied document", async () => {
+    const { controller, pod } = await controllerSetup();
+    const person = controller.getSnapshot().data.people[0];
+    if (!person) throw new Error("fixture");
+    pod.fail = (url, method) =>
+      url === FRIENDS && method === "PUT" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(ContactsWriteError);
+    expect(controller.getSnapshot().data.people[0]?.url).toBe(ALICE);
+    pod.fail = undefined;
+    await expect(controller.restore(person, [])).rejects.toMatchObject({ status: 412 });
+    expect(
+      isomorphic([...(await controller.model.loadContact(ALICE)).dataset], [...person.dataset]),
+    ).toBe(true);
+    expect(pod.writes.at(-1)?.headers.get("if-none-match")).toBe("*");
+  });
+  it("Undo preserves UID, custom properties, contact-point metadata and unrelated RDF", async () => {
+    const { controller, pod } = await controllerSetup();
+    pod.seed(
+      ALICE,
+      `${pod.files.get(ALICE)?.body}\n${VCARD_PREFIX} <#this> vcard:hasEmail [ a vcard:Home; vcard:value <mailto:second@example.org>; <https://example.org/pref> 2 ]; vcard:bday "2000-01-02". <#unrelated> <https://example.org/note> "keep".`,
+    );
+    await controller.refresh(false);
+    const person = controller.getSnapshot().data.people[0];
+    if (!person) throw new Error("fixture");
+    await controller.delete(`${ALICE}#this`);
+    await controller.restore(person, [`${FRIENDS}#this`]);
+    const restored = await controller.model.loadContact(ALICE);
+    expect(isomorphic([...restored.dataset], [...person.dataset])).toBe(true);
+    expect(
+      [
+        ...restored.dataset.match(
+          null,
+          DataFactory.namedNode("http://www.w3.org/2006/vcard/ns#hasUID"),
+        ),
+      ][0]?.object.value,
+    ).toBe("urn:uuid:alice");
+  });
+  it("repairs deletions in books that omit the conventional index link", async () => {
+    const { controller, pod } = await controllerSetup();
+    pod.seed(
+      BOOK,
+      (pod.files.get(BOOK)?.body ?? "").replace("vcard:nameEmailIndex <people.ttl>;", ""),
+    );
+    await controller.refresh();
+    pod.fail = (url, method) =>
+      url === ALICE && method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toThrow();
+    expect(controller.getSnapshot().data.people[0]?.url).toBe(ALICE);
+    expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
+  });
+  it("retains Undo's dataset through a failed index repair and merges unrelated memberships", async () => {
+    const { controller, pod } = await controllerSetup();
+    const person = controller.getSnapshot().data.people[0];
+    if (!person) throw new Error("fixture");
+    await controller.delete(`${ALICE}#this`);
+    pod.fail = (url, method) =>
+      url === PEOPLE && method === "PUT" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.restore(person, [`${FRIENDS}#this`])).rejects.toThrow();
+    expect(controller.getSnapshot().status).toBe("error");
+    expect(
+      isomorphic([...(await controller.model.loadContact(ALICE)).dataset], [...person.dataset]),
+    ).toBe(true);
+    pod.seed(
+      FRIENDS,
+      `${VCARD_PREFIX} <#this> a vcard:Group; vcard:fn "Friends"; vcard:hasMember <${ROOT}contacts/people/other.ttl#this>.`,
+    );
+    pod.fail = undefined;
+    await controller.refresh();
+    expect(controller.getSnapshot().data.groups[0]?.data.members).toEqual([
+      `${ROOT}contacts/people/other.ttl#this`,
+      `${ALICE}#this`,
+    ]);
+    expect(controller.getSnapshot().data.people[0]?.url).toBe(ALICE);
   });
   it("rolls back failures without discarding newer field changes, and continues its queue", async () => {
     const { controller, pod, errors } = await controllerSetup();
@@ -318,9 +455,90 @@ describe("Contacts optimistic conditional mutations", () => {
       url === INDEX && method === "PUT" ? new Response(null, { status: 412 }) : undefined;
     await expect(controller.createBook()).rejects.toThrow();
     expect(controller.getSnapshot().data.book).not.toBeNull();
+    expect(controller.getSnapshot().data.registrationPending).toBe(true);
     pod.fail = undefined;
     await controller.createBook();
     expect(pod.files.get(INDEX)?.body).toContain("contacts-");
+    expect(controller.getSnapshot().data.registrationPending).toBe(false);
+  });
+  it.each([
+    GROUPS,
+    BOOK,
+  ])("resumes book creation after failing %s without re-creating indexes", async (failedUrl) => {
+    const { controller, pod } = await controllerSetup();
+    for (const url of [BOOK, PEOPLE, GROUPS, INDEX]) pod.files.delete(url);
+    await controller.refresh();
+    pod.fail = (url, method) =>
+      url === failedUrl && method === "PUT" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.createBook()).rejects.toThrow();
+    expect(controller.getSnapshot().data.book).toBeNull();
+    const peopleEtag = pod.files.get(PEOPLE)?.etag;
+    pod.fail = undefined;
+    await controller.createBook();
+    expect(pod.files.get(PEOPLE)?.etag).toBe(peopleEtag);
+    expect(controller.getSnapshot().data.book?.url).toBe(BOOK);
+    expect(pod.files.get(INDEX)?.body).toContain("UnlistedDocument");
+    expect(pod.files.get(`${ROOT}settings/prefs.ttl`)?.body).toContain(INDEX);
+    expect(pod.files.get(`${ROOT}profile/card`)?.body).toContain("preferencesFile");
+  });
+  it("tolerates a genuinely missing linked preferences document during discovery", async () => {
+    const { controller, pod } = await controllerSetup();
+    pod.seed(
+      `${ROOT}profile/card`,
+      `@prefix pim: <http://www.w3.org/ns/pim/space#>. <#me> pim:preferencesFile <${ROOT}settings/prefs.ttl>.`,
+    );
+    await controller.refresh();
+    expect(controller.getSnapshot().status).toBe("ready");
+  });
+  it.each([
+    PEOPLE,
+    PM,
+  ])("resumes a partial migration after failing %s with exactly one destination", async (failedUrl) => {
+    const { controller, pod } = await controllerSetup();
+    pod.fail = (url, method) =>
+      url === failedUrl && method === (url === PM ? "DELETE" : "PUT")
+        ? new Response(null, { status: 503 })
+        : undefined;
+    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    expect(pod.files.has(PM)).toBe(true);
+    const destinations = () =>
+      pod.writes.filter((r) => r.method === "PUT" && r.headers.get("if-none-match") === "*");
+    expect(destinations()).toHaveLength(1);
+    pod.fail = undefined;
+    expect(await controller.migrate()).toEqual({ moved: 1, failed: 0 });
+    expect(destinations()).toHaveLength(1);
+    expect(
+      controller.getSnapshot().data.people.filter((p) => p.data.name === "Pat Morgan"),
+    ).toHaveLength(1);
+    expect(pod.files.has(PM)).toBe(false);
+  });
+  it("keeps a changed migration source safe and resumes an unstarted destination", async () => {
+    const { controller, pod } = await controllerSetup();
+    let first = true;
+    pod.fail = (url, method) => {
+      if (method === "PUT" && url.includes("/people/") && first) {
+        first = false;
+        return new Response(null, { status: 503 });
+      }
+      if (url === PM && method === "DELETE") return new Response(null, { status: 503 });
+      return undefined;
+    };
+    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    pod.seed(
+      PM,
+      `${pod.files.get(PM)?.body}\n<#it> <https://example.org/changed> "new data".`,
+      '"changed"',
+    );
+    pod.fail = undefined;
+    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    expect(pod.files.has(PM)).toBe(true);
+    expect(
+      pod.writes
+        .filter((r) => r.headers.get("if-none-match") === "*" && r.method === "PUT")
+        .map((r) => r.url),
+    ).toEqual([expect.any(String), expect.any(String)]);
+    expect(controller.getSnapshot().data.people).toHaveLength(2);
   });
   it("migrates sources sequentially, preserves fields, and reports partial failures", async () => {
     const { controller, pod } = await controllerSetup();

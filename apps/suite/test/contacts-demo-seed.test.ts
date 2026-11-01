@@ -27,6 +27,19 @@ describe("Contacts demo seed", () => {
     expect(data.people).toHaveLength(40);
     expect(data.groups.map((g) => g.data.name)).toEqual(["Family", "Work", "Book club"]);
     expect(data.flat).toHaveLength(2);
+    for (const candidate of data.flat) {
+      const snapshot = await controller.model.loadFlatContacts(candidate.id);
+      expect(
+        [...snapshot.dataset].every(
+          (quad) => quad.subject.value === candidate.id && quad.object.termType !== "BlankNode",
+        ),
+      ).toBe(true);
+      expect(snapshot.data[0]?.data).toMatchObject({
+        organization: "Fictional Bookshop",
+        emails: [expect.stringMatching(/^mailto:legacy[01]@example.org$/)],
+        phones: ["tel:+442079460123"],
+      });
+    }
     const contacts = data.people.map(projectContact);
     expect(sectionContacts(contacts).at(-1)?.label).toBe("Z");
     expect(searchContacts(contacts, "Mira")[0]?.contact.displayName).toBe("Mira Quill");

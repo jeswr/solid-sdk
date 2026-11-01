@@ -147,9 +147,9 @@ export function ContactsList({
           </span>
           <ContactAvatar contact={c} />
           <span className="con-person-text">
-            <button type="button" className="con-name" tabIndex={-1} onClick={() => onOpen(c)}>
+            <span className="con-name">
               {high(c, "displayName", c.displayName ?? c.emails?.[0] ?? "Unnamed contact")}
-            </button>
+            </span>
             <span className="con-mobile-point">
               {c.emails?.[0]
                 ? high(c, "emails", c.emails[0])

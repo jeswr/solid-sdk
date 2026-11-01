@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { normaliseEmail, normalisePhone } from "../lib/dedupe/normalise";
 import type { ListContact } from "../lib/list";
 import type { ContactData, ContactGroupData, Snapshot } from "../lib/model";
+import { formatPhoneNumber, parsePhoneNumber } from "../lib/phone";
 
 /** Explicit undefined clears an optional field; omission preserves it. */
 export type ContactPatch = { name?: string } & {
@@ -50,17 +52,56 @@ export function decodeContactRef(book: string, ref: string): string {
   return url;
 }
 
-/** Keep unstructured names intact; the list helper must not infer surnames. */
+export function displayPhone(phone: string): string {
+  const bare = phone.replace(/^tel:/, "");
+  try {
+    return formatPhoneNumber(bare, "international");
+  } catch {
+    return bare;
+  }
+}
+
+function singleLine(value: string): string {
+  return value
+    .toWellFormed()
+    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .trim();
+}
+
+/** The list's strict search subset is a presentation adapter; detail retains the original RDF. */
 export function projectContact(person: Snapshot<ContactData>): ListContact {
   const data = person.data;
-  const emails = (data.emails ?? []).map((email) => email.replace(/^mailto:/, "")).filter(Boolean);
-  const phones = (data.phones ?? []).map((phone) => phone.replace(/^tel:/, "")).filter(Boolean);
+  const emails = (data.emails ?? []).flatMap((value) => {
+    const email = value.replace(/^mailto:/, "");
+    try {
+      normaliseEmail(email);
+      return [email];
+    } catch {
+      return [];
+    }
+  });
+  const phones = (data.phones ?? []).flatMap((value) => {
+    let phone = value.replace(/^tel:/, "");
+    try {
+      // The list supports base numbers only. Extensions stay in the detail snapshot.
+      try {
+        normalisePhone(phone);
+      } catch {
+        phone = parsePhoneNumber(phone).e164;
+      }
+      return [displayPhone(phone)];
+    } catch {
+      return [];
+    }
+  });
+  const name = singleLine(data.name);
+  const organization = singleLine(data.organization ?? "");
   return {
     id: `${person.url}#this`,
-    ...(data.name.trim() ? { displayName: data.name } : {}),
+    ...(name ? { displayName: name } : {}),
     ...(emails.length ? { emails } : {}),
     ...(phones.length ? { phones } : {}),
-    ...(data.organization?.trim() ? { organization: data.organization } : {}),
+    ...(organization ? { organization } : {}),
   };
 }
 

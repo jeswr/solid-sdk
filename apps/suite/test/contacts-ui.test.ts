@@ -198,6 +198,14 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
       expect(view.host.querySelector(".con-detail-header")?.textContent).toContain("Amir Vale"),
     );
     expect(Boolean(view.host.querySelector(".ish-details"))).toBe(width >= 1024);
+    const input = view.host.querySelector<HTMLInputElement>('[role="combobox"]');
+    if (!input) throw new Error("Missing Labels input");
+    await act(async () => input.focus());
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    await key(input, "Escape");
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(env.href).toContain("/contacts/c/");
+    expect(document.activeElement).toBe(input);
     await key(document.activeElement as Element, "Escape");
     await settle(() => {
       expect(env.href).toBe("/contacts");

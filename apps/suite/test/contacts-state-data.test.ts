@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { contactAvatar, searchContacts, sectionContacts } from "../src/apps/contacts/lib/list";
 import type { ContactData, Snapshot } from "../src/apps/contacts/lib/model";
 import {
   applyContactPatch,
   contactLabels,
   decodeContactRef,
+  displayPhone,
   encodeContactRef,
   filterContacts,
   projectContact,
@@ -90,7 +92,7 @@ describe("Contacts presentation and filters", () => {
       id: `${ALICE}#this`,
       displayName: "Mira",
       emails: ["mira@example.org"],
-      phones: ["+12025550101"],
+      phones: ["+1 202 555 0101"],
       organization: "Observatory",
     });
     expect(projectContact(snap({ name: " " }))).toEqual({ id: `${ALICE}#this` });
@@ -100,6 +102,32 @@ describe("Contacts presentation and filters", () => {
     expect(
       projectContact(snap({ name: "Mira", emails: ["bare@example.org"], phones: ["123"] })).emails,
     ).toEqual(["bare@example.org"]);
+  });
+  it("adapts model-supported values to the strict list subset without changing detail data", () => {
+    const unusual = snap({
+      name: "Mira\nQuill\u200e",
+      organization: "Observatory\r\nSecond floor\tOffice",
+      emails: ["mailto:mira@localhost", "mailto:mira@example.org", "mailto:é@example.org"],
+      phones: ["tel:+12025550101;ext=42", "tel:123", "tel:unknown", "tel:"],
+    });
+    const original = structuredClone(unusual.data);
+    const projected = projectContact(unusual);
+    expect(projected).toMatchObject({
+      displayName: "Mira Quill",
+      organization: "Observatory Second floor Office",
+      emails: ["mira@example.org"],
+      phones: ["+1 202 555 0101", "123"],
+    });
+    const contacts = [projected, { id: "ordinary", displayName: "Ada" }];
+    expect(sectionContacts(contacts)).toHaveLength(2);
+    expect(searchContacts(contacts, "2025550101")[0]?.contact.id).toBe(projected.id);
+    expect(contactAvatar(projected).initials).toBe("MQ");
+    expect(unusual.data).toEqual(original);
+    expect(displayPhone("tel:+12025550101;ext=42")).toBe("+1 202 555 0101 ext. 42");
+    expect(displayPhone("tel:123")).toBe("123");
+    expect(projectContact(snap({ name: "\u200e\n", organization: "\t" }))).toEqual({
+      id: `${ALICE}#this`,
+    });
   });
   it("resolves label memberships and intersects label and starred filters", () => {
     const contacts = [{ id: "a" }, { id: "b" }];
