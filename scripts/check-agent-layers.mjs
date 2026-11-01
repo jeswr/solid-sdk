@@ -84,6 +84,7 @@ function context(root, file, projects) {
       /^packages\/agent-channels\/(?:src|test)\//.test(path) &&
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path),
     test: testExemptPath(path),
+    uiData: /^apps\/suite\/src\/apps\/agent\/lib\//.test(path),
     ui: /^apps\/suite\/(?:src\/)?apps\/agent\//.test(path),
   };
 }
@@ -223,7 +224,21 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     )
       failures.push("gateway may import channel ingest types only");
     if (ctx.ui) {
-      const uiAllowed = new Set([agent("model"), agent("mandate"), agent("registry")]);
+      const uiAllowed = new Set([
+        agent("model"),
+        agent("mandate"),
+        agent("registry"),
+        "@jeswr/suite-ui",
+      ]);
+      // A-015's injected pod adapter lives only in lib; components stay RDF-free.
+      if (ctx.uiData)
+        for (const dependency of [
+          "@jeswr/guarded-fetch",
+          "@jeswr/fetch-rdf",
+          "@jeswr/rdf-serialize",
+          "@jeswr/ldp-container",
+        ])
+          uiAllowed.add(dependency);
       if (
         (name.startsWith("@jeswr/") &&
           !uiAllowed.has(name) &&
