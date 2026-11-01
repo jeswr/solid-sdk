@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 export function useMobileSheet() {
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
+    const media = matchMedia("(max-width: 767px)");
     const update = () => setMobile(media.matches);
     update();
     media.addEventListener("change", update);

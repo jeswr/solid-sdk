@@ -138,7 +138,7 @@ export function ChatScreen({ id }: { id?: string }) {
   const outbox = useAgentQuery(client.paths.outbox, readOutbox, 300);
   const accounts = useAgentQuery(client.paths.accounts, readAccounts, 300);
   useEffect(() => {
-    const about = new URLSearchParams(window.location.search).get("about");
+    const about = new URLSearchParams(location.search).get("about");
     if (about) {
       try {
         setText(`Please help me reply to message ${guardSlug(about)}. `);

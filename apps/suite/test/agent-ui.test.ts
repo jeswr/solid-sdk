@@ -35,6 +35,9 @@ import { AgentSidebar } from "../src/apps/agent/components/sidebar";
 import { QueryRows } from "../src/apps/agent/components/states";
 import { StatusPill, useDaemonStatus } from "../src/apps/agent/components/status-pill";
 
+// The agent layer guard bans `window.`; components read these as bare globals.
+vi.stubGlobal("matchMedia", window.matchMedia);
+vi.stubGlobal("location", window.location);
 const NOW = Date.parse("2026-11-01T12:00:00Z");
 const BASE = `${DEMO_ROOT}agent/`;
 afterEach(() => {
