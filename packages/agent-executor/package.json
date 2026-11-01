@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-executor",
   "version": "0.1.0",
   "private": true,
-  "description": "Single action enforcement point (experimental scaffold).",
+  "description": "Single fail-closed action enforcement point, outbox and transmission gate.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -34,5 +34,9 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10"
+  },
+  "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/agent-mandate": "workspace:*"
   }
 }

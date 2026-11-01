@@ -24,10 +24,20 @@ it("declares the root and testing entry points on Node >=24", () => {
   expect(manifest.engines.node).toBe(">=24");
 });
 
-it.each(entries)("resolves %s without exposing runtime capabilities", (subpath, target) => {
+it.each(entries)("resolves the %s public API", (subpath, target) => {
   expect(existsSync(fileURLToPath(new URL(`../${target.types}`, import.meta.url)))).toBe(true);
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
+  expect(Object.keys(modules[subpath] as object).sort()).toEqual(
+    subpath === "."
+      ? [
+          "MAX_TRANSMISSION_ATTEMPTS",
+          "createExecutor",
+          "createFileTransmissionStore",
+          "createHaltFileCheck",
+          "proposalTermsDigest",
+        ]
+      : ["createMemoryStores"],
+  );
 });

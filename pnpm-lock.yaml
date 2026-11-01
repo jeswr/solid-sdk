@@ -2453,6 +2453,13 @@ importers:
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-executor:
+    dependencies:
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../agent-mandate
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
