@@ -60,7 +60,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | open (unblocked) | `packages/solid-listening` | sst-ild.7.3 |
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | open | `packages/solid-scheduling` | sst-ild.7.5 |
-| R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | open | `AGENTS.md`, lane briefs | sst-ild.7.6 |
+| R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
