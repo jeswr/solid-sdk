@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { Store } from "n3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RdfLimitError } from "../src/bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { fetchDocument } from "../src/fetch.js";
-import { listContainer, search } from "../src/pod.js";
+import { listContainer, readRdf, search } from "../src/pod.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createStoragePodPort } from "../src/storage-pod-port.js";
 
@@ -232,11 +234,14 @@ it("smokes sparq LWS through the shared storage wire fixtures, including all 150
   expect(calls.every((r) => !r.headers.has("authorization"))).toBe(true);
 });
 
-it.each([
-  "pod_list",
-  "solid_list",
-  "resources/list",
-])("%s negotiates LWS-only container representations before paginating", async (operation) => {
+it.each(
+  ["pod_list", "solid_list", "resources/list", "pod_read", "solid_read", "readRdf"].flatMap(
+    (operation) => [false, true].map((denyChild) => ({ operation, denyChild })),
+  ),
+)("$operation negotiates LWS-only containers (denied child: $denyChild)", async ({
+  operation,
+  denyChild,
+}) => {
   const actual =
     await vi.importActual<typeof import("@jeswr/storage-client")>("@jeswr/storage-client");
   vi.mocked(createPodClient).mockImplementationOnce(actual.createPodClient);
@@ -290,6 +295,8 @@ it.each([
         },
       );
     }
+    if (request.method === "GET" && denyChild && request.url === other)
+      return new Response(null, { status: 403 });
     if (request.method === "GET" && [FILE, other].includes(request.url))
       return new Response("note", { headers: { "content-type": "text/plain" } });
     throw new Error("Unexpected LWS negotiation request");
@@ -303,21 +310,41 @@ it.each([
     if (operation === "resources/list") {
       expect((await client.listResources()).resources).toEqual([
         expect.objectContaining({ uri: FILE, name: "note.txt", mimeType: "text/plain" }),
-        expect.objectContaining({ uri: other, name: "other.txt", mimeType: "text/plain" }),
+        ...(denyChild
+          ? []
+          : [expect.objectContaining({ uri: other, name: "other.txt", mimeType: "text/plain" })]),
       ]);
-    } else {
+    } else if (["pod_list", "solid_list"].includes(operation)) {
       const result = await client.callTool({ name: operation, arguments: { container: ROOT } });
       expect(result.isError).toBeFalsy();
       const content = result.content as Array<{ text: string }>;
       expect(JSON.parse(content[0]?.text ?? "")).toEqual([
         expect.objectContaining({ url: FILE, mimeType: "text/plain" }),
-        expect.objectContaining({ url: other, mimeType: "text/plain" }),
+        ...(denyChild ? [] : [expect.objectContaining({ url: other, mimeType: "text/plain" })]),
       ]);
+    } else {
+      let dataset: Store;
+      if (operation === "readRdf") {
+        dataset = (await readRdf(pod, ROOT)).dataset;
+      } else {
+        const result = await client.callTool({ name: operation, arguments: { url: ROOT } });
+        expect(result.isError).toBeFalsy();
+        const content = result.content as Array<{ text: string }>;
+        dataset = await parseRdf(content[0]?.text ?? "", "text/turtle", { baseIRI: ROOT });
+      }
+      expect(
+        dataset
+          .getQuads(ROOT, "http://www.w3.org/ns/ldp#contains", null, null)
+          .map((quad) => quad.object.value)
+          .sort(),
+      ).toEqual((denyChild ? [FILE] : [FILE, other]).sort());
+      if (denyChild) expect(dataset.getQuads(other, null, null, null)).toEqual([]);
     }
+    const projections = ["pod_read", "solid_read"].includes(operation) ? 2 : 1;
     expect(
       calls.filter((request) => request.method === "GET" && request.url === ROOT),
-    ).toHaveLength(2);
-    expect(calls.filter((request) => request.url === next)).toHaveLength(1);
+    ).toHaveLength(2 * projections);
+    expect(calls.filter((request) => request.url === next)).toHaveLength(projections);
   } finally {
     await client.close();
     await server.close();
