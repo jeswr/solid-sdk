@@ -314,6 +314,26 @@ it("opens the last item with ArrowUp and keeps submenu and pointer switches insi
   expect(screen.getAllByRole("menu")).toHaveLength(1);
 });
 
+it("leaves focus where the person clicked after dismissing a menu outside", async () => {
+  const editor = create();
+  render(h(EditorMenubar, props(editor)));
+  const outside = document.createElement("textarea");
+  document.body.append(outside);
+  await openMenu("Format");
+  // Clicking into the document dismisses the menu; Radix's delayed unmount autofocus
+  // must not pull keystrokes back to the Format trigger's typeahead.
+  fireEvent.pointerDown(outside, { button: 0, ctrlKey: false });
+  await act(() => outside.focus());
+  await vi.waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  expect(document.activeElement).toBe(outside);
+  // A keyboard dismissal still returns to the trigger.
+  await openMenu("Format");
+  key(document.activeElement as Element, "Escape");
+  await vi.waitFor(() => expect(document.activeElement).toBe(menuitem("Format")));
+  outside.remove();
+});
+
 it("ignores a stale close from a menu the bar already switched away from", () => {
   expect(openMenuAfter(null, "File", true)).toBe("File");
   expect(openMenuAfter("File", "Edit", true)).toBe("Edit");

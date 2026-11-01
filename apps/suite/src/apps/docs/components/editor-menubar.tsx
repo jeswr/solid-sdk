@@ -364,16 +364,20 @@ export function EditorMenubar(props: EditorMenubarProps) {
               );
             }}
             onCloseAutoFocus={(event) => {
-              event.preventDefault();
               if (switching.current.delete(label)) {
+                event.preventDefault();
                 return;
               }
               const run = pending.current;
+              // Without a command, Radix restores the trigger after a keyboard close and
+              // leaves focus where the person clicked or tabbed after an outside interaction.
+              if (!run) return;
+              event.preventDefault();
               pending.current = null;
               // Land on the durable trigger first: a dialog the command opens then
               // restores focus here when it closes, instead of to the removed item.
               trigger(index)?.focus();
-              run?.();
+              run();
             }}
             onKeyDown={(event) => {
               // Radix already handled keys that open or close a submenu (including
