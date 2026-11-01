@@ -337,7 +337,7 @@ describe("canonical writes and live alias sets", () => {
     expect([...ds]).toEqual(before);
     expect(bm.parse(RES, new Store(new Parser().parse(ttl)))).toEqual({
       url: "https://example.org/",
-      text: "ab",
+      text: "a\u0000b",
       flag: false,
       tags: ["a", "z"],
     });

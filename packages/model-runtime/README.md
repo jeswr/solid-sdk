@@ -118,16 +118,24 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   values cannot be masked by defaults. Defaults never satisfy `requiredFailClosed` and never
   apply with `maxCount: 0`. Reads do not mutate the dataset.
 - Sets read the guarded, deduplicated union (Dates compare by instant). Their mutations
-  migrate surviving members to the canonical predicate and remove alias triples. Parse checks
+  migrate surviving raw RDF terms to the canonical predicate and remove alias triples. Parse checks
   raw-union `maxCount` (including malformed terms) and guarded raw-term-union `minCount`,
   before deduplicating JS values. Required sets reject every invalid raw member.
-- Type checks accept canonical or alias types. `mark()` removes alias types, adds the
-  canonical types, and preserves unrelated types. Builds and setters write canonical
-  predicates only; every setter, including `undefined` or an invalid value, clears all
+- Type checks accept a subject's `rdf:type` reaching any canonical or alias class through
+  `rdfs:subClassOf*` in the data graph. The cycle-safe walk shares a 10,000 raw-read budget
+  across all accepted classes per check and fails closed on exhaustion. `mark()` removes
+  explicit alias types, adds canonical types, and preserves subclass and unrelated types.
+  Builds and setters write canonical predicates only; every setter, including `undefined`
+  or an invalid value, clears all
   alias triples for its field.
 - `serialize` and `storeToTurtle` emit canonical field/type IRIs. `storeToTurtle` migrates
-  known aliases in a copy, applying the same value guards and write sanitisation, without
-  mutating its input. Prefixes advertising alias namespaces are omitted.
+  known aliases in a copy without mutating its input. Singleton migration retains the raw
+  term selected by canonical-first reads; sets and live-set mutations retain every guarded
+  raw term, including distinct terms with equal JS projections. Migration changes predicates
+  without normalizing IRI spellings, literal lexical forms or datatypes, sanitizing retained
+  text, or collapsing raw cardinality. Revalidation checks those original terms. Explicit API
+  writes still apply JS write guards and sanitization. Prefixes advertising alias namespaces
+  are omitted.
 
 The generator derives aliases exclusively from explicit extra `sh:targetClass` values and
 bounded `sh:alternativePath` lists. Vocabulary alignment annotations never grant aliases.
@@ -162,7 +170,8 @@ field names are **globally unique** across the composite (the projection is one 
 - **`parse`** GRAPH-WALKS from the root: it follows the ACTUAL link triple (never assumes the fragment
   — an untrusted document may link anywhere), requiring an absolute http(s) NamedNode without
   IRIREF-forbidden characters and bounding the candidate scan. It follows the exact linked term
-  without URL canonicalisation. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
+  without URL canonicalisation. A sub-node must have a data-graph type reaching one of its
+  canonical or alias classes (fail-closed, using the same bounded class walk). Link-resolution
   also enforces any retained `hasClass` (`sh:class`): the linked subject must have that type,
   or a type reaching it through `rdfs:subClassOf*` in the **data graph**. Build-time ontology
   ancestry never proves data membership. Traversal is cycle-safe and capped at 10,000 raw
@@ -177,8 +186,9 @@ field names are **globally unique** across the composite (the projection is one 
 
 The composite manifest is validated **fail-closed** (the tree invariant — one root, every non-root node
 exactly one incoming link, acyclic + spanning; a `nested` field may retain a safe absolute
-`hasClass` IRI, carries no scalar data-shape key and only the
-`requiredFailClosed` guard; composite documents are http(s)-scoped, matching the suite IRI discipline).
+`hasClass` IRI, but cannot require a target node's alias class that type migration removes;
+it carries no scalar data-shape key and only the `requiredFailClosed` guard; composite documents
+are http(s)-scoped, matching the suite IRI discipline).
 
 ## Install
 

@@ -105,7 +105,12 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
   omitted from a composite projection.
 - The runtime checks alias caps, distinctness, and absolute http(s) IRIs. Singleton reads
   try the guarded canonical predicate before ordered aliases; sets read a guarded union.
-  Writes remove aliases and use canonical IRIs only.
+  Writes remove aliases and use canonical predicates/types. Migration preserves each
+  retained raw RDF term's lexical form, datatype and IRI spelling, including distinct terms
+  whose JS projections are equal. Singleton selection stays canonical-first; explicit API
+  writes still use the runtime's JS write guards and normalization. Node-type recognition
+  accepts data-graph subclasses of canonical or alias classes through the runtime's bounded,
+  cycle-safe class walk; it never uses ontology ancestry at runtime or changes subclass types.
 
 `parseShapes(ttl, shapesBase, ontology?, ontologyQuads?)` uses the adapter's normalized ontology
 to resolve aliases and raw ontology quads to check composite subclass ancestry. `generateModel`
@@ -155,6 +160,9 @@ generates a single composite entity over the runtime's composite kind:
   its actual types and `rdfs:subClassOf*` chains in the **data graph**, including for aliases.
   Alias ancestry need not be declared in the ontology and ontology-only ancestry cannot
   admit a class violation. Builds assert the explicit link class on materialised children.
+  Compilation and fidelity independently reject a link whose `sh:class` names an alias target
+  class of its child shape: type migration deletes that assertion, so the configuration is
+  contradictory. This rejection also applies to optional links; type migration is unchanged.
   The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
 - Compilation and fidelity reject incompatible IRI/datatype constraints and impossible
   `minCount > maxCount` on every property before projection, including nested links.

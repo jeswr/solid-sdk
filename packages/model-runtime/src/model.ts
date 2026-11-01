@@ -23,6 +23,8 @@ import {
   NamedNodeFrom,
   OptionalAs,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory as N3DataFactory, Store } from "n3";
@@ -63,7 +65,7 @@ export interface EntityWrapper extends TermWrapper {
   readonly id: string;
   /** The `rdf:type` set, as a live set of IRI strings. */
   readonly types: Set<string>;
-  /** Whether this subject carries (any of) the entity's type IRI(s). */
+  /** Whether a data-graph type reaches any canonical/alias class via subClassOf*. */
   readonly isInstance: boolean;
   /** Stamp this subject with the entity's type IRI(s); returns `this`. */
   mark(): this;
@@ -405,10 +407,9 @@ function makeGuardedSet(
   return guarded;
 }
 
-/** Read a single (non-set) field's value, applying read-side guards, fail-closed. */
-function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
+/** Select the guarded RAW singleton using the documented canonical-first policy. */
+function readSingleTerm(doc: TermWrapper, plan: FieldPlan): { term?: Term; present: boolean } {
   const { field } = plan;
-  const normalise = (v: unknown): unknown => applyScalarGuards(field, projectValue(plan, v));
   let present = false;
   for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
     // Migration reads deliberately resolve canonical first. Check DISTINCT raw
@@ -419,22 +420,29 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
       doc as unknown as Term,
       doc.factory.namedNode(predicate),
     )) {
-      if (object !== undefined && !object.equals(candidate)) return undefined;
+      if (object !== undefined && !object.equals(candidate)) return { present: true };
       object = candidate;
     }
     if (object === undefined) continue;
     present = true;
-    if (field.maxCount === 0) return undefined;
-    const value = readTerm(doc, plan, object);
+    if (field.maxCount === 0) return { present };
     // Undefined alone triggers fallback: false, zero and the empty string win.
-    if (value !== undefined) return value;
+    if (readTerm(doc, plan, object) !== undefined) return { term: object, present };
   }
+  return { present };
+}
+
+/** Read a single (non-set) field's value, applying read-side guards, fail-closed. */
+function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
+  const { field } = plan;
+  const { term, present } = readSingleTerm(doc, plan);
+  if (term !== undefined) return readTerm(doc, plan, term);
   // A present but malformed value must never be masked by a configured default.
   return !present &&
     !field.guards?.requiredFailClosed &&
     field.maxCount !== 0 &&
     field.default !== undefined
-    ? normalise(field.default)
+    ? applyScalarGuards(field, projectValue(plan, field.default))
     : undefined;
 }
 
@@ -462,6 +470,38 @@ function clearAliases(doc: TermWrapper, field: ManifestField): void {
   }
 }
 
+/** Keep raw identities, even when several terms project to the same JS value. */
+function retainedSetTerms(doc: TermWrapper, plan: FieldPlan): Term[] {
+  const terms: Term[] = [];
+  for (const predicate of [plan.field.predicate, ...(plan.field.aliasPredicates ?? [])]) {
+    for (const term of matchObjects(
+      doc.dataset,
+      doc as unknown as Term,
+      doc.factory.namedNode(predicate),
+    )) {
+      if (readTerm(doc, plan, term) !== undefined) terms.push(term);
+    }
+  }
+  return terms;
+}
+
+/** Move retained terms through identity mappers, never through the JS writer. */
+function replaceFieldTerms(doc: TermWrapper, plan: FieldPlan, terms: Term[]): void {
+  if (!isSafeAbsoluteIri(plan.field.predicate)) throw new TypeError("unsafe field predicate");
+  const canonical = SetFrom.subjectPredicate(
+    doc,
+    plan.field.predicate,
+    TermAs.term,
+    TermFrom.itself,
+  );
+  clearAliases(doc, plan.field);
+  canonical.clear();
+  for (const term of terms) {
+    // Revalidate the original term, not its normalized/deduplicated projection.
+    if (readTerm(doc, plan, term) !== undefined) canonical.add(term);
+  }
+}
+
 /** A live union of guarded predicate sets; every mutation migrates retained values. */
 function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
   const canonical = predicateSet(doc, plan);
@@ -484,33 +524,26 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
       }
     return out;
   };
-  const migrate = (values: unknown[]): void => {
-    clearAliases(doc, plan.field);
-    canonical.clear();
-    // Reuse the build path for sanitisation and datatype/scalar/scheme guards.
-    for (const value of values)
+  const union: Set<unknown> = {
+    add(value) {
+      replaceFieldTerms(doc, plan, retainedSetTerms(doc, plan));
+      // Only the explicitly supplied API value goes through the JS write path.
       writeFlatField(
         doc,
         { ...plan, field: { ...plan.field, aliasPredicates: undefined } },
         { [plan.field.name]: [value] },
       );
-  };
-  const union: Set<unknown> = {
-    add(value) {
-      migrate([...members(), value]);
       return union;
     },
     delete(value) {
-      const all = members();
-      const normalized = hasIriSchemeGuard(plan.field)
-        ? fieldIri(plan.field, value)
-        : applyDatatypeValidity(plan.mapper, value);
-      const retained = all.filter((member) => !sameValueZero(member, normalized));
-      migrate(retained);
+      const all = retainedSetTerms(doc, plan);
+      const normalized = projectValue(plan, value);
+      const retained = all.filter((term) => !sameValueZero(readTerm(doc, plan, term), normalized));
+      replaceFieldTerms(doc, plan, retained);
       return retained.length !== all.length;
     },
     clear() {
-      migrate([]);
+      replaceFieldTerms(doc, plan, []);
     },
     has(value) {
       return sets.some((set) => set.has(value));
@@ -605,8 +638,7 @@ function makeWrapperClass(
       return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom);
     }
     get isInstance(): boolean {
-      const types = this.types;
-      return [...typeIris, ...aliasTypeIris].some((t) => types.has(t));
+      return hasDatasetClass(this, this.value, [...typeIris, ...aliasTypeIris]);
     }
     mark(): this {
       const types = this.types;
@@ -762,18 +794,14 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
       const plan = planField(field);
       for (const subject of subjects.values()) {
         const doc = new TermWrapper(subject, output, factory);
-        if (field.collection === "set") {
-          const members = [...fieldSet(doc, plan)];
-          clearAliases(doc, field);
-          predicateSet(doc, plan).clear();
-          writeFlatField(
-            doc,
-            { ...plan, field: { ...field, aliasPredicates: undefined } },
-            { [field.name]: members },
-          );
-        } else {
-          writeSingle(doc, plan, readSingle(doc, plan));
-        }
+        const terms =
+          field.collection === "set"
+            ? retainedSetTerms(doc, plan)
+            : (() => {
+                const { term } = readSingleTerm(doc, plan);
+                return term === undefined ? [] : [term];
+              })();
+        replaceFieldTerms(doc, plan, terms);
       }
     }
     for (const alias of node.aliasTypeIris ?? []) {
@@ -908,13 +936,14 @@ const MAX_LINK_READS = 32;
 const MAX_CLASS_READS = 10000;
 
 /** SHACL class membership is rdf:type followed by rdfs:subClassOf* in the data. */
-function hasDatasetClass(doc: TermWrapper, subject: string, required: string): boolean {
+function hasDatasetClass(doc: TermWrapper, subject: string, required: readonly string[]): boolean {
+  const accepted = new Set(required);
   const pending: Term[] = [];
   const seen = new Set<string>();
   let reads = 0;
   const enqueue = (term: Term): boolean => {
     if (term.termType !== "NamedNode" && term.termType !== "BlankNode") return false;
-    if (term.termType === "NamedNode" && term.value === required) return true;
+    if (term.termType === "NamedNode" && accepted.has(term.value)) return true;
     const key = JSON.stringify([term.termType, term.value]);
     if (!seen.has(key)) {
       seen.add(key);
@@ -1067,8 +1096,8 @@ function makeCompositeEntity(
       if (++visits > MAX_NODE_VISITS) return undefined;
       if (!isSafeAbsoluteIri(iri)) return undefined;
       const doc = new rt.Wrapper(iri, dataset, factory);
-      // A node MUST carry its rdf:type — an untyped subject at a fragment is not a
-      // conforming node (fail-closed cross-node type check).
+      // A node's data-graph type must reach a canonical/alias target class;
+      // an untyped subject at a fragment is not a conforming node.
       if (!doc.isInstance) return undefined;
       const data: EntityData = {};
       for (const plan of rt.plans) {
@@ -1097,7 +1126,7 @@ function makeCompositeEntity(
         }
         const childData =
           link.target !== undefined &&
-          (nf.hasClass === undefined || hasDatasetClass(doc, link.target, nf.hasClass))
+          (nf.hasClass === undefined || hasDatasetClass(doc, link.target, [nf.hasClass]))
             ? parseNode(child, link.target)
             : undefined;
         if (childData === undefined) {

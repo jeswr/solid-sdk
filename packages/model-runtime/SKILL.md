@@ -80,9 +80,14 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   cardinality violation drops the field without alias fallback; a required field rejects.
   Sets expose the guarded union; parse checks raw-union maxCount and guarded raw-term-union
   minCount before deduplicating the JS projection. Required sets reject invalid raw members.
-  Reads never mutate. Set mutations migrate retained
-  members. Setters clear aliases even on `undefined`/invalid input; `mark` clears alias
-  types. Serialisation migrates known aliases in a copy and writes canonical IRIs only.
+  Reads never mutate. Singleton migration preserves the raw term selected by canonical-first
+  reads; set serialization and live-set mutations migrate all retained guard-passing raw terms.
+  Keep exact lexical forms, datatypes, IRI spellings and raw cardinality, even for terms with
+  equal JS projections. Revalidate raw terms, never re-project and rewrite retained values.
+  Retained text is not sanitized during migration; explicitly supplied API values still pass
+  through JS write guards and sanitization. Setters clear aliases even on `undefined`/invalid
+  input; `mark` clears explicit alias types. Serialization migrates known aliases in a copy
+  and writes canonical predicates/types only, preserving subclass type assertions.
 - Deliberate G5 migration exception: for singleton `sh:alternativePath` fields, SHACL
   counts the union for `maxCount`, but runtime reads resolve canonical-first. A stale
   conflicting alias beside a valid canonical value can therefore parse even when the
@@ -99,7 +104,13 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   `rdf:type` values and `rdfs:subClassOf*` chains in the data graph, never the build-time
   ontology. Bound traversal to 10,000 raw reads per link and track visited class terms;
   absence, cycles without membership, and budget exhaustion fail the link closed with its
-  required/optional grading. Builds assert the explicit link class on materialised children.
+  required/optional grading. Node-type recognition (flat entities, composite roots/children,
+  and per-node wrappers) uses the same bounded walk to any canonical or alias target class,
+  with one 10,000 raw-read budget across the accepted classes. Never add or delete subclass
+  `rdf:type` assertions during recognition or serialization; `mark` retains its existing
+  explicit alias-to-canonical type migration. Builds assert the explicit link class on
+  materialised children. Reject a link whose `hasClass` names an alias type of its target:
+  that assertion would be deleted by type migration.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
   belongs in the consuming package's facade, not in this runtime.
 - Changes here are security-critical: add an adversarial test that fails before the fix.
