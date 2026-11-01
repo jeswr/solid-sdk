@@ -2,10 +2,10 @@
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { pods, resolve } from "../../../../packages/pod-access/test/helpers.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { serialize } from "../../src/engine/rdf.js";
 import { readResourceBytes } from "../../src/engine/resource-body.js";
-import { pods, resolve } from "./helpers.js";
 
 const url = "https://source.example/pod/file";
 async function unicodeTurtle(): Promise<string> {

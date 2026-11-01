@@ -5,22 +5,25 @@ import type {
   EffectivePolicy,
   Grant,
   OptionId,
+  PodImplementation,
   ReportItem,
   ReportKind,
   Resolutions,
   Subject,
 } from "./types.js";
+/** Caller-established owners, implementation, group evidence and source provenance. */
 export interface TranslationContext {
   scopeId?: string;
   sourceRules?: ReadonlyMap<string, string>;
   resourceUrl: string;
   targetOwner: string;
   sourceOwner: string;
-  targetImplementation?: "css" | "ess" | "nss";
+  targetImplementation?: PodImplementation;
   groups: ReadonlyMap<string, readonly string[]>;
   sourceRuleTurtle?: string;
 }
-export const optionDescriptions: Record<OptionId, string> = {
+/** Stable explanations for report decisions, shared with migration callers. */
+const optionDescriptions: Readonly<Record<OptionId, string>> = Object.freeze({
   skip: "Leave this resource or unsupported grant out of the migration.",
   expand: "Grant only the listed current members; future membership changes will not follow.",
   "owner-only": "Copy with access reserved to the target owner.",
@@ -33,7 +36,8 @@ export const optionDescriptions: Record<OptionId, string> = {
   "drop-overlapping": "Drop every grant clause that might overlap a denial.",
   abort: "Stop the migration without writing anything.",
   acknowledge: "Acknowledge this information; no decision is required.",
-};
+});
+/** Build a stable report item for a limitation and its safe caller choices. */
 export function reportItem(
   kind: ReportKind,
   resourceUrl: string,

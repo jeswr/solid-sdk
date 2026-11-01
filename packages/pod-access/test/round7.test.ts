@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6
+
+import { assertNotWider, emptyPolicy, readAcp, readWac, translatePolicy } from "@jeswr/pod-access";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
-import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { assertNotWider, emptyPolicy } from "../../src/engine/policy.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { readAcp } from "../../src/engine/systems/acp.js";
-import { readWac } from "../../src/engine/systems/wac.js";
-import { translatePolicy } from "../../src/engine/translation.js";
+import {
+  executeMigration,
+  finalizePlan,
+  planMigration,
+} from "../../../apps/pod-migrator/src/engine/index.js";
+import { ACL, ACP, RdfNode, serialize } from "../src/rdf.js";
 import { FakePod } from "./fake-pod.js";
 import { acl, grant, policy, resolve, stranger } from "./helpers.js";
 

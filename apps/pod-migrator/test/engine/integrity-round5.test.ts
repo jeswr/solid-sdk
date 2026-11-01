@@ -2,9 +2,17 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
+import { RdfNode } from "../../../../packages/pod-access/src/rdf.js";
+import {
+  acl,
+  grant,
+  pods,
+  policy,
+  resolve,
+  stranger,
+} from "../../../../packages/pod-access/test/helpers.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
+import { RDF, serialize } from "../../src/engine/rdf.js";
 
 function rdf(body: string, type = "text/turtle"): Response {
   return new Response(body, { headers: { "content-type": type } });

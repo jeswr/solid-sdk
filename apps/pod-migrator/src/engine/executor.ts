@@ -1,9 +1,5 @@
 // AUTHORED-BY Codex GPT-6
 import { extractMediaType, parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
-import { Group } from "@solid/object";
-import { DataFactory, Store } from "n3";
-import { readAccess, writeAccess } from "./access.js";
-import { executions, proveExecutionPhases } from "./planner.js";
 import {
   assertNotWider,
   effectivePolicy,
@@ -11,7 +7,11 @@ import {
   policiesEqual,
   scopePolicy,
   unionPolicies,
-} from "./policy.js";
+} from "@jeswr/pod-access";
+import { Group } from "@solid/object";
+import { DataFactory, Store } from "n3";
+import { readAccess, writeAccess } from "./access.js";
+import { executions, proveExecutionPhases } from "./planner.js";
 import { aclLink, parent, parse, requireOk, requireRepresentation, serialize } from "./rdf.js";
 import { ResourceReadError, readResourceBytes } from "./resource-body.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";

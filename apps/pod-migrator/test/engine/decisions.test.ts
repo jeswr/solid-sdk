@@ -2,9 +2,17 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { RdfNode } from "../../../../packages/pod-access/src/rdf.js";
+import {
+  acl,
+  grant,
+  pods,
+  policy,
+  resolve,
+  stranger,
+} from "../../../../packages/pod-access/test/helpers.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
+import { ACL, ACP, serialize } from "../../src/engine/rdf.js";
 
 async function scenario(from: "wac" | "acp" = "wac", to: "wac" | "acp" = "acp") {
   const { source, target } = await pods(from, to);

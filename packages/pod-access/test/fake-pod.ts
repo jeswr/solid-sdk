@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { AccessSystem, Mode } from "@jeswr/pod-access";
 import {
   AccessControlResource,
   AclResource,
@@ -9,9 +10,9 @@ import {
   Policy,
 } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { createPodHttp } from "../../src/engine/pod-http.js";
-import { ACL, ACP, FOAF, modeIri, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
-import type { AccessSystem, Mode, PodSide } from "../../src/engine/types.js";
+import { createPodHttp } from "../../../apps/pod-migrator/src/engine/pod-http.js";
+import type { PodSide } from "../../../apps/pod-migrator/src/engine/types.js";
+import { ACL, ACP, FOAF, modeIri, RDF, RdfNode, serialize } from "../src/rdf.js";
 export interface Stored {
   bytes: Uint8Array;
   type: string;
@@ -415,7 +416,7 @@ export class FakePod {
         responseHeaders.set("content-type", "text/turtle");
         return new Response(await serialize(dataset), { headers: responseHeaders });
       }
-      return new Response(stored?.bytes, { headers: responseHeaders });
+      return new Response(stored?.bytes as BodyInit | undefined, { headers: responseHeaders });
     }
     if (
       (headers.get("if-none-match") === "*" && stored) ||

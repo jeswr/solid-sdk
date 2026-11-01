@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
+import { acl, grant, pods, policy, resolve } from "../../../../packages/pod-access/test/helpers.js";
 import {
   createPodHttp,
   executeMigration,
   finalizePlan,
   planMigration,
 } from "../../src/engine/index.js";
-import { acl, grant, pods, policy, resolve } from "./helpers.js";
 
 describe("CSS PUT responses without ETags", () => {
   for (const from of ["wac", "acp"] as const)

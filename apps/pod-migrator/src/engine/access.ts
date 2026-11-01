@@ -1,11 +1,20 @@
 // AUTHORED-BY Codex GPT-6
+
 import { parseRdf } from "@jeswr/fetch-rdf";
+import {
+  type AcpDialect,
+  assertNotWider,
+  ownerPolicy,
+  policiesEqual,
+  readAcp,
+  readWac,
+  scopePolicy,
+  writeAcp,
+  writeWac,
+} from "@jeswr/pod-access";
 import { DataFactory } from "n3";
-import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
 import { ACL, ACP, aclLink, links, parse, RDF, requireOk, serialize } from "./rdf.js";
 import { ResourceReadError } from "./resource-body.js";
-import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
-import { readWac, writeWac } from "./systems/wac.js";
 import { assertSpecificAccess } from "./target-access.js";
 import type { AccessDocument, AccessSystem, EffectivePolicy, PodSide } from "./types.js";
 

@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
+import type { Mode } from "@jeswr/pod-access";
 import { Store } from "n3";
-import { ACL } from "../../src/engine/rdf.js";
-import type { Mode } from "../../src/engine/types.js";
+import { ACL } from "../src/rdf.js";
+
 import type { FakePod, Identity } from "./fake-pod.js";
 
 const requireCss = createRequire(import.meta.url);

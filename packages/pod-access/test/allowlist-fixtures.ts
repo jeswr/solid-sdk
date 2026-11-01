@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+
 import {
   LiteralAs,
   LiteralFrom,
@@ -8,7 +9,8 @@ import {
   TermFrom,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
-import { ACL, ACP, RDF, RdfNode } from "../../src/engine/rdf.js";
+import { ACL, ACP, RDF, RdfNode } from "../src/rdf.js";
+
 import type { FakePod } from "./fake-pod.js";
 import { acl } from "./helpers.js";
 
