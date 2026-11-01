@@ -15,6 +15,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./requests-solid": {
+      "types": "./dist/requests-solid/index.d.ts",
+      "default": "./dist/requests-solid/index.js"
     }
   },
   "files": [
@@ -36,11 +40,16 @@
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@jeswr/fetch-rdf": "workspace:*",
     "@types/n3": "1.26.1",
     "@vitest/coverage-v8": "^4.1.9"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/types": "2.0.1",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",

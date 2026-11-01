@@ -46,6 +46,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../packages/solid-elements
@@ -3352,6 +3355,24 @@ importers:
 
   packages/pod-access:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@rdfjs/types':
         specifier: 2.0.1
         version: 2.0.1
@@ -3368,9 +3389,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../fetch-rdf
       '@types/n3':
         specifier: 1.26.1
         version: 1.26.1
