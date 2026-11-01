@@ -1,7 +1,8 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
-injects a `window.solid` consent stub into every page (`login` and `requestAccess`).
+injects a `window.solid` consent stub into every page (`login`, `requestAccess`, and `disconnect`).
 Explicit origin consent adds DPoP-authenticated `fetch`, the bound profile's `webId`,
 and class-management APIs. The toolbar account menu shows the signed-in WebID's avatar. The UI is built with
 [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)
@@ -66,7 +67,7 @@ WebID/origin-mismatch test that genuinely fails without the guard.
 ## `window.solid`
 
 ```ts
-// Ungranted origins receive only login() and requestAccess().
+// Ungranted origins receive login(), requestAccess(), and disconnect().
 // These additional properties become available after explicit origin consent.
 interface SolidExtension {
   readonly webId: string | null;
@@ -77,6 +78,7 @@ interface SolidExtension {
   requestAccess(request: AccessRequestArgs): Promise<{ ok: boolean; grants: SolidGrant[] }>;
   listGrants(): Promise<SolidGrant[]>;
   revokeGrant(grantId: string): Promise<boolean>;
+  disconnect(): Promise<boolean>;             // also available without a grant
   resolveClass(classIRI: string): Promise<{
     shape: string | null;
     targets: Array<{ url: string; kind: 'instance' | 'container' }>;
@@ -247,6 +249,13 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   Removal precedes replica-slice purging, so even a purge failure cannot keep access live.
   Cached bytes still covered by another live read grant of the same origin are retained.
   The parent origin binding is managed separately from its nested class records.
+  Removal broadcasts a state update to this origin's tabs so apps can re-read the remaining grants.
+- **`disconnect`** removes this origin's binding and every nested class grant, and purges their
+  replica slices, just like revoking the origin in the side panel. It broadcasts a state update
+  to this origin's tabs, removing `webId` and `fetch` from their stubs. It leaves other origins,
+  the extension's signed-in account and its DPoP key untouched. No consent or user gesture is
+  required. It returns `true` if a binding was removed, `false` if none existed (including a
+  repeated call), and remains callable on an ungranted stub.
 - **`resolveClass`** walks the WebID's public/private Solid Type Indexes for `solid:forClass`
   and returns `solid:instance` / `solid:instanceContainer` targets on allowed pod origins.
   It requires a verified, granted origin and an active session. Class-only origins can

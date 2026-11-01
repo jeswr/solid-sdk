@@ -23,6 +23,7 @@ import type {
   AccessResponse,
   ActionResult,
   ConsentDecisionMessage,
+  DisconnectRequest,
   FetchRequest,
   FetchResponse,
   GetPendingConsentRequest,
@@ -212,7 +213,15 @@ async function reconcileOriginGrants(): Promise<void> {
     // Signed-out/removing profiles retain metadata until their mandatory lifecycle purge succeeds.
     if (profile?.sessionState === 'active') await purgeOriginSlice(g, profile.webId);
   }
-  const grants = await originGrants.list();
+  await syncOriginGrantRegistrations();
+}
+
+/** Refresh injection/alarms without reconciling or removing another origin's stored grants. */
+async function syncOriginGrantRegistrations(): Promise<void> {
+  const now = Date.now();
+  const grants = (await originGrants.list()).filter(
+    (g) => g.expiresAt === undefined || g.expiresAt > now,
+  );
   await syncOriginFetchInjection(grants.map((g) => g.origin));
   const expiries = grants.flatMap((g) => (g.expiresAt === undefined ? [] : [g.expiresAt]));
   if (chrome.alarms) {
@@ -228,7 +237,10 @@ async function purgeOriginSlice(grant: OriginGrant, webId: string): Promise<void
     await purgeReplicaSlice(cache, db, {
       webId,
       grantScope: grant.origin,
-      targets: grant.scope.pods.map((pod) => ({ url: `${pod}/`, kind: 'container' as const })),
+      targets: [
+        ...grant.scope.pods.map((pod) => ({ url: `${pod}/`, kind: 'container' as const })),
+        ...(grant.scope.classes ?? []).flatMap((g) => g.targets),
+      ],
       retainTargets: [],
     });
   } catch {
@@ -432,17 +444,20 @@ async function teardownSession(sender?: MessageSender, stamp?: string): Promise<
  * succeeded, a failed publication is retried once and still reported, so the caller never sees
  * success while open pages may hold a revoked identity.
  */
-async function revokeThenPublish(cleanup: () => Promise<void>): Promise<void> {
+async function revokeThenPublish(
+  cleanup: () => Promise<void>,
+  publish: () => Promise<void> = updateDefaultIconAndBroadcast,
+): Promise<void> {
   try {
     await cleanup();
   } catch (err) {
-    await updateDefaultIconAndBroadcast().catch(() => {});
+    await publish().catch(() => {});
     throw err;
   }
   try {
-    await updateDefaultIconAndBroadcast();
+    await publish();
   } catch (err) {
-    await updateDefaultIconAndBroadcast().catch(() => {});
+    await publish().catch(() => {});
     throw err;
   }
 }
@@ -844,6 +859,50 @@ async function refreshProfile(profileId: string, webId: string): Promise<void> {
  */
 let stateChangeVersion = 0;
 
+/** Same origin/session/navigation checks for global and per-origin state notifications. */
+async function broadcastTabStateChange(tab: chrome.tabs.Tab, isCurrent: () => boolean) {
+  if (tab.id === undefined) return;
+  const tabId = tab.id;
+  const tabOrigin = tab.url ? originOf(tab.url) : null;
+  const grant = tabOrigin ? await originGrantFor(tabOrigin) : null;
+  const deliver = async (signal: AbortSignal) => {
+    const bound = grant ? await (await getProfiles()).session(grant.profileId) : null;
+    signal.throwIfAborted();
+    // The bridge checks origin as well, closing navigation after this URL lookup.
+    const currentTab = await chrome.tabs.get(tabId).catch(() => null);
+    signal.throwIfAborted();
+    if (!tabOrigin || !currentTab?.url || originOf(currentTab.url) !== tabOrigin) return;
+    let tabWebId: string | null = null;
+    if (grant && bound) {
+      try {
+        await checkOriginAuthority(grant, { ...bound, profileId: grant.profileId }, signal);
+        tabWebId = bound.session.webId;
+      } catch {
+        signal.throwIfAborted();
+      }
+    }
+    if (!isCurrent()) return;
+    chrome.tabs
+      .sendMessage(
+        tabId,
+        { type: 'SOLID_STATE_CHANGED', origin: tabOrigin, webId: tabWebId },
+        { frameId: 0 },
+      )
+      .catch(() => {});
+  };
+  if (grant) await withProfileOperation(grant.profileId, deliver, tabOrigin ?? undefined);
+  else await deliver(new AbortController().signal);
+}
+
+/** Grant changes notify only this origin, without refreshing or changing any account session. */
+async function broadcastOriginGrantChange(origin: string): Promise<void> {
+  await syncOriginGrantRegistrations();
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.url && originOf(tab.url) === origin) await broadcastTabStateChange(tab, () => true);
+  }
+}
+
 async function broadcastStateChange(ctx: SessionContext | null, version: number): Promise<void> {
   const webId = ctx?.session.webId ?? null;
 
@@ -861,39 +920,7 @@ async function broadcastStateChange(ctx: SessionContext | null, version: number)
       return;
   } else if (current?.profile.sessionState === 'active') return;
   for (const tab of tabs) {
-    if (tab.id === undefined) continue;
-    const tabId = tab.id;
-    const tabOrigin = tab.url ? originOf(tab.url) : null;
-    // A signed-in WebID is only revealed to a granted tab; everyone else (and every tab on
-    // logout) gets null. Fail-closed: an unparseable tab URL never receives the WebID.
-    const grant = tabOrigin ? await originGrantFor(tabOrigin) : null;
-    const deliver = async (signal: AbortSignal) => {
-      const bound = grant ? await (await getProfiles()).session(grant.profileId) : null;
-      signal.throwIfAborted();
-      // The bridge checks origin as well, closing navigation after this URL lookup.
-      const currentTab = await chrome.tabs.get(tabId).catch(() => null);
-      signal.throwIfAborted();
-      if (!tabOrigin || !currentTab?.url || originOf(currentTab.url) !== tabOrigin) return;
-      let tabWebId: string | null = null;
-      if (grant && bound) {
-        try {
-          await checkOriginAuthority(grant, { ...bound, profileId: grant.profileId }, signal);
-          tabWebId = bound.session.webId;
-        } catch {
-          signal.throwIfAborted();
-        }
-      }
-      if (version !== stateChangeVersion) return;
-      chrome.tabs
-        .sendMessage(
-          tabId,
-          { type: 'SOLID_STATE_CHANGED', origin: tabOrigin, webId: tabWebId },
-          { frameId: 0 },
-        )
-        .catch(() => {});
-    };
-    if (grant) await withProfileOperation(grant.profileId, deliver, tabOrigin ?? undefined);
-    else await deliver(new AbortController().signal);
+    await broadcastTabStateChange(tab, () => version === stateChangeVersion);
     if (version !== stateChangeVersion) return;
   }
   // The popup/side panel are trusted extension contexts — give them the real value.
@@ -1527,7 +1554,19 @@ async function handleRevokeGrant(
   );
   if (removed.length > 0) cancelProfileOperations(ctx.profileId, requestingOrigin);
   await purgeGrantSlices(removed, survivors);
+  if (removed.length > 0) await broadcastOriginGrantChange(requestingOrigin);
   return { requestId, ok: removed.length > 0 };
+}
+
+async function handleDisconnect(
+  message: DisconnectRequest,
+  sender: MessageSender | undefined,
+): Promise<AccessResponse> {
+  const requestId = message.requestId;
+  const origin = resolveRequestingOrigin(sender, message.stampedOrigin);
+  if (origin === null)
+    return { requestId, ok: false, error: 'Could not verify the requesting origin.' };
+  return { requestId, ok: await revokeOriginGrant(origin) };
 }
 
 async function handleResolveClass(
@@ -1609,9 +1648,49 @@ async function handleResolveClass(
   }
 }
 
+/** Shared by the trusted manager and a page surrendering only its own origin authority. */
+async function revokeOriginGrant(origin: string): Promise<boolean> {
+  const grant = (await originGrants.list()).find((g) => g.origin === origin);
+  if (!grant) return false;
+  const removed: OriginGrant[] = [];
+  let rebound = false;
+  await revokeThenPublish(
+    () =>
+      withProfileTask(grant.profileId, async () => {
+        await originGrants.update((all) =>
+          all.filter((g) => {
+            if (g.origin !== origin) return true;
+            // A concurrent manager may have rebound the origin while this profile queue
+            // was busy. Retry under its new profile so no cache commit can outlive the purge.
+            if (g.profileId !== grant.profileId) {
+              rebound = true;
+              return true;
+            }
+            removed.push(g);
+            return false;
+          }),
+        );
+        for (const gone of removed) {
+          cancelProfileOperations(gone.profileId, origin);
+          const record = await (await getProfiles()).get(gone.profileId);
+          await purgeOriginSlice(gone, record.profile.webId);
+        }
+      }),
+    async () => {
+      if (removed.length > 0) await broadcastOriginGrantChange(origin);
+    },
+  );
+  if (rebound) return revokeOriginGrant(origin);
+  return removed.length > 0;
+}
+
 async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSender | undefined) {
   if (!isExtensionContext(sender))
     return { error: 'Origin grant management requires extension context.' };
+  if (message.type === 'SOLID_ORIGIN_GRANT_REVOKE') {
+    if (!canonicalOrigin(message.origin)) return { error: 'Invalid origin.' };
+    return { ok: await revokeOriginGrant(message.origin), grants: await originGrants.list() };
+  }
   await syncOriginGrants();
   if (message.type !== 'SOLID_ORIGIN_GRANTS_LIST') {
     if (!canonicalOrigin(message.origin)) return { error: 'Invalid origin.' };
@@ -1644,25 +1723,20 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
         return { ...g, expiresAt: message.expiresAt };
       };
       await originGrants.update((all) =>
-        message.type === 'SOLID_ORIGIN_GRANT_REVOKE'
-          ? all.filter((g) => g.origin !== message.origin)
-          : all.map((g) =>
-              g.origin !== message.origin
-                ? g
-                : message.type === 'SOLID_ORIGIN_GRANT_PROFILE'
-                  ? {
-                      ...g,
-                      profileId: message.profileId,
-                      createdAt: Date.now(),
-                      scope: { pods: [], classes: [] },
-                    }
-                  : shorten(g),
-            ),
+        all.map((g) =>
+          g.origin !== message.origin
+            ? g
+            : message.type === 'SOLID_ORIGIN_GRANT_PROFILE'
+              ? {
+                  ...g,
+                  profileId: message.profileId,
+                  createdAt: Date.now(),
+                  scope: { pods: [], classes: [] },
+                }
+              : shorten(g),
+        ),
       );
-      if (
-        message.type === 'SOLID_ORIGIN_GRANT_REVOKE' ||
-        message.type === 'SOLID_ORIGIN_GRANT_PROFILE'
-      ) {
+      if (message.type === 'SOLID_ORIGIN_GRANT_PROFILE') {
         const record = await (await getProfiles()).get(grant.profileId);
         await purgeOriginSlice(grant, record.profile.webId);
       }
@@ -1736,6 +1810,9 @@ chrome.runtime.onMessage.addListener(
         return true;
       case 'SOLID_REVOKE_GRANT':
         respond(handleRevokeGrant(message, sender));
+        return true;
+      case 'SOLID_DISCONNECT':
+        respond(handleDisconnect(message, sender));
         return true;
       case 'SOLID_RESOLVE_CLASS':
         respond(handleResolveClass(message, sender));

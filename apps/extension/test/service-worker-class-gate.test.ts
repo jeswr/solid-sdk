@@ -321,6 +321,229 @@ beforeEach(() => {
   idbDpopKey = undefined;
 });
 
+describe('origin disconnect and access-change broadcasts', () => {
+  const other = { origin: 'https://appy.example', url: 'https://appy.example/app' };
+
+  async function boot() {
+    await seedSession();
+    storage.set('solid:class-grants', [
+      classGrant({ grantId: 'finance' }),
+      classGrant({
+        grantId: 'health',
+        dataClass: 'https://schema.org/MedicalRecord',
+        targets: [{ url: 'https://alice.pod.example/health/', kind: 'container' }],
+      }),
+      classGrant({ grantId: 'other', origin: other.origin }),
+    ]);
+    await loadWorker();
+  }
+
+  it.each([
+    'SOLID_DISCONNECT',
+    'SOLID_ORIGIN_GRANT_REVOKE',
+  ])('%s removes the binding and all its class replicas, preserving other origins and credentials', async (type) => {
+    await boot();
+    for (const [sender, path] of [
+      [APPX, 'finance'],
+      [APPX, 'health'],
+      [other, 'finance'],
+    ] as const) {
+      expect(
+        (
+          await sendFetch(
+            {
+              url: `https://alice.pod.example/${path}/item.ttl`,
+              stampedOrigin: sender.origin,
+            },
+            sender,
+          )
+        ).status,
+      ).toBe(200);
+    }
+    expect(cacheStore.size).toBe(3);
+    const parents = storage.get('solid:origin-grants') as OriginGrant[];
+    const otherGrant = parents.find((g) => g.origin === other.origin);
+    // Historical class targets still need purging after the parent's pod scope changes.
+    storage.set(
+      'solid:origin-grants',
+      parents.map((g) =>
+        g.origin === APPX.origin ? { ...g, scope: { ...g.scope, pods: [] } } : g,
+      ),
+    );
+    // No refresh is needed to surrender authority, even with an expiring account session.
+    const account = profileDb.state.records[0];
+    if (account.session) account.session = { ...account.session, expiresAt: Date.now() + 1000 };
+    const before = structuredClone(profileDb.state);
+    const key = idbDpopKey;
+    fetchCalls.length = 0;
+    const request =
+      type === 'SOLID_DISCONNECT'
+        ? { type, requestId: 'disconnect', stampedOrigin: APPX.origin, origin: other.origin }
+        : { type, origin: APPX.origin };
+    const sender = type === 'SOLID_DISCONNECT' ? APPX : EXT_SENDER;
+    expect((await send(request, sender)).ok).toBe(true);
+    expect(storage.get('solid:origin-grants')).toEqual([otherGrant]);
+    expect(cacheStore.size).toBe(1);
+    expect([...idbMeta.values()].map((m) => m.grantScope)).toEqual([other.origin]);
+    expect(profileDb.state).toEqual(before);
+    expect(idbDpopKey).toBe(key);
+    expect(fetchCalls).toEqual([]);
+    expect(createdWindows).toEqual([]);
+    expect((await send(request, sender)).ok).toBe(false);
+  });
+
+  it.each([
+    { sender: APPX, stamp: other.origin },
+    { sender: APPX, stamp: undefined },
+    { sender: { origin: 'null', url: APPX.url }, stamp: APPX.origin },
+    { sender: {}, stamp: APPX.origin },
+  ])('refuses an unverifiable disconnect origin: %j', async ({ sender, stamp }) => {
+    await boot();
+    const before = structuredClone(storage.get('solid:origin-grants'));
+    const result = await send(
+      {
+        type: 'SOLID_DISCONNECT',
+        requestId: 'spoof',
+        stampedOrigin: stamp,
+        origin: other.origin,
+      },
+      sender,
+    );
+    expect(result).toMatchObject({ requestId: 'spoof', ok: false, error: expect.any(String) });
+    expect(storage.get('solid:origin-grants')).toEqual(before);
+  });
+
+  it('disconnect returns false for an ungranted origin without an account session', async () => {
+    await loadWorker();
+    expect(
+      await send(
+        {
+          type: 'SOLID_DISCONNECT',
+          requestId: 'absent',
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      ),
+    ).toEqual({ requestId: 'absent', ok: false });
+    expect(createdWindows).toEqual([]);
+  });
+
+  it('concurrent disconnects report exactly one binding removal', async () => {
+    await boot();
+    const request = {
+      type: 'SOLID_DISCONNECT',
+      requestId: 'concurrent',
+      stampedOrigin: APPX.origin,
+    };
+    const results = await Promise.all([send(request, APPX), send(request, APPX)]);
+    expect(results.map((r) => r.ok).sort()).toEqual([false, true]);
+  });
+
+  it('disconnect leaves another origin binding untouched even when it has expired', async () => {
+    await boot();
+    const parents = (storage.get('solid:origin-grants') as OriginGrant[]).map((g) =>
+      g.origin === other.origin ? { ...g, expiresAt: Date.now() - 1 } : g,
+    );
+    storage.set('solid:origin-grants', parents);
+    expect(
+      (
+        await send(
+          { type: 'SOLID_DISCONNECT', requestId: 'isolated', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(storage.get('solid:origin-grants')).toEqual(
+      parents.filter((g) => g.origin === other.origin),
+    );
+  });
+
+  it('disconnect cancels its own pending fetch while another origin can finish', async () => {
+    await boot();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async () => {
+      await held;
+      return new Response('private bytes');
+    };
+    fetchCalls.length = 0;
+    const own = sendFetch(
+      { url: 'https://alice.pod.example/finance/own.ttl', stampedOrigin: APPX.origin },
+      APPX,
+    );
+    const theirs = sendFetch(
+      { url: 'https://alice.pod.example/finance/other.ttl', stampedOrigin: other.origin },
+      other,
+    );
+    await vi.waitFor(() => expect(fetchCalls).toHaveLength(2));
+    try {
+      expect(
+        (
+          await send(
+            { type: 'SOLID_DISCONNECT', requestId: 'cancel', stampedOrigin: APPX.origin },
+            APPX,
+          )
+        ).ok,
+      ).toBe(true);
+    } finally {
+      release();
+    }
+    expect((await own).body).toBeUndefined();
+    expect((await theirs).status).toBe(200);
+  });
+
+  it.each([
+    'SOLID_REVOKE_GRANT',
+    'SOLID_DISCONNECT',
+    'SOLID_ORIGIN_GRANT_REVOKE',
+  ])('%s broadcasts the updated state to all and only the caller origin tabs', async (type) => {
+    await boot();
+    const tabs = [
+      { id: 1, url: APPX.url },
+      { id: 2, url: `${APPX.origin}/second` },
+      { id: 3, url: other.url },
+      { id: 4, url: 'https://ungranted.example/' },
+    ];
+    chrome.tabs.query = vi.fn().mockResolvedValue(tabs);
+    chrome.tabs.get = vi.fn().mockImplementation(async (id) => tabs.find((tab) => tab.id === id));
+    chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
+    expect(
+      (
+        await send(
+          {
+            type,
+            requestId: 'changed',
+            stampedOrigin: APPX.origin,
+            origin: APPX.origin,
+            grantId: 'finance',
+          },
+          type === 'SOLID_ORIGIN_GRANT_REVOKE' ? EXT_SENDER : APPX,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2);
+    for (const tabId of [1, 2])
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+        tabId,
+        {
+          type: 'SOLID_STATE_CHANGED',
+          origin: APPX.origin,
+          webId: type === 'SOLID_REVOKE_GRANT' ? WEBID : null,
+        },
+        { frameId: 0 },
+      );
+    const remaining = await send(
+      { type: 'SOLID_LIST_GRANTS', requestId: 'remaining', stampedOrigin: APPX.origin },
+      APPX,
+    );
+    expect((remaining.grants as ClassGrant[]).map((g) => g.grantId)).toEqual(
+      type === 'SOLID_REVOKE_GRANT' ? ['health'] : [],
+    );
+  });
+});
+
 describe('Phase-2 per-data-class gate (wired into the SW)', () => {
   it('a class-only origin READS within its pinned container → ALLOW with egress', async () => {
     await seedSession();

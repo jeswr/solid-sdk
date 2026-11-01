@@ -411,7 +411,7 @@ it('keeps an ungranted origin stub-only, preserving native fetch; removes capabi
   vi.resetModules();
   await import('../src/inject/inject');
   const stub = (dom.window as unknown as { solid: Record<string, unknown> }).solid;
-  expect(Object.keys(stub).sort()).toEqual(['login', 'requestAccess']);
+  expect(Object.keys(stub).sort()).toEqual(['disconnect', 'login', 'requestAccess']);
   expect(stub.webId).toBeUndefined();
   expect(stub.fetch).toBeUndefined();
   expect(dom.window.fetch).toBe(nativeFetch);
@@ -426,6 +426,59 @@ it('keeps an ungranted origin stub-only, preserving native fetch; removes capabi
   expect(typeof stub.fetch).toBe('function');
   expect(dom.window.fetch).not.toBe(nativeFetch);
   update(null);
-  expect(Object.keys(stub).sort()).toEqual(['login', 'requestAccess']);
+  expect(Object.keys(stub).sort()).toEqual(['disconnect', 'login', 'requestAccess']);
   expect(dom.window.fetch).toBe(nativeFetch);
+});
+
+it.each([true, false])('disconnect sends only a correlated request and resolves %s', async (ok) => {
+  await importInject();
+  posted.length = 0;
+  const solid = (dom.window as unknown as { solid: { disconnect(): Promise<boolean> } }).solid;
+  const result = solid.disconnect();
+  const request = posted[0];
+  expect(request).toEqual({
+    channel: 'solid-browser-ext',
+    dir: 'to-content',
+    type: 'SOLID_DISCONNECT',
+    requestId: expect.any(String),
+  });
+  dom.window.dispatchEvent(
+    new dom.window.MessageEvent('message', {
+      source: dom.window,
+      data: {
+        channel: 'solid-browser-ext',
+        dir: 'to-page',
+        type: 'SOLID_ACCESS_RESPONSE',
+        requestId: request.requestId,
+        ok,
+      },
+    }),
+  );
+  await expect(result).resolves.toBe(ok);
+});
+
+it('disconnect remains callable without a grant and rejects a worker error', async () => {
+  vi.resetModules();
+  await import('../src/inject/inject');
+  const stub = (dom.window as unknown as { solid: { disconnect(): Promise<boolean> } }).solid;
+  for (const response of [{ ok: false }, { error: 'Could not verify the requesting origin.' }]) {
+    const result = stub.disconnect();
+    const expectation =
+      'error' in response
+        ? expect(result).rejects.toThrow(response.error)
+        : expect(result).resolves.toBe(false);
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent('message', {
+        source: dom.window,
+        data: {
+          channel: 'solid-browser-ext',
+          dir: 'to-page',
+          type: 'SOLID_ACCESS_RESPONSE',
+          requestId: posted.at(-1)?.requestId,
+          ...response,
+        },
+      }),
+    );
+    await expectation;
+  }
 });
