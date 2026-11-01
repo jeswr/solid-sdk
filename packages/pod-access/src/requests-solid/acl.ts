@@ -129,6 +129,12 @@ function grantArgs(
 
 /** On a records folder ACL: the folder was made private but not yet shown to be empty. */
 const UNVERIFIED = `${ACCM.ns}unverifiedRecords`;
+/**
+ * On a sealed records folder ACL: a random key that names the decision records inside. Only the
+ * owner (Control) can read an ACL, so nobody else can know a record's URL, and nothing written
+ * before the folder was sealed can sit at one.
+ */
+const RECORDS_KEY = `${ACCM.ns}recordsKey`;
 
 /**
  * Make sure a records container is readable and writable by the owner alone before anything is
@@ -149,7 +155,7 @@ export async function ensureOwnerOnlyContainer(
   storage: string,
   owner: string,
   fetchFn: typeof fetch,
-): Promise<void> {
+): Promise<string> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
   if (head.status === 404) await put(container, "", fetchFn, null, true);
@@ -187,13 +193,38 @@ export async function ensureOwnerOnlyContainer(
       [ACL.Read, ACL.Write, ACL.Control].every((mode) => modes.has(mode));
     if (!full(own) || !full(inherited))
       throw new Error("The access records folder does not give you full control");
-    if (values(existing.dataset, url, UNVERIFIED).length === 0) return;
-    // Anything that arrived before the folder became private is untrusted.
-    await assertEmpty(container, url, fetchFn);
+    const key = values(existing.dataset, url, RECORDS_KEY)[0];
+    const unverified = values(existing.dataset, url, UNVERIFIED).length > 0;
+    if (!unverified && key !== undefined) return key;
+    // Anything that arrived before the folder became private is untrusted. The key is minted only
+    // now, after the folder is known to be private, so nothing written earlier can sit at a name
+    // derived from it (a key found next to the unverified mark was not written by us).
+    if (unverified) await assertEmpty(container, url, fetchFn);
+    const sealed = crypto.randomUUID();
     set(existing.dataset, url, UNVERIFIED, undefined);
-    if (await put(url, await turtle(existing.dataset), fetchFn, existing.etag)) return;
+    set(existing.dataset, url, RECORDS_KEY, sealed);
+    if (await put(url, await turtle(existing.dataset), fetchFn, existing.etag)) return sealed;
   }
   throw new Error("The access records folder ACL kept changing");
+}
+
+/**
+ * The records key of an already private records folder, sealing it first if needed; undefined
+ * while the folder or its ACL does not exist yet (so no decision record can exist either). Writes
+ * nothing to a pod without a records folder ACL.
+ */
+export async function recordsKey(
+  container: string,
+  storage: string,
+  owner: string,
+  fetchFn: typeof fetch,
+): Promise<string | undefined> {
+  scoped(storage, container);
+  const head = await fetchFn(container, { method: "HEAD" });
+  if (head.status === 404) return undefined;
+  if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
+  if (!(await read(await aclUrl(container, storage, fetchFn), fetchFn))) return undefined;
+  return ensureOwnerOnlyContainer(container, storage, owner, fetchFn);
 }
 
 async function ownerOnlyAcl(url: string, container: string, owner: string): Promise<string> {

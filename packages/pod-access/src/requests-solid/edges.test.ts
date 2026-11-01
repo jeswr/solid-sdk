@@ -6,6 +6,8 @@ import {
   accessRequestTurtle,
   buildPod,
   CONTACTS_CLASS,
+  decisionUrl,
+  grantIdFor,
   INBOX,
   OWNER,
   POD,
@@ -21,7 +23,6 @@ import {
   accessModel,
   canonicalizeAccmDataset,
   decide,
-  deriveGrantId,
   listRequests,
   MAX_MEMBERS,
   RequestConflictError,
@@ -33,11 +34,7 @@ const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
 const CAROL = `${POD}contacts/carol.ttl`;
 const INDEX = `${POD}settings/publicTypeIndex.ttl`;
-const RECORDS = `${POD}settings/access-records/`;
 
-/** The owner's pinned-decision record for the fixture request (read access to contacts). */
-const pinnedIntent = async () =>
-  `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
 const opts = (pod = buildPod()) => ({
   fetch: pod.fetch,
   webId: OWNER,
@@ -371,7 +368,7 @@ describe("role grant seam", () => {
 });
 
 describe("forward-only approval reconciliation", () => {
-  /** Crash after the Approving CAS, before grant records; returns the owner's intent record. */
+  /** Crash after the Approving CAS, before grant records; returns the owner's decision record. */
   async function orphan(pod: ReturnType<typeof buildPod>) {
     pod.intercept = (method, url) => {
       if (method === "PUT" && /access-records\/(grant|receipt)-/.test(url))
@@ -379,7 +376,7 @@ describe("forward-only approval reconciliation", () => {
     };
     await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("crash");
     pod.intercept = undefined;
-    const intent = await pinnedIntent();
+    const intent = await decisionUrl(pod);
     const dataset = await graph(pod.body(intent) as string);
     return {
       intent,
@@ -449,7 +446,7 @@ describe("forward-only approval reconciliation", () => {
     ]) {
       const forged = { ...snapshot, ...change };
       if (change.targets?.length === 1) {
-        forged.grantId = await deriveGrantId(ID, forged.targets, OWNER);
+        forged.grantId = await grantIdFor(intent, forged.targets);
         forged.targetModes = { [change.targets[0] as string]: ["read"] };
       }
       set(dataset, intent, `${ACCM.ns}snapshot`, JSON.stringify(forged));

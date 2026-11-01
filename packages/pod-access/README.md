@@ -289,13 +289,18 @@ modes include Write is granted Editor (Read, Write, Append), otherwise Viewer (R
 append-only request is refused before any write. `role: "viewer"` narrows to requested Read, and no
 approval ever grants Control. The owner Type Index resolves classes
 to registered instances and bounded, recursively listed instance-container members. Unknown classes
-and off-storage targets fail before the Approving CAS. `options.typeIndex` accepts an owner-controlled
+and off-storage targets fail before the Approving CAS, and so do targets an approval may never
+share: the storage root itself and anything under `<storage>settings/` (Type Indexes, preferences,
+the access records). A requested type that grants no mode (it has no permission of its own, or
+`role: "viewer"` drops its only mode) is left out of the approval rather than blocking it. `options.typeIndex` accepts an owner-controlled
 dataset or in-storage index URL; otherwise discovery reads profile public/private links and
 `pim:preferencesFile` → private index. All authenticated discovered URLs stay in `storage`, with
 redirects refused. Options also accept `publicFetch?`, `now?: () => Date`, and `signal?`.
 
 Approval resolves once, then CASes Pending → Approving with a pinned snapshot and deterministic
-SHA-256 grant ID. It creates the ODRL grant and DPV receipt under `settings/access-records/` using
+SHA-256 grant ID. The grant ID is derived from the owner's decision record (below), whose address
+names the requester, so identical requests from different requesters never share a grant or receipt
+ID; a denial receipt is named the same way. It creates the ODRL grant and DPV receipt under `settings/access-records/` using
 `If-None-Match: *`, grants each role with `addGrant` from `./roles`, then CASes to Approved. The
 role layer is additive (it never downgrades an existing role), writes conditionally, materialises a
 missing own ACL keeping the owner's Control, and refuses a legacy `acl:defaultForNew` ancestor on
@@ -304,8 +309,10 @@ layer can foresee (`owner-lockout`, `unsupported`, an unknown ACL construct) sto
 the request is still pending. A refusal that only appears later (for example a `conflict` from a
 concurrent edit) is rethrown unchanged and never retried; the approval stays Approving and can be
 retried, and a lost race against another approver that finished reports the approval. Initial CAS races throw `RequestConflictError` with
-the re-read winner's status. Explicitly retrying resumes the pinned decision, ignoring new
-overrides, without resolving again or rolling back ACLs. Completed decisions are idempotent; reversing
+the re-read winner's status. Explicitly retrying resumes the pinned decision without resolving
+again or rolling back ACLs. A retry may repeat the same choices or leave them out, but if it passes
+different `dataTypes`, `role` or `expiresAt` it fails with an error saying an earlier approval is
+still finishing, rather than silently granting something other than what the owner just chose. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
@@ -332,13 +339,30 @@ exists without its own ACL is made private only while it lists as empty, because
 it may have been written by someone else: its new ACL is marked unverified, and the mark is removed
 (with a conditional write) only once the folder still lists as empty. A crash or a failed check
 leaves the mark, so later calls check again and keep refusing while anything is inside; a folder
-that cannot be listed is refused. Each pinned decision is bound to the request's requester and
-requested types and modes, so a new request at a reused notification URL never resumes an old
-decision, and a pinned grant must name this requester and stay within the role its request maps to. Approval first pins its decision (targets, modes, expiry) in a
-create-only record in that folder, then moves the request to Approving. A retry resumes only from
-that record (even when the crash came before the request changed state, so the Type Index is not
-read again): a notification that claims to be Approving or Approved without one was written by the
-requester, so `decide` refuses to approve it (it can still be denied).
+that cannot be listed is refused. (A server that lists the folder's own ACL as a member is fine.)
+
+When the mark is removed, `decide` also stores a random **records key** in the folder's ACL. Only
+the owner can read that ACL, and the key is created only after the folder is known to be private,
+so nobody else can predict where a decision record lives, and nothing written before the folder was
+sealed (or slipped in while it was being sealed) can sit at one. A key found next to the unverified
+mark is not trusted and is replaced. A folder sealed before keys existed simply gets one; its old
+files are ignored. Looking up a decision creates nothing on a pod that has no records folder ACL
+yet.
+
+Each decision is a **decision record** in that folder, named from the records key, the request URL,
+its requester, what it asks for and a generation number. A record says `approving` (the decision is
+pinned: targets, modes, expiry and the owner's own choices), `approved` or `denied`. Approval first
+pins its decision in a create-only `approving` record, then moves the request to Approving, and
+marks the record `approved` once the request is Approved. A retry resumes only from an `approving`
+record (even when the crash came before the request changed state, so the Type Index is not read
+again): a notification that claims to be Approving or Approved without one was written by the
+requester, so `decide` refuses to approve it (it can still be denied). Denying a request whose
+approval was pinned but never reached Approving turns that record into `denied`, so it can never be
+resumed. A finished record only matches a request in the same state, so when a new request arrives
+at a reused notification URL, even an identical one, it is decided afresh under the next generation
+and never reuses the old decision. A pinned decision must name this requester, stay within the role
+its request maps to, and pass the same target checks as a new one. After 32 decisions at one
+request URL, `decide` refuses that URL.
 
 Every document the pipeline writes back (including the requester-authored request during CAS) is
 serialised with regenerated blank-node labels, validated language tags and no named graphs, so a

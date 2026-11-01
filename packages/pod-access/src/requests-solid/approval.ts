@@ -14,6 +14,7 @@ import {
   checkGrant,
   ensureOwnerOnlyContainer,
   ROLE_MODES,
+  recordsKey,
   roleFor,
   UnsupportedAccessModelError,
 } from "./acl.js";
@@ -91,6 +92,8 @@ interface Snapshot {
   purpose?: string;
   expiresAt?: string;
   decidedAt: string;
+  /** The owner's own choices, so a resumed approval can refuse different ones. */
+  chosen: { dataTypes: string[]; viewer: boolean };
 }
 
 /** sha256(requestId, sorted target set, ownerWebID, schemaVersion), as in access-manager. */
@@ -140,50 +143,133 @@ function urls(storage: string, id: string) {
   };
 }
 
+type Outcome = "approving" | "approved" | "denied";
+const OUTCOME = `${ACCM.ns}outcome`;
+const MAX_SLOTS = 32;
+
+interface DecisionRecord {
+  outcome: Outcome;
+  snapshot?: Snapshot;
+  etag: string | null;
+}
+
+/** The owner's decision record for one decision on a request, in the owner-only folder. */
+interface Slot {
+  url: string;
+  record?: DecisionRecord;
+}
+
 /**
- * The owner's own record of an approval in progress. Inbox notifications are authored by the
- * requester, so a claimed `Approving` state or snapshot inside one proves nothing: recovery only
- * ever resumes from this create-only document in the owner-only records folder.
+ * The owner's own record of each decision. Inbox notifications are authored by the requester, so
+ * a claimed state or snapshot inside one proves nothing: recovery only ever resumes from these
+ * create-only records. Their names derive from the folder's secret records key, so nothing written
+ * before the folder was sealed can sit at one, and from what was asked plus a generation number, so
+ * a new request at a reused notification URL gets its own record. A finished record (approved or
+ * denied) only matches a request in that same state. An approval in progress matches whatever
+ * state the request is in, so a denial that crashed before settling it still consumes it on retry
+ * instead of leaving it for a later identical request to resume.
  */
-async function intentUrl(storage: string, entry: RequestEntry, owner: string): Promise<string> {
-  // Bound to what was asked, so a new request reusing an old notification URL never resumes an
-  // old decision.
+async function findSlot(
+  storage: string,
+  key: string | undefined,
+  entry: RequestEntry,
+  owner: string,
+  fetchFn: typeof fetch,
+): Promise<Slot | undefined> {
+  if (key === undefined) return undefined;
   const asked = Object.entries(entry.modesByType).map(
     ([type, modes]) => `${type} ${[...modes].sort().join(",")}`,
   );
-  const key = await deriveGrantId(
-    entry.id,
-    [`agent ${entry.requester}`, ...asked],
-    owner,
-    "intent-2",
-  );
-  return scoped(storage, `${recordsFolder(storage)}intent-${key}.ttl`);
+  for (let n = 0; n < MAX_SLOTS; n++) {
+    const name = await deriveGrantId(
+      entry.id,
+      [`key ${key}`, `agent ${entry.requester}`, `generation ${n}`, ...asked],
+      owner,
+      "decision-1",
+    );
+    const url = scoped(storage, `${recordsFolder(storage)}decision-${name}.ttl`);
+    const record = await readRecord(url, entry.id, fetchFn);
+    if (!record) return { url };
+    if (record.outcome === "approving" || record.outcome === entry.status) return { url, record };
+  }
+  throw new Error("This request has been decided too many times");
 }
 
-async function readIntent(
+async function readRecord(
   url: string,
   id: string,
   fetchFn: typeof fetch,
-): Promise<Snapshot | undefined> {
+): Promise<DecisionRecord | undefined> {
   const doc = await read(url, fetchFn);
   if (!doc) return undefined;
+  const outcome = values(doc.dataset, url, OUTCOME)[0];
   const stored = values(doc.dataset, url, `${ACCM.ns}snapshot`)[0];
-  if (values(doc.dataset, url, ACCM.requestRef)[0] !== id || stored === undefined)
-    throw new Error("Approval record does not match this request");
-  return JSON.parse(stored) as Snapshot;
+  if (
+    values(doc.dataset, url, ACCM.requestRef)[0] !== id ||
+    (outcome !== "approving" && outcome !== "approved" && outcome !== "denied") ||
+    (outcome !== "denied") !== (stored !== undefined)
+  )
+    throw new Error("Decision record does not match this request");
+  return {
+    outcome,
+    etag: doc.etag,
+    ...(stored !== undefined && { snapshot: JSON.parse(stored) as Snapshot }),
+  };
 }
 
-async function writeIntent(
+async function recordBody(
   url: string,
   id: string,
-  snapshot: Snapshot,
-  fetchFn: typeof fetch,
-): Promise<boolean> {
+  outcome: Outcome,
+  snapshot?: Snapshot,
+): Promise<string> {
   const dataset = new Store();
   set(dataset, url, ACCM.requestRef, id, true);
-  set(dataset, url, ACCM.grantId, snapshot.grantId);
-  set(dataset, url, `${ACCM.ns}snapshot`, JSON.stringify(snapshot));
-  return put(url, await turtle(dataset), fetchFn, null, true);
+  set(dataset, url, OUTCOME, outcome);
+  if (snapshot) {
+    set(dataset, url, ACCM.grantId, snapshot.grantId);
+    set(dataset, url, `${ACCM.ns}snapshot`, JSON.stringify(snapshot));
+  }
+  return turtle(dataset);
+}
+
+/**
+ * Move a decision record forward to its final outcome. Only an approval in progress may change:
+ * an approval becomes approved once the request is, and a pinned approval that never reached
+ * Approving becomes a denial when the owner denies instead.
+ */
+async function settleRecord(
+  slot: Slot,
+  id: string,
+  outcome: "approved" | "denied",
+  snapshot: Snapshot | undefined,
+  fetchFn: typeof fetch,
+): Promise<void> {
+  let record = slot.record;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (record?.outcome === outcome) return;
+    if (record !== undefined && record.outcome !== "approving")
+      throw new Error("This decision was already recorded differently");
+    const body = await recordBody(slot.url, id, outcome, snapshot);
+    if (await put(slot.url, body, fetchFn, record ? record.etag : null, record === undefined))
+      return;
+    record = await readRecord(slot.url, id, fetchFn);
+  }
+  throw new Error("The decision record kept changing");
+}
+
+/** A resumed approval keeps its pinned choices: refuse explicit choices that differ. */
+function assertSameChoices(snapshot: Snapshot, decision: RequestDecision): void {
+  const pinned = snapshot.chosen;
+  if (
+    (decision.dataTypes !== undefined &&
+      [...new Set(decision.dataTypes)].sort().join("\n") !== pinned.dataTypes.join("\n")) ||
+    (decision.role !== undefined && (decision.role === "viewer") !== pinned.viewer) ||
+    (decision.expiresAt !== undefined && decision.expiresAt.toISOString() !== snapshot.expiresAt)
+  )
+    throw new Error(
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+    );
 }
 
 /** Ignore all requester-supplied grant/receipt/snapshot IRIs and persist our own tuple. */
@@ -254,12 +340,14 @@ function withinRequest(snapshot: Snapshot, entry: RequestEntry): boolean {
 async function validateSnapshot(
   snapshot: Snapshot,
   entry: RequestEntry,
+  slotUrl: string,
   options: DecideOptions,
 ): Promise<void> {
-  const id = entry.id;
   if (
     !withinRequest(snapshot, entry) ||
     snapshot.schemaVersion !== "1" ||
+    !Array.isArray(snapshot.chosen?.dataTypes) ||
+    typeof snapshot.chosen.viewer !== "boolean" ||
     snapshot.targets.length === 0 ||
     snapshot.targets.length > MAX_MEMBERS ||
     snapshot.modes.length === 0 ||
@@ -278,16 +366,27 @@ async function validateSnapshot(
         modes.every((mode) => snapshot.modes.includes(mode))
       );
     }) ||
-    snapshot.grantId !== (await deriveGrantId(id, snapshot.targets, options.webId))
+    snapshot.grantId !== (await deriveGrantId(slotUrl, snapshot.targets, options.webId))
   ) {
     throw new Error("Invalid persisted approval snapshot");
   }
   httpUrl(snapshot.agent);
-  for (const target of snapshot.targets) {
-    scoped(options.storage, target);
-    if (/\.(acl|acr)(?:[?#]|$)/i.test(target) || target.includes("#"))
-      throw new Error("Invalid snapshot target");
-  }
+  for (const target of snapshot.targets) assertGrantable(target, options.storage);
+}
+
+/**
+ * Targets an approval may never grant: anything outside storage, access-control documents,
+ * fragments, the storage root, and the owner's settings (type indexes, preferences, records).
+ */
+function assertGrantable(target: string, storage: string): void {
+  scoped(storage, target);
+  if (
+    /\.(acl|acr)(?:[?#]|$)/i.test(target) ||
+    target.includes("#") ||
+    target === storage ||
+    target.startsWith(new URL("settings/", storage).href)
+  )
+    throw new Error(`${target} can't be shared through an access request`);
 }
 
 async function complete(
@@ -297,7 +396,6 @@ async function complete(
   fetchFn: typeof fetch,
 ): Promise<{ grantUrl: string; receiptUrl: string }> {
   const id = request.entry.id;
-  await validateSnapshot(snapshot, request.entry as RequestEntry, options);
   const locations = urls(options.storage, snapshot.grantId);
   const grant = new Store(
     policyToRdf({
@@ -349,8 +447,13 @@ async function complete(
         fetchFn,
       );
     } catch (error) {
-      // A competing resumer may have finished while this one lost a write race.
-      if ((await current(id, fetchFn)).entry.status === "approved") return locations;
+      // A competing resumer may have finished while this one lost a write race. A failed re-read
+      // never hides the original error.
+      const status = await current(id, fetchFn).then(
+        (fresh) => fresh.entry.status,
+        () => undefined,
+      );
+      if (status === "approved") return locations;
       throw error;
     }
   }
@@ -403,7 +506,7 @@ async function notify(
 
 /**
  * Decide an explicitly user-confirmed request; entry.id is re-read, never trusted as state.
- * Approving retries use the persisted snapshot and ignore new decision overrides.
+ * Approving retries use the persisted snapshot and refuse explicit choices that differ from it.
  * Inbox children must be owner-write-only (public Append to the inbox is fine): a hash
  * is an idempotency key, not an authenticity proof for requester-writable snapshots.
  */
@@ -426,24 +529,33 @@ export async function decide(
   const parsed = request.entry;
   const now = (options.now ?? (() => new Date()))().toISOString();
   const records = recordsFolder(storage);
-  const intent = await intentUrl(storage, parsed, options.webId);
+  const owner = options.webId;
+  const peeked = await recordsKey(records, storage, owner, fetchFn);
+  const found = await findSlot(storage, peeked, parsed, owner, fetchFn);
+  const recorded = found?.record;
+  // Records live only in a folder only the owner can read; resolve the slot under its key.
+  const sealed = async (): Promise<Slot> => {
+    const key = await ensureOwnerOnlyContainer(records, storage, owner, fetchFn);
+    return key === peeked && found
+      ? found
+      : ((await findSlot(storage, key, parsed, owner, fetchFn)) as Slot);
+  };
   const resuming = parsed.status === "approving" || parsed.status === "approved";
-  const recorded = resuming ? await readIntent(intent, id, fetchFn) : undefined;
   // A claimed approval with no owner record was written by the requester: it can still be denied.
   const claimed = resuming && recorded === undefined;
   if (!decision.approve) {
-    if (parsed.status !== "pending" && parsed.status !== "denied" && !claimed)
-      throw new Error("Cannot deny an approval");
+    if (resuming && !claimed) throw new Error("Cannot deny an approval");
     if (parsed.status !== "denied") requireStrongEtag(request.etag);
-    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
+    const slot = await sealed();
     const decidedAt = parsed.status === "denied" ? (parsed.decidedAt ?? now) : now;
     if (parsed.status !== "denied") {
       set(request.dataset, id, ACCM.status, ACCM.Denied, true);
       set(request.dataset, id, `${ACCM.ns}decidedAt`, decidedAt);
       await cas(request, fetchFn);
     }
-    const denialId = await deriveGrantId(id, [], options.webId);
-    const { receiptUrl } = urls(storage, denialId);
+    // A pinned approval that never reached Approving becomes this denial, so it never resumes.
+    await settleRecord(slot, id, "denied", undefined, fetchFn);
+    const { receiptUrl } = urls(storage, await deriveGrantId(slot.url, [], owner, "denial"));
     await put(
       receiptUrl,
       await receipt(receiptUrl, id, options, parsed.requester, decidedAt, parsed.purpose),
@@ -462,16 +574,17 @@ export async function decide(
   if (claimed) throw new Error("This request claims an approval that was never recorded");
   if (parsed.status !== "approved") requireStrongEtag(request.etag);
   let snapshot: Snapshot;
-  // A crash after pinning but before the Approving CAS leaves the request pending: resume the
-  // pinned decision without discovering targets again.
-  const pinned = parsed.status === "pending" ? await readIntent(intent, id, fetchFn) : undefined;
-  if (pinned !== undefined) {
-    snapshot = pinned;
-    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
-    await validateSnapshot(snapshot, parsed, options);
-    await moveToApproving(request, id, snapshot, fetchFn);
-  } else if (parsed.status === "pending") {
-    const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)];
+  let slot: Slot;
+  if (recorded !== undefined) {
+    // Resume only from the owner's record, never from the requester-authored notification. A
+    // pending request here crashed after pinning but before the Approving CAS.
+    snapshot = recorded.snapshot as Snapshot;
+    slot = await sealed();
+    if (parsed.status === "pending") assertSameChoices(snapshot, decision);
+    await validateSnapshot(snapshot, parsed, slot.url, options);
+    if (parsed.status === "pending") await moveToApproving(request, id, snapshot, fetchFn);
+  } else {
+    const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)].sort();
     if (dataTypes.length === 0 || !dataTypes.every((type) => parsed.dataTypes.includes(type)))
       throw new Error("Approved dataTypes must be a nonempty requested subset");
     // Concrete target claims never override class registrations or storage confinement.
@@ -480,14 +593,18 @@ export async function decide(
     }
     // Each approved type grants only its own requested modes, so narrowing the data types
     // can never carry a mode that was requested for an excluded type.
+    const viewer = decision.role === "viewer";
     const publicFetch = options.publicFetch && publicTransport(options.publicFetch, options.signal);
     const perTarget = new Map<string, Set<RequestMode>>();
+    const granted: string[] = [];
     for (const type of dataTypes) {
       const typeModes = (parsed.modesByType[type] ?? []).filter(
-        (mode) => decision.role !== "viewer" || mode === "read",
+        (mode) => !viewer || mode === "read",
       );
       if (typeModes.length === 0) continue;
+      granted.push(type);
       for (const target of await resolveTargets([type], options, fetchFn, publicFetch)) {
+        assertGrantable(target, storage);
         const modes = perTarget.get(target) ?? new Set<RequestMode>();
         for (const mode of typeModes) modes.add(mode);
         perTarget.set(target, modes);
@@ -512,43 +629,54 @@ export async function decide(
       await checkGrant(
         target,
         storage,
-        options.webId,
+        owner,
         parsed.requester,
         targetModes[target] as RequestMode[],
         fetchFn,
       );
     }
+    slot = await sealed();
     snapshot = {
-      grantId: await deriveGrantId(id, targets, options.webId),
+      grantId: await deriveGrantId(slot.url, targets, owner),
       targets,
       agent: parsed.requester,
       modes,
       targetModes,
-      dataTypes,
+      dataTypes: granted,
       schemaVersion: "1",
       decidedAt: now,
+      chosen: { dataTypes, viewer },
       ...(parsed.purpose !== undefined && { purpose: parsed.purpose }),
       ...(decision.expiresAt !== undefined && { expiresAt: decision.expiresAt.toISOString() }),
     };
-    // Records (including this pin) only ever live in a folder only the owner can read.
-    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
-    // Pin the decision in the owner's records first. If an earlier attempt already pinned one,
-    // resume that decision (forward-only) and ignore this call's overrides.
-    if (!(await writeIntent(intent, id, snapshot, fetchFn))) {
-      snapshot = (await readIntent(intent, id, fetchFn)) as Snapshot;
+    // Check the decision before pinning it, so a pin can always be resumed.
+    await validateSnapshot(snapshot, parsed, slot.url, options);
+    // Pin the decision in the owner's records first. If a concurrent call pinned this slot first,
+    // resume its decision (forward-only) when the choices match.
+    if (
+      !(await put(
+        slot.url,
+        await recordBody(slot.url, id, "approving", snapshot),
+        fetchFn,
+        null,
+        true,
+      ))
+    ) {
+      const winner = await readRecord(slot.url, id, fetchFn);
+      if (winner?.outcome !== "approving") throw new RequestConflictError(id, "pending");
+      snapshot = winner.snapshot as Snapshot;
+      slot = { url: slot.url, record: winner };
+      assertSameChoices(snapshot, decision);
+      await validateSnapshot(snapshot, parsed, slot.url, options);
     }
-    await validateSnapshot(snapshot, parsed, options);
     await moveToApproving(request, id, snapshot, fetchFn);
-  } else {
-    // Resume only from the owner's record, never from the requester-authored notification.
-    snapshot = recorded as Snapshot;
-    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
   }
-  await validateSnapshot(snapshot, parsed, options);
   const locations =
     parsed.status === "approved"
       ? urls(storage, snapshot.grantId)
       : await complete(request, snapshot, options, fetchFn);
+  // A finished approval never resumes for a later request at the same address.
+  await settleRecord(slot, id, "approved", snapshot, fetchFn);
   return {
     status: "approved",
     ...locations,
