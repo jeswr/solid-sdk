@@ -1,4 +1,5 @@
 @prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix interop: <http://www.w3.org/ns/solid/interop#>.
 @prefix pim: <http://www.w3.org/ns/pim/space#>.
 @prefix solid: <http://www.w3.org/ns/solid/terms#>.
 @prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
@@ -16,5 +17,6 @@
     vcard:hasPhoto "{{base.path}}profile/photo.jpg";
     {{#if oidcIssuer}}solid:oidcIssuer <{{oidcIssuer}}>;{{/if}}
     solid:publicTypeIndex <{{base.path}}profile/type-index>;
+    {{#if saiRegistry}}interop:hasRegistrySet <{{base.path}}registries/set>;{{/if}}
     pim:storage <{{base.path}}>;
     a foaf:Person.

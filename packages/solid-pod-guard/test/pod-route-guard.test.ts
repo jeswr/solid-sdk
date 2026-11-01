@@ -25,7 +25,7 @@ import {
 import { assertAllowedPodBase } from "../src/pod.js";
 import { type DevOidcIssuer, startDevOidcIssuer } from "./dev-issuer.js";
 import { type SolidTestServer, startSolidServer } from "./harness.js";
-import { seedPod } from "./seed.js";
+import { seedPod, storageRootFetch } from "./seed.js";
 
 const APP_ORIGIN = "http://127.0.0.1";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#storage";
@@ -99,7 +99,7 @@ beforeAll(async () => {
     allowInsecureLoopback: true,
     trustForwardedHeaders: false,
   };
-  guard = createPodRouteGuard({ config });
+  guard = createPodRouteGuard({ ownerSeams: { podFetch: storageRootFetch }, config });
 }, 120_000);
 
 afterAll(async () => {
@@ -121,6 +121,7 @@ describe("anonymous callers (L1)", () => {
 
   test("an unconfigured issuer allowlist fails the rail closed (503)", async () => {
     const unconfigured = createPodRouteGuard({
+      ownerSeams: { podFetch: storageRootFetch },
       config: { ...config, trustedOidcIssuers: [] },
     });
     const response = await unconfigured.handle(new Request(apiUrl("/pod")), echoHandler);
@@ -201,6 +202,7 @@ describe("param overrides are rejected loudly (L2.4)", () => {
     const counting = createPodRouteGuard({
       config,
       ownerSeams: {
+        podFetch: storageRootFetch,
         profileFetch: (input, init) => {
           profileFetches += 1;
           return fetch(input, { ...init, redirect: "error" });
@@ -253,6 +255,7 @@ describe("body DoS containment (size cap enforced while the stream is consumed)"
     const counting = createPodRouteGuard({
       config,
       ownerSeams: {
+        podFetch: storageRootFetch,
         profileFetch: (input, init) => {
           profileFetches += 1;
           return fetch(input, { ...init, redirect: "error" });
@@ -369,6 +372,7 @@ describe("pod base URLs never carry a query or fragment (profile-card confusion)
     const confused = await startDevOidcIssuer({ storage: `${podBase}#attack` });
     try {
       const scoped = createPodRouteGuard({
+        ownerSeams: { podFetch: storageRootFetch },
         config: configWith({ issuers: [confused.issuer] }),
       });
       const response = await scoped.handle(
@@ -410,6 +414,7 @@ describe("cross-pod substitution is rejected (L2)", () => {
     const bareIssuer = await startDevOidcIssuer({ storage: bareBase });
     try {
       const scoped = createPodRouteGuard({
+        ownerSeams: { podFetch: storageRootFetch },
         config: configWith({ issuers: [bareIssuer.issuer], origins: [bare.baseUrl] }),
       });
       const response = await scoped.handle(
@@ -428,6 +433,7 @@ describe("cross-pod substitution is rejected (L2)", () => {
     const outside = await startDevOidcIssuer({ storage: "https://evil.example/" });
     try {
       const scoped = createPodRouteGuard({
+        ownerSeams: { podFetch: storageRootFetch },
         config: configWith({ issuers: [outside.issuer] }),
       });
       const response = await scoped.handle(
@@ -453,6 +459,7 @@ describe("cross-pod substitution is rejected (L2)", () => {
     const greedy = await startDevOidcIssuer({ storage: [podBase, secondBase] });
     try {
       const scoped = createPodRouteGuard({
+        ownerSeams: { podFetch: storageRootFetch },
         config: configWith({ issuers: [greedy.issuer], origins: [second.baseUrl] }),
       });
       const response = await scoped.handle(await authedRequest(greedy, "GET", "/pod"), echoHandler);
@@ -466,6 +473,7 @@ describe("cross-pod substitution is rejected (L2)", () => {
 
   test("an unconfigured pod allowlist fails the rail closed (503) even for a verified caller", async () => {
     const scoped = createPodRouteGuard({
+      ownerSeams: { podFetch: storageRootFetch },
       config: { ...config, allowedPodOrigins: [] },
     });
     const response = await scoped.handle(await authedRequest(borrower, "GET", "/pod"), echoHandler);
@@ -526,7 +534,9 @@ describe("resolveAuthorizedPod over real pod HTTP (L2)", () => {
     const webid = `${base}profile/card#me`;
     await seedPod(account.baseUrl, [{ path: "/profile/card", body: ackCard(webid, base) }]);
     const scoped = configWith({ origins: [account.baseUrl] });
-    await expect(resolveAuthorizedPod(webid, scoped)).resolves.toBe(base);
+    await expect(resolveAuthorizedPod(webid, scoped, { podFetch: storageRootFetch })).resolves.toBe(
+      base,
+    );
   }, 60_000);
 
   test("an unreachable WebID profile document is 502 (never an open pass)", async () => {
