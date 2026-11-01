@@ -1,17 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { appFromEnvironment } from "./config.js";
 import { podRootFor } from "./pod.js";
 import { createSingleUserApp } from "./single-user.js";
 
-it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-memory token caching", async () => {
+afterEach(() => vi.unstubAllEnvs());
+
+it.each([
+  "https://pod.example/",
+  "http://127.0.0.1:3000/",
+])("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and token caching (%s)", async (issuer) => {
   const upstream = vi.fn<typeof fetch>(async (input, init) => {
     const url = input instanceof Request ? input.url : input.toString();
     const request = new Request(input, init);
     if (url.endsWith("/.well-known/openid-configuration"))
       return Response.json({
-        issuer: "https://pod.example/",
-        token_endpoint: "https://pod.example/token",
+        issuer,
+        token_endpoint: `${issuer}token`,
       });
     if (url.endsWith("/token")) {
       expect(request.headers.get("authorization")).toMatch(/^Basic /);
@@ -27,7 +32,7 @@ it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-
     if (request.method === "HEAD")
       return new Response(null, {
         headers: {
-          link: '<https://pod.example/.well-known/solid>; rel="http://www.w3.org/ns/solid/terms#storageDescription", <http://www.w3.org/ns/pim/space#Storage>; rel="type", <http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+          link: `<${issuer}.well-known/solid>; rel="http://www.w3.org/ns/solid/terms#storageDescription", <http://www.w3.org/ns/pim/space#Storage>; rel="type", <http://www.w3.org/ns/ldp#BasicContainer>; rel="type"`,
         },
       });
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
@@ -40,10 +45,11 @@ it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-
   const options = {
     publicOrigin: "https://mcp.example",
     accessToken: "t".repeat(43),
-    credentials: { issuer: "https://pod.example/", id: "account", secret: "private" },
-    podRoot: "https://pod.example/alice/",
-    webId: "https://pod.example/alice/profile/card#me",
+    credentials: { issuer, id: "account", secret: "private" },
+    podRoot: `${issuer}alice/`,
+    webId: `${issuer}alice/profile/card#me`,
     upstreamFetch: upstream,
+    allowInsecureLoopback: issuer.startsWith("http:"),
   };
   const app = await createSingleUserApp(options);
   const call = (name: string, args: unknown, token = options.accessToken) =>
@@ -112,4 +118,29 @@ it("fails closed on configuration errors, private stores on Vercel and ambiguous
       async () => new Response("", { headers: { "content-type": "text/turtle" } }),
     ),
   ).rejects.toThrow("exactly one");
+});
+
+it("keeps HTTP credentials restricted to explicit loopback development", async () => {
+  const upstreamFetch = vi.fn<typeof fetch>();
+  const options = {
+    publicOrigin: "https://mcp.example",
+    accessToken: "t".repeat(43),
+    credentials: { issuer: "http://127.0.0.1:3000/", id: "account", secret: "fixture" },
+    podRoot: "http://127.0.0.1:3000/alice/",
+    webId: "http://127.0.0.1:3000/alice/profile/card#me",
+    upstreamFetch,
+  };
+  await expect(createSingleUserApp(options)).rejects.toThrow("requires HTTPS");
+  await expect(
+    createSingleUserApp({
+      ...options,
+      allowInsecureLoopback: true,
+      podRoot: "http://pod.example/alice/",
+    }),
+  ).rejects.toThrow("requires HTTPS");
+  vi.stubEnv("NODE_ENV", "production");
+  await expect(createSingleUserApp({ ...options, allowInsecureLoopback: true })).rejects.toThrow(
+    "local development only",
+  );
+  expect(upstreamFetch).not.toHaveBeenCalled();
 });

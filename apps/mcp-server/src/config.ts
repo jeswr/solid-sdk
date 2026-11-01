@@ -26,6 +26,7 @@ export async function appFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
   if (env.MCP_MODE === "single-user")
     return createSingleUserApp({
       ...options,
+      allowInsecureLoopback: env.MCP_ALLOW_LOOPBACK === "true",
       accessToken: required("MCP_ACCESS_TOKEN"),
       podRoot: required("SOLID_MCP_POD_ROOT"),
       webId: required("SOLID_MCP_WEBID"),

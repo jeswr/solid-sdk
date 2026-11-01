@@ -16,6 +16,7 @@ export interface SingleUserOptions {
   readOnly?: boolean;
   allowedOrigins?: readonly string[];
   upstreamFetch?: typeof fetch;
+  allowInsecureLoopback?: boolean;
 }
 
 /** Explicit service-account mode; a separate operator bearer protects the MCP endpoint. */
@@ -27,7 +28,12 @@ export async function createSingleUserApp(options: SingleUserOptions) {
   const credentials = { ...options.credentials };
   const transport = refuseRedirects(
     options.upstreamFetch ??
-      createNodeGuardedFetch({ maxBytes: 1024 * 1024, timeoutMs: 8_000, maxRedirects: 0 }),
+      createNodeGuardedFetch({
+        allowLoopback: options.allowInsecureLoopback === true,
+        maxBytes: 1024 * 1024,
+        timeoutMs: 8_000,
+        maxRedirects: 0,
+      }),
   );
   const issuer = new URL(credentials.issuer);
   publicOrigin(issuer.origin);
@@ -36,6 +42,7 @@ export async function createSingleUserApp(options: SingleUserOptions) {
     clientId: credentials.id,
     clientSecret: credentials.secret,
     boundary: [podRoot],
+    allowInsecureLoopback: options.allowInsecureLoopback,
     fetch: transport,
   });
   const fetcher: typeof fetch = async (input, init) => {

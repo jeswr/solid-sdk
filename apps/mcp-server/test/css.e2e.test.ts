@@ -11,9 +11,9 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { appFromEnvironment } from "../src/config.js";
 import { createApp } from "../src/handler.js";
 import { nodeHandler } from "../src/node-handler.js";
-import { createSingleUserApp } from "../src/single-user.js";
 import { CookieJar, CSS, completeCssLogin, cssAccount, MCP, startCss } from "./css.js";
 import { navigation } from "./navigation.js";
 
@@ -286,20 +286,18 @@ it("reads private local CSS through single-user client credentials and a separat
   const account = await cssAccount();
   expect([401, 403]).toContain((await fetch(account.privateUrl)).status);
   const bearer = randomBytes(32).toString("base64url");
-  const app = await createSingleUserApp({
-    publicOrigin: MCP,
-    accessToken: bearer,
-    credentials: account.credentials,
-    podRoot: account.podRoot,
-    webId: account.webId,
-    upstreamFetch: async (input, init) => {
-      const request = new Request(input, init);
-      if (new URL(request.url).origin !== new URL(CSS).origin)
-        throw new Error("Single-user fixture escaped CSS");
-      expect(request.headers.get("authorization")?.includes(bearer)).not.toBe(true);
-      return fetch(request, { redirect: "manual" });
-    },
-  });
+  const env = {
+    MCP_MODE: "single-user",
+    MCP_PUBLIC_ORIGIN: MCP,
+    MCP_ACCESS_TOKEN: bearer,
+    SOLID_MCP_ISSUER: account.credentials.issuer,
+    SOLID_MCP_CLIENT_ID: account.credentials.id,
+    SOLID_MCP_CLIENT_SECRET: account.credentials.secret,
+    SOLID_MCP_POD_ROOT: account.podRoot,
+    SOLID_MCP_WEBID: account.webId,
+  };
+  await expect(appFromEnvironment(env)).rejects.toThrow();
+  const app = await appFromEnvironment({ ...env, MCP_ALLOW_LOOPBACK: "true" });
   const client = new Client({ name: "single-user-css-e2e", version: "1" });
   clients.push(client);
   await client.connect(
