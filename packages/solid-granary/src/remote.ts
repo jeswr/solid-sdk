@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * OPTIONAL fetch-from-granary helper — GET a granary REST endpoint (e.g.
  * `granary.io`) and return its parsed `format=as2` payload.
@@ -86,13 +87,9 @@ export async function fetchGranary(
   try {
     res = await guarded(url, {
       method: "GET",
-      // Fail closed on redirects at THIS layer too. The default `nodeGuardedFetch`
-      // already re-validates + re-pins every hop internally (so it FOLLOWS safe
-      // redirects and returns a 2xx), and overrides this flag with its own manual
-      // loop — so this is a no-op for the guarded path. But if a caller injects their
-      // OWN `fetch` (options.fetch), `redirect: "manual"` stops it from silently
-      // auto-following a redirect to another origin; the 3xx check below then rejects.
-      redirect: "manual",
+      // The default guard re-validates and re-pins every hop, so it may follow. An
+      // injected fetch must not silently follow another origin: the 3xx check below refuses.
+      redirect: options.fetch ? "manual" : "follow",
       headers: {
         accept: "application/activity+json, application/ld+json, application/json",
       },
@@ -105,9 +102,7 @@ export async function fetchGranary(
     throw new GranaryFetchError(`granary fetch failed: ${url}`, url, { cause: err });
   }
 
-  // Fail closed on a redirect (an injected non-guarded fetch could otherwise be told
-  // to follow one). The default guarded fetch already followed+re-validated safe hops
-  // and returns a 2xx, so this never fires for the guarded path.
+  // Fail closed on a redirect an injected fetch was told not to follow.
   if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
     throw new GranaryFetchError(
       `granary endpoint returned a redirect (${res.type || res.status}); not followed`,

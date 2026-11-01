@@ -4,6 +4,7 @@
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
+import type { ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
 
@@ -75,12 +76,14 @@ export function memoiseResolveFetch(fetch: ResolveFetch): ResolveFetch {
   };
 }
 
-function parse(body: Document): ParsedDocument | null {
+function parse(body: Document, budget?: ResolutionBudget): ParsedDocument | null {
   if (!body.ok) return null;
   try {
     return {
       url: body.url,
-      store: new Store(new Parser({ baseIRI: documentUrl(body.url) }).parse(body.text)),
+      store: budget
+        ? budget.parse(body.url, body.text)
+        : new Store(new Parser({ baseIRI: documentUrl(body.url) }).parse(body.text)),
     };
   } catch {
     return null;
@@ -88,20 +91,25 @@ function parse(body: Document): ParsedDocument | null {
 }
 
 /** Subject-specific, NamedNode-only HTTP(S) links; unrelated triples confer no discovery. */
-function refs(doc: ParsedDocument, subject: string, predicate: string): string[] {
-  const links = doc.store.getQuads(
+function* refs(
+  doc: ParsedDocument,
+  subject: string,
+  predicate: string,
+  budget?: ResolutionBudget,
+): Generator<string> {
+  const seen = new Set<string>();
+  for (const { object } of doc.store.readQuads(
     DataFactory.namedNode(subject),
     DataFactory.namedNode(predicate),
     null,
     null,
-  );
-  return [
-    ...new Set(
-      links.flatMap(({ object }) =>
-        object.termType === 'NamedNode' && httpUrl(object.value) ? [object.value] : [],
-      ),
-    ),
-  ];
+  )) {
+    if (budget && !budget.active()) return;
+    if (object.termType !== 'NamedNode' || seen.has(object.value) || !httpUrl(object.value))
+      continue;
+    seen.add(object.value);
+    yield object.value;
+  }
 }
 
 function isAuthenticated(url: string, opts: ResolveOptions): boolean {
@@ -135,18 +143,24 @@ function registrationTarget(
 function matchesClass(doc: ParsedDocument, shape: string, classIRI: string): boolean {
   const node = DataFactory.namedNode(shape);
   return (
-    doc.store.countQuads(
-      node,
-      DataFactory.namedNode(RDF_TYPE),
-      DataFactory.namedNode(`${SH}NodeShape`),
-      null,
-    ) > 0 &&
-    doc.store.countQuads(
-      node,
-      DataFactory.namedNode(`${SH}targetClass`),
-      DataFactory.namedNode(classIRI),
-      null,
-    ) > 0
+    !doc.store
+      .readQuads(
+        node,
+        DataFactory.namedNode(RDF_TYPE),
+        DataFactory.namedNode(`${SH}NodeShape`),
+        null,
+      )
+      [Symbol.iterator]()
+      .next().done &&
+    !doc.store
+      .readQuads(
+        node,
+        DataFactory.namedNode(`${SH}targetClass`),
+        DataFactory.namedNode(classIRI),
+        null,
+      )
+      [Symbol.iterator]()
+      .next().done
   );
 }
 
@@ -155,8 +169,10 @@ export async function resolveSaiTargets(
   classIRI: string,
   opts: ResolveOptions,
   profile: Document,
+  found?: ClassTargetCollector,
 ): Promise<ClassResolution> {
   opts = { ...opts, fetch: memoiseResolveFetch(opts.fetch) };
+  const active = () => !opts.signal?.aborted && (!opts.budget || opts.budget.active());
   const targets: ResolvedTarget[] = [];
   let truncated = false;
   const registries = new Set<string>();
@@ -164,22 +180,31 @@ export async function resolveSaiTargets(
   const shapeDocuments = new Map<string, Promise<ParsedDocument | null>>();
   // Both tree and external shape documents count against one budget, including failed reads.
   const publicShapes = async (url: string): Promise<ParsedDocument | null> => {
+    if (!active()) return null;
     const key = documentUrl(httpUrl(url)?.href ?? url);
     const cached = shapeDocuments.get(key);
     if (cached) return cached;
-    if (shapeDocuments.size >= MAX_SHAPE_DOCUMENTS) {
+    if (
+      shapeDocuments.size >= MAX_SHAPE_DOCUMENTS ||
+      (opts.budget && !opts.budget.saiDocument('shapes', key, MAX_SHAPE_DOCUMENTS))
+    ) {
       truncated = true;
       return null;
     }
-    const read = opts.fetch(url, false).then(parse);
+    opts.read?.allowDocument(url, false);
+    const read = opts
+      .fetch(url, false)
+      .then((body) => (active() ? parse(body, opts.budget) : null));
     shapeDocuments.set(key, read);
     return read;
   };
   const treeMatches = async (tree: string): Promise<boolean> => {
+    if (!active()) return false;
     if (CLASS_SHAPE_TREES.get(classIRI)?.includes(tree)) return true;
     const doc = await publicShapes(tree);
     if (!doc) return false;
-    for (const shape of refs(doc, tree, `${ST}shape`)) {
+    for (const shape of refs(doc, tree, `${ST}shape`, opts.budget)) {
+      if (!active()) break;
       if (matchesClass(doc, shape, classIRI)) return true;
       if (documentUrl(shape) === documentUrl(doc.url)) continue;
       const shapeDoc = await publicShapes(shape);
@@ -188,36 +213,55 @@ export async function resolveSaiTargets(
     return false;
   };
   const privateDocument = async (url: string): Promise<ParsedDocument | null> => {
-    if (!isAuthenticated(url, opts)) return null;
-    const doc = parse(await opts.fetch(url, true));
+    if (!active() || !isAuthenticated(url, opts)) return null;
+    opts.read?.allowDocument(url, true);
+    const body = await opts.fetch(url, true);
+    const doc = active() ? parse(body, opts.budget) : null;
     return doc && isAuthenticated(doc.url, opts) ? doc : null;
   };
-  const profileDoc = parse(profile);
+  const profileDoc = parse(profile, opts.budget);
   if (!profileDoc) return { targets, truncated };
-  for (const set of refs(profileDoc, opts.webId, `${INTEROP}hasRegistrySet`)) {
+  for (const set of refs(profileDoc, opts.webId, `${INTEROP}hasRegistrySet`, opts.budget)) {
+    if (!active()) break;
     const setDoc = await privateDocument(set);
     if (!setDoc) continue;
-    for (const registry of refs(setDoc, set, `${INTEROP}hasDataRegistry`)) {
+    for (const registry of refs(setDoc, set, `${INTEROP}hasDataRegistry`, opts.budget)) {
+      if (!active()) break;
       if (!isAuthenticated(registry, opts) || registries.has(registry)) continue;
-      if (registries.size >= MAX_REGISTRIES) {
+      if (
+        registries.size >= MAX_REGISTRIES ||
+        (opts.budget &&
+          !opts.budget.saiDocument('registries', documentUrl(registry), MAX_REGISTRIES))
+      ) {
         truncated = true;
         continue;
       }
       registries.add(registry);
       const registryDoc = await privateDocument(registry);
       if (!registryDoc) continue;
-      for (const registration of refs(registryDoc, registry, `${INTEROP}hasDataRegistration`)) {
+      for (const registration of refs(
+        registryDoc,
+        registry,
+        `${INTEROP}hasDataRegistration`,
+        opts.budget,
+      )) {
+        if (!active()) break;
         const url = registrationTarget(registry, registration, opts);
         if (!url || registrations.has(url)) continue;
-        if (registrations.size >= MAX_REGISTRATIONS) {
+        if (
+          registrations.size >= MAX_REGISTRATIONS ||
+          (opts.budget && !opts.budget.saiDocument('registrations', url, MAX_REGISTRATIONS))
+        ) {
           truncated = true;
           continue;
         }
         registrations.add(url);
         const doc = await privateDocument(registration);
         if (!doc || !registrationTarget(registry, doc.url, opts)) continue;
-        for (const tree of refs(doc, registration, `${INTEROP}registeredShapeTree`)) {
-          if (await treeMatches(tree)) {
+        for (const tree of refs(doc, registration, `${INTEROP}registeredShapeTree`, opts.budget)) {
+          if ((await treeMatches(tree)) && active()) {
+            opts.read?.allowTarget({ url, kind: 'container' });
+            found?.add({ url, kind: 'container' }, 'sai');
             targets.push({
               url,
               kind: 'container',
@@ -234,25 +278,39 @@ export async function resolveSaiTargets(
   return { targets, truncated };
 }
 
-/** Merge only rung-produced targets; kind is part of identity, provenance is unioned. */
-export function mergeClassTargets(
-  sai: ClassResolution,
-  indexed: readonly PinnedTarget[],
-): ClassResolution {
-  const targets = new Map<string, ResolvedTarget>();
-  const add = (target: PinnedTarget, source: TargetSource) => {
+/** Incremental provenance merging keeps finalization constant-time when the budget expires. */
+export class ClassTargetCollector {
+  readonly targets: ResolvedTarget[] = [];
+  private readonly indices = new Map<string, number>();
+
+  add(target: PinnedTarget, source: TargetSource): void {
     const key = `${target.kind} ${target.url}`;
-    const previous = targets.get(key);
-    const sources = [...new Set([...(previous?.sources ?? []), source])];
-    targets.set(key, {
+    const index = this.indices.get(key);
+    const previous = index === undefined ? undefined : this.targets[index];
+    const sources = previous?.sources.includes(source)
+      ? previous.sources
+      : [...(previous?.sources ?? []), source];
+    const resolved: ResolvedTarget = {
       url: target.url,
       kind: target.kind,
       source: previous?.source ?? source,
       sources,
       check: 'unchecked',
-    });
-  };
-  for (const target of sai.targets) add(target, 'sai');
-  for (const target of indexed) add(target, 'type-index');
-  return { targets: [...targets.values()], truncated: sai.truncated };
+    };
+    if (index === undefined) {
+      this.indices.set(key, this.targets.length);
+      this.targets.push(resolved);
+    } else this.targets[index] = resolved;
+  }
+}
+
+/** Merge only rung-produced targets; kind is part of identity, provenance is unioned. */
+export function mergeClassTargets(
+  sai: ClassResolution,
+  indexed: readonly PinnedTarget[],
+): ClassResolution {
+  const found = new ClassTargetCollector();
+  for (const target of sai.targets) found.add(target, 'sai');
+  for (const target of indexed) found.add(target, 'type-index');
+  return { targets: found.targets, truncated: sai.truncated };
 }
