@@ -90,6 +90,8 @@ export interface ManifestField {
   kind: "iri" | "literal" | "nested";
   /** For a `nested` field: the name of the target sub-node within the composite. */
   node?: string;
+  /** Nested link's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
+  hasClass?: string;
   /** Present ⇒ the field is a live set; absent ⇒ a single value. */
   collection?: "set";
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
@@ -277,6 +279,7 @@ const FIELD_KEYS = new Set<string>([
   "aliasPredicates",
   "kind",
   "node",
+  "hasClass",
   "collection",
   "datatype",
   "minCount",
@@ -398,6 +401,7 @@ function validateNestedField(
     }
   }
   const field: ManifestField = { name, predicate, kind: "nested", node };
+  if (raw.hasClass !== undefined) field.hasClass = checkIri(raw.hasClass, "field.hasClass");
   if (raw.guards !== undefined) {
     if (!isObject(raw.guards)) fail("field.guards must be an object");
     assertKnownKeys(raw.guards, new Set(["requiredFailClosed"]), "nested field.guards");
@@ -430,6 +434,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     return validateNestedField(raw, name, predicate);
   }
   if (raw.node !== undefined) fail("field.node is only allowed on a nested field");
+  if (raw.hasClass !== undefined) fail("field.hasClass is only allowed on a nested field");
   if (raw.kind !== "iri" && raw.kind !== "literal") {
     fail('field.kind must be "iri", "literal", or "nested"');
   }

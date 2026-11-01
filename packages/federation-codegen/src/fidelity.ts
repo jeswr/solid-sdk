@@ -453,6 +453,11 @@ function assertCompositeFidelity(
             `composite ${composite.name} node "${node.name}" nested link ${field.name} maps the multi-valued shape property ${field.predicate} (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1)`,
           );
         }
+        if (field.hasClass !== constraint.hasClass) {
+          throw new FidelityError(
+            `composite ${composite.name} link ${field.name} changes or drops sh:class`,
+          );
+        }
         const target = composite.nodes.find((candidate) => candidate.name === field.node);
         if (
           target?.typeIris.length !== 1 ||

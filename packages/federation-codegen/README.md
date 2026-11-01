@@ -148,9 +148,14 @@ generates a single composite entity over the runtime's composite kind:
   FLAT fields (with an optional `rename`, since the composite is ONE flat object — `dct:title` on a
   Track and an Album need distinct names); its `links` project **IRI-link** properties as `nested`
   links to a sub-node (the shape parser reads `sh:class` / `sh:node` / `sh:nodeKind sh:IRI`). The
-  target must conform to both `sh:class` and the exact referenced `sh:node` shape. Class checks
-  accept only identity or explicit input-ontology `rdfs:subClassOf` ancestry (cycle-bounded);
-  no inferred similarity or alignment is used. The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
+  target must conform to both `sh:class` and the exact referenced `sh:node` shape. Generation
+  checks canonical target compatibility using identity or explicit ontology ancestry, and
+  retains each link's `sh:class` as `hasClass` in the manifest. Fidelity checks it exactly.
+  This mapping check never proves a linked subject's class membership: the runtime checks
+  its actual types and `rdfs:subClassOf*` chains in the **data graph**, including for aliases.
+  Alias ancestry need not be declared in the ontology and ontology-only ancestry cannot
+  admit a class violation. Builds assert the explicit link class on materialised children.
+  The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
 - Compilation and fidelity reject incompatible IRI/datatype constraints and impossible
   `minCount > maxCount` on every property before projection, including nested links.
 - The **fidelity assertion** extends to the composite: every projected field traces to a shape

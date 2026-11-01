@@ -28,11 +28,15 @@ invariant, design §7.1).
 
 ## The guard inventory (design §7.3)
 
-Every read/write goes through, in the load-bearing order:
+Every read validates the original RDF term before projecting a JS value. Writes validate
+the spelling they will store. The guard inventory is:
 
 - **http(s)-only, injection-safe LEXICAL IRI filter** (`httpIriOrUndefined` / `isHttpIri`) — canonicalises
   via `URL.href`, then rejects any remaining Turtle IRIREF-forbidden character. Applied to IRI
   fields with `iriScheme: "http-https"` or the HTTPS-only `iriScheme: "https"` on read and write.
+  Reads check shape-derived term kind, lexical length, pattern and enum membership before
+  normalization. Enum IRIs keep their exact identity on reads and writes: scheme policy
+  filters them without rewriting. Other admitted IRIs retain bookmark normalization.
   Canonicalisation retains the imported bookmark contract; unlike `rdf-serialize`, this helper
   rejects surviving forbidden characters rather than escaping the lexical input.
 - **`tryRead` fail-closed field drops** — a malformed literal in untrusted pod data drops the field
@@ -115,7 +119,8 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   apply with `maxCount: 0`. Reads do not mutate the dataset.
 - Sets read the guarded, deduplicated union (Dates compare by instant). Their mutations
   migrate surviving members to the canonical predicate and remove alias triples. Parse checks
-  raw-union `maxCount` (including malformed terms) and guarded-union `minCount`.
+  raw-union `maxCount` (including malformed terms) and guarded raw-term-union `minCount`,
+  before deduplicating JS values. Required sets reject every invalid raw member.
 - Type checks accept canonical or alias types. `mark()` removes alias types, adds the
   canonical types, and preserves unrelated types. Builds and setters write canonical
   predicates only; every setter, including `undefined` or an invalid value, clears all
@@ -158,7 +163,12 @@ field names are **globally unique** across the composite (the projection is one 
   — an untrusted document may link anywhere), requiring an absolute http(s) NamedNode without
   IRIREF-forbidden characters and bounding the candidate scan. It follows the exact linked term
   without URL canonicalisation. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
-  failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), an unsafe IRI, or an
+  also enforces any retained `hasClass` (`sh:class`): the linked subject must have that type,
+  or a type reaching it through `rdfs:subClassOf*` in the **data graph**. Build-time ontology
+  ancestry never proves data membership. Traversal is cycle-safe and capped at 10,000 raw
+  type/subclass reads per link; exceeding the cap fails the link closed. Builds explicitly
+  assert the link's class on a materialised child so their data needs no ontology inference.
+  Link-resolution failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), an unsafe IRI, or an
   over-budget fan-out — is graded by the link: a `requiredFailClosed` cross-node link **rejects the
   WHOLE composite** (a titled `Track` + a valid `Instant` MUST be reachable); a Warning/Info (optional)
   link simply drops its sub-node's fields and admits (an otherwise-usable document is never rejected
@@ -166,7 +176,8 @@ field names are **globally unique** across the composite (the projection is one 
   into one flat object.
 
 The composite manifest is validated **fail-closed** (the tree invariant — one root, every non-root node
-exactly one incoming link, acyclic + spanning; a `nested` field carries no data-shape key and only the
+exactly one incoming link, acyclic + spanning; a `nested` field may retain a safe absolute
+`hasClass` IRI, carries no scalar data-shape key and only the
 `requiredFailClosed` guard; composite documents are http(s)-scoped, matching the suite IRI discipline).
 
 ## Install

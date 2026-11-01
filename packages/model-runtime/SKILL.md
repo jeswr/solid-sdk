@@ -50,7 +50,10 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   Reject instead of escaping: `rdf-serialize`'s `escapeIri` percent-encodes forbidden
   characters and changes identity, while `n3.Writer` does not validate IRIREF safety.
 - Every IRI field with `iriScheme: "http-https"` or `iriScheme: "https"` goes through `httpIriOrUndefined` on read
-  and write. Do not add a bypass; widen schemes only with a new reviewed guard.
+  and write. On reads, first validate SHACL constraints on the original RDF term's exact
+  lexical spelling; normalization only projects an already-admitted value. IRI enum members
+  retain their exact identity on reads and writes; the scheme filter checks but never
+  rewrites them. Do not widen schemes without a new reviewed guard.
 - A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse when
   missing, malformed, ambiguous, or outside its set cardinality bounds. Optional fields drop.
   Required sets also reject any invalid raw member; optional sets retain valid members.
@@ -75,7 +78,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   cannot satisfy `requiredFailClosed`, and never apply with `maxCount: 0`.
   Each predicate checks distinct raw terms and maxCount before mapping: ambiguity or a
   cardinality violation drops the field without alias fallback; a required field rejects.
-  Sets expose the guarded union; parse checks raw-union maxCount and guarded-union minCount.
+  Sets expose the guarded union; parse checks raw-union maxCount and guarded raw-term-union
+  minCount before deduplicating the JS projection. Required sets reject invalid raw members.
   Reads never mutate. Set mutations migrate retained
   members. Setters clear aliases even on `undefined`/invalid input; `mark` clears alias
   types. Serialisation migrates known aliases in a copy and writes canonical IRIs only.
@@ -91,6 +95,11 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   A linked NamedNode must be an absolute http(s) IRI without IRIREF-forbidden characters.
   Follow that exact term without URL canonicalisation; an unsafe required link rejects
   the record and an optional link drops its subtree.
+- Retain a composite link's `sh:class` as `hasClass`. Check the linked subject's actual
+  `rdf:type` values and `rdfs:subClassOf*` chains in the data graph, never the build-time
+  ontology. Bound traversal to 10,000 raw reads per link and track visited class terms;
+  absence, cycles without membership, and budget exhaustion fail the link closed with its
+  required/optional grading. Builds assert the explicit link class on materialised children.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
   belongs in the consuming package's facade, not in this runtime.
 - Changes here are security-critical: add an adversarial test that fails before the fix.

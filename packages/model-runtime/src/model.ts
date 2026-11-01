@@ -46,6 +46,7 @@ import {
 import { serializeTurtle } from "./rdf.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDFS_SUBCLASS = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
 
 /** Defense in depth for public type mutations and structural NamedNode writes. */
 const safeNamedNodeFrom: ITermFromValueMapping<string> = (value, factory) => {
@@ -159,26 +160,38 @@ function hasIriSchemeGuard(field: ManifestField): boolean {
 
 function fieldIri(field: ManifestField, value: unknown): string | undefined {
   const iri = httpIriOrUndefined(value);
-  return field.guards?.iriScheme === "https" && !iri?.startsWith("https:") ? undefined : iri;
+  if (iri === undefined || (field.guards?.iriScheme === "https" && !iri.startsWith("https:")))
+    return undefined;
+  // sh:in names RDF identities. Scheme policy may filter a member, never rewrite
+  // it or admit a normalized lookalike that is absent from the enumeration.
+  if (field.in !== undefined)
+    return typeof value === "string" && field.in.includes(value) ? value : undefined;
+  return iri;
 }
 
-/** Shape patterns inspect RDF spelling before any scheme-policy normalization. */
+/** JS projection policy, applied only after the raw RDF term passed its constraints. */
+function projectValue(plan: FieldPlan, value: unknown): unknown {
+  return hasIriSchemeGuard(plan.field)
+    ? fieldIri(plan.field, value)
+    : applyDatatypeValidity(plan.mapper, value);
+}
+
+/** All term/lexical constraints precede scheme-policy normalization on reads. */
 function readTerm(doc: TermWrapper, plan: FieldPlan, term: Term): unknown {
   const { field, mapper } = plan;
   if (!enumTermMatches(doc, plan, term)) return undefined;
-  const pattern = field.guards?.iriPattern;
-  if (pattern !== undefined) {
-    if (term.termType !== "NamedNode") return undefined;
-    const matches =
-      term.value.startsWith("https://") ||
-      (pattern === "http-https" && term.value.startsWith("http://"));
-    if (!matches) return undefined;
-  }
   const raw = tryRead(() => mapper.as(new TermWrapper(term, doc.dataset, doc.factory)));
-  const value = hasIriSchemeGuard(field)
-    ? fieldIri(field, raw)
-    : applyDatatypeValidity(mapper, raw);
-  return applyScalarGuards(field, value);
+  // IRI lexical safety is projection policy: the bookmark contract permits the
+  // scheme filter to remove URL noise. Term kind and SHACL lexical guards still
+  // inspect the original spelling; literal datatype checks never repair input.
+  const valid =
+    field.kind === "iri"
+      ? typeof raw === "string"
+        ? raw
+        : undefined
+      : applyDatatypeValidity(mapper, raw);
+  const checked = applyScalarGuards(field, valid);
+  return projectValue(plan, checked);
 }
 
 /**
@@ -215,6 +228,12 @@ function applyScalarGuards(field: ManifestField, value: unknown): unknown {
     if (g.maxInclusive !== undefined && value > g.maxInclusive) return undefined;
   }
   if (typeof value === "string") {
+    if (
+      g.iriPattern !== undefined &&
+      !value.startsWith("https://") &&
+      !(g.iriPattern === "http-https" && value.startsWith("http://"))
+    )
+      return undefined;
     // minLength counts Unicode CODE POINTS (not UTF-16 code units) to match
     // SHACL/XSD character-length semantics for astral characters.
     if (g.minLength !== undefined && [...value].length < g.minLength) return undefined;
@@ -259,22 +278,6 @@ function applyDatatypeValidity(mapper: DatatypeMapper, value: unknown): unknown 
 }
 
 /**
- * The raw NamedNode object VALUES of `(doc, predicate, *)`, read straight from the
- * dataset — NOT through a mapper. Non-NamedNode objects (a literal / blank node
- * planted on an IRI predicate by hostile pod data) are SKIPPED, so a malformed
- * term can never throw the read (fail-closed); the @rdfjs/wrapper `NamedNodeAs`
- * mapper would throw on such a term, so the filtered set must not use it for reads.
- */
-function rawNamedNodeValues(doc: TermWrapper, predicate: string): string[] {
-  const pred = doc.factory.namedNode(predicate);
-  const out: string[] = [];
-  for (const q of doc.dataset.match(doc as unknown as Term, pred, null, null)) {
-    if (q.object.termType === "NamedNode") out.push(q.object.value);
-  }
-  return out;
-}
-
-/**
  * Lazily yield the OBJECT terms of `(subject, predicate, *)` WITHOUT materialising the
  * full match — so a caller can stop early after a bounded number of reads. Prefers n3's
  * lazy `readQuads` generator (which yields on demand and can be abandoned mid-stream);
@@ -299,8 +302,8 @@ function* matchObjects(dataset: DatasetCore, subject: Term, predicate: Term): Ge
  * passes through the datatype + scalar guards fail-closed — a direct
  * `wrapper.field.add("P1W")` (xsd:duration) or `.add(0)` (minInclusive 1) can no
  * longer land an invalid member, and a pre-existing invalid member in untrusted pod
- * data is not surfaced on read. IRI sets apply the scheme filter before scalar
- * guards; all other sets check datatype validity before the same scalar guards.
+ * data is not surfaced on read. Reads validate raw terms before projection;
+ * writes validate the term spelling that will actually be stored.
  * The base writes through @rdfjs/wrapper, while reads isolate malformed raw terms.
  */
 function makeGuardedSet(
@@ -310,12 +313,12 @@ function makeGuardedSet(
   field: ManifestField,
   mapper: DatatypeMapper,
 ): Set<unknown> {
-  const iri = hasIriSchemeGuard(field);
+  const plan = { field, mapper };
   const guard = (value: unknown): unknown => {
     // For an IRI-scheme field, CANONICALISE first (strip padding, normalise) so the
     // scalar guards (e.g. minLength) evaluate the STORED canonical form, not the raw
     // padded input — otherwise a padded IRI could pass minLength then be stored short.
-    const v = iri ? fieldIri(field, value) : applyDatatypeValidity(mapper, value);
+    const v = projectValue(plan, value);
     return applyScalarGuards(field, v);
   };
   // Read members from the RAW dataset, mapping each object term inside `tryRead` so a
@@ -325,8 +328,7 @@ function makeGuardedSet(
   const validMembers = (): unknown[] => {
     const out: unknown[] = [];
     const seen = new Set<string>();
-    const push = (mapped: unknown) => {
-      const g = guard(mapped);
+    const push = (g: unknown) => {
       if (g === undefined) return;
       // Dedup by VALUE. `String(date)` drops milliseconds (two distinct instants in
       // the same second would wrongly dedup), so a Date keys by its ISO instant.
@@ -337,7 +339,7 @@ function makeGuardedSet(
     };
     const pred = doc.factory.namedNode(predicate);
     for (const q of doc.dataset.match(doc as unknown as Term, pred, null, null)) {
-      push(readTerm(doc, { field, mapper }, q.object));
+      push(readTerm(doc, plan, q.object));
     }
     return out;
   };
@@ -348,7 +350,9 @@ function makeGuardedSet(
       return guarded;
     },
     delete(value: unknown) {
-      const g = guard(value);
+      // Query the projected value; shape constraints apply to stored RDF terms,
+      // whose lexical length may differ from this normalized JS value.
+      const g = projectValue(plan, value);
       if (g === undefined) return false;
       // Remove every stored member whose GUARDED (canonical) form matches — a
       // non-canonical equivalent (`<http://x.org>` vs `http://x.org/`, `"01"^^integer`
@@ -356,18 +360,9 @@ function makeGuardedSet(
       // would serialise only the CANONICAL literal and miss the stored quad, so the
       // raw dataset quads are scanned + compared by SameValueZero and deleted directly.
       let deleted = false;
-      if (iri) {
-        for (const raw of rawNamedNodeValues(doc, predicate)) {
-          if (fieldIri(field, raw) === g && base.delete(raw)) deleted = true;
-        }
-        return deleted;
-      }
       const pred = doc.factory.namedNode(predicate);
       for (const q of [...doc.dataset.match(doc as unknown as Term, pred, null, null)]) {
-        const mapped = tryRead(() =>
-          mapper.as(new TermWrapper(q.object, doc.dataset, doc.factory)),
-        );
-        const gm = guard(mapped);
+        const gm = readTerm(doc, plan, q.object);
         if (gm !== undefined && sameValueZero(gm, g)) {
           doc.dataset.delete(q);
           deleted = true;
@@ -376,7 +371,7 @@ function makeGuardedSet(
       return deleted;
     },
     has(value: unknown) {
-      const g = guard(value);
+      const g = projectValue(plan, value);
       // Membership by the SAME equality `delete` uses ({@link sameValueZero}: a NaN
       // member matches `has(NaN)` like a native `Set`, and a `Date` compares by
       // INSTANT) — every read mints a fresh `Date` object, so `Array.includes`
@@ -412,11 +407,8 @@ function makeGuardedSet(
 
 /** Read a single (non-set) field's value, applying read-side guards, fail-closed. */
 function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
-  const { field, mapper } = plan;
-  const normalise = (v: unknown): unknown =>
-    hasIriSchemeGuard(field)
-      ? applyScalarGuards(field, fieldIri(field, v))
-      : applyScalarGuards(field, applyDatatypeValidity(mapper, v));
+  const { field } = plan;
+  const normalise = (v: unknown): unknown => applyScalarGuards(field, projectValue(plan, v));
   let present = false;
   for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
     // Migration reads deliberately resolve canonical first. Check DISTINCT raw
@@ -683,10 +675,11 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
   writeSingle(doc, plan, v);
 }
 
-/** SHACL counts distinct raw RDF terms across the canonical/alias union, even invalid terms. */
-function exceedsMaximum(doc: TermWrapper, field: ManifestField): boolean {
-  if (field.maxCount === undefined) return false;
+/** Count distinct raw identities, before deduplication of the guarded JS projection. */
+function setTermsConform(doc: TermWrapper, plan: FieldPlan): boolean {
+  const { field } = plan;
   const seen = new Set<string>();
+  let validCount = 0;
   for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
     for (const term of matchObjects(
       doc.dataset,
@@ -697,11 +690,21 @@ function exceedsMaximum(doc: TermWrapper, field: ManifestField): boolean {
         term.termType === "Literal"
           ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
           : JSON.stringify([term.termType, term.value]);
+      if (seen.has(key)) continue;
       seen.add(key);
-      if (seen.size > field.maxCount) return true;
+      if (field.maxCount !== undefined && seen.size > field.maxCount) return false;
+      if (readTerm(doc, plan, term) === undefined) {
+        // A surviving member must never mask another raw member's Violation.
+        if (field.guards?.requiredFailClosed) return false;
+      } else {
+        // Optional sets retain their filtering policy, but even their minimum
+        // counts RDF identities, not the subsequently deduplicated JS values.
+        validCount++;
+      }
     }
   }
-  return false;
+  const min = Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0);
+  return validCount >= min;
 }
 
 /**
@@ -713,24 +716,8 @@ function exceedsMaximum(doc: TermWrapper, field: ManifestField): boolean {
 function readFlatFieldInto(doc: TermWrapper, plan: FieldPlan, data: EntityData): "ok" | "reject" {
   const { field } = plan;
   if (field.collection === "set") {
-    if (exceedsMaximum(doc, field)) return field.guards?.requiredFailClosed ? "reject" : "ok";
-    if (field.guards?.requiredFailClosed) {
-      // A surviving valid member cannot mask a Violation on another raw member.
-      for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
-        for (const term of matchObjects(
-          doc.dataset,
-          doc as unknown as Term,
-          doc.factory.namedNode(predicate),
-        )) {
-          if (readTerm(doc, plan, term) === undefined) return "reject";
-        }
-      }
-    }
+    if (!setTermsConform(doc, plan)) return field.guards?.requiredFailClosed ? "reject" : "ok";
     const members = [...fieldSet(doc, plan)];
-    const min = Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0);
-    if (members.length < min) {
-      return field.guards?.requiredFailClosed ? "reject" : "ok";
-    }
     const arr = field.guards?.sortOnRead
       ? members.slice().sort((a, b) => String(a).localeCompare(String(b)))
       : members;
@@ -917,6 +904,43 @@ const MAX_NODE_VISITS = 10000;
  */
 const MAX_LINK_READS = 32;
 
+/** Bound dataset type/subclass traversal, including duplicate quads across graphs. */
+const MAX_CLASS_READS = 10000;
+
+/** SHACL class membership is rdf:type followed by rdfs:subClassOf* in the data. */
+function hasDatasetClass(doc: TermWrapper, subject: string, required: string): boolean {
+  const pending: Term[] = [];
+  const seen = new Set<string>();
+  let reads = 0;
+  const enqueue = (term: Term): boolean => {
+    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") return false;
+    if (term.termType === "NamedNode" && term.value === required) return true;
+    const key = JSON.stringify([term.termType, term.value]);
+    if (!seen.has(key)) {
+      seen.add(key);
+      pending.push(term);
+    }
+    return false;
+  };
+  for (const type of matchObjects(
+    doc.dataset,
+    doc.factory.namedNode(subject),
+    doc.factory.namedNode(RDF_TYPE),
+  )) {
+    if (++reads > MAX_CLASS_READS) return false;
+    if (enqueue(type)) return true;
+  }
+  const subClassOf = doc.factory.namedNode(RDFS_SUBCLASS);
+  while (pending.length) {
+    const type = pending.pop() as Term;
+    for (const parent of matchObjects(doc.dataset, type, subClassOf)) {
+      if (++reads > MAX_CLASS_READS) return false;
+      if (enqueue(parent)) return true;
+    }
+  }
+  return false;
+}
+
 interface NestedTargetResolution {
   /**
    * The link failed to resolve — ambiguous (>1 distinct target) or over the read budget.
@@ -1017,7 +1041,14 @@ function makeCompositeEntity(
         const child = runtimes.get(nf.node as string);
         if (!child) continue;
         const childIri = buildNode(child, false);
-        if (childIri !== undefined) writeIriLink(doc, nf.predicate, childIri);
+        if (childIri !== undefined) {
+          // Assert the shape's explicit class on writes; build-time ontology
+          // ancestry is not available to a validator of the resulting document.
+          if (nf.hasClass !== undefined) {
+            new child.Wrapper(childIri, store, factory).types.add(nf.hasClass);
+          }
+          writeIriLink(doc, nf.predicate, childIri);
+        }
       }
       return iri;
     };
@@ -1064,7 +1095,11 @@ function makeCompositeEntity(
           if (required) return undefined;
           continue;
         }
-        const childData = link.target !== undefined ? parseNode(child, link.target) : undefined;
+        const childData =
+          link.target !== undefined &&
+          (nf.hasClass === undefined || hasDatasetClass(doc, link.target, nf.hasClass))
+            ? parseNode(child, link.target)
+            : undefined;
         if (childData === undefined) {
           // Same grading: a Violation-graded cross-node MUST whose single target is
           // absent or non-conforming (fails its own guards / type check) rejects the

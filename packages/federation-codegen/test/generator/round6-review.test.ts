@@ -88,27 +88,36 @@ ex:ChildShape a sh:NodeShape; sh:targetClass ex:Child, ex:OldChild; sh:property 
     ],
   };
   const input = { ontologyTtl, shapesTtl, config, admissionNamespace: EX };
-  it("rejects generation when an alias alone cannot satisfy sh:class", async () => {
+  it.each([
+    true,
+    false,
+  ])("checks aliases at runtime without ontology ancestry (data ancestry=%s)", async (inData) => {
+    const result = generateModel(input);
+    const entity = defineModel(result.manifest).entities.Tree;
+    if (!entity) throw new Error("missing tree");
     const ds = new Store(
       new Parser().parse(
-        `${HEADER} ex:doc a ex:Thing; ex:link ex:child . ex:child a ex:OldChild; ex:p "child" .`,
+        `${HEADER} <${DOC}#it> a ex:Thing; ex:link ex:child . ex:child a ex:OldChild; ex:p "child" . ${inData ? "ex:OldChild rdfs:subClassOf ex:Child ." : ""}`,
       ),
     );
-    await crossCheck(ds, shapesTtl, false);
-    expect(() => generateModel(input)).toThrow(/class|alias/i);
+    await crossCheck(ds, shapesTtl, inData, result.artifacts["shapes.ttl"]);
+    expect(entity.parse(DOC, ds)).toEqual(inData ? { val: "child" } : undefined);
   });
-  it("accepts aliases with explicit transitive subclass ancestry", async () => {
+  it.each([
+    true,
+    false,
+  ])("requires transitive subclass ancestry in the data (data ancestry=%s)", async (inData) => {
     const ancestry = `${HEADER} ex:OldChild rdfs:subClassOf ex:Middle . ex:Middle rdfs:subClassOf ex:Child .`;
     const result = generateModel({ ...input, ontologyTtl: ontologyTtl + ancestry });
     const entity = defineModel(result.manifest).entities.Tree;
     if (!entity) throw new Error("missing tree");
     const ds = new Store(
       new Parser().parse(
-        `${HEADER} <${DOC}#it> a ex:Thing; ex:link ex:child . ex:child a ex:OldChild; ex:p "child" . ${ancestry}`,
+        `${HEADER} <${DOC}#it> a ex:Thing; ex:link ex:child . ex:child a ex:OldChild; ex:p "child" . ${inData ? ancestry : ""}`,
       ),
     );
-    await crossCheck(ds, shapesTtl, true, result.artifacts["shapes.ttl"]);
-    expect(entity.parse(DOC, ds)).toEqual({ val: "child" });
+    await crossCheck(ds, shapesTtl, inData, result.artifacts["shapes.ttl"]);
+    expect(entity.parse(DOC, ds)).toEqual(inData ? { val: "child" } : undefined);
   });
 });
 

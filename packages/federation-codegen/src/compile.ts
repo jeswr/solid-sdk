@@ -90,22 +90,17 @@ export function classConforms(shapes: NormalizedShapes, actual: string, required
   return false;
 }
 
-/** A link's configured target must satisfy BOTH its class and its referenced shape. */
+/** Structural target compatibility; actual class membership is checked in the data graph. */
 export function linkTargetConforms(
   shapes: NormalizedShapes,
   c: ShapeConstraint,
   targetClass: string,
 ): boolean {
   if (c.hasClass !== undefined) {
-    const target = shapes.nodeShapes.find((shape) => shape.targetClass === targetClass);
-    // Runtime node recognition accepts any declared alias. Generation must prove
-    // EACH accepted type satisfies the link class, or refuse this projection.
-    if (
-      ![targetClass, ...(target?.aliasTypeIris ?? [])].every((type) =>
-        classConforms(shapes, type, c.hasClass as string),
-      )
-    )
-      return false;
+    // The canonical projection must be compatible with the ontology. This is
+    // only a build-time mapping check, never proof that a linked subject (whose
+    // type may be an alias) satisfies sh:class. Retain that constraint below.
+    if (!classConforms(shapes, targetClass, c.hasClass)) return false;
   }
   if (c.node !== undefined) {
     const target = shapes.nodeShapes.find((shape) => shape.iri === c.node);
@@ -425,6 +420,7 @@ function compileCompositeEntity(
           predicate: constraint.pathIri,
           kind: "nested",
           node: targetNode,
+          ...(constraint.hasClass !== undefined ? { hasClass: constraint.hasClass } : {}),
         };
         // G1 — the cross-node MUST: fail-closed only when Violation-graded (or severity
         // absent, SHACL's default). A Warning/Info link is advisory (no runtime guard).
