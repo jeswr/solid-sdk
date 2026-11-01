@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6
 import type { ClassGrant } from '../src/background/core/class-grant';
 import { dpopThumbprint, generateDpopKeyPair } from '../src/background/core/dpop';
 import type { LegacyProfile, ProfileSnapshot } from '../src/background/core/profile-store';
@@ -11,7 +12,8 @@ export class MemoryProfileDb {
     if (this.error) throw this.error;
     return structuredClone(this.state);
   }
-  async write(state: ProfileSnapshot): Promise<void> {
+  async write(state: ProfileSnapshot, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     this.state = structuredClone(state);
   }
   close() {}
