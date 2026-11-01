@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "request": {
+    "method": "HEAD",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt",
+    "headers": [["accept", "*/*"]],
+    "body": null
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt",
+    "status": 200,
+    "statusText": "OK",
+    "headers": [
+      ["accept-patch", "text/n3, application/sparql-update"],
+      ["accept-put", "*/*"],
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["allow", "OPTIONS, HEAD, GET, PATCH, PUT, DELETE"],
+      ["connection", "close"],
+      ["content-length", "11"],
+      ["content-type", "text/plain"],
+      ["date", "Sun, 01 Nov 2026 00:00:08 GMT"],
+      ["etag", "\"1793491208779-text/plain\""],
+      ["last-modified", "Sun, 01 Nov 2026 00:00:08 GMT"],
+      [
+        "link",
+        "<http://www.w3.org/ns/ldp#Resource>; rel=\"type\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt.meta>; rel=\"describedby\", <http://localhost:46617/.notifications/StreamingHTTPChannel2023/http%3A%2F%2Flocalhost%3A46617%2Fconformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7%2Fmeta-links%2Fnote.txt>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt.acl>; rel=\"acl\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/.well-known/solid>; rel=\"http://www.w3.org/ns/solid/terms#storageDescription\""
+      ],
+      ["vary", "Accept,Authorization,Origin"],
+      ["wac-allow", "user=\"append control read write\""],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": null,
+    "redirected": false
+  }
+}

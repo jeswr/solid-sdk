@@ -5345,16 +5345,41 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   tools/storage-conformance:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@sparq-org/solid-server':
+        specifier: 0.1.6
+        version: 0.1.6
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.9
+        version: 4.1.10(vitest@4.1.10)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
 packages:
 
@@ -10054,6 +10079,9 @@ packages:
   '@solid/access-token-verifier@2.1.1':
     resolution: {integrity: sha512-dGvu4xk3P74xl6XYsULWBY8F/fNCoi/EK07Iv3RT+0vDA21+3VEKk72sWmki0W59qJRTRDQZXkCOyo4b5Hd7zA==}
 
+  '@solid/access-token-verifier@2.1.2':
+    resolution: {integrity: sha512-QSFcH0fgLmoQG9eFptTzgKbgi+DaanvYxla/xVSn70dQMAZOPmJ1xUHD2W1tN70RKs6ay5zi8AyZZAWDvz16HA==}
+
   '@solid/community-server@7.2.0':
     resolution: {integrity: sha512-rPC5NTMwao5AMG4iZoXazbkG9gUb7FGvLVVAYQXmjufUmFvu/pgCJR6VOXv5eg8iGuvH8CSnepa0JbMS6zpKGw==}
     engines: {node: '>=18.0'}
@@ -10079,6 +10107,16 @@ packages:
 
   '@solidlab/policy-engine@0.0.2':
     resolution: {integrity: sha512-kWWNMXwxIVOTkgCOa5EEiO5um98cJZ0hREu6LKe3O/7O0BZ5XkeYfsZWuHbtgwXR+vblkRkQ7EBQffkNAjT/JA==}
+
+  '@sparq-org/solid-server@0.1.6':
+    resolution: {integrity: sha512-BwXsyX6QrlxRbVwoGociCFpLbhj7/myJmpJBaeS2ylGIcU9a2QZOz/3Tdh5FbSpkNHKziiS/ZmabxgjH9DNw0g==}
+    engines: {node: '>=18'}
+    hasBin: true
+    peerDependencies:
+      fastify: ^5.12.5
+    peerDependenciesMeta:
+      fastify:
+        optional: true
 
   '@sparq-org/sparq@0.1.5':
     resolution: {integrity: sha512-YJ3awKa3OuNHJ7p5SpKoDch9uVyKP64YHEP8Bq6mt712rpjV2Xq6SlK2smOyzw9HA+bVOOl/InxYy48x6JWu5w==}
@@ -25788,6 +25826,16 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@solid/access-token-verifier@2.1.2':
+    dependencies:
+      jose: 5.10.0
+      lru-cache: 6.0.0
+      n3: 1.26.0
+      node-fetch: 2.7.0
+      ts-guards: 0.5.1
+    transitivePeerDependencies:
+      - encoding
+
   '@solid/community-server@7.2.0(jiti@2.7.0)':
     dependencies:
       '@comunica/context-entries': 2.10.0
@@ -25971,6 +26019,12 @@ snapshots:
       global-logger-factory: 1.0.0
       n3: 1.26.0
       rdf-vocabulary: 1.0.1
+    transitivePeerDependencies:
+      - encoding
+
+  '@sparq-org/solid-server@0.1.6':
+    dependencies:
+      '@solid/access-token-verifier': 2.1.2
     transitivePeerDependencies:
       - encoding
 

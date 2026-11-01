@@ -35,7 +35,8 @@
     "gate:full": "turbo run lint lint:root build typecheck test test:root --concurrency=4",
     "mirror-publish": "node scripts/mirror-publish.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "conformance": "turbo run build --filter=@jeswr/storage-conformance... && pnpm --filter @jeswr/storage-conformance run conformance"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
