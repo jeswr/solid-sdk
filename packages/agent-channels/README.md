@@ -2,12 +2,15 @@
 
 # @jeswr/agent-channels
 
-> Experimental — AI-agent-generated. Private workspace package; Gmail defaults to dry-run.
+> Experimental — AI-agent-generated. Private workspace package; sends default to dry-run.
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
 (A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez) and shared metadata carriage
 (A-014 / sst-wxu), and Microsoft Graph mail (A-024 / sst-1zu).
 The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
+
+(A-014 / sst-wxu) and Discord (A-030 / sst-r57). The `ChannelBinding` and `CarriageProfile`
+declarations follow §3.1.
 
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
@@ -50,8 +53,9 @@ or destination accounts are refused. Lookup has `finalAbsence: true`.
 
 All DESIGN §3.2 rows have frozen constants in `CARRIAGE_PROFILES`. Only email's
 25,000,000-byte limit is specified there. Other structured profiles use the pilot's
-64 KiB local ceiling; footer-only profiles conservatively cap at 256 bytes pending
-their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
+64 KiB local ceiling; Discord uses an 8 KiB local JSON request ceiling with separate
+2000-character content and 2048-character footer limits. Other footer-only profiles
+conservatively cap at 256 bytes pending their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
@@ -329,3 +333,46 @@ The Mastodon capability descriptor advertises `federated: true`,
 `endToEndEncrypted: false`, footer-only carriage, no delivery receipts, no promised
 history window, and zero owner rate limits. Direct visibility still permits
 federation between instances and provides no end-to-end encryption.
+
+`./discord` exports `createDiscordReader({ tokens, gateway })`, `GATEWAY_INTENTS`,
+`DISCORD_INTENTS` and `ORIGINS`. It requests exactly `GUILD_MESSAGES`,
+`DIRECT_MESSAGES` and `MESSAGE_CONTENT` (37376). Enable the privileged message
+content intent in Discord's developer portal and obtain approval where required.
+The reader accepts bot-visible guild channels and bot DMs. It cannot read a user's
+personal DM inbox; bots cannot DM users who do not share a server. These limitations
+are also in the capability descriptor's `dcterms:description`. The descriptor
+advertises no structured payload, no guaranteed history and zero owner allowances.
+
+The required `DiscordGatewaySource` is a trusted host transport, with an explicit
+fixed `wss://gateway.discord.gg` origin. It owns TLS/DNS pinning, Identify,
+heartbeats, reconnect/resume and a bounded, replayable event buffer per account.
+It receives only a read grant, the fixed intents and frozen account/bounds.
+This package does not open an unguarded WebSocket or supply a socket lifecycle.
+The outer cursor binds its checkpoint to an account. Batch limits include ignored
+control frames and other dispatches, and oversized batches fail without advancing
+the caller's cursor. `./testing` supplies `InMemoryDiscordGateway`, which snapshots
+fixtures, paginates without dropping events and records no credentials.
+
+Only `MESSAGE_CREATE` is ingested. Parsing uses the raw event bytes, validates
+snowflakes and bounded JSON, strips controls, and projects content and embed
+footer text into plain-text `BridgeMessage` observations. Footer URLs feed existing
+legacy-bridge discovery; they are never fetched or interpreted as authority.
+No embedded data is projected as a signed envelope. Channel IDs provide thread keys.
+
+`./discord/send` exports `createDiscordSend({ account, recipients, verify,
+resolveProposal, verifyApproval, footer?, now?, transport? })`. Trusted actor-to-channel
+pins select existing guild or bot-DM channels; sending never opens a user DM.
+Rendering verifies the signed proposal locally, emits a deterministic human summary
+in `content`, the configured J2 footer in `embeds[0].footer.text`, disabled mentions,
+and a provider-native nonce binding the signed proposal, rendered body and pinned destination.
+No signed envelope is transmitted. `resolveProposal(wire)` must retrieve the
+signed proposal from the executor's local outbox by digest so transmission can
+re-derive and check all approved bytes even after a process restart.
+
+Real sending requires `dryRun: false`, the configured account, exact wire bytes,
+fresh signed content, a separate `TokenProvider.send` grant and current owner
+approval. The guarded request uses `POST https://discord.com/api/v10/channels/{id}/messages`
+with bot authentication, refuses redirects and never retries. Explicit client and
+rate-limit refusals throw `ProviderRejectedError`; server/transport failures and
+malformed acknowledgements remain uncertain. There is no lookup or `finalAbsence`.
+Dry-run invokes no outbox callback, approval, credential provider or transport.
