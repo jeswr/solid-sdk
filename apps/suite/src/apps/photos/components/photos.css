@@ -1,0 +1,663 @@
+/* AUTHORED-BY Codex GPT-6 */
+.pho-page {
+  font-variant-numeric: tabular-nums;
+  padding: var(--space-6);
+  min-width: 0;
+}
+.pho-page h1 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: var(--space-1) 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+.pho-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+}
+.pho-page-header p,
+.pho-album-card p {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.pho-header-text {
+  min-width: 0;
+}
+.pho-eyebrow {
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+.pho-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pho-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-4);
+  min-height: 100%;
+}
+.pho-brand {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  padding: 0 var(--space-2);
+}
+.pho-sidebar :where(nav) ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.pho-sidebar :where(nav) a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--foreground);
+}
+.pho-sidebar :where(nav) a:hover {
+  background: var(--surface-2);
+}
+.pho-sidebar :where(nav) a[aria-current] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-weight: 600;
+}
+.pho-count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.pho-sidebar-note {
+  margin-top: auto;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+  line-height: 1.7;
+  padding: var(--space-2);
+}
+.pho-context {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.pho-upload-mobile {
+  display: none;
+}
+.pho-select input {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+}
+[data-app="photos"] .su-drop-zone {
+  min-height: calc(100dvh - 120px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+[data-app="photos"] .su-drop-actions {
+  display: none;
+}
+.pho-day {
+  margin-bottom: var(--space-8);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
+}
+.pho-day-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--background);
+  padding: var(--space-3) 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pho-day-header p {
+  flex-basis: 100%;
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+  margin: 0 0 var(--space-1);
+}
+.pho-day-header h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0;
+}
+.pho-day-header > span {
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+.pho-tiles {
+  position: relative;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.pho-tile {
+  position: absolute;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.pho-tile > a {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline-offset: -4px;
+}
+.pho-tile img,
+.pho-album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pho-tile[data-selected="true"] {
+  outline: 3px solid var(--primary);
+  outline-offset: -3px;
+}
+.pho-tile[data-selected="true"] > a {
+  padding: var(--space-1);
+}
+.pho-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pho-image-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--foreground-muted);
+  background: var(--surface-2);
+}
+.pho-select {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1);
+  display: flex;
+  opacity: 0;
+}
+.pho-select[data-visible="true"],
+.pho-tile:hover .pho-select,
+.pho-tile:focus-within .pho-select {
+  opacity: 1;
+}
+.pho-select:focus-within {
+  outline: 2px solid var(--ring);
+}
+.pho-tile-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+}
+.pho-tile:hover .pho-tile-caption,
+.pho-tile:focus-within .pho-tile-caption {
+  opacity: 1;
+}
+.pho-tile-caption[data-source="google-photos"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  opacity: 1;
+}
+.pho-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pho-favourite-mark {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
+  background: var(--surface);
+  color: var(--primary);
+  border-radius: var(--radius-full);
+  padding: var(--space-1);
+  pointer-events: none;
+}
+.pho-tile-menu {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+.pho-tile-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.pho-tiles[data-actions="true"] {
+  height: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-4);
+}
+.pho-tiles[data-actions="true"] .pho-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  inset: auto;
+  width: auto;
+  height: auto;
+}
+.pho-tiles[data-actions="true"] .pho-tile > a {
+  height: 180px;
+  flex-shrink: 0;
+}
+.pho-card-body {
+  padding: var(--space-2);
+}
+.pho-card-name {
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+.pho-selection {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  margin-bottom: var(--space-4);
+}
+.pho-selection p {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.pho-warning {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+}
+.pho-albums {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-6);
+}
+.pho-album-card {
+  display: block;
+  text-decoration: none;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface);
+  padding-bottom: var(--space-4);
+}
+.pho-album-cover {
+  aspect-ratio: 1.5;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--foreground-muted);
+}
+.pho-album-card h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: var(--space-4) var(--space-4) var(--space-1);
+  overflow-wrap: anywhere;
+}
+.pho-album-card p {
+  margin: 0 var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+.pho-album-settings {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.pho-field {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+.pho-field select {
+  min-height: 40px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: var(--space-2);
+  width: 100%;
+}
+.pho-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.pho-picker {
+  width: min(960px, calc(100vw - 32px));
+  max-width: 960px;
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+}
+.pho-picker-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+.pho-save-status {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.pho-save-status:empty {
+  display: none;
+}
+.pho-dismiss-uploads {
+  position: fixed;
+  right: var(--space-4);
+  bottom: 76px;
+  z-index: 51;
+}
+.pho-lightbox {
+  translate: none;
+  position: fixed;
+  inset: 0;
+  transform: none;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--background);
+  color: var(--foreground);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+.pho-lightbox-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.pho-lightbox-header h1 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+.pho-position {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pho-lightbox-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  flex-shrink: 0;
+}
+.pho-lightbox-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.pho-lightbox-body[data-info="true"] {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+.pho-lightbox-image {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-4) var(--space-12);
+}
+.pho-viewer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+.pho-image-stage {
+  margin: 0;
+
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+}
+.pho-image-stage > img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  user-select: none;
+}
+.pho-pan {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.pho-zoom {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.pho-file-size {
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.pho-prev-next {
+  position: absolute;
+  inset: 50% var(--space-1) auto;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.pho-prev-next a {
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  min-width: 40px;
+  min-height: 44px;
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.pho-info {
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  padding: var(--space-6);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+.pho-info h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-6);
+}
+.pho-info h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin: var(--space-6) 0 var(--space-2);
+}
+.pho-info :where(dl) > div {
+  margin-bottom: var(--space-4);
+}
+.pho-info dt {
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-1);
+}
+.pho-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.pho-info a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pho-info ul {
+  padding-left: var(--space-4);
+}
+.pho-info .suite-field {
+  margin-top: var(--space-6);
+}
+.pho-add-keyword {
+  margin-top: var(--space-3);
+}
+.pho-add-keyword > div {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.pho-unavailable {
+  padding: var(--space-8);
+  text-align: center;
+}
+.pho-page :focus-visible,
+.pho-sidebar :focus-visible,
+.pho-lightbox :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.pho-page .pho-tile > a:focus-visible {
+  outline-offset: -4px;
+}
+@media (max-width: 767px) {
+  .pho-page {
+    padding: var(--space-4);
+  }
+  .pho-page-header {
+    margin-bottom: var(--space-6);
+  }
+  .pho-context {
+    display: none;
+  }
+  .pho-albums {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+  .pho-album-card h2 {
+    font-size: var(--text-base);
+    margin-inline: var(--space-3);
+  }
+  .pho-album-card p {
+    margin-inline: var(--space-3);
+  }
+  .pho-lightbox-body[data-info="true"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(210px, 38%) minmax(0, 1fr);
+  }
+  .pho-lightbox-image {
+    padding: var(--space-2) var(--space-10);
+  }
+  .pho-lightbox-actions {
+    justify-content: center;
+    padding-inline: var(--space-2);
+  }
+  .pho-info {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: var(--space-4);
+  }
+  .pho-info dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-4);
+  }
+  .pho-lightbox-header h1 {
+    font-size: var(--text-base);
+  }
+  .pho-lightbox-body[data-info="true"] .pho-file-size {
+    display: none;
+  }
+}
+@media (pointer: coarse) {
+  .pho-select {
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pho-page *,
+  .pho-lightbox * {
+    scroll-behavior: auto;
+    transition: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .pho-upload-desktop {
+    display: none;
+  }
+  .pho-upload-mobile {
+    display: block;
+  }
+}

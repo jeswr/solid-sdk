@@ -12,6 +12,7 @@ import {
   discoveryUrl,
   type FetchLike,
   isLoopbackHost,
+  readOidcJson,
   type SolidSessionState,
 } from "@jeswr/solid-dpop";
 import { podScopedUrlOrUndefined } from "./auth.js";
@@ -85,10 +86,13 @@ export async function createCliFetch(
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<typeof fetch> {
   if (!config.clientId) return fetchImpl;
+  const authUrl = new URL((config.tokenUrl ?? config.oidcIssuer) as string);
+  const allowInsecureLoopback = authUrl.protocol === "http:" && isLoopbackHost(authUrl.hostname);
   const creds = {
     id: config.clientId,
     secret: config.clientSecret as string,
     issuer: config.oidcIssuer ?? new URL(config.tokenUrl as string).origin,
+    allowInsecureLoopback,
   };
   const discovery = discoveryUrl(creds.issuer);
   let endpoint = config.tokenUrl;
@@ -97,18 +101,25 @@ export async function createCliFetch(
   const authTransport: FetchLike = async (url, init) => {
     try {
       if (url === discovery && !init?.method) {
+        let metadata: Record<string, unknown> | undefined;
         if (!endpoint) {
-          const response = await fetchImpl(url, { redirect: "manual", credentials: "omit" });
+          const response = await fetchImpl(url, {
+            redirect: "manual",
+            credentials: "omit",
+            signal: init?.signal,
+          });
           if (!response.ok) throw new Error();
-          const metadata = await response.json();
+          metadata = await readOidcJson(response, init?.signal);
           if (metadata.issuer !== creds.issuer || typeof metadata.token_endpoint !== "string")
             throw new Error();
           endpoint = metadata.token_endpoint;
         }
-        assertEndpointTransport(endpoint as string, "token_endpoint");
+        assertEndpointTransport(endpoint as string, "token_endpoint", allowInsecureLoopback);
         const target = new URL(endpoint as string);
         if (target.username || target.password || target.hash) throw new Error();
-        return Response.json({ token_endpoint: endpoint });
+        // Preserve advertised endpoints for solid-dpop's transport validation.
+        // Explicit token URLs use synthetic metadata with the exact configured issuer.
+        return Response.json({ ...metadata, issuer: creds.issuer, token_endpoint: endpoint });
       }
       const response = await fetchImpl(url, {
         ...init,
@@ -121,9 +132,10 @@ export async function createCliFetch(
         await response.body?.cancel();
         return new Response(null, { status: response.status, headers: response.headers });
       }
-      const token = await response.json();
+      const token = await readOidcJson(response, init?.signal);
       if (
-        token.token_type?.toLowerCase() !== "dpop" ||
+        typeof token.token_type !== "string" ||
+        token.token_type.toLowerCase() !== "dpop" ||
         typeof token.access_token !== "string" ||
         !/^[\x21-\x7e]+$/.test(token.access_token) ||
         (token.expires_in !== undefined &&

@@ -7,6 +7,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        // AUTHORED-BY Codex GPT-6.1-Sol: cold notification launch, before plugin registration.
+        if let response = connectionOptions.notificationResponse { SuitePushCoordinator.shared.tap(response) }
+
         window = UIWindow(windowScene: windowScene)
         window?.rootViewController = MainViewController()
         window?.makeKeyAndVisible()

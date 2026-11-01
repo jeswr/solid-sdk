@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/federation-client
 
@@ -45,10 +46,30 @@ const result = await verify("https://app.example/clientid.jsonld", {
 
 - Registration: `verify`, `list`, `selfDescribe`, `serialize`.
 - Registry and storage: `discoverFromRegistry`, `resolveStorageSpecVersion`.
-- Guarded fetch: `createGuardedFetch`, `guardedFetch`, `SsrfError`.
+- Guard errors and types: `SsrfError`, `RedirectRefusedError`, `DnsLookup`, `GuardOptions`,
+  `ResolvedAddress`.
 - Node hardening: `nodeGuardedFetch`, `createNodeGuardedFetch`, and
   `createPinningDispatcher` from `@jeswr/federation-client/node`.
 - Vocabulary: `FEDAPP`, `ACL_MODES`, `accessModeName`, `sectorIri`.
+
+## Guard helper migration (breaking)
+
+The root entry no longer exports `createGuardedFetch`, `guardedFetch`, `isLoopbackAddress`,
+`isPublicAddress`, `classifyIpLiteral`, or `refuseRedirects`. Import these helpers directly
+from `@jeswr/guarded-fetch`:
+
+```ts
+import { createGuardedFetch } from "@jeswr/guarded-fetch";
+import { verify } from "@jeswr/federation-client";
+
+const fetch = createGuardedFetch();
+const result = await verify("https://app.example/clientid.jsonld", { fetch });
+```
+
+`SsrfError`, `RedirectRefusedError`, and the guard types remain available from this package
+for catching and typing errors from its own functions. The `@jeswr/federation-client/node`
+entry still provides the DNS-pinning helpers. Both built entries share the same guard error
+classes. Existing `github:` commit SHA pins continue to use their original exports.
 
 ## Links
 

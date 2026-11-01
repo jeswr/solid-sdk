@@ -2,6 +2,7 @@ import type { OriginGrant } from '../src/background/core/origin-grant';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,
@@ -23,6 +24,7 @@ import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
 import { MemoryProfileDb, profileCredentials } from './profile-fixtures';
 import { opaqueRedirect, redirectProbe } from './redirect-fixtures';
 
@@ -144,6 +146,8 @@ let messageListeners: MessageListener[];
 let fetchCalls: Array<{ url: string; init?: RequestInit }>;
 let fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
 let createdWindows: string[];
+let removedTab: (tabId: number) => void;
+let updatedTab: (tabId: number, change: { url?: string }) => void;
 let registrations: Map<string, chrome.scripting.RegisteredContentScript>;
 let alarmListener: (alarm: { name: string }) => void;
 
@@ -204,7 +208,22 @@ function installChrome(): void {
         },
       },
     },
-    tabs: { query: async () => [], sendMessage: async () => {} },
+    tabs: {
+      query: async () => [],
+      sendMessage: async () => {},
+      onRemoved: {
+        addListener: (fn: typeof removedTab) => {
+          removedTab = fn;
+        },
+        removeListener: () => {},
+      },
+      onUpdated: {
+        addListener: (fn: typeof updatedTab) => {
+          updatedTab = fn;
+        },
+        removeListener: () => {},
+      },
+    },
     action: {
       setIcon: async () => {},
       setBadgeText: async () => {},
@@ -261,7 +280,6 @@ function sendFetch(
       requestId: 'r1',
       method: 'GET',
       headers: {},
-      body: null,
       ...message,
     },
     sender,
@@ -319,6 +337,251 @@ beforeEach(() => {
   idbMeta.clear();
   idbNonces.clear();
   idbDpopKey = undefined;
+});
+
+describe('origin disconnect and access-change broadcasts', () => {
+  const other = { origin: 'https://appy.example', url: 'https://appy.example/app' };
+
+  async function boot() {
+    await seedSession();
+    storage.set('solid:class-grants', [
+      classGrant({ grantId: 'finance' }),
+      classGrant({
+        grantId: 'health',
+        dataClass: 'https://schema.org/MedicalRecord',
+        targets: [{ url: 'https://alice.pod.example/health/', kind: 'container' }],
+      }),
+      classGrant({ grantId: 'other', origin: other.origin }),
+    ]);
+    await loadWorker();
+  }
+
+  it.each([
+    'SOLID_DISCONNECT',
+    'SOLID_ORIGIN_GRANT_REVOKE',
+  ])('%s removes the binding and all its class replicas, preserving other origins and credentials', async (type) => {
+    await boot();
+    for (const [sender, path] of [
+      [APPX, 'finance'],
+      [APPX, 'health'],
+      [other, 'finance'],
+    ] as const) {
+      expect(
+        (
+          await sendFetch(
+            {
+              url: `https://alice.pod.example/${path}/item.ttl`,
+              stampedOrigin: sender.origin,
+            },
+            sender,
+          )
+        ).status,
+      ).toBe(200);
+    }
+    expect(cacheStore.size).toBe(3);
+    const parents = storage.get('solid:origin-grants') as OriginGrant[];
+    const otherGrant = parents.find((g) => g.origin === other.origin);
+    // Historical class targets still need purging after the parent's pod scope changes.
+    storage.set(
+      'solid:origin-grants',
+      parents.map((g) =>
+        g.origin === APPX.origin ? { ...g, scope: { ...g.scope, pods: [] } } : g,
+      ),
+    );
+    // No refresh is needed to surrender authority, even with an expiring account session.
+    const account = profileDb.state.records[0];
+    if (account.session) account.session = { ...account.session, expiresAt: Date.now() + 1000 };
+    const before = structuredClone(profileDb.state);
+    const key = idbDpopKey;
+    fetchCalls.length = 0;
+    const request =
+      type === 'SOLID_DISCONNECT'
+        ? { type, requestId: 'disconnect', stampedOrigin: APPX.origin, origin: other.origin }
+        : { type, origin: APPX.origin };
+    const sender = type === 'SOLID_DISCONNECT' ? APPX : EXT_SENDER;
+    expect((await send(request, sender)).ok).toBe(true);
+    expect(storage.get('solid:origin-grants')).toEqual([otherGrant]);
+    expect(cacheStore.size).toBe(1);
+    expect([...idbMeta.values()].map((m) => m.grantScope)).toEqual([other.origin]);
+    expect(profileDb.state).toEqual(before);
+    expect(idbDpopKey).toBe(key);
+    expect(fetchCalls).toEqual([]);
+    expect(createdWindows).toEqual([]);
+    expect((await send(request, sender)).ok).toBe(false);
+  });
+
+  it.each([
+    { sender: APPX, stamp: other.origin },
+    { sender: APPX, stamp: undefined },
+    { sender: { origin: 'null', url: APPX.url }, stamp: APPX.origin },
+    { sender: {}, stamp: APPX.origin },
+  ])('refuses an unverifiable disconnect origin: %j', async ({ sender, stamp }) => {
+    await boot();
+    const before = structuredClone(storage.get('solid:origin-grants'));
+    const result = await send(
+      {
+        type: 'SOLID_DISCONNECT',
+        requestId: 'spoof',
+        stampedOrigin: stamp,
+        origin: other.origin,
+      },
+      sender,
+    );
+    expect(result).toMatchObject({ requestId: 'spoof', ok: false, error: expect.any(String) });
+    expect(storage.get('solid:origin-grants')).toEqual(before);
+  });
+
+  it('disconnect returns false for an ungranted origin without an account session', async () => {
+    await loadWorker();
+    expect(
+      await send(
+        {
+          type: 'SOLID_DISCONNECT',
+          requestId: 'absent',
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      ),
+    ).toEqual({ requestId: 'absent', ok: false });
+    expect(createdWindows).toEqual([]);
+  });
+
+  it('concurrent disconnects report exactly one binding removal', async () => {
+    await boot();
+    const request = {
+      type: 'SOLID_DISCONNECT',
+      requestId: 'concurrent',
+      stampedOrigin: APPX.origin,
+    };
+    const results = await Promise.all([send(request, APPX), send(request, APPX)]);
+    expect(results.map((r) => r.ok).sort()).toEqual([false, true]);
+  });
+
+  it('disconnect leaves another origin binding untouched even when it has expired', async () => {
+    await boot();
+    await sendFetch(
+      { url: 'https://alice.pod.example/finance/overdue.ttl', stampedOrigin: other.origin },
+      other,
+    );
+    expect(cacheStore.size).toBe(1);
+    const parents = (storage.get('solid:origin-grants') as OriginGrant[]).map((g) =>
+      g.origin === other.origin ? { ...g, expiresAt: Date.now() - 1 } : g,
+    );
+    storage.set('solid:origin-grants', parents);
+    vi.mocked(chrome.alarms.create).mockClear();
+    const before = Date.now();
+    expect(
+      (
+        await send(
+          { type: 'SOLID_DISCONNECT', requestId: 'isolated', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(storage.get('solid:origin-grants')).toEqual(
+      parents.filter((g) => g.origin === other.origin),
+    );
+    expect(registrations.size).toBe(0);
+    expect(chrome.alarms.create).toHaveBeenCalledOnce();
+    const [name, alarm] = vi.mocked(chrome.alarms.create).mock.calls[0];
+    expect(name).toBe('solid-origin-expiry');
+    expect(alarm.when).toBeGreaterThanOrEqual(before);
+    expect(alarm.when).toBeLessThanOrEqual(Date.now());
+    // The registration refresh leaves the overdue record alone; its immediate alarm must
+    // still run the authoritative prune and remove the other origin's warm replica.
+    alarmListener({ name: 'solid-origin-expiry' });
+    await vi.waitFor(() => expect(storage.get('solid:origin-grants')).toEqual([]));
+    await vi.waitFor(() => expect(cacheStore.size).toBe(0));
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('disconnect cancels its own pending fetch while another origin can finish', async () => {
+    await boot();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async () => {
+      await held;
+      return new Response('private bytes');
+    };
+    fetchCalls.length = 0;
+    const own = sendFetch(
+      { url: 'https://alice.pod.example/finance/own.ttl', stampedOrigin: APPX.origin },
+      APPX,
+    );
+    const theirs = sendFetch(
+      { url: 'https://alice.pod.example/finance/other.ttl', stampedOrigin: other.origin },
+      other,
+    );
+    await vi.waitFor(() => expect(fetchCalls).toHaveLength(2));
+    try {
+      expect(
+        (
+          await send(
+            { type: 'SOLID_DISCONNECT', requestId: 'cancel', stampedOrigin: APPX.origin },
+            APPX,
+          )
+        ).ok,
+      ).toBe(true);
+    } finally {
+      release();
+    }
+    expect((await own).body).toBeUndefined();
+    expect((await theirs).status).toBe(200);
+  });
+
+  it.each([
+    'SOLID_REVOKE_GRANT',
+    'SOLID_DISCONNECT',
+    'SOLID_ORIGIN_GRANT_REVOKE',
+  ])('%s broadcasts the updated state to all and only the caller origin tabs', async (type) => {
+    await boot();
+    const tabs = [
+      { id: 1, url: APPX.url },
+      { id: 2, url: `${APPX.origin}/second` },
+      { id: 3, url: other.url },
+      { id: 4, url: 'https://ungranted.example/' },
+    ];
+    chrome.tabs.query = vi.fn().mockResolvedValue(tabs);
+    chrome.tabs.get = vi.fn().mockImplementation(async (id) => tabs.find((tab) => tab.id === id));
+    chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
+    const trusted = vi.spyOn(chrome.runtime, 'sendMessage');
+    expect(
+      (
+        await send(
+          {
+            type,
+            requestId: 'changed',
+            stampedOrigin: APPX.origin,
+            origin: APPX.origin,
+            grantId: 'finance',
+          },
+          type === 'SOLID_ORIGIN_GRANT_REVOKE' ? EXT_SENDER : APPX,
+        )
+      ).ok,
+    ).toBe(true);
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2);
+    for (const tabId of [1, 2])
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+        tabId,
+        {
+          type: 'SOLID_STATE_CHANGED',
+          origin: APPX.origin,
+          webId: type === 'SOLID_REVOKE_GRANT' ? WEBID : null,
+        },
+        { frameId: 0 },
+      );
+    expect(trusted).toHaveBeenCalledOnce();
+    expect(trusted).toHaveBeenCalledWith({ type: 'SOLID_STATE_CHANGED', webId: WEBID });
+    const remaining = await send(
+      { type: 'SOLID_LIST_GRANTS', requestId: 'remaining', stampedOrigin: APPX.origin },
+      APPX,
+    );
+    expect((remaining.grants as ClassGrant[]).map((g) => g.grantId)).toEqual(
+      type === 'SOLID_REVOKE_GRANT' ? ['health'] : [],
+    );
+  });
 });
 
 describe('Phase-2 per-data-class gate (wired into the SW)', () => {
@@ -927,7 +1190,261 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
   });
 });
 
+describe('pim:Storage through the existing worker gate', () => {
+  const root = 'https://alice.pod.example/alice/';
+  const deep = `${root}photos/2026/november/photo.jpg`;
+  const finance = 'https://w3id.org/jeswr/sectors/finance#Transaction';
+
+  it.each([
+    false,
+    true,
+  ])('pins storage from mixed consent and enforces its modes (write: %s)', async (write) => {
+    await seedSession();
+    await loadWorker();
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${root}> ;
+          <http://www.w3.org/ns/solid/terms#publicTypeIndex> <https://alice.pod.example/index> .`
+          : `<#fin> <http://www.w3.org/ns/solid/terms#forClass> <${finance}> ;
+          <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/> .`,
+      );
+    const request = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'storage',
+        classes: [PIM_STORAGE_CLASS, finance],
+        modes: write ? ['read', 'write'] : ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+        approvedClasses: [PIM_STORAGE_CLASS], // A page cannot include its own approval.
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+    expect(view.classes).toMatchObject([
+      { dataClass: PIM_STORAGE_CLASS, targets: [{ url: root, kind: 'container' }] },
+      {
+        dataClass: finance,
+        targets: [{ url: 'https://alice.pod.example/finance/', kind: 'container' }],
+      },
+    ]);
+    expect(storage.get('solid:origin-grants')).toEqual([]);
+    expect(
+      fetchCalls.filter((call) => call.url === 'https://alice.pod.example/index'),
+    ).toHaveLength(1);
+    const approve = {
+      type: 'SOLID_CONSENT_DECISION',
+      consentId,
+      profileId: '1',
+      approvedClasses: [PIM_STORAGE_CLASS],
+    };
+    await send(approve, APPX);
+    expect(storage.get('solid:origin-grants')).toEqual([]);
+    await send(approve, EXT_SENDER);
+    const result = await request;
+    expect(result.ok).toBe(true);
+    const grants = result.grants as ClassGrant[];
+    expect(grants).toHaveLength(1);
+    expect(grants[0]).toMatchObject({
+      dataClass: PIM_STORAGE_CLASS,
+      targets: [{ url: root, kind: 'container' }],
+    });
+
+    // Later profile discovery cannot widen the targets the person approved.
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <https://alice.pod.example/> .`
+          : 'pod bytes',
+      );
+    expect(
+      (
+        await send(
+          {
+            type: 'SOLID_RESOLVE_CLASS',
+            requestId: 'resolve',
+            classIRI: PIM_STORAGE_CLASS,
+            stampedOrigin: APPX.origin,
+          },
+          APPX,
+        )
+      ).targets,
+    ).toEqual([{ url: 'https://alice.pod.example/', kind: 'container' }]);
+    fetchCalls.length = 0;
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(200);
+    expect(new Headers(fetchCalls[0].init?.headers).get('Authorization')).toBe(
+      'DPoP access-token-xyz',
+    );
+    fetchCalls.length = 0;
+    expect(
+      (
+        await sendFetch(
+          { url: deep, method: 'PUT', body: 'new bytes', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).status,
+    ).toBe(write ? 200 : 403);
+    expect(fetchCalls).toHaveLength(write ? 1 : 0);
+    for (const url of [
+      'https://alice.pod.example/alice-sibling/file',
+      'https://alice.pod.example/alice/../outside',
+      'https://alice.pod.example/finance/file',
+      'https://other.example/alice/photos/file',
+    ]) {
+      fetchCalls.length = 0;
+      expect((await sendFetch({ url, stampedOrigin: APPX.origin }, APPX)).status).toBe(403);
+      expect(fetchCalls).toHaveLength(0);
+    }
+
+    // An existing storage grant is never a remembered approval for a fresh request.
+    const repeated = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'storage-again',
+        classes: [PIM_STORAGE_CLASS],
+        modes: ['read', 'write'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(2));
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId: new URL(createdWindows[1]).searchParams.get('consentId'),
+        approvedClasses: [],
+      },
+      EXT_SENDER,
+    );
+    expect(await repeated).toMatchObject({ ok: false, grants: [] });
+  });
+
+  it.each([
+    'revoke',
+    'expiry',
+  ])('denies the next read and purges the storage replica on %s', async (action) => {
+    await seedSession();
+    storage.set('solid:class-grants', [
+      classGrant({
+        dataClass: PIM_STORAGE_CLASS,
+        targets: [{ url: root, kind: 'container' }],
+      }),
+    ]);
+    await loadWorker();
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(200);
+    expect(cacheStore.size).toBe(1);
+    if (action === 'revoke') {
+      expect(
+        await send(
+          {
+            type: 'SOLID_REVOKE_GRANT',
+            requestId: 'revoke-storage',
+            grantId: 'grant-1',
+            stampedOrigin: APPX.origin,
+          },
+          APPX,
+        ),
+      ).toMatchObject({ ok: true });
+    } else {
+      const parent = (storage.get('solid:origin-grants') as OriginGrant[])[0];
+      storage.set('solid:origin-grants', [{ ...parent, expiresAt: Date.now() - 1 }]);
+    }
+    fetchCalls.length = 0;
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+    if (action === 'expiry') alarmListener({ name: 'solid-origin-expiry' });
+    await vi.waitFor(() => expect(cacheStore.size).toBe(0));
+  });
+});
+
 describe('Phase-2 requestAccess → consent → grant (wired)', () => {
+  it('pins SAI-only targets without resolver metadata in storage or page replies, and never widens them', async () => {
+    await seedSession();
+    await loadWorker();
+    const pod = 'https://alice.pod.example';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const registration = `${pod}/data/contacts/`;
+    const docs: Record<string, string> = {
+      [`${pod}/profile/card`]: `<${WEBID}> <${interop}hasRegistrySet> <${pod}/registries> .`,
+      [`${pod}/registries`]: `<> <${interop}hasDataRegistry> <${pod}/data/> .`,
+      [`${pod}/data/`]: `<> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url.split('#')[0]] ?? '', {
+        status: docs[url.split('#')[0]] === undefined ? 404 : 200,
+      });
+    const requested = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'sai-consent',
+        classes: [dataClass],
+        modes: ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId,
+        approvedClasses: [dataClass],
+      },
+      EXT_SENDER,
+    );
+    const granted = await requested;
+    expect(granted.ok).toBe(true);
+    const pinned = [{ url: registration, kind: 'container' }];
+    const grants = granted.grants as ClassGrant[];
+    expect(grants[0].targets).toEqual(pinned);
+    const stored = storage.get('solid:origin-grants') as OriginGrant[];
+    expect(stored[0].scope.classes?.[0].targets).toEqual(pinned);
+    for (const call of fetchCalls) {
+      expect(call.init?.credentials).toBe('omit');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        !call.url.includes('/profile/card'),
+      );
+    }
+
+    // A new registration can be discovered later, but the original grant stays pinned.
+    const later = `${pod}/data/later/`;
+    docs[`${pod}/data/`] += `<> <${interop}hasDataRegistration> <${later}> .`;
+    docs[later] = docs[registration];
+    const resolved = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'sai-resolve',
+        classIRI: dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(resolved).toEqual({
+      requestId: 'sai-resolve',
+      shape: null,
+      targets: [...pinned, { url: later, kind: 'container' }],
+    });
+    expect(
+      (storage.get('solid:origin-grants') as OriginGrant[])[0].scope.classes?.[0].targets,
+    ).toEqual(pinned);
+    expect(
+      (await sendFetch({ url: `${later}private.ttl`, stampedOrigin: APPX.origin }, APPX)).status,
+    ).toBe(403);
+  });
+
   const PROFILE = `
     @prefix solid: <http://www.w3.org/ns/solid/terms#> .
     <${WEBID}> solid:publicTypeIndex <https://alice.pod.example/settings/pub.ttl> .`;
@@ -944,6 +1461,241 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       return Promise.resolve(new Response(INDEX, { status: 200 }));
     return Promise.resolve(new Response('ok', { status: 200 }));
   }
+
+  function requestAccess(sender = APPX) {
+    return send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'consent-race',
+        classes: [classGrant().dataClass],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: sender.origin,
+        userActivated: true,
+      },
+      sender,
+    );
+  }
+
+  function approveConsent(index: number) {
+    return send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        consentId: new URL(createdWindows[index]).searchParams.get('consentId'),
+        profileId: '1',
+        approvedClasses: [classGrant().dataClass],
+      },
+      EXT_SENDER,
+    );
+  }
+
+  it.each(
+    ['SOLID_DISCONNECT', 'SOLID_ORIGIN_GRANT_REVOKE'].flatMap((type) =>
+      [false, true].map((bound) => ({ type, bound })),
+    ),
+  )('$type expires every open consent, including without a binding ($bound)', async ({
+    type,
+    bound,
+  }) => {
+    await seedSession();
+    if (bound) storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const requests = [requestAccess(), requestAccess(), requestAccess(other)];
+    try {
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(3));
+      expect(
+        (
+          await send(
+            { type, stampedOrigin: APPX.origin, origin: APPX.origin },
+            type === 'SOLID_DISCONNECT' ? APPX : EXT_SENDER,
+          )
+        ).ok,
+      ).toBe(bound);
+      for (const url of createdWindows) {
+        const consentId = new URL(url).searchParams.get('consentId');
+        const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+        if (view?.origin === other.origin) {
+          await send(
+            { type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] },
+            EXT_SENDER,
+          );
+          continue;
+        }
+        expect(view).toBeNull();
+        const result = await send(
+          {
+            type: 'SOLID_CONSENT_DECISION',
+            consentId,
+            profileId: '1',
+            approvedClasses: [classGrant().dataClass],
+          },
+          EXT_SENDER,
+        );
+        expect(result.error).toContain('expired');
+      }
+      expect((await Promise.all(requests)).every((result) => result.ok === false)).toBe(true);
+      expect(storage.get('solid:origin-grants')).toEqual([]);
+      // Revocation fences old requests, while a newly opened consent can still grant access.
+      const fresh = requestAccess();
+      requests.push(fresh);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(4));
+      expect((await approveConsent(3)).ok).toBe(true);
+      expect((await fresh).ok).toBe(true);
+    } finally {
+      for (const url of createdWindows)
+        await send(
+          {
+            type: 'SOLID_CONSENT_DECISION',
+            consentId: new URL(url).searchParams.get('consentId'),
+            approvedClasses: [],
+          },
+          EXT_SENDER,
+        );
+      await Promise.all(requests);
+    }
+  });
+
+  it('checks the revocation generation inside the serialized consent grant update', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const pending = requestAccess();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    const update = OriginGrantStore.prototype.update;
+    const read = chrome.storage.local.get;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reading = false;
+    const storageRead = vi.spyOn(chrome.storage.local, 'get');
+    const queued = vi.spyOn(OriginGrantStore.prototype, 'update').mockImplementationOnce(function (
+      this: InstanceType<typeof OriginGrantStore>,
+      change,
+    ) {
+      // Suspend after approval entered the store's writer queue, before its change callback.
+      storageRead.mockImplementationOnce(async (key) => {
+        const snapshot = await read(key);
+        reading = true;
+        await held;
+        return snapshot;
+      });
+      return update.call(this, change);
+    });
+    try {
+      const approval = approveConsent(0);
+      await vi.waitFor(() => expect(reading).toBe(true));
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      release();
+      const [decision, request, revocation] = await Promise.all([approval, pending, revoke]);
+      expect(decision.error).toContain('expired');
+      expect(request.error).toContain('expired');
+      expect(revocation.ok).toBe(true);
+      expect(storage.get('solid:origin-grants')).toEqual([]);
+    } finally {
+      release();
+      queued.mockRestore();
+      storageRead.mockRestore();
+    }
+  });
+
+  it('serializes a delayed registration snapshot with another origin consent reconciliation', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    const list = OriginGrantStore.prototype.list;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let captured = false;
+    const snapshot = vi
+      .spyOn(OriginGrantStore.prototype, 'list')
+      .mockImplementation(async function (this: InstanceType<typeof OriginGrantStore>) {
+        const grants = await list.call(this);
+        if (!captured && grants.length === 0) {
+          captured = true;
+          await held;
+        }
+        return grants;
+      });
+    try {
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      await vi.waitFor(() => expect(captured).toBe(true));
+      const pending = requestAccess(other);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      const approval = approveConsent(0);
+      await vi.waitFor(() =>
+        expect(storage.get('solid:origin-grants')).toMatchObject([{ origin: other.origin }]),
+      );
+      // Let the fresh consent's registration work enter the queue before resuming the old read.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      release();
+      const results = await Promise.all([approval, pending, revoke]);
+      expect(results.every((result) => result.ok)).toBe(true);
+      expect([...registrations.keys()]).toEqual([
+        `solid-origin-${encodeURIComponent(other.origin)}`,
+      ]);
+      const grants = storage.get('solid:origin-grants') as OriginGrant[];
+      expect(chrome.alarms.create).toHaveBeenLastCalledWith('solid-origin-expiry', {
+        when: grants[0].expiresAt,
+      });
+    } finally {
+      release();
+      snapshot.mockRestore();
+    }
+  });
+
+  it('drops a disconnect notification held in tabs.get after fresh consent publishes the WebID', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const tab = { id: 1, url: APPX.url };
+    chrome.tabs.query = vi.fn().mockResolvedValue([tab]);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    chrome.tabs.get = vi
+      .fn()
+      .mockResolvedValue(tab)
+      .mockImplementationOnce(async () => {
+        await held;
+        return tab;
+      });
+    chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
+    const trusted = vi.spyOn(chrome.runtime, 'sendMessage');
+    try {
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      await vi.waitFor(() => expect(chrome.tabs.get).toHaveBeenCalledOnce());
+      const pending = requestAccess();
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      expect((await approveConsent(0)).ok).toBe(true);
+      expect((await pending).ok).toBe(true);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledOnce();
+      expect(chrome.tabs.sendMessage).toHaveBeenLastCalledWith(
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: APPX.origin, webId: WEBID },
+        { frameId: 0 },
+      );
+      const latestTrusted = [...trusted.mock.calls];
+      release();
+      expect((await revoke).ok).toBe(true);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledOnce();
+      expect(trusted.mock.calls).toEqual(latestTrusted);
+    } finally {
+      release();
+      trusted.mockRestore();
+    }
+  });
 
   it.each([
     'logout',
@@ -1594,7 +2346,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
 
   it.each([
     'https://alice.pod.example/finance/x.ttl?view=1#me',
-    'https://ALICE.POD.EXAMPLE:443/finance/./x.ttl?view=1#me',
+    'https://ALICE.POD.EXAMPLE:443/finance/x.ttl?view=1#me',
     'https://alice.pod.example/finance/x.ttl?view=1#',
   ])('reports a canonical document URL without a fragment for direct responses (%s)', async (url) => {
     await boot();
@@ -1606,6 +2358,25 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       body: 'document bytes',
     });
     expect(fetchCalls.map((call) => call.url)).toEqual([url]);
+  });
+
+  it.each([
+    '..%2foutside/x.ttl',
+    '%2Foutside/x.ttl',
+    '%252foutside/x.ttl',
+    '%2E%2e/x.ttl',
+    '%5Coutside/x.ttl',
+    '\\x.ttl',
+    './x.ttl',
+    'contacts/../x.ttl',
+  ])('denies ambiguous descendant requests before egress (%s)', async (path) => {
+    await boot();
+    expect(await fetchFinance({ url: `https://alice.pod.example/finance/${path}` })).toMatchObject({
+      status: 403,
+      error: 'Out of grant scope',
+    });
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
   });
 
   it('does not count a DPoP nonce retry as a redirect', async () => {
@@ -1786,6 +2557,59 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
   });
 
   it.each([
+    '/data/..%2foutside/',
+    '/data/%2Foutside/',
+    '/data/%252foutside/',
+    '/data/%2E%2e/contacts/',
+    '/data/%5Coutside/',
+    '/data/\\contacts/',
+    '/data/contacts/../other/',
+  ])('refuses an unsafe SAI redirect before a credentialed resend (%s)', async (path) => {
+    const pod = 'https://alice.pod.example';
+    const set = `${pod}/registries`;
+    const registry = `${pod}/data/`;
+    const registration = `${registry}contacts/`;
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const unsafe = `${pod}${path}`;
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <${interop}hasRegistrySet> <${set}> .`,
+      [set]: `<${set}> <${interop}hasDataRegistry> <${registry}> .`,
+      [registry]: `<${registry}> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<${registration}> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    for (const redirected of [set, registry, registration]) {
+      await boot([parent({ scope: { pods: [pod] } })]);
+      fetchCalls.length = 0;
+      fetchImpl = async (url, init) =>
+        init?.redirect === 'follow'
+          ? redirectProbe(unsafe)
+          : url === redirected
+            ? new Response(null, { status: 302, headers: { location: unsafe } })
+            : new Response(docs[url === unsafe ? redirected : url] ?? '');
+      const result = await send(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: 'unsafe-sai-redirect',
+          classIRI: dataClass,
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      );
+      expect(result.targets).toEqual([]);
+      expect(fetchCalls.map(({ url }) => url)).not.toContain(unsafe);
+      const probe = fetchCalls.at(-1);
+      expect(probe?.url).toBe(redirected);
+      expect(probe?.init).toMatchObject({
+        method: 'GET',
+        redirect: 'manual',
+        credentials: 'omit',
+      });
+      expect(new Headers(probe?.init?.headers).has('Authorization')).toBe(true);
+    }
+  });
+
+  it.each([
     'publicTypeIndex',
     'privateTypeIndex',
   ])('follows a discovery %s slash redirect with the same credential policy', async (type) => {
@@ -1795,9 +2619,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       init?.redirect === 'follow'
         ? redirectProbe(`${index}/`)
         : url === WEBID
-          ? new Response(`<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}> .`)
+          ? new Response(
+              `<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}>, <${index}/> .`,
+            )
           : url === index
-            ? opaqueRedirect()
+            ? new Response(null, { status: 302, headers: { location: `${index}/` } })
             : new Response(`<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
               <http://www.w3.org/ns/solid/terms#instanceContainer> <finance/> .`);
     const result = await send(
@@ -1810,7 +2636,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: `${index}/finance/`, kind: 'container' }]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, `${index}/`]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`]);
     for (const call of fetchCalls) {
       const probing = call.init?.redirect === 'follow';
       expect(call.init).toMatchObject({
@@ -1849,7 +2675,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, final]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index]);
     for (const call of fetchCalls) {
       expect(call.init?.credentials).toBe('omit');
       expect(new Headers(call.init?.headers).has('Authorization')).toBe(false);
@@ -1858,7 +2684,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
   });
 
   it.each([
-    ['https://public.example/profile', true],
+    ['https://public.example/profile', false],
     ['http://alice.pod.example/profile', false],
     ['https://idp.example/token', false],
     ['data:text/plain,profile', false],
@@ -1880,9 +2706,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual(
-      allowed ? [WEBID, WEBID, target] : target === 'opaque' ? [WEBID] : [WEBID, WEBID],
-    );
+    expect(fetchCalls.map((c) => c.url)).toEqual(allowed ? [WEBID, target] : [WEBID]);
     for (const call of fetchCalls) {
       expect(call.init).toMatchObject({ credentials: 'omit' });
       if (call.init?.redirect === 'follow')
@@ -1914,7 +2738,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index]);
   });
 
   it('ignores standalone class/login grants and client-id declarations without a parent', async () => {
@@ -2068,7 +2892,10 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       if ('solid:origin-grants' in items && ++writes === pruneWrite) await held;
       return set(items);
     });
-    const pending = fetchFinance({ method, body: method === 'PUT' ? 'updated finance' : null });
+    const pending = fetchFinance({
+      method,
+      body: method === 'PUT' ? 'updated finance' : undefined,
+    });
     try {
       await vi.waitFor(() => expect(writes).toBe(pruneWrite));
       expect(fetchCalls).toHaveLength(method === 'PUT' ? 0 : 1);
@@ -2702,5 +3529,819 @@ describe('separate form-fill consent wired into the worker', () => {
       });
     expect(fetchCalls).toHaveLength(0);
     expect(createdWindows).toHaveLength(0);
+  });
+});
+
+describe('worker-owned class discovery', () => {
+  const pod = 'https://alice.pod.example';
+  const solid = 'http://www.w3.org/ns/solid/terms#';
+  const prefs = `${pod}/settings/prefs`;
+  const privateIndex = `${pod}/settings/private`;
+  const secret = 'internal RDF bytes must stay inside the resolver';
+  const dataClass = classGrant().dataClass;
+  function request(classes = [dataClass], sender: CapturedSender = APPX) {
+    return send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'internal',
+        classes,
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: sender.origin,
+        userActivated: true,
+      },
+      sender,
+    );
+  }
+  async function deny() {
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
+  }
+
+  it.each(
+    ['refresh failure', 'logout', 'remove'].flatMap((ending) =>
+      ['stream', 'nonce retry'].map((race) => ({ ending, race })),
+    ),
+  )('cancels a $race before $ending replica cleanup finishes', async ({ ending, race }) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    const url = `${pod}/race`;
+    const cancel = vi.fn();
+    let releaseResponse!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async (target) => {
+      if (target === 'https://idp.example/token') return new Response(null, { status: 401 });
+      if (fetchCalls.filter((call) => call.url === url).length > 1)
+        return new Response('credentialed retry reached the pod', { status: 403 });
+      if (race === 'nonce retry') {
+        await new Promise<void>((resolve) => {
+          releaseResponse = resolve;
+          entered();
+        });
+        return new Response(new ReadableStream({ cancel }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          cancel,
+          start(controller) {
+            let released = false;
+            releaseResponse = () => {
+              if (released || cancel.mock.calls.length) return;
+              released = true;
+              controller.enqueue(new TextEncoder().encode(secret));
+              controller.close();
+            };
+          },
+          pull() {
+            entered();
+          },
+        }),
+        // A cold error response has no replica commit to queue behind the held purge.
+        { status: 403 },
+      );
+    };
+    let completed = false;
+    const pending = sendFetch({ url, stampedOrigin: APPX.origin }, APPX).finally(() => {
+      completed = true;
+    });
+    await started;
+    const signal = fetchCalls.find((call) => call.url === url)?.init?.signal;
+    expect(new Headers(fetchCalls[0].init?.headers).get('Authorization')).toBe(
+      'DPoP access-token-xyz',
+    );
+    let releasePurge!: () => void;
+    let purging!: () => void;
+    const purgeStarted = new Promise<void>((resolve) => {
+      purging = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      releasePurge = resolve;
+    });
+    const remove = FakeReplicaDb.prototype.deleteMetadataByWebId;
+    const purge = vi
+      .spyOn(FakeReplicaDb.prototype, 'deleteMetadataByWebId')
+      .mockImplementationOnce(async function (this: FakeReplicaDb, webId) {
+        purging();
+        await held;
+        return remove.call(this, webId);
+      });
+    const clearNonces = vi.spyOn(FakeReplicaDb.prototype, 'clearNonces');
+    if (ending === 'refresh failure')
+      profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const teardown =
+      ending === 'refresh failure'
+        ? request()
+        : send(
+            { type: ending === 'logout' ? 'SOLID_LOGOUT' : 'SOLID_PROFILE_REMOVE', profileId: '1' },
+            EXT_SENDER,
+          );
+    try {
+      await purgeStarted;
+      expect(profileDb.state.records[0]).toMatchObject({ session: null, keyPair: null });
+      expect(clearNonces).not.toHaveBeenCalled();
+      // Deliver bytes/challenge while cleanup is still held. Neither may reach the page
+      // or redeem the captured credentials, even if the transport ignores its signal.
+      releaseResponse();
+      await vi.waitFor(() =>
+        expect(completed || fetchCalls.filter((call) => call.url === url).length > 1).toBe(true),
+      );
+      expect(fetchCalls.filter((call) => call.url === url)).toHaveLength(1);
+      expect(await pending).toMatchObject({ requestId: 'r1', error: 'Fetch cancelled' });
+      expect(signal?.aborted).toBe(true);
+      expect(createdWindows).toHaveLength(0);
+      releasePurge();
+      await teardown;
+      await pending;
+      await vi.waitFor(() => {
+        expect(clearNonces).toHaveBeenCalledOnce();
+        expect(storage.get('solid:origin-grants')).toEqual([]);
+      });
+      expect(cacheStore.size).toBe(0);
+      expect(idbMeta.size).toBe(0);
+    } finally {
+      releaseResponse();
+      releasePurge();
+      await teardown;
+      purge.mockRestore();
+      clearNonces.mockRestore();
+    }
+  });
+
+  it.each([
+    'form-fill revocation',
+    'profile persistence',
+  ])('finishes validated refresh teardown after cancelling its waiter during %s', async (stage) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    fetchImpl = async () => new Response(null, { status: 401 });
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const set = chrome.storage.local.set.bind(chrome.storage.local);
+    const storageWrite = vi.spyOn(chrome.storage.local, 'set').mockImplementation(async (items) => {
+      if (stage === 'form-fill revocation' && 'solid:formfill-grants' in items) {
+        entered();
+        await held;
+      }
+      return set(items);
+    });
+    const write = profileDb.write.bind(profileDb);
+    const profileWrite = vi
+      .spyOn(profileDb, 'write')
+      .mockImplementationOnce(async (state, signal) => {
+        if (stage === 'profile persistence') {
+          entered();
+          await held;
+        }
+        return write(state, signal);
+      });
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    try {
+      await started;
+      // Cancellation must already have detached this refresh's own operation, before
+      // either persistence seam finishes, without aborting the validated teardown.
+      await vi.waitFor(() => expect(fetchCalls[0].init?.signal?.aborted).toBe(true));
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
+      release();
+      await vi.waitFor(() => {
+        expect(profileDb.state.records[0]).toMatchObject({
+          profile: { sessionState: 'signed-out' },
+          session: null,
+          keyPair: null,
+        });
+        expect(storage.get('solid:origin-grants')).toEqual([]);
+      });
+      expect(fetchCalls).toHaveLength(1);
+      expect(createdWindows).toHaveLength(0);
+    } finally {
+      release();
+      await pending;
+      storageWrite.mockRestore();
+      profileWrite.mockRestore();
+    }
+  });
+
+  it.each([
+    'close tab',
+    'deadline',
+  ])('cancels a profile-queue wait on %s without starting preflight later', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = profileDb.write.bind(profileDb);
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state) => {
+      entered();
+      await held;
+      return write(state);
+    });
+    const removing = send({ type: 'SOLID_PROFILE_REMOVE', profileId: '1' }, EXT_SENDER);
+    await started;
+    vi.useFakeTimers();
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await vi.advanceTimersByTimeAsync(0);
+      if (ending === 'close tab') removedTab(75);
+      else await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(vi.getTimerCount()).toBe(0);
+      release();
+      expect((await removing).ok).toBe(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCalls).toHaveLength(0);
+      expect(createdWindows).toHaveLength(0);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a shared refresh alive for another origin after one request closes its tab', async () => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === 'https://idp.example/token') {
+        started();
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }
+      return new Response('');
+    };
+    const first = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const session = WorkerStore.prototype.session;
+    let joined!: () => void;
+    const joining = new Promise<void>((resolve) => {
+      joined = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+      this: ProfileStore,
+      id,
+    ) {
+      const result = await session.call(this, id);
+      joined();
+      return result;
+    });
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const second = request([dataClass], other);
+    await joining;
+    // Let the second ensureSession attach to the in-flight redemption.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    removedTab(75);
+    expect(await first).toMatchObject({ error: expect.any(String) });
+    expect(fetchCalls[0].init?.signal?.aborted).toBe(false);
+    release(
+      Response.json({
+        access_token: 'shared-access',
+        refresh_token: 'shared-refresh',
+        expires_in: 3600,
+      }),
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await second).ok).toBe(false);
+    expect(profileDb.state.records[0].session?.accessToken).toBe('shared-access');
+    expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(1);
+  });
+
+  it.each([
+    'close tab',
+    'deadline',
+    'revoke',
+  ])('cancels a stalled refresh on %s and fences its late success', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const before = structuredClone(profileDb.state);
+    vi.useFakeTimers();
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async () => {
+      started();
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    };
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await entered;
+      const signal = fetchCalls[0].init?.signal;
+      expect(fetchCalls[0].url).toBe('https://idp.example/token');
+      expect(signal).toBeInstanceOf(AbortSignal);
+      if (ending === 'close tab') removedTab(75);
+      else if (ending === 'deadline') await vi.advanceTimersByTimeAsync(10_000);
+      else await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(signal!.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      release(
+        Response.json({
+          access_token: 'late-access',
+          refresh_token: 'late-refresh',
+          expires_in: 3600,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(profileDb.state).toEqual(before);
+      expect(fetchCalls).toHaveLength(1);
+      expect(createdWindows).toHaveLength(0);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    'close tab',
+    'deadline',
+    'expired handoff',
+  ] as const)('cancels a refresh during persistence on %s and hands the rotated chain to a later request', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const before = structuredClone(profileDb.state);
+    const write = profileDb.write.bind(profileDb);
+    let release!: () => void;
+    let started!: () => void;
+    let writeSignal: AbortSignal | undefined;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state, signal) => {
+      writeSignal = signal;
+      started();
+      await held;
+      return write(state, signal);
+    });
+    fetchImpl = async (url) =>
+      url === 'https://idp.example/token'
+        ? Response.json({
+            access_token: 'rotated-access',
+            refresh_token: 'rotated-refresh',
+            expires_in: 3600,
+          })
+        : new Response('');
+    vi.useFakeTimers();
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await entered;
+      if (ending !== 'deadline') removedTab(75);
+      else await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(result).toMatchObject({ error: expect.any(String) });
+      expect(JSON.stringify(result)).not.toContain('rotated');
+      expect(writeSignal?.aborted).toBe(true);
+      expect(createdWindows).toHaveLength(0);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(profileDb.state).toEqual(before);
+      if (ending === 'expired handoff') {
+        vi.setSystemTime(Date.now() + 3600_000);
+        fetchImpl = async (url, init) => {
+          if (url !== 'https://idp.example/token') return new Response('');
+          expect(new URLSearchParams(init?.body as URLSearchParams).get('refresh_token')).toBe(
+            'rotated-refresh',
+          );
+          return Response.json({
+            access_token: 'next-access',
+            refresh_token: 'next-refresh',
+            expires_in: 3600,
+          });
+        };
+      }
+      // A completed redemption is retained only inside the worker. The next live request
+      // persists it without trying to redeem the now-spent refresh token again.
+      const other = { origin: 'https://recovery.example', url: 'https://recovery.example/app' };
+      const next = request([dataClass], other);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      expect(profileDb.state.records[0].session?.refreshToken).toBe(
+        ending === 'expired handoff' ? 'next-refresh' : 'rotated-refresh',
+      );
+      expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(
+        ending === 'expired handoff' ? 2 : 1,
+      );
+      await deny();
+      expect((await next).ok).toBe(false);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails the cancelled request when a token commit won the abort race and preserves that chain', async () => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const write = profileDb.write.bind(profileDb);
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state) => {
+      await write(state);
+      started();
+      await held;
+    });
+    fetchImpl = async (url) =>
+      url === 'https://idp.example/token'
+        ? Response.json({
+            access_token: 'committed-access',
+            refresh_token: 'committed-refresh',
+            expires_in: 3600,
+          })
+        : new Response('');
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    removedTab(75);
+    expect(await pending).toMatchObject({ error: expect.any(String) });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(profileDb.state.records[0].session?.refreshToken).toBe('committed-refresh');
+    const next = request([dataClass], {
+      origin: 'https://recovery.example',
+      url: 'https://recovery.example/app',
+    });
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await next).ok).toBe(false);
+    expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(1);
+  });
+
+  it.each([
+    'session',
+    'origin grant',
+  ] as const)('bounds the final %s lookup, retains targets with truncation and fences its late continuation', async (lookup) => {
+    await seedSession();
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      if (lookup === 'session') {
+        const session = WorkerStore.prototype.session;
+        vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+          this: ProfileStore,
+          id,
+        ) {
+          started();
+          await held;
+          return session.call(this, id);
+        });
+      } else {
+        const list = OriginGrantStore.prototype.list;
+        vi.spyOn(OriginGrantStore.prototype, 'list').mockImplementationOnce(async function (
+          this: InstanceType<typeof OriginGrantStore>,
+        ) {
+          started();
+          await held;
+          return list.call(this);
+        });
+      }
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    vi.useFakeTimers();
+    try {
+      const pending = request();
+      await entered;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(createdWindows).toHaveLength(1);
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { truncated: true, targets: [{ url: `${pod}/finance/` }] },
+      ]);
+      expect(fetchCalls).toHaveLength(2);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(createdWindows).toHaveLength(1);
+      expect(fetchCalls).toHaveLength(2);
+      await deny();
+      expect((await pending).ok).toBe(false);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    'close tab',
+    'revoke',
+  ] as const)('fences cancellation during final authority lookup on %s', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      const session = WorkerStore.prototype.session;
+      vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+        this: ProfileStore,
+        id,
+      ) {
+        started();
+        await held;
+        return session.call(this, id);
+      });
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    if (ending === 'close tab') removedTab(75);
+    else await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+    expect(await pending).toMatchObject({ error: expect.any(String) });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createdWindows).toHaveLength(0);
+    expect(fetchCalls).toHaveLength(2);
+  });
+
+  it.each([
+    'preflight',
+    'final authority',
+  ] as const)('bounds the page resolveClass %s await and fences its late completion', async (phase) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holdSession = () => {
+      const session = WorkerStore.prototype.session;
+      vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+        this: ProfileStore,
+        id,
+      ) {
+        started();
+        await held;
+        return session.call(this, id);
+      });
+    };
+    if (phase === 'preflight') holdSession();
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      holdSession();
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    vi.useFakeTimers();
+    try {
+      const pending = send(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: 'page-resolve',
+          classIRI: dataClass,
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      );
+      await entered;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toMatchObject({ requestId: 'page-resolve', error: expect.any(String) });
+      expect(vi.getTimerCount()).toBe(0);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCalls).toHaveLength(phase === 'preflight' ? 0 : 2);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it('charges nonce re-sends against the same 128 network reads and discards the last challenge', async () => {
+    await seedSession();
+    await loadWorker();
+    const attempts = new Set<string>();
+    const cancelled = vi.fn();
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(
+          `<${WEBID}> <${solid}privateTypeIndex> ${Array.from({ length: 70 }, (_, i) => `<${pod}/index${i}>`).join(', ')} .`,
+        );
+      if (!attempts.has(url)) {
+        attempts.add(url);
+        return new Response(new ReadableStream({ cancel: cancelled }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${url}/target/> .`,
+      );
+    };
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([{ truncated: true, targets: expect.any(Array) }]);
+      expect((view.classes as { targets: unknown[] }[])[0].targets).toHaveLength(63);
+      expect(fetchCalls).toHaveLength(128);
+      expect(cancelled).toHaveBeenCalledTimes(64);
+      expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
+    } finally {
+      await deny();
+    }
+    expect((await pending).ok).toBe(false);
+  });
+
+  it('cleans a streamed nonce challenge and its transport before consent denial', async () => {
+    await seedSession();
+    await loadWorker();
+    const cancel = vi.fn();
+    let challenged = false;
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}privateTypeIndex> <${privateIndex}> .`);
+      if (!challenged) {
+        challenged = true;
+        return new Response(new ReadableStream({ cancel }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      expect(cancel).toHaveBeenCalledOnce();
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await pending).ok).toBe(false);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchCalls).toHaveLength(3);
+    expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
+  });
+
+  it('reads preferences before first consent, authenticates only pod documents, and exposes no bytes to page or replica', async () => {
+    await seedSession();
+    await loadWorker();
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> <${prefs}> .`,
+      [prefs]: `<${WEBID}> <${solid}privateTypeIndex> <${privateIndex}>; <${solid}publicTypeIndex> <https://public.example/index> .\n<> <https://example.test/secret> "${secret}" .`,
+      [privateIndex]: `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      'https://public.example/index': '',
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url] ?? '', { headers: { 'dpop-nonce': 'internal-nonce' } });
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      expect(await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, APPX)).toBeNull();
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { targets: [{ url: `${pod}/finance/`, kind: 'container' }] },
+      ]);
+      for (const call of fetchCalls) {
+        expect(call.init).toMatchObject({
+          method: 'GET',
+          redirect: 'manual',
+          credentials: 'omit',
+          cache: 'no-store',
+        });
+        expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+          call.url === prefs || call.url === privateIndex,
+        );
+      }
+      expect(cacheStore.size).toBe(0);
+      expect(idbMeta.size).toBe(0);
+      expect(idbNonces.size).toBe(0);
+      expect(JSON.stringify([...storage.values(), view])).not.toContain(secret);
+      expect(JSON.stringify([...storage.values(), view])).not.toContain('internal-nonce');
+    } finally {
+      await deny();
+    }
+    expect(await pending).toEqual({ requestId: 'internal', ok: false, grants: [] });
+  });
+
+  it.each([
+    'revoke',
+    'close tab',
+    'navigate tab',
+  ])('cancels a stalled first-consent discovery on %s', async (change) => {
+    await seedSession();
+    await loadWorker();
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async () => {
+      started();
+      return new Promise(() => {});
+    };
+    const sender = { ...APPX, tab: { id: 75, url: `${APPX.origin}/app` } };
+    const pending = request([dataClass], sender);
+    await entered;
+    if (change === 'revoke')
+      await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+    else if (change === 'close tab') removedTab(75);
+    else {
+      updatedTab(75, { url: `${APPX.origin}/same-origin` });
+      expect(fetchCalls[0].init?.signal?.aborted).toBe(false);
+      updatedTab(75, { url: 'https://other.example/' });
+    }
+    expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+    expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
+    expect(fetchCalls).toHaveLength(1);
+    expect(createdWindows).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('shares the request budget and document cache across classes and still opens truncated consent', async () => {
+    await seedSession();
+    await loadWorker();
+    const classes = [dataClass, 'https://example.test/Second'];
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <${solid}publicTypeIndex> ${Array.from({ length: 130 }, (_, i) => `<${pod}/index${i}>`).join(', ')} .`
+          : `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    const pending = request(classes);
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { dataClass, truncated: true, targets: [{ url: `${pod}/finance/` }] },
+        { dataClass: classes[1], truncated: true, targets: [] },
+      ]);
+      expect(fetchCalls).toHaveLength(128);
+      expect(fetchCalls.filter((call) => call.url === WEBID)).toHaveLength(1);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      await deny();
+    }
+    expect((await pending).ok).toBe(false);
   });
 });

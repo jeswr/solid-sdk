@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
 /**
@@ -10,16 +11,29 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { FileText, HardDrive, Mail, Menu, MessageSquare, Search } from "lucide-react";
+import {
+  CalendarDays,
+  FileText,
+  HardDrive,
+  Images,
+  Mail,
+  Menu,
+  MessageSquare,
+  Search,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "mail" | "chat";
+export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "mail" | "chat";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
+  { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
+  { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "mail", label: "Mail", href: "/mail", icon: Mail },
   { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
 ];
@@ -33,10 +47,11 @@ export interface SuiteFrameProps {
   /** Top bar trailing actions. */
   actions?: ReactNode;
   /** Search placeholder and target (`?q=` is appended). */
-  search?: { placeholder: string; action: string; scopeLabel: string };
+  search?: { placeholder: string; action: string; scopeLabel: string; query?: string };
   /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
   onDetailsClose?: () => void;
+  detailsReturnFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
@@ -69,14 +84,15 @@ function Rail({ app }: { app: SuiteAppId }) {
 
 function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
   const router = useRouter();
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(search.query ?? "");
+  useEffect(() => setValue(search.query ?? ""), [search.query]);
   return (
     <search className="ish-search">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           const q = value.trim();
-          if (q) router.push(`${search.action}?q=${encodeURIComponent(q)}`);
+          router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
         }}
       >
         <Search aria-hidden="true" size={18} strokeWidth={1.75} />
@@ -102,6 +118,7 @@ export function SuiteFrame({
   search,
   details,
   onDetailsClose,
+  detailsReturnFocus,
   children,
 }: SuiteFrameProps) {
   const pathname = usePathname();
@@ -197,7 +214,7 @@ export function SuiteFrame({
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              const trigger = detailsTrigger.current;
+              const trigger = detailsReturnFocus?.current ?? detailsTrigger.current;
               (trigger?.isConnected ? trigger : document.getElementById("main-content"))?.focus();
             }}
           >

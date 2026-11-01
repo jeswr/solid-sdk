@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -104,14 +106,23 @@ engineFetched.dataset.addQuads([]);
 void size;
 `,
     );
-    const typecheck = () =>
-      spawnSync(
-        process.execPath,
-        [join(packageRoot, "node_modules/typescript/lib/tsc.js"), "-p", "tsconfig.json"],
-        { cwd: consumer, encoding: "utf8" },
-      );
+    const typecheck = () => {
+      // File capture also works where synchronous child-process pipes are restricted.
+      const logPath = join(consumer, "typecheck.log");
+      const log = openSync(logPath, "w");
+      try {
+        const result = spawnSync(
+          process.execPath,
+          [join(packageRoot, "node_modules/typescript/lib/tsc.js"), "-p", "tsconfig.json"],
+          { cwd: consumer, stdio: ["ignore", log, log] },
+        );
+        return { ...result, stdout: readFileSync(logPath, "utf8") };
+      } finally {
+        closeSync(log);
+      }
+    };
     const result = typecheck();
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.status, result.stdout).toBe(0);
 
     // Prove the fixture cannot borrow @types/n3 from the workspace or consumer.
     rmSync(join(installed, "node_modules/@types/n3"));
