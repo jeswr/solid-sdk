@@ -7,11 +7,13 @@ import { useId, useState } from "react";
 import {
   buildReport,
   type MoneyReport,
+  type MonthBar,
   REPORT_PRESETS,
   type ReportChange,
   type ReportPreset,
   reportCurrencies,
 } from "../lib/data/reports";
+import { minorUnits } from "../lib/reports";
 import { useMoney } from "../state/money-context";
 import { Amount } from "./money-forms";
 
@@ -26,6 +28,15 @@ const dateLabel = (date: string) =>
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00Z`));
+
+/** Whole percent, but never "0%" for a share that isn't zero. */
+function shareLabel(share: number) {
+  const value = Math.round(share * 100);
+  return value === 0 && share > 0 ? "<1%" : `${value}%`;
+}
+function partial(row: MonthBar) {
+  return row.days === undefined ? "" : ` (${row.days} ${row.days === 1 ? "day" : "days"})`;
+}
 
 export function ReportsScreen() {
   const money = useMoney();
@@ -53,9 +64,15 @@ export function ReportsScreen() {
         </section>
       </>
     );
-  const report = buildReport(money.transactions, money.categories, currency, preset, money.today, {
-    rollUp,
-  });
+  let report: MoneyReport | undefined;
+  try {
+    report = buildReport(money.transactions, money.categories, currency, preset, money.today, {
+      rollUp,
+    });
+  } catch {
+    // Totals beyond safe integers or other data the exact library rejects.
+    report = undefined;
+  }
   return (
     <>
       <Heading />
@@ -86,18 +103,53 @@ export function ReportsScreen() {
           </label>
         )}
       </div>
+      {!report ? (
+        <section className="mon-panel">
+          <EmptyState
+            title="Can't build this report"
+            body={`Your ${currency} transactions can't be added up exactly, so there's no report for them. Try another currency.`}
+          />
+        </section>
+      ) : (
+        <ReportBody report={report} versus={versus} rollUp={rollUp} onRollUp={setRollUp} />
+      )}
+    </>
+  );
+}
+
+function ReportBody({
+  report,
+  versus,
+  rollUp,
+  onRollUp,
+}: {
+  report: MoneyReport;
+  versus: string;
+  rollUp: boolean;
+  onRollUp: (value: boolean) => void;
+}) {
+  const { currency } = report;
+  return (
+    <>
       <p className="mon-hint mon-report-period">
         {dateLabel(report.current.start)} to {dateLabel(report.current.end)}, compared with {versus}{" "}
         ({dateLabel(report.previous.start)} to {dateLabel(report.previous.end)}). Transfers between
-        your accounts are left out.
+        your accounts are left out, and refunds count as money in for now.
       </p>
+      {report.skipped > 0 && (
+        <p className="mon-hint" role="status">
+          {report.skipped} {report.skipped === 1 ? "transaction has" : "transactions have"} an
+          amount with more decimal places than {currency} allows and{" "}
+          {report.skipped === 1 ? "isn't" : "aren't"} included.
+        </p>
+      )}
       <div className="mon-worth-grid mon-report-totals">
         <Total title="Money in" value={report.income} currency={currency} />
         <Total title="Spending" value={report.expense} currency={currency} />
         <Total title="Net" value={report.net} currency={currency} signed />
       </div>
       <div className="mon-columns">
-        <Categories report={report} rollUp={rollUp} onRollUp={setRollUp} />
+        <Categories report={report} rollUp={rollUp} onRollUp={onRollUp} />
         <Months report={report} />
       </div>
     </>
@@ -145,10 +197,10 @@ function Total({
         {direction === "same" ? (
           "No change"
         ) : size === null ? (
-          "New this period"
+          "No previous figure"
         ) : (
           <>
-            {direction === "up" ? "Up" : "Down"} {size}% (
+            {direction === "up" ? "Up" : "Down"} {size === 0 ? "<1" : size}% (
             <Amount amount={value.change} currency={currency} signed />)
           </>
         )}
@@ -203,7 +255,7 @@ function Categories({
             {report.categories.map((row) => (
               <tr key={row.id ?? "none"}>
                 <td>{row.label}</td>
-                <td>{Math.round(row.share * 100)}%</td>
+                <td>{shareLabel(row.share)}</td>
                 <td>
                   <Amount amount={row.amount} currency={report.currency} />
                 </td>
@@ -218,7 +270,7 @@ function Categories({
               <div>
                 <span>{row.label}</span>
                 <span className="mon-report-share">
-                  <span className="mon-hint">{Math.round(row.share * 100)}%</span>
+                  <span className="mon-hint">{shareLabel(row.share)}</span>
                   <Amount amount={row.amount} currency={report.currency} />
                 </span>
               </div>
@@ -242,7 +294,11 @@ function niceMax(minor: number) {
 
 function Months({ report }: { report: MoneyReport }) {
   const [table, setTable] = useState(false);
-  const [active, setActive] = useState<string>();
+  const [hovered, setHovered] = useState<string>();
+  const [focusedMonth, setFocusedMonth] = useState<string>();
+  const [dismissed, setDismissed] = useState(false);
+  const active = dismissed ? undefined : (focusedMonth ?? hovered);
+  const scale = 10 ** minorUnits(report.currency);
   const tip = useId();
   const top = niceMax(Math.max(0, ...report.months.map((row) => row.minor)));
   const ticks = [0, top / 2, top];
@@ -269,7 +325,10 @@ function Months({ report }: { report: MoneyReport }) {
           <tbody>
             {report.months.map((row) => (
               <tr key={row.month}>
-                <td>{monthLabel(row.month, "long")}</td>
+                <td>
+                  {monthLabel(row.month, "long")}
+                  {partial(row)}
+                </td>
                 <td>
                   <Amount amount={row.amount} currency={report.currency} />
                 </td>
@@ -286,7 +345,7 @@ function Months({ report }: { report: MoneyReport }) {
                   style: "currency",
                   currency: report.currency,
                   notation: "compact",
-                }).format(tick / 100)}
+                }).format(tick / scale)}
               </span>
             ))}
           </div>
@@ -306,18 +365,30 @@ function Months({ report }: { report: MoneyReport }) {
                     type="button"
                     className="mon-chart-hit"
                     aria-describedby={active === row.month ? tip : undefined}
-                    onPointerEnter={() => setActive(row.month)}
-                    onPointerLeave={() => setActive(undefined)}
-                    onFocus={() => setActive(row.month)}
-                    onBlur={() => setActive(undefined)}
+                    onPointerEnter={(event) => {
+                      if (event.pointerType === "touch") return;
+                      setDismissed(false);
+                      setHovered(row.month);
+                    }}
+                    onPointerLeave={(event) => {
+                      if (event.pointerType !== "touch") setHovered(undefined);
+                    }}
+                    onFocus={() => {
+                      setDismissed(false);
+                      setFocusedMonth(row.month);
+                    }}
+                    onBlur={() => setFocusedMonth(undefined)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setDismissed(true);
+                    }}
                   >
                     <span
                       className="mon-chart-bar"
                       style={{ height: `${(Math.max(0, row.minor) / top) * 100}%` }}
                     />
                     <span className="sr-only">
-                      {monthLabel(row.month, "long")}:{" "}
-                      <Amount amount={row.amount} currency={report.currency} />
+                      {monthLabel(row.month, "long")}
+                      {partial(row)}: <Amount amount={row.amount} currency={report.currency} />
                     </span>
                   </button>
                   <span className="mon-chart-label" aria-hidden="true">
@@ -336,7 +407,10 @@ function Months({ report }: { report: MoneyReport }) {
                   bottom: `${Math.min(100, (Math.max(0, focused.minor) / top) * 100)}%`,
                 }}
               >
-                <strong>{monthLabel(focused.month, "long")}</strong>
+                <strong>
+                  {monthLabel(focused.month, "long")}
+                  {partial(focused)}
+                </strong>
                 <Amount amount={focused.amount} currency={report.currency} />
               </div>
             )}

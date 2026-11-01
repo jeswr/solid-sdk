@@ -6,6 +6,8 @@ import {
   REPORT_PRESETS,
   reportCurrencies,
   reportRows,
+  storedMoney,
+  supportedCurrency,
 } from "../src/apps/money/lib/data/reports";
 import type { Category, Transaction } from "../src/apps/money/lib/model";
 
@@ -141,7 +143,7 @@ describe("buildReport", () => {
       percent: 214,
     });
     expect(report.net.percent).toBe(43);
-    expect(report.months).toEqual([{ month: "2026-11", amount: "125.50", minor: 12550 }]);
+    expect(report.months).toEqual([{ month: "2026-11", amount: "125.50", minor: 12550, days: 14 }]);
   });
   it("orders categories by spend with shares of spending", () => {
     const report = buildReport(rows, categories, "GBP", "month", "2026-11-14");
@@ -190,6 +192,47 @@ describe("buildReport", () => {
   });
 });
 
+describe("exact amounts", () => {
+  it("drops trailing zeros beyond the currency's minor units but rejects finer amounts", () => {
+    expect(storedMoney("GBP", "10.500")).toEqual({ currency: "GBP", minor: 1050 });
+    expect(storedMoney("GBP", "-4.5")).toEqual({ currency: "GBP", minor: -450 });
+    expect(storedMoney("JPY", "1000.00")).toEqual({ currency: "JPY", minor: 1000 });
+    expect(storedMoney("JPY", "-7")).toEqual({ currency: "JPY", minor: -7 });
+    expect(storedMoney("BHD", "1.2340")).toEqual({ currency: "BHD", minor: 1234 });
+    expect(() => storedMoney("GBP", "-4.999")).toThrow();
+    expect(() => storedMoney("BTC", "1")).toThrow();
+  });
+  it("skips rows it can't represent and reports how many", () => {
+    const rows = [
+      tx("2026-11-02", "-4.999"),
+      tx("2026-11-02", "-10.500"),
+      tx("2026-11-03", "-2", { debitAccount: `${B}x`, amount: "-1.001" }),
+    ];
+    const skipped: string[] = [];
+    expect(
+      reportRows(rows, categories, "GBP", false, skipped).map((row) => row.amount.minor),
+    ).toEqual([-1050]);
+    expect(skipped).toEqual([rows[0]?.id, rows[2]?.id]);
+    const report = buildReport(rows, categories, "GBP", "month", "2026-11-14");
+    expect(report.skipped).toBe(2);
+    expect(report.expense.amount).toBe("10.50");
+  });
+  it("reports zero-decimal currencies in whole units", () => {
+    const report = buildReport(
+      [tx("2026-11-02", "-1500", { currency: "JPY" })],
+      categories,
+      "JPY",
+      "last-month",
+      "2026-12-05",
+    );
+    expect(report.months).toEqual([{ month: "2026-11", amount: "1500", minor: 1500 }]);
+  });
+  it("knows which currencies the exact library supports", () => {
+    expect(supportedCurrency("GBP")).toBe(true);
+    expect(supportedCurrency("BTC")).toBe(false);
+  });
+});
+
 describe("reportCurrencies", () => {
   it("orders currencies by use", () => {
     expect(
@@ -198,6 +241,9 @@ describe("reportCurrencies", () => {
         [tx("2026-11-01", "1"), tx("2026-11-01", "1", { currency: "USD" })],
       ),
     ).toEqual(["GBP", "EUR", "USD"]);
+    expect(
+      reportCurrencies([{ currency: "BTC" }], [tx("2026-11-01", "1", { currency: "BTC" })]),
+    ).toEqual([]);
     expect(reportCurrencies([], [])).toEqual([]);
   });
 });

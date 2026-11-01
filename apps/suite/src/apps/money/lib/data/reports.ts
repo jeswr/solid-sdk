@@ -5,6 +5,7 @@ import {
   type ExactRatio,
   formatMoney,
   type Money,
+  minorUnits,
   money,
   type Period,
   type PeriodChange,
@@ -17,10 +18,10 @@ import { resolveCategory } from "./categories";
 
 export type ReportPreset = "month" | "last-month" | "90-days" | "year";
 export const REPORT_PRESETS: readonly { id: ReportPreset; label: string; versus: string }[] = [
-  { id: "month", label: "This month", versus: "same days last month" },
+  { id: "month", label: "This month", versus: "the same days last month" },
   { id: "last-month", label: "Last month", versus: "the month before" },
   { id: "90-days", label: "Last 90 days", versus: "the 90 days before" },
-  { id: "year", label: "This year", versus: "same days last year" },
+  { id: "year", label: "This year", versus: "the same days last year" },
 ];
 
 const day = (value: Date) => value.toISOString().slice(0, 10);
@@ -84,15 +85,41 @@ export function presetPeriods(
   }
 }
 
+/** True for ISO 4217 currencies the exact-money library supports. */
+export function supportedCurrency(currency: string): boolean {
+  try {
+    minorUnits(currency);
+    return true;
+  } catch {
+    return false;
+  }
+}
+/**
+ * Parses a stored decimal exactly. Trailing zeros beyond the currency's minor
+ * units (RDF keeps "10.500"; another app may write JPY "1000.00") are dropped;
+ * genuinely finer amounts ("4.999" GBP) are rejected rather than rounded.
+ */
+export function storedMoney(currency: string, amount: string): Money {
+  const [whole, fraction] = amount.split(".");
+  const digits = minorUnits(currency);
+  if (fraction === undefined || fraction.length <= digits) return parseMoney(currency, amount);
+  const kept = fraction.slice(0, digits);
+  if (!/^0*$/.test(fraction.slice(digits))) return parseMoney(currency, amount);
+  return parseMoney(currency, kept ? `${whole}.${kept}` : (whole as string));
+}
+
 /**
  * Report rows for one currency. Until the model records an explicit kind
  * (bead MON-F1), transfer legs are transfers and signs classify income and spending.
+ * Rows whose amount can't be represented exactly are left out and their IDs
+ * pushed to `skipped`, so one malformed row never breaks a whole report.
  */
 export function reportRows(
   transactions: readonly Transaction[],
   categories: readonly Category[],
   currency: string,
   rollUp = false,
+  skipped: string[] = [],
 ): ReportTransaction[] {
   const parents = new Map(categories.map((category) => [category.id, category.parent]));
   const top = (id: string) => {
@@ -108,7 +135,14 @@ export function reportRows(
   };
   return transactions
     .filter((row) => row.currency === currency)
-    .map((row) => {
+    .flatMap((row) => {
+      let amount: Money;
+      try {
+        amount = storedMoney(currency, row.amount);
+      } catch {
+        skipped.push(row.id);
+        return [];
+      }
       const kind =
         row.debitAccount || row.creditAccount
           ? ("transfer" as const)
@@ -116,13 +150,15 @@ export function reportRows(
             ? ("expense" as const)
             : ("income" as const);
       const category = kind === "expense" ? resolveCategory(row.category, categories) : undefined;
-      return {
-        id: row.id,
-        date: row.postingTime.slice(0, 10),
-        amount: parseMoney(currency, row.amount),
-        kind,
-        categoryId: category === undefined ? null : rollUp ? top(category) : category,
-      };
+      return [
+        {
+          id: row.id,
+          date: row.postingTime.slice(0, 10),
+          amount,
+          kind,
+          categoryId: category === undefined ? null : rollUp ? top(category) : category,
+        },
+      ];
     });
 }
 
@@ -145,6 +181,8 @@ export interface MonthBar {
   month: string;
   amount: string;
   minor: number;
+  /** Days of this month inside the period, present only for a partial month. */
+  days?: number;
 }
 export interface MoneyReport {
   currency: string;
@@ -155,6 +193,8 @@ export interface MoneyReport {
   net: ReportChange;
   categories: CategoryBar[];
   months: MonthBar[];
+  /** Rows in this currency left out because their amount isn't exact. */
+  skipped: number;
 }
 
 function percent(ratio: ExactRatio | null): number | null {
@@ -191,7 +231,8 @@ export function buildReport(
   options: { rollUp?: boolean } = {},
 ): MoneyReport {
   const { current, previous } = presetPeriods(preset, today);
-  const rows = reportRows(transactions, categories, currency, options.rollUp);
+  const skipped: string[] = [];
+  const rows = reportRows(transactions, categories, currency, options.rollUp, skipped);
   const comparison = comparePeriods(rows, previous, current, { currency });
   const labels = new Map(categories.map((category) => [category.id, category.label]));
   const spending = spendingByCategory(rows, current, { currency });
@@ -207,6 +248,7 @@ export function buildReport(
     income: changeOf(comparison.income),
     expense: changeOf(comparison.expense),
     net: changeOf(comparison.net),
+    skipped: skipped.length,
     categories: spending
       .map((row) => ({
         id: row.categoryId,
@@ -220,18 +262,28 @@ export function buildReport(
     months: monthsBetween(current).map((month) => {
       const total = byMonth.get(month);
       const value = total ?? money(currency, 0);
-      return { month, amount: formatMoney(value), minor: sizeOf(value) };
+      const first = `${month}-01`;
+      const last = addDays(shiftMonths(first, 1), -1);
+      const start = first < current.start ? current.start : first;
+      const end = last > current.end ? current.end : last;
+      const days = (utc(end).getTime() - utc(start).getTime()) / 86_400_000 + 1;
+      return {
+        month,
+        amount: formatMoney(value),
+        minor: sizeOf(value),
+        ...(start !== first || end !== last ? { days } : {}),
+      };
     }),
   };
 }
 
-/** Currencies with at least one account or transaction, most-used first. */
+/** Supported currencies with at least one account or transaction, most-used first. */
 export function reportCurrencies(
   accounts: readonly { currency: string }[],
   transactions: readonly Transaction[],
 ): string[] {
   const counts = new Map<string, number>();
   for (const { currency } of [...accounts, ...transactions])
-    counts.set(currency, (counts.get(currency) ?? 0) + 1);
+    if (supportedCurrency(currency)) counts.set(currency, (counts.get(currency) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([c]) => c);
 }

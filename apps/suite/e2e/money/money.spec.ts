@@ -305,6 +305,13 @@ test("reports compare periods and break spending down by category and month", as
   await expect(bars).toHaveCount(4);
   await bars.nth(1).focus();
   await expect(months.getByRole("tooltip")).toContainText("September 2026");
+  await expect(months.getByRole("tooltip")).not.toContainText("days");
+  await bars.last().focus();
+  // The period ends on 1 November, so its bar covers a single day.
+  await expect(months.getByRole("tooltip")).toContainText("November 2026 (1 day)");
+  await page.keyboard.press("Escape");
+  await expect(months.getByRole("tooltip")).toHaveCount(0);
+  await bars.nth(1).focus();
   await shot(page, info, "reports");
   await categories.getByLabel("Include subcategories in their parent", { exact: true }).uncheck();
   await expect(categories.getByText("Groceries", { exact: true })).toBeVisible();
