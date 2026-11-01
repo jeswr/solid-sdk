@@ -8,8 +8,13 @@ const navigation = vi.hoisted(() => ({
   params: { ref: "web-value" } as Record<string, string | string[]>,
   pathname: "/drive/f/a/" as string | null,
   listeners: new Set<() => void>(),
+  notFound: false,
 }));
 vi.mock("next/navigation", () => ({
+  // Next's notFound() throws; recording the call lets the probe render its result.
+  notFound: () => {
+    navigation.notFound = true;
+  },
   useParams: () => {
     if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native")
       throw new Error("Native must not read the placeholder router tree");
@@ -26,10 +31,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 let useRouteParams: typeof import("../src/lib/route-params").useRouteParams;
+let usePageRouteParams: typeof import("../src/lib/route-params").usePageRouteParams;
 async function loadTarget(target: string) {
   vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", target);
   vi.resetModules();
-  ({ useRouteParams } = await import("../src/lib/route-params"));
+  ({ useRouteParams, usePageRouteParams } = await import("../src/lib/route-params"));
 }
 
 afterEach(() => vi.unstubAllEnvs());
@@ -50,6 +56,52 @@ it("passes through reactive web params without remounting or interpreting the pa
   await view.render(h(Probe));
   expect(view.host.textContent).toBe(JSON.stringify(navigation.params));
   expect(mounts).toBe(1);
+});
+
+it("decodes web params once, keeping malformed percent-encoding as it arrived", async () => {
+  await loadTarget("web");
+  navigation.params = { label: "Work%20stuff", bad: "100%", parts: ["a%2Fb", "%E0%A4%A"] };
+  function Probe() {
+    return h("span", null, JSON.stringify(useRouteParams("/tasks/l/[label]")));
+  }
+  const view = await mount(h(Probe));
+  expect(JSON.parse(view.host.textContent ?? "")).toEqual({
+    label: "Work stuff",
+    bad: "100%",
+    parts: ["a/b", "%E0%A4%A"],
+  });
+  navigation.params = { ref: "web-value" };
+});
+
+describe("usePageRouteParams", () => {
+  function Probe() {
+    const params = usePageRouteParams("/tasks/l/[label]");
+    const text = navigation.notFound ? "NEXT_NOT_FOUND" : (JSON.stringify(params) ?? "pending");
+    return h("span", null, text);
+  }
+
+  it("returns web params", async () => {
+    await loadTarget("web");
+    navigation.params = { label: "a" };
+    const view = await mount(h(Probe));
+    expect(view.host.textContent).toBe('{"label":"a"}');
+    navigation.params = { ref: "web-value" };
+  });
+
+  it.each([
+    ["/tasks/l/home/", '{"label":"home"}'],
+    ["/tasks/l/__/", "pending"],
+    [null, "pending"],
+    ["/tasks/l/%E0%A4%A/", "NEXT_NOT_FOUND"],
+    ["/tasks/l/a/b/", "NEXT_NOT_FOUND"],
+  ])("on native maps %s to %s", async (pathname, expected) => {
+    await loadTarget("native");
+    navigation.notFound = false;
+    navigation.pathname = pathname;
+    const view = await mount(h(Probe));
+    expect(view.host.textContent).toBe(expected);
+    navigation.pathname = "/drive/f/a/";
+  });
 });
 
 it("reads the real native pathname and updates a sibling param on the same mounted component", async () => {

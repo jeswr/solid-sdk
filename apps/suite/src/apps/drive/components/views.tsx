@@ -9,7 +9,7 @@ import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucid
 import { notFound, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
-import { useRouteParams } from "../../../lib/route-params";
+import { usePageRouteParams } from "../../../lib/route-params";
 import {
   type DriveClient,
   DriveError,
@@ -33,7 +33,7 @@ import { trashMenu } from "./item-menu";
 import { PreviewPage } from "./preview";
 
 function useRefParam(pattern: string): string | undefined {
-  const params = useRouteParams<{ ref: string }>(pattern);
+  const params = usePageRouteParams<{ ref: string }>(pattern);
   if (!params) return undefined;
   try {
     return decodeRef(params.ref);

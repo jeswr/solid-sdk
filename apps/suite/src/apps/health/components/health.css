@@ -467,6 +467,23 @@
   margin-right: var(--space-2);
   cursor: pointer;
 }
+/* Export (AUTHORED-BY Claude Opus 5.5) */
+.hlt-export-card {
+  max-width: 40rem;
+}
+.hlt-export-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--space-4);
+}
+.hlt-export-dates label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: var(--space-1);
+}
+.hlt-export-error {
+  color: var(--destructive);
+}
 .hlt-import-preview {
   background: var(--surface-2);
   border-radius: var(--radius-md);

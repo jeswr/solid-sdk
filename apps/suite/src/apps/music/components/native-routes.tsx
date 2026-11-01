@@ -2,7 +2,7 @@
 "use client";
 import { LoadingSkeleton } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
-import { useRouteParams } from "@/lib/route-params";
+import { usePageRouteParams } from "@/lib/route-params";
 import { MusicScreen } from "./music-screen";
 
 const PATTERNS = {
@@ -13,7 +13,7 @@ const PATTERNS = {
 
 /** Read the ref on the client, so the native export's placeholder page works too. */
 export function MusicRefRoute({ view }: { view: keyof typeof PATTERNS }) {
-  const params = useRouteParams<{ ref: string }>(PATTERNS[view]);
+  const params = usePageRouteParams<{ ref: string }>(PATTERNS[view]);
   if (!params) return <LoadingSkeleton preset="grid" />;
   return <MusicScreen view={view} reference={params.ref} />;
 }
