@@ -22,6 +22,7 @@ import {
   usePodSessionState,
 } from "../src/lib/session/pod-session";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
+import { captureTimers } from "./session-timers";
 
 vi.mock("../src/lib/demo-pod/browser", () => ({
   getDemoPod: vi.fn(),
@@ -323,9 +324,111 @@ describe("PodSessionProvider", () => {
     api.webId = "https://bob.example/profile#me";
     vi.mocked(openExtensionSession).mockResolvedValueOnce(extensionSession(api.webId));
     await focus();
+    expect(state).toMatchObject({
+      status: "ready",
+      session: { mode: "extension", webId: api.webId },
+    });
     await act(() => decision.resolve([storageGrant()]));
     expect(state).toMatchObject({ session: { mode: "extension", webId: api.webId } });
     expect(openExtensionSession).toHaveBeenCalledOnce();
+  });
+
+  it("opens Bob while Alice's listGrants remains pending forever", async () => {
+    const timers = captureTimers();
+    grant();
+    api.listGrants.mockReturnValueOnce(new Promise(() => {}));
+    await render();
+    expect(state.status).toBe("loading");
+    expect(timers.count(5000)).toBe(1);
+    api.webId = "https://bob.example/profile#me";
+    vi.mocked(openExtensionSession).mockResolvedValueOnce(extensionSession(api.webId));
+    await focus();
+    expect(state).toMatchObject({ status: "ready", session: { webId: api.webId } });
+    expect(api.listGrants).toHaveBeenCalledTimes(2);
+    expect(timers.count(5000)).toBe(0);
+    expect(getDemoPod).not.toHaveBeenCalled();
+    await act(() => timers.fire(0));
+    expect(state).toMatchObject({ status: "ready", session: { webId: api.webId } });
+    expect(timers.count(5000)).toBe(0);
+  });
+
+  it.each([
+    "disconnect",
+    "presence",
+    "stub",
+  ])("supersedes a pending check after a %s change", async (change) => {
+    const timers = captureTimers();
+    grant();
+    api.listGrants.mockReturnValueOnce(new Promise(() => {}));
+    await render();
+    if (change === "disconnect") revoke();
+    if (change === "presence") document.documentElement.removeAttribute(EXTENSION_MARKER);
+    if (change === "stub") {
+      api = makeApi();
+      Object.defineProperty(window, "solid", { configurable: true, value: api });
+    }
+    await focus();
+    expect(state).toMatchObject({ status: "ready", session: { mode: "demo" } });
+    expect(timers.count(5000)).toBe(0);
+  });
+
+  it("recovers from a lost reply after the deadline and one scheduled retry", async () => {
+    const timers = captureTimers();
+    grant();
+    api.listGrants.mockReturnValueOnce(new Promise(() => {}));
+    await render();
+    await act(() => timers.fire(1500));
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    await act(() => timers.fire(5000));
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    expect(timers.count(1000)).toBe(1);
+    expect(api.listGrants).toHaveBeenCalledOnce();
+    await act(() => timers.fire(1000));
+    expect(api.listGrants).toHaveBeenCalledTimes(2);
+    expect(state).toMatchObject({ status: "ready", session: { mode: "extension" } });
+    expect(state.extensionError).toBeUndefined();
+    expect(timers.count(5000)).toBe(0);
+    expect(timers.count(1000)).toBe(0);
+  });
+
+  it("bounds pending checks during event bursts and stops automatic retries after another lost reply", async () => {
+    const timers = captureTimers();
+    api.listGrants.mockImplementation(() => new Promise(() => {}));
+    const view = await render();
+    for (let i = 0; i < 100; i++) await focus();
+    await act(() => timers.fire(0));
+    expect(api.listGrants).toHaveBeenCalledOnce();
+    expect(timers.count(5000)).toBe(1);
+    await act(() => timers.fire(1500));
+    // The single queued event check takes over after the first timeout.
+    await act(() => timers.fire(5000));
+    expect(api.listGrants).toHaveBeenCalledTimes(2);
+    expect(timers.count(5000)).toBe(1);
+    await act(() => timers.fire(5000));
+    expect(timers.count(1000)).toBe(1);
+    await act(() => timers.fire(1000));
+    expect(api.listGrants).toHaveBeenCalledTimes(3);
+    await act(() => timers.fire(5000));
+    expect(timers.count()).toBe(0);
+    expect(state).toMatchObject({ status: "ready", session: { mode: "demo" } });
+    await view.unmount();
+    expect(timers.count()).toBe(0);
+  });
+
+  it("retains a live session on timeout and clears the pending deadline on unmount", async () => {
+    const timers = captureTimers();
+    grant();
+    const view = await render();
+    const current = state.status === "ready" ? state.session : undefined;
+    api.listGrants.mockReturnValue(new Promise(() => {}));
+    await focus();
+    await act(() => timers.fire(5000));
+    expect(state).toMatchObject({ status: "ready", session: current });
+    // The focus notification is another external check; cleanup must cancel its timer.
+    await act(() => timers.fire(0));
+    expect(timers.count(5000)).toBe(1);
+    await view.unmount();
+    expect(timers.count()).toBe(0);
   });
 
   it("invalidates Alice's generation on switch and does not revive it on switching back", async () => {
@@ -372,6 +475,28 @@ describe("PodSessionProvider", () => {
       session: { mode: "extension", webId: api.webId, storageUrl: "https://bob.example/" },
     });
     expect(getDemoPod).not.toHaveBeenCalled();
+  });
+
+  it("opens a valid storage session when its public profile never replies", async () => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    const timers = captureTimers();
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}));
+    grant();
+    const view = await render();
+    expect(state.status).toBe("loading");
+    expect(timers.count(1500)).toBe(0);
+    expect(timers.count(3000)).toBe(1);
+    await act(() => timers.fire(3000));
+    expect(state).toMatchObject({
+      status: "ready",
+      session: { mode: "extension", webId: WEBID, displayName: WEBID },
+    });
+    expect(getDemoPod).not.toHaveBeenCalled();
+    await view.unmount();
+    expect(timers.count()).toBe(0);
   });
 
   it("rejects retained Alice fetches, uploads and disconnects even after switching back to Alice", async () => {

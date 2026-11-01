@@ -18,6 +18,7 @@ import {
 } from "react";
 import { getDemoPod, resetDemoPod } from "../demo-pod/browser";
 import { DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../demo-pod/seed";
+import { boundedRead } from "./bounded-read";
 import {
   chooseSession,
   ExtensionSessionError,
@@ -103,16 +104,25 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
     let initialDecision = true;
     let generation = 0;
     let decisionGeneration = 0;
-    let observedWebId: string | null = null;
+    let observed = ABSENT;
+    let observedApi: ExtensionWindow["solid"];
     let requestedKey: string | undefined;
+    let selectedGrant: SolidExtensionGrant | undefined;
     let failed = false;
     let pending = Promise.resolve();
     let connecting: Promise<void> | undefined;
-    let checking: Promise<void> | undefined;
-    let queued = false;
-    let queuedRetry = false;
+    let opening = new AbortController();
+    type CheckQueue = {
+      controller: AbortController;
+      promise: Promise<void>;
+      queued: boolean;
+      retry: boolean;
+      allowRetry: boolean;
+    };
+    let checking: CheckQueue | undefined;
     let fallbackTimer: unknown;
     let expiryTimer: unknown;
+    let retryTimer: unknown;
     const win = window as unknown as ExtensionWindow;
     const isCurrent = (captured: number) => live && captured === generation;
     const finishInitialDecision = () => {
@@ -133,8 +143,11 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
       }
       setExtensionError(error);
       requestedKey = key;
+      selectedGrant = grant;
       failed = false;
       const captured = ++generation;
+      opening.abort();
+      opening = new AbortController();
       setState({ status: "loading" });
       pending = (async () => {
         if (grant) {
@@ -145,6 +158,7 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
               grant,
               generation: captured,
               isCurrent,
+              signal: opening.signal,
             });
             if (!isCurrent(captured)) return;
             const session: ExtensionPodSession = {
@@ -154,7 +168,10 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
                   await opened.disconnect();
                 } finally {
                   // Older extensions don't broadcast class revocations. Re-read even on failure.
-                  if (live) await refresh();
+                  if (live) {
+                    if (isCurrent(captured)) invalidate();
+                    await refresh();
+                  }
                 }
               },
             };
@@ -182,23 +199,47 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
       return pending;
     };
 
+    const invalidate = () => {
+      ++generation;
+      ++decisionGeneration;
+      opening.abort();
+      checking?.controller.abort();
+      checking = undefined;
+      win.clearTimeout(retryTimer);
+      win.clearTimeout(expiryTimer);
+      requestedKey = undefined;
+      selectedGrant = undefined;
+      setState({ status: "loading" });
+    };
+
     const observe = () => {
       const next = readSolidExtension();
       setExtension(next);
-      if (next.webId !== observedWebId) {
-        observedWebId = next.webId;
-        ++generation; // Invalidate opened sessions before awaiting the new account's grants.
-        requestedKey = undefined;
-        setState({ status: "loading" });
+      if (
+        next.webId !== observed.webId ||
+        next.present !== observed.present ||
+        next.granted !== observed.granted ||
+        win.solid !== observedApi
+      ) {
+        observed = next;
+        observedApi = win.solid;
+        // A new account/binding must never queue behind a lost reply from the old one.
+        invalidate();
       }
       return next;
     };
 
-    const recheck = async (request: number, retry: boolean): Promise<void> => {
+    const recheck = async (
+      queue: CheckQueue,
+      request: number,
+      retry: boolean,
+      allowRetry: boolean,
+    ): Promise<void> => {
       const next = observe();
       try {
         const api = win.solid;
-        if (!next.present || !api?.listGrants) {
+        const listGrants = api?.listGrants;
+        if (!next.present || !api || !listGrants) {
           // The permanent stub announces before its asynchronous initial state arrives.
           if (next.present && initialDecision) return;
           finishInitialDecision();
@@ -210,9 +251,15 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
           );
           return;
         }
-        const grants = await api.listGrants();
-        if (!live || request !== decisionGeneration) {
-          if (live) queuedRetry ||= retry;
+        const grants = await boundedRead(
+          () => listGrants.call(api),
+          5000,
+          queue.controller.signal,
+          win,
+        );
+        if (!live || checking !== queue) return;
+        if (request !== decisionGeneration) {
+          queue.retry ||= retry;
           return;
         }
         if (readSolidExtension().webId !== next.webId || win.solid !== api) {
@@ -236,8 +283,9 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
           retry,
         );
       } catch (error) {
-        if (!live || request !== decisionGeneration) {
-          if (live) queuedRetry ||= retry;
+        if (!live || checking !== queue) return;
+        if (request !== decisionGeneration) {
+          queue.retry ||= retry;
           return;
         }
         if (readSolidExtension().webId !== next.webId) {
@@ -245,30 +293,53 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
           return;
         }
         finishInitialDecision();
-        win.clearTimeout(expiryTimer);
-        void select(null, undefined, error);
+        // Keep a known safe session during a transient failure, but never retain an
+        // expired grant or an account whose generation has already been invalidated.
+        if (!requestedKey || (selectedGrant && selectedGrant.expiresAt <= Date.now())) {
+          win.clearTimeout(expiryTimer);
+          void select(null, undefined, error);
+        } else setExtensionError(error);
+        if (allowRetry) {
+          win.clearTimeout(retryTimer);
+          retryTimer = win.setTimeout(() => void refresh(retry, false), 1000);
+        }
       }
     };
 
-    // Serialize grant introspection, keeping only one queued check for an event burst.
+    // Coalesce within one account generation. Superseded queues stop independently.
     // Session opening is separate: a slow public profile must not block an account switch.
-    const refresh = async (retry = false): Promise<void> => {
+    const refresh = async (retry = false, allowRetry = true): Promise<void> => {
       if (!live) return;
       observe(); // Invalidate retained sessions immediately, even while a check is pending.
+      win.clearTimeout(retryTimer);
       ++decisionGeneration;
-      queued = true;
-      queuedRetry ||= retry;
-      checking ??= (async () => {
-        while (live && queued) {
-          queued = false;
-          const retry = queuedRetry;
-          queuedRetry = false;
-          await recheck(decisionGeneration, retry);
-        }
-      })().finally(() => {
-        checking = undefined;
-      });
-      await checking;
+      if (!checking) {
+        const queue: CheckQueue = {
+          controller: new AbortController(),
+          promise: Promise.resolve(),
+          queued: true,
+          retry,
+          allowRetry,
+        };
+        checking = queue;
+        queue.promise = (async () => {
+          while (live && checking === queue && queue.queued) {
+            queue.queued = false;
+            const retry = queue.retry;
+            const allowRetry = queue.allowRetry;
+            queue.retry = false;
+            queue.allowRetry = false;
+            await recheck(queue, decisionGeneration, retry, allowRetry);
+          }
+        })().finally(() => {
+          if (checking === queue) checking = undefined;
+        });
+      } else {
+        checking.queued = true;
+        checking.retry ||= retry;
+        checking.allowRetry ||= allowRetry;
+      }
+      await checking.promise;
       await pending;
     };
 
@@ -306,8 +377,11 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
       live = false;
       ++generation;
       ++decisionGeneration;
+      opening.abort();
+      checking?.controller.abort();
       win.clearTimeout(fallbackTimer);
       win.clearTimeout(expiryTimer);
+      win.clearTimeout(retryTimer);
       stop();
       connect.current = async () => {};
     };

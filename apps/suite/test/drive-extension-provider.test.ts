@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { DRIVE_ROOT_CLASS } from "../src/apps/drive/lib/constants";
 import { DriveProvider, useDrive, useFolder } from "../src/apps/drive/state/drive-context";
 import { openExtensionSession, STORAGE_CLASS } from "../src/lib/session/extension-pod-session";
-import { act, h, mount } from "./drive-ui-dom";
+import { act, deferred, h, mount } from "./drive-ui-dom";
+import { captureTimers } from "./session-timers";
 
 const WEBID = "https://identity.example/card#me";
 const PROFILE = "https://identity.example/card";
@@ -135,4 +136,92 @@ it.each([
     expect(pageFetch.mock.calls.some(([input]) => new Request(input).url === PUBLIC)).toBe(true);
   if (index === "private")
     expect(storageFetch.mock.calls.some(([input]) => String(input) === PRIVATE)).toBe(true);
+});
+
+it.each(
+  ["profile", "public-index", "private-index", "preferences"].flatMap((phase) =>
+    ["pending", "rejected", "unmounted"].map((outcome) => ({ phase, outcome })),
+  ),
+)("Drive falls back to its granted root when $phase is $outcome", async ({ phase, outcome }) => {
+  const timers = captureTimers();
+  const reached = deferred<void>();
+  const response = deferred<Response>();
+  const block = () => {
+    reached.resolve();
+    if (outcome === "rejected") throw new Error("Discovery offline");
+    return response.promise;
+  };
+  const pageFetch = vi.fn<typeof fetch>(async (input) => {
+    const url = new Request(input).url.split("#")[0];
+    if (url === PROFILE) {
+      if (phase === "profile") return block();
+      if (phase === "public-index") return rdf(link(`${SOLID}publicTypeIndex`, PUBLIC));
+      if (phase === "private-index") return rdf(link(`${SOLID}privateTypeIndex`, PRIVATE));
+      return rdf(link("http://www.w3.org/ns/pim/space#preferencesFile", PREFERENCES));
+    }
+    if (url === PUBLIC) return block();
+    throw new Error(`Unexpected public read ${url}`);
+  });
+  // Decoration succeeds; the next profile read belongs to Drive's discovery budget.
+  pageFetch.mockResolvedValueOnce(rdf(""));
+  vi.spyOn(globalThis, "fetch").mockImplementation(pageFetch);
+  const storageFetch = vi.fn<typeof fetch>(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.method).toBe("GET");
+    if (request.url === PRIVATE || request.url === PREFERENCES) return block();
+    if (request.url === STORAGE)
+      return rdf(`<${STORAGE}> a <${LDP}BasicContainer>; <${LDP}contains> <${STORAGE}hello.txt>.`);
+    throw new Error(`Unexpected storage read ${request.url}`);
+  });
+  const api = {
+    webId: WEBID,
+    fetch: storageFetch,
+    listGrants: async () => [
+      {
+        grantId: "storage",
+        dataClass: STORAGE_CLASS,
+        modes: ["read", "write"],
+        purpose: null,
+        expiresAt: Date.now() + 60_000,
+        targets: [{ url: STORAGE, kind: "container" as const }],
+      },
+    ],
+  };
+  Object.defineProperty(window, "solid", { configurable: true, value: api });
+  const session = await openExtensionSession(api);
+  let drive!: ReturnType<typeof useDrive>;
+  function Probe() {
+    drive = useDrive();
+    useFolder(drive.driveRoot);
+    return null;
+  }
+  const view = await mount(h(DriveProvider, { session, children: h(Probe) }));
+  await act(() => reached.promise);
+  if (outcome === "unmounted") {
+    expect(timers.count(5000)).toBe(1);
+    await view.unmount();
+    expect(timers.count()).toBe(0);
+    await act(() => response.resolve(rdf(registration(DRIVE))));
+    expect(drive.driveRoot).toBeUndefined();
+    expect(storageFetch.mock.calls.some(([input]) => new Request(input).url === STORAGE)).toBe(
+      false,
+    );
+    return;
+  }
+  if (outcome === "pending") {
+    expect(drive.driveRoot).toBeUndefined();
+    expect(timers.count(5000)).toBe(1);
+    expect(vi.mocked(window.setTimeout).mock.calls.filter(([, ms]) => ms === 5000)).toHaveLength(2);
+    // One completed grant deadline above, and one overall discovery deadline, regardless of
+    // how many profile/index requests have already completed.
+    await act(() => timers.fire(5000));
+  }
+  expect(drive.driveRoot).toBe(STORAGE);
+  expect(drive.rootError).toBeUndefined();
+  expect(timers.count(5000)).toBe(0);
+  expect(storageFetch.mock.calls.some(([input]) => new Request(input).url === STORAGE)).toBe(true);
+  await act(() => response.resolve(rdf(registration(DRIVE))));
+  expect(drive.driveRoot).toBe(STORAGE);
+  await view.unmount();
+  expect(timers.count()).toBe(0);
 });

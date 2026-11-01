@@ -3,6 +3,7 @@
 /** Drive's token-free session over the browser extension's storage grant. */
 import { type DatasetCore, fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
+import { boundedRead } from "./bounded-read";
 import type { SolidExtensionApi, SolidExtensionGrant } from "./extension-session";
 import type { ExtensionPodSession } from "./pod-session";
 
@@ -18,7 +19,10 @@ export class ExtensionSessionError extends Error {
 }
 
 export interface ExtensionPodSessionDeps {
-  readonly window?: Pick<Window, "addEventListener" | "removeEventListener"> & {
+  readonly window?: Pick<
+    Window,
+    "addEventListener" | "removeEventListener" | "setTimeout" | "clearTimeout"
+  > & {
     readonly solid?: SolidExtensionApi;
   };
   readonly fetch?: typeof globalThis.fetch;
@@ -30,6 +34,7 @@ export interface ExtensionPodSessionDeps {
   readonly generation?: number;
   readonly isCurrent?: (generation: number) => boolean;
   readonly grant?: SolidExtensionGrant;
+  readonly signal?: AbortSignal;
 }
 
 function isLiveStorageGrant(grant: SolidExtensionGrant, now: number): boolean {
@@ -106,7 +111,9 @@ export async function openExtensionSession(
   if (!grant) {
     const listGrants = api.listGrants;
     if (!listGrants) throw new ExtensionSessionError("unavailable");
-    const grants = await checked(() => listGrants.call(api));
+    const grants = await checked(() =>
+      boundedRead(() => listGrants.call(api), 5000, deps.signal, win),
+    );
     assertCurrent();
     grant = chooseSession(grants);
     if (!grant && grants.some((candidate) => isLiveStorageGrant(candidate, Date.now())))
@@ -135,7 +142,12 @@ export async function openExtensionSession(
   let displayName = webId;
   try {
     const { dataset } = await checked<{ dataset: DatasetCore }>(() =>
-      (deps.fetchRdf ?? fetchRdf)(documentUrl.href, { fetch: publicFetch }),
+      boundedRead<{ dataset: DatasetCore }>(
+        () => (deps.fetchRdf ?? fetchRdf)(documentUrl.href, { fetch: publicFetch }),
+        3000,
+        deps.signal,
+        win,
+      ),
     );
     assertCurrent();
     const subject = DataFactory.namedNode(webId);
@@ -186,7 +198,9 @@ export async function openExtensionSession(
         return;
       }
       if (!listGrants || !revokeGrant) throw new ExtensionSessionError("unavailable");
-      const grants = await checked(() => listGrants.call(api));
+      const grants = await checked(() =>
+        boundedRead(() => listGrants.call(api), 5000, deps.signal, win),
+      );
       assertCurrent();
       // Sequential dispatch lets a switch during any revocation stop all later ones.
       for (const grant of grants) {

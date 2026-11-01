@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { boundedRead } from "../../../lib/session/bounded-read";
 import type { PodSession } from "../../../lib/session/pod-session";
 import {
   discoverProfileRegistrations,
@@ -66,14 +67,22 @@ export class DriveRootDiscoveryError extends Error {
   }
 }
 
-async function resolveDriveRoot(client: DriveClient, session: PodSession): Promise<string> {
+async function resolveDriveRoot(
+  client: DriveClient,
+  session: PodSession,
+  signal: AbortSignal,
+): Promise<string> {
   try {
-    const locations = await discoverProfileRegistrations(
-      session.webId,
-      session.fetch,
-      session.storageUrl,
-      session.mode === "extension" ? session.publicFetch : undefined,
-    );
+    const discover = () =>
+      discoverProfileRegistrations(
+        session.webId,
+        session.fetch,
+        session.storageUrl,
+        session.mode === "extension" ? session.publicFetch : undefined,
+      );
+    // One budget covers the profile and every linked index/preferences read.
+    const locations =
+      session.mode === "extension" ? await boundedRead(discover, 5000, signal) : await discover();
     // Reuse the first DriveRoot container in discovery order (public, then private).
     // A DriveRoot can also be registered as an instance of the root container.
     // Resource instances without a trailing slash cannot serve as a folder.
@@ -202,12 +211,14 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
 
   useEffect(() => {
     let live = true;
-    resolveDriveRoot(client, session).then(
+    const controller = new AbortController();
+    resolveDriveRoot(client, session, controller.signal).then(
       (root) => live && setDriveRoot(root),
       (error: unknown) => live && setRootError(error),
     );
     return () => {
       live = false;
+      controller.abort();
     };
   }, [client, session]);
 

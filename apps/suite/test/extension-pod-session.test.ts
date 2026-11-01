@@ -11,6 +11,7 @@ import {
   STORAGE_CLASS,
 } from "../src/lib/session/extension-pod-session";
 import type { SolidExtensionGrant } from "../src/lib/session/extension-session";
+import { captureTimers } from "./session-timers";
 
 const { namedNode, literal, quad } = DataFactory;
 const WEBID = "https://alice.example/profile/card#me";
@@ -45,7 +46,11 @@ function fixture(roots = ["https://alice.example/"]) {
     revokeGrant: vi.fn(async (_grantId: string) => true),
     requestAccess: vi.fn(async (_request: unknown) => ({ ok: true })),
   };
-  const win = Object.assign(new EventTarget(), { solid: api });
+  const win = Object.assign(new EventTarget(), {
+    solid: api,
+    setTimeout: globalThis.setTimeout as unknown as Window["setTimeout"],
+    clearTimeout: globalThis.clearTimeout as Window["clearTimeout"],
+  });
   const read = vi.fn<NonNullable<ExtensionPodSessionDeps["fetchRdf"]>>(async () => ({ dataset }));
   const pageFetch = vi.fn<typeof globalThis.fetch>(async () => new Response("public profile"));
   let generation = 1;
@@ -138,6 +143,55 @@ describe("live storage grants", () => {
     await expect(
       openExtensionSession(f.api, { ...f.deps, grant: { ...f.grant, modes: ["read"] } }),
     ).rejects.toMatchObject({ code: "not-granted" });
+  });
+  it("reports no storage consent when only grants for other classes exist", async () => {
+    const f = fixture();
+    f.api.listGrants.mockResolvedValue([{ ...f.grant, dataClass: "https://schema.org/Person" }]);
+    await expect(openExtensionSession(f.api, f.deps)).rejects.toMatchObject({
+      code: "not-granted",
+    });
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    { targets: [] },
+    { targets: [{ url: "https://alice.example/file", kind: "instance" }] },
+    { targets: [{ url: "file:///pod/", kind: "container" }] },
+  ] as const)("rejects a supplied grant with unusable targets: $targets", async ({ targets }) => {
+    const f = fixture();
+    await expect(
+      openExtensionSession(f.api, { ...f.deps, grant: { ...f.grant, targets } }),
+    ).rejects.toMatchObject({ code: "no-storage" });
+    expect(f.api.listGrants).not.toHaveBeenCalled();
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+  it("stops opening after 5 seconds when grant introspection stays pending", async () => {
+    const f = fixture();
+    const timers = captureTimers(f.win);
+    const grants = deferred<readonly SolidExtensionGrant[]>();
+    f.api.listGrants.mockReturnValueOnce(grants.promise);
+    const opening = openExtensionSession(f.api, f.deps);
+    const rejected = expect(opening).rejects.toThrow("Read timed out");
+    expect(timers.count(5000)).toBe(1);
+    timers.fire(5000);
+    await rejected;
+    expect(timers.count()).toBe(0);
+    // A late grant must not resume the failed opening or start profile I/O.
+    grants.resolve([f.grant]);
+    await Promise.resolve();
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+  it("propagates grant introspection failures and clears the deadline", async () => {
+    const f = fixture();
+    const timers = captureTimers(f.win);
+    const failure = new Error("extension bridge disconnected");
+    f.api.listGrants.mockRejectedValueOnce(failure);
+    await expect(openExtensionSession(f.api, f.deps)).rejects.toBe(failure);
+    expect(timers.count()).toBe(0);
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
   });
   it.each([
     {},
@@ -233,6 +287,50 @@ describe("public profile decoration", () => {
     const f = fixture();
     f.read.mockRejectedValue(new Error("private or malformed profile"));
     expect((await openExtensionSession(f.api, f.deps)).displayName).toBe(WEBID);
+  });
+  it.each([
+    "fetch",
+    "body",
+  ])("opens after 3 seconds if the public profile %s stays pending", async (phase) => {
+    const f = fixture();
+    const timers = captureTimers(f.win);
+    const profile = deferred<{ dataset: Store }>();
+    if (phase === "body") f.read.mockReturnValueOnce(profile.promise);
+    else {
+      f.pageFetch.mockReturnValueOnce(new Promise(() => {}));
+      f.read.mockImplementation(async (url, { fetch }) => {
+        await fetch(url);
+        return { dataset: f.dataset };
+      });
+    }
+    const opening = openExtensionSession(f.api, { ...f.deps, grant: f.grant });
+    expect(timers.count(3000)).toBe(1);
+    timers.fire(3000);
+    const session = await opening;
+    expect(session).toMatchObject({ displayName: WEBID, storageUrl: "https://alice.example/" });
+    expect(timers.count()).toBe(0);
+    expect(f.fetch).not.toHaveBeenCalled();
+    // Late completion cannot change an already opened session's identity or name.
+    f.dataset.add(quad(namedNode(WEBID), namedNode(FOAF_NAME), literal("Late Alice")));
+    profile.resolve({ dataset: f.dataset });
+    await Promise.resolve();
+    expect(session.displayName).toBe(WEBID);
+  });
+  it("clears the profile deadline when its generation is cancelled", async () => {
+    const f = fixture();
+    const timers = captureTimers(f.win);
+    const controller = new AbortController();
+    f.read.mockReturnValueOnce(new Promise(() => {}));
+    const opening = openExtensionSession(f.api, {
+      ...f.deps,
+      grant: f.grant,
+      signal: controller.signal,
+    });
+    expect(timers.count(3000)).toBe(1);
+    f.invalidate();
+    controller.abort();
+    await expect(opening).rejects.toMatchObject({ code: "stale" });
+    expect(timers.count()).toBe(0);
   });
   it("uses real fetch-rdf and browser defaults without an extension profile request", async () => {
     const f = fixture();
