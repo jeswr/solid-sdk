@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Public channel-neutral agent model API. */
 
+export * from "./binding-controls.js";
 export * from "./core/canonical.js";
 export * from "./core/conversation.js";
 export * from "./core/limits.js";

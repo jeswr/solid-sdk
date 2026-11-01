@@ -2,7 +2,7 @@
 import type { ActionProposal } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { describe, expect, it } from "vitest";
-import { canBulkApprove, pendingApprovals } from "../src/apps/agent/lib/queue";
+import { canBulkApprove, conservativeReason, pendingApprovals } from "../src/apps/agent/lib/queue";
 import type { DisplayApproval, DisplayControl } from "../src/apps/agent/lib/readers";
 import { agentStatus } from "../src/apps/agent/lib/status";
 
@@ -238,3 +238,15 @@ describe("approval queue", () => {
       expect(canBulkApprove([row, changed])).toBe(false);
   });
 });
+
+it.each([
+  ["Allowed", "Ask first", "Ask first"],
+  ["Ask first", "Allowed", "Ask first"],
+  ["Never", "Ask first", "Never"],
+  ["Ask first", "Never", "Never"],
+  ["Needs a new approval", "Ask first", "Needs a new approval"],
+  ["Needs a new approval", "Never", "Never"],
+  ["Allowed", "Something new", "Something new"],
+  ["Something new", "Allowed", "Something new"],
+])("keeps the more restrictive badge of %s and %s", (a, b, want) =>
+  expect(conservativeReason(a, b)).toBe(want));

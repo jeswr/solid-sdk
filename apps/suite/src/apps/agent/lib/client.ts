@@ -46,6 +46,7 @@ export function createAgentClient(options: {
   const document = async (url: string) => {
     const response = await scoped(check(url), {
       headers: { accept: "text/turtle, application/trig" },
+      cache: "no-store",
     });
     if (!response.ok) throw new AgentReadError(response.status);
     return readRdfDocument(response);

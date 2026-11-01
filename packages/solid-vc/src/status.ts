@@ -42,6 +42,7 @@ import {
   setStatusBit,
 } from "./bitstring.js";
 import type { SuiteRegistry } from "./proof.js";
+import { parseStatusListCredential } from "./status-rdf.js";
 import type {
   BitstringStatusListEntry,
   Credential,
@@ -74,7 +75,8 @@ const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
 const MAX_STATUS_ENTRIES = 8;
 
 /** The content types we ask a status-list host for. */
-const STATUS_ACCEPT = "application/vc+ld+json, application/ld+json;q=0.9, application/json;q=0.8";
+const STATUS_ACCEPT =
+  "application/trig, text/turtle;q=0.9, application/vc+ld+json;q=0.8, application/ld+json;q=0.7, application/json;q=0.6";
 
 // --- issue side --------------------------------------------------------------
 
@@ -438,7 +440,12 @@ async function checkOneEntry(
   if (typeof body !== "string") return { kind: "unreachable", reason: body.reason };
 
   // 2. parse the JSON document into the structured credential, strictly.
-  const parsed = parseStatusListDocument(body, url, entry.statusPurpose);
+  const json = parseStatusListDocument(body, url, entry.statusPurpose);
+  const rdf = "reason" in json ? await parseStatusListCredential(body) : undefined;
+  const parsed =
+    rdf === undefined
+      ? json
+      : parseStatusListDocument(JSON.stringify(rdf), url, entry.statusPurpose);
   if ("reason" in parsed) return { kind: "unreachable", reason: parsed.reason };
   const { listVc, encodedList } = parsed;
 

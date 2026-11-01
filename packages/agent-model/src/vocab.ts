@@ -74,6 +74,8 @@ export const TERM_DEFINITIONS = {
   ProposalFailed: "Migrated M1 lifecycle or intent term ProposalFailed.",
   ProposalPending: "Status individuals \u2014 a proposal is NEVER sent until it reaches Confirmed.",
   ProposalRejected: "Migrated M1 lifecycle or intent term ProposalRejected.",
+  Remember:
+    "Permission action for saving information to the agent memory; subject to owner mandate and approval checks.",
   RepresentationAssessment:
     "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation.",
   RepresentationStatement:

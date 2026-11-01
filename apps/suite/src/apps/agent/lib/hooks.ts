@@ -28,6 +28,15 @@ const ClockContext = createContext(0);
 export function useAgentClock() {
   return Math.max(useContext(ClockContext), Date.now());
 }
+/**
+ * The workspace tick: stable between ticks, so memoised results and effects keyed on it
+ * don't change on every render. Outside a workspace it starts at the component's mount time.
+ */
+export function useAgentTick() {
+  const tick = useContext(ClockContext);
+  const [mounted] = useState(Date.now);
+  return Math.max(tick, mounted);
+}
 export function useAgentWorkspace(): Workspace {
   const context = useContext(WorkspaceContext);
   if (!context) throw new Error("Agent workspace is not ready");

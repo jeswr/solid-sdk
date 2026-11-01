@@ -313,6 +313,9 @@ export function parseAndValidateCredential(body: string, contentType?: string): 
 export function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
 
 // @public
+export function parseStatusListCredential(document: string): Promise<VerifiableCredential | undefined>;
+
+// @public
 export interface Presentation {
     readonly holder?: string;
     readonly id?: string;
@@ -481,6 +484,9 @@ export const STATUS_PURPOSE: "https://www.w3.org/ns/credentials/status#statusPur
 export function statusListBitsOf(credential: Credential_2, options?: {
     readonly maxDecodedBytes?: number;
 }): Promise<Uint8Array>;
+
+// @public
+export function statusListCredentialToTurtle(vc: VerifiableCredential): Promise<string>;
 
 // @public
 export type SuiteKeyType = "Ed25519" | "P-256";

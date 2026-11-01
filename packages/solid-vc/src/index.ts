@@ -115,6 +115,7 @@ export {
   statusListBitsOf,
   withStatusBit,
 } from "./status.js";
+export { parseStatusListCredential, statusListCredentialToTurtle } from "./status-rdf.js";
 // --- types -----------------------------------------------------------------
 export type {
   AgentAuthorization,

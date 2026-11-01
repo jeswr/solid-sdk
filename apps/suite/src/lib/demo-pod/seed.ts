@@ -10,6 +10,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { withDemoAgentKey } from "../../apps/agent/lib/demo-mandate";
 import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
@@ -114,7 +115,12 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
   ].join("\n");
   const files: DemoSeedFile[] = [
     ...(await buildAgentSeed(now)),
-    { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
+    {
+      path: "profile/card",
+      body: await withDemoAgentKey(profile),
+      contentType: "text/turtle",
+      modified: now - 40 * DAY,
+    },
     {
       path: "settings/privateTypeIndex.ttl",
       body: typeIndex,

@@ -21,6 +21,7 @@ export {
   defaultMandate,
   issueMandate,
   limitConstraint,
+  mandateCredential,
   type VcMandateOptions,
 } from "./mandate.js";
 export { evaluateIntent, solidOdrlEngine } from "./policy.js";

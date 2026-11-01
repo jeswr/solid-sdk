@@ -6,11 +6,13 @@ import {
   createBitstringStatusResolver,
   createStatusBitstring,
   credentialToRdf,
+  DataIntegritySuite,
   digestQuads,
   issue,
   type JsonValue,
   type KeyPair,
   setStatusBit,
+  statusListCredentialToTurtle,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
@@ -27,6 +29,7 @@ import { evaluateIntent } from "../src/policy.js";
 import { AGENT, LIMIT_OPERANDS, ODRL } from "../src/types.js";
 import {
   ACTOR,
+  approvalKey,
   clock,
   edKey,
   ID,
@@ -528,4 +531,91 @@ it("verifies actual signed bitstring status lists and refuses revoked or unreada
     fetch: async () => new Response("unreadable", { status: 503 }),
   });
   expect(await createVcMandateVerifier({ ...options, resolveStatus }).load()).toBeUndefined();
+});
+
+it("issues and verifies non-extractable P-256 mandates and rejects revocation through an ECDSA status list", async () => {
+  const p256 = await approvalKey();
+  expect(p256.privateKey.extractable).toBe(false);
+  const signed = await issueMandate(
+    mandate(),
+    p256,
+    {
+      statusListCredential: STATUS,
+      statusListIndex: "0",
+    },
+    { cryptosuite: "ecdsa-rdfc-2019" },
+  );
+  const parsed = await parseMandateCredential(await mandateToTurtle(signed));
+  expect(parsed).toBeDefined();
+  const resolver = await profileResolver(p256);
+  for (const revoked of [false, true]) {
+    const bits = createStatusBitstring();
+    setStatusBit(bits, 0, revoked);
+    const list = await issue({
+      credential: await buildBitstringStatusListCredential({
+        id: STATUS,
+        issuer: OWNER,
+        statusPurpose: "revocation",
+        bits,
+        validFrom: NOW.toISOString(),
+        validUntil: "2026-11-25T00:00:00Z",
+      }),
+      key: p256,
+      suite: new DataIntegritySuite("ecdsa-rdfc-2019"),
+      options: { created: NOW },
+    });
+    for (const transport of [JSON.stringify(list), await statusListCredentialToTurtle(list)]) {
+      const resolveStatus = createBitstringStatusResolver({
+        ...resolver,
+        now: NOW,
+        fetch: async () => new Response(transport),
+      });
+      for (const read of [async () => signed, async () => parsed]) {
+        const loaded = await createVcMandateVerifier({
+          ...options,
+          read,
+          webIdKeyResolver: resolver,
+          resolveStatus,
+        }).load();
+        if (revoked) expect(loaded).toBeUndefined();
+        else {
+          expect(loaded?.id).toBe(ID);
+          expect((await evaluateIntent(loaded, intent())).decision).toBe("confirm-required");
+        }
+      }
+    }
+  }
+});
+it("rejects a third cryptosuite and more than one proof", async () => {
+  const proof = Array.isArray(credential.proof) ? credential.proof[0] : credential.proof;
+  for (const proofs of [[{ ...proof, cryptosuite: "third-suite" }], [proof, proof], [undefined]]) {
+    const vc = { ...credential, proof: proofs } as VerifiableCredential;
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => vc }).load(),
+    ).toBeUndefined();
+  }
+});
+it("permits remembering only when the owner explicitly grants that action", async () => {
+  const m = mandate();
+  const action = `${AGENT}Remember`;
+  expect((await evaluateIntent(m, intent({ action }))).decision).toBe("confirm-required");
+  expect(
+    await evaluateIntent(
+      { ...m, autonomous: { ...m.autonomous, permissions: [{ type: "permission", action }] } },
+      intent({ action }),
+    ),
+  ).toEqual({ decision: "permit", reason: "autonomous" });
+});
+
+it("preserves registry HMAC hashes verbatim with or without the optional sha256 prefix", () => {
+  for (const hash of ["a".repeat(64), `sha256:${"a".repeat(64)}`]) {
+    const built = defaultMandate({
+      id: ID,
+      ownerWebId: OWNER,
+      agentWebId: ACTOR,
+      recipientHashes: [hash],
+      now: NOW,
+    });
+    expect(built.withApproval.permissions?.[0]?.constraints?.[0]?.rightOperand).toEqual([hash]);
+  }
 });

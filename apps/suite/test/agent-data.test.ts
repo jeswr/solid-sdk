@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { issueApproval } from "@jeswr/agent-mandate/approval";
-
 import {
   digestOf,
   type PodRecord,
@@ -603,7 +602,9 @@ describe("agent demo seed", () => {
       (file) =>
         !file.path.includes("heartbeat") &&
         !file.path.includes(".triage.") &&
-        !file.path.endsWith(".trig"),
+        !file.path.endsWith(".trig") &&
+        file.contentType !== "application/trig" &&
+        !file.path.endsWith("descriptors/agent.ttl"),
     )) {
       const record = await recordFromTurtle(
         file.body as string,

@@ -5,6 +5,7 @@ import {
   buildAgentAuthorizationCredential,
   type Credential,
   credentialToRdf,
+  DataIntegritySuite,
   digestQuads,
   issue,
   type KeyPair,
@@ -59,7 +60,7 @@ export function defaultMandate(options: {
 }): Mandate {
   if (
     options.recipientHashes.length === 0 ||
-    options.recipientHashes.some((h) => !/^sha256:[a-f0-9]{64}$/.test(h))
+    options.recipientHashes.some((h) => !/^(?:sha256:)?[a-f0-9]{64}$/.test(h))
   )
     throw new Error("Expected salted SHA-256 account hashes");
   return {
@@ -135,10 +136,12 @@ export async function issueMandate(
   m: Mandate,
   key: KeyPair,
   status: { statusListCredential: string; statusListIndex: string; id?: string },
+  options: { cryptosuite?: "eddsa-rdfc-2022" | "ecdsa-rdfc-2019" } = {},
 ): Promise<VerifiableCredential> {
   return issue({
     credential: mandateCredential(m, status),
     key,
+    suite: new DataIntegritySuite(options.cryptosuite ?? "eddsa-rdfc-2022"),
     options: { created: new Date(m.validFrom) },
   });
 }
@@ -179,7 +182,11 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
         )
           return undefined;
         const proofs = Array.isArray(vc.proof) ? vc.proof : [vc.proof];
-        if (proofs.length !== 1 || proofs[0]?.cryptosuite !== "eddsa-rdfc-2022") return undefined;
+        if (
+          proofs.length !== 1 ||
+          !["eddsa-rdfc-2022", "ecdsa-rdfc-2019"].includes(proofs[0]?.cryptosuite)
+        )
+          return undefined;
         const statuses = Array.isArray(vc.credentialStatus)
           ? vc.credentialStatus
           : [vc.credentialStatus];

@@ -77,6 +77,8 @@ agent:ProposalPending rdfs:comment "Status individuals — a proposal is NEVER s
     rdfs:label "ProposalPending".
 agent:ProposalRejected rdfs:comment "Migrated M1 lifecycle or intent term ProposalRejected.";
     rdfs:label "ProposalRejected".
+agent:Remember rdfs:comment "Permission action for saving information to the agent memory; subject to owner mandate and approval checks.";
+    rdfs:label "Remember".
 agent:RepresentationAssessment rdfs:comment "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation.";
     rdfs:label "RepresentationAssessment".
 agent:RepresentationStatement rdfs:comment "Party-signed statement that an actor key speaks for the party for listed operations. Authorises nothing at the receiver.";
