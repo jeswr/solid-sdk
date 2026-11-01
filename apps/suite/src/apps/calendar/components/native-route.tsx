@@ -1,14 +1,15 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { LoadingSkeleton } from "@jeswr/suite-ui";
 import { notFound, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { useRouteParams } from "../../../lib/route-params";
+import { usePageRouteParams } from "../../../lib/route-params";
 import { isView } from "../state/view";
 import { CalendarScreen } from "./calendar-views";
 
 export function NativeCalendarView() {
-  const params = useRouteParams<{ view: string }>("/calendar/[view]");
+  const params = usePageRouteParams<{ view: string }>("/calendar/[view]");
   if (!params) return <LoadingSkeleton preset="grid" />;
   if (!isView(params.view)) notFound();
   return <CalendarScreen view={params.view} />;

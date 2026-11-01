@@ -15,9 +15,9 @@ import {
 } from "@jeswr/suite-ui";
 import { Disc3, Heart, History, House, ListMusic, Music2, Settings2, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { playlistHref } from "../lib/navigation";
 import { MusicProvider, useMusic } from "../state/music-context";
@@ -33,7 +33,7 @@ const navigation = [
   ["History", "/music/history", History],
 ] as const;
 function Sidebar() {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const music = useMusic();
   return (
     <nav className="mus-sidebar" aria-label="Music">

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { CircleCheck } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { useRoutePathname } from "@/lib/route-params";
 import { compareTasks } from "../../lib/views/project-groups";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
@@ -9,7 +10,7 @@ import { CrossProjectView } from "./cross-project-view";
 export function CompletedView() {
   const { views } = useTasks();
   const { preferences } = useTasksPreferences();
-  const path = usePathname();
+  const path = useRoutePathname();
   const rows = views
     .filter((task) => task.state === "closed")
     .sort(

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Tag } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { useRoutePathname } from "@/lib/route-params";
 import { unionLabels } from "../../lib/model/tracker";
 import { compareTasks } from "../../lib/views/project-groups";
 import { useTasksPreferences } from "../../state/preferences";
@@ -10,7 +11,7 @@ import { CrossProjectView } from "./cross-project-view";
 export function LabelView({ label }: { label: string }) {
   const { views, projects } = useTasks();
   const { preferences } = useTasksPreferences();
-  const path = usePathname();
+  const path = useRoutePathname();
   const ids = new Set(
     (unionLabels(projects.map((project) => project.tracker)).get(label.toLowerCase()) ?? []).map(
       (category) => category.id,
