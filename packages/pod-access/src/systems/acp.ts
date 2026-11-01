@@ -6,9 +6,14 @@ import { DataFactory, Store } from "n3";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 import { assertUnvalidatedTargetAcp } from "./acp-target.js";
+
 /** Reject expressions whose bounded neutral representation cannot preserve safety. */
-export class PolicyTooComplex extends Error {
+class PolicyTooComplex extends Error {
   override name = "PolicyTooComplex";
+}
+/** Identify bounded-representation refusals without exposing the internal error class. */
+export function isPolicyTooComplex(error: unknown): boolean {
+  return error instanceof PolicyTooComplex;
 }
 /** Independently established ACP server semantics supported by the migrator. */
 export type AcpDialect = "css" | "ess";

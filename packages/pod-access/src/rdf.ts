@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Writer } from "n3";
@@ -11,8 +12,9 @@ export const ACP = "http://www.w3.org/ns/solid/acp#";
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 /** FOAF vocabulary namespace for public WAC agents. */
 export const FOAF = "http://xmlns.com/foaf/0.1/";
-/** Canonical mode order, retained from the migrator. */
-export const modes: Mode[] = ["read", "append", "write", "control"];
+const readerModes: readonly Mode[] = Object.freeze(["read", "append", "write", "control"]);
+/** Frozen copy of the canonical mode order; readers retain their private list. */
+export const modes: readonly Mode[] = Object.freeze([...readerModes]);
 /** Map a neutral mode to its WAC mode IRI. */
 export function modeIri(mode: Mode): string {
   return ACL + mode.charAt(0).toUpperCase() + mode.slice(1);
@@ -21,7 +23,7 @@ export function modeIri(mode: Mode): string {
 export function readModes(iris: Iterable<string>): Set<Mode> {
   const values = new Set(iris);
   const result = new Set<Mode>();
-  for (const mode of modes) if (values.has(modeIri(mode))) result.add(mode);
+  for (const mode of readerModes) if (values.has(modeIri(mode))) result.add(mode);
   if (result.has("write")) result.add("append");
   return result;
 }
