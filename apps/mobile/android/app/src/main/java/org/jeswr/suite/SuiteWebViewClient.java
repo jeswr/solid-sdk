@@ -30,6 +30,7 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
     private final NavigationPolicy policy;
     private final Bridge bridge;
     private final String appOrigin;
+    private final String localHost;
     private final BundledServer bundled;
 
     public SuiteWebViewClient(Bridge bridge) {
@@ -38,6 +39,8 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
         String appUrl = NavigationPolicy.appUrl(bridge.getServerUrl(), bridge.getLocalUrl());
         this.policy = new NavigationPolicy(appUrl, bridge.getErrorUrl());
         this.appOrigin = NavigationPolicy.origin(appUrl);
+        String local = bridge.getLocalUrl();
+        this.localHost = local == null ? null : Uri.parse(local).getHost();
         this.bundled = bridge.getServerUrl() == null ? loadBundle(bridge) : null;
     }
 
@@ -56,6 +59,15 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
 
     private boolean isLocal(Uri url) {
         return appOrigin != null && appOrigin.equals(NavigationPolicy.origin(url.toString()));
+    }
+
+    /**
+     * Capacitor's local server answers its hostname on any scheme and port (http://localhost too),
+     * so in bundled mode every such request that is not the exact app origin is refused.
+     */
+    private boolean isOtherLocalOrigin(Uri url) {
+        String host = url.getHost();
+        return localHost != null && host != null && host.equalsIgnoreCase(localHost) && !isLocal(url);
     }
 
     /** Navigations send Upgrade-Insecure-Requests; isForMainFrame alone misses iframes. */
@@ -116,6 +128,7 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
             return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
                 Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
         }
+        if (bundled != null && isOtherLocalOrigin(request.getUrl())) return forbidden();
         if (bundled != null && isLocal(request.getUrl())) {
             // Capacitor's local server is never reached for the local origin except for device files.
             if (BundledServer.isNativeFilePath(request.getUrl().getPath())) return serveNativeFile(view, request);
@@ -130,6 +143,7 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
         Uri url = request.getUrl();
         String target = url.toString();
         // No frame may navigate to a device file at the local origin (E5).
+        if (bundled != null && isOtherLocalOrigin(url)) return true;
         if (bundled != null && isLocal(url) && BundledServer.isNativeFilePath(url.getPath())) return true;
         if (request.isForMainFrame() && !policy.staysInApp(target) && !policy.isErrorPage(target)) {
             if (policy.mayOpenExternally(target)) {

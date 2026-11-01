@@ -437,6 +437,31 @@
       "request": "/docs/__next._full.txt",
       "path": "404.html",
       "status": 404
+    },
+    {
+      "request": "/docs/a/__next.%0A.txt",
+      "path": "docs/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/__next.%C2%85.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a/__next.%E2%80%A9.txt",
+      "path": "docs/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/__next.%CC%81.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a/%CC%81/b",
+      "path": "docs/__/index.html",
+      "status": 200
     }
   ]
 }

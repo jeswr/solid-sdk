@@ -35,7 +35,7 @@ public final class RouteResolver {
     private static final Pattern RAW_FORBIDDEN = Pattern.compile("[\\\\\\x00?#]");
     private static final Pattern ENCODED_FORBIDDEN =
         Pattern.compile("%2f|%5c|%00", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PREFETCH = Pattern.compile("^__next\\..+\\.txt$");
+    private static final Pattern PREFETCH = Pattern.compile("^__next\\.[^\n\r\u2028\u2029]+\\.txt$");
 
     private static final int STATIC = 3;
     private static final int PARAM = 2;

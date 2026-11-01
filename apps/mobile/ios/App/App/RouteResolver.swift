@@ -20,6 +20,9 @@ struct RouteResolver {
         let segments: [Segment]
         let directory: String
         let files: Set<String>
+        /// The file names as UTF-8 bytes: Swift's String equality is canonical equivalence, the
+        /// JavaScript and Java resolvers compare code units, so lookups go through the bytes.
+        var fileBytes: Set<[UInt8]> { Set(files.map { Array($0.utf8) }) }
     }
 
     /// The bundle file to serve, its status, and the MIME type of the resolved file.
@@ -35,10 +38,14 @@ struct RouteResolver {
 
     let routes: [Route]
     let assets: Set<String>
+    private let assetBytes: Set<[UInt8]>
+    private let routeFiles: [Set<[UInt8]>]
 
     init(routes: [Route], assets: Set<String>) {
         self.routes = routes
         self.assets = assets
+        assetBytes = Set(assets.map { Array($0.utf8) })
+        routeFiles = routes.map(\.fileBytes)
     }
 
     /// Parse `route-manifest.json`; any shape error rejects the whole manifest.
@@ -77,13 +84,14 @@ struct RouteResolver {
     func resolve(_ encodedPath: String) -> Resolution {
         guard let values = RouteResolver.requestSegments(encodedPath) else { return RouteResolver.notFound }
         let exact = values.joined(separator: "/")
-        if assets.contains(exact) { return Resolution(path: exact, status: 200) }
+        if assetBytes.contains(Array(exact.utf8)) { return Resolution(path: exact, status: 200) }
         let last = values.last ?? ""
         let transport = RouteResolver.reservedSuffix(last)
         let routeValues = transport ? Array(values.dropLast()) : values
         let file = transport ? last : "index.html"
         var best: (route: Route, rank: [Int])?
-        for route in routes where route.files.contains(file) {
+        let fileKey = Array(file.utf8)
+        for (route, files) in zip(routes, routeFiles) where files.contains(fileKey) {
             guard let rank = RouteResolver.matchRoute(route, routeValues) else { continue }
             if best == nil || RouteResolver.compareRank(rank, best!.rank) > 0 {
                 best = (route, rank)
@@ -96,10 +104,21 @@ struct RouteResolver {
 
     static let notFound = Resolution(path: notFoundPath, status: 404)
 
-    /// Exported transport file names: never a route parameter (E3).
+    /// Exported transport file names: never a route parameter (E3). Byte-wise, like the JS
+    /// `/^__next\..+\.txt$/`, whose `.` excludes the four JavaScript line terminators.
     static func reservedSuffix(_ name: String) -> Bool {
-        if name == "index.html" || name == "index.txt" { return true }
-        return name.hasPrefix("__next.") && name.hasSuffix(".txt") && name.count > "__next.".count + ".txt".count
+        if same(name, "index.html") || same(name, "index.txt") { return true }
+        let scalars = Array(name.unicodeScalars)
+        let prefix = Array("__next.".unicodeScalars), suffix = Array(".txt".unicodeScalars)
+        guard scalars.count > prefix.count + suffix.count,
+              scalars.starts(with: prefix), scalars.suffix(suffix.count).elementsEqual(suffix) else { return false }
+        let middle = scalars[prefix.count..<(scalars.count - suffix.count)]
+        return !middle.contains { ["\n", "\r", "\u{2028}", "\u{2029}"].contains($0) }
+    }
+
+    /// Code-unit equality, as in JavaScript and Java (not canonical equivalence).
+    static func same(_ left: String, _ right: String) -> Bool {
+        left.utf8.elementsEqual(right.utf8)
     }
 
     private static let fixedRank = 3
@@ -119,7 +138,7 @@ struct RouteResolver {
                     index += 1
                 }
             case let .fixed(value):
-                if index == values.count || values[index] != value { return nil }
+                if index == values.count || !same(values[index], value) { return nil }
                 rank.append(fixedRank)
                 index += 1
             case .param:
@@ -152,11 +171,13 @@ struct RouteResolver {
         }
         let lower = path.lowercased()
         if lower.contains("%2f") || lower.contains("%5c") || lower.contains("%00") { return nil }
-        var parts = path.dropFirst().split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        // Split on the byte: a "/" followed by a combining mark is one Swift Character.
+        var parts = path.utf8.dropFirst().split(separator: UInt8(ascii: "/"), omittingEmptySubsequences: false)
+            .map { String(decoding: $0, as: UTF8.self) }
         if parts.last == "" { parts.removeLast() }
         var decoded: [String] = []
         for part in parts {
-            guard let value = decodeSegment(part), !value.isEmpty, value != ".", value != "..",
+            guard let value = decodeSegment(part), !value.isEmpty, !same(value, "."), !same(value, ".."),
                   !value.unicodeScalars.contains(where: { $0 == "\\" || $0 == "/" || $0 == "\0" })
             else { return nil }
             decoded.append(value)

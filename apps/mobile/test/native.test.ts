@@ -703,6 +703,13 @@ describe("bundled-mode wiring (MOB-P3 E4, E5)", () => {
     ).toBeGreaterThan(serve);
     expect(client).toContain('getAssets().open("public/route-manifest.json")');
     expect(client).toContain("if (isDocumentRequest(request)) return forbidden();");
+    // Capacitor's local server answers http://localhost too; only the exact app origin is served.
+    expect(
+      intercept.indexOf("isOtherLocalOrigin(request.getUrl())) return forbidden();"),
+    ).toBeLessThan(intercept.indexOf("BundledServer.isNativeFilePath("));
+    expect(
+      intercept.indexOf("isOtherLocalOrigin(request.getUrl())) return forbidden();"),
+    ).toBeGreaterThan(-1);
     const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
     expect(activity).toMatch(
       /client = new SuiteWebViewClient\(bridge\);\s*\} catch \(RuntimeException e\) \{/,
