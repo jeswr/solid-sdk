@@ -8,6 +8,7 @@ import {
   AccessControl,
   AccessControlResource,
   AclResource,
+  AcrDataset,
   Authorization,
   Matcher,
   Policy,
@@ -70,6 +71,7 @@ export interface SharingSnapshot {
   readonly input: SharingInput;
   readonly state: SharingState;
   readonly own: AccessDocument;
+  readonly ownExists: boolean;
   readonly etags: ReadonlyMap<string, string | null>;
   readonly canManage: boolean;
 }
@@ -77,6 +79,30 @@ export class SharingConflictError extends Error {
   constructor(readonly snapshot: SharingSnapshot) {
     super("Sharing changed elsewhere, review and try again");
   }
+}
+/** The PUT committed. Callers must discard stale controls and retry only the read. */
+export class SharingRefreshError extends Error {
+  readonly committed = true;
+  constructor(cause: unknown) {
+    super("Sharing was saved, but current access couldn't be reloaded. Retry to verify access.", {
+      cause,
+    });
+  }
+}
+
+function advertisesAcp(headers: Headers): boolean {
+  for (const match of (headers.get("link") ?? "").matchAll(/<([^>]*)>\s*((?:;\s*[^,]*)*)/g)) {
+    const params = match[2] as string;
+    if (/;\s*anchor\s*=/i.test(params)) continue;
+    const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(params);
+    const relations = (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/);
+    if (
+      relations.includes(`${ACP}accessControl`) ||
+      (match[1] === `${ACP}AccessControlResource` && relations.includes("type"))
+    )
+      return true;
+  }
+  return false;
 }
 
 function parent(resource: string): string {
@@ -94,6 +120,7 @@ export async function loadSharing(
   const documents: AccessDocument[] = [];
   const etags = new Map<string, string | null>();
   let own: AccessDocument | undefined;
+  let ownExists = false;
   let model: "wac" | "acp" = "wac";
   let current = resource;
   for (;;) {
@@ -113,6 +140,7 @@ export async function loadSharing(
       let dataset: DatasetCore = new Store();
       let etag: string | null = null;
       let exists = false;
+      let accessHeaders = new Headers();
       try {
         const fetched = await fetchRdf(scoped(source), {
           fetch: (url, init) =>
@@ -121,12 +149,15 @@ export async function loadSharing(
         dataset = fetched.dataset;
         etag = fetched.etag;
         exists = true;
+        accessHeaders = fetched.headers;
       } catch (error) {
         if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
       }
       const acp =
         source.endsWith(".acr") ||
-        (headers.get("link") ?? "").includes(`${ACP}accessControl`) ||
+        advertisesAcp(headers) ||
+        advertisesAcp(accessHeaders) ||
+        new AcrDataset(dataset, DataFactory).acr !== undefined ||
         [...dataset].some((q) => q.predicate.value.startsWith(ACP));
       const detected = acp ? "acp" : "wac";
       if (current === resource) model = detected;
@@ -148,7 +179,10 @@ export async function loadSharing(
         inherited: current !== resource,
       };
       etags.set(source, exists ? etag : null);
-      if (current === resource) own = document;
+      if (current === resource) {
+        own = document;
+        ownExists = exists;
+      }
       if (exists) documents.push(document);
       if (exists && model === "wac") break;
     }
@@ -165,6 +199,7 @@ export async function loadSharing(
     input,
     state,
     own: destination,
+    ownExists,
     etags,
     canManage: state.people.some((p) => p.webId === session.webId && p.role === "owner"),
   };
@@ -202,21 +237,35 @@ function rewriteWac(document: AccessDocument, change: AuthorizationChange) {
   const dataset = document.dataset;
   const principal = change.principal.kind === "public" ? FOAF : change.principal.webId;
   const selector = change.principal.kind === "public" ? "agentClass" : "agent";
+  // One folder selection governs both the folder and inheriting descendants, including
+  // default-only rules and legacy defaultForNew. Other targets retain their own modes.
+  const targets = [
+    `${ACL}accessTo`,
+    ...(change.resource.endsWith("/") ? [`${ACL}default`, `${ACL}defaultForNew`] : []),
+  ];
+  const allowed = new Set(
+    readGrants({ resource: document.governingResource, documents: [document] })
+      .filter(
+        (grant) => grant.principal === (change.principal.kind === "public" ? PUBLIC : principal),
+      )
+      .flatMap((grant) => [...grant.modes]),
+  );
+  for (const mode of change.remove) allowed.delete(mode);
+  for (const mode of change.add) allowed.add(mode);
   for (const authorization of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(authorization as Term, dataset);
-    if (
-      !rule.values(`${ACL}accessTo`).has(change.resource) ||
-      !rule.values(ACL + selector).has(principal)
-    )
-      continue;
-    // Keep the original authorization for other targets and container defaults.
+    const affected = targets.filter((predicate) => rule.values(predicate).has(change.resource));
+    if (!affected.length || !rule.values(ACL + selector).has(principal)) continue;
+    // Split the changed scopes and principal, preserving unrelated scopes and metadata.
     const scope = clone(authorization as Term, dataset, dataset, [
       `${ACL}accessTo`,
       `${ACL}default`,
       `${ACL}defaultForNew`,
     ]);
-    rule.values(`${ACL}accessTo`).delete(change.resource);
-    scope.values(`${ACL}accessTo`).add(change.resource);
+    for (const predicate of affected) {
+      rule.values(predicate).delete(change.resource);
+      scope.values(predicate).add(change.resource);
+    }
     scope.values(ACL + selector).delete(principal);
     const personal = clone(scope as Term, dataset, dataset, [
       `${ACL}agent`,
@@ -224,16 +273,18 @@ function rewriteWac(document: AccessDocument, change: AuthorizationChange) {
       `${ACL}agentGroup`,
     ]);
     personal.values(ACL + selector).add(principal);
-    for (const mode of change.remove) personal.values(`${ACL}mode`).delete(ACL + mode);
+    personal.values(`${ACL}mode`).clear();
+    for (const mode of allowed) personal.values(`${ACL}mode`).add(ACL + mode);
   }
-  if (change.add.length) {
+  if (allowed.size) {
     const rule = new Authorization(DataFactory.blankNode(), dataset, DataFactory);
     rule.type.add(`${ACL}Authorization`);
     rule.accessTo = change.resource;
+    if (change.resource.endsWith("/")) rule.default = change.resource;
     properties(rule as Term, dataset)
       .values(ACL + selector)
       .add(principal);
-    for (const mode of change.add) rule.mode.add(ACL + mode);
+    for (const mode of allowed) rule.mode.add(ACL + mode);
   }
 }
 
@@ -323,6 +374,8 @@ export async function applySharing(
       );
   // Revalidate every source before a copied/combined policy is written, including ancestors.
   for (const source of snapshot.input.access.documents) {
+    // A missing own ACR is a conditional-create destination, not a source lacking an ETag.
+    if (source.source === snapshot.own.source && !snapshot.ownExists) continue;
     const etag = snapshot.etags.get(source.source);
     if (!etag || etag.startsWith("W/"))
       throw new SharingError("A strong access document ETag is required to change sharing");
@@ -344,6 +397,7 @@ export async function applySharing(
   const latest = await loadSharing(session, snapshot.input.access.resource);
   if (
     latest.own.source !== snapshot.own.source ||
+    latest.ownExists !== snapshot.ownExists ||
     JSON.stringify([...latest.etags]) !== JSON.stringify([...snapshot.etags])
   )
     throw new SharingConflictError(latest);
@@ -364,5 +418,9 @@ export async function applySharing(
   if (response.status === 412)
     throw new SharingConflictError(await loadSharing(session, snapshot.input.access.resource));
   if (!response.ok) throw new DriveAccessError(response.status, "Couldn't save sharing");
-  return loadSharing(session, snapshot.input.access.resource);
+  try {
+    return await loadSharing(session, snapshot.input.access.resource);
+  } catch (cause) {
+    throw new SharingRefreshError(cause);
+  }
 }

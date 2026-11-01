@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
@@ -10,6 +11,7 @@ import {
   type SharingSession,
 } from "../src/apps/drive/lib/sharing/apply";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { aclBody, OWNER, PRIVATE, ROOT as WAC_ROOT, wacPod } from "./drive-wac-pod";
 import {
   ACL,
   ACP,
@@ -494,4 +496,231 @@ it("blocks ACP self-removal and owner downgrades before any network mutation", a
     }),
   ).rejects.toThrow("own owner access");
   expect(env.fetch).not.toHaveBeenCalled();
+});
+
+it.each([
+  "default",
+  "defaultForNew",
+])("revokes anonymous folder and descendant access together for acl:%s", async (predicate) => {
+  const pod = await wacPod();
+  const dataset = await parseRdf(await aclBody(PRIVATE, true), "text/turtle");
+  for (const auth of new AclResource(dataset, DataFactory).authorizations) {
+    auth.default = undefined;
+    properties(auth)
+      .values(ACL + predicate)
+      .add(PRIVATE);
+  }
+  pod.policies.set(`${PRIVATE}.policy`, await serialize([...dataset]));
+  const session = { fetch: pod.fetch, storageUrl: WAC_ROOT, webId: OWNER };
+  expect((await pod.anonymous(PRIVATE)).status).toBe(200);
+  expect((await pod.anonymous(`${PRIVATE}secret`)).status).toBe(200);
+  const snapshot = await loadSharing(session, PRIVATE);
+  const result = await applySharing(session, snapshot, {
+    ...snapshot.state,
+    link: "none",
+    public: "none",
+  });
+  expect(result.state.link).toBe("none");
+  expect((await pod.anonymous(PRIVATE)).status).toBe(403);
+  expect((await pod.anonymous(`${PRIVATE}secret`)).status).toBe(403);
+});
+
+it.each([
+  false,
+  true,
+])("gives new folder Editors access to inheriting children (inherited ACL: %s)", async (inherited) => {
+  const env = await setup("wac", inherited);
+  const folder = `${FOLDER}nested/`;
+  await env.pod.fetch(folder, { method: "PUT" });
+  if (!inherited) {
+    const doc = document("wac", false, folder);
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+    await writeDoc(env, doc);
+  }
+  const snapshot = await loadSharing(env.session, folder);
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: BOB, role: "editor" }],
+  });
+  const child = readSharing({
+    access: { resource: `${folder}child`, documents: [{ ...result.own, inherited: true }] },
+  });
+  expect(child.people.find((p) => p.webId === BOB)?.role).toBe("editor");
+  expect(child.people.find((p) => p.webId === ALICE)?.role).toBe("owner");
+});
+
+it.each([
+  "viewer",
+  "none",
+] as const)("sets all folder scopes to %s while preserving shared principals and unrelated targets", async (role) => {
+  const env = await setup();
+  const doc = document("wac", false, FOLDER);
+  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+  const shared = authorization(doc, BOB, ["Read", "Write"]);
+  shared.agent.add(CAROL);
+  shared.default = FOLDER;
+  properties(shared).values(`${ACL}accessTo`).add(`${FOLDER}other`);
+  properties(shared).values(`${ACL}defaultForNew`).add(FOLDER);
+  // A separate descendant-only Append must also be removed on a folder downgrade.
+  const children = authorization(doc, BOB, ["Append"]);
+  children.accessTo = undefined;
+  children.default = FOLDER;
+  await writeDoc(env, doc);
+  const snapshot = await loadSharing(env.session, FOLDER);
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.flatMap((p) =>
+      p.webId === BOB ? (role === "none" ? [] : [{ ...p, role }]) : [p],
+    ),
+  });
+  const child = readSharing({
+    access: { resource: `${FOLDER}child`, documents: [{ ...result.own, inherited: true }] },
+  });
+  expect(child.people.find((p) => p.webId === BOB)?.role).toBe(
+    role === "none" ? undefined : "viewer",
+  );
+  expect(child.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
+  const unrelated = readSharing({
+    access: {
+      resource: `${FOLDER}other`,
+      documents: [{ ...result.own, governingResource: `${FOLDER}other` }],
+    },
+  });
+  expect(unrelated.people.find((p) => p.webId === BOB)?.role).toBe("editor");
+});
+
+it.each(
+  [`${FILE}?ext=acr`, `${FILE}.acl`].flatMap((endpoint) =>
+    ["rel=type", 'rel="type alternate"'].map((relation) => ({ endpoint, relation })),
+  ),
+)("uses the ACR type header at $endpoint ($relation) to discover inherited public access", async ({
+  endpoint,
+  relation,
+}) => {
+  const env = await setup("acp");
+  const ancestor = document("acp", true);
+  policy(ancestor, PUBLIC, ["Read"]);
+  await writeDoc(env, ancestor);
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    if (url === endpoint)
+      return new Response("", {
+        headers: {
+          "content-type": "text/turtle",
+          etag: '"empty-acr"',
+          link: `<${ACP}AccessControlResource>; ${relation}`,
+        },
+      });
+    const response = await env.session.fetch(url, init);
+    if (url !== FILE) return response;
+    const headers = new Headers(response.headers);
+    headers.set("link", `<${endpoint}>; rel="acl"`);
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const snapshot = await loadSharing({ ...env.session, fetch }, FILE);
+  expect(snapshot.own.model).toBe("acp");
+  expect(snapshot.state).toMatchObject({
+    link: "viewer",
+    public: "viewer",
+    general: { inherited: true, sources: [ancestor.source] },
+  });
+});
+
+it.each([
+  false,
+  true,
+])("recognizes inherited ACP management and permits adding, changing and removing people (own ACR exists: %s)", async (ownExists) => {
+  const env = await setup("acp", true);
+  policy(env.doc, ALICE, ["Read", "Write"], `${FILE}.acr`);
+  await writeDoc(env);
+  if (ownExists)
+    await env.pod.fetch(`${FILE}.acr`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "",
+    });
+  const ancestorBody = await (await env.pod.fetch(env.doc.source)).text();
+  let snapshot = await env.load();
+  expect(snapshot.state.people.find((p) => p.webId === ALICE)).toMatchObject({
+    role: "owner",
+    inherited: true,
+    sources: [env.doc.source],
+  });
+  expect(snapshot.canManage).toBe(true);
+  for (const role of ["editor", "viewer", "none"] as const) {
+    snapshot = await applySharing(env.session, snapshot, {
+      ...snapshot.state,
+      people: [
+        ...snapshot.state.people.filter((p) => p.webId !== BOB),
+        ...(role === "none" ? [] : [{ webId: BOB, role }]),
+      ],
+    });
+    expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe(
+      role === "none" ? undefined : role,
+    );
+    expect(snapshot.canManage).toBe(true);
+  }
+  expect(await (await env.pod.fetch(env.doc.source)).text()).toBe(ancestorBody);
+});
+
+it.each(
+  (["wac", "acp"] as const).flatMap((model) =>
+    (["HEAD", "GET"] as const).map((method) => ({ model, method })),
+  ),
+)("reports a committed $model change when the refresh $method fails", async ({ model, method }) => {
+  const env = await setup(model);
+  const snapshot = await env.load();
+  let committed = false;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+    if (committed && (init?.method ?? "GET") === method) return new Response(null, { status: 503 });
+    const response = await env.session.fetch(url, init);
+    if (init?.method === "PUT" && response.ok) committed = true;
+    return response;
+  });
+  await expect(
+    applySharing({ ...env.session, fetch }, snapshot, {
+      ...snapshot.state,
+      link: "viewer",
+      public: "viewer",
+    }),
+  ).rejects.toMatchObject({
+    committed: true,
+    message: "Sharing was saved, but current access couldn't be reloaded. Retry to verify access.",
+    cause: expect.any(Error),
+  });
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  expect((await env.load()).state.link).toBe("viewer");
+  expect(snapshot.state.link).toBe("none");
+});
+
+it.each([
+  `<${ACP}AccessControlResource>; rel="type"; anchor="https://example.org/other"`,
+  `<${ACP}AccessControlResource>`,
+])("ignores an ACR type link without an applicable relation: %s", async (link) => {
+  const env = await setup();
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    if (url !== env.doc.source) return response;
+    const headers = new Headers(response.headers);
+    headers.set("link", link);
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const snapshot = await loadSharing({ ...env.session, fetch }, FILE);
+  expect(snapshot.own.model).toBe("wac");
+  expect(snapshot.canManage).toBe(true);
+});
+
+it("recognizes a type-only ACP graph at a legacy ACL endpoint", async () => {
+  const env = await setup();
+  const own = document("acp");
+  new Properties(`${FILE}.acl`, own.dataset, DataFactory)
+    .values("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    .add(`${ACP}AccessControlResource`);
+  await env.pod.fetch(`${FILE}.acl`, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serialize([...own.dataset]),
+  });
+  const snapshot = await env.load();
+  expect(snapshot.own.model).toBe("acp");
+  expect(snapshot.canManage).toBe(false);
 });

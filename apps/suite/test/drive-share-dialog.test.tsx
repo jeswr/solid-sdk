@@ -17,6 +17,7 @@ import {
   applySharing,
   loadSharing,
   SharingConflictError,
+  SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
 } from "../src/apps/drive/lib/sharing/apply";
@@ -44,6 +45,7 @@ function snapshot(next = state, canManage = true): SharingSnapshot {
   return {
     input: { access: { resource: FILE, documents: [own] } },
     own,
+    ownExists: true,
     state: next,
     canManage,
     etags: new Map(),
@@ -294,4 +296,84 @@ it("traps keyboard focus within the modal", async () => {
   expect(dialog.contains(document.activeElement)).toBe(true);
   await user.tab({ shift: true });
   expect(dialog.contains(document.activeElement)).toBe(true);
+});
+
+it("invalidates stale permissions after a committed save and retries only the refresh", async () => {
+  apply.mockRejectedValueOnce(new SharingRefreshError(new Error("Refresh returned 503")));
+  show();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
+  await screen.findByText(/Sharing was saved, but current access couldn't be reloaded/);
+  expect(screen.queryByRole("region", { name: "General access" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
+  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  expect(onSaved).toHaveBeenCalledOnce();
+  load.mockRejectedValueOnce(new Error("Still unavailable"));
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByText("Still unavailable");
+  expect(screen.queryByLabelText("Who can access")).toBeNull();
+  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  load.mockResolvedValueOnce(snapshot({ ...state, link: "viewer", public: "viewer" }));
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await ready();
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).value).toBe("anyone");
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(false);
+  expect(apply).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "Done",
+  "Close",
+  "Escape",
+  "outside",
+])("keeps a pending public revocation visible after %s dismissal and reports PUT failure", async (dismissal) => {
+  load.mockResolvedValue(snapshot({ ...state, link: "viewer", public: "viewer" }));
+  let reject!: (reason: unknown) => void;
+  apply.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  show();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "restricted" } });
+  await screen.findByText("Saving sharing…");
+  if (dismissal === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+  else if (dismissal === "outside") {
+    fireEvent(document.body, new MouseEvent("pointerdown", { bubbles: true }));
+    fireEvent.click(document.body);
+  } else fireEvent.click(screen.getByRole("button", { name: dismissal }));
+  expect(onClose).not.toHaveBeenCalled();
+  expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => reject(new Error("Couldn't save sharing (500)")));
+  await screen.findByText("Couldn't save sharing (500)");
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).value).toBe("anyone");
+  expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("keeps an Editor removal open on Escape until a rejected PUT is reported", async () => {
+  load.mockResolvedValue(
+    snapshot({
+      ...state,
+      people: state.people.map((p) => (p.webId === BOB ? { ...p, role: "editor" } : p)),
+    }),
+  );
+  let reject!: (reason: unknown) => void;
+  apply.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  show();
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: `Remove access for ${BOB}` }));
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+  await act(async () => reject(new Error("Couldn't save sharing (403)")));
+  await screen.findByText("Couldn't save sharing (403)");
+  expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).value).toBe("editor");
 });

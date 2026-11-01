@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 
 import { LiteralAs, LiteralFrom, NamedGraphDataset, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
@@ -765,4 +766,35 @@ it("honors all ACP resource targets, including a shared data and policy scope", 
   properties(acr).values(`${ACP}resource`).add(FILE);
   properties(acr).values(`${ACP}resource`).add(doc.source);
   expect(readSharing(input(doc)).people[0]?.role).toBe("owner");
+});
+
+it("combines inherited and own ACP management modes on the actual own ACR", () => {
+  const own = document("acp");
+  const parent = document("acp", true);
+  policy(own, ALICE, ["Read", "Write"]);
+  policy(own, ALICE, ["Read"], own.source);
+  policy(parent, ALICE, ["Write"], own.source);
+  const value = { access: { resource: FILE, documents: [own, parent] } };
+  const state = readSharing(value);
+  expect(state.people).toEqual([
+    {
+      webId: ALICE,
+      role: "owner",
+      explicit: true,
+      inherited: true,
+      sources: [own.source, parent.source].sort(),
+    },
+  ]);
+  expect(diffSharing(value, state)).toEqual([]);
+  expect(() => diffSharing(value, { ...state, people: [] })).toThrow("Owner rows");
+});
+
+it("does not confuse management of an ancestor ACR with management of the own ACR", () => {
+  const own = document("acp");
+  const parent = document("acp", true);
+  policy(own, ALICE, ["Read", "Write"]);
+  policy(parent, ALICE, ["Read", "Write"], parent.source);
+  expect(
+    readSharing({ access: { resource: FILE, documents: [own, parent] } }).people[0]?.role,
+  ).toBe("editor");
 });

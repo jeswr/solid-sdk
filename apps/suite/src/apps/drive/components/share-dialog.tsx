@@ -18,6 +18,7 @@ import {
   applySharing,
   loadSharing,
   SharingConflictError,
+  SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
 } from "../lib/sharing/apply";
@@ -127,6 +128,13 @@ export function ShareDialog({
       onSaved();
     } catch (reason) {
       if (reason instanceof SharingConflictError) setSnapshot(reason.snapshot);
+      if (reason instanceof SharingRefreshError) {
+        setSnapshot(undefined);
+        setPeople([]);
+        setQuery("");
+        setAnnouncement("Sharing saved");
+        onSaved();
+      }
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
     } finally {
       setSaving(false);
@@ -134,6 +142,10 @@ export function ShareDialog({
   };
   const state = snapshot?.state;
   const blocked = loading || saving || !snapshot?.canManage;
+  // Every dismissal route (Done, close button, Escape and outside interaction) shares this guard.
+  const close = () => {
+    if (!saving) onClose();
+  };
   const updatePerson = (peopleState: SharingState, webId: string, next?: SharingRole) => {
     void save({
       ...peopleState,
@@ -144,7 +156,7 @@ export function ShareDialog({
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
+    <Dialog open onOpenChange={close}>
       <DialogContent
         className="drv-share-dialog"
         aria-modal="true"
@@ -330,7 +342,9 @@ export function ShareDialog({
           >
             Copy link
           </Button>
-          <Button onClick={onClose}>Done</Button>
+          <Button disabled={saving} onClick={close}>
+            Done
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -19,6 +19,8 @@ Both flags may be true for ACP grants composed from own and ancestor policies.
 - Editor: resource Read+Write (an explicit redundant Append is retained).
 - Owner: editor plus WAC Control, or Read+Write on the own ACR itself for ACP.
   This is a permission summary, not proof of legal ownership; existing owner rows are immutable.
+  ACP management modes may combine own policies and ancestor member policies targeting
+  that own ACR. Access to an ancestor's ACR does not confer management of the item.
 
 ACP permissions on the ACR are supported only as part of a named owner's full
 Read+Write access to both the resource and its ACR. Management-only principals,
@@ -72,6 +74,18 @@ never written. Sources and discovery are revalidated, and PUT uses the captured
 strong ETag or `If-None-Match: *`. A 412 produces `SharingConflictError` with a fresh
 snapshot and the message “Sharing changed elsewhere, review and try again”. Existing
 owners and inherited rows remain immutable; a non-owner cannot save changes.
+
+A changed WAC folder grant applies to both the folder and inheriting descendants:
+`accessTo`, `default`, and legacy `defaultForNew` scopes for that folder are edited
+together. Unrelated targets retain their grants. ACP discovery also checks the
+access document's type Link header and RDF type, including empty ACRs advertised
+through `rel="acl"` at arbitrary URLs. A missing own ACR remains a conditional-create
+destination when inherited policies permit management.
+
+If PUT succeeds but reloading fails, `SharingRefreshError` carries `committed: true`
+and the read failure as its cause. The dialog reports that sharing was saved, clears
+its stale controls, and offers Retry to reload access without repeating the write.
+All dismissal routes remain guarded while a save is pending so failures stay visible.
 
 The Drive dialog uses Viewer and Editor. Commenter stays disabled until Drive has a
 separate comments resource; it never substitutes Append on the file for commenting.
