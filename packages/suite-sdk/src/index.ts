@@ -8,7 +8,7 @@ import {
   type NotifyResult,
 } from "@jeswr/pod-access/notify";
 import { usePodAuth } from "@jeswr/pod-auth/react";
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
 export type {
   NotificationDraft,
@@ -58,7 +58,12 @@ export function useNotify(options: Omit<NotifyOptions, "fetch"> = {}): NotifyAct
     };
     return { session, action };
   }, [fetch, identity, clock, recipientProtocol, pinningFetch]);
-  // Set the token from the memo React actually retained, including StrictMode replay.
-  active.current = state.session;
+  // Only committed renders may activate a session. Revoke it on replacement or unmount.
+  useLayoutEffect(() => {
+    active.current = state.session;
+    return () => {
+      active.current = null;
+    };
+  }, [state]);
   return state.action;
 }

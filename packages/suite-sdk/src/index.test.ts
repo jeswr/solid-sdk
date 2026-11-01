@@ -1,7 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { PodAuthProvider } from "@jeswr/pod-auth/react";
-import { act, createElement, StrictMode } from "react";
+import {
+  act,
+  type ComponentType,
+  createElement,
+  StrictMode,
+  Suspense,
+  startTransition,
+  useLayoutEffect,
+} from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -68,7 +76,7 @@ function Probe() {
   action = useNotify(options);
   return null;
 }
-async function mount(auth: PodAuth) {
+async function mount(auth: PodAuth, ProbeComponent: ComponentType = Probe) {
   const container = document.createElement("div");
   document.body.append(container);
   const mountedRoot = createRoot(container);
@@ -78,7 +86,11 @@ async function mount(auth: PodAuth) {
       createElement(
         StrictMode,
         null,
-        createElement(PodAuthProvider, { auth }, createElement(Probe)),
+        createElement(
+          PodAuthProvider,
+          { auth },
+          createElement(Suspense, { fallback: "loading" }, createElement(ProbeComponent)),
+        ),
       ),
     );
   await act(update);
@@ -214,4 +226,109 @@ test("fences retained actions and in-flight discovery across logout and same-acc
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
   expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+test.each([
+  false,
+  true,
+])("revokes retained actions and pending discovery on unmount (pinned transport: %s)", async (pinned) => {
+  const { auth, fetch, emit } = fakeAuth();
+  if (pinned) options = { pinningFetch: fetch };
+  await mount(auth);
+  const oldAction = action;
+  const draft = roomInvitation("https://pod.example/room/");
+  const profile = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  fetch.mockImplementationOnce(async () => {
+    started.resolve();
+    return profile.promise;
+  });
+  const pending = oldAction(recipient, draft);
+  await started.promise;
+
+  await act(() => root?.unmount());
+  root = undefined;
+  const bob = { ...alice, webId: "https://bob.example/#me", subject: "bob" };
+  await emit("login", bob);
+  await mount(auth);
+  profile.resolve(
+    new Response(`<${recipient}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`, {
+      headers: { "content-type": "text/turtle" },
+    }),
+  );
+
+  expect(await pending).toEqual({ delivered: false, inbox, reason: "network" });
+  expect(await oldAction(recipient, draft)).toEqual({ delivered: false, inbox, reason: "network" });
+  expect(await oldAction("https://1.1.1.1/profile#me", draft)).toEqual({
+    delivered: false,
+    inbox: null,
+    reason: "network",
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(JSON.parse(fetch.mock.calls[2]?.[1]?.body as string).actor).toBe(bob.webId);
+});
+
+test.each([
+  "commit",
+  "discard",
+])("keeps committed actions active while an option change suspends, then %ss it", async (outcome) => {
+  const { auth, fetch } = fakeAuth();
+  const originalOptions = { clock: () => 0 };
+  options = originalOptions;
+  const blocker = Promise.withResolvers<void>();
+  let suspended = false;
+  let attemptedAction: NotifyAction | undefined;
+  function SuspendedProbe() {
+    const notify = useNotify(options);
+    useLayoutEffect(() => {
+      action = notify;
+    }, [notify]);
+    if (suspended) {
+      attemptedAction = notify;
+      throw blocker.promise;
+    }
+    return createElement("p", null, "ready");
+  }
+  await mount(auth, SuspendedProbe);
+  const committedAction = action;
+  const draft = roomInvitation("https://pod.example/room/");
+  expect(await committedAction(recipient, draft)).toEqual({ delivered: true, inbox });
+
+  options = { clock: () => 1 };
+  suspended = true;
+  await act(() => startTransition(update));
+  expect(attemptedAction).toBeDefined();
+  expect(attemptedAction).not.toBe(committedAction);
+  expect(action).toBe(committedAction);
+  expect(document.body.textContent).toBe("ready");
+  expect(await committedAction(recipient, draft)).toEqual({ delivered: true, inbox });
+  expect(await attemptedAction?.(recipient, draft)).toEqual({
+    delivered: false,
+    inbox: null,
+    reason: "network",
+  });
+  expect(fetch).toHaveBeenCalledTimes(3);
+
+  suspended = false;
+  if (outcome === "discard") options = originalOptions;
+  await act(async () => {
+    if (outcome === "discard") update();
+    blocker.resolve();
+  });
+  if (outcome === "commit") {
+    expect(action).not.toBe(committedAction);
+    expect(await committedAction(recipient, draft)).toEqual({
+      delivered: false,
+      inbox,
+      reason: "network",
+    });
+    expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
+    expect(fetch).toHaveBeenCalledTimes(5);
+  } else {
+    expect(action).toBe(committedAction);
+    expect(await committedAction(recipient, draft)).toEqual({ delivered: true, inbox });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  }
 });
