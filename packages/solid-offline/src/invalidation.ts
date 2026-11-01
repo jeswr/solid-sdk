@@ -6,13 +6,13 @@ import type { StorageClient } from '@jeswr/storage-client';
 import { StorageError } from '@jeswr/storage-client';
 import {
   deleteVariantBytes,
+  evictListingPages,
   IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
   resLike,
 } from './cache-coherence.js';
 import { classifyResponse, computeVaryKey, keyRequest, type RequestLike } from './cache-policy.js';
-import { nextPages } from './listing-pages.js';
 import type { MetadataStore } from './metadata-store.js';
 import { policyResponse } from './storage.js';
 import type { Broadcaster, ByteCache } from './swr.js';
@@ -127,7 +127,7 @@ async function purge(
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
   // Retain the old pagination links until every associated cursor is evicted.
-  await evictListingPages(url, records, deps);
+  await evictListingPages(url, records, deps, (next) => deps.storage.isWithinStorage(next));
   // Delete EVERY cached variant's bytes for this URL (the #3 fix) + the defensive
   // canonical-Turtle orphan sweep — the shared coherence primitive (deleting only
   // a single synthetic key would leave other variants' bytes behind with no
@@ -156,6 +156,7 @@ async function purgeStaleVariants(
   keepVaryKey: string,
   deps: InvalidateDeps,
 ): Promise<void> {
+  await evictListingPages(url, records, deps, (next) => deps.storage.isWithinStorage(next));
   for (const record of records) {
     // Keep the variant we're about to (re)write; it is overwritten by the
     // subsequent canonical put + meta.put.
@@ -223,8 +224,6 @@ async function revalidateResource(
     const decision = classifyResponse(rl, resLike(fresh));
     const newEtag = fresh.headers.get('etag') ?? undefined;
     if (decision.cacheable) {
-      // Follow the old cursor chain before replacing its bytes and pagination metadata.
-      await evictListingPages(url, records, deps);
       // Replace the whole resource: drop stale OTHER variants before writing the
       // new canonical one (so lookup can't keep matching an old Vary row).
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
@@ -269,7 +268,7 @@ async function refreshListing(
 
   // Follow the OLD listing's cached pagination links before replacing page one.
   // Cursors are opaque URLs, so path/prefix matching cannot identify its pages.
-  await evictListingPages(container, records, deps);
+  await evictListingPages(container, records, deps, (next) => deps.storage.isWithinStorage(next));
 
   const req = rdfRequest(container);
   const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
@@ -327,40 +326,6 @@ async function refreshListing(
     return purge(container, records, deps);
   }
   return { kind: 'skipped' };
-}
-
-/** Evict every cached cursor variant; cached Link chains associate pages with their listing. */
-async function evictListingPages(
-  container: string,
-  records: CacheMetadata[],
-  deps: InvalidateDeps,
-): Promise<void> {
-  const pending = [{ url: container, records }];
-  const seen = new Set([container]);
-  for (let index = 0; index < pending.length; index += 1) {
-    const page = pending[index];
-    if (!page) continue;
-    for (const record of page.records) {
-      // Legacy records predate nextPages; their cached headers remain usable.
-      const cached = record.nextPages
-        ? undefined
-        : await deps.cache.match(keyRequest(page.url, record.varyKey), IGNORE_VARY);
-      for (const next of record.nextPages ??
-        nextPages(page.url, cached?.headers.get('link') ?? null)) {
-        if (seen.has(next) || !deps.storage.isWithinStorage(next)) continue;
-        seen.add(next);
-        pending.push({ url: next, records: await deps.meta.getByUrl(next) });
-      }
-      void cached?.body?.cancel().catch(() => undefined);
-    }
-    if (page.url === container) continue;
-    await deleteVariantBytes(
-      deps.cache,
-      page.url,
-      page.records.map((record) => record.varyKey),
-    );
-    for (const record of page.records) await deps.meta.delete(record.key);
-  }
 }
 
 /** Reconcile the warmed set using fresh HEADs, reading only changed/unversioned entries. */

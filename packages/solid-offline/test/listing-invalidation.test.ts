@@ -39,6 +39,7 @@ async function harness() {
   const cache = new MockByteCache();
   const broadcast = new MockBroadcaster();
   let changed = false;
+  let changedResponse: (() => Response) | undefined;
   let online = true;
   const requests: Request[] = [];
   const transport: typeof fetch = async (input, init) => {
@@ -46,6 +47,7 @@ async function harness() {
     requests.push(request);
     if (!online) throw new Error('offline');
     if (request.url === CONTAINER) {
+      if (changedResponse) return changedResponse();
       const etag = changed ? 'listing-v2' : 'listing';
       if (request.headers.get('if-none-match') === etag) return new Response(null, { status: 304 });
       const response = listing([KEPT], SECOND);
@@ -66,14 +68,12 @@ async function harness() {
       transport,
     ),
   };
+  const fetchPage = (request: Request) =>
+    handleFetch(request, { ...deps, fetch: transport, isOnline: () => online });
   const storage = createLwsBackend({
     root: ROOT,
     fetch: async (input, init) => {
-      const result = await handleFetch(new Request(input, init), {
-        ...deps,
-        fetch: transport,
-        isOnline: () => online,
-      });
+      const result = await fetchPage(new Request(input, init));
       await result.revalidation;
       return result.response;
     },
@@ -85,9 +85,11 @@ async function harness() {
   return {
     deps,
     storage,
+    fetchPage,
     requests,
-    change: () => {
+    change: (response?: () => Response) => {
       changed = true;
+      changedResponse = response;
     },
     offline: () => {
       online = false;
@@ -99,6 +101,129 @@ async function harness() {
 }
 
 describe('paginated listing invalidation', () => {
+  it.each([
+    { mode: 'swr', legacy: false },
+    { mode: 'swr', legacy: true },
+    { mode: 'no-cache', legacy: false },
+    { mode: 'evicted', legacy: false },
+  ])('evicts old cursor chains before a $mode refresh (legacy=$legacy)', async ({
+    mode,
+    legacy,
+  }) => {
+    const h = await harness();
+    const first = (await h.deps.meta.getByUrl(CONTAINER))[0];
+    const second = (await h.deps.meta.getByUrl(SECOND))[0];
+    const third = (await h.deps.meta.getByUrl(THIRD))[0];
+    if (!first || !second || !third) throw new Error('missing cached listing fixtures');
+    const extra = { ...second, key: `${SECOND} x-mode=other`, varyKey: 'x-mode=other' };
+    await h.deps.meta.put(extra);
+    h.deps.cache.seed(keyRequest(SECOND, extra.varyKey), listing([REMOVED]));
+    // The old chain can loop back to page one and contain out-of-scope links.
+    const foreign = 'https://foreign.example/page';
+    const unrelated = `${ROOT}unrelated`;
+    for (const url of [foreign, unrelated]) {
+      await h.deps.meta.put({ ...third, url, key: `${url} ${third.varyKey}` });
+      h.deps.cache.seed(keyRequest(url, third.varyKey), listing([KEPT]));
+    }
+    await h.deps.meta.put({ ...third, nextPages: [CONTAINER, foreign] });
+    h.deps.cache.seed(keyRequest(THIRD, third.varyKey), listing([], CONTAINER));
+    if (legacy) {
+      for (const url of [CONTAINER, SECOND]) {
+        for (const record of await h.deps.meta.getByUrl(url)) {
+          delete record.nextPages;
+          await h.deps.meta.put(record);
+        }
+      }
+    }
+    if (mode === 'evicted') await h.deps.cache.delete(keyRequest(CONTAINER, first.varyKey));
+    const replacement = legacy ? `${ROOT}pages?cursor=new` : SECOND;
+    h.change(() => {
+      const response = listing([KEPT], replacement);
+      response.headers.set('etag', 'listing-v2');
+      return response;
+    });
+    h.requests.length = 0;
+
+    const result = await h.fetchPage(
+      new Request(CONTAINER, {
+        headers: { accept: '*/*', ...(mode === 'no-cache' ? { 'cache-control': 'no-cache' } : {}) },
+      }),
+    );
+    expect(result.source).toBe(
+      mode === 'swr'
+        ? 'cache-hit-online'
+        : mode === 'no-cache'
+          ? 'request-no-cache-revalidated'
+          : 'network-miss-store',
+    );
+    if (mode === 'swr')
+      expect(await result.revalidation).toEqual({ kind: '200-replaced', etag: 'listing-v2' });
+    expect(h.requests.map((request) => request.url)).toEqual([CONTAINER]);
+    expect(await h.deps.meta.getByUrl(CONTAINER)).toEqual([
+      expect.objectContaining({ etag: 'listing-v2', nextPages: [replacement] }),
+    ]);
+    // The later notification cannot repair missed eviction: it is already current.
+    expect(
+      await handleNotification({ type: 'Update', object: CONTAINER, state: 'listing-v2' }, h.deps),
+    ).toEqual({ kind: 'short-circuit' });
+    for (const url of [SECOND, THIRD]) {
+      expect(await h.deps.meta.getByUrl(url)).toEqual([]);
+      expect(await h.deps.cache.match(keyRequest(url, second.varyKey))).toBeUndefined();
+    }
+    expect(await h.deps.cache.match(keyRequest(SECOND, extra.varyKey))).toBeUndefined();
+    for (const url of [foreign, unrelated]) {
+      expect(await h.deps.meta.getByUrl(url)).toHaveLength(1);
+      expect(await h.deps.cache.match(keyRequest(url, third.varyKey))).toBeDefined();
+    }
+    h.offline();
+    const after: string[] = [];
+    await expect(async () => {
+      for await (const entry of h.storage.listAll(CONTAINER)) after.push(entry.url);
+    }).rejects.toThrow();
+    expect(after).toEqual([KEPT]);
+    // Even a retained cursor cannot return deleted members after the refresh.
+    await expect(h.storage.list(SECOND)).rejects.toThrow();
+  });
+
+  it.each(['304', 'HEAD'])('retains cached cursor pages after a %s observation', async (mode) => {
+    const h = await harness();
+    if (mode === 'HEAD') h.change();
+    const result = await h.fetchPage(
+      new Request(CONTAINER, {
+        method: mode === 'HEAD' ? 'HEAD' : 'GET',
+        headers: { accept: '*/*' },
+      }),
+    );
+    if (mode === '304') expect(await result.revalidation).toEqual({ kind: '304-confirmed' });
+    for (const url of [SECOND, THIRD]) expect(await h.deps.meta.getByUrl(url)).toHaveLength(1);
+    h.offline();
+    const unchanged: string[] = [];
+    for await (const entry of h.storage.listAll(CONTAINER)) unchanged.push(entry.url);
+    expect(unchanged).toEqual([KEPT, REMOVED]);
+  });
+
+  it.each([
+    'no-store',
+    '403',
+    '404',
+  ])('purges old cursor chains when an SWR response becomes %s', async (mode) => {
+    const h = await harness();
+    const second = (await h.deps.meta.getByUrl(SECOND))[0];
+    if (!second) throw new Error('missing cached cursor fixture');
+    h.change(() => {
+      if (mode !== 'no-store') return new Response(null, { status: Number(mode) });
+      const response = listing([KEPT]);
+      response.headers.set('cache-control', 'no-store');
+      return response;
+    });
+    const result = await h.fetchPage(new Request(CONTAINER, { headers: { accept: '*/*' } }));
+    expect((await result.revalidation)?.kind).toBe('200-replaced');
+    for (const url of [SECOND, THIRD]) {
+      expect(await h.deps.meta.getByUrl(url)).toEqual([]);
+      expect(await h.deps.cache.match(keyRequest(url, second.varyKey))).toBeUndefined();
+    }
+  });
+
   it.each([
     { evicted: false, legacy: false },
     { evicted: true, legacy: false },

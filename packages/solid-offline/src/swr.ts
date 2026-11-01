@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Stale-while-revalidate engine for §2.
  *
@@ -19,6 +20,7 @@
 
 import {
   deleteVariantBytes,
+  evictListingPages,
   IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
@@ -439,6 +441,7 @@ function varyHeaders(vary: string | undefined): Headers {
  */
 async function purgeAllVariants(url: string, deps: SwrDeps): Promise<void> {
   const rows = await deps.meta.getByUrl(url);
+  await evictListingPages(url, rows, deps);
   // Drop EVERY variant's bytes (+ the defensive canonical-Turtle orphan sweep).
   await deleteVariantBytes(
     deps.cache,
@@ -504,6 +507,9 @@ async function store(
   negative: boolean,
 ): Promise<void> {
   const now = deps.now();
+  // Cache misses can still have metadata after byte eviction; retain the old
+  // pagination links until their cursor chain is gone, before overwriting them.
+  await evictListingPages(rl.url, await deps.meta.getByUrl(rl.url), deps);
   // Store the bytes UN-mutated under the canonical (url, varyKey) key + the 1:1
   // metadata row (the shared coherence primitives — see `cache-coherence.ts`).
   await putCanonicalBytes(deps.cache, rl, response);
