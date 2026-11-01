@@ -103,6 +103,8 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./email-mime/send",
       "./gmail",
       "./gmail/send",
+      "./discord",
+      "./discord/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -122,4 +124,11 @@ it("keeps Gmail send and MIME render factories out of read surfaces", () => {
   expect(entry2).not.toHaveProperty("createEmailRenderer");
   expect(entry19).toHaveProperty("createGmailSend");
   expect(entry18).toHaveProperty("createEmailRenderer");
+});
+
+it("keeps Discord sending out of the root and reader surfaces", () => {
+  expect(entry0).not.toHaveProperty("createDiscordSend");
+  expect(entry8).not.toHaveProperty("createDiscordSend");
+  expect(entry8).toHaveProperty("createDiscordReader");
+  expect(entry24).toHaveProperty("createDiscordSend");
 });

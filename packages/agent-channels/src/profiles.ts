@@ -64,7 +64,13 @@ export const MCP_STRUCTURED = profile(
   64 * 1024,
   "application/ld+json",
 );
-export const DISCORD_FOOTER = profile("discord-footer/0.1", "footer-url-only", "required", 256);
+/** Local full-request ceiling; Discord also limits content to 2000 and footer text to 2048 characters. */
+export const DISCORD_FOOTER = profile(
+  "discord-footer/0.1",
+  "footer-url-only",
+  "required",
+  8 * 1024,
+);
 export const BLUESKY_FOOTER = profile("bluesky-footer/0.1", "footer-url-only", "required", 256);
 export const MASTODON_FOOTER = profile("mastodon-footer/0.1", "footer-url-only", "required", 256);
 export const TELEGRAM_FOOTER = profile("telegram-footer/0.1", "footer-url-only", "required", 256);
