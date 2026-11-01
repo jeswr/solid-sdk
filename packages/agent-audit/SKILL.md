@@ -3,11 +3,13 @@ name: agent-audit
 description: Use when working on the system-written audit ledger surface in @jeswr/agent-audit.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-audit
 
 Read agent DESIGN §2 / §5 and README.md before changing this security-critical API.
-The root exports the bounded local ledger, PROV mirror, reader and auditor CLI;
+The root exports the bounded local ledger, PROV mirror, reader, auditor CLI and
+A-045 task statistics (verify retained evidence before exporting body-free counts);
 `./testing` contains the conditional anonymous in-memory resource fixture.
 
 Use one FileLedger writer per path. Preserve fsync-before-prune checkpoints, canonical

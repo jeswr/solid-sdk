@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DataFactory as Factory, Quad } from "@rdfjs/types";
@@ -80,6 +81,8 @@ export function entryGraph(url: string, e: LedgerEntry): Store {
     n.setIri(`${PROV}wasAssociatedWith`, r.agent);
     entity.setIri(`${PROV}wasAttributedTo`, r.owner);
     n.setIri(`${PROV}generated`, r.id);
+    if (r.taskId !== undefined) n.setText(`${AGENT}taskId`, r.taskId);
+    if (r.conversation !== undefined) n.setIri(`${AGENT}conversation`, r.conversation);
     for (const id of [
       r.proposal,
       r.mandate,
@@ -87,6 +90,7 @@ export function entryGraph(url: string, e: LedgerEntry): Store {
       r.decisionRecord,
       r.transmission,
       r.receipt,
+      r.modelCall,
     ])
       if (id !== undefined) n.setIri(`${PROV}used`, id);
     if (r.type === "decision") writeDecisionRecord(n, r, e.at);

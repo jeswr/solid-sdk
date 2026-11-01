@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestOf, isIri } from "@jeswr/agent-model";
 import { z } from "zod";
 
@@ -13,7 +14,9 @@ export const ENTRY_KINDS = [
   "control",
   "mandate-change",
   "model-call",
+  "tool-call",
   "tamper-suspected",
+  "conversation",
 ] as const;
 const iri = z
   .string()
@@ -21,6 +24,8 @@ const iri = z
   .refine(isIri)
   .refine((value) => !/^[a-z][a-z0-9+.-]*:\/\/[^/]*@/i.test(value));
 const label = z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/);
+/** Opaque runtime-assigned experiment label; never a prompt or user-supplied title. */
+export const taskIdSchema = label;
 export const digestSchema = z.string().regex(/^sha-256:[a-f0-9]{64}$/);
 export const recipientHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const instantSchema = z.iso.datetime({ precision: 3 });
@@ -40,6 +45,8 @@ const recordSchema = z.strictObject({
   id: iri,
   agent: iri,
   owner: iri,
+  taskId: taskIdSchema.optional(),
+  conversation: iri.optional(),
   proposal: iri.optional(),
   mandate: iri.optional(),
   approval: iri.optional(),
@@ -57,7 +64,11 @@ const recordSchema = z.strictObject({
   context: z.enum(["reader", "proposer"]).optional(),
   provider: z.enum(["openai", "anthropic"]).optional(),
   model: label.optional(),
+  modelCall: iri.optional(),
+  tool: label.optional(),
   tokens: count.optional(),
+  inputTokens: count.optional(),
+  outputTokens: count.optional(),
   toolCalls: count.optional(),
   latencyMs: count.optional(),
   retries: count.optional(),

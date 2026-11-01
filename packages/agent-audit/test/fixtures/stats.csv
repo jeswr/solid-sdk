@@ -1,0 +1,3 @@
+taskId,modelCalls,toolCalls,inputTokens,outputTokens,tokens,tokenBreakdownCalls,modelLatencySamples,modelLatencyP50Ms,modelLatencyP95Ms,modelLatencyP99Ms,toolLatencySamples,toolLatencyP50Ms,toolLatencyP95Ms,toolLatencyP99Ms,humanInterrupts,retries,refusals,prunedThroughSeq,unassignedEntries
+"task-a","3","7","100","20","170","2","3","10","30","30","4","5","15","15","2","4","4",,"1"
+"task-b","0","0","0","0","0","0","0",,,,"0",,,,"0","0","0",,"1"
