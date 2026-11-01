@@ -2,6 +2,8 @@
 "use client";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { TypedViewData } from "@jeswr/suite-ui";
+import type { DatasetCore } from "@rdfjs/types";
+import { Store } from "n3";
 import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
@@ -14,7 +16,11 @@ import {
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
 import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
 import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
-import { type DiscoveryFailure, readTypeIndexes } from "../lib/model/type-index";
+import {
+  type DiscoveryFailure,
+  type RegisteredLocation,
+  readTypeIndexes,
+} from "../lib/model/type-index";
 import { cardView } from "./presentation";
 
 interface Snapshot {
@@ -67,14 +73,16 @@ function reconcileItems(
   result: DomainItems,
   failures: readonly DiscoveryFailure[],
   unavailable: readonly string[],
-  preserveUnvisited: boolean,
+  preserveUnvisited: (item: DomainItem) => boolean,
 ): DomainItem[] {
   const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
   const items = new Map(result.items.map((item) => [key(item), item]));
   for (const item of previous) {
     const failedRead = failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
-      preserveUnvisited && !result.etags.has(item.url) && !result.etags.has(item.containerUrl);
+      preserveUnvisited(item) &&
+      !result.etags.has(item.url) &&
+      !result.etags.has(item.containerUrl);
     if (
       !items.has(key(item)) &&
       (failedRead || unvisited) &&
@@ -105,6 +113,8 @@ function createDomainStore(session: HomeSession) {
   let lastFocus = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let detach: (() => void) | undefined;
+  type IndexSource = { locations: readonly RegisteredLocation[]; via: readonly string[] };
+  let knownIndexes = new Map<string, IndexSource>();
   const publish = (next: Snapshot) => {
     snapshot = next;
     for (const listener of listeners) listener();
@@ -137,14 +147,25 @@ function createDomainStore(session: HomeSession) {
           if (response.ok && length !== null) sizes.set(String(input), Number(length));
           return response;
         };
-        const budget = new DiscoveryBudget();
         const profileFetch: typeof globalThis.fetch = inStorage(profileUrl, session.storageUrl)
           ? fetch
           : (input, init) =>
               globalThis.fetch(input, { ...init, credentials: "omit", redirect: "error" });
-        const profile = (await readResource(profileFetch, profileUrl, budget.signal)).dataset;
+        let profile: DatasetCore = new Store();
+        const profileFailures: DiscoveryFailure[] = [];
+        try {
+          // Profile discovery has its own deadline so a slow identity host cannot exhaust the scan.
+          profile = (await readResource(profileFetch, profileUrl, AbortSignal.timeout(5_000)))
+            .dataset;
+        } catch (error) {
+          profileFailures.push({ url: profileUrl, error });
+          if (confirmedUnavailable(error)) unavailable.push(profileUrl);
+        }
+        const budget = new DiscoveryBudget();
+        const freshIndexes = new Map<string, IndexSource>();
         const indexes = await readTypeIndexes(fetch, session.webId, profile, session.storageUrl, {
           budget,
+          onIndex: (url, locations, via) => freshIndexes.set(url, { locations, via }),
         });
         const result = await discoverDomainItems("all", {
           fetch,
@@ -154,16 +175,35 @@ function createDomainStore(session: HomeSession) {
           typeIndex: indexes.locations,
           budget,
         });
-        const failures = [...indexes.failures, ...result.failures];
-        const incompleteIndexes =
-          (indexes.truncated || indexes.failures.length > 0) &&
-          !indexes.failures.some((failure) => confirmedUnavailable(failure.error));
+        const failures = [...profileFailures, ...indexes.failures, ...result.failures];
+        const indexFailures = [...profileFailures, ...indexes.failures];
+        const preservedLocations: RegisteredLocation[] = [];
+        for (const [url, source] of knownIndexes) {
+          if (freshIndexes.has(url)) continue;
+          const affected = indexFailures.filter((failure) =>
+            [profileUrl, url, ...source.via].includes(failure.url),
+          );
+          if (
+            (indexes.truncated || affected.length > 0) &&
+            !affected.some((failure) => confirmedUnavailable(failure.error))
+          ) {
+            preservedLocations.push(...source.locations);
+            freshIndexes.set(url, source);
+          }
+        }
         const items = reconcileItems(
           snapshot.items,
           result,
           failures,
           unavailable,
-          incompleteIndexes || result.truncated,
+          (item) =>
+            indexes.truncated ||
+            result.truncated ||
+            preservedLocations.some(
+              (location) =>
+                location.instance?.split("#")[0] === item.url ||
+                (location.container !== undefined && inStorage(item.url, location.container)),
+            ),
         );
         for (const item of items) {
           // Listing sizes include binaries that discovery deliberately does not download.
@@ -189,6 +229,7 @@ function createDomainStore(session: HomeSession) {
             ),
           ),
         );
+        knownIndexes = freshIndexes;
         publish({
           status: failures.length && !items.length ? "error" : "ready",
           items,

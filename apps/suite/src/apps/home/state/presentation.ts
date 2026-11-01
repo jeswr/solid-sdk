@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-import type { TypedViewData } from "@jeswr/suite-ui";
+import { type TypedViewData, typedViewRegistry } from "@jeswr/suite-ui";
+import { canonicalize, NS } from "@jeswr/suite-vocab";
 import { encodeRef } from "../../../lib/refs";
 import { type DomainItem, nameFromUrl, sortItems } from "../lib/model/discovery";
 import type { DataCategory } from "../lib/model/domains";
@@ -130,13 +131,29 @@ export function itemTitle(item: DomainItem): string {
   return item.title.trim() && !/http/i.test(item.title) ? item.title : nameFromUrl(item.url);
 }
 
+// Match the selected TypedView renderer, with useful details ahead of redundant metadata.
+const CARD_FIELDS = new Map<string, readonly string[]>([
+  [`${NS.VCARD}Individual`, ["email", "telephone", "organization", "role"]],
+  [`${NS.SCHEMA}MusicRecording`, ["artist", "album", "duration"]],
+  [`${NS.SCHEMA}Event`, ["start", "end", "location", "description"]],
+  [`${NS.WF}Task`, ["status", "due", "description"]],
+  [`${NS.POD_DOCS}Document`, ["description"]],
+  [`${NS.SCHEMA}Photograph`, ["description", "created", "location"]],
+  [`${NS.SCHEMA}ImageObject`, ["description", "created", "location"]],
+]);
+
 /** Raw identifiers never become visible card fields, including user-supplied literals. */
 export function cardView(item: DomainItem, view: TypedViewData): TypedViewData {
+  const rendererType = view.types.find((type) => typedViewRegistry.has(type));
+  const fields = rendererType && CARD_FIELDS.get(canonicalize(rendererType));
+  const properties = fields
+    ? fields.flatMap((key) => view.properties.filter((property) => property.key === key))
+    : view.properties;
   return {
     types: view.types,
     title: itemTitle(item),
     ...(view.image ? { image: { ...view.image, alt: itemTitle(item) } } : {}),
-    properties: view.properties
+    properties: properties
       .map((property) => ({
         ...property,
         values: property.values.filter((value) => !/http/i.test(value)),

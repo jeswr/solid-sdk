@@ -43,6 +43,9 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(music.getByText("Provided by Spotify", { exact: true })).toHaveCount(3);
+  const caroline = music.getByRole("listitem", { name: "Caroline", exact: true });
+  await expect(caroline.getByText("Arlo Parks", { exact: true })).toBeVisible();
+  await expect(caroline.getByText("3 min 11 sec", { exact: true })).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(/http|WebID|ACL|RDF|container|Type Index/);
   await accessible(page);
   await page.screenshot({ path: test.info().outputPath("home-media.png"), fullPage: true });
@@ -58,8 +61,17 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   );
   const notes = page.getByRole("list", { name: "Notes items", exact: true });
   await expect(notes.getByText("Added by you")).toBeVisible();
+  const docs = page.getByRole("list", { name: "Documents items", exact: true });
+  const launch = docs.getByRole("listitem", { name: "Launch plan", exact: true });
+  await expect(
+    launch.getByText("A shared plan for the next chapter.", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(/http/);
   await accessible(page);
+  await page.keyboard.press("3");
+  await expect(page).toHaveURL("/home/calendar");
+  const event = page.getByRole("listitem", { name: "Coffee with Ada", exact: true });
+  await expect(event.getByText("The corner café", { exact: true })).toBeVisible();
 });
 
 test("empty domains offer the appropriate actions", async ({ page }) => {

@@ -104,7 +104,7 @@ export async function discoverDomainItems(
       webId && url === resourceUrl(webId)
         ? subjectOf(dataset, webId)
         : primarySubject(dataset, url);
-    if (!node) return;
+    if (!node || dataset.match(TermAs.term(node)).size === 0) return;
     const classified = classifySubject(node, webId);
     const modifiedAt = node.modified;
     const item: DomainItem = {

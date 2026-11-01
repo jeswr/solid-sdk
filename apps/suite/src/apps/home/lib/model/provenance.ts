@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -73,6 +74,32 @@ function providedBy(connector: Connector): Provenance {
   return { kind: "source", label: connector.label, logoId: connector.id };
 }
 
+/** Resolve only names already present in the loaded item graph; never dereference an agent. */
+export function identitiesIn(
+  dataset: DatasetCore,
+  subject: string | Term,
+): NonNullable<ProvenanceContext["identities"]> {
+  const node = subjectOf(dataset, subject);
+  const identities = new Map<string, { kind: "app" | "person"; label: string }>();
+  for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
+    for (const iri of node.iris(NS.PROV + predicate)) {
+      const agent = subjectOf(dataset, iri);
+      const label = agent.name?.trim();
+      if (!label || /http/i.test(label)) continue;
+      const person = agent.types.some((type) =>
+        [
+          `${NS.FOAF}Person`,
+          `${NS.SCHEMA}Person`,
+          `${NS.VCARD}Individual`,
+          `${NS.PROV}Person`,
+        ].includes(type),
+      );
+      identities.set(iri, { kind: person ? "person" : "app", label });
+    }
+  }
+  return identities;
+}
+
 /** Home §5.3, in precedence order; labels contain names, never raw identifiers. */
 export function provenanceOf(
   dataset: DatasetCore,
@@ -81,6 +108,7 @@ export function provenanceOf(
   context: ProvenanceContext = {},
 ): Provenance {
   const node = subjectOf(dataset, subject);
+  let attributedToAnother = false;
   for (const value of node.sourceUrls) {
     const connector = connectorForUrl(value);
     if (connector) return providedBy(connector);
@@ -88,9 +116,10 @@ export function provenanceOf(
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
       if (iri === context.userWebId) continue;
+      attributedToAnother = true;
       const identity = context.identities?.get(iri);
-      if (identity?.label.trim())
-        return { kind: identity.kind === "app" ? "app" : "source", label: identity.label };
+      if (identity?.label.trim() && !/http/i.test(identity.label))
+        return { kind: identity.kind === "app" ? "app" : "source", label: identity.label.trim() };
     }
   }
   const url = httpUrl(containerUrl);
@@ -103,5 +132,7 @@ export function provenanceOf(
     const connector = CONNECTORS.find((connector) => connector.id === id);
     if (connector) return providedBy(connector);
   }
-  return { kind: "you", label: "Added by you" };
+  return attributedToAnother
+    ? { kind: "app", label: "another app" }
+    : { kind: "you", label: "Added by you" };
 }

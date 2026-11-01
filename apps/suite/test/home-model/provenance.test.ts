@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   CONNECTORS,
@@ -60,8 +61,8 @@ describe("Home §5.3 provenance", () => {
       label: "GitHub",
     });
     expect(provenanceOf(dataset, subject, `${STORAGE}integrations/unknown/`, context)).toEqual({
-      kind: "you",
-      label: "Added by you",
+      kind: "app",
+      label: "another app",
     });
   });
 
@@ -79,6 +80,21 @@ describe("Home §5.3 provenance", () => {
       });
     }
     expect(provenanceOf(dataset, subject, STORAGE)).toEqual({ kind: "you", label: "Added by you" });
+  });
+
+  it("keeps self attribution while refusing identifier-shaped identity names", async () => {
+    const self = await rdf(`<#it> prov:wasAttributedTo <${WEB_ID}> .`);
+    expect(provenanceOf(self, subject, STORAGE, context)).toEqual({
+      kind: "you",
+      label: "Added by you",
+    });
+    const other = await rdf(`<#it> prov:wasAttributedTo <${app}> .`);
+    expect(
+      provenanceOf(other, subject, STORAGE, {
+        ...context,
+        identities: new Map([[app, { kind: "app", label: "https://app.example/client.jsonld" }]]),
+      }),
+    ).toEqual({ kind: "app", label: "another app" });
   });
 
   it("ports all connector host patterns and protects host boundaries", () => {
