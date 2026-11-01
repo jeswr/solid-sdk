@@ -1,8 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /** Extension-owned ConsentSheet. Untrusted request copy is always rendered as text. */
 import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
-import type { ConsentDecisionMessage, PendingConsentView } from '../shared/messages';
+import type { ActionResult, ConsentDecisionMessage, PendingConsentView } from '../shared/messages';
 
 function fmtExpiry(ms: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(ms);
@@ -140,6 +141,7 @@ async function main(): Promise<void> {
   const decide = (approvedClasses: string[]) => {
     if (!consentId || decided) return;
     decided = true;
+    picker.disabled = true;
     updateSelection();
     const message: ConsentDecisionMessage = {
       type: 'SOLID_CONSENT_DECISION',
@@ -148,9 +150,15 @@ async function main(): Promise<void> {
       // Retain the existing denial payload; only an approval needs an account binding.
       ...(approvedClasses.length ? { profileId: selectedProfileId } : {}),
     };
-    chrome.runtime.sendMessage(message, () => window.close());
+    chrome.runtime.sendMessage(message, (result: ActionResult | undefined) => {
+      if (result?.error) showError(result.error);
+      else window.close();
+    });
   };
-  document.getElementById('deny')!.addEventListener('click', () => decide([]));
+  document.getElementById('deny')!.addEventListener('click', () => {
+    if (decided) window.close();
+    else decide([]);
+  });
   approve.addEventListener('click', () => {
     if (!approve.disabled)
       decide([...boxes].filter(([, box]) => box.checked).map(([dataClass]) => dataClass));
@@ -173,6 +181,7 @@ async function main(): Promise<void> {
     return;
   }
   async function load(profileId?: string): Promise<void> {
+    if (decided) return;
     const generation = ++version;
     loading = true;
     error.hidden = true;

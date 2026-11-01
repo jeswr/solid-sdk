@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -291,6 +292,29 @@ it.each(['missing', 'expired'])('keeps Share disabled for a %s request', async (
   );
   expect(approve.disabled).toBe(true);
   expect(document.querySelector<HTMLElement>('#error')?.hidden).toBe(false);
+});
+
+it('shows expiry and keeps the window open when revocation refuses an already displayed approval', async () => {
+  const { document, approve, all, picker } = await mount();
+  send.mockImplementationOnce((_message, callback) => {
+    callback({ error: 'This access request has expired. Please request access again.' });
+  });
+  approve.click();
+  expect(dom.window.close).not.toHaveBeenCalled();
+  expect(document.querySelector('#error')?.textContent).toContain('expired');
+  expect(document.querySelector<HTMLElement>('#error')?.hidden).toBe(false);
+  expect(approve.disabled).toBe(true);
+  expect(all.disabled).toBe(true);
+  picker.value = '2';
+  picker.dispatchEvent(new dom.window.Event('change'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(approve.disabled).toBe(true);
+  expect(document.querySelector('#error')?.textContent).toContain('expired');
+  (document.querySelector('#deny') as HTMLButtonElement).click();
+  expect(dom.window.close).toHaveBeenCalledOnce();
+  expect(
+    send.mock.calls.filter(([message]) => message.type === 'SOLID_CONSENT_DECISION'),
+  ).toHaveLength(1);
 });
 
 it.each([

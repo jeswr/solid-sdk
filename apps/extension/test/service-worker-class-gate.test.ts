@@ -2,6 +2,7 @@ import type { OriginGrant } from '../src/background/core/origin-grant';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,
@@ -441,10 +442,17 @@ describe('origin disconnect and access-change broadcasts', () => {
 
   it('disconnect leaves another origin binding untouched even when it has expired', async () => {
     await boot();
+    await sendFetch(
+      { url: 'https://alice.pod.example/finance/overdue.ttl', stampedOrigin: other.origin },
+      other,
+    );
+    expect(cacheStore.size).toBe(1);
     const parents = (storage.get('solid:origin-grants') as OriginGrant[]).map((g) =>
       g.origin === other.origin ? { ...g, expiresAt: Date.now() - 1 } : g,
     );
     storage.set('solid:origin-grants', parents);
+    vi.mocked(chrome.alarms.create).mockClear();
+    const before = Date.now();
     expect(
       (
         await send(
@@ -456,6 +464,18 @@ describe('origin disconnect and access-change broadcasts', () => {
     expect(storage.get('solid:origin-grants')).toEqual(
       parents.filter((g) => g.origin === other.origin),
     );
+    expect(registrations.size).toBe(0);
+    expect(chrome.alarms.create).toHaveBeenCalledOnce();
+    const [name, alarm] = vi.mocked(chrome.alarms.create).mock.calls[0];
+    expect(name).toBe('solid-origin-expiry');
+    expect(alarm.when).toBeGreaterThanOrEqual(before);
+    expect(alarm.when).toBeLessThanOrEqual(Date.now());
+    // The registration refresh leaves the overdue record alone; its immediate alarm must
+    // still run the authoritative prune and remove the other origin's warm replica.
+    alarmListener({ name: 'solid-origin-expiry' });
+    await vi.waitFor(() => expect(storage.get('solid:origin-grants')).toEqual([]));
+    await vi.waitFor(() => expect(cacheStore.size).toBe(0));
+    expect(idbMeta.size).toBe(0);
   });
 
   it('disconnect cancels its own pending fetch while another origin can finish', async () => {
@@ -509,6 +529,7 @@ describe('origin disconnect and access-change broadcasts', () => {
     chrome.tabs.query = vi.fn().mockResolvedValue(tabs);
     chrome.tabs.get = vi.fn().mockImplementation(async (id) => tabs.find((tab) => tab.id === id));
     chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
+    const trusted = vi.spyOn(chrome.runtime, 'sendMessage');
     expect(
       (
         await send(
@@ -534,6 +555,8 @@ describe('origin disconnect and access-change broadcasts', () => {
         },
         { frameId: 0 },
       );
+    expect(trusted).toHaveBeenCalledOnce();
+    expect(trusted).toHaveBeenCalledWith({ type: 'SOLID_STATE_CHANGED', webId: WEBID });
     const remaining = await send(
       { type: 'SOLID_LIST_GRANTS', requestId: 'remaining', stampedOrigin: APPX.origin },
       APPX,
@@ -1167,6 +1190,241 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       return Promise.resolve(new Response(INDEX, { status: 200 }));
     return Promise.resolve(new Response('ok', { status: 200 }));
   }
+
+  function requestAccess(sender = APPX) {
+    return send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'consent-race',
+        classes: [classGrant().dataClass],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: sender.origin,
+        userActivated: true,
+      },
+      sender,
+    );
+  }
+
+  function approveConsent(index: number) {
+    return send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        consentId: new URL(createdWindows[index]).searchParams.get('consentId'),
+        profileId: '1',
+        approvedClasses: [classGrant().dataClass],
+      },
+      EXT_SENDER,
+    );
+  }
+
+  it.each(
+    ['SOLID_DISCONNECT', 'SOLID_ORIGIN_GRANT_REVOKE'].flatMap((type) =>
+      [false, true].map((bound) => ({ type, bound })),
+    ),
+  )('$type expires every open consent, including without a binding ($bound)', async ({
+    type,
+    bound,
+  }) => {
+    await seedSession();
+    if (bound) storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const requests = [requestAccess(), requestAccess(), requestAccess(other)];
+    try {
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(3));
+      expect(
+        (
+          await send(
+            { type, stampedOrigin: APPX.origin, origin: APPX.origin },
+            type === 'SOLID_DISCONNECT' ? APPX : EXT_SENDER,
+          )
+        ).ok,
+      ).toBe(bound);
+      for (const url of createdWindows) {
+        const consentId = new URL(url).searchParams.get('consentId');
+        const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+        if (view?.origin === other.origin) {
+          await send(
+            { type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] },
+            EXT_SENDER,
+          );
+          continue;
+        }
+        expect(view).toBeNull();
+        const result = await send(
+          {
+            type: 'SOLID_CONSENT_DECISION',
+            consentId,
+            profileId: '1',
+            approvedClasses: [classGrant().dataClass],
+          },
+          EXT_SENDER,
+        );
+        expect(result.error).toContain('expired');
+      }
+      expect((await Promise.all(requests)).every((result) => result.ok === false)).toBe(true);
+      expect(storage.get('solid:origin-grants')).toEqual([]);
+      // Revocation fences old requests, while a newly opened consent can still grant access.
+      const fresh = requestAccess();
+      requests.push(fresh);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(4));
+      expect((await approveConsent(3)).ok).toBe(true);
+      expect((await fresh).ok).toBe(true);
+    } finally {
+      for (const url of createdWindows)
+        await send(
+          {
+            type: 'SOLID_CONSENT_DECISION',
+            consentId: new URL(url).searchParams.get('consentId'),
+            approvedClasses: [],
+          },
+          EXT_SENDER,
+        );
+      await Promise.all(requests);
+    }
+  });
+
+  it('checks the revocation generation inside the serialized consent grant update', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const pending = requestAccess();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    const update = OriginGrantStore.prototype.update;
+    const read = chrome.storage.local.get;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reading = false;
+    const storageRead = vi.spyOn(chrome.storage.local, 'get');
+    const queued = vi.spyOn(OriginGrantStore.prototype, 'update').mockImplementationOnce(function (
+      this: InstanceType<typeof OriginGrantStore>,
+      change,
+    ) {
+      // Suspend after approval entered the store's writer queue, before its change callback.
+      storageRead.mockImplementationOnce(async (key) => {
+        const snapshot = await read(key);
+        reading = true;
+        await held;
+        return snapshot;
+      });
+      return update.call(this, change);
+    });
+    try {
+      const approval = approveConsent(0);
+      await vi.waitFor(() => expect(reading).toBe(true));
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      release();
+      const [decision, request, revocation] = await Promise.all([approval, pending, revoke]);
+      expect(decision.error).toContain('expired');
+      expect(request.error).toContain('expired');
+      expect(revocation.ok).toBe(true);
+      expect(storage.get('solid:origin-grants')).toEqual([]);
+    } finally {
+      release();
+      queued.mockRestore();
+      storageRead.mockRestore();
+    }
+  });
+
+  it('serializes a delayed registration snapshot with another origin consent reconciliation', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    const list = OriginGrantStore.prototype.list;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let captured = false;
+    const snapshot = vi
+      .spyOn(OriginGrantStore.prototype, 'list')
+      .mockImplementation(async function (this: InstanceType<typeof OriginGrantStore>) {
+        const grants = await list.call(this);
+        if (!captured && grants.length === 0) {
+          captured = true;
+          await held;
+        }
+        return grants;
+      });
+    try {
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      await vi.waitFor(() => expect(captured).toBe(true));
+      const pending = requestAccess(other);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      const approval = approveConsent(0);
+      await vi.waitFor(() =>
+        expect(storage.get('solid:origin-grants')).toMatchObject([{ origin: other.origin }]),
+      );
+      // Let the fresh consent's registration work enter the queue before resuming the old read.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      release();
+      const results = await Promise.all([approval, pending, revoke]);
+      expect(results.every((result) => result.ok)).toBe(true);
+      expect([...registrations.keys()]).toEqual([
+        `solid-origin-${encodeURIComponent(other.origin)}`,
+      ]);
+      const grants = storage.get('solid:origin-grants') as OriginGrant[];
+      expect(chrome.alarms.create).toHaveBeenLastCalledWith('solid-origin-expiry', {
+        when: grants[0].expiresAt,
+      });
+    } finally {
+      release();
+      snapshot.mockRestore();
+    }
+  });
+
+  it('drops a disconnect notification held in tabs.get after fresh consent publishes the WebID', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const tab = { id: 1, url: APPX.url };
+    chrome.tabs.query = vi.fn().mockResolvedValue([tab]);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    chrome.tabs.get = vi
+      .fn()
+      .mockResolvedValue(tab)
+      .mockImplementationOnce(async () => {
+        await held;
+        return tab;
+      });
+    chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
+    const trusted = vi.spyOn(chrome.runtime, 'sendMessage');
+    try {
+      const revoke = send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      await vi.waitFor(() => expect(chrome.tabs.get).toHaveBeenCalledOnce());
+      const pending = requestAccess();
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      expect((await approveConsent(0)).ok).toBe(true);
+      expect((await pending).ok).toBe(true);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledOnce();
+      expect(chrome.tabs.sendMessage).toHaveBeenLastCalledWith(
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: APPX.origin, webId: WEBID },
+        { frameId: 0 },
+      );
+      const latestTrusted = [...trusted.mock.calls];
+      release();
+      expect((await revoke).ok).toBe(true);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledOnce();
+      expect(trusted.mock.calls).toEqual(latestTrusted);
+    } finally {
+      release();
+      trusted.mockRestore();
+    }
+  });
 
   it.each([
     'logout',

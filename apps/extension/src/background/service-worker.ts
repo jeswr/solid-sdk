@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -188,10 +189,13 @@ async function pruneAndPurgeExpiredGrants(profileId: string, now: number): Promi
 
 /** Expiry alarms are advisory; every request independently checks durable grant expiry. */
 let originSyncTail: Promise<void> = Promise.resolve();
-function syncOriginGrants(): Promise<void> {
-  const run = originSyncTail.then(reconcileOriginGrants);
+function queueOriginSync(task: () => Promise<void>): Promise<void> {
+  const run = originSyncTail.then(task);
   originSyncTail = run.catch(() => {});
   return run;
+}
+function syncOriginGrants(): Promise<void> {
+  return queueOriginSync(reconcileOriginGrants);
 }
 async function reconcileOriginGrants(): Promise<void> {
   const store = await getProfiles();
@@ -213,21 +217,30 @@ async function reconcileOriginGrants(): Promise<void> {
     // Signed-out/removing profiles retain metadata until their mandatory lifecycle purge succeeds.
     if (profile?.sessionState === 'active') await purgeOriginSlice(g, profile.webId);
   }
-  await syncOriginGrantRegistrations();
+  await refreshOriginGrantRegistrations();
 }
 
 /** Refresh injection/alarms without reconciling or removing another origin's stored grants. */
-async function syncOriginGrantRegistrations(): Promise<void> {
+function syncOriginGrantRegistrations(): Promise<void> {
+  return queueOriginSync(refreshOriginGrantRegistrations);
+}
+
+/** Called only inside originSyncTail; read the snapshot in the same queue as its consumers. */
+async function refreshOriginGrantRegistrations(): Promise<void> {
+  const grants = await originGrants.list();
   const now = Date.now();
-  const grants = (await originGrants.list()).filter(
-    (g) => g.expiresAt === undefined || g.expiresAt > now,
+  await syncOriginFetchInjection(
+    grants.filter((g) => g.expiresAt === undefined || g.expiresAt > now).map((g) => g.origin),
   );
-  await syncOriginFetchInjection(grants.map((g) => g.origin));
+  // An overdue grant still needs its replica purged by reconciliation. Request an immediate
+  // alarm instead of losing that cleanup when another origin refreshes registrations.
   const expiries = grants.flatMap((g) => (g.expiresAt === undefined ? [] : [g.expiresAt]));
   if (chrome.alarms) {
     await chrome.alarms.clear('solid-origin-expiry');
     if (expiries.length)
-      await chrome.alarms.create('solid-origin-expiry', { when: Math.min(...expiries) });
+      await chrome.alarms.create('solid-origin-expiry', {
+        when: Math.max(now, Math.min(...expiries)),
+      });
   }
 }
 
@@ -858,9 +871,15 @@ async function refreshProfile(profileId: string, webId: string): Promise<void> {
  * panel (extension contexts) always get the real value via the runtime broadcast.
  */
 let stateChangeVersion = 0;
+let globalStateChangeVersion = 0;
+const originStateChangeVersions = new Map<string, number>();
+
+function isCurrentOriginState(origin: string, version: number): boolean {
+  return version === Math.max(globalStateChangeVersion, originStateChangeVersions.get(origin) ?? 0);
+}
 
 /** Same origin/session/navigation checks for global and per-origin state notifications. */
-async function broadcastTabStateChange(tab: chrome.tabs.Tab, isCurrent: () => boolean) {
+async function broadcastTabStateChange(tab: chrome.tabs.Tab, version: number) {
   if (tab.id === undefined) return;
   const tabId = tab.id;
   const tabOrigin = tab.url ? originOf(tab.url) : null;
@@ -881,7 +900,7 @@ async function broadcastTabStateChange(tab: chrome.tabs.Tab, isCurrent: () => bo
         signal.throwIfAborted();
       }
     }
-    if (!isCurrent()) return;
+    if (!isCurrentOriginState(tabOrigin, version)) return;
     chrome.tabs
       .sendMessage(
         tabId,
@@ -896,11 +915,22 @@ async function broadcastTabStateChange(tab: chrome.tabs.Tab, isCurrent: () => bo
 
 /** Grant changes notify only this origin, without refreshing or changing any account session. */
 async function broadcastOriginGrantChange(origin: string): Promise<void> {
+  const version = ++stateChangeVersion;
+  originStateChangeVersions.set(origin, version);
   await syncOriginGrantRegistrations();
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (tab.url && originOf(tab.url) === origin) await broadcastTabStateChange(tab, () => true);
+    if (tab.url && originOf(tab.url) === origin) await broadcastTabStateChange(tab, version);
   }
+  await broadcastTrustedStateChange(version);
+}
+
+/** Runtime messages reach extension contexts, never page bridges. Do not refresh tokens here. */
+async function broadcastTrustedStateChange(version: number): Promise<void> {
+  const current = await (await getProfiles()).getDefault();
+  if (version !== stateChangeVersion) return;
+  const webId = current?.profile.sessionState === 'active' ? current.profile.webId : null;
+  chrome.runtime.sendMessage({ type: 'SOLID_STATE_CHANGED', webId }).catch(() => {});
 }
 
 async function broadcastStateChange(ctx: SessionContext | null, version: number): Promise<void> {
@@ -910,7 +940,7 @@ async function broadcastStateChange(ctx: SessionContext | null, version: number)
   // Tab discovery and grant reads can overlap a default switch. Discard the whole stale
   // notification, including its trusted-context copy, before sending any captured identity.
   const current = await (await getProfiles()).getDefault();
-  if (version !== stateChangeVersion) return;
+  if (version !== globalStateChangeVersion) return;
   if (ctx) {
     if (
       current?.profile.id !== ctx.profileId ||
@@ -920,11 +950,11 @@ async function broadcastStateChange(ctx: SessionContext | null, version: number)
       return;
   } else if (current?.profile.sessionState === 'active') return;
   for (const tab of tabs) {
-    await broadcastTabStateChange(tab, () => version === stateChangeVersion);
-    if (version !== stateChangeVersion) return;
+    await broadcastTabStateChange(tab, version);
+    if (version !== globalStateChangeVersion) return;
   }
   // The popup/side panel are trusted extension contexts — give them the real value.
-  chrome.runtime.sendMessage({ type: 'SOLID_STATE_CHANGED', webId }).catch(() => {});
+  await broadcastTrustedStateChange(version);
 }
 
 // The legacy PKCE params slot admits one interactive auth flow at a time.
@@ -975,7 +1005,8 @@ function handleLogin(
 
 async function updateDefaultIconAndBroadcast(): Promise<void> {
   const version = ++stateChangeVersion;
-  const isCurrent = () => version === stateChangeVersion;
+  globalStateChangeVersion = version;
+  const isCurrent = () => version === globalStateChangeVersion;
   const ctx = await ensureSession();
   const record = ctx ? await (await getProfiles()).get(ctx.profileId) : null;
   const webId = ctx?.session.webId ?? null;
@@ -1141,9 +1172,30 @@ async function handleSetClientId(
 type ProfileConsent = { pending: PendingConsent; ctx: SessionContext; label: string };
 const pendingConsents = new Map<string, Map<string, ProfileConsent>>();
 /** Resolvers for the awaiting `requestAccess` calls (consentId → resolve(approvedClasses)). */
-type ConsentChoice = { approved: string[]; profileId?: string };
+type ConsentChoice = {
+  approved: string[];
+  profileId?: string;
+  respond?: (result: AccessResponse) => void;
+};
 const consentResolvers = new Map<string, (choice: ConsentChoice) => void>();
 const CONSENT_TIMEOUT_MS = 5 * 60_000;
+const CONSENT_EXPIRED = 'This access request has expired. Please request access again.';
+const originRevocationVersions = new Map<string, number>();
+
+function originRevocationVersion(origin: string): number {
+  return originRevocationVersions.get(origin) ?? 0;
+}
+
+/** Also fences discovery and approvals that have already left the pending-consent maps. */
+function invalidateOriginConsents(origin: string): void {
+  originRevocationVersions.set(origin, originRevocationVersion(origin) + 1);
+  for (const [consentId, choices] of pendingConsents) {
+    if (![...choices.values()].some((choice) => choice.pending.origin === origin)) continue;
+    pendingConsents.delete(consentId);
+    consentResolvers.get(consentId)?.({ approved: [] });
+    consentResolvers.delete(consentId);
+  }
+}
 
 /**
  * Per-origin `requestAccess` throttle state (residual c). Best-effort module state (re-derived —
@@ -1295,6 +1347,7 @@ async function handleRequestAccess(
   if (requestingOrigin === null) {
     return { requestId, error: 'Could not verify the requesting origin.' };
   }
+  const revocationVersion = originRevocationVersion(requestingOrigin);
 
   // (residual c) Anti-spam gate — BEFORE any session work, class resolution (pod fetches), or the
   // consent window: require a genuine user gesture (browser-attested via the ISOLATED content
@@ -1333,6 +1386,8 @@ async function handleRequestAccess(
           signal.throwIfAborted();
           if (!ctx) return null;
           const checkAuthority = async () => {
+            if (revocationVersion !== originRevocationVersion(requestingOrigin))
+              throw new Error(CONSENT_EXPIRED);
             await checkProfileSession(ctx, signal);
             const latest = await originGrantFor(requestingOrigin);
             signal.throwIfAborted();
@@ -1378,6 +1433,8 @@ async function handleRequestAccess(
       // A signed-out, replaced or revoked session cannot contribute a consent choice.
     }
   }
+  if (revocationVersion !== originRevocationVersion(requestingOrigin))
+    return { requestId, error: CONSENT_EXPIRED };
   if (!choices.size) return { requestId, error: 'Not authenticated' };
   pendingConsents.set(consentId, choices);
   let decision: ConsentChoice;
@@ -1387,11 +1444,19 @@ async function handleRequestAccess(
     pendingConsents.delete(consentId);
     consentResolvers.delete(consentId);
   }
+  // A trusted approval is acknowledged only after the serialized grant commit, so a
+  // revocation that wins the race leaves the consent window open with its expiry error.
+  const finish = (result: AccessResponse): AccessResponse => {
+    decision.respond?.(result);
+    return result;
+  };
   const selected = decision.profileId ? choices.get(decision.profileId) : undefined;
-  if (!selected || decision.approved.length === 0) return { requestId, ok: false, grants: [] };
+  if (!selected || decision.approved.length === 0)
+    return finish({ requestId, ok: false, grants: [] });
   const { ctx, pending } = selected;
   const grants = consentDecisionToGrants(pending, decision.approved, () => crypto.randomUUID());
-  if (!grants.length || spec.expiresAt <= Date.now()) return { requestId, ok: false, grants: [] };
+  if (!grants.length || spec.expiresAt <= Date.now())
+    return finish({ requestId, ok: false, error: CONSENT_EXPIRED, grants: [] });
   try {
     await withProfileLifecycle(ctx.profileId, async () => {
       const current = await store.session(ctx.profileId);
@@ -1400,6 +1465,8 @@ async function handleRequestAccess(
       const previous = await originGrantFor(requestingOrigin);
       if (previous) cancelProfileOperations(previous.profileId);
       await originGrants.update((all) => {
+        if (revocationVersion !== originRevocationVersion(requestingOrigin))
+          throw new Error(CONSENT_EXPIRED);
         const current = liveOriginGrant(all, requestingOrigin, Date.now());
         const nested =
           current?.profileId === ctx.profileId
@@ -1434,12 +1501,25 @@ async function handleRequestAccess(
       }
     });
     await updateDefaultIconAndBroadcast();
+    const latest = await originGrantFor(requestingOrigin);
+    if (revocationVersion !== originRevocationVersion(requestingOrigin))
+      return finish({ requestId, error: CONSENT_EXPIRED });
+    if (latest?.profileId !== ctx.profileId) return finish({ requestId, ok: false, grants: [] });
+    return finish({
+      requestId,
+      ok: true,
+      webId: ctx.session.webId,
+      grants: grants.map(grantSummary),
+    });
   } catch {
-    return { requestId, error: 'Profile session changed.' };
+    return finish({
+      requestId,
+      error:
+        revocationVersion !== originRevocationVersion(requestingOrigin)
+          ? CONSENT_EXPIRED
+          : 'Profile session changed.',
+    });
   }
-  const latest = await originGrantFor(requestingOrigin);
-  if (latest?.profileId !== ctx.profileId) return { requestId, ok: false, grants: [] };
-  return { requestId, ok: true, webId: ctx.session.webId, grants: grants.map(grantSummary) };
 }
 
 /** The consent window (extension chrome only) asks for the pending record to render. */
@@ -1476,13 +1556,13 @@ function handleGetPendingConsent(
 }
 
 /** The consent window's decision. ONLY the extension's own window may decide (fail-closed). */
-function handleConsentDecision(
+async function handleConsentDecision(
   message: ConsentDecisionMessage,
   sender: MessageSender | undefined,
-): void {
-  if (!isExtensionContext(sender)) return;
+): Promise<ActionResult> {
+  if (!isExtensionContext(sender)) return { error: 'Consent requires extension context.' };
   const resolver = consentResolvers.get(message.consentId);
-  if (!resolver) return;
+  if (!resolver) return { error: CONSENT_EXPIRED };
   consentResolvers.delete(message.consentId);
   const choices = pendingConsents.get(message.consentId);
   const selected = message.profileId ? choices?.get(message.profileId) : undefined;
@@ -1490,7 +1570,13 @@ function handleConsentDecision(
   const approved = Array.isArray(message.approvedClasses)
     ? message.approvedClasses.filter((c) => requested.has(c))
     : [];
-  resolver({ approved, profileId: selected?.ctx.profileId });
+  if (approved.length === 0) {
+    resolver({ approved: [] });
+    return { ok: true };
+  }
+  return new Promise((respond) =>
+    resolver({ approved, profileId: selected?.ctx.profileId, respond }),
+  );
 }
 
 async function handleListGrants(
@@ -1650,6 +1736,7 @@ async function handleResolveClass(
 
 /** Shared by the trusted manager and a page surrendering only its own origin authority. */
 async function revokeOriginGrant(origin: string): Promise<boolean> {
+  invalidateOriginConsents(origin);
   const grant = (await originGrants.list()).find((g) => g.origin === origin);
   if (!grant) return false;
   const removed: OriginGrant[] = [];
@@ -1821,9 +1908,8 @@ chrome.runtime.onMessage.addListener(
         sendResponse(handleGetPendingConsent(message, sender));
         return false;
       case 'SOLID_CONSENT_DECISION':
-        handleConsentDecision(message, sender);
-        sendResponse({ ok: true });
-        return false;
+        respond(handleConsentDecision(message, sender));
+        return true;
       default:
         return false;
     }
