@@ -159,3 +159,35 @@ test("Android foreground and background data delivery use the same deduplicating
   expect(service).toContain("result.kind == PushReceiver.Kind.NOTIFY");
   expect(service).toContain("SuitePushPlugin.store(this).withActive(result.payload");
 });
+
+test("every iOS enable requests APNs and unsolicited rotations reach durable state", () => {
+  const registration = read("ios/App/App/PushActivation.swift");
+  const coordinator = read("ios/App/App/SuitePushCoordinator.swift");
+  const plugin = read("ios/App/App/SuitePushPlugin.swift");
+  expect(registration).not.toContain("if let token = token");
+  expect(registration).toContain("self.completion = completion; request()");
+  expect(registration).toContain("try recordToken(token)");
+  expect(coordinator).toContain("PushTokenRegistration(recordToken:");
+  expect(coordinator).toContain("try PushStore.shared().recordToken(token)");
+  expect(coordinator).toContain("UIApplication.shared.registerForRemoteNotifications()");
+  expect(plugin).toContain("self.enablement.finish(call)");
+  expect(plugin).toContain("SuitePushCoordinator.shared.cancelRegistration()");
+  expect(plugin).toContain('"registrationStale": try PushStore.shared().registrationStale()');
+  expect(plugin).toContain('pushToken: call.getString("pushToken")');
+});
+
+test("Android requests Firebase's current token and records service rotations without a bridge", () => {
+  const plugin = read("android/app/src/main/java/org/jeswr/suite/SuitePushPlugin.java");
+  const service = read("android/app/src/main/java/org/jeswr/suite/SuitePushService.java");
+  expect(plugin).toContain("FirebaseMessaging.getInstance().getToken().addOnCompleteListener");
+  expect(plugin).toContain("enablement.finish(call");
+  expect(plugin).toContain("store(getContext()).recordToken(task.getResult())");
+  expect(service).toContain("@Override public void onNewToken(String token)");
+  expect(service).toContain("SuitePushPlugin.store(this).recordToken(token)");
+  expect(plugin).toContain(
+    'result.put("registrationStale", store(getContext()).registrationStale())',
+  );
+  expect(plugin).toContain(
+    'args.containsKey("pushToken") ? PushJson.string(args.get("pushToken")) : null',
+  );
+});

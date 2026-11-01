@@ -26,6 +26,12 @@ public class SuitePushService extends FirebaseMessagingService {
         Bundle extras = intent.getExtras();
         PushTransport.dispatch(extras == null ? java.util.Collections.emptySet() : extras.keySet(), () -> super.handleIntent(intent));
     }
+    @Override public void onNewToken(String token) {
+        try {
+            // This callback also runs without a bridge or pending enable. Keep silence and keys unchanged.
+            if (PushKeys.installed(this)) SuitePushPlugin.store(this).recordToken(token);
+        } catch (Exception ignored) { /* The next enable requests the current FCM token and retries persistence. */ }
+    }
     @Override public void onMessageReceived(RemoteMessage message) {
         UserManager users = getSystemService(UserManager.class);
         PushReceiver.Result result = PushReceiver.receive(message.getData().get("p"), users == null || users.isUserUnlocked(), encoded -> {

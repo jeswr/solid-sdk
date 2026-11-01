@@ -64,4 +64,28 @@ public class PushDeliveryTest {
         assertFalse(enablement.finish(expired, () -> fail("Late token or deadline affected new enable")));
         assertTrue(enablement.finish(next, () -> {}));
     }
+    @Test public void tokenRotationWithoutPendingEnablePersistsUntilRelayAcknowledgesCurrentToken() throws Exception {
+        java.io.File root = temporary.newFolder(); PushStore store = new PushStore(root);
+        store.recordToken("old-fcm"); store.setTopics("b", PushStateTest.topics(), "old-fcm");
+        assertFalse(store.registrationStale());
+        store.recordToken("new-fcm"); // Service onNewToken, with no pending bridge call.
+        assertTrue(new PushStore(root).registrationStale());
+        store.recordToken("new-fcm"); // Next enable's getToken result observes the rotated token again.
+        assertTrue(store.registrationStale()); // A fresh token result is not relay confirmation.
+        assertThrows(Exception.class, () -> store.setTopics("b", java.util.Collections.emptyList(), "old-fcm"));
+        assertTrue(store.registrationStale()); // A rejected acknowledgment must not remove the map.
+        store.setTopics("b", PushStateTest.topics(), "new-fcm"); assertFalse(new PushStore(root).registrationStale());
+        String saved = new String(PushStore.read(new java.io.File(root, "topics.json"), 131072), java.nio.charset.StandardCharsets.UTF_8);
+        assertFalse(saved.contains("old-fcm")); assertFalse(saved.contains("new-fcm"));
+    }
+    @Test public void rotationPreservesLocalSilenceAndLegacyMapsRequireRefresh() throws Exception {
+        PushStore store = new PushStore(temporary.newFolder()); assertFalse(store.registrationStale());
+        store.setTopics("b", PushStateTest.topics()); assertTrue(store.registrationStale());
+        store.recordToken("old"); store.setTopics("b", PushStateTest.topics(), "old");
+        store.recordToken("old"); assertFalse(store.registrationStale());
+        store.silenceAll(); store.recordToken("rotated"); assertFalse(store.registrationStale());
+        assertNull(store.accept(PushStateTest.payload("silenced-rotation", "b", 1)));
+        store.setTopics("b", PushStateTest.topics()); assertTrue(store.registrationStale());
+        store.clear(); assertFalse(store.registrationStale());
+    }
 }

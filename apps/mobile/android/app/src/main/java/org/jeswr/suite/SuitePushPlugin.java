@@ -70,7 +70,10 @@ public class SuitePushPlugin extends Plugin {
         return NotificationManagerCompat.from(getContext()).areNotificationsEnabled() ? "granted" : "denied";
     }
     @PluginMethod public void status(PluginCall call) {
-        JSObject result = new JSObject(); result.put("permission", permission()); result.put("installed", PushKeys.installed(getContext())); result.put("platform", "android"); call.resolve(result);
+        try {
+            JSObject result = new JSObject(); result.put("permission", permission()); result.put("installed", PushKeys.installed(getContext())); result.put("platform", "android");
+            result.put("registrationStale", store(getContext()).registrationStale()); call.resolve(result);
+        } catch (Exception e) { call.reject("Cannot read push registration state", "push-unavailable"); }
     }
     @PluginMethod public void enable(PluginCall call) {
         synchronized (enablement) {
@@ -94,6 +97,7 @@ public class SuitePushPlugin extends Plugin {
                     if (!task.isSuccessful() || task.getResult() == null) { call.reject("Cannot obtain a Firebase push token", "push-unavailable"); return; }
                     try {
                         PushKeys keys = new PushKeys(getContext(), true);
+                        store(getContext()).recordToken(task.getResult());
                         JSObject result = new JSObject(); result.put("pushToken", task.getResult()); result.put("devicePublicKey", PushCrypto.b64(keys.publicKey));
                         result.put("authSecret", PushCrypto.b64(keys.auth)); result.put("deviceSigningKey", new JSONObject(keys.publicSigningKey())); call.resolve(result);
                     } catch (Exception e) { call.reject("Cannot open the push key store", "push-unavailable"); }
@@ -104,7 +108,8 @@ public class SuitePushPlugin extends Plugin {
     @PluginMethod public void setTopicMap(PluginCall call) {
         try {
             Map<String, Object> args = PushJson.object(PushJson.parse(call.getData().toString()));
-            store(getContext()).setTopics(PushPolicy.id(args.get("registrationId")), (List<?>) args.get("topics")); call.resolve();
+            store(getContext()).setTopics(PushPolicy.id(args.get("registrationId")), (List<?>) args.get("topics"),
+                args.containsKey("pushToken") ? PushJson.string(args.get("pushToken")) : null); call.resolve();
         } catch (Exception e) { call.reject("Invalid or unavailable topic map", "INVALID_ARGUMENT"); }
     }
     @PluginMethod public void silence(PluginCall call) {

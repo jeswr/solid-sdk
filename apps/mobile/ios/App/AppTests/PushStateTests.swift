@@ -209,7 +209,7 @@ final class PushStateTests: XCTestCase {
         XCTAssertFalse(enablement.finish(expired) { XCTFail("Old token/deadline affected the new enable") })
         XCTAssertTrue(enablement.finish(next) {})
     }
-    func testLateAPNsCallbackAfterDisableCannotCacheTokenOrResolveCancelledEnable() throws {
+    func testLateAPNsCallbackAfterDisableCannotResolveCancelledEnable() throws {
         let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
         let enablement = PushEnablement<NSObject>(), call = NSObject(), registration = PushTokenRegistration()
         var requests = 0, callbacks = 0
@@ -223,9 +223,68 @@ final class PushStateTests: XCTestCase {
         }, request: { requests += 1 })
         XCTAssertEqual(requests, 2); XCTAssertEqual(callbacks, 0)
         registration.registered("fresh-token"); XCTAssertEqual(callbacks, 1)
-        registration.clear(); registration.registered("late-after-unregister")
+        registration.clear(); registration.registered("late-after-unregister"); XCTAssertNil(registration.token)
         registration.register({ _ in XCTFail("Cached token after unregister") }, request: { requests += 1 })
         XCTAssertEqual(requests, 3); registration.cancel()
+    }
+    func testEveryEnableWaitsForAPNsAfterSuccessfulRegistrationAndUnsolicitedRotation() throws {
+        let store = try PushStore(root: root)
+        let registration = PushTokenRegistration(recordToken: store.recordToken)
+        var requests = 0, returned = [String]()
+        let complete: (Result<String, Error>) -> Void = { result in
+            guard let token = try? result.get() else { return XCTFail("APNs registration failed") }
+            returned.append(token)
+        }
+        registration.register(complete, request: { requests += 1 })
+        XCTAssertTrue(returned.isEmpty); registration.registered("old-apns")
+        XCTAssertEqual(returned, ["old-apns"])
+        try store.setTopics(registration: "b", topics: topics, pushToken: "old-apns")
+        XCTAssertFalse(try store.registrationStale())
+
+        registration.registered("new-apns") // No enable pending: preserve rotation across restart.
+        XCTAssertEqual(registration.token, "new-apns"); XCTAssertEqual(returned, ["old-apns"])
+        XCTAssertTrue(try PushStore(root: root).registrationStale())
+        registration.register(complete, request: { requests += 1 })
+        XCTAssertEqual(requests, 2); XCTAssertEqual(returned, ["old-apns"])
+        registration.registered("new-apns")
+        XCTAssertEqual(returned, ["old-apns", "new-apns"])
+        XCTAssertTrue(try store.registrationStale()) // enable alone does not acknowledge relay activation.
+        XCTAssertThrowsError(try store.setTopics(registration: "b", topics: [], pushToken: "old-apns"))
+        XCTAssertTrue(try store.registrationStale()) // Rejected acknowledgment cannot remove the map.
+        try store.setTopics(registration: "b", topics: topics, pushToken: "new-apns")
+        XCTAssertFalse(try PushStore(root: root).registrationStale())
+        let saved = try String(contentsOf: root.appendingPathComponent("topics.json"), encoding: .utf8)
+        XCTAssertFalse(saved.contains("old-apns")); XCTAssertFalse(saved.contains("new-apns"))
+    }
+    func testRotationDoesNotUnsilenceOrForgetStalenessAndLegacyMapsRequireRefresh() throws {
+        let store = try PushStore(root: root)
+        XCTAssertFalse(try store.registrationStale())
+        try store.setTopics(registration: "b", topics: topics)
+        XCTAssertTrue(try store.registrationStale()) // Legacy map has no acknowledged token.
+        try store.recordToken("old"); try store.setTopics(registration: "b", topics: topics, pushToken: "old")
+        try store.recordToken("old"); XCTAssertFalse(try store.registrationStale())
+        try store.silenceAll(); try store.recordToken("rotated")
+        XCTAssertFalse(try store.registrationStale()); XCTAssertNil(try store.accept(Self.payload("silenced-rotation")))
+        try store.setTopics(registration: "b", topics: topics)
+        XCTAssertTrue(try store.registrationStale()) // Updating topics cannot acknowledge an unknown token.
+        try store.clear(); XCTAssertFalse(try store.registrationStale())
+    }
+    func testCachedAPNsTokenCannotBypassFailureTimeoutOrSinglePendingEnable() {
+        let registration = PushTokenRegistration(); var requests = 0, successes = 0, failures = 0
+        let complete: (Result<String, Error>) -> Void = { result in
+            if case .success = result { successes += 1 } else { failures += 1 }
+        }
+        registration.register(complete, request: { requests += 1 }); registration.registered("old")
+        registration.register(complete, request: { requests += 1 })
+        registration.register(complete, request: { XCTFail("Second pending request reached APNs") })
+        XCTAssertEqual(successes, 1); XCTAssertEqual(failures, 1)
+        registration.failed(PushCrypto.Failure.invalid)
+        XCTAssertEqual(successes, 1); XCTAssertEqual(failures, 2)
+        registration.register(complete, request: { requests += 1 }); registration.cancel() // Inject timeout.
+        registration.registered("late")
+        XCTAssertEqual(successes, 1); XCTAssertEqual(failures, 2)
+        registration.register(complete, request: { requests += 1 }); registration.registered("current")
+        XCTAssertEqual(requests, 4); XCTAssertEqual(successes, 2)
     }
     func testForegroundRevalidatesPayloadAndCurrentStateWithoutTrustingProviderText() throws {
         let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)

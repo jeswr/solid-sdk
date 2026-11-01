@@ -40,7 +40,10 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
     @objc func status(_ call: CAPPluginCall) {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            call.resolve(["permission": Self.permission(settings.authorizationStatus), "installed": PushKeys.installed(), "platform": "ios"])
+            do {
+                call.resolve(["permission": Self.permission(settings.authorizationStatus), "installed": PushKeys.installed(),
+                              "platform": "ios", "registrationStale": try PushStore.shared().registrationStale()])
+            } catch { call.reject("Cannot read push registration state", "push-unavailable") }
         }
     }
     @objc func enable(_ call: CAPPluginCall) {
@@ -80,7 +83,8 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
     @objc func setTopicMap(_ call: CAPPluginCall) {
-        guard let registration = call.getString("registrationId"), let topics = call.getArray("topics") else {
+        guard let registration = call.getString("registrationId"), let topics = call.getArray("topics"),
+              call.options["pushToken"] == nil || call.getString("pushToken") != nil else {
             call.reject("registrationId and topics are required", "INVALID_ARGUMENT"); return
         }
         do {
@@ -92,7 +96,7 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
             let bytes = try JSONSerialization.data(withJSONObject: topics)
             guard bytes.count <= 32768 else { throw PushCrypto.Failure.invalid }
             let decoded = try JSONDecoder().decode([PushStore.Topic].self, from: bytes)
-            try PushStore.shared().setTopics(registration: registration, topics: decoded); call.resolve()
+            try PushStore.shared().setTopics(registration: registration, topics: decoded, pushToken: call.getString("pushToken")); call.resolve()
         } catch { call.reject("Invalid or unavailable topic map", "INVALID_ARGUMENT") }
     }
     @objc func silence(_ call: CAPPluginCall) {

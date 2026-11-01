@@ -9,7 +9,10 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
     static let shared = SuitePushCoordinator()
     let challenges = PushActivation()
     var onChallenge: (() -> Void)?
-    private let registration = PushTokenRegistration()
+    private let registration = PushTokenRegistration(recordToken: { token in
+        // No bridge call is needed for rotation. Never recreate push state after confirmed cleanup.
+        if PushKeys.installed() { try PushStore.shared().recordToken(token) }
+    })
 
     func install() { UNUserNotificationCenter.current().delegate = self }
     func register(_ completion: @escaping (Result<String, Error>) -> Void) {

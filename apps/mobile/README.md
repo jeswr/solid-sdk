@@ -18,6 +18,17 @@ logic, with notification delegation and token auto-init disabled. Token requests
 30 seconds. When unlocked, overflow notices require an unsilenced registration under the same
 lock used by local silence; direct boot keeps the generic fallback.
 
+Every `enable()` requests the current provider token (APNs registration on iOS, Firebase
+`getToken()` on Android) and waits for its callback, even after a previous enable succeeded.
+Unsolicited APNs and FCM token updates persist token hashes without changing local silence.
+`status().registrationStale` is true when an unsilenced registration's current token has not
+been acknowledged, including older topic maps without token metadata. P2d must check it on
+launch/resume, call `enable()`, update the relay installation and complete the new activation
+challenge. Only after the relay confirms activation should it pass that `pushToken` to
+`setTopicMap({registrationId, topics, pushToken})` to acknowledge the update. The acknowledgment
+is atomic with the topic map and rejects if another rotation has already occurred; omitting
+`pushToken` does not clear staleness. No provider tokens are logged or persisted in the topic store.
+
 The RFC 8291 decryptor accepts one RFC 8188 aes128gcm record. Suite plaintext must be exactly
 512 UTF-8 bytes, padded with trailing spaces, with only `v`, `id`, `kind`, `registrationId`,
 `topicIndex`, `sentAt` and (for challenges only) `nonce`. `sentAt` is a nonnegative Unix integer;
@@ -79,7 +90,8 @@ Debug/Release XCTest `AppTests` bundle, which includes push tests. Both native s
 the [RFC 8291 §5 vector](https://www.rfc-editor.org/rfc/rfc8291#section-5), random-key round trips,
 tamper/size/schema rejection, routes, dedupe, grouping, silence, locked-state and activation seams.
 Regression tests also cover background FCM display rejection, cancelled enable callbacks, topic-map
-changes between tap and consumption, overflow after disable, and actual Keychain fallback creation/signing
+changes between tap and consumption, overflow after disable, unsolicited provider token rotation and
+durable relay-refresh state, and actual Keychain fallback creation/signing
 through the injected Security provider on the iOS simulator. That test requires real generation, then
 asserts acceptance/reload only when the provider reports non-extractability; exportable software keys
 must be rejected and deleted, including on the simulator.

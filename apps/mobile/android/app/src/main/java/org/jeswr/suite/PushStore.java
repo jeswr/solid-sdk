@@ -41,12 +41,30 @@ final class PushStore {
     }
     private void save() throws IOException { write(new File(root, "topics.json"), PushCrypto.utf8(PushJson.encode(state))); }
     private Map<String, Object> registrations() { return PushJson.object(state.get("registrations")); }
+    private static String tokenHash(String token) {
+        if (token == null || token.isEmpty() || PushCrypto.utf8(token).length > 8192) throw new IllegalArgumentException("Invalid push token");
+        return PushCrypto.b64(PushCrypto.sha256(PushCrypto.utf8(token)));
+    }
+    /** Persist only hashes; no raw provider token is stored here or logged. */
+    synchronized void recordToken(String token) throws IOException {
+        state.put("tokenHash", tokenHash(token)); save();
+    }
+    synchronized boolean registrationStale() {
+        return withAnyActive(() -> {}) && (state.get("tokenHash") == null || !state.get("tokenHash").equals(state.get("registeredTokenHash")));
+    }
     synchronized void setTopics(String registration, List<?> topics) throws IOException {
+        setTopics(registration, topics, null);
+    }
+    /** pushToken acknowledges confirmed relay activation, never merely a successful enable. */
+    synchronized void setTopics(String registration, List<?> topics, String pushToken) throws IOException {
         PushPolicy.id(registration);
         if (topics == null || topics.size() > 16) throw new IllegalArgumentException("Topic map capacity");
+        String confirmedHash = pushToken == null ? null : tokenHash(pushToken);
+        if (confirmedHash != null && !confirmedHash.equals(state.get("tokenHash"))) throw new IllegalArgumentException("Push token changed; refresh registration");
         if (topics.isEmpty()) {
             registrations().remove(registration);
             for (int i = 0; i < 16; i++) PushJson.object(state.get("counts")).remove(PushPolicy.group(registration, i));
+            if (confirmedHash != null) state.put("registeredTokenHash", confirmedHash);
             save(); return;
         }
         if (!registrations().containsKey(registration) && registrations().size() >= 4) throw new IllegalArgumentException("Registration capacity");
@@ -62,6 +80,7 @@ final class PushStore {
             entries.put("" + index, new LinkedHashMap<>(topic));
         }
         Map<String, Object> reg = new LinkedHashMap<>(); reg.put("silenced", false); reg.put("topics", entries);
+        if (confirmedHash != null) state.put("registeredTokenHash", confirmedHash);
         registrations().put(registration, reg); save();
     }
     synchronized void silence(String registration) throws IOException {

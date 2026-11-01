@@ -29,7 +29,12 @@ test("registers the native SuitePush bridge and exposes the P13 surface", () => 
 });
 
 test("preserves status and public key result shapes", async () => {
-  const status = { permission: "prompt", installed: false, platform: "android" };
+  const status = {
+    permission: "prompt",
+    installed: false,
+    platform: "android",
+    registrationStale: false,
+  };
   const enabled = {
     pushToken: "token",
     devicePublicKey: "public",
@@ -47,6 +52,7 @@ test("preserves status and public key result shapes", async () => {
 test("passes native arguments without altering signed body bytes or account identity", async () => {
   const topics = {
     registrationId: "account-b",
+    pushToken: "confirmed-token",
     topics: [
       { index: 0, kind: "chat" as const, label: "Book club", route: "/chat/book", enabled: true },
     ],
@@ -66,6 +72,19 @@ test("passes native arguments without altering signed body bytes or account iden
   expect(native.silence).toHaveBeenCalledExactlyOnceWith({ registrationId: "account-b" });
   expect(native.sign).toHaveBeenCalledExactlyOnceWith(request);
   expect(native.activate).toHaveBeenCalledExactlyOnceWith({ installationId: "installation" });
+});
+
+test("preserves the durable stale flag so the registrar can refresh after restart", async () => {
+  native.status.mockResolvedValue({
+    permission: "granted",
+    installed: true,
+    platform: "ios",
+    registrationStale: true,
+  });
+  expect((await SuitePush.status()).registrationStale).toBe(true);
+  const topics = { registrationId: "account-b", topics: [] };
+  await SuitePush.setTopicMap(topics);
+  expect(native.setTopicMap).toHaveBeenCalledExactlyOnceWith(topics);
 });
 
 test("separates local silence from confirmed remote cleanup", async () => {

@@ -20,6 +20,8 @@ export interface SuitePushPlugin {
     permission: "granted" | "denied" | "prompt";
     installed: boolean;
     platform: "android" | "ios";
+    /** An enabled installation needs a relay token update and activation on the next launch/resume. */
+    registrationStale: boolean;
   }>;
   enable(): Promise<{
     pushToken: string;
@@ -27,7 +29,12 @@ export interface SuitePushPlugin {
     authSecret: string;
     deviceSigningKey: { kty: "EC"; crv: "P-256"; x: string; y: string };
   }>;
-  setTopicMap(options: { registrationId: string; topics: PushTopic[] }): Promise<void>;
+  setTopicMap(options: {
+    registrationId: string;
+    topics: PushTopic[];
+    /** Include only after this token's relay activation is confirmed. Rejects if it rotated again. */
+    pushToken?: string;
+  }): Promise<void>;
   silence(options: { registrationId: string }): Promise<void>;
   /** Exact UTF-8 body sent to the relay. Native code supplies the timestamp and body hash. */
   sign(request: { method: string; url: string; body?: string }): Promise<{ proof: string }>;

@@ -25,23 +25,31 @@ final class PushEnablement<Call: AnyObject> {
     }
 }
 
-/// Main-queue APNs state. Cancelled/unsolicited callbacks cannot repopulate the token cache.
+/// Main-queue APNs state. Each enable waits for APNs; unsolicited updates still record rotation.
 final class PushTokenRegistration {
-    private var token: String?
+    private enum Failure: Error { case busy }
+    private(set) var token: String?
+    private var acceptingCallbacks = true
+    private let recordToken: (String) throws -> Void
     private var completion: ((Result<String, Error>) -> Void)?
+    init(recordToken: @escaping (String) throws -> Void = { _ in }) { self.recordToken = recordToken }
     func register(_ completion: @escaping (Result<String, Error>) -> Void, request: () -> Void) {
-        if let token = token { completion(.success(token)); return }
+        guard self.completion == nil else { completion(.failure(Failure.busy)); return }
+        acceptingCallbacks = true
         self.completion = completion; request()
     }
     func registered(_ token: String) {
-        guard let completion = completion else { return }
-        self.completion = nil; self.token = token; completion(.success(token))
+        guard acceptingCallbacks else { return }
+        self.token = token
+        let completion = self.completion; self.completion = nil
+        do { try recordToken(token); completion?(.success(token)) }
+        catch { completion?(.failure(error)) }
     }
     func failed(_ error: Error) {
         let completion = self.completion; self.completion = nil; completion?(.failure(error))
     }
     func cancel() { completion = nil }
-    func clear() { completion = nil; token = nil }
+    func clear() { completion = nil; token = nil; acceptingCallbacks = false }
 }
 
 /// Main-queue early-challenge mailbox. The challenge registrationId names the installation (P4).

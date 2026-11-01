@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -34,6 +35,9 @@ final class PushStore {
         var launch: PendingLaunch?
         // Optional for migration: previously seen IDs never gain a replacement permit.
         var presentations: [String: PresentationClaim]?
+        // Hashes only: raw provider tokens are neither persisted here nor logged.
+        var tokenHash: String?
+        var registeredTokenHash: String?
     }
     enum PresentationSource {
         case remote(request: String, token: String?)
@@ -79,10 +83,30 @@ final class PushStore {
         afterCommit(result)
         return result
     }
-    func setTopics(registration: String, topics: [Topic]) throws {
+    private static func tokenHash(_ token: String) throws -> String {
+        guard !token.isEmpty, token.utf8.count <= 8192 else { throw PushCrypto.Failure.invalid }
+        return PushCrypto.b64(Data(SHA256.hash(data: Data(token.utf8))))
+    }
+    func recordToken(_ token: String) throws {
+        let hash = try Self.tokenHash(token)
+        try transaction { $0.tokenHash = hash }
+    }
+    func registrationStale() throws -> Bool {
+        try transaction { state in
+            state.registrations.values.contains(where: { !$0.silenced }) &&
+                (state.tokenHash == nil || state.tokenHash != state.registeredTokenHash)
+        }
+    }
+    /// pushToken acknowledges confirmed relay activation, never merely a successful enable.
+    func setTopics(registration: String, topics: [Topic], pushToken: String? = nil) throws {
         guard PushPolicy.identifier(registration), topics.count <= 16, Set(topics.map { $0.index }).count == topics.count else { throw PushCrypto.Failure.invalid }
         try topics.forEach { try $0.validate() }
+        let confirmedHash = try pushToken.map { try Self.tokenHash($0) }
         try transaction { state in
+            if let hash = confirmedHash {
+                guard hash == state.tokenHash else { throw PushCrypto.Failure.invalid }
+                state.registeredTokenHash = hash
+            }
             if topics.isEmpty {
                 state.registrations.removeValue(forKey: registration)
                 for index in 0..<16 { state.counts.removeValue(forKey: PushPolicy.group(registration, index)) }
