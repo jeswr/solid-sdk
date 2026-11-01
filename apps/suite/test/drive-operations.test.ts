@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -44,7 +45,12 @@ const INDEX = `${DRIVE}.trash/index.ttl`;
 const NOTES = `${DRIVE}notes.md`;
 
 async function setup() {
-  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
+  // These content-operation fixtures retain their original private Drive baseline.
+  // The shared seed's new grants are exercised by home-permissions-ui-demo.test.ts.
+  const seed = (await buildDemoSeed(NOW)).filter(
+    (file) => !file.path.startsWith("drive/") || !file.path.endsWith(".acl"),
+  );
+  const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
   // Every operation request goes through this spy, including recursive client moves.
   const fetch = vi.fn<typeof globalThis.fetch>(pod.fetch);
   const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch });

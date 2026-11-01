@@ -1,0 +1,217 @@
+// AUTHORED-BY Codex GPT-6
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { AgentRow, PermissionsSnapshot } from "../src/apps/home/lib/permissions";
+import type { PodSession } from "../src/lib/session/pod-session";
+import { act, deferred, h, mount } from "./drive-ui-dom";
+
+const mocks = vi.hoisted(() => ({
+  session: undefined as unknown as PodSession,
+  load: vi.fn(),
+  apply: vi.fn(),
+  client: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
+vi.mock("@jeswr/suite-ui", () => ({ toast: { success: mocks.success, error: mocks.error } }));
+vi.mock("../src/apps/home/lib/permissions", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  loadPermissions: mocks.load,
+  applyRevoke: mocks.apply,
+  resolveClientName: mocks.client,
+}));
+
+import { PartialRevokeError } from "../src/apps/home/lib/permissions";
+import { type PermissionsBinding, usePermissions } from "../src/apps/home/state/permissions";
+
+const ROOT = "https://pod.test/";
+const bob: AgentRow = {
+  key: "bob",
+  kind: "person",
+  id: "https://bob.test/card#me",
+  lines: [
+    {
+      key: "files",
+      dataType: { id: "files", label: "Files" },
+      domainId: "documents",
+      role: "viewer",
+      modes: ["read"],
+      inherited: false,
+      resources: [
+        {
+          url: `${ROOT}drive/Work/`,
+          isContainer: true,
+          modes: ["read"],
+          inherited: false,
+          source: `${ROOT}drive/Work/.acl`,
+          node: `${ROOT}drive/Work/.acl#bob`,
+          system: "wac",
+          subject: { kind: "agent", webId: "https://bob.test/card#me" },
+        },
+      ],
+    },
+  ],
+};
+const snapshot: PermissionsSnapshot = {
+  rows: [bob],
+  failures: [],
+  truncated: false,
+  summary: { people: 1, apps: 0, publicItems: 0 },
+};
+let binding: PermissionsBinding;
+let listeners: Set<(url: string) => void>;
+let observeRender: ((state: PermissionsBinding) => void) | undefined;
+function Probe() {
+  binding = usePermissions();
+  observeRender?.(binding);
+  return null;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  observeRender = undefined;
+  listeners = new Set();
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  const sessionFetch = vi.fn<typeof fetch>(
+    async () => new Response("", { headers: { "content-type": "text/turtle" } }),
+  );
+  mocks.session = {
+    mode: "demo",
+    webId: `${ROOT}profile#me`,
+    displayName: "Alice",
+    storageUrl: ROOT,
+    fetch: sessionFetch,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    reset: async () => {},
+  };
+  mocks.load.mockResolvedValue(snapshot);
+  mocks.apply.mockResolvedValue({ undo: { changes: [], restore: [] } });
+  mocks.client.mockResolvedValue({ name: "Coach" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(async () => {
+      throw new Error("Public profile unavailable");
+    }),
+  );
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+it("loads with session fetch, resolves foreign names publicly, and debounces subscription events", async () => {
+  await mount(h(Probe));
+  expect(binding.status).toBe("ready");
+  expect(mocks.load).toHaveBeenCalledWith(
+    expect.objectContaining({
+      fetch: mocks.session.fetch,
+      webId: mocks.session.webId,
+      storage: ROOT,
+    }),
+  );
+  expect(globalThis.fetch).toHaveBeenCalledWith(
+    "https://bob.test/card",
+    expect.objectContaining({ credentials: "omit", redirect: "error" }),
+  );
+  expect(
+    (mocks.session.fetch as ReturnType<typeof vi.fn>).mock.calls.every(([url]) =>
+      String(url).startsWith(ROOT),
+    ),
+  ).toBe(true);
+  vi.useFakeTimers();
+  for (let i = 0; i < 3; i++) for (const listener of listeners) listener(`${ROOT}drive/file`);
+  await act(() => vi.advanceTimersByTimeAsync(249));
+  expect(mocks.load).toHaveBeenCalledTimes(1);
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(mocks.load).toHaveBeenCalledTimes(2);
+});
+
+it("optimistically revokes a line, retains it through refresh, and invokes its exact Undo plan", async () => {
+  await mount(h(Probe));
+  const pending = deferred<{ undo: { changes: []; restore: [] } }>();
+  mocks.apply.mockReturnValueOnce(pending.promise);
+  let writing!: Promise<void>;
+  await act(() => {
+    writing = binding.revoke(bob.lines[0] as NonNullable<(typeof bob.lines)[0]>);
+  });
+  expect(binding.busy).toBe(true);
+  expect(binding.removed.files).toBeDefined();
+  await act(() => binding.refresh());
+  expect(mocks.load).toHaveBeenCalledTimes(1);
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(async () => {
+    pending.resolve({ undo: { changes: [], restore: [] } });
+    await writing;
+  });
+  const token = binding.removed.files?.token;
+  expect(token).toBeTruthy();
+  expect(binding.rows[0]?.lines[0]?.key).toBe("files");
+  expect(mocks.success).toHaveBeenCalledWith(
+    "bob.test will lose access to your Files",
+    expect.objectContaining({ duration: 8000, action: expect.objectContaining({ label: "Undo" }) }),
+  );
+  mocks.load.mockResolvedValue(snapshot);
+  await act(() => binding.undo(token as string));
+  expect(mocks.apply.mock.calls[1]?.[0]).toEqual({ changes: [], restore: [] });
+  expect(binding.removed).toEqual({});
+  expect(binding.busy).toBe(false);
+});
+
+it("rolls failed writes back and offers a persistent Undo when only part of a write succeeded", async () => {
+  await mount(h(Probe));
+  mocks.apply.mockRejectedValueOnce(new Error("write failed"));
+  await act(() => binding.revoke(bob.lines[0] as NonNullable<(typeof bob.lines)[0]>));
+  expect(binding.removed).toEqual({});
+  expect(mocks.error).toHaveBeenCalledWith("Couldn't change access for bob.test", {
+    duration: Infinity,
+  });
+  mocks.apply.mockRejectedValueOnce(
+    new PartialRevokeError({ changes: [], restore: [] }, new Error("write failed")),
+  );
+  await act(() => binding.revoke(bob));
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "Couldn't change access for bob.test",
+    expect.objectContaining({
+      duration: Infinity,
+      action: expect.objectContaining({ label: "Undo" }),
+    }),
+  );
+});
+
+it("ignores a stale refresh that finishes after removing an agent", async () => {
+  await mount(h(Probe));
+  const stale = deferred<PermissionsSnapshot>();
+  mocks.load.mockReturnValueOnce(stale.promise);
+  let refreshing!: Promise<void>;
+  await act(() => {
+    refreshing = binding.refresh();
+  });
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(bob));
+  expect(binding.rows).toEqual([]);
+  await act(async () => {
+    stale.resolve(snapshot);
+    await refreshing;
+  });
+  expect(binding.rows).toEqual([]);
+});
+
+it("blocks offline writes, refreshes on reconnection, and never renders a prior identity's rows", async () => {
+  const view = await mount(h(Probe));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  await act(() => window.dispatchEvent(new Event("offline")));
+  expect(binding.online).toBe(false);
+  await act(() => binding.revoke(bob));
+  expect(mocks.apply).not.toHaveBeenCalled();
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  await act(() => window.dispatchEvent(new Event("online")));
+  expect(mocks.load).toHaveBeenCalledTimes(2);
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  mocks.session = { ...mocks.session, webId: `${ROOT}other#me` };
+  const observed: number[] = [];
+  observeRender = (state) => observed.push(state.rows.length);
+  await view.render(h(Probe));
+  expect(observed.every((count) => count === 0)).toBe(true);
+});

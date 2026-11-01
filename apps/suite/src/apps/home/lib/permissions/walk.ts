@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Bounded BFS ported from apps/access-manager/src/lib/storage-walk.ts; ACL resolution
 // ported from apps/access-manager/src/lib/acl.ts (readEffectiveAcl).
 import { RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
@@ -264,13 +265,14 @@ export async function loadPermissions(
     }
   }
   // First already-known child class supplies an otherwise unclassified folder's data type.
-  for (const node of [...nodes].reverse())
+  for (const node of [...nodes].reverse()) {
     if (node.isContainer && !classes.get(node.url)?.dataType) {
       const child = [...classes].find(
         ([url, cls]) => url !== node.url && parent(url, storage) === node.url && cls.dataType,
       );
       if (child) classes.set(node.url, child[1]);
     }
+  }
   let records: GrantRecordIndex | undefined;
   try {
     records = await readGrantRecords(scoped, storage);

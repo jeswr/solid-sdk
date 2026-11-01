@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { Container } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,11 @@ const NOW = Date.UTC(2026, 9, 26, 12);
 const DRIVE = `${DEMO_ROOT}drive/`;
 
 async function setup() {
-  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
+  // Keep the original private content fixture; Home tests cover the new shared grants.
+  const seed = (await buildDemoSeed(NOW)).filter(
+    (file) => !file.path.startsWith("drive/") || !file.path.endsWith(".acl"),
+  );
+  const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
   const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch: pod.fetch });
   return { pod, client };
 }
