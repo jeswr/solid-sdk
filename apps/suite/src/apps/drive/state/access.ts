@@ -2,9 +2,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { accessControl, accessLabel } from "../lib/client/access";
+import { loadSharing } from "../lib/sharing/apply";
+import type { SharingState } from "../lib/sharing/types";
 import { useDrive } from "./drive-context";
 import { useResourceVersion } from "./resource";
+
+/** One access summary for Details and copied-link confirmations. */
+export function sharingSummary(state: SharingState, webId: string): string {
+  if (state.link !== "none") return "Anyone with the link";
+  const others = state.people.filter((person) => person.webId !== webId);
+  if (others.length) return `People you've shared with: ${others.length}`;
+  return state.people.length ? "Only you" : "No one";
+}
 
 /** Recheck effective access on selection or invalidation, hiding superseded results. */
 export function useAccessLabel(url: string | undefined): string {
@@ -23,9 +32,8 @@ export function useAccessLabel(url: string | undefined): string {
   useEffect(() => {
     if (!url) return;
     let live = true;
-    void accessControl(http, storageUrl)
-      .effective(url)
-      .then((access) => {
+    void loadSharing({ fetch: http, storageUrl, webId }, url)
+      .then(({ state }) => {
         if (live)
           setResult({
             url,
@@ -33,8 +41,11 @@ export function useAccessLabel(url: string | undefined): string {
             storageUrl,
             webId,
             version,
-            label: accessLabel(access, url, webId),
+            label: sharingSummary(state, webId),
           });
+      })
+      .catch(() => {
+        if (live) setResult({ url, http, storageUrl, webId, version, label: "Access unknown" });
       });
     return () => {
       live = false;

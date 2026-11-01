@@ -6,10 +6,12 @@ import {
   accessRequestTurtle,
   buildPod,
   CONTACTS_CLASS,
+  decisionUrl,
   INBOX,
   OWNER,
   POD,
   PREFIXES,
+  RECORDS,
   REQUESTER,
 } from "../../test/requests/fixtures.js";
 import { members, project } from "./inbox.js";
@@ -18,7 +20,6 @@ import {
   ACL,
   DPV,
   decide,
-  deriveGrantId,
   listRequests,
   MAX_MEMBERS,
   MAX_NOTIFICATION_BYTES,
@@ -30,11 +31,7 @@ import { turtle, values } from "./rdf.js";
 const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
 const CAROL = `${POD}contacts/carol.ttl`;
-const RECORDS = `${POD}settings/access-records/`;
 
-/** The owner's pinned-decision record for the fixture request (read access to contacts). */
-const pinnedIntent = async () =>
-  `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
 const NOW = "2026-11-01T12:00:00.000Z";
 function options(pod = buildPod()) {
   return {
@@ -192,8 +189,8 @@ describe("decision state machine", () => {
       options(pod),
     );
     expect(result).toMatchObject({ status: "approved", notified: false, expiryEnforced: false });
-    // The owner-only records folder and the owner's intent record precede the request CAS.
-    const intent = await pinnedIntent();
+    // The owner-only records folder and the owner's decision record precede the request CAS.
+    const intent = await decisionUrl(pod);
     // The folder ACL is created marked unverified, then sealed once the folder still lists empty.
     expect(writes.slice(0, 4).map((write) => write.url)).toEqual([
       RECORDS,
@@ -215,7 +212,11 @@ describe("decision state machine", () => {
     expect(writes.slice(1, 3).every((write) => write.headers.get("if-none-match") === "*")).toBe(
       true,
     );
-    expect(writes.at(-1)?.body).toContain("Approved");
+    expect(writes.filter((write) => write.url === ID).at(-1)?.body).toContain("Approved");
+    // Last of all, the owner's record of the decision is settled as approved, conditionally.
+    expect(writes.at(-1)?.url).toBe(intent);
+    expect(writes.at(-1)?.headers.get("if-match")).toBe('"v1"');
+    expect(writes.at(-1)?.body).toContain('"approved"');
     const receipt = await graph(pod.body(result.receiptUrl) as string);
     expect(values(receipt, result.receiptUrl, DPV.hasPurpose)).toEqual([
       "https://w3id.org/dpv#ServiceProvision",
@@ -308,16 +309,25 @@ describe("decision state machine", () => {
     expect(await entry(pod)).toMatchObject({ status: "approving" });
     const persisted = pod.body(ID) as string;
     expect(persisted).not.toContain(ALICE);
-    const intent = await pinnedIntent();
+    const intent = await decisionUrl(pod);
     expect(pod.body(intent)).toContain(ALICE);
     pod.seed(`${POD}settings/publicTypeIndex.ttl`, "corrupted index @@@");
     pod.seed(`${POD}contacts/new.ttl`, "<urn:new> a <urn:Contact>.");
     pod.intercept = undefined;
-    const result = await decide(
-      { id: ID },
-      { approve: true, dataTypes: ["urn:ignored-on-resume"] },
-      options(pod),
-    );
+    // A retry in Approving with different explicit choices is refused before any write.
+    const before = pod.log.length;
+    for (const changed of [
+      { dataTypes: ["urn:not-what-was-pinned"] },
+      { role: "viewer" as const, dataTypes: [CONTACTS_CLASS] },
+      { expiresAt: new Date("2029-01-01Z") },
+    ])
+      await expect(decide({ id: ID }, { approve: true, ...changed }, options(pod))).rejects.toThrow(
+        "still finishing",
+      );
+    expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
+    expect(await entry(pod)).toMatchObject({ status: "approving" });
+    // Retrying without choices finishes the pinned approval.
+    const result = await decide({ id: ID }, { approve: true }, options(pod));
     expect(result.status).toBe("approved");
     expect(pod.has(`${POD}contacts/new.ttl.acl`)).toBe(false);
     expect(pod.etag(result.receiptUrl)).toBe('"v1"');

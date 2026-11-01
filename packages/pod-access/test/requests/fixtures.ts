@@ -1,11 +1,16 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Claude Opus 5.5
 //
 // Shared fixture pod: an owner with a profile (storage + inbox + type
 // indexes), a root ACL (owner Control, accessTo + default), an inherited
 // subtree, a directly-shared document (bob + public), a type-indexed contacts
 // class, and an ODRL-shaped pending access request in the inbox.
 
+import { Parser, Store } from "n3";
+import { deriveGrantId } from "../../src/requests-solid/approval.js";
+import { set, turtle } from "../../src/requests-solid/rdf.js";
+import { ACCM } from "../../src/requests-solid/vocab.js";
 import { createPodStub, type PodStub } from "./pod-stub.js";
 
 export const POD = "https://pod.example/";
@@ -17,6 +22,10 @@ export const CONTACTS_CLASS = "http://www.w3.org/2006/vcard/ns#Individual";
 export const GRANTS = `${POD}access-manager/grants/`;
 export const RECEIPTS = `${POD}access-manager/receipts/`;
 export const INBOX = `${POD}inbox/`;
+/** The owner-only folder holding decision records, grants and receipts. */
+export const RECORDS = `${POD}settings/access-records/`;
+/** The fixture pod's pending request. */
+export const REQUEST = `${INBOX}request-1.ttl`;
 
 export const PREFIXES = `
 @prefix acl: <http://www.w3.org/ns/auth/acl#> .
@@ -116,4 +125,86 @@ export function buildPod(): PodStub {
   pod.seed(`${POD}docs/report.ttl.acl`, reportAclTurtle());
   pod.seed(`${INBOX}request-1.ttl`, accessRequestTurtle(`${INBOX}request-1.ttl`));
   return pod;
+}
+
+/** The records key sealed into a pod's records folder ACL (parsed as RDF), if it has one. */
+export function sealedKey(pod: PodStub): string | undefined {
+  const acl = `${RECORDS}.acl`;
+  const body = pod.body(acl);
+  if (body === undefined) return undefined;
+  const store = new Store(new Parser({ baseIRI: acl }).parse(body));
+  return store.getObjects(acl, `${ACCM.ns}recordsKey`, null)[0]?.value;
+}
+
+/** What a request asks for, by data type, as the inbox projects it. */
+export type Asked = Record<string, readonly string[]>;
+
+/**
+ * The URL of the owner's decision record for a request, derived exactly as `decide()` does from
+ * the pod's sealed records key, the request id, its requester, what it asks for and the
+ * generation (0 for the first decision at that request URL).
+ */
+export async function decisionUrl(
+  pod: PodStub,
+  {
+    id = REQUEST,
+    requester = REQUESTER,
+    asked = { [CONTACTS_CLASS]: ["read"] },
+    generation = 0,
+    key = sealedKey(pod),
+  }: {
+    id?: string;
+    requester?: string;
+    asked?: Asked;
+    generation?: number;
+    key?: string | undefined;
+  } = {},
+): Promise<string> {
+  if (key === undefined) throw new Error("The records folder is not sealed yet");
+  const name = await deriveGrantId(
+    id,
+    [
+      `key ${key}`,
+      `agent ${requester}`,
+      `generation ${generation}`,
+      ...Object.entries(asked).map(([type, modes]) => `${type} ${[...modes].sort().join(",")}`),
+    ],
+    OWNER,
+    "decision-1",
+  );
+  return `${RECORDS}decision-${name}.ttl`;
+}
+
+/** The grant id `decide()` derives for an approval recorded at `slot`. */
+export const grantIdFor = (slot: string, targets: readonly string[]) =>
+  deriveGrantId(slot, targets, OWNER);
+
+/** The receipt URL of a denial recorded at `slot`. */
+export const denialReceiptUrl = async (slot: string) =>
+  `${RECORDS}receipt-${await deriveGrantId(slot, [], OWNER, "denial")}.ttl`;
+
+/** The name the previous design gave a pinned decision; only ever planted by tests now. */
+export const legacyIntentUrl = async (id = REQUEST) =>
+  `${RECORDS}intent-${await deriveGrantId(id, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
+
+/** Serialise a decision record (or a forgery of one) with n3, as the owner would store it. */
+export async function recordTurtle(
+  url: string,
+  {
+    id = REQUEST,
+    outcome,
+    snapshot,
+  }: { id?: string; outcome?: string; snapshot?: string | object },
+): Promise<string> {
+  const dataset = new Store();
+  set(dataset, url, ACCM.requestRef, id, true);
+  if (outcome !== undefined) set(dataset, url, `${ACCM.ns}outcome`, outcome);
+  if (snapshot !== undefined)
+    set(
+      dataset,
+      url,
+      `${ACCM.ns}snapshot`,
+      typeof snapshot === "string" ? snapshot : JSON.stringify(snapshot),
+    );
+  return turtle(dataset);
 }

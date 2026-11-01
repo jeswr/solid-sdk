@@ -19,7 +19,9 @@ import {
   House,
   Images,
   Menu,
+  Music,
   Search,
+  SquareCheckBig,
   Users,
   Wallet,
 } from "lucide-react";
@@ -35,7 +37,9 @@ export type SuiteAppId =
   | "contacts"
   | "photos"
   | "money"
-  | "health";
+  | "health"
+  | "tasks"
+  | "music";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "home", label: "Home", href: "/home", icon: House },
@@ -46,6 +50,8 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
+  { id: "music", label: "Music", href: "/music", icon: Music },
 ];
 
 export interface SuiteFrameProps {
