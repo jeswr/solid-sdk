@@ -26,7 +26,7 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
-import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
+import { DriveAccessError } from "../lib/client/access";
 import {
   type DriveClient,
   DriveError,
@@ -54,11 +54,14 @@ import {
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
+import { loadSharing } from "../lib/sharing/apply";
+import { sharingSummary } from "./access";
 import { useDrive } from "./drive-context";
 import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
 
 export type DriveDialog =
+  | { kind: "share"; item: DriveItem }
   | { kind: "new-folder"; parent: string }
   | { kind: "rename"; item: DriveItem }
   | { kind: "move"; items: DriveItem[] }
@@ -224,8 +227,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   const dialogOpen = useRef<number | undefined>(undefined);
   const nextDialog = useRef(0);
   const openDialog = useCallback((next: DriveDialog) => {
-    const item =
-      next.kind === "rename" ? next.item : next.kind === "move" ? next.items[0] : undefined;
+    const item = "item" in next ? next.item : "items" in next ? next.items[0] : undefined;
     const url = item?.url ?? ("entries" in next ? next.entries[0]?.url : undefined);
     dialogFocus.current = {
       element:
@@ -519,8 +521,11 @@ export function useDriveActions() {
       const link = `${process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? PUBLIC_SUITE_URL : location.origin}${hrefFor(item)}`;
       try {
         await navigator.clipboard.writeText(link);
-        const access = await accessControl(session.fetch, session.storageUrl).effective(item.url);
-        toast("Link copied", { description: accessLabel(access, item.url, session.webId) });
+        const description = await loadSharing(session, item.url).then(
+          ({ state }) => sharingSummary(state, session.webId),
+          () => "Access unknown",
+        );
+        toast("Link copied", { description });
       } catch {
         toast.error("Couldn't copy the link");
       }

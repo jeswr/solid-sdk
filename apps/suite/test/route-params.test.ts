@@ -8,10 +8,12 @@ const navigation = vi.hoisted(() => ({
   params: { ref: "web-value" } as Record<string, string | string[]>,
   pathname: "/drive/f/a/" as string | null,
   listeners: new Set<() => void>(),
+  notFound: false,
 }));
 vi.mock("next/navigation", () => ({
+  // Next's notFound() throws; recording the call lets the probe render its result.
   notFound: () => {
-    throw new Error("NEXT_NOT_FOUND");
+    navigation.notFound = true;
   },
   useParams: () => {
     if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native")
@@ -73,12 +75,8 @@ it("decodes web params once, keeping malformed percent-encoding as it arrived", 
 
 describe("usePageRouteParams", () => {
   function Probe() {
-    let text: string;
-    try {
-      text = JSON.stringify(usePageRouteParams("/tasks/l/[label]")) ?? "pending";
-    } catch (error) {
-      text = (error as Error).message;
-    }
+    const params = usePageRouteParams("/tasks/l/[label]");
+    const text = navigation.notFound ? "NEXT_NOT_FOUND" : (JSON.stringify(params) ?? "pending");
     return h("span", null, text);
   }
 
@@ -98,6 +96,7 @@ describe("usePageRouteParams", () => {
     ["/tasks/l/a/b/", "NEXT_NOT_FOUND"],
   ])("on native maps %s to %s", async (pathname, expected) => {
     await loadTarget("native");
+    navigation.notFound = false;
     navigation.pathname = pathname;
     const view = await mount(h(Probe));
     expect(view.host.textContent).toBe(expected);

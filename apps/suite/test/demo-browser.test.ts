@@ -4,8 +4,9 @@ import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
+import { applySharing, loadSharing } from "../src/apps/drive/lib/sharing/apply";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { buildDemoSeed, DEMO_ROOT } from "../src/lib/demo-pod/seed";
+import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 // Reuse the workspace's installed IndexedDB fixture; no added dependency.
@@ -61,6 +62,52 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
   TestChannel.peers.clear();
+});
+
+it("persists the share spec's Editor grant across reload, enables link access and removes the person", async () => {
+  storage();
+  const file = `${DEMO_ROOT}drive/notes.md`;
+  const bob = "https://bob.example.org/profile#me";
+  const pod = await (await tab()).getDemoPod();
+  const session = { fetch: pod.fetch, storageUrl: DEMO_ROOT, webId: DEMO_WEBID };
+  const rootAcl = await (await pod.fetch(`${DEMO_ROOT}.acl`)).text();
+  const initial = await loadSharing(session, file);
+  expect(initial.canManage).toBe(true);
+  expect(initial.state.people).toEqual([
+    expect.objectContaining({ webId: DEMO_WEBID, role: "owner", inherited: true }),
+  ]);
+  await applySharing(session, initial, {
+    ...initial.state,
+    people: [...initial.state.people, { webId: bob, role: "editor" }],
+  });
+
+  const reloaded = await (await tab()).getDemoPod();
+  const nextSession = { ...session, fetch: reloaded.fetch };
+  let snapshot = await loadSharing(nextSession, file);
+  expect(snapshot.state.people).toContainEqual(
+    expect.objectContaining({ webId: bob, role: "editor", inherited: false }),
+  );
+  expect(snapshot.canManage).toBe(true);
+  snapshot = await applySharing(nextSession, snapshot, {
+    ...snapshot.state,
+    link: "viewer",
+    public: "viewer",
+  });
+  expect(snapshot.state.link).toBe("viewer");
+  await applySharing(nextSession, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((person) => person.webId !== bob),
+  });
+
+  const finalPod = await (await tab()).getDemoPod();
+  const final = await loadSharing({ ...session, fetch: finalPod.fetch }, file);
+  expect(final.state.people).toEqual([
+    expect.objectContaining({ webId: DEMO_WEBID, role: "owner", inherited: false }),
+  ]);
+  expect(final.state.link).toBe("viewer");
+  expect(final.state.public).toBe("viewer");
+  expect(final.canManage).toBe(true);
+  expect(await (await finalPod.fetch(`${DEMO_ROOT}.acl`)).text()).toBe(rootAcl);
 });
 
 it("preserves uploads from stale tabs and reloads both resources", async () => {
