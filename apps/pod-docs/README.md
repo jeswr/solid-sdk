@@ -41,17 +41,21 @@ Only a missing or forbidden initial collection request produces an empty listing
 continuation-page failures propagate, including after an empty first page.
 Solid Type Index registration resolves `pim:preferencesFile` and its private index before
 falling back to a profile-linked public index, while retaining legacy private profile links.
-Linked preferences and their private index must be inside the selected storage. Unreadable,
+Linked preferences and their private index must be inside a storage the WebID vouches for
+(not necessarily the one selected for documents). Unreadable,
 missing, malformed, or ambiguous preferences fail closed; conflicting legacy and preferences
 private destinations also fail. Discovery follows the same preferences links. The local
 compatibility API retains separately hosted WebIDs and legacy external index documents;
 the shared `@jeswr/pod-type-index` client currently requires a storage-scoped WebID.
-Identity reads follow at most five validated redirects, retaining the canonical document
-URL and its ETag for conditional writes. Preferences redirects must remain within storage
-vouched for by the WebID or the injected client. HTTPS cannot downgrade to HTTP; hidden
-redirects fail closed. For local CSS, explicitly pass `allowInsecureLoopback: true` to the
-store or `DocumentBrowser` (or the options of the Type Index functions). This permits only
-loopback HTTP. The web host uses the same loopback-origin opt-in as its authentication.
+In Node, identity reads follow at most five redirects, each validated, retaining the
+canonical document URL and its ETag for conditional writes. Browsers expose manual redirects
+only as opaque responses, so there the read is repeated with credentials omitted and native
+redirect following; the browser's own hop limit applies and only the final URL is validated
+(against the same rules), then used as the canonical URL. Either way, preferences must end
+within storage vouched for by the WebID or the injected client, and HTTPS cannot downgrade
+to HTTP. For local CSS, explicitly pass `allowInsecureLoopback: true` to the store or
+`DocumentBrowser` (or the options of the Type Index functions). This permits only loopback
+HTTP. The web host enables it only in development builds (`import.meta.env.DEV`).
 LWS has no Solid Type Index bootstrap,
 and sharing reports unsupported where pod-access does not implement the access model.
 
