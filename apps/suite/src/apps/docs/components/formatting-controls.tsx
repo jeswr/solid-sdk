@@ -121,7 +121,7 @@ export function ColourGrid({
               ? 0
               : event.key === "End"
                 ? DOCUMENT_COLOURS.length - 1
-                : (index + (delta ?? 0) + DOCUMENT_COLOURS.length) % DOCUMENT_COLOURS.length;
+                : (index + (delta as number) + DOCUMENT_COLOURS.length) % DOCUMENT_COLOURS.length;
           setTab(next);
           ref.current?.querySelector<HTMLElement>(`[data-swatch="${next}"]`)?.focus();
         }}

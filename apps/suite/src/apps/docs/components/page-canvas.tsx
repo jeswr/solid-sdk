@@ -22,7 +22,8 @@ export function PageCanvas({
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setHeight(entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height + 194);
     });
-    if (page.current) observer.observe(page.current);
+    // The layout effect runs after the article ref is attached.
+    observer.observe(page.current as HTMLElement);
     return () => observer.disconnect();
   }, []);
   return (

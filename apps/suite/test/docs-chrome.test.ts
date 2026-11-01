@@ -8,7 +8,11 @@ import { TooltipProvider } from "@jeswr/suite-ui";
 import { Editor } from "@tiptap/react";
 import { createRef, createElement as h, type ReactElement, useEffect, useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { EditorMenubar, type EditorMenubarProps } from "../src/apps/docs/components/editor-menubar";
+import {
+  EditorMenubar,
+  type EditorMenubarProps,
+  openMenuAfter,
+} from "../src/apps/docs/components/editor-menubar";
 import { CountPopover } from "../src/apps/docs/components/editor-popovers";
 import { EditorToolbar } from "../src/apps/docs/components/editor-toolbar";
 import {
@@ -33,11 +37,13 @@ const { render, cleanup, fireEvent, screen, act } = requireUi("@testing-library/
   cleanup: () => void;
   fireEvent: {
     keyDown: (element: Element, options: object) => void;
+    mouseDown: (element: Element) => boolean;
     focus: (element: Element) => void;
     blur: (element: Element) => void;
     change: (element: Element, options: object) => void;
     click: (element: Element) => void;
     pointerEnter: (element: Element) => void;
+    pointerDown: (element: Element, options?: object) => void;
   };
   screen: {
     getByRole: (role: string, options?: { name?: string | RegExp; exact?: boolean }) => HTMLElement;
@@ -273,6 +279,100 @@ it("switches open menus with arrows and pointers, handles typeahead and nested-m
   expect(options.help).toHaveBeenCalledOnce();
 });
 
+it("opens the last item with ArrowUp and keeps submenu and pointer switches inside the menu bar", async () => {
+  const editor = create();
+  render(h(EditorMenubar, props(editor)));
+  const file = menuitem("File");
+  // Pointer movement between triggers only switches menus while one is open.
+  fireEvent.pointerEnter(menuitem("Edit"));
+  expect(screen.queryByRole("menu")).toBeNull();
+  await act(() => file.focus());
+  key(file, "ArrowUp");
+  await vi.waitFor(() => expect(document.activeElement?.textContent).toBe("Print Ctrl+P"));
+  // Keys inside a submenu belong to the submenu, not to menu bar traversal.
+  await openSub("Download");
+  const word = menuitem("Microsoft Word (.docx)");
+  await act(() => word.focus());
+  key(word, "ArrowRight");
+  expect(screen.getAllByRole("menu")).toHaveLength(2);
+  expect(menuitem("File").getAttribute("aria-expanded")).toBe("true");
+  // A sub-trigger opens its submenu with ArrowRight instead of moving to the next menu.
+  key(word, "ArrowLeft");
+  await vi.waitFor(() => expect(screen.getAllByRole("menu")).toHaveLength(1));
+  const download = menuitem("Download");
+  await act(() => download.focus());
+  key(download, "ArrowRight");
+  await vi.waitFor(() => expect(screen.getAllByRole("menu")).toHaveLength(2));
+  expect(menuitem("File").getAttribute("aria-expanded")).toBe("true");
+  key(document.activeElement as Element, "Escape");
+  await vi.waitFor(() => expect(document.activeElement).toBe(menuitem("File")));
+  // Pressing another trigger opens it; the open menu's outside dismissal cannot close it.
+  await openMenu("File");
+  fireEvent.pointerDown(menuitem("Edit"), { button: 0, ctrlKey: false });
+  await vi.waitFor(() => expect(menuitem("Edit").getAttribute("aria-expanded")).toBe("true"));
+  expect(menuitem("File").getAttribute("aria-expanded")).toBe("false");
+  expect(screen.getAllByRole("menu")).toHaveLength(1);
+});
+
+it("ignores a stale close from a menu the bar already switched away from", () => {
+  expect(openMenuAfter(null, "File", true)).toBe("File");
+  expect(openMenuAfter("File", "Edit", true)).toBe("Edit");
+  expect(openMenuAfter("File", "File", false)).toBeNull();
+  expect(openMenuAfter("Edit", "File", false)).toBe("Edit");
+});
+
+it("runs clipboard, full screen and offline-aware Insert commands", async () => {
+  const editor = create();
+  const clipboard = {
+    writeText: vi.fn(async (_text: string) => {}),
+    readText: vi.fn(async () => "Pasted"),
+  };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+  let fullscreen: Element | null = null;
+  const requestFullscreen = vi.fn(async () => {
+    fullscreen = document.documentElement;
+  });
+  const exitFullscreen = vi.fn(async () => {
+    fullscreen = null;
+  });
+  Object.defineProperty(document.documentElement, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreen,
+  });
+  try {
+    const view = render(h(EditorMenubar, props(editor)));
+    editor.commands.setTextSelection({ from: 1, to: 4 });
+    await openMenu("Edit");
+    await selectItem("Copy Ctrl+C");
+    await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenLastCalledWith("One"));
+    await openMenu("Edit");
+    await selectItem("Cut Ctrl+X");
+    await vi.waitFor(() => expect(editor.getText()).toBe(" two three"));
+    await openMenu("Edit");
+    await selectItem("Paste Ctrl+V");
+    await vi.waitFor(() => expect(editor.getText()).toBe("Pasted two three"));
+    for (const expected of [requestFullscreen, exitFullscreen]) {
+      await openMenu("View");
+      await selectItem("Full screen");
+      await vi.waitFor(() => expect(expected).toHaveBeenCalledOnce());
+    }
+    view.rerender(h(EditorMenubar, props(editor, { online: false })));
+    await openMenu("Insert");
+    expect(menuitem("Insert image").getAttribute("data-disabled")).toBe("");
+    expect(menuitem("Insert table").hasAttribute("data-disabled")).toBe(false);
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+    Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+    Reflect.deleteProperty(document, "exitFullscreen");
+    Reflect.deleteProperty(document, "fullscreenElement");
+  }
+});
+
 it("runs file actions after menus close and preserves keyboard focus for Rename", async () => {
   const editor = create();
   const input = document.createElement("input");
@@ -398,6 +498,9 @@ it("edits font family and point size with typing, bounds, steppers and reset", a
   key(size, "Enter");
   expect(editor.getAttributes("textStyle").fontSize).toBe("14pt");
   view.rerender(h("div", null, h(FontSelect, { editor }), h(FontSizeControl, { editor })));
+  // Pressing a size button keeps the text selection: the button never takes focus.
+  for (const name of ["Increase font size", "Decrease font size"])
+    expect(fireEvent.mouseDown(button(name))).toBe(false);
   fireEvent.click(button("Increase font size"));
   expect(editor.getAttributes("textStyle").fontSize).toBe("15pt");
   view.rerender(h("div", null, h(FontSelect, { editor }), h(FontSizeControl, { editor })));

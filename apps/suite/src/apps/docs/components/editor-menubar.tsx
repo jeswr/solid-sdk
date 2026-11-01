@@ -90,6 +90,16 @@ export interface EditorMenubarProps {
   help: () => void;
 }
 
+/**
+ * The open menu after `label` reports an open change. A close reported by a menu
+ * the bar has already switched away from (for example a dismissal while its exit
+ * animation still has it mounted) must not close the newly opened menu.
+ */
+export function openMenuAfter(current: string | null, label: string, expanded: boolean) {
+  if (expanded) return label;
+  return current === label ? null : current;
+}
+
 /** Radix owns menu/submenu navigation and typeahead; this adds menubar traversal. */
 export function EditorMenubar(props: EditorMenubarProps) {
   const { editor, actions, mac, readOnly } = props;
@@ -288,7 +298,7 @@ export function EditorMenubar(props: EditorMenubarProps) {
           modal={false}
           open={open === label}
           onOpenChange={(expanded) => {
-            setOpen((current) => (expanded ? label : current === label ? null : current));
+            setOpen((current) => openMenuAfter(current, label, expanded));
           }}
         >
           <DropdownMenuTrigger asChild>
@@ -366,14 +376,11 @@ export function EditorMenubar(props: EditorMenubarProps) {
               run?.();
             }}
             onKeyDown={(event) => {
+              // Radix already handled keys that open or close a submenu (including
+              // ArrowRight on a sub-trigger), and submenu keys belong to the submenu.
               if (
                 event.defaultPrevented ||
                 (event.target as HTMLElement).closest('[role="menu"]') !== event.currentTarget
-              )
-                return;
-              if (
-                event.key === "ArrowRight" &&
-                (event.target as HTMLElement).closest('[data-slot="dropdown-menu-sub-trigger"]')
               )
                 return;
               if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
