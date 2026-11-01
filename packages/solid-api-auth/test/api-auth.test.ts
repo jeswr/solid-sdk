@@ -423,6 +423,30 @@ describe("DpopApiVerifier — authentication failures (401)", () => {
     }
   });
 
+  it("rejects a replay whose jti expires while the request is still being checked", async () => {
+    const start = Math.floor(Date.now() / 1000) * 1000;
+    let clock = start;
+    let advanceOnMark = 0;
+    const store = new InProcessReplayStore({ now: () => clock });
+    const verifier = makeVerifier({
+      now: () => clock,
+      replayStore: {
+        mark(jti, ttl) {
+          clock += advanceOnMark;
+          return store.mark(jti, ttl);
+        },
+      },
+    });
+    const token = await mintAccessToken({ exp: nowSec() + 3600 });
+    const proof = await mintProof({ accessToken: token, iat: Math.floor(start / 1000) + 5 });
+    const request = () => mkRequest({ authorization: `DPoP ${token}`, dpop: proof });
+    await verifier.authorizeOwner(request());
+    // Fresh when checked, but the store only runs after the jti's entry has expired.
+    clock = start + 310_999;
+    advanceOnMark = 2;
+    await expectStatus(verifier.authorizeOwner(request()), 401);
+  });
+
   it("401: proof missing iat (presence enforced, not only range)", async () => {
     const token = await mintAccessToken();
     const proof = await mintProof({ accessToken: token, noIat: true });
