@@ -196,8 +196,12 @@ export interface GetPendingConsentRequest {
 export interface ConsentDecisionMessage {
   readonly type: 'SOLID_CONSENT_DECISION';
   readonly consentId: string;
-  /** The data-class IRIs the user APPROVED (a subset of the requested set); [] ⇒ denied all. */
-  readonly approvedClasses: readonly string[];
+  /**
+   * Per approved class, the opaque ids of the targets the person selected (BWC3 C5). Every id
+   * must belong to that class in the pending snapshot or the decision is refused; a class with
+   * no selected id is not granted; `{}` denies everything.
+   */
+  readonly approvedTargets: Readonly<Record<string, readonly string[]>>;
   readonly profileId?: string;
 }
 
@@ -213,7 +217,15 @@ export interface PendingConsentView {
     readonly modes: readonly string[];
     readonly purpose: string | null;
     readonly expiresAt: number;
-    readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+    readonly targets: ReadonlyArray<{
+      readonly id: string;
+      readonly url: string;
+      readonly kind: 'instance' | 'container';
+      /** Which rung found it: SAI data registries or the Type Index. */
+      readonly source: 'sai' | 'type-index';
+      readonly check: 'conforms' | 'mixed' | 'unchecked';
+      readonly preselected: boolean;
+    }>;
     readonly shape: string | null;
     readonly truncated?: boolean;
   }>;

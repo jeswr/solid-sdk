@@ -37,7 +37,7 @@ describe("Pages workflow", () => {
   it.each([
     "apps/pod-drive/web/src/App.tsx",
     "packages/app-shell/src/index.ts",
-    "tools/federation-codegen/package.json",
+    "tools/storage-conformance/package.json",
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",

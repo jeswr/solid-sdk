@@ -21,6 +21,7 @@ import {
   Menu,
   MessageSquare,
   Search,
+  SquareCheckBig,
   Users,
   Wallet,
 } from "lucide-react";
@@ -37,7 +38,8 @@ export type SuiteAppId =
   | "mail"
   | "chat"
   | "money"
-  | "health";
+  | "health"
+  | "tasks";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
@@ -49,6 +51,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
 ];
 
 export interface SuiteFrameProps {
