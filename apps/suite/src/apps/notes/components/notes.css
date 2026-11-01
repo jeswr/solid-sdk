@@ -1,0 +1,650 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+[data-note-colour] {
+  --note-bg: #fff;
+  --note-fg: #202124;
+  background: var(--note-bg);
+  color: var(--note-fg);
+}
+[data-note-colour="red"] {
+  --note-bg: #fce1df;
+}
+[data-note-colour="orange"] {
+  --note-bg: #ffe7cf;
+}
+[data-note-colour="yellow"] {
+  --note-bg: #fff2b5;
+}
+[data-note-colour="green"] {
+  --note-bg: #dcecc9;
+}
+[data-note-colour="teal"] {
+  --note-bg: #d2efea;
+}
+[data-note-colour="blue"] {
+  --note-bg: #dce9fa;
+}
+[data-note-colour="purple"] {
+  --note-bg: #e9dffa;
+}
+[data-note-colour="pink"] {
+  --note-bg: #f9ddec;
+}
+[data-note-colour="brown"] {
+  --note-bg: #eadfce;
+}
+[data-note-colour="grey"] {
+  --note-bg: #e8eaed;
+}
+.dark [data-note-colour] {
+  --note-bg: #25262a;
+  --note-fg: #f3f4f5;
+}
+.dark [data-note-colour="red"] {
+  --note-bg: #532e2e;
+}
+.dark [data-note-colour="orange"] {
+  --note-bg: #523a26;
+}
+.dark [data-note-colour="yellow"] {
+  --note-bg: #4b4428;
+}
+.dark [data-note-colour="green"] {
+  --note-bg: #33452b;
+}
+.dark [data-note-colour="teal"] {
+  --note-bg: #254842;
+}
+.dark [data-note-colour="blue"] {
+  --note-bg: #2d3e55;
+}
+.dark [data-note-colour="purple"] {
+  --note-bg: #403450;
+}
+.dark [data-note-colour="pink"] {
+  --note-bg: #503249;
+}
+.dark [data-note-colour="brown"] {
+  --note-bg: #493e34;
+}
+.dark [data-note-colour="grey"] {
+  --note-bg: #3c3f43;
+}
+.notes-boot {
+  min-height: 70vh;
+  display: grid;
+  place-content: center;
+  gap: 16px;
+  text-align: center;
+}
+.notes-sidebar {
+  padding: 24px 12px;
+}
+.notes-sidebar h2 {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 0 12px;
+  margin: 0 0 28px;
+  font-size: 22px;
+  font-weight: 600;
+}
+.notes-sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.notes-sidebar :where(nav) > a,
+.notes-sidebar :where(nav) > button {
+  display: flex;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--foreground);
+  text-decoration: none;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.notes-sidebar :where(nav) > a[aria-current] {
+  background: var(--accent);
+  font-weight: 600;
+}
+.notes-sidebar hr {
+  margin: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.notes-workspace {
+  padding: 24px 28px 56px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.notes-page-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.notes-page-heading h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+.notes-page-heading p {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+.notes-capture {
+  max-width: 600px;
+  margin: 0 auto 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #00000012;
+  padding: 8px 12px;
+}
+.notes-capture-collapsed {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.notes-capture input:not([type="checkbox"]),
+.notes-capture textarea,
+.notes-dialog :where(.notes-title-input) {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+}
+.notes-capture input::placeholder,
+.notes-capture textarea::placeholder,
+.notes-dialog input::placeholder {
+  color: inherit;
+  opacity: 0.7;
+}
+.notes-capture input:focus-visible,
+.notes-capture textarea:focus-visible {
+  outline: 2px solid var(--ring);
+}
+.notes-title-input {
+  font-size: 20px;
+  font-weight: 600;
+  min-height: 44px;
+  width: 100%;
+}
+.notes-capture-body {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 12px;
+  resize: vertical;
+  font: inherit;
+}
+.notes-capture-footer,
+.notes-dialog-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.notes-capture-footer {
+  margin-top: 10px;
+}
+.notes-close-capture {
+  margin-left: auto;
+}
+.notes-capture-list > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 8px;
+}
+.notes-section-heading {
+  margin: 24px 0 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.notes-grid {
+  /* Row-major grid so reading order matches pinned-then-recent order (CSS columns fill top to bottom). */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.notes-card {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--note-fg) 24%, transparent);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  transition: box-shadow 120ms ease;
+}
+.notes-card:hover,
+.notes-card:focus-within {
+  box-shadow: 0 3px 12px #0000001f;
+}
+.notes-card-body {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 18px 16px 12px;
+  cursor: pointer;
+}
+.notes-card-body:focus-visible {
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+.notes-card h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.notes-excerpt {
+  margin: 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+.notes-checklist-preview {
+  padding: 0 16px;
+  margin: 0 0 10px;
+  list-style: none;
+}
+.notes-checklist-preview li {
+  margin: 4px 0;
+}
+.notes-checklist-preview label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.notes-checklist-preview [data-checked="true"] {
+  text-decoration: line-through;
+}
+.notes-more-items {
+  font-size: 12px;
+  padding-left: 24px;
+}
+.notes-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 4px 8px 8px;
+}
+.notes-card-actions [data-slot="button"] {
+  width: 32px;
+  min-width: 28px;
+  height: 32px;
+}
+.notes-card button,
+.notes-dialog button:where([data-variant="ghost"], [data-variant="outline"], [data-variant="link"]),
+.notes-capture button {
+  color: inherit;
+}
+.notes-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.notes-card > .notes-labels {
+  padding: 0 14px 8px;
+}
+.notes-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  text-decoration: none;
+  font-size: 11px;
+  padding: 3px 8px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.notes-chip:hover {
+  text-decoration: underline;
+}
+.notes-empty {
+  min-height: 45vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+.notes-empty h2 {
+  font-weight: 400;
+  font-size: 18px;
+}
+.notes-trash-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  font-size: 13px;
+}
+.notes-skeleton {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.notes-workspace[data-view="list"] .notes-grid {
+  grid-template-columns: 1fr;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.notes-workspace[data-view="list"] .notes-section-heading {
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.notes-popover {
+  width: min(340px, calc(100vw - 24px));
+}
+.notes-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.notes-swatches legend {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.notes-swatch {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--note-fg);
+  border-radius: 50%;
+  position: relative;
+  cursor: pointer;
+}
+.notes-swatch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.notes-swatch:has(:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.notes-swatch span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 20px;
+}
+.notes-more-menu {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  width: 200px;
+}
+.notes-more-menu button {
+  justify-content: flex-start;
+}
+.notes-new-label {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.notes-new-label input {
+  min-width: 0;
+}
+.notes-edit-labels {
+  width: min(600px, calc(100vw - 24px));
+  max-width: 600px;
+}
+.notes-label-editor {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.notes-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.notes-label-row input {
+  min-width: 0;
+}
+.notes-label-row > svg {
+  flex-shrink: 0;
+}
+.notes-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.notes-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(640px, calc(100vw - 32px));
+  max-width: 640px;
+  max-height: calc(100dvh - 64px);
+  padding: 24px;
+}
+.notes-editor {
+  min-height: 140px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.notes-editor .tiptap {
+  outline: none;
+  min-height: 140px;
+  padding: 8px 4px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.notes-editor .tiptap:focus-visible {
+  box-shadow: inset 2px 0 var(--ring);
+}
+.notes-editor p {
+  margin: 0 0 10px;
+}
+.notes-editor h1 {
+  font-size: 26px;
+  font-weight: 600;
+}
+.notes-editor h2 {
+  font-size: 22px;
+  font-weight: 600;
+}
+.notes-editor h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.notes-editor ul {
+  list-style: disc;
+  padding-left: 24px;
+}
+.notes-editor ol {
+  list-style: decimal;
+  padding-left: 24px;
+}
+.notes-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.notes-editor ul[data-type="taskList"] > li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.notes-editor ul[data-type="taskList"] > li > label {
+  padding-top: 2px;
+  flex: 0 0 auto;
+}
+.notes-editor ul[data-type="taskList"] > li > div {
+  flex: 1;
+  min-width: 0;
+}
+.notes-editor li[data-checked="true"] > div > p {
+  text-decoration: line-through;
+}
+.notes-editor .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  opacity: 0.7;
+}
+.notes-editor a {
+  color: inherit;
+  text-decoration: underline;
+}
+.notes-dialog-footer {
+  border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  padding-top: 12px;
+  flex: 0 0 auto;
+}
+.notes-dialog-actions {
+  margin-top: 8px;
+}
+.notes-dialog-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-top: 12px;
+}
+.notes-dialog-status [role="status"] {
+  min-width: 50px;
+}
+.notes-conflict {
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 12px;
+}
+.notes-conflict p {
+  margin: 0 0 10px;
+}
+.notes-conflict button {
+  margin-right: 8px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .notes-card-actions {
+    opacity: 0;
+  }
+  .notes-card:hover .notes-card-actions,
+  .notes-card:focus-within .notes-card-actions {
+    opacity: 1;
+  }
+}
+@media (max-width: 639px) {
+  .notes-workspace {
+    padding: 20px 12px 40px;
+  }
+  .notes-page-heading {
+    margin-bottom: 20px;
+  }
+  .notes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .notes-card-body {
+    padding: 14px 12px 8px;
+  }
+  .notes-card-actions {
+    padding: 4px;
+  }
+  .notes-card-actions [data-slot="button"] {
+    width: 28px;
+  }
+  .notes-card h3 {
+    font-size: 15px;
+  }
+  .notes-checklist-preview {
+    padding: 0 10px;
+  }
+  .notes-capture {
+    margin-bottom: 28px;
+  }
+  .notes-trash-banner {
+    align-items: flex-start;
+  }
+  .notes-dialog {
+    top: 0;
+    left: 0;
+    transform: none;
+    translate: none;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 20px 16px;
+    gap: 12px;
+  }
+  .notes-dialog-status {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .notes-dialog .suite-toolbar-wrap {
+    flex-shrink: 0;
+  }
+  .notes-label-row {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 359px) {
+  .notes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-card {
+    transition: none;
+  }
+}
+
+/* The global form-control touch-target height would push checklist text below its box. */
+.notes-checklist-preview input[type="checkbox"],
+.notes-editor ul[data-type="taskList"] input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  flex: none;
+}
+.notes-editor ul[data-type="taskList"] > li > label {
+  display: flex;
+  align-items: center;
+  min-height: 1.7em;
+  padding-top: 0;
+}
+.notes-editor ul[data-type="taskList"] > li p {
+  margin: 0;
+}

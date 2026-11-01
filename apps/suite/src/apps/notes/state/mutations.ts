@@ -52,6 +52,8 @@ export function useNotesMutations(store: NotesStore, refresh: () => Promise<unkn
         title: input.title ?? "",
         body: input.body ?? "",
         labels: [...(input.labels ?? [])],
+        created: new Date().toISOString(),
+        modified: new Date().toISOString(),
         format: "text/html",
         location: "active",
         revisions: [],
