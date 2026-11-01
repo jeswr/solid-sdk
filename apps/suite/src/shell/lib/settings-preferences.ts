@@ -43,6 +43,8 @@ export const preferencesSchema = z.object({
     })
     .catch({ enabled: false, start: "22:00", end: "08:00" }),
   offline: z.boolean().catch(true),
+  /** Set once the first-use offline hint toast has been shown for this account. */
+  offlineHintSeen: z.boolean().catch(false),
   technicalDetails: z.boolean().catch(false),
   accountIds: z.boolean().catch(false),
 });

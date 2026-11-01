@@ -14,7 +14,7 @@ import {
   type ShellFrameProps,
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
-import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
+import { OfflinePill } from "@jeswr/suite-ui/sync";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
 import { AccountMenu } from "./account/account-menu";
@@ -29,7 +29,9 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
+import { OfflineProvider } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
+import { ShellSyncSheet } from "./sync/shell-sync-sheet";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -144,14 +146,7 @@ function Frame({
       >
         {children}
       </ShellFrame>
-      <SyncSheet
-        open={syncOpen}
-        onOpenChange={setSyncOpen}
-        snapshot={sync}
-        onRetryAll={() => {}}
-        onRetry={() => {}}
-        onResolve={() => {}}
-      />
+      <ShellSyncSheet open={syncOpen} onOpenChange={setSyncOpen} />
     </RailPreferencesProvider>
   );
 }
@@ -171,7 +166,9 @@ export function SuiteShell(props: SuiteShellProps) {
       <SessionGuard>
         <ShortcutsProvider>
           <ReadyShortcuts />
-          <Frame {...props} />
+          <OfflineProvider pageTitle={props.pageTitle}>
+            <Frame {...props} />
+          </OfflineProvider>
         </ShortcutsProvider>
       </SessionGuard>
     </Suspense>
