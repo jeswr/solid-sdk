@@ -10,16 +10,20 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { FileText, HardDrive, Menu, Search } from "lucide-react";
+import { FileText, HardDrive, HeartPulse, Images, Menu, Music, Search, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs";
+export type SuiteAppId = "drive" | "docs" | "photos" | "music" | "money" | "health";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "photos", label: "Photos", href: "/photos", icon: Images },
+  { id: "music", label: "Music", href: "/music", icon: Music },
+  { id: "money", label: "Money", href: "/money", icon: Wallet },
+  { id: "health", label: "Health", href: "/health", icon: HeartPulse },
 ];
 
 export interface SuiteFrameProps {
