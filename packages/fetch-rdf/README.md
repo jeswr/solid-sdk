@@ -5,7 +5,7 @@
 
 # @jeswr/fetch-rdf
 
-Canonical fetch + parse helpers for Solid RDF resources.
+Canonical fetch + parse helpers for Solid RDF resources. Pure ESM, Node ≥24.
 
 Two functions, one error class. `parseRdf` dispatches a body
 (string or `ReadableStream<Uint8Array>`) on its `Content-Type`.
@@ -24,16 +24,8 @@ Solid workspace.
 npm install @jeswr/fetch-rdf
 ```
 
-Sub-packages in this workspace pull it via a file dep; other repos via
-a git dep:
-
-```jsonc
-// file dep (sub-repos in this workspace)
-"@jeswr/fetch-rdf": "file:../fetch-rdf"
-
-// git dep (everything else, until we publish)
-"@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main"
-```
+Workspace consumers use `"@jeswr/fetch-rdf": "workspace:*"`. External consumers
+install the npm package or use an existing build-mirror git pin.
 
 ## Usage
 
@@ -54,13 +46,59 @@ const ds = await parseRdf(turtleBody, 'text/turtle', {
 });
 ```
 
-`dataset` is an [`N3.Store`](https://github.com/rdfjs/N3.js#storing),
+By default, `dataset` is an [`N3.Store`](https://github.com/rdfjs/N3.js#storing),
 which implements `RDF.DatasetCore`/`RDF.Dataset`/`RDF.Store`.
 
 The result also retains the legacy `etag`, `url`, `contentType`, and `response`
 fields: `etag` is the unmodified validator or `null`; `url` is the final response
 URL (falling back to the requested URL); `contentType` is the lowercase media
 type without parameters, or `null`; `response` is the original consumed response.
+
+### Security and cancellation
+
+The default transport is `globalThis.fetch`: browser-safe and transport-neutral.
+**Server-side callers handling untrusted URLs must inject a guarded fetch**, such
+as `createNodeGuardedFetch` from `@jeswr/guarded-fetch/node`, to enforce address
+policy and DNS pinning. This library does not prevent SSRF. Inject an authenticated
+fetch explicitly for protected resources; selecting the global does not provide
+authentication by itself. An injected transport remains responsible for credentials
+it adds itself and for generating any URL-bound DPoP proofs.
+
+With no caller headers beyond `Accept`, native redirect following is unchanged.
+Supplying any other request header enables manual redirect handling: at most ten
+HTTP(S) hops, retaining headers on same-origin hops and dropping every caller
+header except `Accept` on a cross-origin hop (also on subsequent hops back).
+All requests are GETs, including after 301/302/303. Non-HTTP(S) locations and browser
+`opaqueredirect` responses reject with `RdfFetchError` (`code: "REDIRECT"`). The
+context loader always refuses redirects. A guarded transport may refuse redirects
+more strictly. Response metadata and relative-IRI resolution use the final URL.
+
+Both functions accept `signal`. Aborting rejects promptly with the signal's reason (an `AbortError` by default, as native fetch does),
+cancels body reads and signals context loads; no dataset is returned. A custom
+loader receives an optional second argument `{ signal, maxBytes }` and should pass
+the signal to its I/O. Opaque engine/custom-loader work that ignores cancellation
+may continue internally, but its late result cannot complete the operation.
+
+### Parse budgets
+
+`ParseRdfOptions` and `FetchRdfOptions` accept these finite, nonnegative integer
+limits (`maxContextConcurrency` must be positive). Increase them explicitly for
+larger trusted resources. Exceeding a budget rejects with `RdfFetchError`
+(`code: "PARSE_LIMIT"`) and cancels the input without waiting for cleanup.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `maxBytes` | 16 MiB (16,777,216) | UTF-8 input bytes, checked during body reads and before parsing strings; also bounds the engine buffer and each helper-loaded context response. |
+| `maxQuads` | 1,000,000 | Constructed quads, counting duplicates before dataset deduplication. |
+| `maxTermLength` | 1 MiB (1,048,576 characters) | Each expanded term value, including IRI, literal, graph and datatype values. |
+| `maxTotalTermLength` | 64 MiB (67,108,864 characters) | Aggregate constructed term characters and aggregate term values across quads (each bounded independently), including repeats, datatype IRIs and language tags. |
+| `maxContextRequests` | 32 | Context load attempts per parse after coalescing in-flight duplicates, including nested contexts. |
+| `maxContextConcurrency` | 4 | Simultaneous context loads per parse; excess requests queue. |
+
+Character budgets count JavaScript UTF-16 code units, rather than UTF-8 bytes.
+Term construction and quad budgets run inside the parser's data factory before
+terms enter expansion buffers or quads enter the dataset. They bound retained RDF expansion, rather
+than providing a general CPU or JSON nesting limit.
 
 ### JSON-LD remote contexts
 
@@ -79,7 +117,24 @@ const result = await fetchRdf(resourceUrl, { fetch: authFetch, documentLoader })
 
 The helper checks every context URL before fetching, uses only the supplied
 transport, and refuses redirects. Nested remote contexts must also be allowlisted.
-An offline loader can instead implement `{ async load(url) { /* return context */ } }`.
+In-flight requests for the same URL coalesce within each parse. The helper also
+coalesces calls sharing an operation signal. Its options additionally accept
+`signal`, `timeoutMs` (per-context deadline, including body reading; no default
+deadline) and `maxBytes` (default 16 MiB). The effective context byte limit is the
+smaller of the helper limit and the parse limit. A deadline rejects parsing with
+`AbortError` and aborts other context loads.
+
+An offline loader can return only bundled allowlisted contexts:
+
+```ts
+const documentLoader = {
+  async load(url: string) {
+    if (url === 'https://www.w3.org/ns/activitystreams') return bundledAs2Context;
+    throw new Error('Context refused');
+  },
+};
+const dataset = await parseRdf(body, 'application/ld+json', { documentLoader });
+```
 
 ### Optional RDF engine
 
@@ -100,10 +155,12 @@ try {
 ```
 
 Without `engine`, parsing and `Store` return types stay unchanged. With `engine`,
-stream bodies are buffered before `engine.parse`; its dataset is returned directly,
+stream bodies are bounded by `maxBytes` and buffered, then passed to `engine.parse`
+(which applies its own parse limits) without a second parse; the result is checked
+against `maxQuads` and returned directly,
 typed as `DatasetCore` (`FetchedRdf<DatasetCore>` for fetch results). Engine failures
 are wrapped in `RdfFetchError`, preserving their cause, media type and resource URL.
-The caller owns the engine lifecycle. The `engine` option accepts the exported
+Term-length budgets apply only to the default parser. The caller owns the engine lifecycle. The `engine` option accepts the exported
 structural `RdfParser` interface: only `parse(string, mediaType, { baseIri? })`
 returning `Promise<DatasetCore>` is required. fetch-rdf has no production or type
 dependency on rdf-engine; callers provide it separately. The default path does
@@ -122,13 +179,18 @@ text/turtle, application/ld+json;q=0.9
 ```
 
 Solid Protocol §5.2 only requires servers to support these two RDF
-media types, and they are the only formats we know how to parse — so
-the header is fixed rather than tunable.
+media types. The fixed header advertises those two; the parser additionally
+accepts N-Triples, N-Quads and TriG responses. Caller `headers.accept` is overridden;
+there is no separate `accept` option or exported `DEFAULT_ACCEPT`.
 
 ### Errors
 
-Everything throws `RdfFetchError`. The error carries discriminator
-fields so callers can branch without string-matching the message:
+Fetch and parse failures throw `RdfFetchError`; cancellation throws the abort reason (`AbortError` by default). The error carries discriminator
+fields so callers can branch without string-matching the message. Its optional
+`code` identifies `PARSE_LIMIT` or `REDIRECT` failures. Error messages, `.url` and
+nested causes redact URL userinfo, query and fragment; successful response
+metadata retains the actual final URL. Safe causes retain their identity:
+
 
 ```ts
 try {

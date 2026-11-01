@@ -14,7 +14,9 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
+import { abortable, abortError, checkAbort, isAbortError } from "./operation.js";
 import { extractMediaType, parseRdf } from "./parse.js";
+import { redactUrl } from "./redact.js";
 import type { FetchedRdf, FetchRdfOptions } from "./types.js";
 
 /**
@@ -57,25 +59,86 @@ export async function fetchRdf(
   headers.set("accept", ACCEPT);
 
   let response: Response;
+  let pendingResponse: Response | undefined;
+  let finalUrl = url;
   try {
-    response = await fetchImpl(url, {
-      headers,
-      ...(options.signal !== undefined && { signal: options.signal }),
-    });
+    checkAbort(options.signal);
+    const manual = [...headers.keys()].some((name) => name !== "accept");
+    let hopHeaders = headers;
+    for (let hop = 0; ; hop++) {
+      response = await abortable(
+        fetchImpl(finalUrl, {
+          headers: hopHeaders,
+          ...(manual && { redirect: "manual" }),
+          ...(options.signal !== undefined && { signal: options.signal }),
+        }).then((result) => {
+          pendingResponse = result;
+          if (options.signal?.aborted) {
+            void cancelResponseBody(result);
+            throw abortError(options.signal);
+          }
+          return result;
+        }),
+        options.signal,
+      );
+      finalUrl = response.url || finalUrl;
+      if (!manual) break;
+      if (response.type === "opaqueredirect") {
+        void cancelResponseBody(response);
+        throw new RdfFetchError(`Opaque redirect refused fetching ${redactUrl(finalUrl)}.`, {
+          url: finalUrl,
+          code: "REDIRECT",
+        });
+      }
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      const location = response.headers.get("location");
+      if (location === null) break;
+      void cancelResponseBody(response);
+      if (hop >= 10) {
+        throw new RdfFetchError(`Too many redirects fetching ${redactUrl(finalUrl)}.`, {
+          url: finalUrl,
+          code: "REDIRECT",
+        });
+      }
+      let target: URL;
+      try {
+        target = new URL(location, finalUrl);
+      } catch {
+        throw new RdfFetchError(`Invalid redirect fetching ${redactUrl(finalUrl)}.`, {
+          url: finalUrl,
+          code: "REDIRECT",
+        });
+      }
+      if (target.protocol !== "https:" && target.protocol !== "http:") {
+        throw new RdfFetchError(`Non-HTTP redirect refused fetching ${redactUrl(finalUrl)}.`, {
+          url: finalUrl,
+          code: "REDIRECT",
+        });
+      }
+      if (target.origin !== new URL(finalUrl).origin) hopHeaders = new Headers({ accept: ACCEPT });
+      // fetchRdf only issues GETs: 301/302/303 and 307/308 all remain GET.
+      finalUrl = target.href;
+    }
   } catch (cause) {
-    throw new RdfFetchError(`Network error fetching ${url}: ${errorMessage(cause)}`, {
-      cause,
-      url,
-    });
+    if (pendingResponse) void cancelResponseBody(pendingResponse);
+    if (options.signal?.aborted || isAbortError(cause)) throw abortError(options.signal);
+    if (cause instanceof RdfFetchError) throw cause;
+    throw new RdfFetchError(
+      `Network error fetching ${redactUrl(finalUrl)}: ${errorMessage(cause)}`,
+      {
+        cause,
+        url: finalUrl,
+      },
+    );
   }
 
   try {
     if (!response.ok) {
       throw new RdfFetchError(
-        `HTTP ${response.status} ${response.statusText || ""} fetching ${url}.`.trim(),
+        `HTTP ${response.status} ${response.statusText || ""} fetching ${redactUrl(finalUrl)}.`.trim(),
         {
           status: response.status,
-          url: response.url || url,
+          url: finalUrl,
           contentType: response.headers.get("content-type") ?? undefined,
         },
       );
@@ -84,15 +147,15 @@ export async function fetchRdf(
     // `response.body` is null when there's no body (e.g. 204) — fall back
     // to an empty string so parseRdf still returns an (empty) dataset.
     const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
-      baseIRI: response.url || url,
-      ...(options.engine !== undefined && { engine: options.engine }),
-      ...(options.documentLoader !== undefined && { documentLoader: options.documentLoader }),
+      ...options,
+      baseIRI: finalUrl,
     });
+    checkAbort(options.signal);
     return {
       dataset,
       headers: response.headers,
       etag: response.headers.get("etag"),
-      url: response.url || url,
+      url: finalUrl,
       contentType: extractMediaType(response.headers.get("content-type")),
       response,
     };

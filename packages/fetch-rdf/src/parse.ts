@@ -23,29 +23,27 @@ import type { DatasetCore, Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { Parser, Store, StreamParser } from "n3";
-import { refusingDocumentLoader } from "./document-loader.js";
+import {
+  budgetFactory,
+  bufferBody,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_QUADS,
+  limit,
+  parseLimit,
+  utf8Length,
+} from "./budgets.js";
+import { parseDocumentLoader } from "./document-loader.js";
 import { RdfFetchError } from "./errors.js";
+import { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
+import { abortable, abortError, checkAbort, isAbortError } from "./operation.js";
+import { redactUrl } from "./redact.js";
 import type { ParseRdfOptions, RdfMediaType } from "./types.js";
 
-/** Media types this dispatch helper recognises. Anything else triggers
- * an {@link RdfFetchError} rather than a silent best-effort parse. */
-export const SUPPORTED_RDF_MEDIA_TYPES = [
-  "text/turtle",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig",
-  "application/ld+json",
-] as const;
+export { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
 
-/** The set of media types routed to the n3 parser. */
-const N3_FAMILY = new Set<string>([
-  "text/turtle",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig",
-]);
-
-/** The set of media types routed to the JSON-LD streaming parser. */
+const N3_FAMILY = new Set<string>(
+  SUPPORTED_RDF_MEDIA_TYPES.filter((type) => type !== "application/ld+json"),
+);
 const JSON_LD_FAMILY = new Set<string>(["application/ld+json"]);
 
 /** A body we can stream-parse: either a raw string (already in memory)
@@ -120,72 +118,131 @@ export async function parseRdf(
   }
 
   const baseIRI = options.baseIRI;
-
-  if (options.engine && (N3_FAMILY.has(mediaType) || JSON_LD_FAMILY.has(mediaType))) {
-    try {
-      const input = typeof body === "string" ? body : await bufferBody(body);
-      return await options.engine.parse(input, mediaType as RdfMediaType, {
-        ...(baseIRI !== undefined && { baseIri: baseIRI }),
-      });
-    } catch (cause) {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  if (options.signal?.aborted) controller.abort(options.signal.reason);
+  const signal = controller.signal;
+  try {
+    checkAbort(signal);
+    const maxBytes = limit(options.maxBytes, DEFAULT_MAX_BYTES, "maxBytes");
+    if (typeof body === "string" && utf8Length(body) > maxBytes) throw parseLimit("maxBytes");
+    if (!N3_FAMILY.has(mediaType) && !JSON_LD_FAMILY.has(mediaType)) {
       throw new RdfFetchError(
-        `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
-        { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
+        `Unsupported RDF media type: "${mediaType}". Supported: ${SUPPORTED_RDF_MEDIA_TYPES.join(", ")}.`,
+        { contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
       );
     }
-  }
-
-  let parser: QuadTransform;
-  if (N3_FAMILY.has(mediaType)) {
-    if (typeof body === "string") {
-      try {
-        // A stream's `end` event needs a later event-loop turn in Node/jsdom.
-        // Buffered input previously settled during a consumer's microtask flush.
-        return new Store(
-          new Parser({ format: mediaType, ...(baseIRI !== undefined && { baseIRI }) }).parse(body),
-        );
-      } catch (cause) {
-        throw new RdfFetchError(
-          `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
-          { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
-        );
-      }
+    if (options.engine) {
+      const input = typeof body === "string" ? body : await bufferBody(body, maxBytes, signal);
+      // The engine is the fast path, so it is not pre-parsed by the default parser: it
+      // gets byte-capped input, applies its own parse limits, and the quad budget is
+      // re-checked on its result.
+      const dataset = await abortable(
+        options.engine.parse(input, mediaType as RdfMediaType, {
+          ...(baseIRI !== undefined && { baseIri: baseIRI }),
+        }),
+        signal,
+      );
+      checkAbort(signal);
+      const maxQuads = limit(options.maxQuads, DEFAULT_MAX_QUADS, "maxQuads");
+      if (dataset.size > maxQuads) throw parseLimit("maxQuads");
+      return dataset;
     }
-    parser = new StreamParser({
-      format: mediaType,
-      ...(baseIRI !== undefined && { baseIRI }),
-    }) as unknown as QuadTransform;
-  } else if (JSON_LD_FAMILY.has(mediaType)) {
-    parser = new JsonLdParser({
-      ...(baseIRI !== undefined && { baseIRI }),
-      documentLoader: options.documentLoader ?? refusingDocumentLoader,
-    }) as unknown as QuadTransform;
-  } else {
-    throw new RdfFetchError(
-      `Unsupported RDF media type: "${mediaType}". Supported: ${SUPPORTED_RDF_MEDIA_TYPES.join(", ")}.`,
-      { contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
-    );
+    return await parseDefault(body, mediaType, options, signal, maxBytes);
+  } catch (cause) {
+    if (typeof body !== "string" && !body.locked) void body.cancel().catch(() => {});
+    if (signal.aborted || isAbortError(cause)) throw abortError(signal);
+    throw parseError(cause, mediaType, rawHeader, baseIRI);
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+    // Cancel sibling/queued context work on failure, and remove all outstanding listeners.
+    controller.abort();
   }
+}
 
+/** One error factory for all parser backends, preserving structured failures. */
+function parseError(
+  cause: unknown,
+  mediaType: string,
+  rawHeader: string,
+  baseIRI?: string,
+): RdfFetchError {
+  if (cause instanceof RdfFetchError && cause.code === undefined && cause.contentType !== undefined)
+    return cause;
+  return new RdfFetchError(
+    `Failed to parse ${mediaType} body${baseIRI ? ` at ${redactUrl(baseIRI)}` : ""}.`,
+    {
+      cause,
+      ...(cause instanceof RdfFetchError && { code: cause.code }),
+      contentType: rawHeader,
+      ...(baseIRI !== undefined && { url: baseIRI }),
+    },
+  );
+}
+
+function parseDefault(
+  body: RdfBody,
+  mediaType: string,
+  options: ParseRdfOptions,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<Store> {
+  const baseIRI = options.baseIRI;
+  const budget = budgetFactory(options, signal);
+  const factory = budget.factory;
+  if (N3_FAMILY.has(mediaType) && typeof body === "string") {
+    // Keep buffered N3 settlement within a consumer's microtask flush. The
+    // factory enforces budgets before the synchronous parser retains each quad.
+    const parser = new Parser({ format: mediaType, baseIRI, factory });
+    budget.start();
+    return Promise.resolve(new Store(parser.parse(body)));
+  }
+  let parser: QuadTransform;
+  let rejectFailure!: (error: unknown) => void;
+  const failure = new Promise<never>((_resolve, reject) => {
+    rejectFailure = reject;
+  });
+  let cancelPump = (_error: Error) => {};
+  const fail = (error: unknown) => {
+    // An abort reason may be any value; internal stream teardown needs an Error.
+    const asError =
+      error instanceof Error ? error : new DOMException("The operation was aborted.", "AbortError");
+    cancelPump(asError);
+    rejectFailure(error);
+    parser.destroy(asError);
+  };
+  parser = N3_FAMILY.has(mediaType)
+    ? (new StreamParser({ format: mediaType, baseIRI, factory }) as unknown as QuadTransform)
+    : (new JsonLdParser({
+        baseIRI,
+        dataFactory: factory,
+        documentLoader: parseDocumentLoader(options, signal, fail),
+      }) as unknown as QuadTransform);
+  budget.start();
+  const onAbort = () => fail(abortError(signal));
+  signal.addEventListener("abort", onAbort, { once: true });
   const storePromise = collectIntoStore(parser);
-  const pumpPromise = pumpBody(parser, body).catch((cause: unknown) => {
-    // Includes synchronous failures such as acquiring an already-locked body.
+  const pumpPromise = pumpBody(parser, body, maxBytes, signal, (cancel) => {
+    cancelPump = cancel;
+  }).catch((cause: unknown) => {
     parser.destroy(cause instanceof Error ? cause : new Error(String(cause)));
     throw cause;
   });
-  // Observe both immediately: either side can fail while the other is pending.
-  const [storeResult, pumpResult] = await Promise.allSettled([storePromise, pumpPromise]);
-  try {
-    if (pumpResult.status === "rejected") throw pumpResult.reason;
-    if (storeResult.status === "rejected") throw storeResult.reason;
-    return storeResult.value;
-  } catch (cause) {
-    if (cause instanceof RdfFetchError) throw cause;
-    throw new RdfFetchError(
-      `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
-      { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
-    );
-  }
+  // Observe every promise immediately, but never await a stalled sibling after failure.
+  return Promise.race([
+    Promise.all([storePromise, pumpPromise]).then(([store]) => {
+      checkAbort(signal);
+      return store;
+    }),
+    failure,
+  ])
+    .catch(async (cause: unknown) => {
+      cancelPump(cause instanceof Error ? cause : new Error(String(cause)));
+      await pumpPromise.catch(() => {});
+      throw cause;
+    })
+    .finally(() => signal.removeEventListener("abort", onAbort));
 }
 
 /**
@@ -235,19 +292,27 @@ function collectIntoStore(parser: QuadTransform): Promise<Store> {
  *    pump loop and `cancel()` the source `ReadableStream` so we stop
  *    pulling bytes off the network instead of draining the rest of
  *    the response. */
-async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
+async function pumpBody(
+  parser: QuadTransform,
+  body: RdfBody,
+  maxBytes: number,
+  signal: AbortSignal,
+  registerCancel: (cancel: (error: Error) => void) => void,
+): Promise<void> {
   if (typeof body === "string") {
     parser.end(body);
     return;
   }
 
   const reader = body.getReader();
+  let bytes = 0;
   let parserError: Error | null = null;
   const onParserError = (err: Error) => {
     parserError = err;
     // Wake a pending read even when the source never sends another chunk.
     void reader.cancel(err).catch(() => {});
   };
+  registerCancel(onParserError);
   parser.on("error", onParserError);
 
   try {
@@ -255,8 +320,11 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
     for (;;) {
       if (parserError) throw parserError;
       const { done, value } = await reader.read();
+      checkAbort(signal);
       if (done) break;
       if (value === undefined) continue;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) throw parseLimit("maxBytes");
       const text = decoder.decode(value, { stream: true });
       if (text.length === 0) continue;
       if (!parser.write(text)) await waitForDrain(parser);
@@ -268,12 +336,7 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
   } catch (err) {
     parser.destroy(err instanceof Error ? err : new Error(String(err)));
     // Best-effort: abort the source so the network fetch stops too.
-    try {
-      await reader.cancel();
-    } catch {
-      // The reader may already be released or the stream already
-      // errored; we're throwing anyway, so swallow.
-    }
+    void reader.cancel().catch(() => {});
     throw err;
   } finally {
     parser.off("error", onParserError);
@@ -299,29 +362,4 @@ function waitForDrain(parser: QuadTransform): Promise<void> {
     parser.once("drain", onDrain);
     parser.once("error", onError);
   });
-}
-
-/** Engine parsing accepts buffered input; release the source on every exit path. */
-async function bufferBody(body: ReadableStream<Uint8Array>): Promise<string> {
-  const reader = body.getReader();
-  try {
-    const decoder = new TextDecoder();
-    const chunks: string[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value !== undefined) chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join("");
-  } catch (cause) {
-    try {
-      await reader.cancel(cause);
-    } catch {
-      // Keep the original stream failure.
-    }
-    throw cause;
-  } finally {
-    reader.releaseLock();
-  }
 }
