@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SUITE_URL } from "../src/config.ts";
 import {
+  checkBundle,
   prepareNative,
   renderOfflinePage,
   withAppBoundDomain,
@@ -131,6 +133,93 @@ describe("iOS project", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("bundled mode removes the app-bound domains reversibly", () => {
+    const bundled = withAppBoundDomain(plist, { SUITE_MODE: "bundled" });
+    expect(bundled).not.toContain("WKAppBoundDomains</key>");
+    expect(bundled).toContain("WKAppBoundDomains: none in bundled mode");
+    expect(withAppBoundDomain(bundled, { SUITE_MODE: "bundled" })).toBe(bundled);
+    expect(withAppBoundDomain(bundled, {})).toBe(plist);
+    expect(() => withAppBoundDomain("<plist/>", { SUITE_MODE: "bundled" })).toThrow(
+      "WKAppBoundDomains",
+    );
+    const debug = withLocalNetworking(plist, {
+      SUITE_URL: "http://localhost:4173",
+      MOBILE_DEBUG: "1",
+    });
+    expect(
+      withLocalNetworking(debug, {
+        SUITE_MODE: "bundled",
+        SUITE_URL: "http://localhost:4173",
+        MOBILE_DEBUG: "1",
+      }),
+    ).toBe(plist);
+  });
+
+  describe("bundled sync preparation", () => {
+    const exportTree = (root: string, info: Record<string, unknown>, skip = "") => {
+      const dir = join(root, "export");
+      mkdirSync(join(dir, "_next/static"), { recursive: true });
+      writeFileSync(join(dir, "build-info.json"), JSON.stringify(info));
+      for (const name of ["route-manifest.json", "404.html", "index.html", "_next/static/a.js"])
+        if (name !== skip) writeFileSync(join(dir, name), name);
+      return dir;
+    };
+    const good = {
+      target: "native",
+      clientIdUrl: "https://suite.example/.well-known/solid-client-id-mobile.jsonld",
+    };
+    const withRoot = (run: (root: string) => void) => {
+      const root = mkdtempSync(join(tmpdir(), "mobile-bundled-"));
+      try {
+        mkdirSync(join(root, "ios/App/App"), { recursive: true });
+        writeFileSync(join(root, "ios/App/App/Info.plist"), plist);
+        run(root);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    };
+
+    test("copies a checked native export into www-bundled and drops app-bound domains", () =>
+      withRoot((root) => {
+        const dir = exportTree(root, good);
+        mkdirSync(join(root, "www-bundled"));
+        writeFileSync(join(root, "www-bundled/stale.html"), "stale");
+        prepareNative(pathToFileURL(`${root}/`), { SUITE_MODE: "bundled", SUITE_EXPORT_DIR: dir });
+        expect(readFileSync(join(root, "www-bundled/_next/static/a.js"), "utf8")).toBe(
+          "_next/static/a.js",
+        );
+        expect(() => readFileSync(join(root, "www-bundled/stale.html"))).toThrow();
+        expect(readFileSync(join(root, "ios/App/App/Info.plist"), "utf8")).not.toContain(
+          "WKAppBoundDomains</key>",
+        );
+      }));
+
+    test.each([
+      ["a web export", { ...good, target: "web" }, "", "native target"],
+      ["an http Client ID", { ...good, clientIdUrl: "http://suite.example/id" }, "", "https"],
+      ["no Client ID", { target: "native" }, "", "https"],
+      ["credentials", { ...good, clientIdUrl: "https://a:b@suite.example/id" }, "", "https"],
+      ["no route manifest", good, "route-manifest.json", "route-manifest.json"],
+      ["no 404 page", good, "404.html", "404.html"],
+    ])("refuses %s", (_, info, skip, message) =>
+      withRoot((root) => {
+        const dir = exportTree(root, info, skip);
+        expect(() => checkBundle(pathToFileURL(`${dir}/`))).toThrow(message);
+        expect(() =>
+          prepareNative(pathToFileURL(`${root}/`), {
+            SUITE_MODE: "bundled",
+            SUITE_EXPORT_DIR: dir,
+          }),
+        ).toThrow(message);
+      }));
+
+    test("refuses an export without build-info.json", () =>
+      withRoot((root) => {
+        mkdirSync(join(root, "empty"));
+        expect(() => checkBundle(pathToFileURL(`${join(root, "empty")}/`))).toThrow("build:native");
+      }));
   });
 
   test("the shared scheme includes the UI-test target and its App dependency", () => {
