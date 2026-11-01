@@ -12,6 +12,12 @@ express: `#it` subjects, false archived defaults, creation timestamps, empty tex
 and trimmed/sorted tags. The generated manifest, JS/declarations, normalized shapes,
 and hashes live in `src/generated/`; never edit them directly.
 
+Reads follow the SHACL profile exactly. Language-tagged title/description/keywords, typed
+non-string titles and `xsd:date` created values are dropped, unlike the hand-written package,
+so a parse/serialize round-trip loses them (and re-stamps `created`). To edit third-party
+bookmarks losslessly, set individual fields through the `Bookmark` wrapper on the original
+Store. Relative resource URLs throw. README "Exact divergences" lists every case.
+
 From the workspace root, build the generator/dependencies, then regenerate:
 
 ```sh

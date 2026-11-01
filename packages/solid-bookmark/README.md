@@ -93,6 +93,21 @@ the oracle: ambiguous required URLs reject the record, malformed optional values
 and text writes strip control characters. These shared SHACL/IRI and text guards cannot
 be bypassed by the facade, so those formerly permissive edge behaviors are not retained.
 
+Exact divergences from the hand-written package, pinned in `test/compatibility.test.ts`:
+
+- Literals outside the profile's datatypes are dropped on read: a language-tagged
+  `dct:title`, `dct:description` or `schema:keywords` (`rdf:langString` rather than
+  `xsd:string`), a typed title such as `"5"^^xsd:integer`, and an `xsd:date` `dct:created`.
+  The old package returned them. **A read-modify-write through `parseBookmark` and
+  `serializeBookmark` therefore loses those values, and a dropped `created` is re-stamped
+  with the current time.** Callers that must round-trip third-party data should edit the
+  Store through the `Bookmark` wrapper, which leaves unrelated triples in place.
+- `bookmarkSubject` and `buildBookmark` throw `TypeError` for a relative or unsafe
+  resource URL rather than minting a relative subject.
+- An uppercase-scheme `schema:url` (`HTTPS://…`) rejects the record (the SHACL pattern is
+  case-sensitive), and several `dct:title` values (or duplicate legacy notes) drop that field
+  rather than returning the first.
+
 Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this package uses
 `tsc` and its declarations reference the generated wrapper/runtime types. Publish the
 `jeswr/model-runtime` mirror first, then supply

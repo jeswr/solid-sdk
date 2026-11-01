@@ -105,3 +105,49 @@ it("sorts parsed tags by code unit like the hand-written package (not locale ord
   const turtle = await serializeBookmark(resourceUrl, { url: "https://example.org/", tags });
   expect((await parseBookmarkTtl(resourceUrl, turtle))?.tags).toEqual(expected);
 });
+
+// Pinned divergences from the hand-written implementation, outside the 78-test oracle.
+// The generated model follows the package SHACL profile exactly; whether that profile
+// should widen these datatypes is a normative decision tracked as a needs:jesse bead.
+const RES = "https://pod.example/b/9";
+const doc = (body: string) => `@prefix book: <https://jeswr.org/ns/bookmark#> .
+@prefix schema: <http://schema.org/> . @prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${RES}#it> a book:Bookmark ; ${body} .`;
+
+it("drops literals outside the profile's datatypes (language-tagged text, xsd:date)", async () => {
+  const parsed = await parseBookmarkTtl(
+    RES,
+    doc(`schema:url <https://example.org/> ; dct:title "Hi"@en ; dct:description "D"@en-GB ;
+      schema:keywords "t"@en, "kept" ; dct:created "2026-01-01"^^xsd:date`),
+  );
+  expect(parsed?.url).toBe("https://example.org/");
+  expect(parsed?.title).toBeUndefined();
+  expect(parsed?.description).toBeUndefined();
+  expect(parsed?.created).toBeUndefined();
+  expect(
+    (
+      await parseBookmarkTtl(
+        RES,
+        doc(`schema:url <https://example.org/> ; dct:title "5"^^xsd:integer`),
+      )
+    )?.title,
+  ).toBeUndefined();
+});
+
+it("rejects a relative or unsafe resource URL instead of minting a relative subject", () => {
+  expect(() => buildBookmark("bm/1", { url: "https://example.org/" })).toThrow(TypeError);
+  expect(() => buildBookmark("https://pod.example/a b", { url: "https://example.org/" })).toThrow(
+    TypeError,
+  );
+});
+
+it("fails closed on an uppercase-scheme URL and drops an ambiguous title", async () => {
+  expect(await parseBookmarkTtl(RES, doc("schema:url <HTTPS://example.org/>"))).toBeUndefined();
+  const parsed = await parseBookmarkTtl(
+    RES,
+    doc(`schema:url <https://example.org/> ; dct:title "a", "b"`),
+  );
+  expect(parsed?.url).toBe("https://example.org/");
+  expect(parsed?.title).toBeUndefined();
+});
