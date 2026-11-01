@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { Sun } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { dueDate, localDay } from "../../lib/format/due";
 import { compareTasks } from "../../lib/views/project-groups";
@@ -22,6 +23,7 @@ export function TodayView() {
       title="Today"
       rows={rows}
       emptyTitle="Nothing due today"
+      emptyIcon={<Sun size={24} strokeWidth={1.5} aria-hidden="true" />}
       emptyBody="Enjoy the quiet, or add a task for today"
     />
   );

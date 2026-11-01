@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { Tag } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { unionLabels } from "../../lib/model/tracker";
 import { compareTasks } from "../../lib/views/project-groups";
@@ -23,6 +24,7 @@ export function LabelView({ label }: { label: string }) {
       title={`@${label}`}
       rows={rows}
       emptyTitle={`No tasks with @${label}`}
+      emptyIcon={<Tag size={24} strokeWidth={1.5} aria-hidden="true" />}
       emptyBody="Tasks with this label will show up here"
     />
   );

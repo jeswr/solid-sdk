@@ -8,6 +8,7 @@ import {
   LoadingSkeleton,
   renderAsync,
 } from "@jeswr/suite-ui";
+import { Inbox, ListTodo } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { classifyError } from "../../lib/model/errors";
@@ -57,20 +58,33 @@ export function ProjectView({
   );
   const empty =
     !groups.unsectioned.length && !groups.sections.some((section) => section.rows.length);
-  const list = project ? <TaskList project={project} groups={groups} /> : null;
+  const list = project ? (
+    <TaskList project={project} groups={groups} hideAddTaskTrigger={empty} />
+  ) : null;
   // Keep TaskList at the same React position when the empty state disappears;
   // the first Enter must leave the add input open and focused.
   const content = (
     <>
       {empty && (
         <EmptyState
+          icon={
+            inbox ? (
+              <Inbox size={24} strokeWidth={1.5} aria-hidden="true" />
+            ) : (
+              <ListTodo size={24} strokeWidth={1.5} aria-hidden="true" />
+            )
+          }
           title={inbox ? "Your Inbox is empty" : "No tasks yet"}
           body={
             inbox
               ? "Add anything you need to do. Press q anywhere to add a task."
               : `Add the first task to ${title}`
           }
-          primaryAction={<Button onClick={() => focusAddTask()}>Add task</Button>}
+          primaryAction={
+            <Button className="tsk-empty-add" onClick={() => focusAddTask()}>
+              Add task
+            </Button>
+          }
         />
       )}
       {list}

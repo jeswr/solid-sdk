@@ -2,7 +2,7 @@
 "use client";
 import { Button, EmptyState, ErrorState, LoadingSkeleton, renderAsync } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { classifyError } from "../../lib/model/errors";
 import { flatRows } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
@@ -14,11 +14,13 @@ export function CrossProjectView({
   rows,
   emptyTitle,
   emptyBody,
+  emptyIcon,
 }: {
   title: string;
   rows: readonly TaskView[];
   emptyTitle: string;
   emptyBody: string;
+  emptyIcon: ReactNode;
 }) {
   const tasks = useTasks();
   const router = useRouter();
@@ -55,6 +57,7 @@ export function CrossProjectView({
         empty:
           !loading && !rows.length && !failures.length ? (
             <EmptyState
+              icon={emptyIcon}
               title={emptyTitle}
               body={emptyBody}
               primaryAction={

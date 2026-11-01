@@ -114,11 +114,13 @@ export function TaskList({
   groups,
   rows,
   showProject = false,
+  hideAddTaskTrigger = false,
 }: {
   project?: StoredProject | undefined;
   groups?: ProjectGroups | undefined;
   rows?: Row[] | undefined;
   showProject?: boolean | undefined;
+  hideAddTaskTrigger?: boolean;
 }) {
   const { preferences } = useTasksPreferences();
   const { addSection } = useTasks();
@@ -161,7 +163,7 @@ export function TaskList({
   return (
     <div ref={root} className="tsk-task-list">
       {renderRows(rows ?? groups?.unsectioned ?? [], "Tasks")}
-      {project && <AddTaskRow project={project} />}
+      {project && <AddTaskRow project={project} hideTrigger={hideAddTaskTrigger} />}
       {project &&
         groups?.sections.map(({ section, rows, openCount }, index) => (
           <section className="tsk-section" key={section.id} aria-label={section.name}>
