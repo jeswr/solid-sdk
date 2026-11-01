@@ -222,7 +222,7 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
                     decision:
                       record.outcome === "prohibition"
                         ? "prohibited"
-                        : record.outcome === "permit"
+                        : record.outcome === "permit" || record.outcome === "re-evaluated"
                           ? "permit"
                           : "confirm-required",
                     reason: record.outcome.replaceAll(":", "."),
@@ -396,6 +396,23 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
     const trace = await loadTrace(io, root);
     expect(trace.chain.ok).toBe(true);
     expect(trace.entries).toEqual(ledger.entries());
+    for (const suffix of ["email-split-1", "email-split-2", "a2a-split-1"]) {
+      const id = `${root}agent/proposals/${suffix}.ttl`;
+      const decisions = trace.entries.flatMap(({ record }) =>
+        record.type === "decision" && record.proposal === id
+          ? [{ decision: record.decision, reason: record.reason }]
+          : [],
+      );
+      expect(decisions).toEqual([
+        { decision: "permit", reason: "permit" },
+        { decision: "permit", reason: "re-evaluated" },
+      ]);
+      expect(trace.entries).toContainEqual(
+        expect.objectContaining({
+          record: expect.objectContaining({ type: "transmission", proposal: id, status: "sent" }),
+        }),
+      );
+    }
     const evidence = canonicalJson(trace.entries);
     expect(evidence).not.toContain("pay the £500");
     expect(evidence).not.toContain("Ignore your previous instructions");
