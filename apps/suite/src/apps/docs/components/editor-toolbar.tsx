@@ -37,6 +37,9 @@ import { FONT_FAMILIES } from "../lib/editor/styles";
 import { SpacingItems, ZOOMS } from "./editor-menubar";
 import { ColourPopover, FontSelect, FontSizeControl } from "./formatting-controls";
 import { tableCommands } from "./table-actions";
+
+const OVERFLOW_FIRST = new Set(["Print", "Zoom"]);
+
 export function ToolButton({
   action,
   mac,
@@ -412,16 +415,22 @@ export function EditorToolbar({
     });
   }
   addAction("Clear formatting");
+  // Controls keep their order but leave for More by priority: print and zoom go first
+  // (phones pinch to zoom), so the Block type control stays on the bar on a phone.
+  const ranked = [
+    ...groups.filter((group) => !OVERFLOW_FIRST.has(group.label)),
+    ...groups.filter((group) => OVERFLOW_FIRST.has(group.label)),
+  ];
   let used = 76;
-  let capacity = 0;
-  for (const group of groups) {
+  // At the smallest widths the primary undo buttons still fit beside the overflow trigger.
+  const shown = new Set(ranked.slice(0, 2).map((group) => group.label));
+  for (const group of ranked) {
     used += group.width;
     if (used > width) break;
-    capacity++;
+    shown.add(group.label);
   }
-  // At the smallest widths the primary undo buttons still fit beside the overflow trigger.
-  capacity = Math.max(2, capacity);
-  const shown = new Set(groups.slice(0, capacity).map((group) => group.label));
+  const visible = groups.filter((group) => shown.has(group.label));
+  const hidden = groups.filter((group) => !shown.has(group.label));
   return (
     <div
       ref={ref}
@@ -468,7 +477,7 @@ export function EditorToolbar({
       >
         <PanelLeft aria-hidden="true" size={18} />
       </Button>
-      {groups.slice(0, capacity).map((group) => (
+      {visible.map((group) => (
         <div className="docs-toolbar-control" key={group.label}>
           {group.control}
         </div>
@@ -485,7 +494,7 @@ export function EditorToolbar({
           onCloseAutoFocus={afterClose}
         >
           <DropdownMenuLabel>More</DropdownMenuLabel>
-          {groups.slice(capacity).map((group) => (
+          {hidden.map((group) => (
             <div key={group.label}>{group.overflow}</div>
           ))}
           <DropdownMenuSeparator />

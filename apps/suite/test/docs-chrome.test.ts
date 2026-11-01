@@ -740,6 +740,18 @@ it("keeps toolbar controls in order and moves them into More at narrow widths", 
     sizes[0]?.([{ contentRect: { width: 260 } }] as ResizeObserverEntry[], {} as ResizeObserver);
   });
   expect(screen.queryByRole("combobox", { name: "Font family" })).toBeNull();
+  // A phone keeps Block type on the bar: print and zoom are the first to move into More.
+  expect(screen.getByRole("combobox", { name: "Block type" })).toBeDefined();
+  expect(screen.queryByRole("combobox", { name: "Zoom" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
+  await act(() => {
+    sizes[0]?.([{ contentRect: { width: 100 } }] as ResizeObserverEntry[], {} as ResizeObserver);
+  });
+  expect(screen.getByRole("button", { name: "Redo" })).toBeDefined();
+  expect(screen.queryByRole("combobox", { name: "Block type" })).toBeNull();
+  await act(() => {
+    sizes[0]?.([{ contentRect: { width: 260 } }] as ResizeObserverEntry[], {} as ResizeObserver);
+  });
   const more = button("More formatting");
   await act(() => more.focus());
   key(more, "Enter");
