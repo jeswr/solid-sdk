@@ -248,7 +248,11 @@ it("refreshes Today, Upcoming, due chips and sidebar counts as clock boundaries 
   await act(() => vi.advanceTimersByTime(20_000));
   expect(badge()?.textContent).toBe("2");
   expect(host.querySelector("#today")?.textContent).toContain("Tomorrow task");
-  expect(host.querySelector("#upcoming")?.textContent).not.toContain("Tomorrow task");
+  // Upcoming's seven-day agenda includes today; the due chip changes at midnight.
+  expect(host.querySelector("#upcoming")?.textContent).toContain("Tomorrow task");
+  expect(
+    host.querySelector("#upcoming .tsk-day-cell[data-today]")?.getAttribute("data-day-key"),
+  ).toBe("2026-11-02");
   expect([...host.querySelectorAll("#today .tsk-due")].map((chip) => chip.textContent)).toContain(
     "Today",
   );
