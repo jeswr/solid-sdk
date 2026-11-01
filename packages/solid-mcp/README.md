@@ -152,12 +152,14 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
 
 ## Key API
 
-- Server: `createSolidMcpServer`, `SolidMcpConfig`.
+- Server: `createSolidMcpServer`, `SolidMcpServerConfig`, `SolidMcpConfig`, `MemoryClientInfo`.
 - Operations: `listContainer`, `readResource`, `readRdf`, `search`, `writeResource`.
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
-- Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
+- Data seam: `PodPort`, `createStoragePodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
-- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`.
+- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`;
+  `memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get`,
+  and `health_query` with trusted client identity.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
   List/read/write aliases retain the same schemas, output and read-only enforcement.
   `solid_search` retains its optional scope and ranked array response.
@@ -165,9 +167,9 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
 ## Portable pod access
 
 ```ts
-import { createFetchPodPort, createSolidMcpServer } from "@jeswr/solid-mcp";
+import { createStoragePodPort, createSolidMcpServer } from "@jeswr/solid-mcp";
 
-const pod = createFetchPodPort({
+const pod = createStoragePodPort({
   fetch: authenticatedFetch,
   podRoot: "https://alice.example/",
   webId: "https://alice.example/profile/card#me",
@@ -175,6 +177,21 @@ const pod = createFetchPodPort({
 });
 const server = createSolidMcpServer({ pod });
 ```
+
+`createStoragePodPort(config, discoveryFetch?)` uses `@jeswr/storage-client` to discover
+Solid or LWS and paginate listings. A separate trusted, guarded anonymous `discoveryFetch`
+is required to read same-origin storage descriptions outside the pod root; those requests
+are refused when it is omitted. Resource credentials stay within the pod.
+Discovery failures propagate without choosing a fallback backend.
+The adapter refuses redirects. Solid create-only writes keep their exact URL and
+`If-None-Match: *`; LWS create-only writes fail before mutation because LWS names are
+hints. Updates preserve `ifMatch`; deletion without a supplied validator first reads
+an ETag and refuses deletion when none is available. Container writes require create-only
+conditions and accept empty bodies or LDP container types; other container metadata
+is refused before mutation. Exact named creates reject URL spellings the backend would rewrite.
+The legacy `createFetchPodPort` and fetch-based server configuration remain
+supported. Supplying both `fetch` and `pod` to the server keeps chat ACL discovery through
+the fetch capability while pod operations use the supplied port.
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Optional `PodReadOptions.accept` selects a representation; generic reads keep
@@ -267,6 +284,101 @@ All fetch URLs and redirect hops are validated against the configured pod scope.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
+## Memory tools
+
+Memory tools require the pod owner's WebID and trusted `clientInfo` supplied by the
+server's composition layer. `clientId` is an absolute IRI (HTTPS or URN), bound to
+the authenticated MCP client; tool arguments cannot override it. `name` and `model`
+are optional metadata. For example:
+
+```ts
+const server = createSolidMcpServer({
+  pod,
+  readOnly: false,
+  clientInfo: {
+    clientId: "https://example.org/clients/assistant",
+    name: "Example assistant",
+    model: "Example model",
+  },
+});
+```
+
+- `memory_remember({text, fact?, quote?, hedged?, about?, conversationId?})`
+  returns `{id, epistemic}`. Fact values follow `@jeswr/pkg-memory`'s `Fact` union:
+  email/phone strings; address, preference, condition, allergy, medication and
+  relationship objects. `about` defaults to the owner. A quoted, unhedged fact is
+  `SelfReportedExplicit`; hedging takes precedence and yields `SelfReportedHedged`;
+  other facts are `Inferred`. Quotes retain up to 300 Unicode code points.
+- Without `fact`, the assertion embeds a `@jeswr/solid-memory` `MemoryItem` as
+  `Mentioned`, including when quoted. It has no separate resource to orphan.
+  Free text has no inferred DPV category and remains uncategorized; requesting it
+  through recall fails closed under the purpose filter.
+- `memory_recall({query?, about?, categories?, purpose, include?, limit?})`
+  returns `{facts:[...]}`. `purpose` is `ServiceProvision` or `Personalisation`.
+  The default selects `belief: "definitely"` and `validity: "Current"`;
+  `include` can add `might`, `mentioned` and `past`. Query matching is case
+  insensitive over text and assertion values; categories are absolute DPV IRIs.
+  The default limit is 20, maximum 100. Each fact carries text, assertion Turtle,
+  belief, epistemic/validity status, optional hedge, date, categories,
+  `provenanceId`, and owner/client/model/conversation provenance.
+- `memory_forget({id, mode: "retract" | "delete"})` accepts a returned nanopub UUID
+  IRI. Retraction appends a `Retracted` revision with `prov:invalidatedAtTime` and
+  preserves the original. Deletion removes only a nanopublication written by this
+  client, including a wrapped note, using the ETag of the checked attribution.
+
+Nanopublications use the existing owner-only ACL and byte-preserving TriG storage
+at `private/pkg/mcp/`. Assertion provenance attributes the claim to the owner;
+publication-info provenance attributes the nanopublication to `clientInfo.clientId`
+and retains the optional model (`schema:instrument`) and conversation id
+(`dct:isPartOf`, as a literal). Every call uses the current injected PodPort methods
+and an operation-local output boundary. Memory writes require `readOnly:false` at
+both server and adapter layers.
+
+Recall evaluates the owner-editable `private/pkg/mcp-policy.ttl` for this client on
+every call. Health and finance are denied by default. Denials expose category names
+only. The first memory write creates the default policy; recall always requires an
+existing policy and never creates one. Existing owner policies are preserved, and
+unreadable or malformed policies fail closed.
+
+## Profile, address and health tools
+
+These tools require the same trusted `clientInfo` and owner WebID as memory tools.
+Every call requires `purpose: "ServiceProvision" | "Personalisation"` and reevaluates
+the existing owner policy for that client. Reads never create a missing policy.
+Missing, unreadable or malformed policies fail closed. Denial errors contain only
+fixed category names, without values, subject identities or owner-supplied IRIs.
+
+- `profile_get({purpose})` returns `{name, emails, phones}` from the configured
+  in-pod WebID under `pd:Contact`. Names use vCard then FOAF; missing names are
+  `null`. Contacts support direct `mailto:`/`tel:` IRIs and local vCard
+  `hasValue` nodes, deduplicated and sorted, with scheme prefixes removed.
+  Linked documents are never followed. Off-pod WebIDs and redirects are refused.
+- `address_get({purpose, at?})` returns `{addresses:[...]}` from `pd:PhysicalAddress`
+  nanopublications. Only definitely-true, Current claims about the owner qualify,
+  including for as-of reads. `at` accepts an ISO date (midnight UTC) or a datetime
+  with an explicit timezone, up to microsecond precision; it defaults to now.
+  `schema:validFrom`/`validThrough` are inclusive. Date, year-month and year
+  bounds cover their whole calendar period in UTC; datetime bounds are exact.
+  Absent bounds are open; ambiguous, malformed or timezone-free datetime bounds
+  fail closed. Results retain every qualifying address, its fields, validity
+  bounds and `provenanceId`, ordered by address ID then provenance ID.
+- `health_query({kind, purpose})` returns `{kind, facts:[{id, provenanceId, assertion}]}`,
+  where `assertion` is graph-scoped Turtle. Kinds are `conditions`, `allergies`,
+  `medications` and `observations`. Only definitely-true, Current owner health
+  claims qualify. Canonical and legacy suite health terms are read without
+  rewriting stored claims. Every candidate category needs a permit before
+  content filtering; `pd:MedicalHealth` also needs a permit for an empty query.
+
+Special-category reads, including permitted memory recall and financial data,
+require a writable server and PodPort. Before returning results they append a
+PROV activity to `private/pkg/audit/<yyyy-mm>.ttl`: client IRI, DPV purpose,
+special categories and UTC time, with no fact values. Empty permitted health
+queries are audited too. Owner-only WAC ACLs precede audit content; strong ETags
+and bounded compare-and-swap retries preserve concurrent entries. The saved
+activity is verified through the current PodPort. Audit denial, corruption,
+overflow or persistence failure withholds the tool result. Ordinary contact
+and address reads remain available on a read-only server when permitted.
+
 ## Chat tools
 
 All three tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and require
@@ -300,7 +412,8 @@ while preserving permission, transport and message-read errors.
 Chat tools are registered alongside the canonical pod tools and compatibility
 aliases when using the fetch-based server configuration. The chat adapter retains
 its ACL discovery and write safeguards. The portable `PodPort` configuration
-registers only pod tools because `PodPort` does not expose ACL discovery.
+registers pod and memory tools; chat tools require ACL discovery, which `PodPort`
+does not expose.
 
 ## Streamable HTTP
 

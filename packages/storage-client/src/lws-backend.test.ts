@@ -1192,7 +1192,7 @@ describe("bounded JSON and aborts", () => {
   });
 });
 
-describe("construction, parentOf and pending mutations", () => {
+describe("construction and parentOf", () => {
   test("defaults and provided features, invalid roots", () => {
     const fetch = vi.fn<AuthFetch>();
     const storage = createLwsBackend({ root: ROOT, fetch });
@@ -1260,21 +1260,5 @@ describe("construction, parentOf and pending mutations", () => {
     expect(
       await backend({ [`HEAD ${NOTE}`]: { status: 200, headers: {} } }).storage.parentOf(NOTE),
     ).toBeNull();
-  });
-
-  test("all mutation stubs reject unsupported without fetching until T-024", async () => {
-    const { storage, fetch } = backend();
-    const pending = [
-      storage.write(NOTE, "x", { contentType: "text/plain", ifMatch: "*" }),
-      storage.writeRdf(NOTE, [], { ifMatch: "*" }),
-      storage.create(CONTAINER, null),
-      storage.patch(NOTE, { kind: "json", ops: [] }, { ifMatch: '"1"' }),
-      storage.move(NOTE, ROOT),
-      storage.delete(NOTE),
-      storage.setMetadata(NOTE, [], { ifMatch: '"1"' }),
-    ];
-    for (const promise of pending)
-      expect((await rejects(promise, "unsupported")).message).toContain("T-024");
-    expect(fetch).not.toHaveBeenCalled();
   });
 });

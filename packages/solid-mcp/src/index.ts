@@ -21,6 +21,7 @@ export {
   writesEnabled,
 } from "./auth.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";
+export type { MemoryClientInfo } from "./memory-tools.js";
 export {
   listContainer,
   type PodChild,
@@ -43,4 +44,5 @@ export {
   type PodSource,
 } from "./pod-port.js";
 export { createSolidMcpServer, type SolidMcpServerConfig } from "./server.js";
+export { createStoragePodPort } from "./storage-pod-port.js";
 export { createPodToolRegistry, type PodTool, registerPodTools } from "./tools.js";

@@ -188,7 +188,7 @@ export async function readRdf(source: PodSource, url: string): Promise<ReadRdfRe
     const target = requirePodScopedUrl({ podRoot: pod.root }, url);
     const output = new PodOutput(pod);
     const read = await output.read(target, {
-      accept: RDF_ACCEPT,
+      accept: `${RDF_ACCEPT}, application/lws+json;q=0.8`,
     });
     const dataset =
       (await output.containerRdf(target, read)) ??

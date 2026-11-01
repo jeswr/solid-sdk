@@ -32,7 +32,8 @@ describe("fetch PodPort", () => {
   it("negotiates RDF only for RDF reads, preserving generic resource representations", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
       const rdf =
-        new Headers(init?.headers).get("accept") === "text/turtle, application/ld+json;q=0.9";
+        new Headers(init?.headers).get("accept") ===
+        "text/turtle, application/ld+json;q=0.9, application/lws+json;q=0.8";
       return new Response(
         rdf ? '<#subject> <http://schema.org/name> "RDF view" .' : "default view",
         {

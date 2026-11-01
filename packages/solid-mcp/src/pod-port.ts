@@ -50,7 +50,7 @@ export interface PodReadResult {
 export type PodEntry = Pick<PodChild, "url" | "isContainer"> &
   Partial<Omit<PodChild, "url" | "isContainer">>;
 
-/** Protocol-neutral data seam; storage-client will supply another implementation in MCP-15. */
+/** Protocol-neutral data seam implemented by the fetch and storage-client adapters. */
 export interface PodPort {
   /** Absolute container URL delimiting this capability. */
   readonly root: string;
@@ -83,9 +83,22 @@ export function asPodPort(source: PodSource): PodPort {
 const searchLimits = new WeakMap<PodPort, SolidMcpConfig["searchLimits"]>();
 const nativeReads = new WeakSet<PodPort["read"]>();
 
+/** @internal Retain operator caps without exposing a transport or widening a capability. */
+export function configurePodSearchLimits(
+  pod: PodPort,
+  limits: SolidMcpConfig["searchLimits"],
+): void {
+  searchLimits.set(pod, limits && { ...limits });
+}
+
 /** Internal: only native reads are known not to authorize against complete bodies. */
 export function isFetchPodRead(read: PodPort["read"]): boolean {
   return nativeReads.has(read);
+}
+
+/** @internal Register a built-in read that does not authorize against body content. */
+export function registerNativePodRead(read: PodPort["read"]): void {
+  nativeReads.add(read);
 }
 
 /** Type relations may share a Link header with quoted commas and other relations. */
@@ -213,7 +226,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
     },
   };
 
-  searchLimits.set(pod, config.searchLimits && { ...config.searchLimits });
+  configurePodSearchLimits(pod, config.searchLimits);
   nativeReads.add(pod.read);
   return pod;
 

@@ -99,6 +99,11 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
 - **Identity.** `provider.identity(request)` reports validated ID token claims (issuer, subject, `webid`,
   `azp`), optionally checked against the WebID profile (`verifyWebId: true`). Tokens are never exposed.
 
+`DPoPTokenProvider.session` exposes its `OidcSession` for composition. Pass that session and the same
+`fence` to `SolidUmaTokenProvider`'s `session` option to reuse the Solid credential context, or to
+`OidcIdTokenSource`'s `session` and `context` options for LWS exchange. A different fence is rejected.
+Without these options, the providers retain their independent-session behavior.
+
 ## Automatic credential boundary
 
 Applications that cannot list storages in advance can opt into `AutomaticCredentialBoundary`. No roots are
@@ -312,3 +317,17 @@ The paradigm originates in [@langsamu](https://github.com/langsamu)'s research p
 [.NET ReactiveAuthentication](https://github.com/ReactiveAuthentication/ReactiveAuthentication). This version
 builds on [solid-contrib/reactive-authentication](https://github.com/solid-contrib/reactive-authentication).
 MIT licensed; see [LICENSE](LICENSE).
+
+## Server login brokers
+
+`createServerOidcClient` supplies a split authorization/callback/refresh flow to `pod-auth/node`.
+It uses oauth4webapi for discovery, S256, state/nonce, signed ID-token validation and DPoP.
+The broker owns encrypted pending-state and private-JWK envelopes, single-use callback consumption,
+refresh CAS, durable retirement and URL scope. A server signing key is exported once for its encrypted
+JSON vault, then imported non-extractably; browser sessions retain CryptoKey persistence.
+Resource bodies have an abortable 10 MiB replay cap and nonce challenges retry once.
+With `lws: true`, resource challenges also route through `LwsTokenProvider`, exchanging the
+current verified OIDC ID token (URI `sub` and matching client `azp`) for a storage-audience
+Bearer token. Exchanged tokens stay in
+memory; a missing or expired ID token fails closed. The broker must enforce resource scope
+and session liveness on its injected transport, including discovery, exchange and Bearer retries.

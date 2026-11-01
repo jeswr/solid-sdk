@@ -7,16 +7,19 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Store } from 'n3';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 // @public
 export function createFetchPodPort(input: SolidMcpConfig): PodPort;
 
 // @public
-export function createPodToolRegistry(pod: PodPort, readOnly?: boolean): readonly PodTool[];
+export function createPodToolRegistry(pod: PodPort, readOnly?: boolean, clientInfo?: MemoryClientInfo): readonly PodTool[];
 
 // @public
 export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer;
+
+// @public
+export function createStoragePodPort(input: SolidMcpConfig, discoveryFetch?: typeof fetch): PodPort;
 
 // @public
 export function fetchDocument(source: PodSource, id: string): Promise<FetchResult>;
@@ -36,6 +39,13 @@ export interface FetchResult {
 
 // @public
 export function listContainer(source: PodSource, url: string): Promise<PodChild[]>;
+
+// @public
+export interface MemoryClientInfo {
+    clientId: string;
+    model?: string;
+    name?: string;
+}
 
 // @public
 export function normalizePodRoot(podRoot: string): string;
@@ -170,9 +180,13 @@ export interface SolidMcpConfig {
 }
 
 // @public
-export type SolidMcpServerConfig = SolidMcpConfig | {
+export type SolidMcpServerConfig = ((SolidMcpConfig & {
+    pod?: PodPort;
+}) | {
     pod: PodPort;
     readOnly?: boolean;
+}) & {
+    clientInfo?: MemoryClientInfo;
 };
 
 // @public
