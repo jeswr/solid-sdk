@@ -3,7 +3,7 @@
 import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
-import type { Track } from "./entities";
+import { type MusicReference, Track } from "./entities";
 import { DataFactory, MusicNode } from "./rdf";
 import { httpIri, InvalidMusicError, nonNegative, validDate } from "./validation";
 import { M, NS, S } from "./vocab";
@@ -14,6 +14,9 @@ export interface Playback {
   startTime: Date;
   endTime?: Date | undefined;
   agent?: string | undefined;
+  /** Names from a recording described beside the play, for songs not in the library. */
+  title?: string | undefined;
+  artist?: string | undefined;
 }
 
 /** schema:ListenAction and the solid-listening sector PlaybackEvent converge here. */
@@ -130,14 +133,22 @@ export function readHistory(dataset: Store): Playback[] {
     const event = new PlaybackEvent(subject, dataset);
     if (!event.types.has(`${M}PlaybackEvent`) && !event.types.has(`${S}ListenAction`)) continue;
     const { trackIri, startTime } = event;
-    if (trackIri && startTime)
-      result.push({
-        iri: event.value,
-        trackIri,
-        startTime,
-        endTime: event.endTime,
-        agent: event.agent,
-      });
+    if (!trackIri || !startTime) continue;
+    const play: Playback = {
+      iri: event.value,
+      trackIri,
+      startTime,
+      endTime: event.endTime,
+      agent: event.agent,
+    };
+    // Imported listens describe their recording in the same document.
+    const recording = new Track(trackIri, dataset);
+    const title = recording.strings(`${S}name`, `${NS.DCT}title`)[0];
+    if (title) {
+      play.title = title;
+      play.artist = recording.artists.find((artist) => artist.name)?.name;
+    }
+    result.push(play);
   }
   return result.sort(
     (a, b) => b.startTime.getTime() - a.startTime.getTime() || a.iri.localeCompare(b.iri),
@@ -168,6 +179,11 @@ export interface TopArtist {
   plays: number;
 }
 
+/** Case, width and spacing-insensitive form of a song or artist name. */
+export function nameKey(text: string): string {
+  return text.normalize("NFKC").toLocaleLowerCase("en").trim().replace(/\s+/gu, " ");
+}
+
 export function computeTopArtists(
   history: readonly Playback[],
   tracks: readonly Track[],
@@ -176,6 +192,14 @@ export function computeTopArtists(
 ): TopArtist[] {
   const start = periodStart(period, now).getTime();
   const library = new Map(tracks.map((track) => [track.value, track]));
+  // Named-only listens count towards the library artist with the same name.
+  const byName = new Map<string, string>();
+  for (const track of tracks)
+    for (const artist of track.artists) {
+      const key = artist.iri ?? artist.name;
+      const name = artist.name && nameKey(artist.name);
+      if (key && name && !byName.has(name)) byName.set(name, key);
+    }
   const counts = new Map<string, TopArtist>();
   const seen = new Set<string>();
   for (const play of history) {
@@ -185,13 +209,18 @@ export function computeTopArtists(
     )
       continue;
     seen.add(play.iri);
-    for (const artist of library.get(play.trackIri)?.artists ?? []) {
-      const key = artist.iri ?? artist.name;
+    const credited = library.get(play.trackIri)?.artists;
+    const credits: MusicReference[] = credited ?? (play.artist ? [{ name: play.artist }] : []);
+    for (const artist of credits) {
+      // Uncredited (named-only) listens always carry a name.
+      const named = artist.name as string;
+      const key =
+        artist.iri ?? (credited ? artist.name : (byName.get(nameKey(named)) ?? nameKey(named)));
       if (!key) continue;
       const previous = counts.get(key);
       counts.set(key, {
         key,
-        name: artist.name ?? "Unknown artist",
+        name: previous?.name ?? artist.name ?? "Unknown artist",
         plays: (previous?.plays ?? 0) + 1,
       });
     }

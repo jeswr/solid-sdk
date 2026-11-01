@@ -261,9 +261,11 @@ test("keyboard focus moves between completion-day groups and returns to the head
   await today.press("ArrowDown");
   await expect(yesterday).toBeFocused();
   await yesterday.press("ArrowUp");
-  await today.press("Space");
+  await today.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Reopen", exact: true }).press("Enter");
   await expect(yesterday).toBeFocused();
-  await yesterday.press("Space");
+  await yesterday.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Reopen", exact: true }).press("Enter");
   await expect(
     page.getByRole("heading", { name: "Completed", level: 1, exact: true }),
   ).toBeFocused();
