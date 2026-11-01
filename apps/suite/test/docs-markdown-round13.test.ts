@@ -10,7 +10,7 @@ const paragraphs = (values: string[]): JSONContent => ({
   type: "doc",
   content: values.map((text) => ({
     type: "paragraph",
-    attrs: { textAlign: null },
+    attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null },
     content: [{ type: "text", text }],
   })),
 });
@@ -50,7 +50,7 @@ it.each([
     content: [
       {
         type: "paragraph",
-        attrs: { textAlign: null },
+        attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null },
         content: [{ type: "text", text: value, marks: [{ type: "code" }] }],
       },
     ],

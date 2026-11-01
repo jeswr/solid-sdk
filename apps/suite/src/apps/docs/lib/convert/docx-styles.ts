@@ -79,12 +79,13 @@ export function docxStyles(document: Document, definitions: Document) {
     let reference = direct(props, "rStyle");
     const styleId = value(reference) ?? null;
     const paragraphProps = direct(run.closest("p") ?? run.parentElement ?? undefined, "pPr");
+    // Code runs and code blocks carry their own font and shading through the code mark/node;
+    // reading those as text styles would add a spurious highlight to every code span.
+    if (styleId === "InlineCode" || value(direct(paragraphProps, "pStyle")) === "Code") continue;
+    // Paragraph styles (headings, titles) and the Hyperlink character style are carried by the
+    // block type and link mark; only the run's own formatting and other character styles become text styles.
     const safe = css(
-      [
-        ...inherited(value(direct(paragraphProps, "pStyle")), "rPr"),
-        ...inherited(styleId, "rPr"),
-        props,
-      ],
+      [...(styleId === "Hyperlink" ? [] : inherited(styleId, "rPr")), props],
       false,
     );
     if (!safe) continue;

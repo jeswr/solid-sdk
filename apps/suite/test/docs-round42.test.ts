@@ -104,7 +104,7 @@ it.each([
       const expected = importHtml(html).json;
       expect(editor.getJSON()).toEqual({
         ...expected,
-        content: [...(expected.content ?? []), { type: "paragraph", attrs: { textAlign: null } }],
+        content: [...(expected.content ?? []), { type: "paragraph", attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null } }],
       });
       expect(editor.getJSON().content?.[0]?.content).toHaveLength(2);
     } finally {

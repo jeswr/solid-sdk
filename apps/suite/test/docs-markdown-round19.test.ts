@@ -216,6 +216,6 @@ it("recognizes a front matter closing delimiter at EOF", () => {
 
 it.each(["", " \n"])("imports empty Markdown into an editable paragraph: %j", (source) => {
   expect(importMarkdown(source, "empty.md").json.content).toEqual([
-    { type: "paragraph", attrs: { textAlign: null } },
+    { type: "paragraph", attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null } },
   ]);
 });

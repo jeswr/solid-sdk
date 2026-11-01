@@ -96,7 +96,7 @@ it.each([
 ])("exports literal HTML blocks as inert paragraph text: %j", (text) => {
   const original: JSONContent = {
     type: "doc",
-    content: [{ type: "paragraph", attrs: { textAlign: null }, content: [{ type: "text", text }] }],
+    content: [{ type: "paragraph", attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null }, content: [{ type: "text", text }] }],
   };
   const exported = exportMarkdown(original);
   expect(exported).not.toMatch(/(^|[^\\])</);

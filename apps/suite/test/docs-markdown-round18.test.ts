@@ -382,7 +382,7 @@ it("round trips generated nested lists, tasks and blockquotes with indented code
     fc.property(generated, nestedCode, (value, code) => {
       const stripAlignment = (node: JSONContent): JSONContent => ({
         ...node,
-        ...(node.type === "paragraph" ? { attrs: { textAlign: null } } : {}),
+        ...(node.type === "paragraph" ? { attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null } } : {}),
         ...(node.content ? { content: node.content.map(stripAlignment) } : {}),
       });
       roundTrip(
