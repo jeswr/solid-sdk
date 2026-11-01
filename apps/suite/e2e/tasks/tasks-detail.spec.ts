@@ -86,10 +86,14 @@ test("sub-task progress, properties, exact RDF and focus return", async ({ page 
   await row.getByRole("link", { name: "Water plants", exact: true }).click();
   const detail = page.getByRole("region", { name: "Task details: Water plants", exact: true });
   await expect(detail.getByRole("textbox", { name: "Task title", exact: true })).toBeFocused();
+  await detail.getByRole("button", { name: "Add sub-task", exact: true }).click();
   const subtask = detail.getByRole("textbox", { name: "Sub-task title", exact: true });
   await subtask.fill("Buy soil");
   await subtask.press("Enter");
   await expect(detail.getByRole("heading", { name: /Sub-tasks/ })).toContainText("0/1");
+  await subtask.press("Escape");
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Add sub-task", exact: true })).toBeFocused();
   await detail.getByRole("checkbox", { name: "Complete 'Buy soil'", exact: true }).click();
   await expect(detail.getByRole("heading", { name: /Sub-tasks/ })).toContainText("1/1");
   await expect(

@@ -37,6 +37,7 @@ export function AddTaskRow({
     <div
       ref={container}
       data-tsk-add={sectionId ?? ""}
+      data-composer-open={open || undefined}
       className="tsk-add-row"
       hidden={hideTrigger && !open}
     >

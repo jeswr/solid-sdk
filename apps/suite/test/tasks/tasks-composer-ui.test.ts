@@ -110,7 +110,7 @@ afterEach(async () => {
 });
 
 describe("composer component with the real cache and model", () => {
-  it("shows parsing chips and creates the project and label before the task, retaining the target", async () => {
+  it("creates parsed projects and labels, then restores the row context for the next task", async () => {
     await act(async () =>
       root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
     );
@@ -129,12 +129,136 @@ describe("composer component with the real cache and model", () => {
     expect(task?.priority).toBe("medium");
     expect(task?.types.has(`${homeUrl}#label-bills`)).toBe(true);
     expect(cache.getSnapshot().tasks[inbox.url]?.items).toEqual([]);
-    await type("Second task");
-    await submit(homeUrl, 2);
-    expect(cache.getSnapshot().tasks[homeUrl]?.items.map((task) => task.task.title)).toEqual([
-      "Pay rent",
-      "Second task",
-    ]);
+    await type("Buy milk today p1");
+    await submit();
+    expect(cache.getSnapshot().tasks[homeUrl]?.items).toHaveLength(1);
+    expect(cache.getSnapshot().views.find((task) => task.title === "Buy milk")).toMatchObject({
+      projectUrl: inbox.url,
+      allDay: "2026-11-01",
+      priority: 1,
+      labelIds: [],
+      recurring: false,
+      hasReminders: false,
+    });
+  });
+  it.each(["add", "toast"])("shares a lost response recovery with %s first", async (first) => {
+    const creates = vi.spyOn(cache.store, "createTask");
+    let lost = false;
+    pod.intercept = (request) => {
+      if (!lost && request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
+        lost = true;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Response lost");
+      }
+      return undefined;
+    };
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call tomorrow @bills p2");
+    await act(async () => {
+      query<HTMLButtonElement>('button[type="submit"]').click();
+      await vi.waitFor(() => expect(failures).toHaveBeenCalledOnce());
+    });
+    expect(input().value).toBe("Call tomorrow @bills p2");
+    const retry = failures.mock.calls[0]?.[1];
+    if (!retry) throw new Error("Missing toast retry");
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    if (first === "add") await submit();
+    else await act(async () => retry());
+    await vi.waitFor(() => expect(input().value).toBe(""));
+    await type("New draft");
+    await act(async () => retry());
+    expect(input().value).toBe("New draft");
+    expect(creates).toHaveBeenCalledOnce();
+    const tasks = await cache.store.listTasks(inbox.tracker.stateStore as string);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.task.title).toBe("Call");
+    expect(tasks[0]?.task.allDay).toBe("2026-11-02");
+  });
+  it.each(
+    (["draft", "paste"] as const).flatMap((submission) =>
+      (["label", "project"] as const).flatMap((prerequisite) =>
+        (["rejected", "lost"] as const).map((outcome) => ({ submission, prerequisite, outcome })),
+      ),
+    ),
+  )("resumes a captured $submission after a $outcome $prerequisite write, retaining the task reservation", async ({
+    submission,
+    prerequisite,
+    outcome,
+  }) => {
+    const targetUrl = prerequisite === "project" ? `${cache.store.projects}home.ttl` : inbox.url;
+    const creates = vi.spyOn(cache.store, "createTask");
+    let prerequisiteFailed = false;
+    let taskFailed = false;
+    pod.intercept = (request) => {
+      if (request.method !== "PUT") return undefined;
+      if (!prerequisiteFailed && request.url === targetUrl) {
+        prerequisiteFailed = true;
+        if (outcome === "rejected") return new Response(null, { status: 403 });
+        pod.seed(request.url, request.body);
+        throw new TypeError("Prerequisite response lost");
+      }
+      if (
+        prerequisiteFailed &&
+        !taskFailed &&
+        request.headers.get("If-None-Match") === "*" &&
+        creates.mock.calls.at(-1)?.[1].title === "Call"
+      ) {
+        taskFailed = true;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Task response lost");
+      }
+    };
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    const text = `Call tomorrow @bills${prerequisite === "project" ? " #Home" : ""}`;
+    if (submission === "paste") await paste(`Earlier\n${text}\n  Child\nLast`);
+    else {
+      await type(text);
+      await act(async () => query<HTMLButtonElement>('button[type="submit"]').click());
+    }
+    await vi.waitFor(() => expect(failures).toHaveBeenCalledOnce());
+    const retry = failures.mock.calls[0]?.[1];
+    if (!retry) throw new Error("Missing prerequisite retry");
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    await act(async () => {
+      retry();
+      await vi.waitFor(() => expect(failures).toHaveBeenCalledTimes(2));
+    });
+    await act(async () => retry());
+    await vi.waitFor(() => {
+      if (submission === "paste")
+        expect(document.body.textContent).not.toContain("Retry remaining tasks");
+      else expect(input().value).toBe("");
+    });
+    // Both prerequisite and task toast actions reuse the same completed submission.
+    await type("New draft");
+    await act(async () => {
+      retry();
+      failures.mock.calls[1]?.[1]();
+    });
+    expect(input().value).toBe("New draft");
+    const projects = cache.getSnapshot().projects;
+    const allTasks = (
+      await Promise.all(
+        projects.map((project) => cache.store.listTasks(project.tracker.stateStore as string)),
+      )
+    ).flat();
+    expect(allTasks.map((item) => item.task.title).sort()).toEqual(
+      submission === "paste" ? ["Call", "Child", "Earlier", "Last"] : ["Call"],
+    );
+    const task = allTasks.find((item) => item.task.title === "Call");
+    expect(task?.task.allDay).toBe("2026-11-02");
+    expect(task?.task.types.has(`${targetUrl}#label-bills`)).toBe(true);
+    if (submission === "paste")
+      expect(allTasks.find((item) => item.task.title === "Child")?.task.parent).toBe(task?.task.id);
+    expect(creates.mock.calls.filter(([, data]) => data.title === "Call")).toHaveLength(1);
+    expect(projects.filter((item) => item.tracker.title === "Home")).toHaveLength(
+      prerequisite === "project" ? 1 : 0,
+    );
+    expect(failures).toHaveBeenCalledTimes(2);
   });
   it("keeps removed chip text literal through edits and guards Escape with a discard dialog", async () => {
     const close = vi.fn();
@@ -262,6 +386,16 @@ describe("composer component with the real cache and model", () => {
     expect(query(".tsk-composer-chips").textContent).toContain("Due Tomorrow");
     await submit(inbox.url, 2);
     expect(cache.getSnapshot().views[1]?.allDay).toBe("2026-11-03");
+  });
+  it("interprets a relative draft at submission after a focused midnight rollover", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call tomorrow");
+    expect(document.activeElement).toBe(input());
+    vi.setSystemTime(new Date("2026-11-02T00:30:00Z"));
+    await submit();
+    expect(cache.getSnapshot().views[0]?.allDay).toBe("2026-11-03");
   });
   it("uses the current day for date presets after an idle midnight", async () => {
     await act(async () =>

@@ -98,12 +98,13 @@ async function openInbox(page: Page) {
   await page.keyboard.press("q");
   const input = page.getByPlaceholder(placeholder, { exact: true });
   await expect(input).toBeFocused();
+  await expect(page.locator(".tsk-project-empty")).toBeHidden();
   if ((page.viewportSize()?.width ?? 1280) < 768)
     await expect(page.locator('[data-slot="sheet-content"]')).toBeVisible();
   return input;
 }
 
-test("scenario 1: parses quick add, creates Home and its label before saving, and retains the project", async ({
+test("scenario 1: parses quick add, creates Home and its label before saving, then restores the Inbox context", async ({
   page,
 }) => {
   const input = await openInbox(page);
@@ -140,10 +141,15 @@ test("scenario 1: parses quick add, creates Home and its label before saving, an
   await expect(
     page.locator(".ish-sidebar").locator(`a[href="/tasks/p/${encodeRef(home)}"]`),
   ).toContainText("1");
-  await input.fill("Next task");
+  await input.fill("Buy milk today p1");
   await input.press("Enter");
   await expect(input).toHaveValue("");
-  expect(await readTasks(page, home)).toHaveLength(2);
+  expect(await readTasks(page, home)).toHaveLength(1);
+  const [next] = await readTasks(page);
+  expect(next?.title).toBe("Buy milk");
+  expect(next?.priority).toBe("high");
+  expect(next?.project).toBe(`${inbox}#this`);
+  expect(next?.types.has(`${inbox}#label-bills`)).toBe(false);
   await input.press("Escape");
   await page.goto(`/tasks/p/${encodeRef(home)}`);
   await expect(page.getByRole("link", { name: "Pay rent", exact: true })).toBeVisible();

@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import "./drive-ui-dom";
 import { expect, it, vi } from "vitest";
 
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

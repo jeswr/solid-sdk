@@ -19,6 +19,10 @@ export class RdfIO {
         fetch: this.fetch,
         headers: { "Cache-Control": "no-cache" },
       });
+      // A validator belongs to the requested resource, never to a redirect target.
+      // In particular, listed members must not escape their stateStore after GET.
+      if (result.url !== url)
+        throw new TypeError("The RDF response URL must match the requested resource.");
       return { url: result.url, dataset: new Store([...result.dataset]), etag: result.etag };
     } catch (error) {
       if (error instanceof RdfFetchError)

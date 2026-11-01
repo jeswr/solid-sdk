@@ -26,6 +26,11 @@ export interface StoredTask extends Resource {
 export interface StoredProject extends Resource {
   tracker: TaskTracker;
 }
+/** Kept by one create operation, including when a PUT commits without a response. */
+export interface ProjectCreation {
+  owner: string;
+  reservation?: { name: string; dataset: Store } | undefined;
+}
 export interface StoreOptions {
   storage: string;
   webId: string;
@@ -78,9 +83,15 @@ export class TaskStore {
     if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
-        else
-          for (const url of await this.io.list(reg.location))
-            if (url.endsWith(".ttl")) urls.add(url);
+        else {
+          try {
+            const listed = await this.io.list(reg.location);
+            for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
+          } catch (error) {
+            if (!onError) throw error;
+            onError(reg.location, error);
+          }
+        }
       }
     const projects: StoredProject[] = [];
     for (const url of urls) {
@@ -158,7 +169,11 @@ export class TaskStore {
       }
     }
   }
-  async createProject(title: string, inbox = false): Promise<StoredProject> {
+  async createProject(
+    title: string,
+    inbox = false,
+    operation: ProjectCreation = { owner: crypto.randomUUID() },
+  ): Promise<StoredProject> {
     requireTitle(title);
     await this.protectTasks();
     await this.protectTasks(this.projects);
@@ -170,26 +185,48 @@ export class TaskStore {
       return path.slice(path.lastIndexOf("/") + 1).replace(/\.ttl$/, "");
     });
     for (let attempt = 0; attempt < 100; attempt++) {
-      const name = inbox ? "inbox" : uniqueSlug(title, used);
+      const reservation = operation.reservation;
+      const name = reservation?.name ?? (inbox ? "inbox" : uniqueSlug(title, used));
       const url = `${this.projects}${name}.ttl`;
       const stateStore = `${this.projects}${name}/`;
       await this.protectTasks(url);
       await this.protectTasks(stateStore);
-      const { dataset } = createTracker(url, title, stateStore, [this.options.webId], this.now());
-      let resource: Resource;
-      try {
-        resource = await this.io.write(url, dataset, { create: true });
-      } catch (error) {
-        if (!(error instanceof ModelError && error.status === 412) || inbox) throw error;
-        used.push(name);
-        continue;
+      let intended = reservation;
+      if (!intended) {
+        const { dataset } = createTracker(url, title, stateStore, [this.options.webId], this.now());
+        node(`${url}#this`, dataset).setText(initializationOwner, operation.owner);
+        intended = { name, dataset };
+        operation.reservation = intended;
+      }
+      let resource = reservation ? await this.io.optional(url) : undefined;
+      if (resource) {
+        const tracker = new TaskTracker(`${url}#this`, resource.dataset, DataFactory);
+        if (
+          !tracker.isTracker ||
+          tracker.stateStore !== stateStore ||
+          node(tracker.id, resource.dataset).text(initializationOwner) !== operation.owner
+        )
+          throw new ModelError(412, url, resource.etag);
+        if (node(tracker.id, resource.dataset).text(initializationState) === "ready")
+          return { ...resource, tracker };
+      } else {
+        try {
+          resource = await this.io.write(url, intended.dataset, { create: true });
+        } catch (error) {
+          // Only a definite collision before acquiring a reservation may choose a new slug.
+          if (!(error instanceof ModelError && error.status === 412) || inbox || reservation)
+            throw error;
+          operation.reservation = undefined;
+          used.push(name);
+          continue;
+        }
       }
       let container: Resource | undefined;
       try {
         container = await this.taskContainer(stateStore);
         await this.register(stateStore);
         // Finalize only while this attempt still owns its tracker revision.
-        resource = await this.claimResource(resource, `${url}#this`);
+        resource = await this.claimResource(resource, `${url}#this`, true);
       } catch (error) {
         const cleanup = { resource, resources: container ? [container] : [], title, inbox };
         this.pendingCleanup.set(resource.url, cleanup);
@@ -208,11 +245,16 @@ export class TaskStore {
     throw new ModelError(409, this.projects);
   }
   /** Change representation bytes so even content-based strong validators advance. */
-  private async claimResource(resource: Resource, subject: string): Promise<Resource> {
+  private async claimResource(
+    resource: Resource,
+    subject: string,
+    ready = false,
+  ): Promise<Resource> {
     const dataset = new Store([...resource.dataset]);
     const value = node(subject, dataset);
     if (value.text(initializationState) === "cleanup" || value.text(deletionState) === "pending")
       throw new ModelError(412, resource.url, resource.etag);
+    if (ready) value.setText(initializationState, "ready");
     const previous = value.date(`${NS.DCT}modified`)?.getTime() ?? -Infinity;
     value.setDate(`${NS.DCT}modified`, new Date(Math.max(this.now().getTime(), previous + 1)));
     return this.io.write(resource.url, dataset, { etag: resource.etag });
@@ -344,7 +386,7 @@ export class TaskStore {
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
   }
-  /** Prepare once so Retry uses the same data, destination and child revisions. */
+  /** Prepare once so Retry uses the same data, destination and reference revisions. */
   prepareTaskMove(
     item: StoredTask,
     source: StoredProject,
@@ -366,20 +408,21 @@ export class TaskStore {
       item,
       { url, dataset },
       async () => {
-        // Children can remain in a different project after being moved individually.
+        // Children and occurrences (including reopened copies) may remain in other projects.
         const projects = new Map(
           [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
         );
-        const children = new Map<string, StoredTask>();
+        const references = new Map<string, StoredTask>();
         for (const project of projects.values())
           for (const child of await this.listTasks(project.tracker.stateStore as string))
-            if (child.task.parent === item.task.id) children.set(child.url, child);
-        return [...children.values()];
+            if (child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
+              references.set(child.url, child);
+        return [...references.values()];
       },
       now,
     );
   }
-  /** Create, remap child links, then delete, reconciling before any compensation. */
+  /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
   async moveTaskToProject(
     item: StoredTask,
     source: StoredProject,

@@ -5,7 +5,7 @@ import { shortDayLabel } from "./days";
 import type { TaskView } from "./types";
 
 export type CompletionPlan =
-  | { kind: "close" }
+  | { kind: "close"; copyUrl?: string }
   | {
       kind: "advance";
       next: Date;

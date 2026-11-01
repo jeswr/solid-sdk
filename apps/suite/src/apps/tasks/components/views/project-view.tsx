@@ -66,26 +66,28 @@ export function ProjectView({
   const content = (
     <>
       {empty && (
-        <EmptyState
-          icon={
-            inbox ? (
-              <Inbox size={24} strokeWidth={1.5} aria-hidden="true" />
-            ) : (
-              <ListTodo size={24} strokeWidth={1.5} aria-hidden="true" />
-            )
-          }
-          title={inbox ? "Your Inbox is empty" : "No tasks yet"}
-          body={
-            inbox
-              ? "Add anything you need to do. Press q anywhere to add a task."
-              : `Add the first task to ${title}`
-          }
-          primaryAction={
-            <Button className="tsk-empty-add" onClick={() => focusAddTask()}>
-              Add task
-            </Button>
-          }
-        />
+        <div className="tsk-project-empty">
+          <EmptyState
+            icon={
+              inbox ? (
+                <Inbox size={24} strokeWidth={1.5} aria-hidden="true" />
+              ) : (
+                <ListTodo size={24} strokeWidth={1.5} aria-hidden="true" />
+              )
+            }
+            title={inbox ? "Your Inbox is empty" : "No tasks yet"}
+            body={
+              inbox
+                ? "Add anything you need to do. Press q anywhere to add a task."
+                : `Add the first task to ${title}`
+            }
+            primaryAction={
+              <Button className="tsk-empty-add" onClick={() => focusAddTask()}>
+                Add task
+              </Button>
+            }
+          />
+        </div>
       )}
       {list}
     </>

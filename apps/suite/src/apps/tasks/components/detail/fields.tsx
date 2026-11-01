@@ -16,7 +16,12 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@jeswr/suite-ui";
-import { DateTimeField, type DateTimeValue, RecurrenceEditor } from "@jeswr/suite-ui/date-time";
+import {
+  DateTimeField,
+  type DateTimeValue,
+  parseDateTime,
+  RecurrenceEditor,
+} from "@jeswr/suite-ui/date-time";
 import { Flag, Repeat2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail/recurrence-map";
@@ -43,20 +48,33 @@ function CommitDateField({
   disabled?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
-  const editing = useRef(false);
+  const [referenceDate, setReferenceDate] = useState(() => new Date());
+  const dirty = useRef(false);
   const signature = JSON.stringify(value);
   useEffect(() => {
-    if (!editing.current) setDraft(JSON.parse(signature));
+    if (!dirty.current) setDraft(JSON.parse(signature));
   }, [signature]);
   const commit = (form: HTMLFormElement) => {
-    editing.current = false;
-    if (form.checkValidity() && JSON.stringify(draft) !== signature) onCommit(draft);
+    const input = form.querySelector("input");
+    if (!dirty.current || !input) return;
+    // A focused draft may span midnight; resolve its raw phrase against the commit clock too.
+    const parsed = parseDateTime(input.value, "en-GB", new Date());
+    input.setCustomValidity(parsed.status === "invalid" ? parsed.message : "");
+    if (parsed.status === "invalid" || !form.checkValidity()) return;
+    const next = parsed.status === "valid" ? parsed.value : null;
+    dirty.current = false;
+    setDraft(next);
+    if (JSON.stringify(next) !== signature) onCommit(next);
   };
   return (
     <form
       className="tsk-detail-date"
+      onInput={() => {
+        dirty.current = true;
+        setReferenceDate(new Date());
+      }}
       onFocus={() => {
-        editing.current = true;
+        setReferenceDate(new Date());
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) commit(event.currentTarget);
@@ -70,7 +88,11 @@ function CommitDateField({
         label={label}
         locale="en-GB"
         value={draft}
-        onChange={setDraft}
+        referenceDate={referenceDate}
+        onChange={(value) => {
+          dirty.current = true;
+          setDraft(value);
+        }}
         disabled={disabled}
       />
     </form>
@@ -169,32 +191,51 @@ function LabelsField({
   const selected = project.tracker.labels
     .filter((label) => view.labelIds.includes(label.id))
     .map((label) => label.name.toLowerCase());
-  const setLabels = async (keys: string[]) => {
+  const setLabels = async (keys: string[], submittedName?: string) => {
+    // Either failed write must retry the entire user intent, including assignment.
+    const retry = () => {
+      void setLabels(keys, submittedName);
+    };
     setBusy(true);
     try {
       const missing = keys.filter(
         (key) => !project.tracker.labels.some((label) => label.name.toLowerCase() === key),
       );
       const updated = missing.length
-        ? await tasks.updateProject(project, (tracker) => {
-            for (const key of missing) {
-              if (!tracker.labels.some((label) => label.name.toLowerCase() === key)) {
-                const original = tasks.projects
-                  .flatMap((item) => item.tracker.labels)
-                  .find((label) => label.name.toLowerCase() === key);
-                tracker.defineCategory("Label", names.get(key) ?? key, undefined, original?.color);
+        ? await tasks.updateProject(
+            project,
+            (tracker) => {
+              for (const key of missing) {
+                if (!tracker.labels.some((label) => label.name.toLowerCase() === key)) {
+                  const original = tasks.projects
+                    .flatMap((item) => item.tracker.labels)
+                    .find((label) => label.name.toLowerCase() === key);
+                  tracker.defineCategory(
+                    "Label",
+                    names.get(key) ?? key,
+                    undefined,
+                    original?.color,
+                  );
+                }
               }
-            }
-          })
+            },
+            retry,
+          )
         : project;
       if (!updated) return;
       const ids = updated.tracker.labels
         .filter((label) => keys.includes(label.name.toLowerCase()))
         .map((label) => label.id);
-      await tasks.updateTask(stored, (task) => {
-        for (const label of updated.tracker.labels) task.types.delete(label.id);
-        for (const id of ids) task.types.add(id);
-      });
+      const saved = await tasks.updateTask(
+        stored,
+        (task) => {
+          for (const label of updated.tracker.labels) task.types.delete(label.id);
+          for (const id of ids) task.types.add(id);
+        },
+        retry,
+      );
+      if (saved && submittedName !== undefined)
+        setName((current) => (current === submittedName ? "" : current));
     } finally {
       setBusy(false);
     }
@@ -211,13 +252,13 @@ function LabelsField({
         disabled={busy}
       />
       <form
-        className="tsk-detail-inline"
+        className="tsk-detail-inline tsk-detail-label-create"
         onSubmit={(event) => {
           event.preventDefault();
           const label = name.trim();
           if (!label || busy) return;
           names.set(label.toLowerCase(), label);
-          void setLabels([...new Set([...selected, label.toLowerCase()])]).then(() => setName(""));
+          void setLabels([...new Set([...selected, label.toLowerCase()])], name);
         }}
       >
         <input
@@ -363,41 +404,44 @@ export function TaskProperties({
                 updateDue(
                   checked
                     ? { kind: "date", date: localDate(view.due) }
-                    : { kind: "dateTime", dateTime: view.due.toISOString() },
+                    : {
+                        kind: "dateTime",
+                        dateTime: new Date(`${view.allDay}T00:00:00`).toISOString(),
+                      },
                 );
               }}
             />
             <label htmlFor={allDayId}>All day</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost" disabled={!view.due}>
+                  <Repeat2 size={16} aria-hidden="true" />
+                  Repeat
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="tsk-detail-popover" align="end">
+                <RecurrenceEditor
+                  locale="en-GB"
+                  value={toEditorRule(rule)}
+                  startDate={localDate(anchor)}
+                  onChange={(value) => {
+                    try {
+                      const recurrence = fromEditorRule(value, anchor);
+                      setRepeatError("");
+                      void tasks.updateTask(stored, (task) => {
+                        if (task.dueDate) task.recurrence = recurrence;
+                      });
+                    } catch (error) {
+                      setRepeatError(
+                        error instanceof Error ? error.message : "Choose another repeat pattern.",
+                      );
+                    }
+                  }}
+                />
+                {repeatError && <p role="alert">{repeatError}</p>}
+              </PopoverContent>
+            </Popover>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost" disabled={!view.due}>
-                <Repeat2 size={16} aria-hidden="true" />
-                Repeat
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="tsk-detail-popover" align="end">
-              <RecurrenceEditor
-                locale="en-GB"
-                value={toEditorRule(rule)}
-                startDate={localDate(anchor)}
-                onChange={(value) => {
-                  try {
-                    const recurrence = fromEditorRule(value, anchor);
-                    setRepeatError("");
-                    void tasks.updateTask(stored, (task) => {
-                      if (task.dueDate) task.recurrence = recurrence;
-                    });
-                  } catch (error) {
-                    setRepeatError(
-                      error instanceof Error ? error.message : "Choose another repeat pattern.",
-                    );
-                  }
-                }}
-              />
-              {repeatError && <p role="alert">{repeatError}</p>}
-            </PopoverContent>
-          </Popover>
           {rule && <span className="tsk-chip">{humanise(rule, anchor)}</span>}
         </div>
       </div>

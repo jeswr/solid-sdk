@@ -64,11 +64,17 @@ function subscribeMobile(callback: () => void) {
   media.addEventListener("change", callback);
   return () => media.removeEventListener("change", callback);
 }
+type TaskSave = () => Promise<{ task: StoredTask; project: StoredProject } | undefined>;
 interface PasteBatch {
   entries: PasteEntry[];
   index: number;
   created: Map<number, { task: StoredTask; project: StoredProject }>;
-  save?: (() => Promise<{ task: StoredTask; project: StoredProject } | undefined>) | undefined;
+  save?: TaskSave | undefined;
+}
+interface DraftSave {
+  revision: number;
+  draft: ComposeResult;
+  save?: TaskSave | undefined;
 }
 const parseFailure = "Couldn't interpret this task. Edit the text and try again.";
 
@@ -92,7 +98,7 @@ export function Composer({
     () => false,
   );
   const [now, setNow] = useState(() => new Date());
-  const [defaults, setDefaults] = useState<ComposeContext["defaults"]>(() => ({
+  const [defaults] = useState<ComposeContext["defaults"]>(() => ({
     projectUrl: project.url,
     ...(sectionId
       ? {
@@ -114,6 +120,7 @@ export function Composer({
   const busyRef = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
+  const preparedSave = useRef<DraftSave | undefined>(undefined);
   const requestCloseRef = useRef<() => void>(() => {});
   const id = useId();
   const [labelName, setLabelName] = useState("");
@@ -194,68 +201,88 @@ export function Composer({
     });
     focus();
   };
-  async function prepareSave(
+  function prepareSave(
     draft: ComposeResult,
     parent?: { task: StoredTask; project: StoredProject },
     onRetry?: () => void,
   ) {
     if (!draft.canSubmit) throw new Error("Every task needs a title");
-    const snapshot = cache.getSnapshot();
-    let target = parent?.project;
-    if (!target && draft.project?.kind === "create") {
-      const name = draft.project.name;
-      target =
-        snapshot.projects.find(
-          (item) => item.tracker.title?.toLowerCase() === name.toLowerCase(),
-        ) ?? (await cache.createProject(name));
-    } else if (!target) {
-      const targetUrl =
-        draft.project?.kind === "existing" ? draft.project.url : defaults?.projectUrl;
-      target = snapshot.projects.find((item) => item.url === targetUrl);
-    }
-    if (!target) return undefined;
-    target = await cache.ensureLabels(
-      target,
-      draft.labels.map((label) => label.name),
-    );
-    if (!target) return undefined;
-    await cache.loadTasks(target, cache.getSnapshot().tasks[target.url]?.status === "error");
-    if (cache.getSnapshot().tasks[target.url]?.status !== "ready")
-      throw new Error("Couldn't load the project's tasks. Try again.");
-    const create = cache.prepareTaskCreate(
-      target,
-      taskSubmission(draft, target, parent?.task.task.id),
-      onRetry,
-    );
-    const destination = target;
+    let createProject: ReturnType<typeof cache.prepareProjectCreate> | undefined;
+    let create: ReturnType<typeof cache.prepareTaskCreate> | undefined;
+    let destination: StoredProject | undefined;
+    let announced = false;
     return async () => {
+      if (!create) {
+        const snapshot = cache.getSnapshot();
+        let target = parent?.project;
+        if (!target && draft.project?.kind === "create") {
+          const name = draft.project.name;
+          // Once reserved, finish this project operation even if discovery sees its partial write.
+          target = createProject
+            ? await createProject()
+            : snapshot.projects.find(
+                (item) => item.tracker.title?.toLowerCase() === name.toLowerCase(),
+              );
+          if (!target && !createProject) {
+            createProject = cache.prepareProjectCreate(name, onRetry);
+            target = await createProject();
+          }
+        } else if (!target) {
+          const targetUrl =
+            draft.project?.kind === "existing" ? draft.project.url : defaults?.projectUrl;
+          target = snapshot.projects.find((item) => item.url === targetUrl);
+        }
+        if (!target) return undefined;
+        target = await cache.ensureLabels(
+          target,
+          draft.labels.map((label) => label.name),
+          onRetry,
+        );
+        if (!target) return undefined;
+        await cache.loadTasks(target, cache.getSnapshot().tasks[target.url]?.status === "error");
+        if (cache.getSnapshot().tasks[target.url]?.status !== "ready")
+          throw new Error("Couldn't load the project's tasks. Try again.");
+        create = cache.prepareTaskCreate(
+          target,
+          taskSubmission(draft, target, parent?.task.task.id),
+          onRetry,
+        );
+        destination = target;
+      }
       const task = await create();
-      if (!task) return undefined;
-      if (destination.url !== project.url) toast.success(`Added to ${destination.tracker.title}`);
+      if (!task || !destination) return undefined;
+      if (!announced && destination.url !== project.url)
+        toast.success(`Added to ${destination.tracker.title}`);
+      announced = true;
       return { task, project: destination };
     };
   }
   async function submit() {
     if (parseError || !result.canSubmit || busyRef.current || batch) return;
+    if (preparedSave.current?.revision !== revision.current) {
+      // Capture a fresh interpretation once; retries keep this submission and its reservations.
+      const current = { ...ctx, now: new Date() };
+      try {
+        const draft = applyControls(parseQuickAdd(text, current), controls, current, text);
+        if (!draft.canSubmit) return;
+        preparedSave.current = { revision: revision.current, draft };
+      } catch {
+        toast.error(parseFailure);
+        return;
+      }
+    }
+    await saveDraft(preparedSave.current);
+  }
+  async function saveDraft(prepared: DraftSave) {
+    if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
-    const submittedRevision = revision.current;
     try {
-      const save = await prepareSave(result);
-      const saved = await save?.();
-      if (saved && revision.current === submittedRevision) {
-        setDefaults({
-          projectUrl: saved.project.url,
-          ...(result.sectionId
-            ? {
-                sectionId: result.sectionId,
-                sectionName:
-                  saved.project.tracker.sections.find((section) => section.id === result.sectionId)
-                    ?.name ?? "Section",
-              }
-            : {}),
-          ...(due ? { due } : {}),
-        });
+      prepared.save ??= prepareSave(prepared.draft, undefined, () => void saveDraft(prepared));
+      const saved = await prepared.save?.();
+      if (saved && revision.current === prepared.revision) {
+        revision.current++;
+        preparedSave.current = undefined;
         setText("");
         setKeepText(new Set());
         setControls({});
@@ -281,7 +308,7 @@ export function Composer({
         const entry = pending.entries[pending.index] as PasteEntry;
         const parent =
           entry.parentIndex === undefined ? undefined : pending.created.get(entry.parentIndex);
-        pending.save ??= await prepareSave(entry.result, parent, () => void addPaste(pending));
+        pending.save ??= prepareSave(entry.result, parent, () => void addPaste(pending));
         const saved = await pending.save?.();
         if (!saved) {
           setPasteFailed(true);

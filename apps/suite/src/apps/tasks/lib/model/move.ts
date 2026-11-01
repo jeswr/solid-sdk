@@ -6,7 +6,7 @@ import { DataFactory, Store } from "./rdf";
 import type { StoredTask } from "./store";
 import { TaskItem } from "./task";
 
-interface ChildMove {
+interface ReferenceMove {
   original: StoredTask;
   intended: Store;
 }
@@ -18,17 +18,23 @@ const stored = (resource: Resource): StoredTask => ({
 
 /** One move intent, retained across retries, including ambiguous writes and compensation. */
 export class TaskMove {
-  readonly children = new Map<string, StoredTask>();
-  private plan!: ChildMove[];
+  readonly references = new Map<string, StoredTask>();
+  private plan!: ReferenceMove[];
   private rollingBack = false;
+  private replan = false;
   private result: StoredTask | undefined;
   constructor(
     private readonly io: RdfIO,
     private readonly source: StoredTask,
     private readonly destination: { url: string; dataset: Store },
-    private readonly listChildren: () => Promise<StoredTask[]>,
+    private readonly listReferences: () => Promise<StoredTask[]>,
     private readonly modified: Date,
   ) {}
+
+  /** A definite rejection was fully compensated; Retry may use fresh resources. */
+  get canReplan(): boolean {
+    return this.replan;
+  }
 
   /** Read before retrying; a lost response is success only when the intended data is present. */
   private async write(url: string, dataset: Store, etag?: string | null): Promise<StoredTask> {
@@ -50,20 +56,23 @@ export class TaskMove {
   private async rollback(): Promise<void> {
     // No compensation is safe until we know the original survived.
     if (!(await this.io.optional(this.source.url))) throw new ModelError(409, this.source.url);
-    for (const child of [...this.plan].reverse()) {
-      const current = await this.io.optional(child.original.url);
-      if (!current) continue; // A separately deleted child no longer references either copy.
+    for (const reference of [...this.plan].reverse()) {
+      const current = await this.io.optional(reference.original.url);
+      if (!current) continue; // A separately deleted task no longer references either copy.
       const task = stored(current);
-      if (task.task.parent !== `${this.destination.url}#it`) {
-        if (same(current.dataset, child.original.dataset)) child.original = task;
+      if (
+        task.task.parent !== `${this.destination.url}#it` &&
+        task.task.clonedFrom !== `${this.destination.url}#it`
+      ) {
+        if (same(current.dataset, reference.original.dataset)) reference.original = task;
         continue;
       }
-      if (!same(current.dataset, child.intended))
+      if (!same(current.dataset, reference.intended))
         throw new ModelError(412, current.url, current.etag);
       // Restore only our revision. A failed/lost rollback is reconciled by write().
-      child.original = await this.write(current.url, child.original.dataset, current.etag);
+      reference.original = await this.write(current.url, reference.original.dataset, current.etag);
     }
-    // Recheck after rolling children back; retain the destination if the source disappeared.
+    // Recheck after rolling references back; retain the destination if the source disappeared.
     if (!(await this.io.optional(this.source.url))) throw new ModelError(409, this.source.url);
     const destination = await this.io.optional(this.destination.url);
     if (destination) {
@@ -76,19 +85,21 @@ export class TaskMove {
       }
     }
     this.rollingBack = false;
-    this.children.clear();
+    this.references.clear();
   }
 
   async run(): Promise<StoredTask> {
     if (this.result) return this.result;
+    this.replan = false;
     if (this.rollingBack) {
       if (await this.io.optional(this.source.url)) await this.rollback();
       else this.rollingBack = false; // Finish forward if the source vanished during rollback.
     }
-    this.plan ??= (await this.listChildren()).map((original) => {
+    this.plan ??= (await this.listReferences()).map((original) => {
       const intended = new Store([...original.dataset]);
       const task = new TaskItem(original.task.id, intended, DataFactory);
-      task.parent = `${this.destination.url}#it`;
+      if (task.parent === this.source.task.id) task.parent = `${this.destination.url}#it`;
+      if (task.clonedFrom === this.source.task.id) task.clonedFrom = `${this.destination.url}#it`;
       task.modified = this.modified;
       return { original, intended };
     });
@@ -96,15 +107,19 @@ export class TaskMove {
     let deleting = false;
     try {
       moved = await this.write(this.destination.url, this.destination.dataset);
-      for (const child of this.plan) {
-        const updated = await this.write(child.original.url, child.intended, child.original.etag);
-        this.children.set(updated.url, updated);
+      for (const reference of this.plan) {
+        const updated = await this.write(
+          reference.original.url,
+          reference.intended,
+          reference.original.etag,
+        );
+        this.references.set(updated.url, updated);
       }
       deleting = true;
       await this.io.remove(this.source.url, this.source.etag);
     } catch (error) {
       // DELETE may have committed even though fetch rejected. An unreadable source
-      // leaves the destination and child references intact for reconciliation on Retry.
+      // leaves the destination and task references intact for reconciliation on Retry.
       const source = await this.io.optional(this.source.url);
       if (!source) {
         if (deleting && moved) {
@@ -126,6 +141,7 @@ export class TaskMove {
           "Couldn't finish moving the task; both copies were retained.",
         );
       }
+      this.replan = rejected;
       throw error;
     }
     this.result = moved;

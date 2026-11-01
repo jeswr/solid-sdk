@@ -12,6 +12,7 @@ let cache: TasksCache;
 let route = { pathname: "/tasks/inbox", query: "" };
 const routeListeners = new Set<() => void>();
 const router = { replace: vi.fn(), push: vi.fn() };
+let dismissDetails: (() => void) | undefined;
 function useRoute() {
   return useSyncExternalStore(
     (listener) => {
@@ -35,8 +36,18 @@ vi.mock("@/lib/session/pod-session", () => ({
   usePodSessionState: () => ({ status: "ready", session: { webId } }),
 }));
 vi.mock("@/components/interim-shell/suite-frame", () => ({
-  SuiteFrame: ({ children, details }: { children: ReactNode; details: ReactNode }) =>
-    h("main", null, children, details),
+  SuiteFrame: ({
+    children,
+    details,
+    onDetailsClose,
+  }: {
+    children: ReactNode;
+    details: ReactNode;
+    onDetailsClose?: () => void;
+  }) => {
+    dismissDetails = onDetailsClose;
+    return h("main", null, children, details);
+  },
 }));
 vi.mock("../../src/apps/tasks/components/sidebar", () => ({ TasksSidebar: () => null }));
 vi.mock("../../src/apps/tasks/components/sort-menu", () => ({ SortMenu: () => null }));
@@ -76,14 +87,25 @@ function textarea(label: string) {
   if (!input) throw new Error(`Missing ${label}`);
   return input;
 }
-async function type(input: HTMLTextAreaElement, value: string) {
+async function type(input: HTMLTextAreaElement | HTMLInputElement, value: string) {
   await act(() => {
-    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set?.call(
-      input,
-      value,
-    );
+    const prototype =
+      input instanceof HTMLInputElement
+        ? HTMLInputElement.prototype
+        : window.HTMLTextAreaElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+function input(label: string) {
+  const fieldLabel = [...document.querySelectorAll("label")].find(
+    (element) => element.textContent === label,
+  );
+  const field =
+    document.querySelector(`input[aria-label="${label}"]`) ??
+    (fieldLabel && document.getElementById(fieldLabel.htmlFor));
+  if (!(field instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
+  return field;
 }
 async function navigate(pathname: string, query = "") {
   await act(() => {
@@ -133,10 +155,309 @@ beforeEach(() => {
   router.replace.mockClear();
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("detail edits", () => {
+  it("preserves an invalid due-date draft during refresh without saving it on blur", async () => {
+    const { pod, parent, store, inbox } = await setup();
+    await mount(h(Detail, { url: parent.url }));
+    const field = input("Due date");
+    await act(() => field.focus());
+    await type(field, "not a date");
+    await store.updateTask(parent, (task) => {
+      task.allDay = "2026-11-04";
+    });
+    await act(() => cache.loadTasks(inbox, true));
+    expect(field.value).toBe("not a date");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    const before = pod.mutations().length;
+    await act(() => field.blur());
+    expect(pod.mutations()).toHaveLength(before);
+    expect((await store.readTask(parent.url)).task.allDay).toBe("2026-11-04");
+  });
+  it.each([
+    "Task title",
+    "Description",
+    "Due date",
+  ])("synchronizes an untouched focused %s after a background update without writing on blur", async (label) => {
+    const { pod, parent, store, inbox } = await setup();
+    const original = await store.updateTask(parent, (task) => {
+      task.allDay = "2026-11-03";
+    });
+    await cache.loadTasks(inbox, true);
+    await mount(h(Detail, { url: parent.url }));
+    const field = label === "Due date" ? input(label) : textarea(label);
+    await act(() => field.focus());
+    const before = field.value;
+    await store.updateTask(original, (task) => {
+      task.title = "Remote title";
+      task.description = "Remote description";
+      task.allDay = "2026-11-04";
+    });
+    await act(() => cache.loadTasks(inbox, true));
+    expect(field.value).not.toBe(before);
+    const mutations = pod.mutations().length;
+    await act(() => field.blur());
+    expect(pod.mutations()).toHaveLength(mutations);
+    const saved = (await store.readTask(parent.url)).task;
+    expect(saved.title).toBe("Remote title");
+    expect(saved.description).toBe("Remote description");
+    expect(saved.allDay).toBe("2026-11-04");
+  });
+  it.each([
+    "Task title",
+    "Description",
+    "Due date",
+  ])("preserves and commits a user-edited %s across a background update", async (label) => {
+    const { parent, store, inbox } = await setup();
+    const original = await store.updateTask(parent, (task) => {
+      task.allDay = "2026-11-03";
+    });
+    await cache.loadTasks(inbox, true);
+    await mount(h(Detail, { url: parent.url }));
+    const field = label === "Due date" ? input(label) : textarea(label);
+    await act(() => field.focus());
+    await type(field, label === "Due date" ? "5 November 2026" : "Local draft");
+    const draft = field.value;
+    await store.updateTask(original, (task) => {
+      task.title = "Remote title";
+      task.description = "Remote description";
+      task.allDay = "2026-11-04";
+    });
+    await act(() => cache.loadTasks(inbox, true));
+    expect(field.value).toBe(draft);
+    await act(() => field.blur());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    const saved = (await store.readTask(parent.url)).task;
+    expect(saved.title).toBe(label === "Task title" ? "Local draft" : "Remote title");
+    expect(saved.description).toBe(label === "Description" ? "Local draft" : "Remote description");
+    expect(saved.allDay).toBe(label === "Due date" ? "2026-11-05" : "2026-11-04");
+  });
+  it.each([
+    "tracker",
+    "task",
+  ])("retries the complete label creation and assignment after a rejected %s PUT", async (resource) => {
+    const { pod, parent, store, inbox, failures } = await setup();
+    await mount(h(Detail, { url: parent.url }));
+    const field = input("New label name");
+    await type(field, "Bills");
+    let failed = false;
+    pod.intercept = (request) => {
+      if (
+        !failed &&
+        request.method === "PUT" &&
+        request.url === (resource === "tracker" ? inbox.url : parent.url)
+      ) {
+        failed = true;
+        return new Response(null, { status: 503 });
+      }
+    };
+    await act(() =>
+      field.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await act(() => vi.waitFor(() => expect(failures).toHaveBeenCalledOnce()));
+    expect(field.value).toBe("Bills");
+    expect(cache.getSnapshot().views.find((view) => view.url === parent.url)?.labelIds).toEqual([]);
+    const retry = failures.mock.calls[0]?.[1] as () => void;
+    await act(() => retry());
+    await act(() => vi.waitFor(() => expect(field.value).toBe("")));
+    const project = await store.readProject(inbox.url);
+    expect(project.tracker.labels.map((label) => label.name)).toEqual(["Bills"]);
+    const labelId = project.tracker.labels[0]?.id as string;
+    expect((await store.readTask(parent.url)).task.types.has(labelId)).toBe(true);
+    expect(cache.getSnapshot().views.find((view) => view.url === parent.url)?.labelIds).toEqual([
+      labelId,
+    ]);
+    expect(failures).toHaveBeenCalledOnce();
+  });
+  it("retains autocomplete label assignment and colour when tracker creation is retried", async () => {
+    const { pod, parent, store, target, inbox, failures } = await setup();
+    await store.updateProject(target, (tracker) => {
+      tracker.defineCategory("Label", "Bills", undefined, "var(--warning)");
+    });
+    await cache.refreshProjects();
+    await mount(h(Detail, { url: parent.url }));
+    let failed = false;
+    pod.intercept = (request) => {
+      if (!failed && request.method === "PUT" && request.url === inbox.url) {
+        failed = true;
+        return new Response(null, { status: 503 });
+      }
+    };
+    const field = input("Labels");
+    await act(() => field.focus());
+    await key(field, "ArrowDown");
+    await key(field, "Enter");
+    await act(() => vi.waitFor(() => expect(failures).toHaveBeenCalledOnce()));
+    const retry = failures.mock.calls[0]?.[1] as () => void;
+    await act(() => retry());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    const project = await store.readProject(inbox.url);
+    expect(project.tracker.labels).toHaveLength(1);
+    const label = project.tracker.labels[0];
+    expect(label?.name).toBe("Bills");
+    expect(label?.color).toBe("var(--warning)");
+    expect((await store.readTask(parent.url)).task.types.has(label?.id as string)).toBe(true);
+  });
+  it("keeps a newer label-name draft when an earlier assignment succeeds", async () => {
+    const { pod, parent } = await setup();
+    await mount(h(Detail, { url: parent.url }));
+    const field = input("New label name");
+    const gate = deferred<Response | undefined>();
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url === parent.url ? gate.promise : undefined;
+    await type(field, "Bills");
+    await act(() =>
+      field.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await type(field, "Next label");
+    await act(() => gate.resolve(undefined));
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect(field.value).toBe("Next label");
+  });
+  it("keeps the detail open when a Sheet captures the sub-task composer's Escape", async () => {
+    await setup();
+    const { host } = await mount(h(TasksApp, null, "List"));
+    const trigger = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Add sub-task",
+    );
+    if (!trigger) throw new Error("Missing Add sub-task");
+    await click(trigger);
+    const field = host.querySelector<HTMLInputElement>('input[aria-label="Sub-task title"]');
+    if (!field) throw new Error("Missing Sub-task title");
+    await act(() => field.focus());
+    const captureEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismissDetails?.();
+    };
+    document.addEventListener("keydown", captureEscape, true);
+    try {
+      await key(field, "Escape");
+    } finally {
+      document.removeEventListener("keydown", captureEscape, true);
+    }
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+  });
+  it("expands one sub-task row, adds on Enter, and collapses on Escape", async () => {
+    const { parent, store, inbox } = await setup();
+    const { host } = await mount(h(Detail, { url: parent.url }));
+    const add = () =>
+      [...host.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Add sub-task",
+      );
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+    const trigger = add();
+    if (!trigger) throw new Error("Missing Add sub-task");
+    await click(trigger);
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Sub-task title"]');
+    if (!input) throw new Error("Missing Sub-task title");
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(add()).toBeUndefined();
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "Buy soil",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // jsdom does not synthesize a form's implicit Enter submission.
+    await act(() =>
+      input.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect(host.textContent).toContain("0/1");
+    expect(
+      (await store.listTasks(inbox.tracker.stateStore as string)).find(
+        (task) => task.task.title === "Buy soil",
+      )?.task.parent,
+    ).toBe(parent.task.id);
+    await key(input, "Escape");
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(add()));
+  });
+  it("keeps the all-day calendar day when disabling All day in another timezone", async () => {
+    const { parent, store } = await setup();
+    const previous = process.env.TZ;
+    try {
+      process.env.TZ = "Asia/Tokyo";
+      await cache.updateTask(parent, (task) => {
+        task.allDay = "2026-11-03";
+      });
+      expect((await store.readTask(parent.url)).task.dueDate?.toISOString()).toBe(
+        "2026-11-02T15:00:00.000Z",
+      );
+      process.env.TZ = "America/Los_Angeles";
+      const { host } = await mount(h(Detail, { url: parent.url }));
+      const toggle = host.querySelector('[role="switch"]');
+      if (!toggle) throw new Error("Missing All day switch");
+      await click(toggle);
+      await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+      const task = (await store.readTask(parent.url)).task;
+      expect(task.allDay).toBeUndefined();
+      expect(task.dueDate).toEqual(new Date("2026-11-03T00:00:00-08:00"));
+    } finally {
+      process.env.TZ = previous;
+    }
+  });
+  it.each([
+    "Due date",
+    "Custom reminder",
+  ])("refreshes the clock for a %s edit that stays focused across midnight", async (label) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T10:00:00Z"));
+    const { parent, store } = await setup();
+    await cache.updateTask(parent, (task) => {
+      task.dueDate = new Date("2026-11-10T17:00:00Z");
+    });
+    const { host } = await mount(h(Detail, { url: parent.url }));
+    if (label === "Custom reminder") {
+      const add = [...host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Add reminder",
+      );
+      if (!add) throw new Error("Missing Add reminder");
+      await click(add);
+      const custom = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Custom…",
+      );
+      if (!custom) throw new Error("Missing Custom reminder");
+      await click(custom);
+    }
+    const fieldLabel = [...document.querySelectorAll("label")].find(
+      (element) => element.textContent === label,
+    );
+    const field = fieldLabel && document.getElementById(fieldLabel.htmlFor);
+    if (!(field instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
+    await act(() => field.focus());
+    vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        field,
+        label === "Due date" ? "tomorrow" : "tomorrow 9am",
+      );
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(field.closest("form")?.textContent).toContain("3 November 2026");
+    await act(() => field.blur());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    const task = (await store.readTask(parent.url)).task;
+    if (label === "Due date") expect(task.allDay).toBe("2026-11-03");
+    else expect(task.reminders[0]?.time).toEqual(new Date(2026, 10, 3, 9));
+  });
+  it("interprets a relative due-date draft at commit time after midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T23:59:00Z"));
+    const { parent, store } = await setup();
+    await mount(h(Detail, { url: parent.url }));
+    const field = input("Due date");
+    await act(() => field.focus());
+    await type(field, "tomorrow");
+    vi.setSystemTime(new Date("2026-11-02T00:01:00Z"));
+    await act(() => field.blur());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect((await store.readTask(parent.url)).task.allDay).toBe("2026-11-03");
+  });
   it("saves yearly recurrence and humanises the date-only marker after a zone change", async () => {
     const { parent, store } = await setup();
     const previous = process.env.TZ;

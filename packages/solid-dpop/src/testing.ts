@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * TEST-ONLY helpers for driving a headless CSS v8 OIDC interaction (login → pick-WebID → consent)
  * as an already-logged-in user, so a consumer's live test can exercise the REAL authorization-code
@@ -18,6 +19,7 @@ import {
   type LoopbackListener,
   type OidcProviderMetadata,
 } from "./authCode.js";
+import type { HttpOptions } from "./http.js";
 
 interface PromptResponse {
   prompt?: string;
@@ -129,10 +131,10 @@ export async function headlessLogin(
   meta: OidcProviderMetadata,
   client: ClientRegistration,
   listener: LoopbackListener,
-  opts: { prompt?: "consent" | "login" } = {},
+  opts: HttpOptions & { prompt?: "consent" | "login" } = {},
 ): Promise<AuthCodeSession> {
   const pkce = generatePkce();
-  const state = randomBytes(16).toString("base64url");
+  const state = listener.state ?? randomBytes(16).toString("base64url");
   const authUrl = buildAuthorizationUrl({
     meta,
     client,
@@ -147,6 +149,7 @@ export async function headlessLogin(
     throw new Error("State mismatch on authorization redirect (headless driver).");
   }
   return exchangeCode({
+    ...opts,
     meta,
     client,
     redirectUri: listener.redirectUri,

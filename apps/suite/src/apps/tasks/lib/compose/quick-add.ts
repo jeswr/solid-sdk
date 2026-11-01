@@ -218,9 +218,10 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
         result.labels.push(resolved);
       label = `@${resolved.name}`;
     } else if (kind === "due") label = `Due ${formatDue(due as ComposeDue, ctx)}`;
-    else if (kind === "repeat")
-      label = `Repeats ${humanise(result.recurrence as RecurrenceRule, due?.date ?? ctx.now, ctx.tz)}`;
-    else label = `P${result.priority}`;
+    else if (kind === "repeat") {
+      const rule = humanise(result.recurrence as RecurrenceRule, due?.date ?? ctx.now, ctx.tz);
+      label = `Repeats ${rule.charAt(0).toLowerCase()}${rule.slice(1)}`;
+    } else label = `P${result.priority}`;
     chips.push({
       id: `${kind}:${span.start}`,
       kind,

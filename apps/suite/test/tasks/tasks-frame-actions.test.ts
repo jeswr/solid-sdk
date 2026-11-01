@@ -17,6 +17,63 @@ function context(cache: TasksCache): TasksContextValue {
 }
 
 describe("recurring completion action", () => {
+  it.each([
+    2, 3,
+  ])("resumes a lost occurrence PUT on the next complete action (count: %s)", async (count) => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const original = await store.createTask(inbox, {
+      title: "Repeat",
+      state: "open",
+      dueDate: new Date("2026-11-01T12:00:00Z"),
+      recurrence: { frequency: "DAILY", count },
+      reminders: [{ time: new Date("2026-11-01T11:00:00Z") }],
+    });
+    await cache.loadTasks(inbox, true);
+    const view = cache.getSnapshot().views.find((task) => task.url === original.url);
+    if (!view) throw new Error("Missing original");
+    let copyUrl: string | undefined;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
+        copyUrl = request.url;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Occurrence response lost after commit");
+      }
+      return undefined;
+    };
+    expect(await completeTask(view, context(cache))).toBeUndefined();
+    expect(failures).toHaveBeenCalledOnce();
+    expect(cache.getSnapshot().views.filter((task) => task.state === "closed")).toHaveLength(1);
+    const current = cache.getSnapshot().views.find((task) => task.url === original.url);
+    if (!current) throw new Error("Missing reconciled original");
+    expect(current.state).toBe("open");
+    pod.intercept = undefined;
+    pod.requests.length = 0;
+    const [resumed, repeated] = await Promise.all([
+      completeTask(current, context(cache)),
+      completeTask(current, context(cache)),
+    ]);
+    expect(repeated).toBe(resumed);
+    expect(resumed).toMatchObject({ kind: "advance", copyUrl });
+    expect(pod.requests[0]).toMatchObject({ method: "GET", url: original.url });
+    expect(pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+    ]);
+    const updated = await store.readTask(original.url);
+    expect(updated.task.state).toBe("open");
+    expect(updated.task.dueDate).toEqual(new Date("2026-11-02T12:00:00Z"));
+    expect(updated.task.reminders[0]?.time).toEqual(new Date("2026-11-02T11:00:00Z"));
+    expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(2);
+
+    // A resolved operation releases the task for its next occurrence.
+    const next = cache.getSnapshot().views.find((task) => task.url === original.url);
+    if (!next) throw new Error("Missing advanced original");
+    const completed = await completeTask(next, context(cache));
+    expect(completed?.kind).toBe(count === 2 ? "close" : "advance");
+    expect((await store.readTask(original.url)).task.dueDate).toEqual(
+      new Date(count === 2 ? "2026-11-02T12:00:00Z" : "2026-11-03T12:00:00Z"),
+    );
+  });
+
   it("creates a conditional closed copy, advances due and reminders, retains the plan and emits its toast", async () => {
     const { cache, store, pod, inbox } = await frameCache();
     const original = await store.createTask(inbox, {

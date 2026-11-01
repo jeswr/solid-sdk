@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 .tsk-detail {
   padding: var(--space-4);
   min-width: 0;
@@ -27,10 +28,17 @@
 }
 .tsk-detail-title-row > .tsk-check-target {
   flex: none;
-  margin-top: var(--space-3);
+  margin-top: 10px;
 }
-.tsk-detail-title {
+.tsk-detail .tsk-detail-title {
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
   font-size: var(--text-xl);
+  line-height: 28px;
   font-weight: 600;
   resize: none;
   overflow: hidden;
@@ -77,7 +85,7 @@
 }
 .tsk-detail-properties {
   display: grid;
-  gap: var(--space-4);
+  gap: 12px;
   border-top: 1px solid var(--border);
   padding-top: var(--space-4);
 }
@@ -86,6 +94,11 @@
   grid-template-columns: 96px minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
+  justify-items: start;
+}
+.tsk-detail-property > :last-child {
+  width: 100%;
+  min-width: 0;
 }
 .tsk-detail-property > span {
   padding-top: var(--space-2);
@@ -96,6 +109,22 @@
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+}
+.tsk-detail-stack > button,
+.tsk-detail-stack > .tsk-chip {
+  align-self: flex-start;
+}
+.tsk-detail-inline {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+.tsk-detail-label-create {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.tsk-detail-label-create > button {
+  flex: none;
+  padding-inline: 4px;
 }
 .tsk-detail-inline > input {
   flex: 1;
@@ -113,6 +142,14 @@
 .tsk-detail-date input {
   min-width: 0;
   width: 100%;
+}
+.tsk-detail-date .suite-date-field > label,
+.tsk-detail-date .suite-date-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .tsk-detail-muted,
 .tsk-detail-footer {
@@ -132,6 +169,7 @@
 .tsk-detail-priority {
   flex-wrap: wrap;
   width: 100%;
+  justify-content: flex-start;
 }
 .tsk-detail-priority [data-slot="toggle-group-item"] {
   padding-inline: var(--space-2);
@@ -146,7 +184,7 @@
   color: var(--info);
 }
 .tsk-detail-reminders li {
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 .tsk-detail .suite-field > .suite-label {
   position: absolute;
@@ -160,6 +198,11 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.tsk-detail .tsk-detail-title:focus-visible {
+  outline-width: 1px;
+  outline-offset: 3px;
+  box-shadow: none;
+}
 .tsk-detail-back {
   display: none;
 }
@@ -168,6 +211,13 @@
   max-width: 100vw;
 }
 @media (max-width: 767px) {
+  .tsk-detail-property {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .tsk-detail-property > span {
+    padding-top: 0;
+  }
   .ish-details-sheet:has(.tsk-detail) {
     inset: 0;
     height: 100dvh;

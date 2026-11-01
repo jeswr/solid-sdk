@@ -13,7 +13,7 @@ import {
   Textarea,
   toast,
 } from "@jeswr/suite-ui";
-import { ArrowLeft, Ellipsis, X } from "lucide-react";
+import { ArrowLeft, Ellipsis, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -56,21 +56,16 @@ function descriptionNodes(text: string) {
 function useDetailDraft(saved: string) {
   const [value, setValue] = useState(saved);
   const dirty = useRef(false);
-  const editing = useRef(false);
   useEffect(() => {
-    if (!dirty.current && !editing.current) setValue(saved);
+    if (!dirty.current) setValue(saved);
   }, [saved]);
   return {
     value,
-    focus: () => {
-      editing.current = true;
-    },
     change: (text: string) => {
       dirty.current = true;
       setValue(text);
     },
     blur: (normalise: (text: string) => string = (text) => text) => {
-      editing.current = false;
       const next = dirty.current ? normalise(value) : saved;
       dirty.current = false;
       setValue(next);
@@ -100,6 +95,9 @@ export function TaskDetail({
   const description = descriptionDraft.value;
   const [editingDescription, setEditingDescription] = useState(false);
   const [childTitle, setChildTitle] = useState("");
+  const [addingChild, setAddingChild] = useState(false);
+  const childField = useRef<HTMLInputElement>(null);
+  const childTrigger = useRef<HTMLButtonElement>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   useEffect(() => {
     titleField.current?.focus();
@@ -251,7 +249,6 @@ export function TaskDetail({
           aria-label="Task title"
           rows={1}
           value={title}
-          onFocus={titleDraft.focus}
           onChange={(event) => titleDraft.change(event.target.value)}
           onBlur={commitTitle}
           onKeyDown={(event) => {
@@ -269,7 +266,6 @@ export function TaskDetail({
           placeholder="Description"
           value={description}
           onFocus={() => {
-            descriptionDraft.focus();
             setEditingDescription(true);
           }}
           onChange={(event) => descriptionDraft.change(event.target.value)}
@@ -345,29 +341,51 @@ export function TaskDetail({
               </li>
             ))}
           </ul>
-          <form
-            className="tsk-detail-inline"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!childTitle.trim()) return;
-              void tasks.createTask(project, {
-                title: childTitle.trim(),
-                parent: view.id,
-                sectionId: view.sectionId,
-              });
-              setChildTitle("");
-            }}
-          >
-            <input
-              aria-label="Sub-task title"
-              placeholder="+ Add sub-task"
-              value={childTitle}
-              onChange={(event) => setChildTitle(event.target.value)}
-            />
-            <Button variant="ghost" size="sm" type="submit" disabled={!childTitle.trim()}>
+          {addingChild ? (
+            <form
+              className="tsk-detail-inline"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!childTitle.trim()) return;
+                void tasks.createTask(project, {
+                  title: childTitle.trim(),
+                  parent: view.id,
+                  sectionId: view.sectionId,
+                });
+                setChildTitle("");
+              }}
+            >
+              <input
+                ref={childField}
+                aria-label="Sub-task title"
+                placeholder="+ Add sub-task"
+                value={childTitle}
+                onChange={(event) => setChildTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAddingChild(false);
+                    setChildTitle("");
+                    requestAnimationFrame(() => childTrigger.current?.focus());
+                  }
+                }}
+              />
+            </form>
+          ) : (
+            <button
+              ref={childTrigger}
+              type="button"
+              className="tsk-ghost"
+              onClick={() => {
+                setAddingChild(true);
+                requestAnimationFrame(() => childField.current?.focus());
+              }}
+            >
+              <Plus size={16} aria-hidden="true" />
               Add sub-task
-            </Button>
-          </form>
+            </button>
+          )}
         </section>
       )}
       <TaskProperties
