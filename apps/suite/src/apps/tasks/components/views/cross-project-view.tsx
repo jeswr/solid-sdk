@@ -16,12 +16,24 @@ export function CrossProjectView({
   emptyTitle,
   emptyBody,
   emptyIcon,
+  subtitle,
+  actions,
+  toolbar,
+  children,
+  emptyAction,
+  count = rows.length,
 }: {
   title: string;
   rows: readonly TaskView[];
   emptyTitle: string;
-  emptyBody: string;
+  emptyBody?: string;
   emptyIcon: ReactNode;
+  subtitle?: string;
+  actions?: ReactNode;
+  toolbar?: ReactNode;
+  children?: ReactNode;
+  emptyAction?: ReactNode;
+  count?: number;
 }) {
   const tasks = useTasks();
   useEffect(() => {
@@ -36,13 +48,22 @@ export function CrossProjectView({
   return (
     <div className="tsk-content">
       <header className="tsk-view-header">
-        <h1>{title}</h1>
+        <div className="tsk-heading-line">
+          <h1>{title}</h1>
+          <span className="tsk-count">
+            {count}
+            <span className="tsk-sr-only"> tasks</span>
+          </span>
+          {actions}
+        </div>
+        {subtitle && <p className="tsk-date-subtitle">{subtitle}</p>}
       </header>
+      {toolbar}
       {failures.map(([url, load]) => {
         const title =
           tasks.projects.find((project) => project.url === url)?.tracker.title ?? "Project";
         return (
-          <section key={url} aria-label={title}>
+          <section key={url} aria-label={title} className="tsk-project-error">
             <p>{title}</p>
             <ProjectError
               error={load.error}
@@ -58,19 +79,20 @@ export function CrossProjectView({
           loading && rows.length === 0 ? <LoadingSkeleton preset="list" count={8} /> : undefined,
         children: (
           <>
-            {!loading && !rows.length && !failures.length ? (
+            {!loading && !rows.length && !failures.length && emptyTitle ? (
               <EmptyState
                 icon={emptyIcon}
                 title={emptyTitle}
                 body={emptyBody}
                 primaryAction={
-                  title === "Today" ? (
+                  emptyAction ??
+                  (title === "Today" ? (
                     <Button onClick={() => openAddTask()}>Add task</Button>
-                  ) : undefined
+                  ) : undefined)
                 }
               />
             ) : null}
-            <TaskList rows={flatRows(rows, tasks.views)} showProject />
+            {children ?? <TaskList rows={flatRows(rows, tasks.views)} showProject />}
           </>
         ),
       })}
