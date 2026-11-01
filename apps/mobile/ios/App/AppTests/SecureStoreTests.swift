@@ -11,6 +11,22 @@ struct FakeSecureStoreInstallation: SecureStoreInstallChecking {
     func prepare() throws { if let error = error { throw error } }
 }
 
+/// Asserts a completion result failed with `expected`, without `try`, so completion closures
+/// stay non-throwing (Swift 6.2 infers a closure containing `try` as throwing).
+func assertFailure<Success, Failure: Error>(
+    _ result: Result<Success, Failure>,
+    _ expected: SecureStoreFailure?,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    switch result {
+    case .success:
+        XCTFail("expected failure \(String(describing: expected)), got success", file: file, line: line)
+    case .failure(let error):
+        XCTAssertEqual(error as? SecureStoreFailure, expected, file: file, line: line)
+    }
+}
+
 final class FakeSecureStoreWriter: SecureStoreFileWriting {
     var data: Data?
     var fail = false
@@ -450,7 +466,7 @@ final class SecureStoreTests: XCTestCase {
             queue.sync {
                 store.get(key: "a") { result in
                     completions += 1
-                    XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, code) }
+                    assertFailure(result, code)
                     done.fulfill()
                 }
                 authenticator.sessions.last?.completion?(.failure(code))
@@ -473,7 +489,7 @@ final class SecureStoreTests: XCTestCase {
             try queue.sync {
                 store.get(key: "a") { result in
                     completions += 1
-                    XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+                    assertFailure(result, .cancelled)
                     done.fulfill()
                 }
                 switch trigger {
@@ -498,7 +514,7 @@ final class SecureStoreTests: XCTestCase {
         let done = expectation(description: "rotated during prompt")
         try queue.sync {
             store.get(key: "a") { result in
-                XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .stale) }
+                assertFailure(result, .stale)
                 done.fulfill()
             }
             try store.remove(key: "b")
@@ -528,7 +544,7 @@ final class SecureStoreTests: XCTestCase {
             queue.sync {
                 store.get(key: "a") { result in
                     completions += 1
-                    XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+                    assertFailure(result, .cancelled)
                     done.fulfill()
                 }
                 authenticator.sessions.last?.completion?(.success(()))
@@ -554,7 +570,7 @@ final class SecureStoreTests: XCTestCase {
         let read = try get(authenticated: true)
         cancellation.cancel()
         cancellation.deliver(ticket, .success(read)) { result in
-            XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+            assertFailure(result, .cancelled)
         }
         let current = cancellation.ticket(key: "a")
         cancellation.cancel(key: "b")
@@ -584,7 +600,7 @@ final class SecureStoreTests: XCTestCase {
         let second = expectation(description: "second succeeded")
         queue.sync {
             store.get(key: "a") { result in
-                XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+                assertFailure(result, .cancelled)
                 first.fulfill()
             }
             store.cancel()
@@ -610,11 +626,11 @@ final class SecureStoreTests: XCTestCase {
             let start = authenticator.sessions.count
             try queue.sync {
                 store.get(key: "a") { result in
-                    XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+                    assertFailure(result, .cancelled)
                     a.fulfill()
                 }
                 store.get(key: "b") { result in
-                    if clear { XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) } }
+                    if clear { assertFailure(result, .cancelled) }
                     else { XCTAssertEqual(try? result.get().value, "neighbor") }
                     b.fulfill()
                 }
@@ -649,7 +665,7 @@ final class SecureStoreTests: XCTestCase {
                         XCTAssertNil(try? result.get().value)
                         XCTAssertEqual(try? result.get().version, 2)
                     } else {
-                        XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, error as? SecureStoreFailure) }
+                        assertFailure(result, error as? SecureStoreFailure)
                     }
                     done.fulfill()
                 }
@@ -686,14 +702,14 @@ final class SecureStoreTests: XCTestCase {
         XCTAssertEqual(first.context?.touchIDAuthenticationAllowableReuseDuration, 0)
         let background = expectation(description: "no foreground scene")
         first.authenticate(accessControl: access) { result in
-            XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .background) }
+            assertFailure(result, .background)
             first.invalidate()
             background.fulfill()
         }
         let cancelled = expectation(description: "cancel before presentation")
         second.invalidate()
         second.authenticate(accessControl: access) { result in
-            XCTAssertThrowsError(try result.get()) { XCTAssertEqual($0 as? SecureStoreFailure, .cancelled) }
+            assertFailure(result, .cancelled)
             cancelled.fulfill()
         }
         wait(for: [background, cancelled], timeout: 2)
