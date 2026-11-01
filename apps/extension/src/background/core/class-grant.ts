@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The PER-DATA-CLASS GRANT model + the pure enforcement logic — the security heart of
  * access-management Phase 2 (design `access-management-proposal.md` §4).
@@ -23,8 +24,8 @@
  *   - a grant with no valid modes authorises nothing;
  *   - a malformed stored grant authorises nothing;
  *   - a target-set membership test fails closed on any unparseable URL, cross-origin target,
- *     or path-traversal attempt (the WHATWG URL parser normalises `..`, so a normalised path
- *     that escapes the pinned container prefix is simply not a match → DENY).
+ *     or ambiguous path (dot segments and encoded routing characters are rejected before
+ *     URL normalisation and containment checks).
  *
  * BACKWARDS COMPATIBILITY (design item 5 — "legacy origin-only grants must keep working"):
  * this module governs ONLY origins whose access is class-scoped. An origin that holds a
@@ -35,6 +36,8 @@
  * origin is confined to its pinned targets. (Dual-read migration; no data migration needed.)
  * ────────────────────────────────────────────────────────────────────────────
  */
+
+import { safePathUrl } from './class-path';
 
 /** The three WAC-shaped access modes a grant can carry. */
 export type GrantMode = 'read' | 'append' | 'write';
@@ -138,15 +141,10 @@ export function modeSatisfies(granted: readonly GrantMode[], required: GrantMode
   return granted.includes(required);
 }
 
-/** Parse a string to its normalised `origin + pathname` (no query/fragment), or `null`. */
+/** Parse an unambiguous path to its normalised `origin + pathname`, or `null`. */
 function originPath(value: string): { origin: string; path: string } | null {
-  let u: URL;
-  try {
-    u = new URL(value);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const u = safePathUrl(value);
+  if (!u) return null;
   const origin = u.origin;
   if (origin === 'null' || origin === '') return null;
   return { origin, path: u.pathname };
@@ -160,9 +158,10 @@ function originPath(value: string): { origin: string; path: string } | null {
  *     identity is its path, not its query);
  *   - `container` ⇒ the request path must be the container path itself OR a descendant of it.
  *     The container path is normalised to end in `/`, and membership is a strict path-segment
- *     prefix on the ALREADY-URL-NORMALISED request path — so a `..` traversal (which the URL
- *     parser collapses before we ever see it) that escapes the container cannot match, and a
- *     sibling like `/finance-secret/` never matches the pinned `/finance/`.
+ *     prefix on the URL-normalised request path. Both the request and stored target reject
+ *     dot segments, backslashes and encoded separators/dots/percent signs before parsing,
+ *     so alternate decoding cannot escape the container. A sibling like `/finance-secret/`
+ *     never matches the pinned `/finance/`.
  */
 export function isWithinTarget(target: PinnedTarget, requestUrl: string): boolean {
   const req = originPath(requestUrl);

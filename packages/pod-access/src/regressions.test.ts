@@ -13,7 +13,6 @@ import {
   emptyPolicy,
   ownerPolicy,
   RDF,
-  RdfNode,
   readAcp,
   readWac,
   serialize,
@@ -21,6 +20,7 @@ import {
   writeAcp,
   writeWac,
 } from "./index.js";
+import { RdfNode } from "./rdf.js";
 import type { AccessDocument, EffectivePolicy, Subject } from "./types.js";
 
 const resource = "https://pod.example/folder/";

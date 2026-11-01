@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 import { createHmac } from "node:crypto";
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -20,8 +21,9 @@ interface Recorded {
   readonly headers: Record<string, string>;
 }
 
-function recordingFetch(existing: Set<string> = new Set()) {
+function recordingFetch(existing: Set<string> = new Set(), retainedRaw?: string) {
   const calls: Recorded[] = [];
+  const bodies = new Map<string, string>();
   const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
@@ -30,6 +32,9 @@ function recordingFetch(existing: Set<string> = new Set()) {
     if (method === "PUT" && headers["if-none-match"] === "*" && existing.has(url)) {
       return new Response(null, { status: 412 });
     }
+    if (method === "GET") return new Response(bodies.get(url) ?? retainedRaw, { status: 200 });
+    if (typeof init?.body === "string") bodies.set(url, init.body);
+    else if (init?.body instanceof Uint8Array) bodies.set(url, new TextDecoder().decode(init.body));
     return new Response(null, { status: 201 });
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -184,7 +189,7 @@ describe("Slack webhook handler — end to end", () => {
     const urls = new Set(first.calls.filter((c) => c.method === "PUT").map((c) => c.url));
 
     const events: WebhookAuditEvent[] = [];
-    const second = recordingFetch(urls);
+    const second = recordingFetch(urls, body);
     const res = await slackHandler(
       second.fetchImpl,
       events,
@@ -336,6 +341,51 @@ describe("WhatsApp webhook handler — end to end", () => {
     // Distinct slugs per wamid (the `alb-<base64url>` prefix carries no dot).
     const slugs = new Set(puts.map((p) => p.url.slice(CONTAINER.length).split(".")[0]));
     expect(slugs.size).toBe(2);
+  });
+
+  it("imports a new message when a later delivery repeats an imported one", async () => {
+    // Raw anchors are keyed by wamid but hold the whole delivery, so wamid.AAA's anchor from
+    // the first delivery cannot match the second. That conflict must not block wamid.BBB.
+    const stored = new Map<string, string>();
+    const puts: string[] = [];
+    const pod = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET")
+        return new Response(stored.get(url) ?? null, { status: stored.has(url) ? 200 : 404 });
+      if (stored.has(url)) return new Response(null, { status: 412 });
+      puts.push(url);
+      const body = init?.body;
+      stored.set(
+        url,
+        typeof body === "string" ? body : new TextDecoder().decode(body as Uint8Array),
+      );
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    const events: WebhookAuditEvent[] = [];
+    const handler = createWebhookHandler({
+      channel: { channel: "whatsapp", appSecret: META_SECRET, verifyToken: VERIFY_TOKEN },
+      container: CONTAINER,
+      writeFetch: pod,
+      onEvent: (e) => events.push(e),
+      now,
+    });
+    const first = waBody([{ id: "wamid.AAA", from: "15551230000", text: "one" }]);
+    expect((await handler(req({ headers: metaSig(first), rawBody: enc(first) }))).status).toBe(200);
+    const firstPuts = [...puts];
+    expect(firstPuts).toHaveLength(3);
+    const firstBodies = firstPuts.map((url) => stored.get(url));
+
+    const second = waBody([
+      { id: "wamid.AAA", from: "15551230000", text: "one" },
+      { id: "wamid.BBB", from: "15551230001", text: "two" },
+    ]);
+    const res = await handler(req({ headers: metaSig(second), rawBody: enc(second) }));
+    expect(res.status).toBe(200);
+    expect(puts.slice(firstPuts.length)).toHaveLength(3); // only wamid.BBB's resource set
+    expect(firstPuts.map((url) => stored.get(url))).toEqual(firstBodies); // AAA untouched
+    expect(events).toContainEqual({ kind: "anchor-conflict", channel: "whatsapp" });
+    expect(events.filter((e) => e.kind === "written")).toHaveLength(2);
   });
 
   it("acks (200) a status/receipt delivery carrying no messages, writing nothing", async () => {

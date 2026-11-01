@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * PURE consent-flow logic — the decision layer behind the extension's consent surface
  * (design §4.1, "the consent dialog must be unspoofable by the requesting origin"). The
@@ -94,7 +95,8 @@ export function consentDecisionToGrants(
       modes: c.modes,
       purpose: c.purpose,
       expiresAt: c.expiresAt,
-      targets: c.targets,
+      // Resolver provenance is transient; only the immutable URL/kind scope is persisted.
+      targets: c.targets.map(({ url, kind }) => ({ url, kind })),
       createdAt: pending.createdAt,
     });
   }
