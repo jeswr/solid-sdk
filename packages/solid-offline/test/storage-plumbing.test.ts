@@ -183,7 +183,52 @@ describe('StorageClient invalidation', () => {
     vi.spyOn(deps.storage, 'head').mockRejectedValueOnce(
       new StorageError('network', { method: 'HEAD', url: DOC }),
     );
+    expect((await resyncSweep(deps)).replaced).toBe(1);
+  });
+
+  it.each([
+    403,
+    404,
+    405,
+    500,
+    'network',
+  ])('falls back to conditional GET after a HEAD %s failure', async (status) => {
+    const requests: Request[] = [];
+    const deps = await invalidationHarness(async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (request.method === 'HEAD') {
+        if (status === 'network') throw new Error('Offline HEAD');
+        return new Response(null, { status: Number(status) });
+      }
+      return new Response(null, { status: 304 });
+    });
+    expect((await resyncSweep(deps)).confirmed).toBe(1);
+    expect(requests.map((request) => request.method)).toEqual(['HEAD', 'GET']);
+    expect(requests[1]?.headers.get('if-none-match')).toBe('v1');
+    expect(await (await deps.cache.match(keyRequest(DOC, 'accept=text/turtle')))?.text()).toBe(
+      'old',
+    );
+    expect((await deps.meta.getByUrl(DOC))[0]?.fetchedAt).toBe(500);
+    expect(deps.broadcast.messages).toEqual([]);
+  });
+
+  it.each([
+    403, 404,
+  ])('purges only when GET also returns %s after a failed HEAD', async (status) => {
+    const deps = await invalidationHarness(async () => new Response(null, { status }));
+    expect((await resyncSweep(deps)).purged).toBe(1);
+    expect(deps.cache.size).toBe(0);
+    expect(await deps.meta.getByUrl(DOC)).toEqual([]);
+  });
+
+  it('keeps readable cached bytes when both HEAD and GET fail transiently', async () => {
+    const deps = await invalidationHarness(async () => {
+      throw new Error('Offline');
+    });
     expect((await resyncSweep(deps)).skipped).toBe(1);
+    expect(deps.cache.size).toBe(1);
+    expect((await deps.meta.getByUrl(DOC))[0]?.fetchedAt).toBe(0);
   });
 
   it('evicts changed bytes conservatively when an injected client has no original HTTP policy', async () => {

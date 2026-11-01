@@ -357,8 +357,10 @@ export async function resyncSweep(deps: InvalidateDeps): Promise<SweepResult> {
     result.checked += 1;
     let outcome: InvalidateOutcome;
     try {
-      const head = await deps.storage.head(url, { revalidate: true });
-      if (etag && head.etag !== null && head.etag === etag) {
+      // HEAD is only an optimization. A refusal or transport error says nothing
+      // about whether GET remains readable, so let the conditional read decide.
+      const head = await deps.storage.head(url, { revalidate: true }).catch(() => null);
+      if (etag && head?.etag === etag) {
         for (const record of records) {
           record.fetchedAt = deps.now();
           await deps.meta.put(record);
@@ -366,13 +368,9 @@ export async function resyncSweep(deps: InvalidateDeps): Promise<SweepResult> {
         result.confirmed += 1;
         continue;
       } else outcome = await revalidateResource(url, records, undefined, deps);
-    } catch (error) {
-      if (error instanceof StorageError && (error.status === 403 || error.status === 404))
-        outcome = await purge(url, records, deps);
-      else {
-        result.skipped += 1;
-        continue;
-      }
+    } catch {
+      result.skipped += 1;
+      continue;
     }
     if (outcome.kind === '304-confirmed') result.confirmed += 1;
     else if (outcome.kind === 'updated') result.replaced += 1;
