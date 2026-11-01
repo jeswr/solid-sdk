@@ -1,3 +1,5 @@
+import { createSolidBackend } from "@jeswr/storage-client/solid";
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
@@ -16,7 +18,7 @@ describe("SolidPersistence — round-trip persistence", () => {
 
     // --- Writer: build a doc and let the provider persist its edits. ---
     const docA = new Y.Doc();
-    const writer = new SolidPersistence({ doc: docA, container: CONTAINER, fetch: pod.fetchImpl });
+    const writer = new SolidPersistence({ doc: docA, container: CONTAINER, storage: pod.storage });
     await writer.whenSynced;
     expect(writer.synced).toBe(true);
 
@@ -32,7 +34,7 @@ describe("SolidPersistence — round-trip persistence", () => {
 
     // --- Reader: a brand-new doc + provider over the SAME pod. ---
     const docB = new Y.Doc();
-    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, fetch: pod.fetchImpl });
+    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, storage: pod.storage });
     await reader.whenSynced;
 
     // The reader's doc converges to the writer's state.
@@ -48,7 +50,7 @@ describe("SolidPersistence — round-trip persistence", () => {
   it("preserves binary-update integrity for non-text types (Y.Array of mixed values)", async () => {
     const pod = makePod(CONTAINER);
     const docA = new Y.Doc();
-    const p = new SolidPersistence({ doc: docA, container: CONTAINER, fetch: pod.fetchImpl });
+    const p = new SolidPersistence({ doc: docA, container: CONTAINER, storage: pod.storage });
     await p.whenSynced;
     const arr = docA.getArray<unknown>("items");
     arr.push([1, "two", { three: true }, [4, 5]]);
@@ -56,7 +58,7 @@ describe("SolidPersistence — round-trip persistence", () => {
     p.destroy();
 
     const docB = new Y.Doc();
-    const r = new SolidPersistence({ doc: docB, container: CONTAINER, fetch: pod.fetchImpl });
+    const r = new SolidPersistence({ doc: docB, container: CONTAINER, storage: pod.storage });
     await r.whenSynced;
     expect(docB.getArray<unknown>("items").toJSON()).toEqual([1, "two", { three: true }, [4, 5]]);
     r.destroy();
@@ -69,12 +71,12 @@ describe("SolidPersistence — no echo on load", () => {
     // Seed one update directly via a store.
     const seedDoc = new Y.Doc();
     seedDoc.getText("t").insert(0, "seed");
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
     await store.appendUpdate(Y.encodeStateAsUpdate(seedDoc));
 
     const putsBefore = pod.calls.putCount;
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     await provider.whenSynced;
     await tick();
 
@@ -89,7 +91,7 @@ describe("SolidPersistence — no echo on load", () => {
 describe("SolidPersistence — append-log merge convergence", () => {
   it("merges many independent updates appended out of construction order", async () => {
     const pod = makePod(CONTAINER);
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
 
     // Two independent docs editing the same shared structure; append their state
     // updates separately (simulating two clients each writing to the log).
@@ -104,7 +106,7 @@ describe("SolidPersistence — append-log merge convergence", () => {
     const provider = new SolidPersistence({
       doc: merged,
       container: CONTAINER,
-      fetch: pod.fetchImpl,
+      storage: pod.storage,
     });
     await provider.whenSynced;
     // CRDT merge converges to BOTH clients' contributions.
@@ -118,11 +120,11 @@ describe("SolidPersistence — sync() (the live-sync seam)", () => {
   it("applies updates appended to the pod since load, without re-reading known ones", async () => {
     const pod = makePod(CONTAINER);
     const docA = new Y.Doc();
-    const writer = new SolidPersistence({ doc: docA, container: CONTAINER, fetch: pod.fetchImpl });
+    const writer = new SolidPersistence({ doc: docA, container: CONTAINER, storage: pod.storage });
     await writer.whenSynced;
 
     const docB = new Y.Doc();
-    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, fetch: pod.fetchImpl });
+    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, storage: pod.storage });
     await reader.whenSynced;
     expect(docB.getText("body").toString()).toBe("");
 
@@ -147,7 +149,7 @@ describe("SolidPersistence — sync() (the live-sync seam)", () => {
   it("sync() is a no-op before the initial load and after destroy", async () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     // Before whenSynced resolves.
     expect(await provider.sync()).toBe(0);
     await provider.whenSynced;
@@ -160,11 +162,14 @@ describe("SolidPersistence — compaction", () => {
   it("folds the log into one resource and deletes the rest, preserving state", async () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     await provider.whenSynced;
 
     // Several incremental edits → several log resources.
-    for (let i = 0; i < 4; i++) doc.getArray("a").push([i]);
+    for (let i = 0; i < 4; i++) {
+      doc.getArray("a").push([i]);
+      await provider.flush();
+    }
     await provider.flush();
     const before = [...pod.store.keys()].filter((u) => u !== CONTAINER);
     expect(before.length).toBeGreaterThan(1);
@@ -176,7 +181,7 @@ describe("SolidPersistence — compaction", () => {
 
     // A fresh reader still gets the full state from the single compacted resource.
     const docB = new Y.Doc();
-    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, fetch: pod.fetchImpl });
+    const reader = new SolidPersistence({ doc: docB, container: CONTAINER, storage: pod.storage });
     await reader.whenSynced;
     expect(docB.getArray("a").toJSON()).toEqual([0, 1, 2, 3]);
 
@@ -187,7 +192,7 @@ describe("SolidPersistence — compaction", () => {
   it("compact() is a no-op on an empty or single-member log", async () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     await provider.whenSynced;
     expect(await provider.compact()).toBeUndefined();
     doc.getText("t").insert(0, "one");
@@ -226,7 +231,7 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
     expect(Array.from(afterRaw)).not.toEqual(Array.from(before));
 
     const pod = makePod(CONTAINER);
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
     // A valid update that MUST still apply...
     const seed = new Y.Doc();
     seed.getText("t").insert(0, "ok");
@@ -240,7 +245,7 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
 
     const doc = new Y.Doc();
     // Snapshot the live doc state right before the provider's load applies anything.
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     const onError = vi.fn();
     provider.on("error", onError);
     await provider.whenSynced;
@@ -267,7 +272,7 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
 
   it("skips a corrupt update on load, applies the valid ones, reports an error, and still syncs", async () => {
     const pod = makePod(CONTAINER);
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
 
     // A valid seed update...
     const seed = new Y.Doc();
@@ -281,7 +286,7 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
     });
 
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     const onError = vi.fn();
     provider.on("error", onError);
 
@@ -302,13 +307,13 @@ describe("SolidPersistence — corrupt-update resilience (untrusted pod bytes)",
   it("sync() skips a corrupt update appended after load and returns the applied count", async () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     await provider.whenSynced;
     const onError = vi.fn();
     provider.on("error", onError);
 
     // Append one corrupt + one valid update to the pod after the initial load.
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
     pod.store.set(`${CONTAINER}000000000000000-corrupt2`, {
       body: Corrupt,
       contentType: "application/octet-stream",
@@ -346,12 +351,16 @@ describe("SolidPersistence — error handling + lifecycle", () => {
       return new Response(null, { status: 500 });
     };
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: failingFetch });
+    const provider = new SolidPersistence({
+      doc,
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: failingFetch }),
+    });
     await provider.whenSynced;
     const onError = vi.fn();
     provider.on("error", onError);
     doc.getText("t").insert(0, "x");
-    await provider.flush();
+    await expect(provider.flush()).rejects.toThrow();
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
     provider.destroy();
@@ -360,7 +369,7 @@ describe("SolidPersistence — error handling + lifecycle", () => {
   it("destroy() stops persisting further local updates", async () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     await provider.whenSynced;
     provider.destroy();
     const putsAfterDestroy = pod.calls.putCount;
@@ -374,7 +383,7 @@ describe("SolidPersistence — error handling + lifecycle", () => {
     const pod = makePod(CONTAINER);
     const doc = new Y.Doc();
     const onSynced = vi.fn();
-    const provider = new SolidPersistence({ doc, container: CONTAINER, fetch: pod.fetchImpl });
+    const provider = new SolidPersistence({ doc, container: CONTAINER, storage: pod.storage });
     provider.on("synced", onSynced);
     await provider.whenSynced;
     // Allow the synchronous emit to have run during load().
@@ -389,7 +398,7 @@ describe("SolidPersistence — error handling + lifecycle", () => {
 
   it("accepts a pre-built store", async () => {
     const pod = makePod(CONTAINER);
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+    const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
     const doc = new Y.Doc();
     const provider = new SolidPersistence({ doc, store });
     await provider.whenSynced;
