@@ -1,6 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
-import { exportHealth, exportRange, toFhirRecords } from "../src/apps/health/lib/data/export";
+import {
+  civilToday,
+  exportHealth,
+  exportRange,
+  toFhirRecords,
+} from "../src/apps/health/lib/data/export";
 import { addMeasurement } from "../src/apps/health/lib/data/metrics";
 import {
   type ClinicalRecord,
@@ -66,7 +71,7 @@ describe("toFhirRecords", () => {
       ],
       [
         record({ name: "Daily pill", dose: "5 mg", frequency: "daily" }),
-        record({ name: "Weekly shot", frequency: "weekly", time: "18:30" }),
+        record({ name: "Weekly shot", frequency: "weekly", time: "18:30", timeZone: " " }),
         record({ name: "Spray", frequency: "none", dose: "  " }),
         record({ name: "Undated", date: "" }),
       ],
@@ -110,7 +115,7 @@ describe("toFhirRecords", () => {
       },
     ]);
     expect(result.records.medications.map((med) => med.dosageText)).toEqual([
-      "5 mg, Daily at 08:00",
+      "5 mg, Daily at 08:00 (UTC)",
       "Weekly at 18:30",
       "As needed",
     ]);
@@ -122,18 +127,66 @@ describe("toFhirRecords", () => {
   });
 });
 
+describe("blood pressure pairing", () => {
+  const saved = (kind: "systolic" | "diastolic", value: number, operation: string) => ({
+    ...reading(kind, value, "2026-10-04T00:00:00Z", "Manual entry"),
+    iri: `${ROOT}health/observations/2026-10.ttl#${operation}-${kind}`,
+  });
+  it("pairs readings saved together even when they share a time and source", () => {
+    const result = toFhirRecords(
+      [
+        saved("systolic", 120, "a"),
+        saved("diastolic", 80, "a"),
+        saved("systolic", 130, "b"),
+        saved("diastolic", 85, "b"),
+        // An operation missing its partner falls back to matching by time and source.
+        { ...saved("systolic", 140, "c"), at: at("2026-10-05T00:00:00Z") },
+        { ...reading("diastolic", 90, "2026-10-05T00:00:00Z", "Manual entry"), iri: "x#y" },
+        // A fragment whose suffix names the other kind is not trusted.
+        { ...saved("systolic", 150, "d"), kind: "diastolic" as const },
+      ],
+      [],
+      [],
+    );
+    expect(result.records.observations.map((entry) => entry.value)).toEqual([
+      { systolic: 120, diastolic: 80 },
+      { systolic: 130, diastolic: 85 },
+      { systolic: 140, diastolic: 90 },
+    ]);
+    expect(result.skipped.unpairedBloodPressure).toBe(1);
+  });
+});
+
 describe("exportRange", () => {
-  it("turns inclusive dates into a half-open UTC range", () => {
-    expect(exportRange("2026-01-01", "2026-01-31")).toEqual({
+  it("turns inclusive civil dates into a half-open range in the chosen zone", () => {
+    expect(exportRange("2026-01-01", "2026-01-31", "UTC")).toEqual({
       start: at("2026-01-01T00:00:00Z"),
       end: at("2026-02-01T00:00:00Z"),
     });
-    expect(exportRange("2026-03-05", "2026-03-05").end).toEqual(at("2026-03-06T00:00:00Z"));
+    expect(exportRange("2026-10-31", "2026-10-31", "Pacific/Auckland")).toEqual({
+      start: at("2026-10-30T11:00:00Z"),
+      end: at("2026-10-31T11:00:00Z"),
+    });
+    expect(exportRange("2026-11-01", "2026-11-01", "America/New_York")).toEqual({
+      start: at("2026-11-01T04:00:00Z"),
+      end: at("2026-11-02T05:00:00Z"),
+    });
+    // Midnight is skipped in Santiago when DST starts; the day starts at 01:00.
+    expect(exportRange("2026-09-06", "2026-09-06", "America/Santiago").start).toEqual(
+      at("2026-09-06T04:00:00Z"),
+    );
   });
-  it("rejects invalid or reversed dates", () => {
-    expect(() => exportRange("2026-02-30", "2026-03-01")).toThrow(RangeError);
-    expect(() => exportRange("2026-03-01", "")).toThrow(RangeError);
-    expect(() => exportRange("2026-03-02", "2026-03-01")).toThrow(RangeError);
+  it("rejects invalid, reversed or out-of-range dates", () => {
+    expect(() => exportRange("2026-02-30", "2026-03-01", "UTC")).toThrow(RangeError);
+    expect(() => exportRange("2026-03-01", "", "UTC")).toThrow(RangeError);
+    expect(() => exportRange("2026-03-02", "2026-03-01", "UTC")).toThrow(RangeError);
+    expect(() => exportRange("1999-03-02", "2026-03-01", "UTC")).toThrow(
+      "Choose dates between 2000 and 2099",
+    );
+  });
+  it("reads today's date in the chosen zone", () => {
+    expect(civilToday(at("2026-10-31T20:15:00Z"), "Pacific/Auckland")).toBe("2026-11-01");
+    expect(civilToday(at("2026-11-01T02:00:00Z"), "America/New_York")).toBe("2026-10-31");
   });
 });
 
@@ -162,18 +215,23 @@ describe("exportHealth", () => {
       at("2026-10-01T12:00:00Z"),
     );
     let n = 0;
-    const exported = await exportHealth(store, exportRange("2026-10-01", "2026-11-30"), {
+    const exported = await exportHealth(store, exportRange("2026-10-01", "2026-11-30", "UTC"), {
       clock: () => at("2026-11-30T12:00:00Z"),
       uuid: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`,
+      unsaved: [
+        reading("steps", 900, "2026-10-20T08:00:00Z"),
+        reading("steps", 800, "2026-12-20T08:00:00Z"),
+        reading("steps", 700, "2026-09-20T08:00:00Z"),
+      ],
     });
-    expect(exported.counts).toEqual({ observations: 1, medications: 1, conditions: 0 });
+    expect(exported.counts).toEqual({ observations: 2, medications: 1, conditions: 0 });
     const bundle = JSON.parse(exported.json);
     expect(bundle.resourceType).toBe("Bundle");
     expect(
       bundle.entry.map(
         (entry: { resource: { resourceType: string } }) => entry.resource.resourceType,
       ),
-    ).toEqual(["MedicationStatement", "Observation"]);
+    ).toEqual(["MedicationStatement", "Observation", "Observation"]);
     expect(bundle.entry[1].resource.valueQuantity.value).toBe(70);
   });
 });

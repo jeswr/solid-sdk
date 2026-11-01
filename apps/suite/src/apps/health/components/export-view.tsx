@@ -2,46 +2,60 @@
 "use client";
 import { Button, Input } from "@jeswr/suite-ui";
 import { FileJson, LockKeyhole } from "lucide-react";
-import { useId, useState } from "react";
-import { type ExportCounts, type ExportSkips, exportHealth, exportRange } from "../lib/data/export";
+import { useId, useMemo, useState } from "react";
+import {
+  civilToday,
+  type ExportCounts,
+  type ExportSkips,
+  exportHealth,
+  exportRange,
+} from "../lib/data/export";
 import { FhirExportError } from "../lib/fhir";
 import { useHealth } from "../state/health-context";
 
-const day = (date: Date) => date.toISOString().slice(0, 10);
 function yearBefore(today: string) {
   const date = new Date(`${today}T00:00:00Z`);
   date.setUTCFullYear(date.getUTCFullYear() - 1);
   date.setUTCDate(date.getUTCDate() + 1);
-  return day(date);
+  return date.toISOString().slice(0, 10);
 }
+const RANGE_ERROR = "range";
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 export function ExportView() {
-  const { store } = useHealth();
-  const today = day(new Date());
+  const { store, clock, pending } = useHealth();
+  const zone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const today = civilToday(clock, zone);
   const [from, setFrom] = useState(() => yearBefore(today));
   const [to, setTo] = useState(today);
   const [phase, setPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [result, setResult] = useState<{ counts: ExportCounts; skipped: ExportSkips }>();
-  const [error, setError] = useState("");
+  // `attempt` remounts the alert so a repeated message is announced again.
+  const [error, setError] = useState<{ text: string; kind: string; attempt: number }>();
   const fromId = useId();
   const toId = useId();
+  const errorId = useId();
+  const fail = (text: string, kind = "export") => {
+    setError((current) => ({ text, kind, attempt: (current?.attempt ?? 0) + 1 }));
+    setPhase("error");
+  };
   const run = async () => {
-    setError("");
+    if (phase === "working") return;
     setResult(undefined);
     let range: ReturnType<typeof exportRange>;
     try {
-      range = exportRange(from, to);
+      range = exportRange(from, to, zone);
     } catch (cause) {
-      setError((cause as Error).message);
-      setPhase("error");
+      fail((cause as Error).message, RANGE_ERROR);
       return;
     }
+    setError(undefined);
     setPhase("working");
     try {
       const exported = await exportHealth(store, range, {
         clock: () => new Date(),
         uuid: () => crypto.randomUUID(),
+        unsaved: pending,
       });
       const url = URL.createObjectURL(new Blob([exported.json], { type: "application/fhir+json" }));
       const link = document.createElement("a");
@@ -50,16 +64,18 @@ export function ExportView() {
       document.body.append(link);
       link.click();
       link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
+      // Safari can cancel a download whose URL is revoked straight away.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setResult({ counts: exported.counts, skipped: exported.skipped });
       setPhase("done");
     } catch (cause) {
-      setError(
-        cause instanceof FhirExportError && cause.code === "TOO_MANY_RECORDS"
-          ? "That's too many readings for one file. Choose a shorter date range."
-          : "Couldn't export your health data. Check your connection and try again.",
-      );
-      setPhase("error");
+      if (cause instanceof FhirExportError && cause.code === "TOO_MANY_RECORDS")
+        fail("That's too many readings for one file. Choose a shorter date range.", RANGE_ERROR);
+      else if (cause instanceof FhirExportError)
+        fail(
+          "Some of your health data couldn't be converted to FHIR, so no file was made. Try a different date range.",
+        );
+      else fail("Couldn't export your health data. Check your connection and try again.");
     }
   };
   const skips = result
@@ -91,7 +107,8 @@ export function ExportView() {
         <h2 id="hlt-fhir">FHIR R4 file</h2>
         <p className="hlt-muted">
           Readings from the dates you choose: steps, heart rate, weight and blood pressure. Every
-          medication and condition is included. Immunisations and sleep aren't included yet.
+          medication and condition is included. Notes, workouts, immunisations and sleep aren't
+          included yet. Dates use your device's time zone ({zone}).
         </p>
         <div className="hlt-export-dates">
           <div>
@@ -100,7 +117,10 @@ export function ExportView() {
               id={fromId}
               type="date"
               value={from}
+              min="2000-01-01"
               max={to}
+              aria-invalid={error?.kind === RANGE_ERROR || undefined}
+              aria-describedby={error?.kind === RANGE_ERROR ? errorId : undefined}
               onChange={(event) => setFrom(event.target.value)}
             />
           </div>
@@ -112,11 +132,13 @@ export function ExportView() {
               value={to}
               min={from}
               max={today}
+              aria-invalid={error?.kind === RANGE_ERROR || undefined}
+              aria-describedby={error?.kind === RANGE_ERROR ? errorId : undefined}
               onChange={(event) => setTo(event.target.value)}
             />
           </div>
         </div>
-        <Button disabled={phase === "working"} onClick={() => void run()}>
+        <Button aria-disabled={phase === "working" || undefined} onClick={() => void run()}>
           {phase === "working" ? "Preparing file…" : "Download FHIR file"}
         </Button>
         <div role="status" aria-atomic="true">
@@ -151,8 +173,8 @@ export function ExportView() {
           )}
         </div>
         {error && (
-          <p role="alert" className="hlt-export-error">
-            {error}
+          <p key={error.attempt} id={errorId} role="alert" className="hlt-export-error">
+            {error.text}
           </p>
         )}
       </section>

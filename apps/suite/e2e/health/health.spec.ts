@@ -273,6 +273,21 @@ test("exports a FHIR bundle for a date range and refuses a reversed range", asyn
   const bundle = JSON.parse(await readFile(await download.path(), "utf8"));
   expect(bundle).toMatchObject({ resourceType: "Bundle", type: "collection" });
   await expect(page.getByRole("heading", { name: "Download ready", exact: true })).toBeVisible();
+  const kinds = (bundle.entry as { resource: { resourceType: string } }[]).map(
+    (entry) => entry.resource.resourceType,
+  );
+  const summary = page.locator(".hlt-import-preview");
+  for (const [label, type] of [
+    ["Readings", "Observation"],
+    ["Medications", "MedicationStatement"],
+    ["Conditions", "Condition"],
+  ]) {
+    const count = kinds.filter((kind) => kind === type).length;
+    expect(count).toBeGreaterThan(0);
+    await expect(summary.locator("div", { hasText: label }).locator("dd")).toHaveText(
+      String(count),
+    );
+  }
   await accessible(page);
   await capture(page, info, "export");
   await page.getByLabel("From", { exact: true }).fill("2026-11-01");
@@ -281,4 +296,9 @@ test("exports a FHIR bundle for a date range and refuses a reversed range", asyn
   await expect(
     page.getByRole("alert").filter({ hasText: "start date on or before the end date" }),
   ).toBeVisible();
+  await expect(page.getByLabel("From", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByLabel("To", { exact: true })).toHaveAccessibleDescription(
+    /start date on or before the end date/,
+  );
+  await accessible(page);
 });
