@@ -222,8 +222,13 @@ export async function guardedFetch(
     const location = res.headers.get("location");
     if (location) {
       void res.body?.cancel().catch(() => {});
+      // The URL and Location may carry credentials or signed parameters; report only the origin.
+      let origin = "(unparseable URL)";
+      try {
+        origin = new URL(finalUrl).origin;
+      } catch {}
       throw new GuardedFetchError(
-        `Refusing to follow a ${status} redirect on a POST: ${finalUrl} → ${location}.`,
+        `Refusing to follow a ${status} redirect on a POST from ${origin}.`,
       );
     }
   }

@@ -810,24 +810,33 @@ function isBrowserContext(): boolean {
   );
 }
 
+/**
+ * Redact every URL-like token. Transport errors embed URLs in many malformed spellings
+ * (no slashes, spaces inside the authority, relative paths), so rather than parse them,
+ * any whitespace-separated token containing ':', '/', '\\', '?', '#' or '@' is replaced,
+ * except a plain word ending in one colon ("RequestInit:", "loopback-only:").
+ */
+function safeText(text: string): string {
+  return text.replace(/\S+/g, (token) =>
+    /[:/\\?#@]/.test(token) && !/^[\w.-]+:$/.test(token) ? "(redacted)" : token,
+  );
+}
+
 function message(cause: unknown): string {
   const diagnostics: string[] = [];
   const seen = new Set<unknown>();
-  // Undici nests connection refusals under a generic "fetch failed". Retain only
-  // sanitised message text, with bounded traversal for cyclic/deep transport causes.
+  // Undici nests connection refusals under a generic "fetch failed". Retain only safe
+  // prose and error codes, with bounded traversal for cyclic/deep transport causes.
   for (let current = cause; !seen.has(current) && diagnostics.length < 8; ) {
     seen.add(current);
-    const text = current instanceof Error ? current.message : String(current);
-    // Consume the full URL suffix so malformed authorities with spaces in credentials
-    // cannot evade sanitisation. Any "scheme:" directly followed by a non-space counts
-    // (WHATWG parsers accept "https:host", "https:/host" and "https:\\host"), as does
-    // "//"; an unparseable suffix becomes a constant placeholder.
-    const urlStart = text.search(/[a-z][a-z\d+.-]*:(?=\S)|[\\/]{2}/i);
-    diagnostics.push(
-      urlStart < 0 ? text : `${text.slice(0, urlStart)}${sanitizeUrl(text.slice(urlStart))}`,
-    );
+    const text = safeText(current instanceof Error ? current.message : String(current));
+    const code = (current as { code?: unknown } | null)?.code;
+    const part = [text, typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code) ? code : ""]
+      .filter(Boolean)
+      .join(" ");
+    if (part) diagnostics.push(part);
     if (!(current instanceof Error) || current.cause === undefined) break;
     current = current.cause;
   }
-  return diagnostics.join(": ");
+  return diagnostics.length > 0 ? diagnostics.join(": ") : "transport error";
 }

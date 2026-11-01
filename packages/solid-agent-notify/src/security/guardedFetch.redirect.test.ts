@@ -52,3 +52,24 @@ it.each([
     redirect: "manual",
   });
 });
+
+it("does not disclose the request URL or Location secrets when refusing a POST redirect", async () => {
+  transport.mockResolvedValueOnce(
+    new Response(null, {
+      status: 302,
+      headers: {
+        location: "https://alice:password@login.example/callback?code=oauth-secret#access-token",
+      },
+    }),
+  );
+  const error = await guardedFetch(`${start}?sig=request-secret`, {
+    method: "POST",
+    body: "fixture",
+    skipContentTypeAllowlist: true,
+  }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(GuardedFetchError);
+  for (const secret of ["alice", "password", "oauth-secret", "access-token", "request-secret"]) {
+    expect(String(error)).not.toContain(secret);
+  }
+  expect(String(error)).toContain("302");
+});
