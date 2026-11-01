@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import android.Manifest;
@@ -9,6 +10,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.UserManager;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -19,6 +21,11 @@ import com.google.firebase.messaging.RemoteMessage;
 /** FCM data only: no provider-rendered content. Unknown, disabled or invalid messages post nothing. */
 public class SuitePushService extends FirebaseMessagingService {
     private static final String CHANNEL = "suite-activity";
+    @Override public void handleIntent(Intent intent) {
+        if (intent == null) return;
+        Bundle extras = intent.getExtras();
+        PushTransport.dispatch(extras == null ? java.util.Collections.emptySet() : extras.keySet(), () -> super.handleIntent(intent));
+    }
     @Override public void onMessageReceived(RemoteMessage message) {
         UserManager users = getSystemService(UserManager.class);
         PushReceiver.Result result = PushReceiver.receive(message.getData().get("p"), users == null || users.isUserUnlocked(), encoded -> {
@@ -35,7 +42,11 @@ public class SuitePushService extends FirebaseMessagingService {
             } catch (Exception ignored) { /* Silence/storage failure wins over an in-flight notification. */ }
         }
     }
-    @Override public void onDeletedMessages() { post("suite-generic", PushPolicy.GENERIC, 1, null, -1); }
+    @Override public void onDeletedMessages() {
+        UserManager users = getSystemService(UserManager.class);
+        PushReceiver.deleted(users == null || users.isUserUnlocked(), () -> SuitePushPlugin.store(this),
+            () -> post("suite-generic", PushPolicy.GENERIC, 1, null, -1));
+    }
     private void post(String tag, String body, int count, String registration, int topic) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager.class).createNotificationChannel(

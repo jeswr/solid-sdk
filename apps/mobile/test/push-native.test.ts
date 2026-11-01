@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
@@ -110,6 +111,12 @@ test("both guarded bridges register SuitePush and OS delivery is private", () =>
     /<service android:name="\.SuitePushService" android:exported="false" android:directBootAware="true">/,
   );
   expect(manifest).toContain("android.permission.POST_NOTIFICATIONS");
+  for (const flag of [
+    "firebase_messaging_auto_init_enabled",
+    "firebase_messaging_notification_delegation_enabled",
+  ]) {
+    expect(manifest).toContain(`<meta-data android:name="${flag}" android:value="false" />`);
+  }
   const gradle = read("android/app/build.gradle");
   expect(gradle).toContain('implementation "com.google.firebase:firebase-messaging:24.1.2"');
   expect(gradle).toContain("def servicesJSON = file('google-services.json')");

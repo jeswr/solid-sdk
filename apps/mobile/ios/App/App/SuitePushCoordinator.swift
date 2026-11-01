@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import Foundation
 import UIKit
 import UserNotifications
@@ -8,26 +9,22 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
     static let shared = SuitePushCoordinator()
     let challenges = PushActivation()
     var onChallenge: (() -> Void)?
-    var tokenCompletion: ((Result<String, Error>) -> Void)?
-    private var token: String?
+    private let registration = PushTokenRegistration()
 
     func install() { UNUserNotificationCenter.current().delegate = self }
     func register(_ completion: @escaping (Result<String, Error>) -> Void) {
-        if let token = token { completion(.success(token)); return }
-        tokenCompletion = completion
-        UIApplication.shared.registerForRemoteNotifications()
+        registration.register(completion) { UIApplication.shared.registerForRemoteNotifications() }
     }
     func registered(_ bytes: Data) {
-        token = bytes.map { String(format: "%02x", $0) }.joined()
-        let completion = tokenCompletion; tokenCompletion = nil
-        if let token = token { completion?(.success(token)) }
+        registration.registered(bytes.map { String(format: "%02x", $0) }.joined())
     }
     func registrationFailed(_ error: Error) {
-        let completion = tokenCompletion; tokenCompletion = nil; completion?(.failure(error))
+        registration.failed(error)
     }
     func unregister() {
-        UIApplication.shared.unregisterForRemoteNotifications(); token = nil; tokenCompletion = nil
+        registration.clear(); UIApplication.shared.unregisterForRemoteNotifications()
     }
+    func cancelRegistration() { registration.cancel() }
     func background(_ info: [AnyHashable: Any], completion: @escaping (UIBackgroundFetchResult) -> Void) {
         // Only authenticated, encrypted challenges use the background path. No local alert is ever scheduled.
         guard let encoded = info["p"] as? String else { completion(.noData); return }
@@ -60,6 +57,31 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
     }
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .list, .sound])
+        let completion = PushCompletion<UNNotificationPresentationOptions>(placeholder: [], callback: completionHandler)
+        let info = notification.request.content.userInfo
+        let presented = PushReceiver.foreground(info["p"] as? String, decrypt: { encoded in
+            let keys = try PushKeys()
+            return try PushCrypto.decrypt(encoded, key: keys.key, auth: keys.auth)
+        }, present: { payload in
+            try PushStore.shared().withPresentation(payload) { delivery in
+                let safe = UNMutableNotificationContent()
+                safe.title = "Solid Suite"
+                safe.body = delivery.body + (delivery.count > 1 ? " (\(delivery.count))" : "")
+                safe.threadIdentifier = payload.kind
+                safe.userInfo = ["p": info["p"] ?? "", "suitePushGroup": delivery.group]
+                if notification.request.trigger is UNPushNotificationTrigger {
+                    // Suppress remote text. Only a freshly constructed local notice can be presented.
+                    if completion.finish([]) {
+                        center.add(UNNotificationRequest(identifier: delivery.group, content: safe, trigger: nil), withCompletionHandler: nil)
+                    }
+                } else {
+                    // Local replacements from here/the NSE must still match current validated state.
+                    let content = notification.request.content
+                    completion.finish(content.title == safe.title && content.body == safe.body &&
+                        content.threadIdentifier == safe.threadIdentifier ? [.banner, .list, .sound] : [])
+                }
+            }
+        })
+        if !presented { completion.expire() }
     }
 }

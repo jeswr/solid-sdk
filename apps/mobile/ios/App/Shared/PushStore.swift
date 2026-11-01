@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import Darwin
 import Foundation
 
@@ -17,12 +18,14 @@ final class PushStore {
         }
     }
     struct Registration: Codable { var silenced: Bool; let topics: [Topic] }
-    struct Launch: Codable { let registrationId: String; let route: String }
+    struct Launch { let registrationId: String?; let route: String }
+    // Optional index safely migrates old saved routes; their route text is never used.
+    private struct PendingLaunch: Codable { let registrationId: String; let topicIndex: Int? }
     private struct State: Codable {
         var registrations = [String: Registration]()
         var seen = [String]()
         var counts = [String: Int]()
-        var launch: Launch?
+        var launch: PendingLaunch?
     }
     struct Delivery {
         let payload: PushPayload
@@ -81,7 +84,6 @@ final class PushStore {
     func silenceAll() throws {
         try transaction { state in
             for id in Array(state.registrations.keys) { state.registrations[id]?.silenced = true }
-            state.launch = nil
         }
     }
     func clear() throws { try transaction { $0 = State() } }
@@ -107,15 +109,30 @@ final class PushStore {
             action(); return true
         }
     }
+    /// Foreground presentation never trusts APNs content, even when an NSE did not run.
+    func withPresentation(_ payload: PushPayload, action: (Delivery) -> Void) throws -> Bool {
+        try transaction { state in
+            guard payload.kind != "challenge", let topic = Self.topic(state, payload.registrationId, payload.topicIndex),
+                  topic.kind == payload.kind else { return false }
+            let group = PushPolicy.group(payload.registrationId, payload.topicIndex)
+            action(Delivery(payload: payload, body: PushPolicy.text(kind: topic.kind, label: topic.label),
+                            group: group, count: max(1, state.counts[group, default: 1])))
+            return true
+        }
+    }
     func launch(registration: String, index: Int) throws {
         guard PushPolicy.identifier(registration), (0..<16).contains(index) else { throw PushCrypto.Failure.invalid }
         try transaction { state in
-            let route = Self.topic(state, registration, index)?.route ?? "/notifications"
-            state.launch = Launch(registrationId: registration, route: route)
+            state.launch = PendingLaunch(registrationId: registration, topicIndex: index)
             state.counts.removeValue(forKey: PushPolicy.group(registration, index))
         }
     }
     func consumeLaunch() throws -> Launch? {
-        try transaction { state in let launch = state.launch; state.launch = nil; return launch }
+        try transaction { state in
+            guard let launch = state.launch else { return nil }; state.launch = nil
+            let topic = launch.topicIndex.flatMap { Self.topic(state, launch.registrationId, $0) }
+            return Launch(registrationId: state.registrations[launch.registrationId] == nil ? nil : launch.registrationId,
+                          route: topic?.route ?? "/notifications")
+        }
     }
 }

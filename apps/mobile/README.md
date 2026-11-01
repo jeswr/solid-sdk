@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Solid Suite mobile shells
 
 Capacitor iOS and Android shells around the suite origin. Native plugins use the existing
@@ -12,6 +13,10 @@ keys, topic maps, local silence, installation proofs, activation, disable and on
 routes. Android uses pinned Firebase Messaging 24.1.2 (including direct-boot support); an
 unconfigured build runs normally and `enable()` rejects with `push-unavailable`. iOS embeds
 `NotificationService.appex` alongside the Share Extension. Neither platform renders HTML.
+Android rejects all `gcm.n.*` / `gcm.notification.*` extras before Firebase's automatic display
+logic, with notification delegation and token auto-init disabled. Token requests time out after
+30 seconds. When unlocked, overflow notices require an unsilenced registration under the same
+lock used by local silence; direct boot keeps the generic fallback.
 
 The RFC 8291 decryptor accepts one RFC 8188 aes128gcm record. Suite plaintext must be exactly
 512 UTF-8 bytes, padded with trailing spaces, with only `v`, `id`, `kind`, `registrationId`,
@@ -27,18 +32,23 @@ JWS: protected header `{"alg":"ES256"}`, sorted JSON payload `{bodyHash, method,
 the exact UTF-8 `body` string (default empty). The caller sends `sign()`'s `{proof}` value as
 `Installation-Proof`. The relay implementation must agree on this encoding.
 
-`disable()` silences every registration and retains keys/maps/token for cleanup retries.
+`disable()` synchronously silences every registration before invalidating pending permission/token
+callbacks; late callbacks cannot finish the cancelled enable. It retains keys/maps/token for cleanup retries.
 After relay deletion is confirmed, P2d calls `disable({deleteLocalData: true})` to drop the OS
 token and erase local push material. `silence({registrationId})` affects one account only.
 `setTopicMap` replaces a registration's topics and explicitly unsilences it; an empty topic
 array forgets that registration after remote cleanup, freeing one of the four registration slots.
-`installed` means local push keys exist. `consumeLaunchRoute()` returns the registration and local route once;
+`installed` means local push keys exist. Taps persist only `(registrationId, topicIndex)`.
+`consumeLaunchRoute()` resolves the current map atomically and returns the registration and local route once;
+silenced, disabled or removed topics fall back to `/notifications`, and forgotten registrations return
+`registrationId: null` with that fallback route.
 P2d must resolve/switch the account before navigating, falling back to `/notifications` for
 signed-out accounts. Native Capacitor methods use a `{launchRoute: ... | null}` envelope;
 the TypeScript binding unwraps it to the P13 result.
 
 Signing keys stay in Android Keystore (StrongBox, then TEE/provider fallback) or the app-only
 iOS Keychain group (Secure Enclave, then a permanent Keychain provider fallback).
+The fallback uses a separate ThisDeviceOnly access control without the Enclave-only private-key-usage flag.
 The plugin exposes signing operations only. Software signing fallback requires the provider to report
 non-extractability; otherwise enable fails with `push-unavailable`. Android wraps decryption material with Keystore AES-GCM in `noBackupFilesDir/push/`. iOS shares only decryption
 material through `$(AppIdentifierPrefix)org.jeswr.suite.push`, AfterFirstUnlockThisDeviceOnly,
@@ -52,6 +62,8 @@ Without filtering it removes the previously delivered notification for the same 
 replaces the remote content with a count. With filtering it suppresses that remote notification
 and issues a local request using the stable topic identifier. Different topics have different
 keys (first 16 SHA-256 bytes of UTF-8 `registrationId:topicIndex`, lowercase hex).
+The iOS foreground delegate revalidates encrypted payloads and current silence state, replacing
+remote text with content built from the local topic map before presentation.
 
 The relay (P2a/b), `@jeswr/suite-native/push` registrar and UI (P2d), end-to-end push fixtures
 (P2e), and Firebase/APNs credentials and signed provisioning (P2f/P1) remain separate work.
@@ -62,5 +74,10 @@ Native CI already runs `android/gradlew lint testDebugUnitTest assembleDebug` an
 Debug/Release XCTest `AppTests` bundle, which includes push tests. Both native suites contain
 the [RFC 8291 §5 vector](https://www.rfc-editor.org/rfc/rfc8291#section-5), random-key round trips,
 tamper/size/schema rejection, routes, dedupe, grouping, silence, locked-state and activation seams.
+Regression tests also cover background FCM display rejection, cancelled enable callbacks, topic-map
+changes between tap and consumption, overflow after disable, and actual Keychain fallback creation/signing
+through the injected Security provider on the iOS simulator. That test requires real generation, then
+asserts acceptance/reload only when the provider reports non-extractability; exportable software keys
+must be rejected and deleted, including on the simulator.
 Hardware key backing, APNs/FCM delivery, direct boot, OS permission prompts, extension expiry,
 and concurrent delivered-notification replacement still require native CI/device verification.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import Capacitor
 import Foundation
 import UIKit
@@ -19,7 +20,7 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "consumeLaunchRoute", returnType: CAPPluginReturnPromise)
     ]
     // CAP calls and callbacks join this queue before touching pending calls.
-    private var enableCall: CAPPluginCall?
+    private let enablement = PushEnablement<CAPPluginCall>()
     private var activation: CAPPluginCall?
     private var installation: String?
     private var activationDeadline: TimeInterval = 0
@@ -44,31 +45,36 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
     @objc func enable(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard self.enableCall == nil else { call.reject("Push enable is already pending", "BUSY"); return }
-            self.enableCall = call
+            guard self.enablement.begin(call) else { call.reject("Push enable is already pending", "BUSY"); return }
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
                 DispatchQueue.main.async {
-                    guard self.enableCall === call else { return }
-                    guard granted else { self.enableCall = nil; call.reject("Notifications are not permitted", "permission-denied"); return }
-                    do {
-                        let keys = try PushKeys(create: true)
-                        let jwk = try PushSigningKey(create: true).publicJWK()
-                        SuitePushCoordinator.shared.register { result in
-                            guard self.enableCall === call else { return }; self.enableCall = nil
-                            switch result {
-                            case let .success(token):
-                                call.resolve(["pushToken": token, "devicePublicKey": PushCrypto.b64(keys.key.publicKey.x963Representation),
-                                              "authSecret": PushCrypto.b64(keys.auth), "deviceSigningKey": jwk])
-                            case .failure: call.reject("APNs is unavailable for this build", "push-unavailable")
-                            }
+                    self.enablement.withCurrent(call) {
+                        guard granted else {
+                            self.enablement.finish(call) { call.reject("Notifications are not permitted", "permission-denied") }; return
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-                            if self.enableCall === call {
-                                self.enableCall = nil; SuitePushCoordinator.shared.tokenCompletion = nil
-                                call.reject("APNs registration timed out", "push-unavailable")
+                        do {
+                            let keys = try PushKeys(create: true)
+                            let jwk = try PushSigningKey(create: true).publicJWK()
+                            SuitePushCoordinator.shared.register { result in
+                                self.enablement.finish(call) {
+                                    switch result {
+                                    case let .success(token):
+                                        call.resolve(["pushToken": token, "devicePublicKey": PushCrypto.b64(keys.key.publicKey.x963Representation),
+                                                      "authSecret": PushCrypto.b64(keys.auth), "deviceSigningKey": jwk])
+                                    case .failure: call.reject("APNs is unavailable for this build", "push-unavailable")
+                                    }
+                                }
                             }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                                self.enablement.finish(call) {
+                                    SuitePushCoordinator.shared.cancelRegistration()
+                                    call.reject("APNs registration timed out", "push-unavailable")
+                                }
+                            }
+                        } catch {
+                            self.enablement.finish(call) { call.reject("Cannot open the push key store", "push-unavailable") }
                         }
-                    } catch { self.enableCall = nil; call.reject("Cannot open the push key store", "push-unavailable") }
+                    }
                 }
             }
         }
@@ -129,10 +135,12 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
         activation = nil; installation = nil; call.resolve(["nonce": nonce])
     }
     @objc func disable(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            guard self.enableCall == nil else { call.reject("Push enable is still pending", "BUSY"); return }
+        // Persist silence before returning to the bridge, then invalidate permission/token callbacks.
+        let work = {
             do {
-                try PushStore.shared().silenceAll()
+                let cancelled = try self.enablement.disable { try PushStore.shared().silenceAll() }
+                cancelled?.reject("Push was disabled", "disabled")
+                SuitePushCoordinator.shared.cancelRegistration()
                 self.activation?.reject("Push was disabled", "disabled"); self.activation = nil; self.installation = nil
                 SuitePushCoordinator.shared.challenges.clear()
                 if call.getBool("deleteLocalData") == true {
@@ -143,11 +151,14 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve()
             } catch { call.reject("Cannot disable push; retry cleanup", "push-unavailable") }
         }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync(execute: work) }
     }
     @objc func consumeLaunchRoute(_ call: CAPPluginCall) {
         do {
             if let launch = try PushStore.shared().consumeLaunch() {
-                call.resolve(["launchRoute": ["registrationId": launch.registrationId, "route": launch.route]])
+                var result: [String: Any] = ["registrationId": NSNull(), "route": launch.route]
+                if let registration = launch.registrationId { result["registrationId"] = registration }
+                call.resolve(["launchRoute": result])
             } else { call.resolve(["launchRoute": NSNull()]) }
         } catch { call.reject("Cannot read launch route", "push-unavailable") }
     }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import android.Manifest;
@@ -33,7 +34,7 @@ public class SuitePushPlugin extends Plugin {
     private PluginCall activation;
     private String installation;
     private long activationDeadline;
-    private volatile boolean enabling;
+    private final PushEnablement<PluginCall> enablement = new PushEnablement<>();
     private volatile boolean deleting;
 
     static synchronized PushStore store(Context context) throws java.io.IOException {
@@ -72,25 +73,32 @@ public class SuitePushPlugin extends Plugin {
         JSObject result = new JSObject(); result.put("permission", permission()); result.put("installed", PushKeys.installed(getContext())); result.put("platform", "android"); call.resolve(result);
     }
     @PluginMethod public void enable(PluginCall call) {
-        if (!configured()) { call.reject("Firebase is not configured for this build", "push-unavailable"); return; }
-        if (enabling || deleting) { call.reject("Push lifecycle operation is already pending", "BUSY"); return; }
-        enabling = true;
-        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
-            requestPermissionForAlias("notifications", call, "notificationPermission"); return;
+        synchronized (enablement) {
+            if (!configured()) { call.reject("Firebase is not configured for this build", "push-unavailable"); return; }
+            if (deleting || !enablement.begin(call)) { call.reject("Push lifecycle operation is already pending", "BUSY"); return; }
+            if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+                requestPermissionForAlias("notifications", call, "notificationPermission"); return;
+            }
+            enabled(call);
         }
-        enabled(call);
     }
     @PermissionCallback private void notificationPermission(PluginCall call) { enabled(call); }
     private void enabled(PluginCall call) {
-        if (!permission().equals("granted")) { enabling = false; call.reject("Notifications are not permitted", "permission-denied"); return; }
-        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) { enabling = false; call.reject("Cannot obtain a Firebase push token", "push-unavailable"); return; }
+        enablement.withCurrent(call, () -> {
+            if (!permission().equals("granted")) {
+                enablement.finish(call, () -> call.reject("Notifications are not permitted", "permission-denied")); return;
+            }
+            main.postDelayed(() -> enablement.finish(call, () -> call.reject("Firebase token request timed out", "push-unavailable")), 30000);
             try {
-                PushKeys keys = new PushKeys(getContext(), true);
-                JSObject result = new JSObject(); result.put("pushToken", task.getResult()); result.put("devicePublicKey", PushCrypto.b64(keys.publicKey));
-                result.put("authSecret", PushCrypto.b64(keys.auth)); result.put("deviceSigningKey", new JSONObject(keys.publicSigningKey())); call.resolve(result);
-            } catch (Exception e) { call.reject("Cannot open the push key store", "push-unavailable"); }
-            finally { enabling = false; }
+                FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> enablement.finish(call, () -> {
+                    if (!task.isSuccessful() || task.getResult() == null) { call.reject("Cannot obtain a Firebase push token", "push-unavailable"); return; }
+                    try {
+                        PushKeys keys = new PushKeys(getContext(), true);
+                        JSObject result = new JSObject(); result.put("pushToken", task.getResult()); result.put("devicePublicKey", PushCrypto.b64(keys.publicKey));
+                        result.put("authSecret", PushCrypto.b64(keys.auth)); result.put("deviceSigningKey", new JSONObject(keys.publicSigningKey())); call.resolve(result);
+                    } catch (Exception e) { call.reject("Cannot open the push key store", "push-unavailable"); }
+                }));
+            } catch (Exception e) { enablement.finish(call, () -> call.reject("Cannot obtain a Firebase push token", "push-unavailable")); }
         });
     }
     @PluginMethod public void setTopicMap(PluginCall call) {
@@ -135,10 +143,14 @@ public class SuitePushPlugin extends Plugin {
         JSObject result = new JSObject(); result.put("nonce", nonce); call.resolve(result);
     }
     @PluginMethod public void disable(PluginCall call) {
-        if (enabling || deleting) { call.reject("Push lifecycle operation is still pending", "BUSY"); return; }
-        try { store(getContext()).silenceAll(); }
-        catch (Exception e) { call.reject("Cannot silence push", "push-unavailable"); return; }
-        deleting = Boolean.TRUE.equals(call.getBoolean("deleteLocalData", false));
+        synchronized (enablement) {
+            try {
+                PluginCall cancelled = enablement.disable(() -> store(getContext()).silenceAll());
+                if (cancelled != null) cancelled.reject("Push was disabled", "disabled");
+            } catch (Exception e) { call.reject("Cannot silence push", "push-unavailable"); return; }
+            if (deleting) { call.reject("Push cleanup is still pending; registrations are silenced", "BUSY"); return; }
+            deleting = Boolean.TRUE.equals(call.getBoolean("deleteLocalData", false));
+        }
         main.post(() -> {
             cancelActivation(); challenges.clear();
             if (Boolean.TRUE.equals(call.getBoolean("deleteLocalData", false))) {
@@ -170,5 +182,11 @@ public class SuitePushPlugin extends Plugin {
     @Override protected void handleOnDestroy() {
         synchronized (SuitePushPlugin.class) { if (active == this) active = null; }
         main.post(this::cancelActivation);
+        synchronized (enablement) {
+            try {
+                PluginCall cancelled = enablement.disable(() -> {});
+                if (cancelled != null) cancelled.reject("Push bridge was closed", "disabled");
+            } catch (Exception ignored) { /* No IO in cancellation. */ }
+        }
     }
 }

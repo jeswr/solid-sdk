@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import Foundation
 import XCTest
 @testable import App
@@ -139,5 +140,105 @@ final class PushStateTests: XCTestCase {
             }
         }
         XCTAssertThrowsError(try PushPayload(Self.padded(json.replacingOccurrences(of: nonce, with: "bad"))))
+    }
+    func testLaunchResolvesCurrentMapWhenConsumed() throws {
+        let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
+        try store.launch(registration: "b", index: 1)
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("topics.json"))) as? [String: Any])
+        let pending = try XCTUnwrap(saved["launch"] as? [String: Any])
+        XCTAssertEqual(Set(pending.keys), Set(["registrationId", "topicIndex"]))
+        try store.silence("b")
+        let silenced = try XCTUnwrap(store.consumeLaunch())
+        XCTAssertEqual(silenced.registrationId, "b"); XCTAssertEqual(silenced.route, "/notifications")
+        try store.setTopics(registration: "b", topics: topics)
+        try store.launch(registration: "b", index: 1); try store.silenceAll()
+        XCTAssertEqual(try PushStore(root: root).consumeLaunch()?.route, "/notifications")
+        try store.setTopics(registration: "b", topics: topics); try store.launch(registration: "b", index: 1)
+        let changed = PushStore.Topic(index: 1, kind: "chat", label: "New", route: "/chat/new", enabled: true)
+        try store.setTopics(registration: "b", topics: [changed])
+        XCTAssertEqual(try store.consumeLaunch()?.route, "/chat/new")
+        try store.launch(registration: "b", index: 1); try store.setTopics(registration: "b", topics: [topics[1]])
+        XCTAssertEqual(try store.consumeLaunch()?.route, "/notifications")
+        try store.setTopics(registration: "b", topics: topics); try store.launch(registration: "b", index: 1)
+        let disabled = PushStore.Topic(index: 1, kind: "chat", label: "Book", route: "/chat/book", enabled: false)
+        try store.setTopics(registration: "b", topics: [disabled])
+        XCTAssertEqual(try store.consumeLaunch()?.route, "/notifications")
+        try store.launch(registration: "b", index: 1); try store.setTopics(registration: "b", topics: [])
+        let forgotten = try XCTUnwrap(store.consumeLaunch())
+        XCTAssertNil(forgotten.registrationId); XCTAssertEqual(forgotten.route, "/notifications"); XCTAssertNil(try store.consumeLaunch())
+        try store.launch(registration: "unknown", index: 1); XCTAssertNil(try store.consumeLaunch()?.registrationId)
+    }
+    func testLegacySavedRouteIsConsumedOnlyWithSafeFallback() throws {
+        let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
+        let url = root.appendingPathComponent("topics.json")
+        var state = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        state["launch"] = ["registrationId": "b", "route": "/chat/stale"]
+        try JSONSerialization.data(withJSONObject: state).write(to: url)
+        let launch = try XCTUnwrap(store.consumeLaunch())
+        XCTAssertEqual(launch.registrationId, "b"); XCTAssertEqual(launch.route, "/notifications")
+    }
+    func testDisablePersistsSilenceBeforeInvalidatingPermissionAndTokenCallbacks() throws {
+        for waitingForToken in [false, true] {
+            let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
+            let enablement = PushEnablement<NSObject>(), old = NSObject(), next = NSObject()
+            XCTAssertTrue(enablement.begin(old)); XCTAssertFalse(enablement.begin(next))
+            var tokenRequests = 0, keyCreations = 0
+            if waitingForToken { enablement.withCurrent(old) { tokenRequests += 1 } }
+            let cancelled = try enablement.disable {
+                try store.silenceAll()
+                XCTAssertNil(try PushStore(root: root).accept(Self.payload("during-disable")))
+                XCTAssertTrue(enablement.withCurrent(old) {})
+            }
+            XCTAssertTrue(cancelled === old)
+            XCTAssertFalse(enablement.withCurrent(old) { tokenRequests += 1 })
+            XCTAssertFalse(enablement.finish(old) { keyCreations += 1 })
+            XCTAssertTrue(enablement.begin(next))
+            XCTAssertFalse(enablement.finish(old) { keyCreations += 1 })
+            XCTAssertTrue(enablement.finish(next) { keyCreations += 1 })
+            XCTAssertEqual(tokenRequests, waitingForToken ? 1 : 0); XCTAssertEqual(keyCreations, 1)
+            XCTAssertNil(try store.accept(Self.payload("late-token")))
+        }
+    }
+    func testEnableTimeoutIgnoresLateTokensAndOldDeadlines() {
+        let enablement = PushEnablement<NSObject>(), expired = NSObject(), next = NSObject()
+        XCTAssertTrue(enablement.begin(expired)); XCTAssertTrue(enablement.finish(expired) {})
+        XCTAssertTrue(enablement.begin(next))
+        XCTAssertFalse(enablement.finish(expired) { XCTFail("Old token/deadline affected the new enable") })
+        XCTAssertTrue(enablement.finish(next) {})
+    }
+    func testLateAPNsCallbackAfterDisableCannotCacheTokenOrResolveCancelledEnable() throws {
+        let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
+        let enablement = PushEnablement<NSObject>(), call = NSObject(), registration = PushTokenRegistration()
+        var requests = 0, callbacks = 0
+        XCTAssertTrue(enablement.begin(call))
+        registration.register({ _ in enablement.finish(call) { callbacks += 1 } }, request: { requests += 1 })
+        try enablement.disable { try store.silenceAll() }; registration.cancel()
+        registration.registered("late-token"); registration.failed(PushCrypto.Failure.invalid)
+        XCTAssertEqual(callbacks, 0); XCTAssertNil(try store.accept(Self.payload("after-late-token")))
+        registration.register({ result in
+            XCTAssertEqual(try? result.get(), "fresh-token"); callbacks += 1
+        }, request: { requests += 1 })
+        XCTAssertEqual(requests, 2); XCTAssertEqual(callbacks, 0)
+        registration.registered("fresh-token"); XCTAssertEqual(callbacks, 1)
+        registration.clear(); registration.registered("late-after-unregister")
+        registration.register({ _ in XCTFail("Cached token after unregister") }, request: { requests += 1 })
+        XCTAssertEqual(requests, 3); registration.cancel()
+    }
+    func testForegroundRevalidatesPayloadAndCurrentStateWithoutTrustingProviderText() throws {
+        let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
+        var bodies = [String]()
+        let present: (PushPayload) throws -> Bool = { payload in
+            try store.withPresentation(payload) { bodies.append($0.body) }
+        }
+        XCTAssertTrue(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
+        XCTAssertEqual(bodies, ["New message in Book club"])
+        try store.silence("b")
+        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
+        try store.setTopics(registration: "b", topics: [])
+        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
+        XCTAssertFalse(PushReceiver.foreground(nil, decrypt: { _ in XCTFail("Decrypted absent data"); return Data() }, present: present))
+        XCTAssertFalse(PushReceiver.foreground("bad", decrypt: { _ in throw PushCrypto.Failure.invalid }, present: present))
+        XCTAssertFalse(PushReceiver.foreground("bad", decrypt: { _ in Data("unvalidated".utf8) }, present: present))
+        XCTAssertEqual(bodies.count, 1)
     }
 }

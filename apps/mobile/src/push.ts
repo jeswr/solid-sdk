@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { registerPlugin } from "@capacitor/core";
 
 export interface PushTopic {
@@ -10,7 +11,7 @@ export interface PushTopic {
 }
 
 export interface PushLaunchRoute {
-  registrationId: string;
+  registrationId: string | null;
   route: string;
 }
 

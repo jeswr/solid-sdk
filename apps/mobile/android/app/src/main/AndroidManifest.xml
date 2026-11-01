@@ -66,6 +66,9 @@
             </intent-filter>
         </activity>
 
+        <!-- AUTHORED-BY Codex GPT-6: only explicit token requests; never delegate display to Play Services. -->
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+        <meta-data android:name="firebase_messaging_notification_delegation_enabled" android:value="false" />
         <!-- AUTHORED-BY Codex GPT-6.1-Sol: encrypted data pushes, including direct-boot fallback. -->
         <service android:name=".SuitePushService" android:exported="false" android:directBootAware="true">
             <intent-filter>

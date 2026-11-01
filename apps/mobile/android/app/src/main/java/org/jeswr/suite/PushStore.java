@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import java.io.ByteArrayOutputStream;
@@ -71,7 +72,7 @@ final class PushStore {
     }
     synchronized void silenceAll() throws IOException {
         for (Object reg : registrations().values()) PushJson.object(reg).put("silenced", true);
-        state.remove("launch"); save();
+        save();
     }
     synchronized void clear() throws IOException { state = empty(); save(); }
     static final class Delivery {
@@ -117,18 +118,33 @@ final class PushStore {
         if (topic == null || !p.kind.equals(topic.get("kind"))) return false;
         action.run(); return true;
     }
+    synchronized boolean withAnyActive(Runnable action) {
+        for (Object raw : registrations().values()) {
+            if (Boolean.FALSE.equals(PushJson.object(raw).get("silenced"))) { action.run(); return true; }
+        }
+        return false;
+    }
     /** Tap intents carry only an opaque pair; the route is read afresh, never accepted from an intent. */
     synchronized void launch(String registration, int index) throws IOException {
         PushPolicy.id(registration);
         if (index < 0 || index > 15) return;
-        Map<String, Object> topic = topic(registration, index);
         Map<String, Object> launch = new LinkedHashMap<>(); launch.put("registrationId", registration);
-        // Preserve the registration for the shell's signed-out account fallback, never its stale route.
-        launch.put("route", topic == null ? "/notifications" : topic.get("route"));
-        if (!PushPolicy.route(PushJson.string(launch.get("route")))) return;
+        launch.put("topicIndex", (long) index);
         state.put("launch", launch); PushJson.object(state.get("counts")).remove(PushPolicy.group(registration, index)); save();
     }
     synchronized Map<String, Object> consumeLaunch() throws IOException {
-        Object launch = state.remove("launch"); save(); return launch == null ? null : PushJson.object(launch);
+        Object raw = state.remove("launch");
+        Map<String, Object> result = null;
+        if (raw != null) {
+            Map<String, Object> launch = PushJson.object(raw);
+            String registration = PushPolicy.id(launch.get("registrationId"));
+            // Old saved routes have no index: consume them with the safe fallback only.
+            Map<String, Object> topic = launch.containsKey("topicIndex") ? topic(registration, PushJson.integer(launch.get("topicIndex"), 15)) : null;
+            Object route = topic == null ? null : topic.get("route");
+            result = new LinkedHashMap<>();
+            result.put("registrationId", registrations().containsKey(registration) ? registration : null);
+            result.put("route", route instanceof String && PushPolicy.route((String) route) ? route : "/notifications");
+        }
+        save(); return result;
     }
 }

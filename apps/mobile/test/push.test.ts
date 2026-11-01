@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, test, vi } from "vitest";
 import type { SuitePushPlugin } from "../src/push.ts";
 
@@ -80,6 +81,12 @@ test("unwraps a launch route once, including the registration for account switch
     .mockResolvedValueOnce({ launchRoute: null });
   expect(await SuitePush.consumeLaunchRoute()).toBe(launch);
   expect(await SuitePush.consumeLaunchRoute()).toBeNull();
+});
+
+test("preserves a forgotten registration's notifications-only launch without an account", async () => {
+  const launch = { registrationId: null, route: "/notifications" };
+  native.consumeLaunchRoute.mockResolvedValueOnce({ launchRoute: launch });
+  expect(await SuitePush.consumeLaunchRoute()).toEqual(launch);
 });
 
 test("propagates native permission, availability and activation timeout failures", async () => {

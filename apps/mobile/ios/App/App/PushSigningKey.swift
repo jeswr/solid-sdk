@@ -1,7 +1,36 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import CryptoKit
 import Foundation
 import Security
+
+/// Injectable Security operations; tests can exercise real Keychain creation without app-group entitlements.
+protocol PushSigningKeyProvider {
+    func find(_ query: [String: Any]) throws -> SecKey?
+    func create(_ attributes: [String: Any]) throws -> SecKey
+    func attributes(_ key: SecKey) -> [String: Any]?
+    func delete(_ query: [String: Any]) throws
+}
+struct SecurityPushSigningKeyProvider: PushSigningKeyProvider {
+    func find(_ query: [String: Any]) throws -> SecKey? {
+        var lookup = query; lookup[kSecReturnRef as String] = true
+        var found: CFTypeRef?
+        let status = SecItemCopyMatching(lookup as CFDictionary, &found)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let found = found else { throw PushCrypto.Failure.invalid }
+        return (found as! SecKey)
+    }
+    func create(_ attributes: [String: Any]) throws -> SecKey {
+        var error: Unmanaged<CFError>?
+        guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else { throw PushCrypto.Failure.invalid }
+        return key
+    }
+    func attributes(_ key: SecKey) -> [String: Any]? { SecKeyCopyAttributes(key) as? [String: Any] }
+    func delete(_ query: [String: Any]) throws {
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw PushCrypto.Failure.invalid }
+    }
+}
 
 /// App-only signing operations. No private key representation crosses this API or the JS bridge.
 final class PushSigningKey {
@@ -14,37 +43,39 @@ final class PushSigningKey {
                 kSecAttrApplicationTag as String: Data("org.jeswr.suite.push.sign".utf8),
                 kSecAttrAccessGroup as String: group, kSecAttrSynchronizable as String: false]
     }
-    init(create: Bool) throws {
-        var query = try Self.query(); query[kSecReturnRef as String] = true
-        var found: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &found)
-        if status == errSecSuccess, let found = found {
-            let stored = found as! SecKey
-            guard let attributes = SecKeyCopyAttributes(stored) as? [String: Any], Self.acceptsAttributes(attributes) else { throw PushCrypto.Failure.invalid }
+    convenience init(create: Bool) throws {
+        try self.init(create: create, query: Self.query(), provider: SecurityPushSigningKeyProvider())
+    }
+    init(create: Bool, query: [String: Any], provider: PushSigningKeyProvider) throws {
+        if let stored = try provider.find(query) {
+            guard let attributes = provider.attributes(stored), Self.acceptsAttributes(attributes) else { throw PushCrypto.Failure.invalid }
             key = stored; return
         }
-        guard status == errSecItemNotFound && create else { throw PushCrypto.Failure.invalid }
-        var error: Unmanaged<CFError>?
-        guard let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, .privateKeyUsage, &error) else { throw PushCrypto.Failure.invalid }
-        let privateAttrs: [String: Any] = [
-            kSecAttrIsPermanent as String: true, kSecAttrApplicationTag as String: query[kSecAttrApplicationTag as String]!,
-            kSecAttrAccessGroup as String: query[kSecAttrAccessGroup as String]!, kSecAttrAccessControl as String: access,
-            kSecAttrSynchronizable as String: false
-        ]
-        var attributes: [String: Any] = [kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeySizeInBits as String: 256, kSecPrivateKeyAttrs as String: privateAttrs,
-            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave]
-        if let enclave = SecKeyCreateRandomKey(attributes as CFDictionary, &error) { key = enclave; return }
-        // Simulator/provider fallback: a permanent Keychain SecKey. Only signing is exposed by this class.
-        // Require the provider to report non-extractability; unsupported/exportable fallbacks fail closed.
-        attributes.removeValue(forKey: kSecAttrTokenID as String)
-        var fallbackPrivate = privateAttrs; fallbackPrivate[kSecAttrIsExtractable as String] = false
-        attributes[kSecPrivateKeyAttrs as String] = fallbackPrivate
-        guard let fallback = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else { throw PushCrypto.Failure.invalid }
-        guard let provider = SecKeyCopyAttributes(fallback) as? [String: Any], Self.acceptsAttributes(provider) else {
-            try? Self.delete(); throw PushCrypto.Failure.invalid
+        guard create else { throw PushCrypto.Failure.invalid }
+        func attributes(enclave: Bool) throws -> [String: Any] {
+            var error: Unmanaged<CFError>?
+            // privateKeyUsage is valid only inside the Secure Enclave. Build a fresh fallback ACL.
+            let flags: SecAccessControlCreateFlags = enclave ? .privateKeyUsage : []
+            guard let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, flags, &error),
+                  let tag = query[kSecAttrApplicationTag as String] else { throw PushCrypto.Failure.invalid }
+            var privateAttrs: [String: Any] = [
+                kSecAttrIsPermanent as String: true, kSecAttrApplicationTag as String: tag,
+                kSecAttrAccessControl as String: access, kSecAttrSynchronizable as String: false,
+                kSecAttrIsExtractable as String: false
+            ]
+            if let group = query[kSecAttrAccessGroup as String] { privateAttrs[kSecAttrAccessGroup as String] = group }
+            var result: [String: Any] = [kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+                kSecAttrKeySizeInBits as String: 256, kSecPrivateKeyAttrs as String: privateAttrs]
+            if enclave { result[kSecAttrTokenID as String] = kSecAttrTokenIDSecureEnclave }
+            return result
         }
-        key = fallback
+        let generated: SecKey
+        if let enclave = try? provider.create(attributes(enclave: true)) { generated = enclave }
+        else { generated = try provider.create(attributes(enclave: false)) }
+        guard let reported = provider.attributes(generated), Self.acceptsAttributes(reported) else {
+            try? provider.delete(query); throw PushCrypto.Failure.invalid
+        }
+        key = generated
     }
     static func acceptsAttributes(_ attributes: [String: Any]) -> Bool {
         if attributes[kSecAttrTokenID as String] as? String == kSecAttrTokenIDSecureEnclave as String { return true }
@@ -60,8 +91,7 @@ final class PushSigningKey {
         return try P256.Signing.ECDSASignature(derRepresentation: der).rawRepresentation
     }
     static func delete() throws {
-        let status = SecItemDelete(try query() as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw PushCrypto.Failure.invalid }
+        try SecurityPushSigningKeyProvider().delete(query())
     }
 }
 

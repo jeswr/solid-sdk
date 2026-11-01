@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import static org.junit.Assert.*;
@@ -87,7 +88,7 @@ public class PushStateTest {
         PushReceiver.Decryptor forbidden = value -> { throw new AssertionError("Touched keys before unlock"); };
         PushReceiver.Storage forbiddenStore = () -> { throw new AssertionError("Touched topic state before unlock"); };
         assertEquals(PushReceiver.Kind.GENERIC, PushReceiver.receive("p", false, forbidden, forbiddenStore).kind);
-        assertEquals(PushReceiver.Kind.GENERIC, PushReceiver.deleted().kind);
+        assertTrue(PushReceiver.deleted(false, forbiddenStore, () -> {}));
         assertEquals(PushReceiver.Kind.DROP, PushReceiver.receive(null, false, forbidden, forbiddenStore).kind);
         assertEquals(PushReceiver.Kind.DROP, PushReceiver.receive(new String(new char[6000]), false, forbidden, forbiddenStore).kind);
         PushStore store = new PushStore(temporary.newFolder());
@@ -100,5 +101,50 @@ public class PushStateTest {
         assertNull(activation.take("other", 1)); assertEquals(nonce, activation.take("installation", 59999)); assertNull(activation.take("installation", 59999));
         activation.deliver("installation", nonce, 0); assertNull(activation.take("installation", 60000));
         activation.deliver("installation", nonce, 0); activation.clear(); assertNull(activation.take("installation", 1));
+    }
+    @Test public void launchResolvesTheCurrentMapAtConsumption() throws Exception {
+        File root = temporary.newFolder(); PushStore store = new PushStore(root); store.setTopics("b", topics());
+        store.launch("b", 1);
+        Map<String, Object> saved = PushJson.object(PushJson.parse(new String(PushStore.read(new File(root, "topics.json"), 131072), StandardCharsets.UTF_8)));
+        assertEquals(new java.util.HashSet<>(Arrays.asList("registrationId", "topicIndex")), PushJson.object(saved.get("launch")).keySet());
+        store.silence("b");
+        Map<String, Object> silenced = store.consumeLaunch();
+        assertEquals("b", silenced.get("registrationId")); assertEquals("/notifications", silenced.get("route"));
+        store.setTopics("b", topics()); store.launch("b", 1); store.silenceAll();
+        assertEquals("/notifications", new PushStore(root).consumeLaunch().get("route"));
+        store = new PushStore(root); store.setTopics("b", topics()); store.launch("b", 1);
+        store.setTopics("b", (List<?>) PushJson.parse(PushJson.encode(topics()).replace("/chat/book", "/chat/new")));
+        assertEquals("/chat/new", store.consumeLaunch().get("route"));
+        store.launch("b", 1); store.setTopics("b", Arrays.asList(topics().get(1)));
+        assertEquals("/notifications", store.consumeLaunch().get("route"));
+        store.setTopics("b", topics()); store.launch("b", 1);
+        store.setTopics("b", (List<?>) PushJson.parse(PushJson.encode(topics()).replace("true", "false")));
+        assertEquals("/notifications", store.consumeLaunch().get("route"));
+        store.launch("b", 1); store.setTopics("b", java.util.Collections.emptyList());
+        Map<String, Object> forgotten = store.consumeLaunch();
+        assertNull(forgotten.get("registrationId")); assertEquals("/notifications", forgotten.get("route")); assertNull(store.consumeLaunch());
+        store.launch("unknown", 1); assertNull(store.consumeLaunch().get("registrationId"));
+    }
+    @Test public void legacySavedRouteNeverOverridesTheCurrentMap() throws Exception {
+        File root = temporary.newFolder(); PushStore store = new PushStore(root); store.setTopics("b", topics());
+        Map<String, Object> state = PushJson.object(PushJson.parse(new String(PushStore.read(new File(root, "topics.json"), 131072), StandardCharsets.UTF_8)));
+        state.put("launch", PushJson.parse("{\"registrationId\":\"b\",\"route\":\"/chat/stale\"}"));
+        PushStore.write(new File(root, "topics.json"), PushCrypto.utf8(PushJson.encode(state)));
+        Map<String, Object> launch = new PushStore(root).consumeLaunch();
+        assertEquals("b", launch.get("registrationId")); assertEquals("/notifications", launch.get("route"));
+    }
+    @Test public void overflowRespectsSilenceAndDoesNotReadProtectedStateInDirectBoot() throws Exception {
+        PushStore store = new PushStore(temporary.newFolder()); int[] notices = {0};
+        Runnable post = () -> notices[0]++;
+        assertFalse(PushReceiver.deleted(true, () -> store, post));
+        store.setTopics("a", topics()); store.setTopics("b", topics()); store.silence("b");
+        assertTrue(PushReceiver.deleted(true, () -> store, post)); assertEquals(1, notices[0]);
+        assertTrue(PushReceiver.deleted(true, () -> store, () -> assertTrue(Thread.holdsLock(store))));
+        store.silenceAll(); assertFalse(PushReceiver.deleted(true, () -> store, post));
+        store.clear(); assertFalse(PushReceiver.deleted(true, () -> store, post));
+        assertFalse(PushReceiver.deleted(true, () -> { throw new java.io.IOException(); }, post));
+        assertEquals(1, notices[0]);
+        assertTrue(PushReceiver.deleted(false, () -> { throw new AssertionError("Read protected state"); }, post));
+        assertEquals(2, notices[0]);
     }
 }
