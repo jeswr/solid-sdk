@@ -157,7 +157,8 @@ The same checked migration runs before every mutation (build, setters, live-set
 `add`/`delete`/`clear`, `mark()`), so a no-op write can never silently repair or change a
 record; a failed check throws `MigrationError` and leaves the live dataset untouched. Set
 projections are compared by membership, not iteration order. `defineModel(input, {
-migrationManifest })` lets a per-node view run those checks against its full owning model.
+migrationManifest })` lets a per-node view run those checks against its full owning model;
+the primary manifest's checks still run too, so the option can never weaken a write.
 Nested links keep their own `minCount`, enforced during strict child validation regardless
 of `sh:severity`.
 

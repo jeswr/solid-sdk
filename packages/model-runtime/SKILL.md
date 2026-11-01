@@ -106,7 +106,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   `storeToTurtle`, `serialize`) runs the SAME checked migration on a copy BEFORE the explicit
   change; on `MigrationError` the live dataset is unchanged. There is no unchecked fast path.
   Generated per-node views pass the owning manifest as `defineModel(views, { migrationManifest })`
-  so their checks see the full model.
+  so their checks see the full model. The primary manifest's own preservation checks always
+  still run alongside, so the option can only add context, never drop a check.
 - Nested links carry their own `minCount`, independent of root requiredness and severity:
   inside strict `sh:node` validation an absent link below its minimum makes the child fail. Before deleting alias types, materialise satisfied explicit
   link classes on affected subjects, preserving ancestry proofs as builds do.
