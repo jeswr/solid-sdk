@@ -2,11 +2,26 @@
 
 import { Writer } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
+import { parseDocument } from "../src/apps/docs/lib/model/document";
 import { discoverDomainItems } from "../src/apps/home/lib/model/discovery";
 import { provenanceOf } from "../src/apps/home/lib/model/provenance";
+import { readResource } from "../src/apps/home/lib/model/rdf";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import { buildHomeSeed } from "../src/lib/demo-pod/seed-home";
+
+it("round-trips the shared Launch plan fixture through the Docs parser", async () => {
+  const now = Date.parse("2026-11-01T12:00:00Z");
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildHomeSeed(now) });
+  const url = `${DEMO_ROOT}docs/launch.ttl`;
+  const { dataset } = await readResource(pod.fetch, url);
+  expect(parseDocument(url, dataset)).toMatchObject({
+    title: "Launch plan",
+    body: "A shared plan for the next chapter.",
+    format: "text/plain",
+    revisions: [{ body: "A shared plan for the next chapter.", format: "text/plain" }],
+  });
+});
 
 it("discovers the Home acceptance fixtures through the actual demo pod", async () => {
   const seed = await buildDemoSeed(Date.now());

@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -173,12 +174,64 @@ describe("Home session discovery cache", () => {
     stop();
   });
   it("exposes first-load errors and permits retry", async () => {
-    const { store, fetch } = await setup();
-    fetch.mockRejectedValueOnce(new Error("Unavailable"));
+    const { store, fetch, pod } = await setup();
+    fetch.mockRejectedValue(new Error("Unavailable"));
     await store.refresh();
     expect(store.getSnapshot().status).toBe("error");
+    fetch.mockImplementation(pod.fetch);
     await store.refresh();
     expect(store.getSnapshot().status).toBe("ready");
+  });
+  it.each([
+    "timeout",
+    "503",
+    "parse",
+  ])("loads known containers when the profile fails on first load: %s", async (failure) => {
+    const { store, session, fetch, pod } = await setup();
+    const profile = session.webId.split("#")[0];
+    fetch.mockImplementation(async (input, init) => {
+      if (String(input) !== profile) return pod.fetch(input, init);
+      if (failure === "timeout") throw new DOMException("Timed out", "TimeoutError");
+      return failure === "503"
+        ? new Response(null, { status: 503 })
+        : new Response("invalid Turtle", { headers: { "content-type": "text/turtle" } });
+    });
+    await store.refresh();
+    const result = store.getSnapshot();
+    expect(result.status).toBe("ready");
+    expect(result.counts.get("media")).toBe(3);
+    expect(result.items.some((item) => item.title === "Launch plan")).toBe(true);
+    expect(result.failures).toEqual([{ url: profile, error: expect.any(Error) }]);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === profile)).toHaveLength(1);
+    fetch.mockImplementation(pod.fetch);
+    await store.refresh();
+    expect(store.getSnapshot().failures).toEqual([]);
+    expect(store.getSnapshot().counts.get("personal")).toBe(1);
+  });
+  it("gives container discovery a fresh deadline after the profile request times out", async () => {
+    const { store, session, fetch, pod } = await setup();
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockImplementationOnce((ms) => {
+      expect(ms).toBe(5_000);
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    fetch.mockImplementation((input, init) =>
+      String(input) === session.webId.split("#")[0]
+        ? new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+              once: true,
+            });
+          })
+        : pod.fetch(input, init),
+    );
+    const loading = store.refresh();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await loading;
+    expect(store.getSnapshot().status).toBe("ready");
+    expect(store.getSnapshot().counts.get("media")).toBe(3);
+    expect(store.getSnapshot().truncated).toBe(false);
+    expect(store.getSnapshot().failures).toHaveLength(1);
   });
   it("retains partial cards with failures and retries the scan", async () => {
     const { store, fetch, pod } = await setup();
@@ -280,6 +333,60 @@ describe("Home session discovery cache", () => {
     expect(store.getSnapshot().items.some((item) => item.title === "Registered later")).toBe(false);
   });
 
+  it.each(
+    [401, 403, 404, 410].flatMap((status) => [
+      { status, unavailable: "public" },
+      { status, unavailable: "private" },
+    ]),
+  )("preserves only the affected index's cards with $unavailable HTTP $status and the other index's 503", async ({
+    status,
+    unavailable,
+  }) => {
+    const { store, pod, fetch } = await setup();
+    const privateIndex = await registerCustomNote(pod);
+    const publicIndex = `${DEMO_ROOT}settings/publicTypeIndex.ttl`;
+    const publicNote = `${DEMO_ROOT}public-notes/one.ttl`;
+    await pod.fetch(publicNote, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: '<#it> a <https://schema.org/TextDigitalDocument>; <https://schema.org/name> "Public note".',
+    });
+    await pod.fetch(publicIndex, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: `<#r> a <http://www.w3.org/ns/solid/terms#TypeRegistration>;
+        <http://www.w3.org/ns/solid/terms#forClass> <https://schema.org/TextDigitalDocument>;
+        <http://www.w3.org/ns/solid/terms#instance> <${publicNote}#it>.`,
+    });
+    const profileUrl = DEMO_WEBID.split("#")[0] as string;
+    const profile = await pod.fetch(profileUrl);
+    await pod.fetch(profileUrl, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: `${await profile.text()}\n<${DEMO_WEBID}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${publicIndex}>.`,
+    });
+    await store.refresh();
+    const saved = store.getSnapshot();
+    const privateCard = saved.items.find((item) => item.title === "Registered later");
+    const publicCard = saved.items.find((item) => item.url === publicNote);
+    expect(privateCard).toBeDefined();
+    expect(publicCard).toBeDefined();
+    fetch.mockImplementation(async (input, init) => {
+      if (String(input) === publicIndex)
+        return new Response(null, { status: unavailable === "public" ? status : 503 });
+      if (String(input) === privateIndex)
+        return new Response(null, { status: unavailable === "private" ? status : 503 });
+      return pod.fetch(input, init);
+    });
+    await store.refresh();
+    const next = store.getSnapshot();
+    expect(next.status).toBe("ready");
+    expect(next.failures.map((failure) => failure.url)).toEqual([publicIndex, privateIndex]);
+    expect(next.items).toContain(unavailable === "public" ? privateCard : publicCard);
+    expect(next.items).not.toContain(unavailable === "public" ? publicCard : privateCard);
+    expect(next.counts.get("media")).toBe(3);
+  });
+
   it.each([
     401, 403, 404, 410,
   ])("evicts a cached profile after confirmed HTTP %s", async (status) => {
@@ -293,6 +400,34 @@ describe("Home session discovery cache", () => {
     await store.refresh();
     expect(store.getSnapshot().items.some((item) => item.url === profileUrl)).toBe(false);
     expect(store.getSnapshot().counts.get("media")).toBe(3);
+  });
+
+  it.each([
+    401, 403, 404, 410,
+  ])("evicts an external cached profile after confirmed HTTP %s and keeps scanning storage", async (status) => {
+    const { session, fetch } = await setup();
+    const webId = "https://identity.example/card#me";
+    const anonymous = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          `<${webId}> a <http://xmlns.com/foaf/0.1/Person>; <http://xmlns.com/foaf/0.1/name> "Alice".`,
+          { headers: { "content-type": "text/turtle" } },
+        ),
+    );
+    vi.stubGlobal("fetch", anonymous);
+    const store = domainStore({ ...session, webId });
+    await store.refresh();
+    expect(store.getSnapshot().counts.get("personal")).toBe(1);
+    anonymous.mockResolvedValueOnce(new Response(null, { status }));
+    await store.refresh();
+    expect(store.getSnapshot().counts.get("personal")).toBe(0);
+    expect(store.getSnapshot().counts.get("media")).toBe(3);
+    expect(store.getSnapshot().failures).toEqual([
+      { url: webId.split("#")[0], error: expect.any(Error) },
+    ]);
+    expect(
+      fetch.mock.calls.some(([url]) => String(url).startsWith("https://identity.example/")),
+    ).toBe(false);
   });
 
   it.each([401, 403, 404, 410])("drops cached notes after confirmed HTTP %s", async (status) => {

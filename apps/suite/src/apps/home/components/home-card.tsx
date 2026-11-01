@@ -22,7 +22,7 @@ import { useRouter } from "next/navigation";
 import { type ComponentProps, useMemo } from "react";
 import { createPreviewImageResolver } from "../../drive/lib/preview/image-resolver";
 import type { DomainItem } from "../lib/model/discovery";
-import { provenanceOf } from "../lib/model/provenance";
+import { identitiesIn, provenanceOf } from "../lib/model/provenance";
 import { inStorage } from "../lib/model/rdf";
 import { type ItemAction, itemActions, itemTitle } from "../state/presentation";
 import { useHomeSession } from "./home-app";
@@ -82,6 +82,7 @@ export function HomeCard({
   const provenance = provenanceOf(item.dataset, item.subject, item.containerUrl, {
     storage,
     userWebId: webId,
+    identities: identitiesIn(item.dataset, item.subject),
   });
   const copy = async () => {
     try {

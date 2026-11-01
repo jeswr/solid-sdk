@@ -4,6 +4,7 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { classificationForType } from "../src/apps/home/lib/model/classify";
 import type { DomainItem } from "../src/apps/home/lib/model/discovery";
+import { discoverDomainItems } from "../src/apps/home/lib/model/discovery";
 import { DOMAINS, UNCATEGORISED } from "../src/apps/home/lib/model/domains";
 import { CONNECTORS } from "../src/apps/home/lib/model/provenance";
 import {
@@ -19,6 +20,10 @@ import {
   sectionsFor,
   serializeTypes,
 } from "../src/apps/home/state/presentation";
+import { typedViewData } from "../src/components/typed-view-data";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { buildHomeSeed } from "../src/lib/demo-pod/seed-home";
+import { rdf } from "./home-model/fixtures";
 
 const { namedNode, literal, quad } = DataFactory;
 const ROOT = "https://alice.demo.pod/";
@@ -41,6 +46,34 @@ function fixture(type = "notes", title = "A note", modified?: string, source?: s
 }
 
 describe("Home presentation", () => {
+  it("keeps the seeded track's artist and duration after projecting actual typed data", async () => {
+    const pod = createDemoPod({ root: ROOT, seed: await buildHomeSeed(Date.now()) });
+    const { items } = await discoverDomainItems("media", { fetch: pod.fetch, storage: ROOT });
+    const item = items.find((item) => item.title === "Caroline") as DomainItem;
+    const view = cardView(item, await typedViewData(item.dataset, item.subject));
+    expect(view.properties).toEqual([
+      { key: "artist", label: "Artist", values: ["Arlo Parks"] },
+      { key: "duration", label: "Duration", values: ["3 min 11 sec"] },
+    ]);
+  });
+
+  it("selects event fields before capping actual typed data crowded with metadata", async () => {
+    const item = fixture("events", "Meeting");
+    item.dataset = await rdf(`
+      <${item.subject.value}> a schema:Event; schema:name "Meeting";
+        dct:created "2026-11-01T10:00:00Z"; dct:modified "2026-11-01T11:00:00Z";
+        schema:description "Discuss the plan";
+        schema:startDate "2026-11-02T12:00:00Z";
+        schema:endDate "2026-11-02T13:00:00Z"; schema:location "The corner café".
+    `);
+    const view = cardView(item, await typedViewData(item.dataset, item.subject));
+    expect(view.properties).toEqual([
+      { key: "start", label: "Starts", values: ["Nov 2, 2026, 12:00 PM"] },
+      { key: "end", label: "Ends", values: ["Nov 2, 2026, 1:00 PM"] },
+      { key: "location", label: "Location", values: ["The corner café"] },
+    ]);
+  });
+
   it.each([
     [4, 59, "evening"],
     [5, 0, "morning"],

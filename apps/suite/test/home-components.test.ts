@@ -7,6 +7,7 @@ import type { DomainItem } from "../src/apps/home/lib/model/discovery";
 import { DOMAINS } from "../src/apps/home/lib/model/domains";
 import type { HomeSession } from "../src/apps/home/state/use-domain-items";
 import { act, h, mount } from "./drive-ui-dom";
+import { rdf } from "./home-model/fixtures";
 
 const { router, current } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
@@ -125,6 +126,38 @@ const card = (src: string) =>
     storage,
     webId: `${storage}profile/card#me`,
   });
+
+describe("Home attribution", () => {
+  it.each([
+    { metadata: 'a prov:SoftwareAgent; schema:name "MyHealth"', label: "Provided by MyHealth" },
+    { metadata: 'a foaf:Person; foaf:name "Bob"', label: "Provided by Bob" },
+    { metadata: 'schema:name " "', label: "Provided by another app" },
+    { metadata: 'schema:name "https://private.example/id"', label: "Provided by another app" },
+    { metadata: "a prov:SoftwareAgent", label: "Provided by another app" },
+  ])("uses loaded identity metadata or an unresolved label: $label ($metadata)", async ({
+    metadata,
+    label,
+  }) => {
+    const agent = "https://foreign.example/client.jsonld";
+    const attributed = {
+      ...item,
+      dataset: await rdf(`<${item.subject.value}> prov:wasAttributedTo <${agent}>.
+        <${agent}> ${metadata}.`),
+    };
+    const view = await mount(
+      h(HomeCard, {
+        item: attributed,
+        view: { types: [], title: item.title, properties: [] },
+        storage,
+        webId: `${storage}profile/card#me`,
+      }),
+    );
+    expect(view.host.textContent).toContain(label);
+    expect(view.host.textContent).not.toContain("Added by you");
+    expect(current.session?.fetch).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+});
 
 describe("Home image scope", () => {
   it("blocks a same-storage image redirect before the session reaches a foreign origin", async () => {
