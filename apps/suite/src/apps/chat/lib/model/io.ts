@@ -319,8 +319,16 @@ export async function createRoom(
       throw error;
     }
   };
-  await create(aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members));
   const url = roomIndex(room);
+  if (resume) {
+    // An existing index decides what the room is; never touch its ACL on the caller's behalf.
+    try {
+      return await loadChat(fetch, base, url);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+    }
+  }
+  await create(aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members));
   const etag = await create(url, dataset);
   if (etag === null && resume) return loadChat(fetch, base, url);
   return { url, dataset, etag };

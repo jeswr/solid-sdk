@@ -40,14 +40,18 @@ function OriginalDownload({ url }: { url: string }) {
           .binaryFetch(url)
           .then(async (response) => {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const href = URL.createObjectURL(await response.blob());
+            // A fixed message type: the browser never renders sender-controlled content.
+            const blob = new Blob([await response.arrayBuffer()], { type: "message/rfc822" });
+            const href = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = href;
             link.download = decodeURIComponent(
               new URL(url).pathname.split("/").pop() || "message.eml",
             );
+            document.body.append(link);
             link.click();
-            setTimeout(() => URL.revokeObjectURL(href), 0);
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(href), 1000);
           })
           .catch((error: unknown) => toast.error(mailErrorMessage(error)))
           .finally(() => setBusy(false));

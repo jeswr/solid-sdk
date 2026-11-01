@@ -164,6 +164,8 @@ it("deduplicates direct rooms regardless of member order and respects broken row
   expect(await client.createDirect(BOB)).toEqual(dm);
   expect((await client.joinedRooms()).length).toBe(3);
   await expect(client.createDirect(ME)).rejects.toMatchObject({ code: "invalid-input" });
+  const reserved = await client.createRoom({ name: "dm-0123456789abcdef", members: [BOB] });
+  expect(reserved.url).toBe(`${ROOT}chat/rooms/dm-0123456789abcdef-room/`);
   const legacy = await client.createRoom({ name: "dm:legacy", members: [BOB] });
   expect(legacy.isDirect).toBe(true);
 });

@@ -202,7 +202,9 @@ export class ChatClient {
     }
   }
   async createRoom({ name, members }: { name: string; members: readonly string[] }): Promise<Room> {
-    return this.create(slug(name), name, members);
+    const base = slug(name);
+    // Deterministic DM addresses are reserved: a named room never occupies one.
+    return this.create(/^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base, name, members);
   }
   private async create(baseSlug: string, name: string, members: readonly string[]): Promise<Room> {
     for (let suffix = 1; ; suffix++) {

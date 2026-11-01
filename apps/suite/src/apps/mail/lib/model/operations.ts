@@ -100,13 +100,16 @@ async function snapshotPresent(store: MailStore, urls: string[]): Promise<Mailbo
   const unique = [...new Set(urls)];
   const dataset = new Store();
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (next < unique.length) {
+    while (!failed && next < unique.length) {
       const url = unique[next++] as string;
       try {
         dataset.addQuads([...(await store.load(url)).mailbox]);
       } catch (error) {
-        if (!(error instanceof MailError && error.code === "not-found")) throw error;
+        if (error instanceof MailError && error.code === "not-found") continue;
+        failed = true;
+        throw error;
       }
     }
   };
