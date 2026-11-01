@@ -716,7 +716,10 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       pod.fetch,
       CONFIRMATIONS,
       OWNER,
-      confirmProposal(next, { confirm: true, confirmedAt: FIXED.toISOString() }),
+      confirmProposal(next, {
+        typedAcknowledgement: next.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
     );
     const recorder = new RecordingSender(() => FIXED);
     const send = vi.fn(recorder.send);
