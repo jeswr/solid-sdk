@@ -229,6 +229,8 @@ interface SessionCache {
   writing?: object | undefined;
   /** The mounted page's refresh, run when a write started by an earlier mount settles. */
   settled: Set<() => void>;
+  /** The mounted page's busy marker, run whenever any write takes the lock. */
+  busy: Set<() => void>;
 }
 interface UndoEntry {
   plan: RevokePlan;
@@ -236,6 +238,7 @@ interface UndoEntry {
   items: Record<string, string[]>;
 }
 const CHANGED_ELSEWHERE = "This access was changed elsewhere, so it can't be restored here";
+const ANOTHER_WRITE = "Another change is saving. Try again in a moment.";
 function undoEntry(plan: RevokePlan, changes: RevokePlan, storage: string): UndoEntry {
   const items: Record<string, string[]> = {};
   for (const change of changes.changes) {
@@ -286,6 +289,7 @@ export function usePermissions() {
       names: {},
       undos: new Map(),
       settled: new Set(),
+      busy: new Set(),
     };
     caches.set(session.fetch, cache);
   }
@@ -389,6 +393,9 @@ export function usePermissions() {
       void refresh();
     };
     sessionCache.settled.add(settled);
+    // Another page's write (a toast's Undo, say) still shows this page as saving.
+    const busy = () => dispatch({ type: "undo-start" });
+    sessionCache.busy.add(busy);
     setClients({ ...sessionCache.clients });
     setOnline(navigator.onLine);
     void refresh();
@@ -415,6 +422,7 @@ export function usePermissions() {
       mounted.current = false;
       generation.current++;
       sessionCache.settled.delete(settled);
+      sessionCache.busy.delete(busy);
       clearTimeout(timer);
       unsubscribe?.();
       window.removeEventListener("focus", focus);
@@ -422,6 +430,14 @@ export function usePermissions() {
       window.removeEventListener("offline", connection);
     };
   }, [refresh, session, sessionCache]);
+
+  /** Take the session's write lock and show whichever page is mounted as saving. */
+  const acquire = useCallback(() => {
+    const lock = {};
+    sessionCache.writing = lock;
+    for (const listener of sessionCache.busy) listener();
+    return lock;
+  }, [sessionCache]);
 
   /** Release the session's write lock; refresh this page, or the one mounted now. */
   const settle = useCallback(
@@ -433,12 +449,22 @@ export function usePermissions() {
     [refresh, sessionCache],
   );
 
+  /**
+   * Restore a revoke. From a toast (`event` given), a click while another change saves
+   * is announced and the toast, with its Undo, stays open.
+   */
   const undo = useCallback(
-    async (token: string) => {
+    async (token: string, event?: { preventDefault(): void }): Promise<void> => {
       const entry = sessionCache.undos.get(token);
-      if (!entry || sessionCache.writing || !navigator.onLine) return;
-      const lock = {};
-      sessionCache.writing = lock;
+      if (!entry || !navigator.onLine) return;
+      if (sessionCache.writing) {
+        if (event) {
+          event.preventDefault();
+          toast.info(ANOTHER_WRITE);
+        }
+        return;
+      }
+      const lock = acquire();
       const seq = ++generation.current;
       dispatch({ type: "undo-start" });
       // The result is always announced, even after navigating away from the page.
@@ -456,24 +482,40 @@ export function usePermissions() {
         const partial = error instanceof PartialRevokeError ? error : undefined;
         const cause = partial ? partial.cause : error;
         const restored = [...new Set(partial?.undo.restore?.map((delta) => delta.source))];
-        if (restored.length) {
-          // Documents already restored are done; this Undo keeps only the rest.
-          const remaining = (entry.plan.restore ?? []).filter(
-            (delta) => !restored.includes(delta.source),
-          );
-          sessionCache.undos.set(token, { ...entry, plan: { changes: [], restore: remaining } });
-          if (live()) dispatch({ type: "write-error" });
-          const rest = itemNames(
-            entry,
-            remaining.map((delta) => delta.source),
-          );
-          toast.error(
-            `Access restored for ${itemNames(entry, restored)}. ${
-              cause instanceof RestoreConflictError
-                ? `Access to ${rest} was changed elsewhere, so it can't be restored here`
-                : `Couldn't restore access to ${rest}. Refresh and try again.`
-            }`,
-          );
+        const unrestored = (entry.plan.restore ?? []).filter(
+          (delta) => !restored.includes(delta.source),
+        );
+        // The refused document can't come back here; documents after it still can.
+        const conflict =
+          cause instanceof RestoreConflictError
+            ? (cause.source ?? unrestored[0]?.source)
+            : undefined;
+        const remaining = unrestored.filter((delta) => delta.source !== conflict);
+        if (restored.length || (conflict && remaining.length)) {
+          if (remaining.length)
+            sessionCache.undos.set(token, { ...entry, plan: { changes: [], restore: remaining } });
+          else sessionCache.undos.delete(token);
+          if (live())
+            dispatch(conflict ? { type: "undo-unavailable", token } : { type: "write-error" });
+          const message = [
+            ...(restored.length ? [`Access restored for ${itemNames(entry, restored)}.`] : []),
+            conflict
+              ? `Access to ${itemNames(entry, [conflict])} was changed elsewhere, so it can't be restored here`
+              : `Couldn't restore access to ${itemNames(
+                  entry,
+                  remaining.map((delta) => delta.source),
+                )}. Refresh and try again.`,
+          ].join(" ");
+          // Stays until dismissed: once the line goes stale this is the only way back.
+          if (remaining.length)
+            toast.error(message, {
+              duration: Number.POSITIVE_INFINITY,
+              action: {
+                label: "Undo remaining",
+                onClick: (click) => void undo(token, click),
+              },
+            });
+          else toast.error(message);
         } else if (cause instanceof RestoreConflictError) {
           sessionCache.undos.delete(token);
           if (live()) dispatch({ type: "undo-unavailable", token });
@@ -486,7 +528,7 @@ export function usePermissions() {
         settle(lock, live());
       }
     },
-    [session, sessionCache, settle],
+    [acquire, session, sessionCache, settle],
   );
 
   const revoke = useCallback(
@@ -508,8 +550,7 @@ export function usePermissions() {
         lines: r.lines.filter((l) => !current.removed[l.key]),
       }));
       if (line && current.removed[line.key]) return;
-      const lock = {};
-      sessionCache.writing = lock;
+      const lock = acquire();
       const seq = ++generation.current;
       // The plan and its toast outlive the page; only this page's state needs it live.
       const live = () => mounted.current && seq === generation.current;
@@ -546,7 +587,7 @@ export function usePermissions() {
               : `${name} no longer has access`,
           {
             duration: 8000,
-            action: { label: "Undo", onClick: () => void undo(token) },
+            action: { label: "Undo", onClick: (click) => void undo(token, click) },
           },
         );
       } catch (error) {
@@ -563,14 +604,14 @@ export function usePermissions() {
           toast.error(message, {
             duration: Infinity,
             description: "Some changes were saved. Undo them or refresh before trying again.",
-            action: { label: "Undo", onClick: () => void undo(token) },
+            action: { label: "Undo", onClick: (click) => void undo(token, click) },
           });
         } else toast.error(message, { duration: Infinity });
       } finally {
         settle(lock, live());
       }
     },
-    [session, sessionCache, settle, undo],
+    [acquire, session, sessionCache, settle, undo],
   );
 
   return {

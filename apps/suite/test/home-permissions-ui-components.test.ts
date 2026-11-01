@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { expect, it, vi } from "vitest";
-import { click, h, key, mount } from "./drive-ui-dom";
+import { act, click, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => ({}) }));
 vi.mock("next/link", () => ({
@@ -182,6 +182,52 @@ it.each([
     expect(state.revoke).toHaveBeenLastCalledWith("makePrivate");
   }
   expect(state.revoke).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["button", "at once"],
+  ["shortcut", "at once"],
+  ["button", "later"],
+  ["shortcut", "later"],
+] as const)("moves focus to the row's header, not the disabled Revoke all, after confirming by %s (saving %s)", async (via, timing) => {
+  const state = binding();
+  function Saving() {
+    const [busy, setBusy] = useState(false);
+    const live: PermissionsBinding = {
+      ...state,
+      busy,
+      // The save state can land with the click or only after the dialog has closed.
+      revoke: vi.fn(async () => {
+        if (timing === "at once") setBusy(true);
+        else setTimeout(() => setBusy(true), 30);
+      }),
+    };
+    return h(PermissionAccessRow, {
+      row,
+      binding: live,
+      storage: "https://pod.test/",
+      view: "overview",
+      technical: false,
+      alwaysExpanded: true,
+    });
+  }
+  const view = await mount(h(Saving));
+  const trigger = [...view.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Revoke all",
+  ) as HTMLButtonElement;
+  const header = view.host.querySelector<HTMLButtonElement>(".su-permission-trigger");
+  trigger.focus();
+  if (via === "button") await click(trigger);
+  else await key(trigger, "r");
+  const confirm = [...document.querySelectorAll('[role="alertdialog"] button')].find(
+    (button) => button.textContent === "Remove access",
+  ) as HTMLButtonElement;
+  confirm.focus();
+  await click(confirm);
+  await act(() => new Promise((resolve) => setTimeout(resolve, 60)));
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(trigger.disabled).toBe(true);
+  expect(document.activeElement).toBe(header);
 });
 
 it("keeps keyboard focus on the switch while saving and returns it there after Undo", async () => {

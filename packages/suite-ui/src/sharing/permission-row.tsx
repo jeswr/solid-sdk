@@ -91,6 +91,7 @@ export function PermissionRow({
           action="Remove access"
           onConfirm={onRevoke}
           closeFocusFallback={headerRef}
+          confirmFocus={headerRef}
           disabled={blocked || items.every((item) => !item.checked || item.disabled)}
         />
       </header>

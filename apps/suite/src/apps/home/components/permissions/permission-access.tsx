@@ -228,6 +228,8 @@ export function PermissionAccessRow({
   const [expanded, setExpanded] = useState(alwaysExpanded);
   const [confirm, setConfirm] = useState<"all" | PermissionLine | null>(null);
   const focus = useRef<HTMLElement | null>(null);
+  /** A confirmed Revoke all disables its button, so focus then goes to the row's header. */
+  const confirmedAll = useRef(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<{ header: HTMLElement; items: HTMLElement }>();
   useLayoutEffect(() => {
@@ -347,9 +349,13 @@ export function PermissionAccessRow({
           <AlertDialogContent
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              if (focus.current?.isConnected && !focus.current.matches(":disabled"))
+              const header =
+                wrapper.current?.querySelector<HTMLButtonElement>(".su-permission-trigger");
+              const all = confirmedAll.current;
+              confirmedAll.current = false;
+              if (!all && focus.current?.isConnected && !focus.current.matches(":disabled"))
                 focus.current.focus();
-              else wrapper.current?.querySelector<HTMLButtonElement>("button")?.focus();
+              else header?.focus();
             }}
           >
             <AlertDialogHeader>
@@ -370,8 +376,10 @@ export function PermissionAccessRow({
                 variant="destructive"
                 disabled={!!reason}
                 onClick={() => {
-                  if (confirm === "all") void revokeAll();
-                  else if (confirm) void binding.revoke(confirm);
+                  if (confirm === "all") {
+                    confirmedAll.current = true;
+                    void revokeAll();
+                  } else if (confirm) void binding.revoke(confirm);
                 }}
               >
                 Remove access

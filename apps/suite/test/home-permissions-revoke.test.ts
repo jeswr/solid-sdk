@@ -109,6 +109,120 @@ async function snapshot(initial: string) {
     truncated: false,
   };
 }
+/** Effective access per target: who may do what, without redundant narrower clauses. */
+function access(dataset: import("@rdfjs/types").DatasetCore): string[] {
+  const targets = new Set([ROOT]);
+  for (const scope of ["accessTo", "default", "defaultForNew"])
+    for (const quad of dataset.match(null, DataFactory.namedNode(ACL + scope)))
+      targets.add(quad.object.value);
+  const atoms: { key: string; clause: Set<string> }[] = [];
+  for (const target of targets)
+    for (const grant of readWacPolicy(dataset, target, DOC).grants)
+      for (const scope of grant.appliesTo === "both" ? ["resource", "members"] : [grant.appliesTo])
+        for (const clause of grant.who)
+          for (const mode of grant.modes)
+            atoms.push({
+              key: JSON.stringify([
+                target,
+                scope,
+                mode,
+                grant.except.map((s) => JSON.stringify(s)).sort(),
+              ]),
+              clause: new Set(
+                clause.map((subject) => JSON.stringify(Object.entries(subject).sort())),
+              ),
+            });
+  const implied = (a: (typeof atoms)[number], b: (typeof atoms)[number]) =>
+    a.key === b.key && b.clause.size < a.clause.size && [...b.clause].every((s) => a.clause.has(s));
+  return [
+    ...new Set(
+      atoms
+        .filter((atom) => !atoms.some((other) => implied(atom, other)))
+        .map((atom) => JSON.stringify([atom.key, [...atom.clause].sort()])),
+    ),
+  ].sort();
+}
+/** The documents the tests below revoke from, for the effective-access property test. */
+const FIXTURES: string[] = (() => {
+  const other = `${ROOT}elsewhere`;
+  const carolRule = bobRule.replaceAll("#bob", "#carol").replace(BOB, CAROL);
+  const blank = (rest: string) => `[] a acl:Authorization; ${rest}.`;
+  return [
+    body(),
+    body(
+      `${bobRule} <#public> a acl:Authorization; acl:accessTo <${ROOT}>; acl:agentClass foaf:Agent; acl:mode acl:Read. <#signed> a acl:Authorization; acl:accessTo <${ROOT}>; acl:agentClass acl:AuthenticatedAgent; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>, <${other}>; acl:default <${ROOT}>; acl:mode acl:Read; <urn:purpose> "retain".`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agentClass foaf:Agent, acl:AuthenticatedAgent; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:origin <https://app.test>, <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    ...["<#bob>", "[]"].map((root) =>
+      body(
+        `${root} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://a.test>, <https://b.test>; acl:accessTo <${ROOT}>, <${other}>; acl:default <${ROOT}>; acl:mode acl:Read; <urn:purpose> "retain".`,
+      ),
+    ),
+    body(
+      ["Read", "Write"]
+        .map((mode) => blank(`acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:${mode}`))
+        .join(" "),
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`)} ${blank(`acl:agent <${BOB}>; acl:origin <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`)}`,
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read`)} `.repeat(
+        2,
+      ),
+    ),
+    ...["named", "blank"].map((kind) =>
+      body(
+        `${kind === "named" ? "<#temporary>" : "[]"} a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <http://www.w3.org/ns/odrl/2/purpose> "Preview"; <${NS.ACCESS_MANAGER}expiresAt> "2030-01-01". ${kind === "named" ? "<#permanent>" : "[]"} a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <http://www.w3.org/ns/odrl/2/purpose> "Archive".`,
+      ),
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <urn:annotation> _:detail; <urn:also> _:detail`)} _:detail <urn:value> "retain"; <urn:self> _:detail.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>, <${other}>; acl:mode acl:Read; <urn:annotation> [ <urn:value> "retain" ].`,
+    ),
+    body(
+      blank(
+        `acl:agentClass foaf:Agent; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`,
+      ),
+    ),
+    body(
+      blank(
+        `acl:origin <https://app.test>, <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`,
+      ),
+    ),
+    body(
+      `${bobRule} ${carolRule} ${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Write`)}`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}drive/>, <${ROOT}docs/>; acl:mode acl:Read.`,
+    ),
+    ...["<#shared>", "[]"].map((root) =>
+      body(
+        `${root} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+      ),
+    ),
+    body(
+      [
+        blank(`acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`),
+        blank(`acl:origin <https://one.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`),
+        blank(`acl:origin <https://two.test>; acl:default <${ROOT}>; acl:mode acl:Read`),
+      ].join(" "),
+    ),
+  ];
+})();
 describe("pure revoke planning", () => {
   it("plans one line, all agent lines and both make-private pseudo agents, deduplicating scopes", async () => {
     const data =
@@ -969,6 +1083,128 @@ describe("WAC revocation and inverse plans", () => {
     });
     row.kind = "app";
     expect(() => planRevoke(row, "all")).toThrow(UnsupportedAccessError);
+  });
+  it("never widens origin rules through an inert rule when undoing an app revoke", async () => {
+    const o1 = "https://one.test";
+    const o2 = "https://two.test";
+    const data = body(
+      [
+        `[] a acl:Authorization; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        `[] a acl:Authorization; acl:origin <${o1}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+        `[] a acl:Authorization; acl:origin <${o2}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+      ].join(" "),
+    );
+    const pod = fixture(data);
+    const before = access(await pod.graph());
+    const state = await snapshot(data);
+    const { undo } = await pod.apply(planRevoke(state.rows.find((row) => row.id === o2)!, "all"));
+    expect(access(await pod.graph())).not.toEqual(before);
+    await pod.apply(undo);
+    expect(access(await pod.graph())).toEqual(before);
+    await same(await pod.graph(), data);
+  });
+  it("restores the effective access of every revoke and undo sequence in these fixtures", async () => {
+    let sequences = 0;
+    for (const data of FIXTURES) {
+      const original = access(await parseRdf(data, "text/turtle", { baseIRI: DOC }));
+      const state = await snapshot(data);
+      const plans: RevokePlan[] = [planRevoke(state, "make-private")];
+      for (const row of state.rows) {
+        plans.push(planRevoke(row, "all"));
+        for (const line of row.lines)
+          try {
+            plans.push(planRevoke(line, "line"));
+          } catch {
+            /* A bare line without a subject is refused before any write. */
+          }
+      }
+      for (const plan of plans.filter((plan) => plan.changes.length)) {
+        const pod = fixture(data);
+        let undo: RevokePlan;
+        try {
+          ({ undo } = await pod.apply(plan));
+        } catch {
+          continue; // A refused revoke writes nothing, so there is nothing to undo.
+        }
+        await pod.apply(undo);
+        expect(access(await pod.graph()), data).toEqual(original);
+        sequences++;
+      }
+      // Two revokes, each planned from a fresh read, undone in either order.
+      for (const [a, b] of state.rows.flatMap((x, i) => state.rows.slice(i + 1).map((y) => [x, y])))
+        for (const earlierFirst of [true, false]) {
+          const pod = fixture(data);
+          const revoke = async (id: string) => {
+            const row = (await snapshot(pod.docs.get(DOC)!.body)).rows.find((r) => r.id === id);
+            return row ? pod.apply(planRevoke(row, "all")) : undefined;
+          };
+          let first: Awaited<ReturnType<typeof revoke>>;
+          let second: Awaited<ReturnType<typeof revoke>>;
+          try {
+            first = await revoke(a!.id);
+            second = await revoke(b!.id);
+          } catch {
+            continue;
+          }
+          const undos = [first?.undo, second?.undo].filter((undo) => !!undo);
+          for (const undo of earlierFirst ? undos : undos.reverse()) await pod.apply(undo);
+          expect(access(await pod.graph()), data).toEqual(original);
+          sequences++;
+        }
+    }
+    expect(sequences).toBeGreaterThan(100);
+  });
+  it.each([
+    ["re-created", ""],
+    [
+      "merged",
+      ` [] a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+    ],
+  ])("refuses an undo whose named rule now describes something untyped (%s)", async (_name, extra) => {
+    const pod = fixture();
+    const { undo } = await pod.apply({ changes: [change()] });
+    // Another writer left <#bob> without a type: Undo must not switch Eve's grant on.
+    const eve = `<#bob> acl:agent <https://eve.test/profile#me>; acl:accessTo <${ROOT}>; acl:mode acl:Write.`;
+    const tampered = body(`${eve}${extra}`);
+    pod.docs.get(DOC)!.body = tampered;
+    await expect(pod.apply(undo)).rejects.toBeInstanceOf(RestoreConflictError);
+    await expect(pod.apply(undo)).rejects.toMatchObject({ source: DOC });
+    expect(pod.docs.get(DOC)!.body).toBe(tampered);
+    expect(pod.puts()).toHaveLength(1);
+    // The same holds when the delta is not an exact inverse any more.
+    await expect(
+      pod.apply({
+        changes: [],
+        restore: [
+          {
+            ...undo.restore![0]!,
+            remove: [
+              `${PREFIX} ${bobRule.replace("#bob", "#gone").replace("acl:Read", "acl:Write")}`,
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(RestoreConflictError);
+    expect(pod.puts()).toHaveLength(1);
+  });
+  it("rejoins only the pieces the undone write left, never another writer's covered rule", async () => {
+    const left = `[] a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const foreign = `[] a acl:Authorization; acl:agent <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const shared = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    // The write also changed a rule that has since gone, so this is not an exact inverse.
+    const gone = `[] a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Write.`;
+    const pod = fixture(body(`${left} ${foreign}`));
+    await pod.apply({
+      changes: [],
+      restore: [
+        {
+          source: DOC,
+          remove: [`${PREFIX} ${left}`, `${PREFIX} ${gone}`],
+          add: [`${PREFIX} ${shared}`],
+        },
+      ],
+    });
+    await same(await pod.graph(), body(`${shared} ${foreign}`));
   });
   it("returns undo for completed documents if a later document fails", async () => {
     const pod = fixture();
