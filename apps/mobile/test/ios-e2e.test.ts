@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNamingConvention: xcresulttool's legacy schema uses _value and _values.
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -91,6 +92,10 @@ describe("xcresult attachment export", () => {
                                 name: ref("e2e-navigation.json"),
                                 payloadRef: { id: ref("navigation") },
                               },
+                              {
+                                name: ref("e2e-debug.txt"),
+                                payloadRef: { id: ref("debug") },
+                              },
                             ],
                           },
                         },
@@ -102,7 +107,7 @@ describe("xcresult attachment export", () => {
       }
       const path = args[args.indexOf("--output-path") + 1];
       if (!path) throw new Error("missing path");
-      await writeFile(path, "{}");
+      await writeFile(path, args[args.indexOf("--id") + 1] === "debug" ? "hierarchy dump" : "{}");
       return output();
     });
     expect(await exportAttachments("bundle", directory, run)).toBe("legacy");
@@ -110,6 +115,7 @@ describe("xcresult attachment export", () => {
       "e2e-result.json": {},
       "e2e-navigation.json": {},
     });
+    expect(await readDebugAttachments(directory)).toEqual(["hierarchy dump"]);
     expect(run.mock.calls.some(([, args]) => args.includes("summary"))).toBe(true);
   });
   test("maps Xcode 26 attachment names with the extension dropped before the ordinal", async () => {
@@ -237,6 +243,7 @@ describe("iOS host driver verdict and cleanup", () => {
     vacuous = false,
     missing = false,
     cleanupFails = false,
+    debug = false,
   } = {}) {
     const close = vi.fn(async () => {
       if (cleanupFails) throw new Error("close failed");
@@ -254,6 +261,12 @@ describe("iOS host driver verdict and cleanup", () => {
       const path = args[args.indexOf("--output-path") + 1];
       if (!path) throw new Error("missing path");
       await mkdir(path, { recursive: true });
+      if (debug) {
+        await writeFile(
+          join(path, "e2e-debug.txt"),
+          "step=after foreign navigation, page=navigation, done=true, hasWebView=false\nhierarchy dump",
+        );
+      }
       if (!missing) {
         const evidence = fixtureEvidence();
         if (vacuous) evidence.ios.top.webkitBridge.status = "no-response";
@@ -289,10 +302,20 @@ describe("iOS host driver verdict and cleanup", () => {
     expect(report).toHaveProperty("error", expect.stringContaining("XCTest failed"));
   });
   test("reports the XCTest failure, not only the missing evidence it caused", async () => {
-    const { report } = await scenario({ xcodeFails: true, missing: true });
+    const { report } = await scenario({ xcodeFails: true, missing: true, debug: true });
     expect(report.status).toBe("failed");
     expect(report).toHaveProperty("error", expect.stringContaining("XCTest failed"));
     expect(report).toHaveProperty("error", expect.stringContaining("Evidence unavailable"));
+    expect(report).toHaveProperty("debug", [
+      expect.stringContaining(
+        "step=after foreign navigation, page=navigation, done=true, hasWebView=false",
+      ),
+    ]);
+  });
+  test("retains UI diagnostics even when evidence export succeeds after an XCTest failure", async () => {
+    const { report } = await scenario({ xcodeFails: true, debug: true });
+    expect(report.status).toBe("failed");
+    expect(report).toHaveProperty("debug", [expect.stringContaining("hierarchy dump")]);
   });
   test("collects e2e-debug attachments from the manifest or by name, inside the export only", async () => {
     await mkdir(join(directory, "x"), { recursive: true });

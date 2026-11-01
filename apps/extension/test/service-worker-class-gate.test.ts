@@ -1903,7 +1903,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: target, kind: 'container' }]);
-    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, index]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, index, target]);
     const headers = new Headers(fetchCalls[0].init?.headers);
     expect(headers.has('Authorization')).toBe(false);
     expect(headers.has('DPoP')).toBe(false);
@@ -2636,7 +2636,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: `${index}/finance/`, kind: 'container' }]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`, `${index}/finance/`]);
     for (const call of fetchCalls) {
       const probing = call.init?.redirect === 'follow';
       expect(call.init).toMatchObject({
@@ -2644,7 +2644,8 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
         redirect: probing ? 'follow' : 'manual',
       });
       expect(new Headers(call.init?.headers).has('Authorization')).toBe(
-        type === 'privateTypeIndex' && call.url !== WEBID && !probing,
+        call.url === `${index}/finance/` ||
+          (type === 'privateTypeIndex' && call.url !== WEBID && !probing),
       );
       if (probing) expect(call.init).toMatchObject({ method: 'HEAD', headers: {} });
     }
@@ -3200,7 +3201,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     expect(result.targets).toEqual([
       { url: 'https://alice.pod.example/finance/', kind: 'container' },
     ]);
-    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, indexA]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      WEBID,
+      indexA,
+      'https://alice.pod.example/finance/',
+    ]);
   });
 
   it('filters discovery targets against the live pod scope before delivery', async () => {
@@ -3557,6 +3562,71 @@ describe('worker-owned class discovery', () => {
     const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
     await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
   }
+
+  it('samples before consent, returns the shape IRI, and never exposes member bytes or annotations to the page or replica', async () => {
+    await seedSession();
+    await loadWorker();
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const sh = 'http://www.w3.org/ns/shacl#';
+    const target = `${pod}/data/contacts/`;
+    const tree = 'https://shapes.example/tree';
+    const shape = 'https://shapes.example/contact#Shape';
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <${interop}hasRegistrySet> <${pod}/set> .`,
+      [`${pod}/set`]: `<> <${interop}hasDataRegistry> <${pod}/data/> .`,
+      [`${pod}/data/`]: `<> <${interop}hasDataRegistration> <${target}> .`,
+      [target]: `<> <${interop}registeredShapeTree> <${tree}>;
+        <http://www.w3.org/ns/ldp#contains> <one>, <two> .`,
+      [tree]: `<> <http://www.w3.org/ns/shapetrees#shape> <${shape}> .`,
+      [shape]: `<${shape}> a <${sh}NodeShape>; <${sh}targetClass> <${dataClass}>;
+        <${sh}property> [ <${sh}path> <https://example.org/name>; <${sh}minCount> 1 ] .`,
+      [`${target}one`]: `<#contact> a <${dataClass}>; <https://example.org/name> "${secret}" .`,
+      [`${target}two`]: `<#contact> a <${dataClass}> .`,
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url] ?? '', { headers: { 'Content-Type': 'text/turtle' } });
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+    expect(view.classes).toMatchObject([{ shape, targets: [{ url: target, kind: 'container' }] }]);
+    expect(fetchCalls.map((call) => call.url)).toContain(`${target}one`);
+    expect(fetchCalls.map((call) => call.url)).toContain(`${target}two`);
+    expect(JSON.stringify(view)).not.toContain(secret);
+    await send(
+      { type: 'SOLID_CONSENT_DECISION', consentId, profileId: '1', approvedClasses: [dataClass] },
+      EXT_SENDER,
+    );
+    const granted = await pending;
+    expect((granted.grants as ClassGrant[])[0].targets).toEqual([
+      { url: target, kind: 'container' },
+    ]);
+    const page = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'sampled',
+        classIRI: dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(page).toEqual({
+      requestId: 'sampled',
+      shape,
+      targets: [{ url: target, kind: 'container' }],
+    });
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+    expect(idbNonces.size).toBe(0);
+    expect(JSON.stringify([...storage.values(), page, granted])).not.toContain(secret);
+    for (const call of fetchCalls) {
+      expect(call.init?.cache).toBe('no-store');
+      expect(call.init?.redirect).toBe('manual');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        call.url.startsWith(pod) && call.url !== WEBID,
+      );
+    }
+  });
 
   it.each(
     ['refresh failure', 'logout', 'remove'].flatMap((ending) =>
@@ -4238,7 +4308,7 @@ describe('worker-owned class discovery', () => {
     await deny();
     expect((await pending).ok).toBe(false);
     expect(cancel).toHaveBeenCalledOnce();
-    expect(fetchCalls).toHaveLength(3);
+    expect(fetchCalls).toHaveLength(4);
     expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
   });
 
@@ -4270,7 +4340,7 @@ describe('worker-owned class discovery', () => {
           cache: 'no-store',
         });
         expect(new Headers(call.init?.headers).has('Authorization')).toBe(
-          call.url === prefs || call.url === privateIndex,
+          call.url === prefs || call.url === privateIndex || call.url === `${pod}/finance/`,
         );
       }
       expect(cacheStore.size).toBe(0);

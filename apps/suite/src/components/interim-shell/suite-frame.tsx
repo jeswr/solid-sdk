@@ -21,12 +21,21 @@ import {
   MessageSquare,
   Search,
   Users,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "mail" | "chat";
+export type SuiteAppId =
+  | "drive"
+  | "docs"
+  | "calendar"
+  | "contacts"
+  | "photos"
+  | "mail"
+  | "chat"
+  | "money";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
@@ -36,6 +45,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "mail", label: "Mail", href: "/mail", icon: Mail },
   { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
+  { id: "money", label: "Money", href: "/money", icon: Wallet },
 ];
 
 export interface SuiteFrameProps {

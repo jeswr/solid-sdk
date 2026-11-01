@@ -5,10 +5,13 @@ export interface SignInProvider {
   id: string;
   name: string;
   issuer: string;
+  /** @deprecated Kept for compatibility; provider pills show only the name or label. */
   description?: string;
   signUpUrl?: string;
   label?: string;
   iconUrl?: string;
+  /** Brand colour override. Only six-digit #rrggbb colours are accepted. */
+  color?: string;
 }
 
 export interface SignInRecentAccount {
@@ -19,9 +22,12 @@ export interface SignInRecentAccount {
 
 export interface SignInCardProps {
   title?: string;
+  accountsTitle?: string;
   subtitle?: string;
+  /** Initial view only. Without remembered accounts, sign-in is always shown. */
+  defaultView?: "accounts" | "sign-in";
   recentAccounts?: SignInRecentAccount[];
-  /** Ordered by the host: the first provider is the primary home provider. */
+  /** Ordered by the host, with the home provider first. */
   providers: SignInProvider[];
   recentProviders?: string[];
   allowCustomProvider?: boolean;
