@@ -1915,3 +1915,97 @@ describe("FRAME project and section operations", () => {
     expect(pod.files.has(project.url)).toBe(true);
   });
 });
+
+describe("detail project moves", () => {
+  it("preserves fields and uses conditional create/delete with fresh UUID resource", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let source = await tasks.createProject("Source");
+    let target = await tasks.createProject("Target");
+    source = await tasks.updateProject(source, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+      tracker.defineCategory("Label", "drop");
+    });
+    target = await tasks.updateProject(target, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+    });
+    const task = await tasks.createTask(
+      source,
+      {
+        title: "Water plants",
+        description: "https://example.org/guide",
+        state: "closed",
+        endedAt: now,
+        dueDate: now,
+        creator: webId,
+        priority: "high",
+        recurrence: { frequency: "DAILY" },
+        reminders: [{ offset: "-PT1H" }],
+        categoryTypes: [...source.tracker.sections, ...source.tracker.labels].map(
+          (entry) => entry.id,
+        ),
+      },
+      "original",
+    );
+    const before = pod.mutations().length;
+    const moved = await tasks.moveTaskToProject(task, source, target);
+    expect(moved.url).toBe(`${target.tracker.stateStore}task-1.ttl`);
+    expect(moved.task.title).toBe("Water plants");
+    expect(moved.task.description).toBe("https://example.org/guide");
+    expect(moved.task.priority).toBe("high");
+    expect(moved.task.creator).toBe(webId);
+    expect(moved.task.created).toEqual(task.task.created);
+    expect(moved.task.endedAt).toEqual(now);
+    expect(moved.task.recurrence?.frequency).toBe("DAILY");
+    expect(moved.task.reminders[0]?.offset).toBe("-PT1H");
+    expect(moved.task.types.has(target.tracker.sections[0]?.id as string)).toBe(true);
+    expect([...moved.task.types]).not.toContain(source.tracker.labels[0]?.id);
+    expect(pod.files.has(task.url)).toBe(false);
+    const requests = pod.mutations().slice(before);
+    expect(requests.map((request) => request.method)).toEqual(["PUT", "DELETE"]);
+    expect(requests[0]?.headers.get("If-None-Match")).toBe("*");
+    expect(requests[1]?.headers.get("If-Match")).toBe(task.etag);
+    const count = pod.mutations().length;
+    expect(await tasks.moveTaskToProject(moved, target, target)).toBe(moved);
+    expect(pod.mutations()).toHaveLength(count);
+  });
+  it("does not delete the source when creation fails, and compensates on source conflicts", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const source = await tasks.createProject("Source");
+    const target = await tasks.createProject("Target");
+    const task = await tasks.createTask(source, { title: "Keep", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url.startsWith(target.tracker.stateStore as string)
+        ? new Response(null, { status: 403 })
+        : undefined;
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(pod.files.has(task.url)).toBe(true);
+    pod.intercept = undefined;
+    const updated = await tasks.updateTask(task, (value) => {
+      value.title = "Remote";
+    });
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toMatchObject({
+      status: 412,
+    });
+    expect(pod.files.has(`${target.tracker.stateStore}task-1.ttl`)).toBe(false);
+    expect((await tasks.readTask(task.url)).task.title).toBe("Remote");
+    expect(updated.etag).not.toBe(task.etag);
+  });
+  it("reports incomplete compensation without overwriting either copy", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const source = await tasks.createProject("Source");
+    const target = await tasks.createProject("Target");
+    const task = await tasks.createTask(source, { title: "Keep", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "DELETE" ? new Response(null, { status: 403 }) : undefined;
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toBeInstanceOf(
+      AggregateError,
+    );
+    expect(pod.files.has(task.url)).toBe(true);
+    expect(pod.files.has(`${target.tracker.stateStore}task-1.ttl`)).toBe(true);
+  });
+});

@@ -241,3 +241,38 @@ describe("Tasks cache and pure optimistic helpers", () => {
     ).toEqual({ title: "Original", priority: 1 });
   });
 });
+
+it("creates sub-tasks and copies with all fields, and moves using the latest queued edits", async () => {
+  const { cache, inbox, store } = await setup();
+  const target = await cache.createProject("Target");
+  if (!target) throw new Error("Expected target");
+  await cache.loadTasks(target);
+  const parent = await cache.createTask(inbox, {
+    title: "Parent",
+    description: "Body",
+    priority: "high",
+    due: now,
+    recurrence: { frequency: "DAILY" },
+    reminders: [{ offset: "PT0S" }],
+  });
+  if (!parent) throw new Error("Expected parent");
+  const child = await cache.createTask(inbox, { title: "Child", parent: parent.task.id });
+  expect(child?.task.parent).toBe(parent.task.id);
+  expect(parent.task.description).toBe("Body");
+  expect(parent.task.reminders).toHaveLength(1);
+  const updating = cache.updateTask(parent, (task) => {
+    task.title = "Newest";
+  });
+  const moving = cache.moveTaskToProject(parent, target);
+  expect(cache.getSnapshot().tasks[inbox.url]?.items.some((task) => task.url === parent.url)).toBe(
+    false,
+  );
+  expect(cache.getSnapshot().tasks[target.url]?.items[0]?.task.title).toBe("Newest");
+  await updating;
+  const moved = await moving;
+  if (!moved) throw new Error("Expected move");
+  expect((await store.readTask(moved.url)).task.title).toBe("Newest");
+  expect(moved.task.priority).toBe("high");
+  expect(await cache.moveTaskToProject(moved, target)).toBe(moved);
+  expect(await cache.moveTaskToProject(parent, target)).toBeUndefined();
+});

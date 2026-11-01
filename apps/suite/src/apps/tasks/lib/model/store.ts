@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
@@ -328,6 +329,30 @@ export class TaskStore {
     validateTask(data);
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
+  }
+  /** Create first, then conditionally delete; a stale source must never lose data. */
+  async moveTaskToProject(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): Promise<StoredTask> {
+    if (source.url === target.url) return item;
+    const moved = await this.createTask(target, projectMoveData(item, source, target), id);
+    try {
+      await this.deleteTask(item);
+    } catch (error) {
+      try {
+        await this.deleteTask(moved);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Couldn't finish moving the task; both copies were retained.",
+        );
+      }
+      throw error;
+    }
+    return moved;
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);

@@ -67,6 +67,7 @@ export function TaskRow({
     <li
       className="tsk-row"
       data-tsk-row={task.url}
+      data-task-url={task.url}
       data-depth={depth}
       data-closed={task.state === "closed" || undefined}
       tabIndex={tabIndex}

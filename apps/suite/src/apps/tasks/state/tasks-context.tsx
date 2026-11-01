@@ -76,6 +76,7 @@ function useTasksValue(session: PodSession) {
     () => ({
       ...snapshot,
       cache,
+      webId: session.webId,
       inboxUrl: cache.inboxUrl,
       views: snapshot.projects.flatMap((project) =>
         (snapshot.tasks[project.url]?.items ?? []).map((task) => toTaskView(task, project)),
@@ -84,6 +85,8 @@ function useTasksValue(session: PodSession) {
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
       updateTask: cache.updateTask.bind(cache),
+      updateProject: cache.updateProject.bind(cache),
+      moveTaskToProject: cache.moveTaskToProject.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),
       createProject: cache.createProject.bind(cache),
       renameProject: cache.renameProject,
@@ -95,7 +98,7 @@ function useTasksValue(session: PodSession) {
       moveSection: cache.moveSection.bind(cache),
       deleteSection: cache.deleteSection.bind(cache),
     }),
-    [snapshot, cache],
+    [snapshot, cache, session.webId],
   );
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.

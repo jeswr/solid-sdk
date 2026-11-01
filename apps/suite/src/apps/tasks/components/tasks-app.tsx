@@ -1,14 +1,16 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { ErrorState, Toaster } from "@jeswr/suite-ui";
+import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, Suspense, useEffect } from "react";
+import { type ReactNode, Suspense, useCallback, useEffect, useRef } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
-import { encodeRef } from "@/lib/refs";
+import { decodeRef, encodeRef } from "@/lib/refs";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { focusAddTask, isEditing } from "../state/add-focus";
 import { TasksProvider, useTasks } from "../state/tasks-context";
+import { TaskDetail } from "./detail/task-detail";
+import "./detail/detail.css";
 import { TasksSidebar } from "./sidebar";
 import { SortMenu } from "./sort-menu";
 
@@ -33,9 +35,90 @@ function TasksChrome({ children }: { children: ReactNode }) {
         ? (tasks.projects.find((project) => encodeRef(project.url) === route.ref)?.tracker.title ??
           "Project")
         : "Tasks");
-  // TSK-04 replaces this empty details slot using the resource reference.
   const taskRef = params.get("task");
-  const details = undefined;
+  let taskUrl: string | undefined;
+  try {
+    if (taskRef !== null) taskUrl = decodeRef(taskRef);
+  } catch {
+    /* Show not found inside details. */
+  }
+  const origin = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (taskRef !== null && origin.current === undefined) {
+      const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
+      origin.current = row?.dataset.taskUrl ?? taskUrl;
+    }
+    if (taskRef === null && origin.current) {
+      const url = origin.current;
+      origin.current = undefined;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          document.querySelector<HTMLElement>(`[data-task-url="${CSS.escape(url)}"]`)?.focus(),
+        ),
+      );
+    }
+  }, [taskRef, taskUrl]);
+  const closeDetails = useCallback(() => {
+    // A Sheet dismisses on document capture, before a TagInput can consume Escape.
+    if (document.querySelector('.tsk-detail input[role="combobox"][aria-expanded="true"]')) return;
+    const query = new URLSearchParams(params.toString());
+    query.delete("task");
+    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
+  }, [params, pathname, router]);
+  useEffect(() => {
+    if (taskRef === null) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        document.querySelector(
+          '[data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"]',
+        )
+      )
+        return;
+      if (document.querySelector('.tsk-detail [role="combobox"][aria-expanded="true"]')) return;
+      event.preventDefault();
+      closeDetails();
+    };
+    addEventListener("keydown", keydown);
+    return () => removeEventListener("keydown", keydown);
+  }, [taskRef, closeDetails]);
+  const selectedProject = tasks.projects.find((project) =>
+    tasks.tasks[project.url]?.items.some((item) => item.url === taskUrl),
+  );
+  const selected =
+    selectedProject && tasks.tasks[selectedProject.url]?.items.find((item) => item.url === taskUrl);
+  const loading =
+    taskUrl &&
+    (tasks.status === "loading" ||
+      tasks.saving.includes(taskUrl) ||
+      tasks.projects.some(
+        (project) => !tasks.tasks[project.url] || tasks.tasks[project.url]?.status === "loading",
+      ));
+  const details =
+    taskRef !== null ? (
+      selected && selectedProject ? (
+        <TaskDetail
+          key={selected.url}
+          stored={selected}
+          project={selectedProject}
+          onClose={closeDetails}
+        />
+      ) : loading ? (
+        <div className="tsk-detail">
+          <LoadingSkeleton preset="list" />
+        </div>
+      ) : (
+        <section className="tsk-detail" aria-labelledby="tsk-not-found-heading">
+          <h2 className="sr-only" id="tsk-not-found-heading">
+            Task details
+          </h2>
+          <ErrorState error="not-found">
+            <Button onClick={closeDetails}>Close</Button>
+          </ErrorState>
+        </section>
+      )
+    ) : undefined;
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (
@@ -67,6 +150,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
         />
       }
       details={details}
+      onDetailsClose={closeDetails}
     >
       <div data-tsk-task-ref={taskRef ?? undefined}>
         {tasks.status === "error" ? (
