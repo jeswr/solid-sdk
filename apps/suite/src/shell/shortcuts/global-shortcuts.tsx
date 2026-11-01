@@ -49,6 +49,7 @@ export function GlobalShortcuts({
   const [helpOpen, setHelpOpen] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
+  const openHelp = () => (onOpenHelp ? onOpenHelp() : setHelpOpen(true));
   useShortcut({
     id: "global.search",
     keys: "/",
@@ -65,7 +66,7 @@ export function GlobalShortcuts({
     keys: "?",
     label: "Keyboard shortcuts",
     group: "Global",
-    run: () => (onOpenHelp ? onOpenHelp() : setHelpOpen(true)),
+    run: openHelp,
   });
   useShortcut({
     id: "global.theme",
@@ -91,6 +92,9 @@ export function GlobalShortcuts({
         <CommandPalette
           open={paletteOpen}
           onOpenChange={setPaletteOpen}
+          // The palette (Cmd/Ctrl+K) stays reachable when single keys are off, so the
+          // help sheet and its switch can always be reopened (WCAG 2.1.4).
+          onOpenHelp={openHelp}
           {...(createActions ? { createActions } : {})}
           {...(recent ? { recent } : {})}
           onSearch={onSearch ?? ((query) => router.push(`/search?q=${encodeURIComponent(query)}`))}

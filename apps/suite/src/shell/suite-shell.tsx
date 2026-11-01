@@ -28,7 +28,7 @@ import { useShellSearchSource } from "./search/search-context";
 import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
-import { ShortcutsProvider } from "./shortcuts/provider";
+import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
 import { useSyncSnapshot } from "./sync/online";
 
 export interface SuiteShellProps {
@@ -59,6 +59,7 @@ function Frame({
   const sync = useSyncSnapshot();
   const [syncOpen, setSyncOpen] = useState(false);
   const { active } = useAccounts();
+  const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
@@ -119,6 +120,7 @@ function Frame({
     >
       <ShellFrame
         skipLink={false}
+        characterShortcuts={characterKeys}
         pageTitle={pageTitle}
         preferences={preferences}
         onPreferencesChange={updateShell}

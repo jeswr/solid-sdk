@@ -18,6 +18,7 @@ import {
 } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, useRef, useState } from "react";
+import { useShortcutSettings } from "../shortcuts/provider";
 
 export interface PaletteCreateAction {
   id: string;
@@ -38,6 +39,8 @@ export interface CommandPaletteProps {
   createActions?: readonly PaletteCreateAction[];
   recent?: readonly PaletteRecent[];
   onSearch: (query: string) => void;
+  /** Opens the keyboard-shortcut help, which holds the single-key on/off switch. */
+  onOpenHelp?: () => void;
   showBacklog?: boolean;
 }
 export const appShortcutKeys: Partial<Record<AppSlug, string>> = {
@@ -60,9 +63,12 @@ export function CommandPalette({
   createActions = [],
   recent = [],
   onSearch,
+  onOpenHelp,
   showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
 }: CommandPaletteProps) {
   const router = useRouter();
+  // Single-key hints are noise (and wrong) once the user has turned those keys off.
+  const { characterKeys } = useShortcutSettings();
   const [query, setQuery] = useState("");
   const returnFocus = useRef<HTMLElement | null>(null);
   const select = (run: () => void) => {
@@ -138,11 +144,19 @@ export function CommandPalette({
                   >
                     {item.app && <AppGlyph app={item.app} />}
                     <span>{item.label}</span>
-                    {item.keys && <Kbd className="ml-auto">{item.keys}</Kbd>}
+                    {item.keys && characterKeys && <Kbd className="ml-auto">{item.keys}</Kbd>}
                   </a>
                 </CommandItem>
               ))}
             </CommandGroup>
+            {onOpenHelp && (
+              <CommandGroup heading="Help">
+                <CommandItem value="Keyboard shortcuts" onSelect={() => select(onOpenHelp)}>
+                  Keyboard shortcuts
+                  {characterKeys && <Kbd className="ml-auto">?</Kbd>}
+                </CommandItem>
+              </CommandGroup>
+            )}
             {createActions.length > 0 && (
               <CommandGroup heading="Create">
                 {createActions.map((action) => (
