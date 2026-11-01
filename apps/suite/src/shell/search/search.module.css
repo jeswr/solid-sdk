@@ -1,0 +1,84 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.root {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: min(280px, 100%);
+  width: 400px;
+  max-width: 100%;
+}
+.root:focus-within {
+  width: 560px;
+}
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.field input {
+  flex: 1;
+  min-width: 100px;
+}
+.panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: max(100%, 340px);
+  max-width: calc(100vw - 32px);
+  z-index: 40;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-md);
+}
+.list {
+  max-height: 52dvh;
+  overflow: auto;
+  padding: 4px;
+}
+.option {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  min-height: 32px;
+  scroll-margin: 8px;
+  text-decoration: none;
+}
+.option[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  font-size: 12px;
+}
+.mobile .root {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+.mobile .panel {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  box-shadow: none;
+}
+.mobile .list {
+  max-height: 58dvh;
+}
+.results {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+}
+@media (max-width: 767px) {
+  .results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
