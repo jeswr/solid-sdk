@@ -444,23 +444,40 @@ export function removeAcpAgent(
     }
   }
 }
-/** Reuse an unreferenced canonical IRI only if unused or already a resource root. */
+/**
+ * Choose the subject that anchors this resource's controls. ESS resolves an ACR by its canonical
+ * URL, so ESS controls must live on that IRI: reuse it when it is unused or already this
+ * resource's root (incoming annotations do not change that), and refuse any other occupant before
+ * writing rather than attaching grants to a node ESS would never read. Other dialects use a fresh
+ * blank root.
+ */
 function acpResourceRoot(
   dataset: Store,
   resource: string,
   url: string,
   implementation: PodImplementation,
 ): Properties {
-  const candidate = implementation === "ess" ? DataFactory.namedNode(url) : DataFactory.blankNode();
-  const available =
-    !dataset.match(null, null, candidate).size &&
-    (!dataset.match(candidate).size ||
-      roots(dataset).some(
-        (root) =>
-          root.equals(candidate) &&
-          (properties(root as Term, dataset).iris(`${ACP}resource`)[0] ?? resource) === resource,
-      ));
-  return properties(available ? candidate : DataFactory.blankNode(), dataset);
+  if (implementation !== "ess") return properties(DataFactory.blankNode(), dataset);
+  const candidate = DataFactory.namedNode(url);
+  const unused = !dataset.match(null, null, candidate).size && !dataset.match(candidate).size;
+  // Only non-ACP statements (annotations) may point at a reused root; an ACP reference would mean
+  // the node is also a control, policy or matcher, whose meaning a root's controls must not change.
+  const acpReferenced = [...dataset.match(null, null, candidate)].some((quad) =>
+    quad.predicate.value.startsWith(ACP),
+  );
+  const ownRoot =
+    !acpReferenced &&
+    roots(dataset).some(
+      (root) =>
+        root.equals(candidate) &&
+        (properties(root as Term, dataset).iris(`${ACP}resource`)[0] ?? resource) === resource,
+    );
+  if (unused || ownRoot) return properties(candidate, dataset);
+  throw roleError(
+    "unsupported",
+    url,
+    "The access control resource's canonical subject is used by other statements, so ESS would not read new grants written elsewhere",
+  );
 }
 /** Write the unconditional subset using the trusted dialect's modes and management. */
 export function appendAcp(

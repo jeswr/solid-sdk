@@ -17,7 +17,7 @@ import {
 import { writeAcp } from "../index.js";
 import { ACP, RDF, serialize } from "../rdf.js";
 import { addGrant, grantsWithRoles, readGrants, removeGrant, setGrants } from "./index.js";
-import { properties, roots } from "./rdf.js";
+import { properties } from "./rdf.js";
 
 const nn = DataFactory.namedNode;
 const endpoint = `${resource}.acr`;
@@ -222,7 +222,7 @@ describe("review round 2: ACP root identity collisions", () => {
         "set",
         "add",
         "remove",
-      ] as const)(`%s preserves the canonical ${occupied} node while editing ${location}`, async (operation) => {
+      ] as const)(`%s refuses an ESS canonical subject occupied as ${occupied} while editing ${location}`, async (operation) => {
         const mem = memoryAccess("acp");
         mem.attach(resource, await serialize(await essData()));
         const data = await essData(location);
@@ -304,30 +304,15 @@ describe("review round 2: ACP root identity collisions", () => {
             : operation === "add"
               ? await addGrant([resource], added, options)
               : await removeGrant([resource], selection().agent, options);
-        expect(result.failed).toEqual([]);
-        expect(result.applied).toEqual([resource]);
-        expect(mem.writes()).toHaveLength(location === comments ? 2 : 1);
-        expect(
-          new Headers(required(mem.writes().find((w) => w.url === url)).init.headers).get(
-            "if-match",
-          ),
-        ).toBe('"1"');
-        const after = await parseRdf(required(mem.docs.get(url)).body, "text/turtle", {
-          baseIRI: url,
-        });
-        if (occupied !== "empty-matcher")
-          expect(properties(nn(url), after).iris(`${RDF}type`)).toContain("urn:Preserved");
-        expect(properties(nn(url), after).iris(`${ACP}resource`)).toEqual(
-          occupied === "self" ? [url] : occupied === "foreign" ? ["urn:foreign-resource"] : [],
-        );
-        for (const acr of roots(after))
-          expect(properties(acr as Term, after).iris(`${ACP}resource`)).toHaveLength(
-            occupied === "root-matcher" && acr.value === url ? 0 : 1,
-          );
+        // ESS reads an ACR through its canonical URL (review round 3), so a canonical subject
+        // occupied by anything other than this resource's root is refused before any write
+        // instead of anchoring new grants on a node ESS would never read.
+        expect(result.applied).toEqual([]);
+        expect(result.failed).toEqual([
+          { url: resource, error: expect.objectContaining({ code: "unsupported", url }) },
+        ]);
+        expect(mem.writes()).toHaveLength(0);
         const grants = await grantsWithRoles(resource, options);
         expect(grants).toContainEqual({ ...manager, source: endpoint });
-        if (operation === "remove")
-          expect(grants.some((g) => "id" in g.agent && g.agent.id === bob)).toBe(false);
-        else expect(grants).toContainEqual({ ...added, source: endpoint });
       });
 });
