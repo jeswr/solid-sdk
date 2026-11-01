@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { readFileSync } from "node:fs";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import ts from "typescript";
 import { afterEach, expect, test, vi } from "vitest";
 import { createNotifications } from "../client.js";
 import { FakeEventSource, FakeTimers } from "../testing.js";
-import type { ChangeEvent } from "../types.js";
+import type { ChangeEvent, NotificationsDependencies } from "../types.js";
 import { registerRelay } from "./relay-registration.js";
 import { createWebhookRelayChannel } from "./webhook-relay.js";
 
@@ -101,6 +104,62 @@ function fixture() {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+test("the skill's relay recipe supplies an ID-token callback and connects the implemented transport", async () => {
+  const f = fixture();
+  const markdown = readFileSync(new URL("../../SKILL.md", import.meta.url), "utf8");
+  const code = [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)]
+    .map((match) => match[1]!)
+    .find((example) => example.includes("getSessionIdToken"));
+  if (!code) throw new Error("Missing webhook relay recipe");
+  const { outputText } = ts.transpileModule(code, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  });
+  const client = new Function(
+    "createNotifications",
+    "authenticatedPodFetch",
+    "storage",
+    "getSessionIdToken",
+    `${outputText}\nreturn notifications;`,
+  )(
+    (deps: NotificationsDependencies) => createNotifications({ ...f.deps, ...deps }),
+    f.podFetch,
+    f.storage,
+    f.getIdToken,
+  );
+  vi.stubGlobal("fetch", f.relayFetch);
+  expect(client.plan().channel).toBe("webhook-relay");
+  const sub = await client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(f.getIdToken).toHaveBeenCalledExactlyOnceWith(expect.any(AbortSignal));
+  expect(f.relayFetch).toHaveBeenCalledOnce();
+  f.sources[0]!.open();
+  expect(sub.state).toBe("live");
+  expect(sub.channel).toBe("webhook-relay");
+  await sub.close();
+});
+
+test("a configured relay without the required callback retries instead of polling", async () => {
+  const f = fixture();
+  const head = vi.spyOn(f.storage, "head");
+  const listAll = vi.spyOn(f.storage, "listAll");
+  const client = createNotifications({
+    ...f.deps,
+    relay: { url: f.deps.relay.url, fetch: f.relayFetch },
+  });
+  expect(client.plan().channel).toBe("webhook-relay");
+  const sub = await client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  await f.timers.advanceBy(1000);
+  expect(sub.state).toBe("degraded");
+  expect(sub.channel).toBe("webhook-relay");
+  expect(head).not.toHaveBeenCalled();
+  expect(listAll).not.toHaveBeenCalled();
+  expect(f.relayFetch).not.toHaveBeenCalled();
+  expect(f.sources).toEqual([]);
+  expect(f.timers.pending).toBe(1);
+  await sub.close();
 });
 
 test("registers canonical storage with an ID token, batches topics and opens a relay SSE capability", async () => {

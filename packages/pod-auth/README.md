@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-auth
 
@@ -109,7 +110,9 @@ event timestamps; protocol expiry validation remains in the engine.
 
 `restore()` reads the last-active account pointer and attempts a DPoP refresh grant without opening
 interactive authorization. The same non-extractable ES256 private key and exportable public key are
-persisted beside the refresh token under `(issuer, WebID, actual client_id)`, within the app namespace.
+persisted beside the refresh token under `(issuer, WebID, actual client_id, DPoP public key)`, within
+the app namespace. Separate grants for the same account keep their own credentials and refresh locks;
+rotation updates only the matching grant. Superseded grants remain available for logout across reloads.
 An unloadable, extractable, mismatched or non-ES256 key discards the credential before redemption.
 Access and ID tokens stay in memory. Rotation is persisted before an identity or restore event is exposed.
 Web Locks serialize refreshes across tabs; Node falls back to keyed FIFO locks within the current realm

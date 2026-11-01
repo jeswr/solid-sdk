@@ -81,8 +81,11 @@ fail closed. Restore permits one `prompt=none` attempt through `ui.getCode` only
 `invalid_grant`, never interactive fallback or an iframe. Initial interactive login requests consent.
 
 Persist only refresh records beside the matching non-extractable ES256 private key and exportable
-public key, scoped by issuer/WebID/actual client ID inside an application namespace. Discard unloadable,
-extractable, mismatched or non-ES256 keys before redemption. Access/ID tokens and registrations remain
+public key, scoped by issuer/WebID/actual client ID and DPoP public key inside an application namespace.
+Independent grants retain separate credentials and refresh locks even for the same account; refresh
+rotation updates only its matching grant. Superseded grants stay discoverable for logout across reloads.
+Discard unloadable, extractable, mismatched or non-ES256 keys before redemption.
+Access/ID tokens and registrations remain
 in memory. Preserve credentials/pointers on transient network/discovery/refresh failures; propagate
 storage errors. Retain the verbatim ported `decideSilentRestore` decision and tests with attribution.
 

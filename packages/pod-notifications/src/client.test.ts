@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type AuthFetch, StorageError } from "@jeswr/storage-client";
 import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -329,9 +330,10 @@ test.each([
   expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
     ["Update", root],
     ["Delete", hot.url],
+    ["Delete", hot.url], // Membership and independently watched presence both invalidate it.
   ]);
   await timers.advanceBy(30);
-  expect(changes).toHaveBeenCalledTimes(2);
+  expect(changes).toHaveBeenCalledTimes(3);
   net.set(false);
   net.set(true);
   await timers.advanceBy(0);
@@ -340,7 +342,7 @@ test.each([
   await sub.close();
 });
 
-test("initially absent hot resources and reappearances establish quiet baselines", async () => {
+test("an initially absent resource is quiet, then creation, deletion and recreation emit changes", async () => {
   const net = network(false);
   const { storage, client, timers } = fixture();
   const hot = `${root}hot`;
@@ -352,9 +354,13 @@ test("initially absent hot resources and reappearances establish quiet baselines
   net.set(true);
   await timers.advanceBy(0);
   expect(resync).toHaveBeenCalledTimes(1);
-  const created = await storage.create(root, "first", { contentType: "text/plain", name: "hot" });
   await timers.advanceBy(10);
   expect(changes).not.toHaveBeenCalled();
+  const created = await storage.create(root, "first", { contentType: "text/plain", name: "hot" });
+  await timers.advanceBy(10);
+  expect(changes).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ type: "Create", object: hot }),
+  );
   await storage.delete(hot, { ifMatch: created.etag as string });
   await timers.advanceBy(10);
   const recreated = await storage.create(root, "second", {
@@ -362,13 +368,18 @@ test("initially absent hot resources and reappearances establish quiet baselines
     name: "hot",
   });
   await timers.advanceBy(10);
-  expect(changes).not.toHaveBeenCalled();
+  expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
+    ["Create", hot],
+    ["Delete", hot],
+    ["Create", hot],
+  ]);
   const written = await storage.write(hot, "third", {
     contentType: "text/plain",
     ifMatch: recreated.etag as string,
   });
   await timers.advanceBy(10);
-  expect(changes).toHaveBeenCalledExactlyOnceWith(
+  expect(changes).toHaveBeenCalledTimes(4);
+  expect(changes).toHaveBeenLastCalledWith(
     expect.objectContaining({ type: "Update", object: hot, state: written.etag }),
   );
   await sub.close();

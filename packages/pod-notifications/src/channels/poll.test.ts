@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
-import type { AuthFetch } from "@jeswr/storage-client";
+import { type AuthFetch, StorageError } from "@jeswr/storage-client";
 import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import ts from "typescript";
@@ -9,6 +10,107 @@ import { createNotifications } from "../index.js";
 import { FakeTimers } from "../testing.js";
 import type { ChangeEvent, NotificationsDependencies } from "../types.js";
 import { createPollChannel } from "./poll.js";
+
+test.each([
+  404, 410,
+])("individually watched resources emit deletion (%s) and recreation without ETags", async (status) => {
+  const storage = createMemoryStorage();
+  const resource = await storage.create(storage.root, "first", {
+    name: "watched",
+    contentType: "text/plain",
+  });
+  const head = storage.head.bind(storage);
+  let absent = false;
+  vi.spyOn(storage, "head").mockImplementation(async (...args) => {
+    if (absent) throw new StorageError("not-found", { method: "HEAD", url: resource.url, status });
+    return { ...(await head(...args)), etag: null };
+  });
+  const timers = new FakeTimers();
+  const sub = createPollChannel({
+    storage,
+    topics: [resource.url],
+    intervalMs: 10,
+    timers,
+    now: timers.now,
+  });
+  const changes: ChangeEvent[] = [];
+  sub.on("change", (event) => changes.push(event));
+  await timers.advanceBy(0);
+  expect(changes).toEqual([]);
+  absent = true;
+  await timers.advanceBy(10);
+  expect(changes).toMatchObject([
+    { type: "Delete", object: resource.url, objectKind: "resource", via: "poll" },
+  ]);
+  await timers.advanceBy(20);
+  expect(changes).toHaveLength(1);
+  // A transient failure cannot change the last confirmed presence state.
+  vi.mocked(storage.head).mockRejectedValueOnce(new Error("network"));
+  await timers.advanceBy(10);
+  expect(changes).toHaveLength(1);
+  absent = false;
+  await timers.advanceBy(10);
+  expect(changes).toMatchObject([
+    { type: "Delete", object: resource.url },
+    { type: "Create", object: resource.url, objectKind: "resource", via: "poll" },
+  ]);
+  await timers.advanceBy(20);
+  expect(changes).toHaveLength(2);
+  await sub.close();
+});
+
+test("a recreated container emits presence only after its entire listing succeeds", async () => {
+  const storage = createMemoryStorage();
+  const container = await storage.create(storage.root, null, {
+    kind: "container",
+    name: "watched",
+  });
+  await storage.create(container.url, "child", { name: "child", contentType: "text/plain" });
+  const head = storage.head.bind(storage);
+  const listAll = storage.listAll.bind(storage);
+  let absent = false;
+  vi.spyOn(storage, "head").mockImplementation(async (...args) => {
+    if (absent)
+      throw new StorageError("not-found", { method: "HEAD", url: container.url, status: 404 });
+    return head(...args);
+  });
+  const timers = new FakeTimers();
+  const sub = createPollChannel({
+    storage,
+    topics: [container.url],
+    intervalMs: 10,
+    timers,
+    now: timers.now,
+  });
+  const changes: ChangeEvent[] = [];
+  sub.on("change", (event) => changes.push(event));
+  await timers.advanceBy(0);
+  expect(changes).toEqual([]);
+  // A transient HEAD failure while present must not invent a deletion.
+  vi.mocked(storage.head).mockRejectedValueOnce(new Error("network"));
+  await timers.advanceBy(10);
+  expect(changes).toEqual([]);
+  absent = true;
+  await timers.advanceBy(10);
+  expect(changes).toMatchObject([
+    { type: "Delete", object: container.url, objectKind: "container" },
+  ]);
+  absent = false;
+  vi.spyOn(storage, "listAll").mockImplementationOnce(async function* (...args) {
+    yield* listAll(...args);
+    throw new Error("Final page failed");
+  });
+  await timers.advanceBy(10);
+  expect(changes).toHaveLength(1);
+  await timers.advanceBy(10);
+  expect(changes).toMatchObject([
+    { type: "Delete", object: container.url },
+    { type: "Create", object: container.url, objectKind: "container" },
+  ]);
+  await timers.advanceBy(10);
+  expect(changes).toHaveLength(2);
+  await sub.close();
+});
 
 test("polling revalidates cacheable HEADs and all listing pages to observe changes", async () => {
   const root = "https://pod.example/";

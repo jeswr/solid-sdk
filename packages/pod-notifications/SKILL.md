@@ -129,8 +129,26 @@ reconciliations share a serial queue so an older read cannot overwrite a newer s
 
 `plan()` is an I/O-free advertised preference, while `subscription.channel` reports the actual
 transport. Supported push adapters are Solid WebSocketChannel2023 / StreamingHTTP, LWS
-WebSocket / SSE, and NSS `Updates-Via`. Webhook relay is still a stub: even with `relay`, an
-advertised webhook plan currently polls. Missing push support also polls; `pollIntervalMs: 0`
+WebSocket / SSE / webhook relay, and NSS `Updates-Via`. LWS webhook delivery uses a registered
+relay inbox and an SSE stream. Configure the relay origin and supply an application session adapter
+`getSessionIdToken(signal)` that obtains a current ID token and honors cancellation:
+
+```ts
+const notifications = createNotifications({
+  fetch: authenticatedPodFetch,
+  storage,
+  relay: {
+    url: 'https://relay.example',
+    getIdToken: signal => getSessionIdToken(signal),
+    // fetch: relayFetch, // Optional separate transport; defaults to globalThis.fetch.
+  },
+});
+```
+
+An actual webhook subscription requires `relay.getIdToken`; without it, a configured relay
+still selects `webhook-relay` but stays degraded and retries. It does not fall back to polling.
+Relay registration uses the ID token and a separate `relay.fetch`, never the pod access token
+or authenticated pod fetch. Missing push support polls; `pollIntervalMs: 0`
 disables that fallback and leaves the subscription degraded. Observe `state` for
 `connecting`, `live`, `degraded` or terminal `closed`; polling is degraded by design.
 
@@ -138,7 +156,9 @@ disables that fallback and leaves the subscription degraded. Observe `state` for
 semantics. Solid container subscriptions and all polling observe direct membership; add
 individual resources with `hot` to observe edits. Reconcile on `resync` after interruptions;
 it supplies a timestamp, not a durable replay cursor. Polling establishes a quiet baseline
-and missing ETags do not produce changes. See [LWS differences](../../skills/lws-vs-solid/SKILL.md).
+and emits `Delete`/`Create` when a watched topic disappears (404/410) or reappears after that
+baseline, including resources without ETags. Missing ETags alone do not produce updates.
+See [LWS differences](../../skills/lws-vs-solid/SKILL.md).
 
 
 T-040 implements the ADR-005 contracts, `createNotifications`, internal `createChangeNormalizer`,

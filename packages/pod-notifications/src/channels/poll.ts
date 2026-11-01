@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type Entry,
   type ReadResult,
@@ -20,6 +21,7 @@ export interface PollChannelOptions {
 }
 
 interface Snapshot {
+  kind: ReadResult["kind"];
   etag: string | null;
   members: Map<string, Entry>;
 }
@@ -91,7 +93,9 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           } catch (error) {
             request.signal.throwIfAborted();
             if (error instanceof StorageError && error.code === "not-found") {
+              const previous = snapshots.get(topic);
               snapshots.set(topic, null);
+              if (previous) emit("Delete", topic, previous.kind, error, {});
               continue;
             }
             throw error;
@@ -109,7 +113,8 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           }
           request.signal.throwIfAborted();
           const previous = snapshots.get(topic);
-          snapshots.set(topic, { etag: head.etag, members });
+          snapshots.set(topic, { kind: head.kind, etag: head.etag, members });
+          if (previous === null) emit("Create", topic, head.kind, head, {});
           if (!previous) continue;
           if (head.etag !== null && previous.etag !== null && head.etag !== previous.etag) {
             emit("Update", topic, head.kind, head, { state: head.etag });

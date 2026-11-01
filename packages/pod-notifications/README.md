@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-notifications
 
@@ -109,7 +110,10 @@ event starts immediate reconciliation; successful reconciliation emits `resync` 
 start time. Without browser connectivity globals, polling proceeds normally. Network/list
 failures retry at the next interval; forbidden responses close with reason `forbidden`.
 A HEAD reporting `not-found` (404/410) records absence and permits resync. Container listings
-still emit membership deletions; a reappearing target establishes a fresh quiet baseline.
+still emit membership deletions. After the quiet initial observation, a watched topic disappearing
+emits `Delete` and reappearing emits `Create`, even without ETags. Repeated absence is quiet.
+Reappearing containers commit a fresh membership baseline only after every listing page succeeds.
+Watching a resource both individually and through its parent can produce both presence and membership hints.
 `close()` and signal abort release timers/listeners, abort requests and settle iterator waiters.
 Observers can unsubscribe; observer exceptions are isolated so they cannot interrupt cleanup
 or other consumers. Iterators observe changes from their creation, independently; iterator
