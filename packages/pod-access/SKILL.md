@@ -46,13 +46,20 @@ Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr
 Records live in an owner-only `settings/access-records/` folder (created or verified before any
 write); resume only from the owner's pinned decision there, never from the requester's notification.
 Sealing the folder stores a random records key in its ACL (minted only after the folder is shown
-private; a key found next to the unverified mark is replaced). Decision records are named from that
+private; a key found next to the unverified mark is replaced; a private folder with no key is given
+one only while it holds nothing but its ACL, and otherwise refused so its records are never silently
+orphaned). Decision records are named from that
 key, the request URL, the requester, what was asked and a generation number, and say `approving`,
 `approved` or `denied`; a finished record only matches a request in the same state, so a new request
 at a reused URL starts a new generation. Grant and denial-receipt IDs derive from the record URL, so
-they are bound to the requester. Never grant the storage root or anything under
-`<storage>settings/`, whether discovered or pinned. A resumed approval refuses explicit choices
-(`dataTypes`, `role`, `expiresAt`) that differ from the pinned ones. Each approved data type
+they are bound to the requester. Never grant the storage root (slashless form included) or anything
+under `<storage>settings/`, whether discovered or pinned; compare the parsed origin and path, never
+raw strings, and refuse any target with a query, fragment or `%` in its path. A resumed approval
+(pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
+the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
+Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
+`approved` record returns that earlier grant (nothing new is granted), and the owner cannot record a
+denial for it. Each approved data type
 grants only its own requested modes (`modesByType`); a type that grants no mode is dropped.
 Request/record documents must be owner-write-only; retries are explicit user-confirmed recovery.
 Internal RDF wrappers remain private; the request subpath exports only its typed error classes.

@@ -123,17 +123,40 @@ describe("sealed records key", () => {
     expect((await record(pod, await decisionUrl(pod))).outcome).toBe("approved");
   });
 
-  it("mints a key for a folder sealed before keys existed and ignores its old records", async () => {
+  it("refuses to orphan records in a private folder that has no key", async () => {
+    // Sealed by older code (or its key went missing): private, no unverified mark, no key.
     const pod = buildPod();
     const legacy = await legacyIntentUrl();
     pod.seed(RECORDS, "");
     pod.seed(`${RECORDS}.acl`, ownerOnly());
     pod.seed(legacy, await recordTurtle(legacy, { snapshot: plantedSnapshot("old") }));
-    const result = await decide({ id: ID }, { approve: true }, opts(pod));
-    expect(result.status).toBe("approved");
-    expect(sealedKey(pod)).toBeDefined();
+    for (const approve of [true, false]) {
+      const before = pod.log.length;
+      await expect(decide({ id: ID }, { approve }, opts(pod))).rejects.toThrow(
+        "The access records folder has records this version can't read; move them out of settings/access-records/ first",
+      );
+      expect(puts(pod, before)).toEqual([]);
+    }
+    expect(sealedKey(pod)).toBeUndefined();
+    expect(await modesOf(pod, `${ALICE}.acl`)).toEqual([]);
+    expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "pending" });
+    // Once the old records are moved out, the empty folder gets a key and decisions go ahead.
+    pod.delete(legacy);
+    expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
+    expect(sealedKey(pod)).toMatch(/^[0-9a-f-]{36}$/);
     expect(await modesOf(pod, `${POD}.acl`)).toEqual([]);
-    expect(pod.etag(legacy)).toBe('"v1"');
+  });
+
+  it("mints a key for an empty private folder that has none", async () => {
+    const pod = buildPod();
+    pod.seed(RECORDS, "");
+    pod.seed(`${RECORDS}.acl`, ownerOnly());
+    const result = await decide({ id: ID }, { approve: false }, opts(pod));
+    expect(result.status).toBe("denied");
+    const key = sealedKey(pod);
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(pod.body(`${RECORDS}.acl`)).not.toContain("unverifiedRecords");
+    expect((await record(pod, await decisionUrl(pod))).outcome).toBe("denied");
   });
 
   it("replaces a records key found next to the unverified mark", async () => {
@@ -220,7 +243,15 @@ describe("sealed records key", () => {
 
 describe("refused targets", () => {
   it("refuses a pinned snapshot that targets the storage root or the owner's settings", async () => {
-    for (const target of [POD, INDEX, `${POD}settings/prefs.ttl`]) {
+    for (const target of [
+      POD,
+      `${POD}?x`,
+      INDEX,
+      `${POD}settings/prefs.ttl`,
+      `${POD}settings`,
+      `${POD}%73ettings/prefs.ttl`,
+      `${POD}contacts/./../settings/prefs.ttl`,
+    ]) {
       const pod = buildPod();
       await pinOnly(pod);
       const slot = await decisionUrl(pod);
@@ -255,6 +286,42 @@ describe("refused targets", () => {
       );
       expect(puts(pod)).toEqual([]);
     }
+  });
+
+  it("compares normalised targets against storage below the origin root", async () => {
+    const storage = `${POD}alice/`;
+    const id = `${storage}inbox/request-1.ttl`;
+    const index = `${storage}settings/publicTypeIndex.ttl`;
+    for (const instance of [
+      `${POD}alice`,
+      `${storage}?x`,
+      `${POD}alice?x`,
+      `${storage}%73ettings/prefs.ttl`,
+      `${storage}settings/prefs.ttl`,
+      `${storage}settings`,
+    ]) {
+      const pod = buildPod();
+      pod.seed(id, accessRequestTurtle(id));
+      const typeIndex = await parseRdf(
+        `${PREFIXES}<${index}#r> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${instance}>.`,
+        "text/turtle",
+      );
+      await expect(
+        decide({ id }, { approve: true }, { ...opts(pod), storage, typeIndex }),
+      ).rejects.toThrow("can't be shared");
+      expect(puts(pod)).toEqual([]);
+    }
+    // A slashless storage option names the same root.
+    const pod = buildPod();
+    pod.seed(id, accessRequestTurtle(id));
+    const typeIndex = await parseRdf(
+      `${PREFIXES}<${index}#r> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${storage}>.`,
+      "text/turtle",
+    );
+    await expect(
+      decide({ id }, { approve: true }, { ...opts(pod), storage: `${POD}alice`, typeIndex }),
+    ).rejects.toThrow("can't be shared");
+    expect(puts(pod)).toEqual([]);
   });
 });
 
@@ -499,6 +566,79 @@ describe("races on the decision record", () => {
       expect(pod.has(`${ALICE}.acl`)).toBe(false);
       expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "pending" });
     }
+  });
+
+  it("reports the request's real status when the pin loses to a finished decision", async () => {
+    for (const approve of [false, true]) {
+      const pod = buildPod();
+      // Another call decides the request completely between this call's lookup and its pin.
+      racePin(pod, async () => {
+        await decide({ id: ID }, { approve }, opts(pod));
+        return null;
+      });
+      const error = await decide({ id: ID }, { approve: true }, opts(pod)).catch((e) => e);
+      expect(error).toBeInstanceOf(RequestConflictError);
+      expect(error.current).toBe(approve ? "approved" : "denied");
+      expect((await record(pod, await decisionUrl(pod))).outcome).toBe(
+        approve ? "approved" : "denied",
+      );
+      expect((await listRequests(opts(pod)))[0]).toMatchObject({
+        status: approve ? "approved" : "denied",
+      });
+      if (!approve) expect(pod.has(`${ALICE}.acl`)).toBe(false);
+    }
+  });
+
+  it("lets a denial that wins after the pin, before the Approving CAS, stand", async () => {
+    const pod = buildPod();
+    pod.intercept = (method, url, init) => {
+      if (method !== "PUT" || url !== ID) return undefined;
+      pod.intercept = undefined;
+      return (async () => {
+        // The denier finishes first; the approver's CAS then runs against a stale ETag.
+        await decide({ id: ID }, { approve: false }, opts(pod));
+        return pod.fetch(url, init);
+      })() as unknown as Response;
+    };
+    const error = await decide({ id: ID }, { approve: true }, opts(pod)).catch((e) => e);
+    expect(error).toBeInstanceOf(RequestConflictError);
+    expect(error.current).toBe("denied");
+    const gen0 = await decisionUrl(pod);
+    expect(await record(pod, gen0)).toEqual({ outcome: "denied", snapshot: undefined });
+    expect(pod.body(await denialReceiptUrl(gen0))).toContain("ConsentRefused");
+    expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "denied" });
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+    expect(pod.has(`${CAROL}.acl`)).toBe(false);
+    expect(pod.log.some(({ method, url }) => method === "PUT" && url.includes("/grant-"))).toBe(
+      false,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "Cannot approve a denial",
+    );
+  });
+
+  it("consumes a stale approval still in progress when a newer request at the URL is denied", async () => {
+    const pod = buildPod();
+    // The older request reached Approving, then crashed before its grant was written.
+    pod.intercept = (method, url) => {
+      if (method === "PUT" && url.includes("/grant-")) throw new Error("crash");
+    };
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("crash");
+    pod.intercept = undefined;
+    const gen0 = await decisionUrl(pod);
+    expect((await record(pod, gen0)).outcome).toBe("approving");
+    // A newer, identical request replaces the notification and the owner denies it.
+    pod.seed(ID, accessRequestTurtle(ID));
+    const denied = await decide({ id: ID }, { approve: false }, opts(pod));
+    expect(denied.status).toBe("denied");
+    expect(denied.receiptUrl).toBe(await denialReceiptUrl(gen0));
+    expect(await record(pod, gen0)).toEqual({ outcome: "denied", snapshot: undefined });
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+    // The stale approval never resumes: the next request at the URL starts a new generation.
+    pod.seed(ID, accessRequestTurtle(ID));
+    expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
+    expect((await record(pod, gen0)).outcome).toBe("denied");
+    expect((await record(pod, await decisionUrl(pod, { generation: 1 }))).outcome).toBe("approved");
   });
 
   it("settles a record that changed underneath, and refuses one recorded differently", async () => {

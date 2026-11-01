@@ -121,14 +121,16 @@ async function current(id: string, fetchFn: typeof fetch) {
   return { ...request, entry: request.entry };
 }
 
+/** The conflict to report after losing a race: re-read the request and name its real status. */
+async function conflict(id: string, fetchFn: typeof fetch): Promise<RequestConflictError> {
+  const winner = await read(id, fetchFn);
+  const status = winner ? project(id, winner.dataset, winner.etag).entry.status : "gone";
+  return new RequestConflictError(id, status);
+}
+
 async function cas(request: ParsedRequest, fetchFn: typeof fetch): Promise<void> {
-  if (!(await put(request.entry.id, await turtle(request.dataset), fetchFn, request.etag))) {
-    const winner = await read(request.entry.id, fetchFn);
-    const status = winner
-      ? project(request.entry.id, winner.dataset, winner.etag).entry.status
-      : "gone";
-    throw new RequestConflictError(request.entry.id, status);
-  }
+  if (!(await put(request.entry.id, await turtle(request.dataset), fetchFn, request.etag)))
+    throw await conflict(request.entry.id, fetchFn);
 }
 
 function recordsFolder(storage: string): string {
@@ -376,15 +378,25 @@ async function validateSnapshot(
 
 /**
  * Targets an approval may never grant: anything outside storage, access-control documents,
- * fragments, the storage root, and the owner's settings (type indexes, preferences, records).
+ * queries, fragments, percent-encoded paths (which a server may decode into another name), the
+ * storage root (with or without its trailing slash), and the owner's settings (type indexes,
+ * preferences, records). `storage` is canonical and slash-terminated; the target is compared by
+ * its parsed origin and path, never as a raw string.
  */
 function assertGrantable(target: string, storage: string): void {
-  scoped(storage, target);
+  const url = new URL(scoped(storage, target));
+  // scoped() already refused any other origin, so origin + path is where the target points.
+  const at = `${url.origin}${url.pathname}`;
+  const settings = `${storage}settings`;
   if (
-    /\.(acl|acr)(?:[?#]|$)/i.test(target) ||
+    target.includes("?") ||
     target.includes("#") ||
-    target === storage ||
-    target.startsWith(new URL("settings/", storage).href)
+    url.pathname.includes("%") ||
+    /\.(acl|acr)$/i.test(url.pathname) ||
+    at === storage ||
+    at === storage.slice(0, -1) ||
+    at === settings ||
+    at.startsWith(`${settings}/`)
   )
     throw new Error(`${target} can't be shared through an access request`);
 }
@@ -580,8 +592,9 @@ export async function decide(
     // pending request here crashed after pinning but before the Approving CAS.
     snapshot = recorded.snapshot as Snapshot;
     slot = await sealed();
-    if (parsed.status === "pending") assertSameChoices(snapshot, decision);
     await validateSnapshot(snapshot, parsed, slot.url, options);
+    // Only a finished approval ignores choices: it is reported as it was recorded.
+    if (parsed.status !== "approved") assertSameChoices(snapshot, decision);
     if (parsed.status === "pending") await moveToApproving(request, id, snapshot, fetchFn);
   } else {
     const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)].sort();
@@ -663,7 +676,8 @@ export async function decide(
       ))
     ) {
       const winner = await readRecord(slot.url, id, fetchFn);
-      if (winner?.outcome !== "approving") throw new RequestConflictError(id, "pending");
+      // Lost to a finished decision: report the request's real state, as cas() does.
+      if (winner?.outcome !== "approving") throw await conflict(id, fetchFn);
       snapshot = winner.snapshot as Snapshot;
       slot = { url: slot.url, record: winner };
       assertSameChoices(snapshot, decision);

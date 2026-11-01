@@ -290,8 +290,11 @@ append-only request is refused before any write. `role: "viewer"` narrows to req
 approval ever grants Control. The owner Type Index resolves classes
 to registered instances and bounded, recursively listed instance-container members. Unknown classes
 and off-storage targets fail before the Approving CAS, and so do targets an approval may never
-share: the storage root itself and anything under `<storage>settings/` (Type Indexes, preferences,
-the access records). A requested type that grants no mode (it has no permission of its own, or
+share: the storage root itself (with or without its trailing slash) and anything under
+`<storage>settings/` (Type Indexes, preferences, the access records). Targets are compared by their
+parsed origin and path, never as raw strings, so dot segments cannot hide a refused path; a target
+with a query, a fragment or any `%` in its path is refused outright, because a server may decode
+it into another name. A requested type that grants no mode (it has no permission of its own, or
 `role: "viewer"` drops its only mode) is left out of the approval rather than blocking it. `options.typeIndex` accepts an owner-controlled
 dataset or in-storage index URL; otherwise discovery reads profile public/private links and
 `pim:preferencesFile` → private index. All authenticated discovered URLs stay in `storage`, with
@@ -345,8 +348,10 @@ When the mark is removed, `decide` also stores a random **records key** in the f
 the owner can read that ACL, and the key is created only after the folder is known to be private,
 so nobody else can predict where a decision record lives, and nothing written before the folder was
 sealed (or slipped in while it was being sealed) can sit at one. A key found next to the unverified
-mark is not trusted and is replaced. A folder sealed before keys existed simply gets one; its old
-files are ignored. Looking up a decision creates nothing on a pod that has no records folder ACL
+mark is not trusted and is replaced. A private folder with no key (sealed before keys existed, or
+whose key went missing) gets one only while it holds nothing but its ACL; if it holds other files,
+`decide` refuses ("The access records folder has records this version can't read; move them out of
+settings/access-records/ first") rather than silently orphaning them. Looking up a decision creates nothing on a pod that has no records folder ACL
 yet.
 
 Each decision is a **decision record** in that folder, named from the records key, the request URL,
@@ -363,6 +368,12 @@ at a reused notification URL, even an identical one, it is decided afresh under 
 and never reuses the old decision. A pinned decision must name this requester, stay within the role
 its request maps to, and pass the same target checks as a new one. After 32 decisions at one
 request URL, `decide` refuses that URL.
+
+One limit follows from the request status being requester-authored. If a new notification at a
+reused URL, asking for the same thing as an earlier approved one, itself claims `approved`, it
+matches the earlier `approved` record: `decide` returns that earlier grant and grants nothing new.
+The owner also cannot record a denial for that notification, since denying a finished approval is
+refused; remove the notification (and revoke the earlier grant if it should end) instead.
 
 Every document the pipeline writes back (including the requester-authored request during CAS) is
 serialised with regenerated blank-node labels, validated language tags and no named graphs, so a

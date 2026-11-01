@@ -304,31 +304,35 @@ describe("owner-controlled approval records", () => {
     expect(plain.body(`${RECORDS}.acl`)).toContain(OWNER);
   });
 
-  it("keeps distrusting a folder whose privacy check was interrupted", async () => {
+  /** A pinned approval of the whole storage at the old design's record name, built up front. */
+  const plantedIntent = async () => {
     const intent = await legacyIntentUrl();
-    const planted = async (pod: ReturnType<typeof buildPod>) => {
-      const grantId = await deriveGrantId(ID, [`${POD}`], OWNER);
-      const snapshot = JSON.stringify({
-        grantId,
-        targets: [POD],
-        agent: REQUESTER,
-        modes: ["append", "read", "write"],
-        targetModes: { [POD]: ["append", "read", "write"] },
-        dataTypes: [CONTACTS_CLASS],
-        schemaVersion: "1",
-        decidedAt: "2026-11-01T00:00:00.000Z",
-      });
-      pod.seed(
-        intent,
-        `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot ${JSON.stringify(snapshot)} .`,
-      );
+    const grantId = await deriveGrantId(ID, [`${POD}`], OWNER);
+    const snapshot = JSON.stringify({
+      grantId,
+      targets: [POD],
+      agent: REQUESTER,
+      modes: ["append", "read", "write"],
+      targetModes: { [POD]: ["append", "read", "write"] },
+      dataTypes: [CONTACTS_CLASS],
+      schemaVersion: "1",
+      decidedAt: "2026-11-01T00:00:00.000Z",
+    });
+    return {
+      intent,
+      body: `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot ${JSON.stringify(snapshot)} .`,
     };
+  };
+
+  it("keeps distrusting a folder whose privacy check was interrupted", async () => {
+    const { intent, body } = await plantedIntent();
     for (const interruption of ["crash", "stray"] as const) {
       const pod = buildPod();
       pod.intercept = (method, url, init) => {
         if (method !== "PUT" || url !== `${RECORDS}.acl`) return undefined;
+        // The stray file lands synchronously while the folder is being made private.
         if (interruption === "stray") {
-          void planted(pod);
+          pod.seed(intent, body);
           return undefined;
         }
         if (new Headers(init?.headers).has("if-match")) throw new Error("crash");
@@ -338,7 +342,7 @@ describe("owner-controlled approval records", () => {
         interruption === "crash" ? "crash" : "already has files",
       );
       pod.intercept = undefined;
-      if (interruption === "crash") await planted(pod);
+      if (interruption === "crash") pod.seed(intent, body);
       expect(pod.body(`${RECORDS}.acl`)).toContain("unverifiedRecords");
       for (const approve of [true, false])
         await expect(decide({ id: ID }, { approve }, opts(pod))).rejects.toThrow(
@@ -351,6 +355,26 @@ describe("owner-controlled approval records", () => {
       expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
       expect(pod.body(`${RECORDS}.acl`)).not.toContain("unverifiedRecords");
     }
+  });
+
+  it("ignores a file planted after the folder was sealed", async () => {
+    const { intent, body } = await plantedIntent();
+    const pod = buildPod();
+    // The first decision-record lookup only happens once the folder is sealed.
+    pod.intercept = (method, url) => {
+      if (method === "GET" && url.startsWith(`${RECORDS}decision-`) && !pod.has(intent))
+        pod.seed(intent, body);
+      return undefined;
+    };
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    pod.intercept = undefined;
+    expect(result.status).toBe("approved");
+    expect(pod.body(intent)).toBe(body);
+    expect(pod.body(`${RECORDS}.acl`)).not.toContain("unverifiedRecords");
+    expect(pod.body(`${ALICE}.acl`)).toContain(REQUESTER);
+    expect(pod.body(`${POD}.acl`)).not.toContain(REQUESTER);
+    // Later decisions keep ignoring it: the sealed folder is not checked for emptiness again.
+    expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
   });
 
   it("never resumes a decision recorded for different content at the same request URL", async () => {

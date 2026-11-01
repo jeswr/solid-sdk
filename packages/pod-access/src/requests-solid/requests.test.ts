@@ -314,11 +314,20 @@ describe("decision state machine", () => {
     pod.seed(`${POD}settings/publicTypeIndex.ttl`, "corrupted index @@@");
     pod.seed(`${POD}contacts/new.ttl`, "<urn:new> a <urn:Contact>.");
     pod.intercept = undefined;
-    const result = await decide(
-      { id: ID },
-      { approve: true, dataTypes: ["urn:ignored-on-resume"] },
-      options(pod),
-    );
+    // A retry in Approving with different explicit choices is refused before any write.
+    const before = pod.log.length;
+    for (const changed of [
+      { dataTypes: ["urn:not-what-was-pinned"] },
+      { role: "viewer" as const, dataTypes: [CONTACTS_CLASS] },
+      { expiresAt: new Date("2029-01-01Z") },
+    ])
+      await expect(decide({ id: ID }, { approve: true, ...changed }, options(pod))).rejects.toThrow(
+        "still finishing",
+      );
+    expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
+    expect(await entry(pod)).toMatchObject({ status: "approving" });
+    // Retrying without choices finishes the pinned approval.
+    const result = await decide({ id: ID }, { approve: true }, options(pod));
     expect(result.status).toBe("approved");
     expect(pod.has(`${POD}contacts/new.ttl.acl`)).toBe(false);
     expect(pod.etag(result.receiptUrl)).toBe('"v1"');

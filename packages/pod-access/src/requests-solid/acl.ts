@@ -164,7 +164,7 @@ export async function ensureOwnerOnlyContainer(
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await read(url, fetchFn);
     if (!existing) {
-      await assertEmpty(container, url, fetchFn);
+      await assertEmpty(container, url, fetchFn, NOT_PRIVATE);
       // Created or lost a create race: either way, re-read and verify on the next pass.
       await put(url, await ownerOnlyAcl(url, container, owner), fetchFn, null, true);
       continue;
@@ -198,8 +198,17 @@ export async function ensureOwnerOnlyContainer(
     if (!unverified && key !== undefined) return key;
     // Anything that arrived before the folder became private is untrusted. The key is minted only
     // now, after the folder is known to be private, so nothing written earlier can sit at a name
-    // derived from it (a key found next to the unverified mark was not written by us).
-    if (unverified) await assertEmpty(container, url, fetchFn);
+    // derived from it (a key found next to the unverified mark was not written by us). A private
+    // folder with no key lost it or was sealed by older code: its records can no longer be found,
+    // so refuse rather than silently orphan them.
+    await assertEmpty(
+      container,
+      url,
+      fetchFn,
+      unverified
+        ? NOT_PRIVATE
+        : "The access records folder has records this version can't read; move them out of settings/access-records/ first",
+    );
     const sealed = crypto.randomUUID();
     set(existing.dataset, url, UNVERIFIED, undefined);
     set(existing.dataset, url, RECORDS_KEY, sealed);
@@ -239,14 +248,19 @@ async function ownerOnlyAcl(url: string, container: string, owner: string): Prom
   return turtle(dataset);
 }
 
+const NOT_PRIVATE =
+  "The access records folder already has files but isn't private; review and clear it first";
+
 /** Fails closed: a folder that cannot be listed is not known to be empty. */
-async function assertEmpty(container: string, acl: string, fetchFn: typeof fetch): Promise<void> {
+async function assertEmpty(
+  container: string,
+  acl: string,
+  fetchFn: typeof fetch,
+  refusal: string,
+): Promise<void> {
   const listing = await read(container, fetchFn);
   if (!listing)
     throw new Error("The access records folder can't be listed, so it can't be checked");
   const members = values(listing.dataset, container, LDP.contains);
-  if (members.some((member) => member !== acl))
-    throw new Error(
-      "The access records folder already has files but isn't private; review and clear it first",
-    );
+  if (members.some((member) => member !== acl)) throw new Error(refusal);
 }
