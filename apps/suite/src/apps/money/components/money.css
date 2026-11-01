@@ -1,5 +1,6 @@
 /* AUTHORED-BY Codex GPT-6 */
 .mon-page {
+  position: relative;
   padding: var(--space-6);
   max-width: 1600px;
   margin: 0 auto;
@@ -231,6 +232,7 @@
 }
 .mon-field,
 .mon-form label {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -379,8 +381,29 @@
   flex-wrap: wrap;
 }
 .mon-tree-name {
+  position: relative;
   flex: 1;
   min-width: 100px;
+}
+.mon-tree-name .suite-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.mon-tree-name .suite-editable {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+  text-align: left;
+}
+.mon-tree-spacer {
+  width: 36px;
+  flex-shrink: 0;
 }
 .mon-tree-name > span {
   display: block;
@@ -392,8 +415,12 @@
   gap: var(--space-1);
   flex-wrap: wrap;
 }
-.mon-tree [role="group"] {
-  margin-left: var(--space-5);
+.mon-tree-children {
+  min-width: 0;
+  margin: 0 0 0 var(--space-6);
+  padding: 0 0 0 var(--space-2);
+  border: 0;
+  border-left: 1px solid var(--border);
 }
 .mon-steps {
   list-style: none;
@@ -687,11 +714,6 @@
 /* The statement wizard supplies its own labelled, single-file picker. */
 .mon-import-panel .su-drop-actions {
   display: none;
-}
-.mon-tree fieldset {
-  min-width: 0;
-  padding: 0;
-  border: 0;
 }
 
 .mon-account-title {

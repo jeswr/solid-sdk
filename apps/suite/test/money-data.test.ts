@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -14,16 +15,11 @@ import {
 import * as imports from "../src/apps/money/lib/data/import";
 import * as ledger from "../src/apps/money/lib/data/ledger";
 import { loadOverview, overview } from "../src/apps/money/lib/data/overview";
-import {
-  MoneyDocument,
-  putAccount,
-  putBalance,
-  type Transaction,
-  V,
-} from "../src/apps/money/lib/model";
+import { MoneyDocument, putAccount, putBalance, V } from "../src/apps/money/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { sgmlStatement } from "./fixtures/money-statements";
+import { must } from "./money/helpers";
 
 const today = "2026-11-01";
 const range = { start: "2026-09-01", end: "2026-11-30T23:59:59Z" };
@@ -85,14 +81,14 @@ describe("Money data against the demo pod", () => {
     await add(client, a.id, "later", "-10");
     await add(client, a.id, "future", "100", "2026-12-01");
     const loaded = await accounts.listAccounts(client, today);
-    expect(loaded[0]!).toMatchObject({
+    expect(must(loaded[0])).toMatchObject({
       currentBalance: "990",
       currency: "GBP",
       type: "current",
-      asOf: "2026-08-31",
+      asOf: "2026-08-30T23:59:59.999Z",
     });
     await accounts.renameAccount(client, a.id, "Daily spending");
-    expect((await store.accounts())[0]!.label).toBe("Daily spending");
+    expect(must((await store.accounts())[0]).label).toBe("Daily spending");
     await expect(account(client)).rejects.toMatchObject({ status: 412 });
     await expect(
       accounts.createAccount(client, "bad", {
@@ -107,10 +103,10 @@ describe("Money data against the demo pod", () => {
     const extra = await store.read("accounts/savings.ttl");
     extra.document.node(`${extra.url}#account`).description = undefined;
     await store.write(extra.url, extra.document, extra.condition);
-    expect((await accounts.listAccounts(client, today))[1]!.type).toBe("current");
+    expect(must((await accounts.listAccounts(client, today))[1]).type).toBe("current");
     const missing = new MoneyDocument();
     putAccount(missing, {
-      id: store.resolve("accounts/missing.ttl#x".split("#")[0]!) + "#x",
+      id: `${store.resolve(must("accounts/missing.ttl#x".split("#")[0]))}#x`,
       label: "Missing",
     });
     await store.write("accounts/missing.ttl", missing, { create: true });
@@ -120,11 +116,11 @@ describe("Money data against the demo pod", () => {
     const { client, store } = setup();
     const a = await account(client);
     const loaded = await store.read("accounts/current.ttl");
-    const balance = loaded.document.balances()[0]!;
+    const balance = must(loaded.document.balances()[0]);
     const { asOf: _asOf, ...undated } = balance;
     putBalance(loaded.document, undated);
     await store.write(loaded.url, loaded.document, loaded.condition);
-    expect((await accounts.listAccounts(client, today))[0]!.asOf).toBe("0001-01-01");
+    expect(must((await accounts.listAccounts(client, today))[0]).asOf).toBe("0001-01-01");
     await ledger.addTransaction(client, "foreign", {
       account: a.id,
       postingTime: today,
@@ -137,7 +133,7 @@ describe("Money data against the demo pod", () => {
   it("loads every shard, keeps balances through filters, edits and explicitly moves months", async () => {
     const { client, store } = setup();
     const a = await account(client);
-    const cat = store.resolve("categories.ttl") + "#food";
+    const cat = `${store.resolve("categories.ttl")}#food`;
     const first = await add(client, a.id, "first", "-10", "2026-09-01", cat);
     const second = await add(client, a.id, "second", "20", "2026-10-01");
     await add(client, a.id, "third", "-5", "2026-10-02", cat);
@@ -146,11 +142,13 @@ describe("Money data against the demo pod", () => {
     const rows = await ledger.loadLedger(client, summary, range);
     expect(rows.map((r) => r.runningBalance)).toEqual(["990", "1010", "1005"]);
     expect(
-      ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
-        category: cat,
-        sign: "out",
-        query: "THIRD",
-      })[0]!.runningBalance,
+      must(
+        ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
+          category: cat,
+          sign: "out",
+          query: "THIRD",
+        })[0],
+      ).runningBalance,
     ).toBe("1005");
     expect(
       ledger.ledgerRows(summary, await ledger.allTransactions(client), range, {
@@ -165,10 +163,12 @@ describe("Money data against the demo pod", () => {
         sign: "in",
       }),
     ).toHaveLength(0);
-    await expect(add(client, a.id, "first", "1", "2026-09-01")).rejects.toThrow("already exists");
+    await expect(add(client, a.id, "first", "1", "2026-09-01")).rejects.toMatchObject({
+      status: 412,
+    });
     await ledger.updateTransaction(client, first, { ...first, description: "updated" });
     await expect(
-      ledger.updateTransaction(client, first, { ...first, id: first.id + "x" }),
+      ledger.updateTransaction(client, first, { ...first, id: `${first.id}x` }),
     ).rejects.toThrow("cannot change");
     const moved = await ledger.updateTransaction(client, second, {
       ...second,
@@ -187,7 +187,7 @@ describe("Money data against the demo pod", () => {
     await add(client, a.id, "after", "-3", "2026-10-02");
     const loaded = await store.read("accounts/current.ttl");
     putBalance(loaded.document, {
-      id: loaded.url + "#latest",
+      id: `${loaded.url}#latest`,
       account: a.id,
       amount: "1200",
       currency: "GBP",
@@ -207,7 +207,7 @@ describe("Money data against the demo pod", () => {
     const a = await account(client);
     const loaded = await store.read("accounts/current.ttl");
     putBalance(loaded.document, {
-      id: loaded.url + "#latest",
+      id: `${loaded.url}#latest`,
       account: a.id,
       amount: "1000",
       currency: "GBP",
@@ -235,7 +235,7 @@ describe("Money data against the demo pod", () => {
       if (init?.method === "PUT") calls.push(String(input));
       return client.fetch(input, init);
     };
-    const category = store.resolve("categories.ttl") + "#a";
+    const category = `${store.resolve("categories.ttl")}#a`;
     await ledger.bulkCategorise({ ...client, fetch }, [x.id, y.id, z.id], category);
     expect(calls).toHaveLength(2);
     await ledger.bulkCategorise(client, [x.id]);
@@ -253,18 +253,20 @@ describe("Money data against the demo pod", () => {
     expect(pair.map((r) => r.amount)).toEqual(["-50", "50"]);
     expect(await ledger.loadLedger(client, from, range)).toHaveLength(4);
     expect(await ledger.loadLedger(client, to, range)).toHaveLength(1);
-    await expect(ledger.updateTransaction(client, pair[0]!, pair[0]!)).rejects.toThrow("together");
+    await expect(ledger.updateTransaction(client, must(pair[0]), must(pair[0]))).rejects.toThrow(
+      "together",
+    );
     await expect(
       ledger.updateTransaction(
         client,
-        (({ debitAccount: _debitAccount, ...rest }) => rest)(pair[0]!),
-        pair[0]!,
+        (({ debitAccount: _debitAccount, ...rest }) => rest)(must(pair[0])),
+        must(pair[0]),
       ),
     ).rejects.toThrow("together");
-    await expect(ledger.bulkCategorise(client, [pair[0]!.id], category)).rejects.toThrow(
+    await expect(ledger.bulkCategorise(client, [must(pair[0]).id], category)).rejects.toThrow(
       "together",
     );
-    await expect(ledger.deleteTransaction(client, pair[0]!)).rejects.toThrow("together");
+    await expect(ledger.deleteTransaction(client, must(pair[0]))).rejects.toThrow("together");
     await expect(
       ledger.createTransfer(client, "foreign", from, { ...to, currency: "USD" }, today, "2"),
     ).rejects.toThrow("same currency");
@@ -275,9 +277,9 @@ describe("Money data against the demo pod", () => {
     await provision(client);
     expect(await categories.loadCategories(client)).toEqual({ categories: [], upgraded: false });
     const url = store.resolve("categories.ttl");
-    const food = { id: url + "#food", label: "Food" };
-    const child = { id: url + "#child", label: "Groceries", parent: food.id };
-    const other = { id: url + "#other", label: "Other" };
+    const food = { id: `${url}#food`, label: "Food" };
+    const child = { id: `${url}#child`, label: "Groceries", parent: food.id };
+    const other = { id: `${url}#other`, label: "Other" };
     const { namedNode: nn, literal, quad } = DataFactory;
     const legacy = new MoneyDocument();
     legacy.dataset.add(quad(nn(food.id), nn(V.type), nn(`${NS.POD_MONEY}Category`)));
@@ -296,7 +298,7 @@ describe("Money data against the demo pod", () => {
     expect((await categories.loadCategories(client)).upgraded).toBe(true);
     const loaded = await store.read("categories.ttl");
     loaded.document.node(food.id).types.add(`${NS.SCHEMA}Thing`);
-    loaded.document.node(url + "#note").description = "Preserve me";
+    loaded.document.node(`${url}#note`).description = "Preserve me";
     await store.write(url, loaded.document, loaded.condition);
     await categories.saveCategories(client, () => [
       food,
@@ -314,11 +316,11 @@ describe("Money data against the demo pod", () => {
     await expect(categories.deleteCategory(client, food.id, food.id)).rejects.toThrow("another");
     await expect(categories.deleteCategory(client, food.id, "missing")).rejects.toThrow("another");
     await categories.deleteCategory(client, food.id, other.id);
-    expect((await ledger.allTransactions(client))[0]!.category).toBe(other.id);
+    expect(must((await ledger.allTransactions(client))[0]).category).toBe(other.id);
     expect(
       (await categories.loadCategories(client)).categories.find((c) => c.id === child.id)?.parent,
     ).toBeUndefined();
-    expect((await store.read("categories.ttl")).document.node(url + "#note").description).toBe(
+    expect((await store.read("categories.ttl")).document.node(`${url}#note`).description).toBe(
       "Preserve me",
     );
     await categories.deleteCategory(client, child.id);
@@ -390,12 +392,12 @@ describe("Money data against the demo pod", () => {
     const text =
       "Date,Payee,Amount\n2026-10-20,Shop,-10\n2026-10-21,Other purchase,-3\n2026-11-01,Salary,20\n2026-11-01,Salary,20";
     const options = imports.suggestMapping(text).options;
-    const cat = store.resolve("categories.ttl") + "#income";
+    const cat = `${store.resolve("categories.ttl")}#income`;
     const preview = await imports.previewImport(client, a.id, "GBP", text, "csv", options, [
       { category: cat, description: { match: "contains", value: "Salary" } },
     ]);
     expect(preview.map((row) => row.duplicate)).toEqual([true, false, false, true]);
-    expect(preview[2]!.category).toBe(cat);
+    expect(must(preview[2]).category).toBe(cat);
     const progress = vi.fn();
     const result = await imports.commitImport(
       client,
@@ -523,7 +525,7 @@ describe("Money data against the demo pod", () => {
       },
     };
     await expect(
-      ledger.bulkCategorise(noEtag, [(await ledger.allTransactions(client))[0]!.id]),
+      ledger.bulkCategorise(noEtag, [must((await ledger.allTransactions(client))[0]).id]),
     ).rejects.toThrow("strong ETag");
     await expect(ledger.allTransactions({ ...client, fetch: fail(403) })).rejects.toMatchObject({
       status: 403,
@@ -535,24 +537,24 @@ describe("Money data against the demo pod", () => {
     await account(client, "usd", "USD");
     const cat = store.resolve("categories.ttl");
     const cats = [
-      { id: cat + "#food", label: "Food" },
-      { id: cat + "#child", label: "Shop", parent: cat + "#food" },
-      { id: cat + "#income", label: "Income" },
-      { id: cat + "#salary", label: "Salary", parent: cat + "#income" },
+      { id: `${cat}#food`, label: "Food" },
+      { id: `${cat}#child`, label: "Shop", parent: `${cat}#food` },
+      { id: `${cat}#income`, label: "Income" },
+      { id: `${cat}#salary`, label: "Salary", parent: `${cat}#income` },
     ];
     await categories.saveCategories(client, () => cats);
-    await add(client, a.id, "purchase", "-12", today, cats[1]!.id);
-    await add(client, a.id, "refund", "2", today, cats[1]!.id);
-    await add(client, a.id, "income", "100", today, cats[3]!.id);
+    await add(client, a.id, "purchase", "-12", today, must(cats[1]).id);
+    await add(client, a.id, "refund", "2", today, must(cats[1]).id);
+    await add(client, a.id, "income", "100", today, must(cats[3]).id);
     await add(client, a.id, "unknown income", "10", today);
     await add(client, a.id, "unknown expense", "-1", today);
     await add(client, a.id, "future", "-10", "2027-01-01");
-    const current = (await accounts.listAccounts(client, today))[0]!;
+    const current = must((await accounts.listAccounts(client, today))[0]);
     await ledger.createTransfer(
       client,
       "pair",
       current,
-      { ...current, id: store.resolve("accounts/other.ttl") + "#a" },
+      { ...current, id: `${store.resolve("accounts/other.ttl")}#a` },
       today,
       "30",
     );

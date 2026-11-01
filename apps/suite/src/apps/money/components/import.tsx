@@ -4,7 +4,7 @@ import { Button, DropZoneOverlay, LoadingSkeleton } from "@jeswr/suite-ui";
 import { Check, FileUp } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import {
   commitImport,
@@ -40,13 +40,46 @@ export function ImportScreen() {
   const [count, setCount] = useState(0);
   const [recover, setRecover] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const generation = useRef(0);
+  const reviewed = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      generation.current++;
+    },
+    [],
+  );
+  const invalidate = () => {
+    generation.current++;
+    reviewed.current = null;
+    setRows([]);
+    setRecover(false);
+    setError("");
+    setBusy(false);
+  };
+  const chooseAccount = (id: string) => {
+    invalidate();
+    setAccountId(id);
+  };
+  const changeOptions = (next: CsvOptions) => {
+    invalidate();
+    setOptions(next);
+  };
+  const back = (next: Step) => {
+    invalidate();
+    setStep(next);
+  };
   const readFile = async (chosen?: File) => {
     if (!chosen) return;
-    setError("");
+    invalidate();
+    const request = generation.current;
+    setStep("choose");
+    setFile(undefined);
+    setMapping(undefined);
     setBusy(true);
     try {
       if (chosen.size > 10485760) throw new Error("Choose a statement smaller than 10 MiB.");
       const text = await chosen.text();
+      if (request !== generation.current) return;
       const format = detectFormat(chosen.name, text);
       setRecover(false);
       setFile({ name: chosen.name, text, format });
@@ -57,15 +90,17 @@ export function ImportScreen() {
         setBalanceColumn(suggested.balanceColumn >= 0 ? String(suggested.balanceColumn) : "none");
       }
     } catch (failure) {
+      if (request !== generation.current) return;
       setFile(undefined);
       setError(failure instanceof Error ? failure.message : "Couldn't read this statement");
     } finally {
-      setBusy(false);
+      if (request === generation.current) setBusy(false);
     }
   };
   const preview = async () => {
     if (!account || !file) return;
-    setError("");
+    invalidate();
+    const request = generation.current;
     setBusy(true);
     try {
       const rules = money.categories
@@ -83,18 +118,22 @@ export function ImportScreen() {
         options,
         rules,
       );
+      if (request !== generation.current) return;
       const status = await importStatus(money.session, file.text);
+      if (request !== generation.current) return;
       if (status === "completed")
         throw new Error("This statement has already been imported. Open the ledger to review it.");
       setRecover(status === "pending");
       if (!result.length)
         throw new Error("This statement has no transactions. Choose another file.");
       setRows(result);
+      reviewed.current = request;
       setStep("preview");
     } catch (failure) {
+      if (request !== generation.current) return;
       setError(failure instanceof Error ? failure.message : "Couldn't parse this statement");
     } finally {
-      setBusy(false);
+      if (request === generation.current) setBusy(false);
     }
   };
   const active = ["choose", "map", "preview", "import", "done"].indexOf(step);
@@ -114,7 +153,7 @@ export function ImportScreen() {
       delete columns.credit;
     }
     if ((key === "debit" || key === "credit") && value !== "none") delete columns.amount;
-    setOptions({ ...options, columns });
+    changeOptions({ ...options, columns });
   };
   return (
     <>
@@ -156,7 +195,7 @@ export function ImportScreen() {
               <MoneySelect
                 label="Import into account"
                 value={accountId}
-                onChange={setAccountId}
+                onChange={chooseAccount}
                 options={money.accounts.map((a) => ({
                   value: a.id,
                   label: `${a.label} · ${a.currency}`,
@@ -221,7 +260,7 @@ export function ImportScreen() {
               <input
                 type="checkbox"
                 checked={options.hasHeader !== false}
-                onChange={(e) => setOptions({ ...options, hasHeader: e.target.checked })}
+                onChange={(e) => changeOptions({ ...options, hasHeader: e.target.checked })}
               />
               First row contains column names
             </label>
@@ -251,14 +290,17 @@ export function ImportScreen() {
               <MoneySelect
                 label="Balance column (optional)"
                 value={balanceColumn}
-                onChange={setBalanceColumn}
+                onChange={(value) => {
+                  invalidate();
+                  setBalanceColumn(value);
+                }}
                 options={columnOptions(true)}
               />
               <MoneySelect
                 label="Date format"
                 value={options.dateFormat ?? "auto"}
                 onChange={(value) =>
-                  setOptions({
+                  changeOptions({
                     ...(({ dateFormat: _dateFormat, ...rest }) => rest)(options),
                     ...(value === "auto" ? {} : { dateFormat: value as DateFormat }),
                   })
@@ -274,7 +316,7 @@ export function ImportScreen() {
                 label="Decimal separator"
                 value={options.decimalSeparator ?? "."}
                 onChange={(value) =>
-                  setOptions({ ...options, decimalSeparator: value as "." | "," })
+                  changeOptions({ ...options, decimalSeparator: value as "." | "," })
                 }
                 options={[
                   { value: ".", label: "Point (12.50)" },
@@ -319,7 +361,7 @@ export function ImportScreen() {
               </tbody>
             </table>
             <div className="mon-wizard-actions">
-              <Button variant="outline" onClick={() => setStep("choose")}>
+              <Button variant="outline" onClick={() => back("choose")}>
                 Back
               </Button>
               <Button onClick={() => void preview()} disabled={busy}>
@@ -415,14 +457,14 @@ export function ImportScreen() {
             <div className="mon-wizard-actions">
               <Button
                 variant="outline"
-                onClick={() => setStep(file?.format === "csv" ? "map" : "choose")}
+                onClick={() => back(file?.format === "csv" ? "map" : "choose")}
               >
                 Back
               </Button>
               <Button
                 disabled={(!recover && !rows.some((row) => row.include)) || money.saving}
                 onClick={async () => {
-                  if (!file || !account) return;
+                  if (!file || !account || reviewed.current !== generation.current) return;
                   setStep("import");
                   setError("");
                   const saved = await money.mutate(async () => {
@@ -484,7 +526,7 @@ export function ImportScreen() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setStep("choose");
+                  back("choose");
                   setFile(undefined);
                   setRows([]);
                 }}
@@ -495,7 +537,7 @@ export function ImportScreen() {
           </div>
         )}
       </section>
-      <AccountDialog open={add} onOpenChange={setAdd} onCreated={setAccountId} />
+      <AccountDialog open={add} onOpenChange={setAdd} onCreated={chooseAccount} />
     </>
   );
 }

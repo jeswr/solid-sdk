@@ -1,5 +1,13 @@
 // AUTHORED-BY Codex GPT-6
-import { addAmounts, type Balance, MoneyDocument, putAccount, putBalance } from "../model";
+import {
+  addAmounts,
+  type Balance,
+  instant,
+  MoneyDocument,
+  MoneyIoError,
+  putAccount,
+  putBalance,
+} from "../model";
 import { parseMoney } from "../reports";
 import { type MoneyClient, provision, storeOf } from "./container";
 import { allTransactions } from "./ledger";
@@ -68,15 +76,28 @@ export async function createAccount(
     account: account.id,
     amount: input.openingBalance,
     currency: input.currency,
-    asOf: input.date,
+    asOf: new Date(instant(input.date) - 1).toISOString(),
   });
   await provision(client);
+  const existing = await store.read(url);
+  if (existing.exists) {
+    const saved = existing.document.accounts().find((row) => row.id === account.id);
+    const opening = existing.document.balances().find((row) => row.id === `${url}#opening`);
+    if (
+      saved?.label !== account.label ||
+      existing.document.node(account.id).description !== input.type ||
+      JSON.stringify(opening) !== JSON.stringify(document.balances()[0])
+    )
+      throw new MoneyIoError(412);
+    return saved;
+  }
   await store.write(url, document, { create: true });
   return account;
 }
 export async function renameAccount(client: MoneyClient, id: string, label: string) {
   const store = storeOf(client);
   const loaded = await store.read(id.slice(0, id.indexOf("#")));
+  if (!loaded.document.accounts().some((row) => row.id === id)) throw new MoneyIoError(412);
   putAccount(loaded.document, { id, label });
   await store.write(loaded.url, loaded.document, loaded.condition);
 }

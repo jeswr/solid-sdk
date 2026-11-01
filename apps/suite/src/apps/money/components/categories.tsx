@@ -118,26 +118,29 @@ export function CategoriesScreen() {
         }}
       >
         <div className="mon-tree-row">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!node.children.length}
-            aria-label={`${collapsed.has(node.id) ? "Expand" : "Collapse"} ${node.label}`}
-            onClick={() =>
-              setCollapsed((current) => {
-                const next = new Set(current);
-                if (next.has(node.id)) next.delete(node.id);
-                else next.add(node.id);
-                return next;
-              })
-            }
-          >
-            {collapsed.has(node.id) ? (
-              <ChevronRight aria-hidden="true" size={16} />
-            ) : (
-              <ChevronDown aria-hidden="true" size={16} />
-            )}
-          </Button>
+          {node.children.length ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`${collapsed.has(node.id) ? "Expand" : "Collapse"} ${node.label}`}
+              onClick={() =>
+                setCollapsed((current) => {
+                  const next = new Set(current);
+                  if (next.has(node.id)) next.delete(node.id);
+                  else next.add(node.id);
+                  return next;
+                })
+              }
+            >
+              {collapsed.has(node.id) ? (
+                <ChevronRight aria-hidden="true" size={16} />
+              ) : (
+                <ChevronDown aria-hidden="true" size={16} />
+              )}
+            </Button>
+          ) : (
+            <span className="mon-tree-spacer" aria-hidden="true" />
+          )}
           <div className="mon-tree-name" data-rename>
             <EditableText
               label={`Rename ${node.label}`}
@@ -177,7 +180,9 @@ export function CategoriesScreen() {
           </div>
         </div>
         {node.children.length > 0 && (
-          <fieldset hidden={collapsed.has(node.id)}>{render(node.children, level + 1)}</fieldset>
+          <fieldset className="mon-tree-children" hidden={collapsed.has(node.id)}>
+            {render(node.children, level + 1)}
+          </fieldset>
         )}
       </div>
     ));
@@ -239,11 +244,13 @@ export function CategoriesScreen() {
             setError("");
             if (!dialog) return;
             if (dialog.kind === "delete") {
+              const id = dialog.id;
+              if (!id) return;
               if (
                 await money.mutate(() =>
                   deleteCategory(
                     money.session,
-                    dialog.id!,
+                    id,
                     replacement === "none" ? undefined : replacement,
                   ),
                 )

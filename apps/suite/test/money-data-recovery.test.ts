@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+
 import { describe, expect, it, vi } from "vitest";
 import { createAccount } from "../src/apps/money/lib/data/accounts";
 import {
@@ -24,6 +25,7 @@ import {
 } from "../src/apps/money/lib/data/ledger";
 import { putTransaction, type Transaction } from "../src/apps/money/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { must } from "./money/helpers";
 
 async function setup() {
   const pod = createDemoPod({ root: "https://recovery.example/", latency: 0 });
@@ -74,7 +76,7 @@ describe("Money conditional edits and recovery", () => {
     await expect(updateTransaction(client, row, movedValue(row))).rejects.toMatchObject({
       status: 412,
     });
-    await deleteTransaction(client, row);
+    await deleteTransaction(client, must((await allTransactions(client))[0]));
     await expect(updateTransaction(client, row, row)).rejects.toMatchObject({ status: 412 });
     await expect(updateTransaction(client, row, movedValue(row))).rejects.toMatchObject({
       status: 412,
@@ -88,7 +90,7 @@ describe("Money conditional edits and recovery", () => {
     expect((await allTransactions(client)).find((r) => r.id === other.id)?.amount).toBe("7");
     const displayed = { ...row, description: "Updated", runningBalance: "497" };
     await updateTransaction(client, displayed, { ...displayed, description: "From ledger" });
-    const current = (await allTransactions(client)).find((r) => r.id === row.id)!;
+    const current = must((await allTransactions(client)).find((r) => r.id === row.id));
     let once = true;
     const racing = intercept(client, async (url, init) => {
       if (once && init?.method === "PUT") {
@@ -200,9 +202,9 @@ describe("Money conditional edits and recovery", () => {
   it("mutates categories in one loaded document and detects changes during delete recategorisation", async () => {
     const { client, store, row } = await setup();
     const base = store.resolve("categories.ttl");
-    const food = { id: base + "#food", label: "Food" };
-    const other = { id: base + "#other", label: "Other" };
-    const added = { id: base + "#added", label: "Concurrent" };
+    const food = { id: `${base}#food`, label: "Food" };
+    const other = { id: `${base}#other`, label: "Other" };
+    const added = { id: `${base}#added`, label: "Concurrent" };
     await saveCategories(client, () => [food, other]);
     // The UI's stale tree need never be written back: the intended rename operates on the current tree.
     await saveCategories(client, (current) => [...current, added]);
@@ -216,7 +218,7 @@ describe("Money conditional edits and recovery", () => {
         once = false;
         await saveCategories(client, (current) => [
           ...current,
-          { id: base + "#race", label: "Race" },
+          { id: `${base}#race`, label: "Race" },
         ]);
       }
     });
@@ -235,7 +237,7 @@ describe("Money conditional edits and recovery", () => {
         once = false;
         await saveCategories(client, (current) => [
           ...current,
-          { id: base + "#during", label: "During delete" },
+          { id: `${base}#during`, label: "During delete" },
         ]);
       }
     });

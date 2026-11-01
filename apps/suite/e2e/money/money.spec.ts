@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
+
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { must } from "../../test/money/helpers";
 
 const fixture = fileURLToPath(new URL("./fixtures/statement.csv", import.meta.url));
 test.use({ locale: "en-GB" });
@@ -47,15 +49,15 @@ async function shot(page: Page, info: TestInfo, name: string) {
 async function dialogFits(page: Page) {
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  const bounds = await dialog.boundingBox();
-  const width = page.viewportSize()!.width;
-  expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+  const bounds = must(await dialog.boundingBox());
+  const width = must(page.viewportSize()).width;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(width + 1);
   for (const control of await dialog.locator("input, button, [role=combobox]").all()) {
     if (!(await control.isVisible())) continue;
-    const box = await control.boundingBox();
-    expect(box!.x).toBeGreaterThanOrEqual(bounds!.x);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width + 1);
+    const box = must(await control.boundingBox());
+    expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
   }
 }
 async function addAccount(page: Page, name: string) {
@@ -88,7 +90,7 @@ test("import, inline and bulk categorisation, overview, category moves and paire
     .trim()
     .split("\n")
     .slice(1)
-    .reduce((sum, line) => sum + BigInt(line.split(",")[2]!) * BigInt(100), BigInt(0));
+    .reduce((sum, line) => sum + BigInt(must(line.split(",")[2])) * BigInt(100), BigInt(0));
   const expectedWorth = new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "GBP",
@@ -114,9 +116,9 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   await previewRegion.focus();
   await expect(previewRegion).toBeFocused();
   if (info.project.name.startsWith("375")) {
-    const bounds = await previewRegion.boundingBox();
-    expect(bounds!.width).toBeLessThan(375);
-    expect(bounds!.height).toBeLessThanOrEqual(521);
+    const bounds = must(await previewRegion.boundingBox());
+    expect(bounds.width).toBeLessThan(375);
+    expect(bounds.height).toBeLessThanOrEqual(521);
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2200);
   }
   await shot(page, info, "import-preview");
@@ -138,6 +140,24 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   if (info.project.name.startsWith("375")) {
     await expect(page.locator(".mon-ledger-card")).toHaveCount(100);
     await expect(page.locator(".mon-desktop")).toBeHidden();
+    const dimensions = await page.evaluate(() => {
+      const main = document.getElementById("main-content");
+      if (!main) throw new Error("Expected the ledger's scroll container");
+      const viewport = main.getBoundingClientRect();
+      const cards = Array.from(document.querySelectorAll(".mon-ledger-card"));
+      const last = cards
+        .filter((card) => {
+          const bounds = card.getBoundingClientRect();
+          return bounds.top < viewport.bottom && bounds.bottom > viewport.top;
+        })
+        .at(-1);
+      if (!last) throw new Error("Expected a visible transaction card");
+      return {
+        height: document.documentElement.scrollHeight,
+        lastBottom: last.getBoundingClientRect().bottom + window.scrollY,
+      };
+    });
+    expect(dimensions.height, JSON.stringify(dimensions)).toBeLessThan(dimensions.lastBottom * 1.3);
   }
   for (const name of ["Merchant 100", "Merchant 099", "Merchant 098"]) {
     await choose(page, `Category for ${name}`, "Groceries");
@@ -214,6 +234,12 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   await rename.fill("Journeys");
   await rename.press("Enter");
   await expect(page.getByRole("treeitem", { name: /^Journeys,/ })).toBeVisible();
+  const child = page.getByRole("treeitem", { name: /^Journeys,/ });
+  expect(must(await child.locator(".mon-tree-row").boundingBox()).x).toBeGreaterThan(
+    must(await fun.locator(":scope > .mon-tree-row").boundingBox()).x + 20,
+  );
+  await expect(child.locator(".suite-editable")).toHaveCSS("border-top-width", "0px");
+  await expect(child.getByRole("button", { name: /^(Expand|Collapse)/ })).toHaveCount(0);
   await shot(page, info, "categories");
 });
 test("transaction entry, searching, validation and refusing a transfer leg", async ({ page }) => {

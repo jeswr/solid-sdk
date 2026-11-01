@@ -20,7 +20,7 @@ import {
 } from "../model";
 import { parseMoney } from "../reports";
 import { type MoneyClient, storeOf } from "./container";
-import { allTransactions, categorised } from "./ledger";
+import { allTransactions, categorised, transactionKey } from "./ledger";
 export function detectFormat(name: string, text: string): "csv" | "ofx" {
   if (/\.pdf$/i.test(name) || text.startsWith("%PDF"))
     throw new Error("PDF statements are not supported yet. Export CSV or OFX from your bank.");
@@ -69,7 +69,10 @@ export function suggestMapping(text: string) {
 export function statementId(text: string) {
   let hash = BigInt("14695981039346656037");
   for (const character of text)
-    hash = BigInt.asUintN(64, (hash ^ BigInt(character.codePointAt(0)!)) * BigInt("1099511628211"));
+    hash = BigInt.asUintN(
+      64,
+      (hash ^ BigInt(character.codePointAt(0) as number)) * BigInt("1099511628211"),
+    );
   return `statement-${hash.toString(16)}`;
 }
 export interface PreviewRow {
@@ -209,11 +212,16 @@ export async function commitImport(
           shards.set(month, group);
         }
         const saved: string[] = [];
+        const persisted = new Set(
+          (await allTransactions(client)).map((row) => transactionKey(row.id)),
+        );
         progress(0, shards.size);
         for (const [month, rows] of shards) {
           const loaded = await store.read(`transactions/${month}.ttl`);
           const existing = new Set(loaded.document.transactions().map((row) => row.id));
-          const missing = rows.filter((row) => !existing.has(row.id));
+          const missing = rows.filter(
+            (row) => !existing.has(row.id) && !persisted.has(transactionKey(row.id)),
+          );
           // Recovery fills gaps only, preserving edits to rows saved by a previous attempt.
           if (missing.length) {
             for (const row of missing) putTransaction(loaded.document, row);
@@ -237,8 +245,8 @@ export async function commitImport(
     statement,
   );
   const transactions = checked.transactions.flatMap((row, index) => {
-    const entry = plan.selection[index]!;
-    return entry.include ? [categorised(row, entry.category)] : [];
+    const entry = plan.selection[index];
+    return entry?.include ? [categorised(row, entry.category)] : [];
   });
   return { ...checked, transactions, count: transactions.length };
 }

@@ -159,6 +159,7 @@ export function AccountDialog({
   onCreated?: (id: string) => void;
 }) {
   const money = useMoney();
+  const operation = useRef<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -177,8 +178,10 @@ export function AccountDialog({
     },
   });
   useEffect(() => {
-    if (open)
+    if (open) {
+      operation.current = null;
       reset({ name: "", type: "current", currency: "GBP", openingBalance: "0", date: money.today });
+    }
   }, [open, reset, money.today]);
   return (
     <Modal
@@ -190,9 +193,11 @@ export function AccountDialog({
       <form
         className="mon-form"
         onSubmit={handleSubmit(async (input) => {
+          operation.current ??= crypto.randomUUID();
+          const key = operation.current;
           let id = "";
           const saved = await money.mutate(async () => {
-            id = (await createAccount(money.session, crypto.randomUUID(), input)).id;
+            id = (await createAccount(money.session, key, input)).id;
           });
           if (saved) {
             onCreated?.(id);
@@ -285,6 +290,7 @@ export function TransactionDialog({
   transaction?: Transaction | undefined;
 }) {
   const money = useMoney();
+  const operation = useRef<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -294,7 +300,8 @@ export function TransactionDialog({
     formState: { errors, isSubmitting },
   } = useForm<z.infer<typeof transactionSchema>>({ resolver: zodResolver(transactionSchema) });
   useEffect(() => {
-    if (open)
+    if (open) {
+      operation.current = null;
       reset({
         date: transaction?.postingTime.slice(0, 10) ?? money.today,
         description: transaction?.description ?? "",
@@ -303,6 +310,7 @@ export function TransactionDialog({
         category: transaction?.category ?? "",
         note: "",
       });
+    }
   }, [open, transaction, reset, money.today]);
   const transfer = Boolean(transaction?.debitAccount || transaction?.creditAccount);
   return (
@@ -322,10 +330,15 @@ export function TransactionDialog({
         <form
           className="mon-form"
           onSubmit={handleSubmit(async (input) => {
+            operation.current ??= crypto.randomUUID();
+            const key = operation.current;
             const amount = input.direction === "out" ? `-${input.amount}` : input.amount;
             const value = {
               account: account.id,
-              postingTime: input.date,
+              postingTime:
+                transaction && input.date === transaction.postingTime.slice(0, 10)
+                  ? transaction.postingTime
+                  : input.date,
               description: input.note ? `${input.description}\n${input.note}` : input.description,
               amount,
               currency: account.currency,
@@ -339,7 +352,7 @@ export function TransactionDialog({
                       transaction,
                       categorised({ ...transaction, ...value }, input.category || undefined),
                     )
-                  : addTransaction(money.session, crypto.randomUUID(), value),
+                  : addTransaction(money.session, key, value),
               transaction
                 ? (snapshot) => ({
                     ...snapshot,
@@ -428,6 +441,7 @@ export function TransferDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const money = useMoney();
+  const operation = useRef<string | null>(null);
   const eligible = money.accounts.filter(
     (a) => a.id !== account.id && a.currency === account.currency,
   );
@@ -443,7 +457,10 @@ export function TransferDialog({
     defaultValues: { to: "", amount: "", date: money.today },
   });
   useEffect(() => {
-    if (open) reset({ to: "", amount: "", date: money.today });
+    if (open) {
+      operation.current = null;
+      reset({ to: "", amount: "", date: money.today });
+    }
   }, [open, reset, money.today]);
   return (
     <Modal
@@ -457,16 +474,11 @@ export function TransferDialog({
         onSubmit={handleSubmit(async (input) => {
           const to = eligible.find((a) => a.id === input.to);
           if (!to) return;
+          operation.current ??= crypto.randomUUID();
+          const key = operation.current;
           if (
             await money.mutate(() =>
-              createTransfer(
-                money.session,
-                crypto.randomUUID(),
-                account,
-                to,
-                input.date,
-                input.amount,
-              ),
+              createTransfer(money.session, key, account, to, input.date, input.amount),
             )
           )
             onOpenChange(false);

@@ -4,7 +4,9 @@ import { DataFactory } from "n3";
 import {
   addAmounts,
   conditionalHeaders,
+  MoneyDocument,
   MoneyIoError,
+  createTransfer as modelTransfer,
   monthKey,
   type Precondition,
   putTransaction,
@@ -82,6 +84,14 @@ export async function addTransaction(
   const store = storeOf(client);
   parseMoney(value.currency, value.amount);
   const row = { ...value, id: store.transactionId(key, value.postingTime) };
+  validateTransaction(row);
+  const persisted = (await allTransactions(client)).find(
+    (existing) => transactionKey(existing.id) === key,
+  );
+  if (persisted) {
+    if (!sameTransaction(persisted, row)) throw new MoneyIoError(412);
+    return persisted;
+  }
   const shard = await store.read(`transactions/${monthKey(value.postingTime)}.ttl`);
   if (shard.document.transactions().some((existing) => existing.id === row.id))
     throw new Error("This transaction already exists");
@@ -113,7 +123,7 @@ export async function updateTransaction(
   if (current && !sameTransaction(current, original)) throw new MoneyIoError(412);
   if (!current && !moving) throw new MoneyIoError(412);
   if (moving) {
-    const destination = await store.read(moved.id.split("#")[0]!);
+    const destination = await store.read(moved.id.slice(0, moved.id.indexOf("#")));
     const existing = destination.document.transactions().find((row) => row.id === moved.id);
     if (existing && !sameTransaction(existing, moved)) throw new MoneyIoError(412);
     // An identical destination is a previous partially completed attempt. Never overwrite it.
@@ -156,22 +166,20 @@ function sameTransaction(left: Transaction, right: Transaction) {
     ] as const
   ).every((key) => left[key] === right[key]);
 }
-/** Reuse the model's RDF deletion, pinned to the source version checked before creating the destination. */
+/** Reuse the model's RDF deletion, pinned to the document version whose transaction we checked. */
 async function deleteAtVersion(client: MoneyClient, row: Transaction, condition: Precondition) {
   const headers = conditionalHeaders(condition);
-  return deleteTransaction(
-    {
-      ...client,
-      fetch: (input, init) =>
-        client.fetch(
-          input,
-          init?.method === "PUT"
-            ? { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), ...headers } }
-            : init,
-        ),
-    },
-    row,
-  );
+  const store = storeOf({
+    ...client,
+    fetch: (input, init) =>
+      client.fetch(
+        input,
+        init?.method === "PUT"
+          ? { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), ...headers } }
+          : init,
+      ),
+  });
+  return store.deleteTransaction(transactionKey(row.id), row.postingTime);
 }
 export async function bulkCategorise(
   client: MoneyClient,
@@ -200,7 +208,14 @@ export async function bulkCategorise(
   return saved;
 }
 export async function deleteTransaction(client: MoneyClient, row: Transaction) {
-  return storeOf(client).deleteTransaction(row.id.slice(row.id.indexOf("#") + 1), row.postingTime);
+  const loaded = await storeOf(client).read(row.id.slice(0, row.id.indexOf("#")));
+  const current = loaded.document.transactions().find((value) => value.id === row.id);
+  if (!current || !sameTransaction(current, row)) throw new MoneyIoError(412);
+  return deleteAtVersion(client, row, loaded.condition);
+}
+/** The fragment remains stable when a transaction is explicitly moved to another month. */
+export function transactionKey(id: string) {
+  return id.slice(id.indexOf("#") + 1);
 }
 export async function createTransfer(
   client: MoneyClient,
@@ -213,7 +228,28 @@ export async function createTransfer(
   parseMoney(from.currency, amount);
   if (from.currency !== to.currency)
     throw new Error("Transfers require accounts with the same currency");
-  return storeOf(client).transfer(key, from.id, to.id, date, { amount, currency: from.currency });
+  const store = storeOf(client);
+  // Use the model to validate and construct both expected legs, without issuing a write.
+  const expected = modelTransfer(
+    new MoneyDocument(),
+    store.transactionId(key, date),
+    from.id,
+    to.id,
+    date,
+    {
+      amount,
+      currency: from.currency,
+    },
+  );
+  const persisted = (await allTransactions(client)).filter((row) =>
+    expected.some((leg) => transactionKey(leg.id) === transactionKey(row.id)),
+  );
+  if (persisted.length) {
+    if (!expected.every((leg) => persisted.some((row) => sameTransaction(row, leg))))
+      throw new MoneyIoError(412);
+    return persisted;
+  }
+  return store.transfer(key, from.id, to.id, date, { amount, currency: from.currency });
 }
 
 /** Remove absent optional fields rather than persisting an undefined value. */
