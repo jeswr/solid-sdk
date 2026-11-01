@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# This file applies to the repository-root build context for this Containerfile.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!turbo.json
+!tsconfig.base.json
+!packages/
+!packages/**
+!apps/
+!apps/agent-daemon/
+!apps/agent-daemon/**
+**/node_modules
+**/dist
+**/.git
+**/.turbo
+**/coverage
+**/.env*
+**/*.pem
+**/*.key
+**/credentials
+**/grants
+**/providers/*.json

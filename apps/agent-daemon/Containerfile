@@ -1,0 +1,31 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Build from the workspace root: docker build -f apps/agent-daemon/Containerfile .
+FROM node:24-bookworm-slim AS build
+WORKDIR /workspace
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/agent-daemon/ apps/agent-daemon/
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @jeswr/app-agent-daemon...
+RUN pnpm exec turbo run build --filter=@jeswr/app-agent-daemon
+RUN pnpm --filter @jeswr/app-agent-daemon deploy --legacy --prod --frozen-lockfile --ignore-scripts /out
+
+FROM gcr.io/distroless/nodejs24-debian13:nonroot AS runtime
+WORKDIR /app
+ENV NODE_ENV=production AGENT_ENVIRONMENT=dev AGENT_A2A_ENABLED=true AGENT_A2A_PORT=8080
+ENV AGENT_CREDENTIAL_DIR=/var/lib/jeswr-agent
+COPY --from=build --chown=65532:65532 /out/ /app/
+USER 65532:65532
+EXPOSE 8080
+# A derived image bakes a trusted preload and adds --import /app/host/compose.mjs.
+# An unconfigured image fails closed, just like the local awp executable.
+CMD ["/app/bin/awp-cloud.mjs"]
+
+# CI-only target: exercise A-012's private CSS / signed approval / send / halt flow
+# on the same distroless Node runtime, with synthetic local fixtures and no Azure.
+FROM runtime AS css-test
+COPY --from=build --chown=65532:65532 /workspace/ /workspace/
+WORKDIR /workspace
+CMD ["node_modules/vitest/vitest.mjs", "run", "--root", "apps/agent-daemon", "test/css.test.ts", "test/cloud.test.ts"]
+
+FROM runtime AS final
