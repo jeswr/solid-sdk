@@ -1,9 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import rrule from "rrule/dist/es5/rrule.js";
-
-const { RRule } = rrule;
-
+import { RRule } from "rrule";
 import type { CalendarDate, CalendarEvent, RecurrenceRule } from "./types";
 import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";
 
@@ -55,11 +52,7 @@ export function fromWallClock(
   if (gap === "offset-before" && Number.isFinite(afterGap)) return new Date(afterGap);
   throw new TypeError("Local time does not exist in this timezone");
 }
-export function toRRule(
-  rule: RecurrenceRule,
-  start: CalendarDate,
-  timeZone = "UTC",
-): import("rrule").RRule {
+export function toRRule(rule: RecurrenceRule, start: CalendarDate, timeZone = "UTC"): RRule {
   validateRule(rule);
   const dtstart = typeof start === "string" ? asDate(start) : wallClock(asDate(start), timeZone);
   return new RRule({
