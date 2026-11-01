@@ -115,16 +115,20 @@ const doc = (body: string) => `@prefix book: <https://jeswr.org/ns/bookmark#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 <${RES}#it> a book:Bookmark ; ${body} .`;
 
-it("drops literals outside the profile's datatypes (language-tagged text, xsd:date)", async () => {
+it("carries literals outside the profile's datatypes like the hand-written package", async () => {
   const parsed = await parseBookmarkTtl(
     RES,
     doc(`schema:url <https://example.org/> ; dct:title "Hi"@en ; dct:description "D"@en-GB ;
       schema:keywords "t"@en, "kept" ; dct:created "2026-01-01"^^xsd:date`),
   );
-  expect(parsed?.url).toBe("https://example.org/");
-  expect(parsed?.title).toBeUndefined();
-  expect(parsed?.description).toBeUndefined();
-  expect(parsed?.created).toBeUndefined();
+  expect(parsed).toEqual({
+    url: "https://example.org/",
+    title: "Hi",
+    description: "D",
+    archived: false,
+    created: new Date("2026-01-01"),
+    tags: ["kept", "t"],
+  });
   expect(
     (
       await parseBookmarkTtl(
@@ -132,7 +136,37 @@ it("drops literals outside the profile's datatypes (language-tagged text, xsd:da
         doc(`schema:url <https://example.org/> ; dct:title "5"^^xsd:integer`),
       )
     )?.title,
-  ).toBeUndefined();
+  ).toBe("5");
+  // The same carry applies to the Store entry point and to lang-tagged legacy notes.
+  const store = await parseRdf(
+    doc(`schema:url <https://example.org/> ; <https://w3id.org/jeswr/bookmark#notes> "n"@en ;
+      dct:modified "not a date"`),
+    "text/turtle",
+    { baseIRI: RES },
+  );
+  const fromStore = parseBookmark(RES, store);
+  expect(fromStore?.notes).toBe("n");
+  expect(fromStore && "modified" in fromStore).toBe(false);
+});
+
+it("keeps unprofiled values through a plain-data edit of an unrelated field", async () => {
+  const original = doc(`schema:url <https://example.org/> ; dct:title "Hola"@es ;
+    dct:description "Resumen"@es ; schema:keywords "etiqueta"@es, "plain" ;
+    dct:created "2025-03-04"^^xsd:date`);
+  const parsed = await parseBookmarkTtl(RES, original);
+  if (!parsed) throw new Error("expected a bookmark");
+  const reparsed = await parseBookmarkTtl(
+    RES,
+    await serializeBookmark(RES, { ...parsed, archived: true }),
+  );
+  expect(reparsed).toEqual({
+    url: "https://example.org/",
+    title: "Hola",
+    description: "Resumen",
+    archived: true,
+    created: new Date("2025-03-04"),
+    tags: ["etiqueta", "plain"],
+  });
 });
 
 it("rejects a relative or unsafe resource URL instead of minting a relative subject", () => {
@@ -142,12 +176,12 @@ it("rejects a relative or unsafe resource URL instead of minting a relative subj
   );
 });
 
-it("fails closed on an uppercase-scheme URL and drops an ambiguous title", async () => {
+it("fails closed on an uppercase-scheme URL and reads the first of several titles", async () => {
   expect(await parseBookmarkTtl(RES, doc("schema:url <HTTPS://example.org/>"))).toBeUndefined();
   const parsed = await parseBookmarkTtl(
     RES,
     doc(`schema:url <https://example.org/> ; dct:title "a", "b"`),
   );
   expect(parsed?.url).toBe("https://example.org/");
-  expect(parsed?.title).toBeUndefined();
+  expect(parsed?.title).toBe("a");
 });

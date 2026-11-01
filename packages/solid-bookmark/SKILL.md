@@ -12,11 +12,12 @@ express: `#it` subjects, false archived defaults, creation timestamps, empty tex
 and trimmed/sorted tags. The generated manifest, JS/declarations, normalized shapes,
 and hashes live in `src/generated/`; never edit them directly.
 
-Reads follow the SHACL profile exactly. Language-tagged title/description/keywords, typed
-non-string titles and `xsd:date` created values are dropped, unlike the hand-written package,
-so a parse/serialize round-trip loses them (and re-stamps `created`). To edit third-party
-bookmarks losslessly, set individual fields through the `Bookmark` wrapper on the original
-Store. Relative resource URLs throw. README "Exact divergences" lists every case.
+`parseBookmark`/`parseBookmarkTtl` validate through the SHACL profile, then carry any field
+the profile omits (language-tagged or non-string text, an `xsd:date` created value, extra
+titles) using the hand-written package's read, so a parse → edit → serialize round-trip
+keeps those values. The `Bookmark` wrapper getters follow the profile exactly; set fields
+through it on the original Store to keep the original terms (language tags, datatypes)
+too. Relative resource URLs throw. README "Exact divergences" lists every case.
 
 From the workspace root, build the generator/dependencies, then regenerate:
 

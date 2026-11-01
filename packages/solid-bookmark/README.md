@@ -95,18 +95,24 @@ be bypassed by the facade, so those formerly permissive edge behaviors are not r
 
 Exact divergences from the hand-written package, pinned in `test/compatibility.test.ts`:
 
-- Literals outside the profile's datatypes are dropped on read: a language-tagged
-  `dct:title`, `dct:description` or `schema:keywords` (`rdf:langString` rather than
-  `xsd:string`), a typed title such as `"5"^^xsd:integer`, and an `xsd:date` `dct:created`.
-  The old package returned them. **A read-modify-write through `parseBookmark` and
-  `serializeBookmark` therefore loses those values, and a dropped `created` is re-stamped
-  with the current time.** Callers that must round-trip third-party data should edit the
-  Store through the `Bookmark` wrapper, which leaves unrelated triples in place.
+- The `Bookmark` wrapper getters follow the SHACL profile exactly, so they return
+  `undefined` for literals outside the profile's datatypes: a language-tagged `dct:title`,
+  `dct:description` or `schema:keywords`, a typed title such as `"5"^^xsd:integer`, or an
+  `xsd:date` `dct:created`. `parseBookmark` and `parseBookmarkTtl` still return those
+  values exactly as the old package did (first literal's text, dates parsed, every
+  keyword), so a plain-data parse → edit → serialize round-trip does not delete them or
+  re-stamp `created`. As before, `serializeBookmark` writes them back as plain strings and
+  `xsd:dateTime`; to keep the original language tags and datatypes, edit the Store through
+  the `Bookmark` wrapper, which leaves unrelated triples in place. Whether the profile
+  should widen is an open normative decision.
 - `bookmarkSubject` and `buildBookmark` throw `TypeError` for a relative or unsafe
   resource URL rather than minting a relative subject.
 - An uppercase-scheme `schema:url` (`HTTPS://…`) rejects the record (the SHACL pattern is
-  case-sensitive), and several `dct:title` values (or duplicate legacy notes) drop that field
-  rather than returning the first.
+  case-sensitive). The wrapper drops a field with several values (for example two
+  `dct:title`s); the plain-data parsers return the first, as before.
+- Data-graph subclasses count as bookmarks: a subject typed with a class that the same
+  dataset declares `rdfs:subClassOf book:Bookmark` is recognised (SHACL target semantics,
+  bounded at 10,000 reads). Field values are still read only from `${resourceUrl}#it`.
 
 Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this package uses
 `tsc` and its declarations reference the generated wrapper/runtime types. Publish the

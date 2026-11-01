@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /** Public bookmark API over the ontology/SHACL-generated model. */
+import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Literal } from "@rdfjs/types";
 import type { TermWrapper } from "@rdfjs/wrapper";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { type BookmarkData, type BookmarkWrapper, entities } from "./generated/model.js";
 import {
   BOOK_ARCHIVED,
@@ -13,6 +14,7 @@ import {
   DCT_DESCRIPTION,
   DCT_MODIFIED,
   DCT_TITLE,
+  LEGACY_BOOK_NS,
   PREFIXES,
   RDF_TYPE,
   SCHEMA_KEYWORDS,
@@ -111,9 +113,70 @@ function publicData(data: BookmarkData | undefined): BookmarkData | undefined {
   };
 }
 
+/** The literal objects of `subject predicate ?o`, in dataset order. */
+function literals(dataset: DatasetCore, subject: string, predicate: string): Literal[] {
+  const found: Literal[] = [];
+  for (const quad of dataset.match(
+    DataFactory.namedNode(subject),
+    DataFactory.namedNode(predicate),
+  )) {
+    if (quad.object.termType === "Literal") found.push(quad.object);
+  }
+  return found;
+}
+
+function firstText(
+  dataset: DatasetCore,
+  subject: string,
+  predicates: string[],
+): string | undefined {
+  for (const predicate of predicates) {
+    const [first] = literals(dataset, subject, predicate);
+    if (first !== undefined) return first.value;
+  }
+  return undefined;
+}
+
+function firstDate(dataset: DatasetCore, subject: string, predicate: string): Date | undefined {
+  const [first] = literals(dataset, subject, predicate);
+  if (first === undefined) return undefined;
+  const date = new Date(first.value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/**
+ * Keep values the SHACL profile does not admit (language-tagged or non-string text, an
+ * `xsd:date` created value, a second title) so a plain-data parse → edit → serialize
+ * round-trip never silently deletes them or re-stamps `created`. For a field the
+ * profile projection omits, this applies the hand-written package's read: the first
+ * literal's lexical value (dates parsed as before), and every literal keyword. Whether
+ * the profile itself should widen is a normative decision (sst-ild.7.7).
+ */
+function carryUnprofiled(
+  resourceUrl: string,
+  dataset: DatasetCore,
+  data: BookmarkData | undefined,
+): BookmarkData | undefined {
+  if (data === undefined) return undefined;
+  const subject = bookmarkSubject(resourceUrl);
+  const carried: BookmarkData = { ...data };
+  carried.title ??= firstText(dataset, subject, [DCT_TITLE]);
+  carried.description ??= firstText(dataset, subject, [DCT_DESCRIPTION]);
+  carried.notes ??= firstText(dataset, subject, [BOOK_NOTES, `${LEGACY_BOOK_NS}notes`]);
+  carried.created ??= firstDate(dataset, subject, DCT_CREATED);
+  carried.modified ??= firstDate(dataset, subject, DCT_MODIFIED);
+  const tags = new Set(data.tags ?? []);
+  for (const keyword of literals(dataset, subject, SCHEMA_KEYWORDS)) tags.add(keyword.value);
+  if (tags.size > 0) carried.tags = [...tags];
+  for (const key of ["title", "description", "notes", "created", "modified"] as const) {
+    if (carried[key] === undefined) delete carried[key];
+  }
+  return carried;
+}
+
 /** Fail closed on a missing/invalid URL; omit absent optional fields. */
 export function parseBookmark(resourceUrl: string, dataset: DatasetCore): BookmarkData | undefined {
-  return publicData(bm.parse(resourceUrl, dataset));
+  return publicData(carryUnprofiled(resourceUrl, dataset, bm.parse(resourceUrl, dataset)));
 }
 
 /** Parse via fetch-rdf, defaulting an absent/null Content-Type to Turtle. */
@@ -122,5 +185,9 @@ export async function parseBookmarkTtl(
   body: string,
   contentType: string | null = "text/turtle",
 ): Promise<BookmarkData | undefined> {
-  return publicData(await bm.parseDocument(resourceUrl, body, contentType));
+  // Same order as the runtime's parseDocument: refuse an unsafe resource URL before parsing.
+  if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  const dataset = await parseRdf(body, contentType ?? "text/turtle", { baseIRI: resourceUrl });
+  return parseBookmark(resourceUrl, dataset);
 }
