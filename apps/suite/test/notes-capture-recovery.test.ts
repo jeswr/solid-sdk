@@ -478,3 +478,57 @@ it("retries a failed Save anyway from the toast after the bar unmounts", async (
   await act(() => retry());
   expect(create).toHaveBeenCalledTimes(2);
 });
+
+it("does not re-create from an old toast after a later bar saved the draft", async () => {
+  const create = vi.fn().mockRejectedValue(new Error("Offline"));
+  mocks.context.create = create;
+  const { CaptureBar, key } = await page();
+  const first = await mount(h(CaptureBar));
+  await enter(first.host, "Kept");
+  const writing = deferred<StoredNote>();
+  create.mockReturnValueOnce(writing.promise);
+  await close(first.host);
+  await first.unmount();
+  await act(() => writing.reject(new Error("Offline")));
+  const retry = mocks.toast.error.mock.lastCall?.[1].action.onClick;
+  expect(localStorage.getItem(key)).not.toBeNull();
+  // A second bar in this tab restores the kept draft and saves it.
+  create.mockResolvedValue({} as StoredNote);
+  const second = await mount(h(CaptureBar));
+  await close(second.host);
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(localStorage.getItem(key)).toBeNull();
+  await second.unmount();
+  // The first failure's toast must not create the note a second time.
+  await act(() => retry());
+  expect(create).toHaveBeenCalledTimes(2);
+});
+
+it("still retries from the toast when browser storage cannot be read", async () => {
+  const create = vi.fn().mockRejectedValue(new Error("Offline"));
+  mocks.context.create = create;
+  const { CaptureBar } = await page();
+  const ui = await mount(h(CaptureBar));
+  await enter(ui.host, "Only copy");
+  const writing = deferred<StoredNote>();
+  create.mockReturnValueOnce(writing.promise);
+  await close(ui.host);
+  await ui.unmount();
+  await act(() => writing.reject(new Error("Offline")));
+  const retry = mocks.toast.error.mock.lastCall?.[1].action.onClick;
+  create.mockResolvedValue({} as StoredNote);
+  const read = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  try {
+    await act(() => retry());
+  } finally {
+    read.mockRestore();
+  }
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(create).toHaveBeenLastCalledWith(
+    { title: "Only copy", body: "<p>Only copy</p>", labels: [] },
+    false,
+    "default",
+  );
+});

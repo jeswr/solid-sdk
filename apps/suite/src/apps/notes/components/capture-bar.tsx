@@ -35,6 +35,15 @@ const captureDraft = z.object({
   maybeSaved: z.boolean().optional(),
 });
 
+/** Whether the kept draft is still the text a failed save stored; unreadable storage counts as unchanged. */
+function keptUnchanged(key: string, kept: string | null) {
+  try {
+    return localStorage.getItem(key) === kept;
+  } catch {
+    return true;
+  }
+}
+
 export function CaptureBar({ label }: { label?: string }) {
   const { create, session } = useNotesContext();
   const createNote = useRef(create);
@@ -164,7 +173,7 @@ export function CaptureBar({ label }: { label?: string }) {
               // No capture bar is mounted for this key: retry from this closure, but
               // only while the kept text is still the one this failure stored
               // (a later bar may already have saved or replaced it).
-              if (!detail.handled && localStorage.getItem(captureKey) === recovery.current)
+              if (!detail.handled && keptUnchanged(captureKey, recovery.current))
                 void finish(confirmed);
             },
           },
