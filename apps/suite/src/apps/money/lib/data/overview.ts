@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 import { addAmounts, type Category, type Transaction } from "../model";
-import { formatMoney, parseMoney, spendingByCategory } from "../reports";
+import { formatMoney, spendingByCategory } from "../reports";
 import { type AccountSummary, listAccounts } from "./accounts";
-import { loadCategories, resolveCategory } from "./categories";
+import { loadCategories } from "./categories";
 import type { MoneyClient } from "./container";
 import { allTransactions } from "./ledger";
+import { reportRows } from "./reports";
 export function overview(
   accounts: readonly AccountSummary[],
   transactions: readonly Transaction[],
@@ -23,25 +24,7 @@ export function overview(
     .slice(0, 10);
   const spending = [...totals.keys()]
     .flatMap((currency) => {
-      const rows = transactions
-        .filter((row) => row.currency === currency)
-        .map((row) => {
-          // Until the model has an explicit kind, signs classify income and spending.
-          const kind =
-            row.debitAccount || row.creditAccount
-              ? ("transfer" as const)
-              : row.amount.startsWith("-")
-                ? ("expense" as const)
-                : ("income" as const);
-          return {
-            id: row.id,
-            date: row.postingTime.slice(0, 10),
-            amount: parseMoney(currency, row.amount),
-            kind,
-            categoryId:
-              kind === "expense" ? (resolveCategory(row.category, categories) ?? null) : null,
-          };
-        });
+      const rows = reportRows(transactions, categories, currency);
       return spendingByCategory(
         rows,
         { start: `${today.slice(0, 7)}-01`, end: today },
