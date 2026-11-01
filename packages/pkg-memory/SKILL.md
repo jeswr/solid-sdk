@@ -40,6 +40,14 @@ to the target, including `defaultForNew`. Shared, unscoped, malformed and unknow
 rules refuse replacement; preserve unrelated grants by leaving the ACL untouched.
 Read strong ETags and use `If-Match` / `If-None-Match: *` for ACL writes.
 Give generic memory test ports explicit WAC metadata when testing private writes.
+Use `WacDiscoveryOptions.allowAclUrl` in NanopubStore's second constructor argument
+and discoverWacAcl's third argument when the caller has a protected ACL area.
+False or thrown predicate results fail closed before ACL access, without fallback;
+the store retains `Memory protection unavailable`. Do not hard-code consumer paths
+in pkg-memory. solid-mcp supplies a predicate derived from the memory layout so
+every accepted ACL lies inside its generic-tool boundary; other in-pod ACLs are
+refused. The consumer also protects its in-pod WebID profile from generic tools
+while retaining policy-enforced Contact reads and internal discovery.
 TriG rejection (HTTP 415) or rewriting permits only the same bytes stored as
 octet-stream. Strong ETags are required for replacements. Never use a Turtle or
 flattened-graph fallback. Retraction appends a revising nanopub; it does not edit

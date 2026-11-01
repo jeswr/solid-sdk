@@ -21,7 +21,7 @@ import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createPodToolRegistry } from "../src/tools.js";
 import { containerTurtle } from "./fake-pod.js";
-import { createWacMemoryPodPort } from "./wac-memory-pod.js";
+import { createWacMemoryPodPort, memoryAclUrl } from "./wac-memory-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = "https://example.org/people/avery#me";
@@ -832,7 +832,10 @@ describe("additional memory boundary regressions", () => {
       requests.push({ url, method });
       const headers = new Headers(init?.headers);
       if (method === "HEAD")
-        return new Response(null, { status: 404, headers: { link: `<${url}.acl>; rel="acl"` } });
+        return new Response(null, {
+          status: 404,
+          headers: { link: `<${memoryAclUrl(ROOT, url)}>; rel="acl"` },
+        });
       const cond = {
         ...(headers.has("if-match") ? { ifMatch: headers.get("if-match") as string } : {}),
         ...(headers.has("if-none-match") ? { ifNoneMatch: "*" as const } : {}),
@@ -883,7 +886,9 @@ describe("additional memory boundary regressions", () => {
       await client.callTool({ name: "memory_forget", arguments: { id: saved.id, mode: "delete" } }),
     );
     expect(requests.every(({ url }) => url.startsWith(ROOT))).toBe(true);
-    expect(requests.find(({ method }) => method === "PUT")?.url).toBe(`${ROOT}private/.acl`);
+    expect(requests.find(({ method }) => method === "PUT")?.url).toBe(
+      memoryAclUrl(ROOT, `${ROOT}private/`),
+    );
     const readonlyAdapter = createFetchPodPort({ fetch, podRoot: ROOT, webId: OWNER });
     expect((await registry(readonlyAdapter)("memory_remember", remember)).isError).toBe(true);
   });

@@ -177,6 +177,16 @@ closed with `Memory protection unavailable`. All scope values, including legacy
 Existing ACL replacement requires a strong read ETag and `If-Match`; absent ACLs
 use `If-None-Match: *`. ACL read/write failures stop the operation.
 
+`new NanopubStore(pod, { allowAclUrl })` and
+`discoverWacAcl(pod, target, { allowAclUrl })` accept an optional predicate for
+the caller's protected ACL area. A false result or thrown error refuses discovery
+before reading or writing the advertised ACL, with no guessed fallback. Store
+operations return `Memory protection unavailable`; direct discovery returns
+`WAC protection unavailable`. Callers exposing generic pod tools must use this
+option to keep every accepted ACL inside their generic-tool exclusion boundary.
+solid-mcp derives that boundary from this store's layout (`private/pkg/`) and
+refuses ACLs advertised elsewhere in the pod, including `permissions/`.
+
 An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
 container protection, coordinates puts across store instances and processes.
 Its dedicated owner-only resource ACL is established conditionally before every

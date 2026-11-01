@@ -5,7 +5,13 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createChatPodPort } from "../src/chat-tools.js";
 import { PodOutput } from "../src/output.js";
-import { auditContainer, PERSONAL_DATA_DENIED, personalDataRoot } from "../src/personal-data.js";
+import {
+  auditContainer,
+  PERSONAL_DATA_DENIED,
+  personalAclOptions,
+  personalDataRoot,
+  requireGenericPodAccess,
+} from "../src/personal-data.js";
 import { containerCandidates, readResource, search, writeResource } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
@@ -23,6 +29,30 @@ const INDEX = `${ROOT}type-index.ttl`;
 const PURPOSE = "ServiceProvision";
 const encoder = new TextEncoder();
 const clients: Client[] = [];
+
+it("accepts ACLs only when every path interpretation stays inside the generic exclusion boundary", () => {
+  const pod = createWacMemoryPodPort({ root: ROOT, webId: OWNER });
+  const area = personalDataRoot(pod);
+  const { allowAclUrl } = personalAclOptions(pod);
+  for (const url of [
+    `${area}permissions/one`,
+    `${area}.acl`,
+    `${area.slice(0, -1)}.acl`,
+    `${area}permissions/one`.replace("private/pkg", "PRIVATE/PkG"),
+  ]) {
+    expect(allowAclUrl(url)).toBe(true);
+    expect(() => requireGenericPodAccess(pod, url, true)).toThrow(PERSONAL_DATA_DENIED);
+  }
+  for (const url of [
+    `${ROOT}permissions/one`,
+    `${ROOT}private/.acl`,
+    `${ROOT}private/pkg-other/one`,
+    `${area}%252e%252e/permissions/one`,
+    `${area}permissions/one`.replace("example.org", "outside.example"),
+  ])
+    expect(allowAclUrl(url)).toBe(false);
+});
+
 afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });

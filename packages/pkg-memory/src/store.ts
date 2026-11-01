@@ -19,7 +19,7 @@ import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
 import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
 import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
-import { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";
+import { discoverWacAcl, validateDedicatedWacAcl, type WacDiscoveryOptions } from "./wac.js";
 
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(body);
@@ -41,7 +41,10 @@ export class NanopubStore {
   private readonly owner: string;
   private initialized?: Promise<void>;
 
-  constructor(private readonly pod: PodPort) {
+  constructor(
+    private readonly pod: PodPort,
+    private readonly options: WacDiscoveryOptions = {},
+  ) {
     const root = new URL(pod.root);
     const owner = safeHttpIri(pod.webId);
     if (
@@ -307,7 +310,7 @@ export class NanopubStore {
   private async readAcl(url: string) {
     let aclUrl: string;
     try {
-      aclUrl = await discoverWacAcl(this.pod, url);
+      aclUrl = await discoverWacAcl(this.pod, url, this.options);
     } catch {
       throw new Error("Memory protection unavailable");
     }

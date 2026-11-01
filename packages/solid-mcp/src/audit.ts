@@ -11,7 +11,7 @@ import { requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MemoryNode, status } from "./memory-context.js";
 import { PodOutput } from "./output.js";
-import { auditContainer } from "./personal-data.js";
+import { auditContainer, personalAclOptions } from "./personal-data.js";
 import { specialCategories } from "./personal-policy.js";
 import type { PodConditions, PodPort, PodReadResult } from "./pod-port.js";
 
@@ -70,7 +70,11 @@ export async function auditSpecialRead(
   async function protect(target: string, inherit: boolean) {
     let acl: string;
     try {
-      acl = await discoverWacAcl({ root: pod.root, head: (url) => output.head(url) }, target);
+      acl = await discoverWacAcl(
+        { root: pod.root, head: (url) => output.head(url) },
+        target,
+        personalAclOptions(pod),
+      );
     } catch {
       // Never expose server URLs or backend errors through an audit denial.
       throw new Error("Audit protection unavailable");

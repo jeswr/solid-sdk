@@ -7,6 +7,7 @@ import { DataFactory, Store } from "n3";
 import { requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { MAX_CONTENT_BYTES } from "./content.js";
 import { PodOutput } from "./output.js";
+import { personalAclOptions } from "./personal-data.js";
 import type { PodPort } from "./pod-port.js";
 
 /** Operator-supplied identity; never take deletion authority from tool arguments. */
@@ -94,6 +95,6 @@ export function memoryContext(pod: PodPort, readOnly: boolean, client?: MemoryCl
     },
     delete: (url, cond) => pod.delete(mutationTarget(url), cond),
   };
-  const store = new NanopubStore(port);
+  const store = new NanopubStore(port, personalAclOptions(pod));
   return { store, port, reads, output, client };
 }

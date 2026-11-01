@@ -36,6 +36,12 @@ Check redirects and final aliases, slashless containers, case variants, repeated
 percent encoding and normalized dot segments at the shared output/operation
 boundary. Only memoryContext and audit may opt into internal personal access;
 all personal disclosure retains purpose checks and verified sensitive-read audits.
+Apply the same generic boundary to the configured WebID's profile document when
+it lies inside the pod: refuse reads/writes/deletes with the fixed personal-data
+diagnostic and omit it from listings, search and resource enumeration. Preserve
+internal storage-root, Type Index and issuer discovery, and Contact-authorized
+`profile_get`. Off-pod WebIDs add no in-pod profile restriction. Type Index profile
+discovery may bypass only the profile restriction; it must still exclude memory.
 Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
 reads; generic byte reads must retain the backend default representation.
 
@@ -68,7 +74,10 @@ data, including through recall, unless its monthly private PROV audit append
 succeeds and is verified. Audit uses the current PodPort and its optional HEAD
 metadata to discover a unique server-advertised WAC `rel="acl"` URL for each
 protected target, including on 404. Require a pod-scoped ACL URL and write the
-owner-only WAC authorization there; never guess a `.acl` URL. Missing or unsafe
+owner-only WAC authorization there; never guess a `.acl` URL. Additionally require
+the ACL itself to lie inside the protected memory area derived from NanopubStore's
+layout, using the same prefixes as the generic guard. Refuse other in-pod ACL
+locations without fallback, using `Audit protection unavailable`. Missing or unsafe
 WAC links, ACP-only storage and custom ports
 without HEAD metadata fail closed with `Audit protection unavailable`, withholding
 the sensitive read. Do not add ACP support. Preserve strong conditional ETags and
@@ -80,6 +89,9 @@ Memory writes forward the current port's HEAD capability into `NanopubStore`.
 Require unique server-advertised, pod-scoped WAC ACLs for every protected container,
 policy, lock and nanopub, including on 404. Missing discovery and ACP fail closed
 before private content with `Memory protection unavailable`; never guess `.acl`.
+Pass the same protected-area ACL predicate via pkg-memory's `WacDiscoveryOptions`
+to both memory and audit discovery, including newly protected ancestors. Reject
+ACLs outside that area before reading or writing them, without falling back.
 Both memory and audit reuse pkg-memory's `validateDedicatedWacAcl` checks before
 replacing an existing ACL. All accessTo/default/defaultForNew scopes must name only
 the target, with no unscoped, malformed or unknown rules; otherwise leave the ACL

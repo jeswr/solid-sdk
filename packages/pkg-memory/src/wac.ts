@@ -8,8 +8,18 @@ import { NS, RdfNode } from "./rdf.js";
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const unavailable = () => new Error("WAC protection unavailable");
 
+/** Additional caller-owned boundary for server-advertised ACL URLs. */
+export interface WacDiscoveryOptions {
+  /** Must return true before the ACL may be read or written; exceptions deny. */
+  allowAclUrl?: (aclUrl: string) => boolean;
+}
+
 /** Resolve only the port's advertised WAC capability, including for absent resources. */
-export async function discoverWacAcl(pod: Pick<PodPort, "root" | "head">, target: string) {
+export async function discoverWacAcl(
+  pod: Pick<PodPort, "root" | "head">,
+  target: string,
+  options: WacDiscoveryOptions = {},
+) {
   try {
     const metadata = await pod.head?.(target);
     if (!metadata?.acl || safeHttpIri(metadata.acl) !== metadata.acl) throw unavailable();
@@ -29,6 +39,7 @@ export async function discoverWacAcl(pod: Pick<PodPort, "root" | "head">, target
       acl.href === target
     )
       throw unavailable();
+    if (options.allowAclUrl && !options.allowAclUrl(acl.href)) throw unavailable();
     return acl.href;
   } catch {
     // Discovery failures must never reveal a server URL or private backend diagnostic.

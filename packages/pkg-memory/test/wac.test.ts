@@ -7,6 +7,7 @@ import { expect, it, vi } from "vitest";
 import {
   buildNanopublications,
   createFactAssertion,
+  discoverWacAcl,
   NanopubStore,
   type PodPort,
 } from "../src/index.js";
@@ -20,7 +21,10 @@ const ACL = "http://www.w3.org/ns/auth/acl#";
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder().decode(body);
 const policy = (target: string) =>
-  `${ROOT}permissions/${target.slice(ROOT.length).replaceAll("/", "_")}`;
+  `${ROOT}private/pkg/permissions/${target.slice(ROOT.length).replaceAll("/", "_")}`;
+const boundary = {
+  allowAclUrl: (url: string) => url.startsWith(`${ROOT}private/pkg/`),
+};
 
 function fixture() {
   const memory = createMemoryPodPort({ root: ROOT, webId: options.owner });
@@ -31,7 +35,7 @@ function fixture() {
     },
   };
   const write = vi.spyOn(pod, "write");
-  return { pod, memory, write, store: new NanopubStore(pod) };
+  return { pod, memory, write, store: new NanopubStore(pod, boundary) };
 }
 async function seedAncestors(memory: PodPort) {
   for (const target of [FIRST, `${ROOT}private/pkg/`])
@@ -104,7 +108,7 @@ it("uses advertised non-default ACLs for every container, mutex, policy and nano
   const first = await medicalFact();
   await store.put(first);
   // Replacements must also use discovery, and retain conditional ETags.
-  await new NanopubStore(pod).put(await medicalFact("second"));
+  await new NanopubStore(pod, boundary).put(await medicalFact("second"));
   for (const target of [
     FIRST,
     `${ROOT}private/pkg/`,
@@ -126,6 +130,48 @@ it("uses advertised non-default ACLs for every container, mutex, policy and nano
   expect(
     write.mock.calls.some(([url, , , cond]) => url === policy(store.container) && !!cond.ifMatch),
   ).toBe(true);
+});
+
+it.each([
+  "container",
+  "mutex",
+  "policy",
+  "nanopub",
+])("refuses an advertised %s ACL outside the caller's protected area without fallback", async (kind) => {
+  const { pod, memory, store, write } = fixture();
+  await seedAncestors(memory);
+  const value = await medicalFact();
+  const target = {
+    container: store.container,
+    mutex: `${store.container}.write-lock`,
+    policy: store.policyUrl,
+    nanopub: store.url(value.nanopubs[0]!.id),
+  }[kind]!;
+  const rejected = `${ROOT}permissions/PRIVATE`;
+  pod.head = async (url) => ({ acl: url === target ? rejected : policy(url) });
+  const read = vi.spyOn(pod, "read");
+  await expect(kind === "policy" ? store.writeDefaultPolicy() : store.put(value)).rejects.toThrow(
+    /^Memory protection unavailable$/,
+  );
+  expect(read.mock.calls.some(([url]) => url === rejected)).toBe(false);
+  expect(write.mock.calls.some(([url]) => [target, rejected, `${target}.acl`].includes(url))).toBe(
+    false,
+  );
+  expect(write.mock.calls.some(([, , type]) => type === "application/trig")).toBe(false);
+});
+
+it("fails closed when the caller's ACL predicate throws, without exposing its diagnostic", async () => {
+  const { pod, write } = fixture();
+  const options = {
+    allowAclUrl() {
+      throw new Error("PRIVATE predicate diagnostic");
+    },
+  };
+  await expect(discoverWacAcl(pod, FIRST, options)).rejects.toThrow(/^WAC protection unavailable$/);
+  await expect(new NanopubStore(pod, options).writeDefaultPolicy()).rejects.toThrow(
+    /^Memory protection unavailable$/,
+  );
+  expect(write).not.toHaveBeenCalled();
 });
 
 it("preserves a nanopub ACL with a separate unrelated owner authorization", async () => {

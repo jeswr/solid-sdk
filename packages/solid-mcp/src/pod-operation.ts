@@ -11,10 +11,17 @@ type ReadMode = "complete" | "fetch" | "fetch-complete" | "authorization";
 const readModes = new AsyncLocalStorage<ReadMode>();
 const dataAccess = new AsyncLocalStorage<(url: string, mutation?: boolean) => void>();
 
-/** Personal access is granted only by the internal policy/audit composition path. */
-export function withPodDataAccess<T>(pod: PodPort, personal: boolean, operation: () => T): T {
+/** Personal access is internal; profile discovery still excludes the memory area. */
+export function withPodDataAccess<T>(
+  pod: PodPort,
+  personal: boolean | "profile-discovery",
+  operation: () => T,
+): T {
   return dataAccess.run(
-    personal ? () => {} : (url, mutation) => requireGenericPodAccess(pod, url, mutation),
+    personal === true
+      ? () => {}
+      : (url, mutation) =>
+          requireGenericPodAccess(pod, url, mutation, personal === "profile-discovery"),
     operation,
   );
 }

@@ -353,8 +353,11 @@ both server and adapter layers.
 
 Before writing any private content, memory discovers the server-advertised WAC
 ACL for each protected container, policy, mutex and nanopub through `PodPort.head`.
-It uses the advertised pod-scoped URL, including non-default ACL locations, and
-never guesses `.acl`. Missing HEAD metadata, absent or unsafe WAC links and ACP
+It accepts the advertised URL only inside the protected `private/pkg/` area,
+including non-default ACL locations there. An ACL advertised elsewhere in the pod
+(such as `permissions/`) is refused before ACL access or private content writes;
+there is no fallback to `.acl`. This keeps every accepted personal ACL behind the
+generic-tool boundary. Missing HEAD metadata, absent or unsafe WAC links and ACP
 storage fail closed with `Memory protection unavailable`. Existing ACLs must be
 proven dedicated to the exact target before replacement; shared or unscoped rules,
 including legacy `acl:defaultForNew` scopes, refuse the write. ACL mutations use
@@ -373,6 +376,13 @@ Every call requires `purpose: "ServiceProvision" | "Personalisation"` and reeval
 the existing owner policy for that client. Reads never create a missing policy.
 Missing, unreadable or malformed policies fail closed. Denial errors contain only
 fixed category names, without values, subject identities or owner-supplied IRIs.
+
+When the configured WebID profile document is inside the pod, generic reads,
+writes and deletes refuse it with `Personal data requires a purpose-limited tool`.
+Listings, search and resource enumeration omit it, including encoded aliases and
+redirects. Internal storage, Type Index and issuer discovery remain available, as
+does `profile_get` after its Contact policy check. Off-pod WebIDs do not change
+generic access to other in-pod documents.
 
 - `profile_get({purpose})` returns `{name, emails, phones}` from the configured
   in-pod WebID under `pd:Contact`. Names use vCard then FOAF; missing names are
@@ -401,7 +411,9 @@ PROV activity to `private/pkg/audit/<yyyy-mm>.ttl`: client IRI, DPV purpose,
 special categories and UTC time, with no fact values. Empty permitted health
 queries are audited too. Before writing audit content, the server discovers each
 protected target's actual WAC ACL using HEAD and installs an owner-only authorization
-there; it never guesses a `.acl` URL. ACL URLs must be within the configured pod.
+there; it never guesses a `.acl` URL. As with memory writes, the ACL URL itself
+must lie inside the protected `private/pkg/` area; other in-pod locations are
+refused without fallback.
 Missing, ambiguous or unsafe WAC links, ACP-only storage, and custom PodPorts without
 WAC HEAD metadata refuse auditing and the sensitive read with the fixed diagnostic
 `Audit protection unavailable`. Existing ACLs must contain only supported WAC

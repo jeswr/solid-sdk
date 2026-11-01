@@ -582,11 +582,13 @@ async function searchRdf(
   profile = false,
 ): Promise<import("n3").Store> {
   const pod = asPodPort(source);
-  requireGenericPodAccess(pod, url);
-  const read = await withPodDataAccess(pod, false, () => pod.read(url, { accept: RDF_ACCEPT }));
+  requireGenericPodAccess(pod, url, false, profile);
+  const read = await withPodDataAccess(pod, profile ? "profile-discovery" : false, () =>
+    pod.read(url, { accept: RDF_ACCEPT }),
+  );
   const { url: finalUrl } = read;
   const base = finalUrl ?? url;
-  requireGenericPodAccess(pod, base);
+  requireGenericPodAccess(pod, base, false, profile);
   // HTTP representation URLs omit WebID fragments; retain the configured-profile exception.
   const expectedProfile = profile ? new URL(pod.webId) : undefined;
   const finalDocument = new URL(base);

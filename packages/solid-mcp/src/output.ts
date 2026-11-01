@@ -333,6 +333,7 @@ export function podOutputError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   if (message === PERSONAL_DATA_DENIED) return new Error(message);
   if (message === "Audit protection unavailable") return new Error(message);
+  if (message === "Memory protection unavailable") return new Error(message);
   if (/purpose denied/i.test(message)) return new Error("purpose denied");
   if (/grant denied/i.test(message)) return new Error("grant denied");
   if (/pod-scope/i.test(message)) return new Error("pod-scope violation");

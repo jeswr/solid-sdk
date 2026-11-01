@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { NanopubStore } from "@jeswr/pkg-memory";
+import { podScopedUrlOrUndefined } from "./auth.js";
 import type { PodPort } from "./pod-port.js";
 
 export const PERSONAL_DATA_DENIED = "Personal data requires a purpose-limited tool";
@@ -14,6 +15,25 @@ export function personalDataRoot(pod: PodPort): string {
 
 export function auditContainer(pod: PodPort): string {
   return new URL("audit/", personalDataRoot(pod)).href;
+}
+
+function within(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}.`);
+}
+
+/** ACLs must stay within the same memory area that generic tools cannot access. */
+export function personalAclOptions(pod: PodPort) {
+  const root = new URL(personalDataRoot(pod));
+  const prefixes = pathAliases(root);
+  return {
+    allowAclUrl(url: string): boolean {
+      const target = new URL(url);
+      return (
+        target.origin === root.origin &&
+        pathAliases(target).every((path) => prefixes.some((prefix) => within(path, prefix)))
+      );
+    },
+  };
 }
 
 /** Check every decoding stage: backends may decode different numbers of times. */
@@ -44,20 +64,26 @@ function normalizedPath(path: string): string {
 }
 
 /** No URL or backend-supplied value may enter this diagnostic. */
-export function requireGenericPodAccess(pod: PodPort, url: string, mutation = false): void {
+export function requireGenericPodAccess(
+  pod: PodPort,
+  url: string,
+  mutation = false,
+  profileDiscovery = false,
+): void {
   try {
     const target = new URL(url, pod.root);
     const protectedRoot = new URL(personalDataRoot(pod));
     if (target.origin !== protectedRoot.origin) return; // The pod-scope guard owns this.
     const prefixes = pathAliases(protectedRoot);
+    // The whole profile document carries Contact data, independent of its WebID fragment.
+    const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
+    if (profile && (!profileDiscovery || mutation)) prefixes.push(...pathAliases(new URL(profile)));
     for (const path of pathAliases(target)) {
       if (
         prefixes.some(
           (prefix) =>
-            path === prefix ||
-            path.startsWith(`${prefix}/`) ||
             // Protect slashless container ACL/metadata aliases too.
-            path.startsWith(`${prefix}.`) ||
+            within(path, prefix) ||
             // Replacing/deleting an ancestor can destroy the protected subtree.
             (mutation && prefix.startsWith(`${path}/`)),
         )

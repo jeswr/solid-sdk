@@ -8,7 +8,7 @@ import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { MemoryNode } from "../src/memory-context.js";
 import { purposeDenied } from "../src/personal-policy.js";
 import type { PodPort } from "../src/pod-port.js";
-import { createWacMemoryPodPort } from "./wac-memory-pod.js";
+import { createWacMemoryPodPort, memoryAclUrl } from "./wac-memory-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -75,7 +75,7 @@ it("protects missing ancestors and replaces orphan public ACLs before writing da
     url(),
   ]) {
     const acl = new Store(
-      new Parser().parse(decoder.decode((await pod.read(`${target}.acl`)).body)),
+      new Parser().parse(decoder.decode((await pod.read(memoryAclUrl(ROOT, target))).body)),
     );
     expect(
       acl
@@ -85,7 +85,9 @@ it("protects missing ancestors and replaces orphan public ACLs before writing da
     expect(
       acl.getObjects(null, df.namedNode("http://www.w3.org/ns/auth/acl#agentClass"), null),
     ).toEqual([]);
-    const aclIndex = write.mock.calls.findIndex(([address]) => address === `${target}.acl`);
+    const aclIndex = write.mock.calls.findIndex(
+      ([address]) => address === memoryAclUrl(ROOT, target),
+    );
     expect(aclIndex).toBeLessThan(write.mock.calls.findIndex(([address]) => address === target));
   }
   const body = decoder.decode((await pod.read(url())).body);

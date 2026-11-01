@@ -5,8 +5,10 @@ import { expect, it, vi } from "vitest";
 import { auditSpecialRead } from "../src/audit.js";
 import { serializeBoundedTurtle } from "../src/bounded-rdf.js";
 import { MemoryNode } from "../src/memory-context.js";
+import { PERSONAL_DATA_DENIED, personalDataRoot } from "../src/personal-data.js";
 import { createFetchPodPort, type PodConditions } from "../src/pod-port.js";
 import { createPodToolRegistry } from "../src/tools.js";
+import { containerTurtle } from "./fake-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -20,7 +22,7 @@ const targets = () => [
   LOG(),
 ];
 const policy = (target: string) =>
-  `${ROOT}permissions/${target.slice(ROOT.length).replaceAll("/", "_")}`;
+  `${ROOT}private/pkg/permissions/${target.slice(ROOT.length).replaceAll("/", "_")}`;
 
 /** A WAC server seam that advertises its real ACL even before a resource exists. */
 function fixture(link: (target: string) => string = (target) => `<${policy(target)}>; rel="acl"`) {
@@ -43,7 +45,16 @@ function fixture(link: (target: string) => string = (target) => `<${policy(targe
         return new Response(null, { status: 201, headers: { etag: receipt.etag ?? "" } });
       }
       const read = await memory.read(target);
-      return new Response(request.method === "HEAD" ? null : new Uint8Array(read.body), {
+      const body = target.endsWith("/")
+        ? containerTurtle(
+            target,
+            (await memory.list(target)).map(({ url, isContainer }) => ({
+              name: url.slice(target.length),
+              container: isContainer,
+            })),
+          )
+        : new Uint8Array(read.body);
+      return new Response(request.method === "HEAD" ? null : body, {
         headers: { link: link(target), "content-type": read.contentType, etag: read.etag ?? "" },
       });
     } catch (error) {
@@ -106,7 +117,7 @@ it("remembers medical facts using non-default WAC URLs through the projected por
   const { pod, writes } = fixture();
   expect((await remember(pod)).isError).not.toBe(true);
   const urls = writes();
-  for (const target of urls.filter((url) => !url.startsWith(`${ROOT}permissions/`))) {
+  for (const target of urls.filter((url) => !url.startsWith(`${ROOT}private/pkg/permissions/`))) {
     expect(urls).toContain(policy(target));
     expect(urls.indexOf(policy(target))).toBeLessThan(urls.indexOf(target));
   }
@@ -114,11 +125,63 @@ it("remembers medical facts using non-default WAC URLs through the projected por
   expect(urls.some((url) => url.endsWith(".acl"))).toBe(false);
 });
 
+it("refuses memory and audit ACLs advertised outside the protected personal area", async () => {
+  for (const operation of ["memory", "audit"]) {
+    const { pod, audit, writes, fetch } = fixture(
+      (target) => `<${ROOT}permissions/${target.slice(ROOT.length)}>; rel="acl"`,
+    );
+    if (operation === "audit")
+      await expect(audit()).rejects.toThrow(/^Audit protection unavailable$/);
+    else {
+      const result = await remember(pod);
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain("Memory protection unavailable");
+      expect(JSON.stringify(result)).not.toContain("permissions/");
+    }
+    expect(writes()).toEqual([]);
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith(`${ROOT}permissions/`))).toBe(
+      false,
+    );
+  }
+});
+
+it("denies generic pod_write on the advertised memory and audit ACLs", async () => {
+  const { pod, memory, audit, writes } = fixture();
+  expect((await remember(pod)).isError).not.toBe(true);
+  await audit();
+  const registry = createPodToolRegistry(pod, false, { clientId: "urn:client" });
+  const recall = registry.find((entry) => entry.name === "memory_recall");
+  if (!recall) throw new Error("Missing memory_recall");
+  const denied = await recall.handler({ purpose: "ServiceProvision" });
+  expect(denied.isError).toBe(true);
+  expect(JSON.stringify(denied)).toContain("purpose denied: MedicalHealth");
+  const aclUrls = writes().filter((url) => url.startsWith(`${personalDataRoot(pod)}permissions/`));
+  expect(aclUrls.some((url) => url.endsWith(".trig"))).toBe(true);
+  const tool = registry.find((entry) => entry.name === "pod_write");
+  if (!tool) throw new Error("Missing pod_write");
+  for (const url of aclUrls) {
+    const before = await memory.read(url);
+    const count = writes().length;
+    const result = await tool.handler({
+      url,
+      content: `@prefix acl: <http://www.w3.org/ns/auth/acl#>.
+        <#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>;
+          acl:mode acl:Read; acl:accessTo <${ROOT}private/pkg/mcp/>.`,
+      contentType: "text/turtle",
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain(PERSONAL_DATA_DENIED);
+    expect(writes()).toHaveLength(count);
+    expect(await memory.read(url)).toEqual(before);
+  }
+});
+
 it.each([
   "",
   '<a>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
   '<https://outside.example/PRIVATE>; rel="acl"',
   '<https://example.org/outside/PRIVATE>; rel="acl"',
+  `<${ROOT}permissions/PRIVATE>; rel="acl"`,
   '<a>; rel="acl", <b>; rel="acl"',
 ])("refuses medical memory writes with unusable advertised access control: %s", async (link) => {
   const { pod, writes, fetch } = fixture(() => link);
@@ -262,6 +325,7 @@ it.each([
   '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
   '<https://outside.example/PRIVATE>; rel="acl"',
   '<https://example.org/elsewhere/PRIVATE>; rel="acl"',
+  `<${ROOT}permissions/PRIVATE>; rel="acl"`,
   '<https://example.org/pod/>; rel="acl"',
   '<policy?PRIVATE>; rel="acl"',
   '<policy#PRIVATE>; rel="acl"',
