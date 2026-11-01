@@ -1,6 +1,6 @@
 ---
 name: pod-notifications
-description: Use when working on @jeswr/pod-notifications: storage-scoped change normalisation, WebSocket lifecycle, subscription state and polling across Solid and LWS.
+description: Use when working on @jeswr/pod-notifications, covering storage-scoped change normalisation, WebSocket lifecycle, subscription state and polling across Solid and LWS.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

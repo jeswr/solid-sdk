@@ -1,6 +1,6 @@
 ---
 name: agent-memory
-description: Implement or consume scoped PKG recall, approval-gated remember and communication-rule imports in @jeswr/agent-memory.
+description: Use when implementing or consuming scoped PKG recall, approval-gated remember and communication-rule imports in @jeswr/agent-memory.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
