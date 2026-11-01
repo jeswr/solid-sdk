@@ -177,9 +177,10 @@ window.addEventListener('message', (event) => {
       break;
 
     case 'SOLID_LIST_GRANTS':
+    case 'SOLID_DISCONNECT':
       chrome.runtime.sendMessage(
         {
-          type: 'SOLID_LIST_GRANTS',
+          type: data.type,
           requestId: data.requestId,
           stampedOrigin: window.location.origin,
         },

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * DATA-CLASS → CONCRETE TARGET resolution — the compile step (design §2.3, resolution ladder).
  *
@@ -7,6 +8,7 @@
  * mitigation, design §6.2). This module implements the ubiquitous rung of the ladder — the
  * **Solid Type Index** (`solid:publicTypeIndex` / `solid:privateTypeIndex` →
  * `solid:TypeRegistration` `solid:forClass` → `solid:instance` / `solid:instanceContainer`).
+ * The built-in pim:Storage class instead pins the WebID's advertised pim:storage containers.
  * The SAI `interop:DataRegistration` rung and the SHACL-validate rung (design §2.3 rungs 1 & 3)
  * are documented follow-ups; the resolver is structured so they slot in as additional passes.
  *
@@ -24,6 +26,7 @@
  */
 
 import { DataFactory, Parser, Store } from 'n3';
+import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
 
 const SOLID = 'http://www.w3.org/ns/solid/terms#';
@@ -32,6 +35,7 @@ const PRIVATE_TYPE_INDEX = `${SOLID}privateTypeIndex`;
 const FOR_CLASS = `${SOLID}forClass`;
 const INSTANCE = `${SOLID}instance`;
 const INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
+const PIM_STORAGE = 'http://www.w3.org/ns/pim/space#storage';
 
 /** Public documents must never carry credentials; `url` is the final post-redirect RDF base. */
 export type ResolveFetch = (
@@ -153,9 +157,34 @@ export function parseTargetsForClass(
   return out;
 }
 
+/** Storage roots must already be containers; never widen a resource by adding a slash. */
+function parseStorageTargets(
+  webId: string,
+  profileTurtle: string,
+  profileUrl: string,
+  allowedOrigins?: ReadonlySet<string>,
+): PinnedTarget[] {
+  const store = parse(profileUrl, profileTurtle);
+  const roots = new Set<string>();
+  for (const q of store.getQuads(
+    DataFactory.namedNode(webId),
+    DataFactory.namedNode(PIM_STORAGE),
+    null,
+    null,
+  )) {
+    if (q.object.termType !== 'NamedNode') continue;
+    const n = normaliseTargetUrl(q.object.value);
+    if (n === null || !n.url.endsWith('/')) continue;
+    if (allowedOrigins && !allowedOrigins.has(n.origin)) continue;
+    roots.add(n.url);
+  }
+  return [...roots].map((url) => ({ url, kind: 'container' }));
+}
+
 /**
  * Resolve `classIRI` to its concrete, pinned targets by walking the Type Index: fetch the WebID
- * profile → its type-index refs → each index, unioning the targets. Returns a deduped list
+ * profile → its type-index refs → each index, unioning the targets. pim:Storage resolves directly
+ * from that profile's storage roots without fetching any indexes. Returns a deduped list
  * (possibly empty — an unregistered class resolves to NOTHING, and the gate then denies every
  * request for it, fail-closed). Never throws on a per-document fetch/parse failure.
  */
@@ -168,6 +197,8 @@ export async function resolveClassTargets(
 
   let refs: ReturnType<typeof parseTypeIndexRefs>;
   try {
+    if (classIRI === PIM_STORAGE_CLASS)
+      return parseStorageTargets(opts.webId, profile.text, profile.url, opts.allowedOrigins);
     refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url);
   } catch {
     return [];

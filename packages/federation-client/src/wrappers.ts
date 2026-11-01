@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // AUTHORED-BY Codex GPT-6.1-Sol
 //
@@ -8,6 +9,7 @@
 // writing uses RequiredAs.object + the dataset add, all from @rdfjs/wrapper.
 
 import { escapeIri, safeIri } from "@jeswr/rdf-serialize";
+import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -51,22 +53,9 @@ function uniqueNodes<T extends TermWrapper>(...groups: Iterable<T>[]): T[] {
   return [...nodes.values()];
 }
 
-/**
- * Read an IRI-valued property as a Set of the OBJECT TERMS themselves (not their
- * lexical `.value`) — so the term type survives the read. An IRI-valued property
- * (access mode, sector, consumes/produces/declaresShape link) is only valid when
- * its object is a `NamedNode`; a string LITERAL or a BLANK NODE in that position
- * is malformed. Reading `.value` alone discarded that distinction, so a literal
- * `"http://www.w3.org/ns/auth/acl#Read"` would pass as a valid IRI value. By
- * projecting the term (via `TermAs.instance(TermWrapper)` + `TermFrom.instance`,
- * the same term-type-preserving pattern `sectorUses` already uses) the validation
- * layer can inspect `.termType` and reject non-`NamedNode` objects with a coded
- * issue. The factory is shared so term identity / Set de-duplication hold.
- */
-function iriTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return readObjects(predicate, (iri) =>
-    SetFrom.subjectPredicate(node, iri, TermAs.instance(TermWrapper), TermFrom.instance),
-  );
+/** Preserve canonical-first fallback; the shared read keeps RDF term types. */
+function readAliasedTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
+  return readObjects(predicate, (iri) => objectTerms(node, iri));
 }
 
 /**
@@ -74,23 +63,23 @@ function iriTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
  * sector — exposed as a Set so a malformed multi-sector node is observable
  * rather than silently truncated), `fedapp:access`, `fedapp:consumes`,
  * `fedapp:produces`. Each is exposed as a Set of the OBJECT TERMS so the
- * validation layer can reject non-`NamedNode` objects (see {@link iriTerms}).
+ * validation layer can reject non-`NamedNode` objects (see {@link readAliasedTerms}).
  */
 export class SectorUseNode extends TermWrapper {
   get sectors(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_SECTOR);
+    return readAliasedTerms(this, FEDAPP_SECTOR);
   }
 
   get access(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_ACCESS);
+    return readAliasedTerms(this, FEDAPP_ACCESS);
   }
 
   get consumes(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_CONSUMES);
+    return readAliasedTerms(this, FEDAPP_CONSUMES);
   }
 
   get produces(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_PRODUCES);
+    return readAliasedTerms(this, FEDAPP_PRODUCES);
   }
 }
 
@@ -101,23 +90,23 @@ export class SectorUseNode extends TermWrapper {
  */
 export class AppNode extends TermWrapper {
   get sectors(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_SECTOR);
+    return readAliasedTerms(this, FEDAPP_SECTOR);
   }
 
   get access(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_ACCESS);
+    return readAliasedTerms(this, FEDAPP_ACCESS);
   }
 
   get consumes(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_CONSUMES);
+    return readAliasedTerms(this, FEDAPP_CONSUMES);
   }
 
   get produces(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_PRODUCES);
+    return readAliasedTerms(this, FEDAPP_PRODUCES);
   }
 
   get declaresShape(): Set<TermWrapperType> {
-    return iriTerms(this, FEDAPP_DECLARES_SHAPE);
+    return readAliasedTerms(this, FEDAPP_DECLARES_SHAPE);
   }
 
   /**

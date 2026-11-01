@@ -89,6 +89,8 @@ interface SolidExtension {
   listGrants(): Promise<SolidGrant[]>;
   /** Revoke one of THIS origin's grants; effective on the next request. Returns whether removed. */
   revokeGrant(grantId: string): Promise<boolean>;
+  /** End THIS origin's binding; true if removed, false if absent. Available even ungranted. */
+  disconnect(): Promise<boolean>;
   /** Read-only introspection: resolve a data-class IRI to its pod targets (for the app's UX). */
   resolveClass(classIRI: string): Promise<{
     shape: string | null;
@@ -168,7 +170,7 @@ function installSolidInjection(): void {
 
   const pendingFetches = new Map<string, PendingFetch>();
   const pendingActions = new Map<string, Pending<void>>();
-  /** Pending access-management calls (requestAccess/listGrants/revokeGrant/resolveClass). */
+  /** Pending access-management calls, including disconnect on the permanent stub. */
   const pendingAccess = new Map<string, Pending<AccessResponseData>>();
 
   let currentWebId: string | null = null;
@@ -416,6 +418,10 @@ function installSolidInjection(): void {
       const res = await accessRequest('SOLID_REVOKE_GRANT', { grantId });
       return res.ok === true;
     },
+    async disconnect() {
+      const res = await accessRequest('SOLID_DISCONNECT');
+      return res.ok === true;
+    },
     async resolveClass(classIRI: string) {
       const res = await accessRequest('SOLID_RESOLVE_CLASS', { classIRI });
       return { shape: res.shape ?? null, targets: res.targets ?? [] };
@@ -423,7 +429,11 @@ function installSolidInjection(): void {
   };
 
   // The permanent surface is a stub. Privileged properties exist only while granted.
-  const stub = { login: solid.login, requestAccess: solid.requestAccess };
+  const stub = {
+    login: solid.login,
+    requestAccess: solid.requestAccess,
+    disconnect: solid.disconnect,
+  };
   const privileged = [
     'webId',
     'fetch',
