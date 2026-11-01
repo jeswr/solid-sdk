@@ -183,13 +183,18 @@ export function mediaType(contentType: string): string | null {
   return extractMediaType(contentType)?.toLowerCase() ?? null;
 }
 
-/** Serialise quads (from a dataset or any iterable) in one of the WRITABLE_RDF formats. */
+/** Serialise quads in a WRITABLE_RDF format or expanded, context-free JSON-LD. */
 export function serializeQuads(
   dataset: DatasetCore | Iterable<Quad>,
   format: string,
   prefixes: Record<string, string> = {},
 ): Promise<string> {
   const quads = [...(dataset as Iterable<Quad>)];
+  if (format === "application/ld+json") {
+    // JSON-LD validates RDF/JS fields itself. Avoid n3 rebuilding, which can discard
+    // inconsistent language/datatype or direction fields before the writer sees them.
+    return serialize(quads, { format });
+  }
   if (TRIPLE_FORMATS.has(format) && quads.some(inNamedGraph)) {
     // n3.Writer would emit graph blocks, which are not valid in a triple-only format.
     throw new TypeError(

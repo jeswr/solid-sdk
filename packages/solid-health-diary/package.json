@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-health-diary",
   "version": "0.1.0",
-  "description": "The shared multi-intolerance health-diary RDF model for the Solid app suite — typed read/write accessors over meals, food items, derived exposures, symptoms, trigger classes (with evidence-prior lag profiles), elimination protocols, tolerance conclusions, a genetics summary and a diet plan (schema.org / OWL-Time / PROV-O / Dublin Core + the diet: nutrition/intolerance terms), plus OFF-tag exposure derivation and an owner-only fail-closed ACL helper.",
+  "description": "The shared multi-intolerance health-diary RDF model for the Solid app suite \u2014 typed read/write accessors over meals, food items, derived exposures, symptoms, trigger classes (with evidence-prior lag profiles), elimination protocols, tolerance conclusions, a genetics summary and a diet plan (schema.org / OWL-Time / PROV-O / Dublin Core + the diet: nutrition/intolerance terms), plus OFF-tag exposure derivation and an owner-only fail-closed ACL helper.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -68,11 +68,10 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
-    "@zazuko/env-node": "^3.0.0",
     "esbuild": "^0.25.0",
-    "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "engines": {
     "node": ">=20"

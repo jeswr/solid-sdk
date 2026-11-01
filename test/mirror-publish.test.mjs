@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ describe("agent history imports", () => {
       missingPin.delete(name);
       expect(() => rewriteManifest(manifest, missingPin)).toThrow(/nor pinned/);
     }
-    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe("^0.1.0");
+    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe(`github:jeswr/fetch-rdf#${FULL_SHA}`);
     expect(mirror.exports).toEqual(manifest.exports);
   });
 });
@@ -107,6 +108,16 @@ describe("assertDirMatchesName (the flat-layout invariant)", () => {
 });
 
 describe("rewriteManifest", () => {
+  it("mirrors fetch-rdf without a private rdf-engine mirror pin", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../packages/fetch-rdf/package.json", import.meta.url), "utf8"),
+    );
+    expect(manifest.devDependencies).not.toHaveProperty("@jeswr/rdf-engine");
+    const out = rewriteManifest(manifest);
+    expect(out.dependencies).not.toHaveProperty("@jeswr/rdf-engine");
+    expect(out.devDependencies).toBeUndefined();
+  });
+
   const base = () => ({
     name: "@jeswr/solid-openid-client",
     version: "1.2.3",

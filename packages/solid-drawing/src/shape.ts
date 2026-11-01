@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Access to the canonical SHACL shape (`drawing.shacl.ttl`) and the ontology TTL
@@ -6,8 +7,8 @@
  * Both `.ttl` files live at the package root (the human- and tool-readable
  * artifacts a SHACL engine / triplestore consumes directly). This module reads
  * them as strings so consumers can feed them into whatever SHACL engine they
- * already depend on (the suite uses `rdf-validate-shacl` over a `@zazuko/env`
- * dataset). Reading the file rather than embedding a copy means the string can
+ * already depend on (the suite uses `@jeswr/rdf-engine` with real Node WASM).
+ * Reading the file rather than embedding a copy means the string can
  * never drift from the canonical `.ttl`.
  *
  * The relative path `../drawing.shacl.ttl` resolves identically from the source
@@ -35,7 +36,7 @@ let cachedOntology: string | undefined;
 /**
  * The canonical `draw:Scene` SHACL shape, as a Turtle string. Cached after the
  * first read. Pass it (with the data graph) to a SHACL validator — see the
- * round-trip + shape tests for the `rdf-validate-shacl` pattern.
+ * round-trip + shape tests for the `rdf-engine.validate` pattern.
  */
 export function drawingShapeTtl(): string {
   if (cachedShape === undefined) cachedShape = readFileSync(DRAWING_SHAPE_PATH, "utf8");

@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { parseRdf } from "@jeswr/fetch-rdf";
-import env from "@zazuko/env-node";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import { afterAll, describe, expect, it } from "vitest";
 import { bookmarkSubject, serializeBookmark } from "./bookmark.js";
 import { bookmarkOntologyTtl, bookmarkShapeTtl } from "./shape.js";
 import { BOOK, LEGACY_BOOK_NS, LEGACY_CORE_NS } from "./vocab.js";
@@ -11,20 +11,14 @@ import { BOOK, LEGACY_BOOK_NS, LEGACY_CORE_NS } from "./vocab.js";
 const RES = "http://localhost:3000/alice/bookmarks/x";
 const SUBJ = bookmarkSubject(RES);
 
-// rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// parsed through the suite parse seam into an env dataset — the same pattern the
-// task-model shape test uses, so verdicts match across the suite.
-function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-const shapes = toDataset(await parseRdf(bookmarkShapeTtl(), "text/turtle", {}));
+const shapes = bookmarkShapeTtl();
 
 async function validateTtl(ttl: string) {
-  const data = toDataset(await parseRdf(ttl, "text/turtle", { baseIRI: RES }));
-  return new SHACLValidator(shapes, { factory: env }).validate(data);
+  const data = await parseRdf(ttl, "text/turtle", { baseIRI: RES });
+  return engine.validate(data, shapes);
 }
 
 describe("the shipped .ttl artifacts parse", () => {
@@ -90,7 +84,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("url"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("url>"))).toBe(true);
   });
 
   it("a non-http(s) url is rejected by sh:pattern (e.g. a hostile javascript: scheme)", async () => {
@@ -101,7 +95,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("url"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("url>"))).toBe(true);
   });
 
   it("a url written as a literal (not an IRI) is rejected by sh:nodeKind", async () => {
@@ -112,7 +106,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("url"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("url>"))).toBe(true);
   });
 
   it("two schema:url values are non-conforming (maxCount 1)", async () => {
@@ -124,7 +118,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("url"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("url>"))).toBe(true);
   });
 
   it("a non-boolean book:archived is rejected by sh:datatype", async () => {
@@ -137,15 +131,15 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => r.value?.value === "yes")).toBe(true);
+    expect(report.results.some((r) => r.value === '"yes"')).toBe(true);
   });
 
   it("rejects a legacy bookmark with no URL and a malformed archived flag", async () => {
     const report = await validateTtl(`<${SUBJ}> a <${LEGACY_BOOK_NS}Bookmark> ;
       <${LEGACY_BOOK_NS}archived> "not a boolean" .`);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => r.path?.value === "http://schema.org/url")).toBe(true);
-    expect(report.results.some((r) => r.value?.value === "not a boolean")).toBe(true);
+    expect(report.results.some((r) => r.path === "<http://schema.org/url>")).toBe(true);
+    expect(report.results.some((r) => r.value === '"not a boolean"')).toBe(true);
   });
 
   describe.each([BOOK, LEGACY_BOOK_NS])("class namespace %s", (classNs) => {
@@ -167,7 +161,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
         expect(report.conforms).toBe(false);
         expect(
           report.results.some((r) =>
-            r.sourceConstraintComponent?.value.endsWith("DatatypeConstraintComponent"),
+            r.sourceConstraintComponent.endsWith("DatatypeConstraintComponent"),
           ),
         ).toBe(true);
       });
@@ -181,7 +175,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
         expect(report.conforms).toBe(false);
         expect(
           report.results.some((r) =>
-            r.sourceConstraintComponent?.value.endsWith("MaxCountConstraintComponent"),
+            r.sourceConstraintComponent.endsWith("MaxCountConstraintComponent"),
           ),
         ).toBe(true);
       });
@@ -197,7 +191,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
       expect(report.conforms).toBe(false);
       expect(
         report.results.some((r) =>
-          r.sourceConstraintComponent?.value.endsWith("MaxCountConstraintComponent"),
+          r.sourceConstraintComponent.endsWith("MaxCountConstraintComponent"),
         ),
       ).toBe(true);
     });
@@ -221,7 +215,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("keywords"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("keywords>"))).toBe(true);
   });
 
   it("many string tags conform (tags are unbounded)", async () => {
