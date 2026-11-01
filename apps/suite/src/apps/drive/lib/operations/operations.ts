@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * Drive operations over a {@link DriveClient} (04-drive §4, §5.2–5.4): uploads
  * with conflict policies, new folder, rename, move, make a copy, the
@@ -7,7 +8,12 @@
  * they return `{ done, failed }` so the UI can report partial results.
  */
 
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
+import { mapConcurrent } from "../../../../lib/parallel";
+import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
+import { type PodDocument, parseDocument } from "../../../docs/lib/model/document";
+import { docContainerUrls } from "../../../docs/lib/model/layout";
 import { discardVersion, ownsEmptyContainer } from "../client/cleanup";
 import {
   type DriveClient,
@@ -27,7 +33,7 @@ import {
   type ResourceAssertion,
   type ResourceIdentity,
 } from "../client/commit";
-import { rethrowPendingDeletion } from "../client/deletion";
+import { DriveDeletePendingError, rethrowPendingDeletion } from "../client/deletion";
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
@@ -38,6 +44,7 @@ import {
   removeTrashRecord,
   serializeTrashIndex,
   type TrashEntry,
+  type TrashRecord,
   trashEntries,
   trashIndexFrom,
 } from "./trash-index";
@@ -372,6 +379,15 @@ async function exists(client: DriveClient, url: string): Promise<boolean> {
   );
 }
 
+/** Docs may reconcile a lost acknowledgement only after Drive's durable guard settles. */
+async function recheckDeletionFailure(client: DriveClient, error: unknown): Promise<void> {
+  const cause = error instanceof DrivePartialFailureError ? error.cause : error;
+  if (cause instanceof DriveDeletePendingError) {
+    const pending = await client.recheckDeletions?.();
+    if (pending === undefined || pending.includes(cause.url)) throw error;
+  } else rethrowPendingDeletion(cause);
+}
+
 /** Persist source identities in the intent; older records use byte comparison. */
 async function sourceVersions(client: DriveClient, url: string): Promise<string[]> {
   try {
@@ -483,19 +499,33 @@ function recoveryMarker(driveRoot: string, entry: TrashEntry): string {
   return `${slotOf(driveRoot, entry)}${nameOf(entry.url) === "partial.ttl" ? ".partial.ttl" : "partial.ttl"}`;
 }
 
+async function recoveryRecord(
+  client: DriveClient,
+  driveRoot: string,
+  entry: TrashEntry,
+): Promise<
+  { record: TrashRecord; status: "partial" | "complete"; etag: string | undefined } | undefined
+> {
+  const current = await client.readRdf(recoveryMarker(driveRoot, entry));
+  if (!current) return undefined;
+  const record = trashIndexFrom(current.dataset).record(entry.url);
+  const status = record.status;
+  return (status === "partial" || status === "complete") &&
+    record.originalLocation === entry.original &&
+    record.trashedAt?.getTime() === entry.trashedAt.getTime()
+    ? { record, status, etag: current.etag }
+    : undefined;
+}
+
 async function recoveryStatus(
   client: DriveClient,
   driveRoot: string,
   entry: TrashEntry,
+  inspect?: (record: TrashRecord) => void,
 ): Promise<"partial" | "complete" | undefined> {
-  const current = await client.readRdf(recoveryMarker(driveRoot, entry));
-  if (!current) return undefined;
-  const record = trashIndexFrom(current.dataset).record(entry.url);
-  return (record.status === "partial" || record.status === "complete") &&
-    record.originalLocation === entry.original &&
-    record.trashedAt?.getTime() === entry.trashedAt.getTime()
-    ? record.status
-    : undefined;
+  const current = await recoveryRecord(client, driveRoot, entry);
+  if (current) inspect?.(current.record);
+  return current?.status;
 }
 
 /** A slot-local receipt keeps recovery discoverable if the shared index is unavailable. */
@@ -504,17 +534,28 @@ async function markRecovery(
   driveRoot: string,
   entry: TrashEntry,
   status: "partial" | "complete",
+  restoredLocation?: string,
 ): Promise<void> {
-  if (await recoveryStatus(client, driveRoot, entry)) return;
-  const receipt = emptyTrashIndex();
-  addTrashRecord(receipt, entry);
-  receipt.record(entry.url).status = status;
+  const current = await recoveryRecord(client, driveRoot, entry);
+  if (
+    current &&
+    (restoredLocation === undefined || current.record.restoredLocation === restoredLocation)
+  )
+    return;
+  if (current?.record.restoredLocation) throw new DriveError("conflict", 412, entry.url);
+  if (current && (!current.etag || current.etag.startsWith("W/")))
+    throw new DriveError("missing-validator", 409, recoveryMarker(driveRoot, entry));
+  const receipt = current ? trashIndexFrom(current.record.dataset) : emptyTrashIndex();
+  if (!current) addTrashRecord(receipt, entry);
+  const record = receipt.record(entry.url);
+  record.status = current?.status ?? status;
+  record.restoredLocation = restoredLocation;
   await client.write(
     recoveryMarker(driveRoot, entry),
     await serializeTrashIndex(receipt),
     {
       contentType: "text/turtle",
-      ifNoneMatch: "*",
+      ...(current ? { ifMatch: current.etag as string } : { ifNoneMatch: "*" as const }),
     },
     { kind: "owner-only" },
   );
@@ -579,6 +620,7 @@ async function requireTrashEntry(
   entry: TrashEntry,
   pending = false,
   owner?: string,
+  inspect?: (record: TrashRecord) => void,
 ): Promise<string | undefined> {
   const current = await client.readRdf(indexUrlOf(driveRoot));
   const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
@@ -593,6 +635,7 @@ async function requireTrashEntry(
   )
     throw new DriveError("invalid-trash-record", 409, entry.url);
   if (!pending && record.status !== "pending" && ownerIsLive(record)) throw new TrashMovingError();
+  inspect?.(record);
   if (!pending && record.status === "pending") {
     const reconciled = await reconcilePending(client, driveRoot, entry, record, true);
     if (reconciled) return reconciled;
@@ -632,7 +675,7 @@ export async function listTrash(
   for (const entry of trashEntries(index)) {
     try {
       slotOf(driveRoot, entry);
-      validateOriginal(driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
     } catch (error) {
       if (options.onInvalid) options.onInvalid(error as DriveError);
       else console.warn(error);
@@ -763,7 +806,7 @@ async function runTrash(
   if (!entries.length) return result;
   for (const entry of entries) {
     slotOf(driveRoot, entry);
-    validateOriginal(driveRoot, entry);
+    validateOriginal(client, driveRoot, entry);
   }
   // No source may be removed until every intent is durably discoverable.
   try {
@@ -775,6 +818,17 @@ async function runTrash(
       for (const [entry, versions] of intents) {
         addTrashRecord(index, entry);
         const record = transferRecord(index, entry.url);
+        const docs = new URL("docs/", client.storageUrl).href;
+        if (entry.original.startsWith(docs)) {
+          const partner = entries.find(
+            (other) =>
+              other.original ===
+              (entry.original.endsWith("/")
+                ? `${entry.original.slice(0, -1)}.ttl`
+                : docContainerUrls(entry.original).container),
+          );
+          record.pairedWith = partner?.url;
+        }
         record.status = "pending";
         record.leaseOwner = owner;
         record.leaseUntil = new Date(Date.now() + LEASE_MS);
@@ -789,6 +843,8 @@ async function runTrash(
     };
   }
   const partial: TrashEntry[] = [];
+  // Preserve Drive's transfer order: shared access bindings must never observe
+  // another entry between its placeholder creation and ACL installation.
   for (const [index, entry] of entries.entries()) {
     try {
       const identity = await client.move(
@@ -799,11 +855,10 @@ async function runTrash(
           // Entries and confirmations are captured together before this loop.
           ...confirmationOptions(items[index] as DriveItem),
           ...(options.webId ? { privateOwner: options.webId } : {}),
-          archiveContainers: async (archive) => {
-            await updateIndex(client, driveRoot, (index) => {
+          archiveContainers: (archive) =>
+            updateIndex(client, driveRoot, (index) => {
               index.record(entry.url).containerAcls = archive;
-            });
-          },
+            }),
           beforeDelete: async () => {
             await requireTrashEntry(client, driveRoot, entry, true, owner);
             await client.stat(entry.url);
@@ -874,14 +929,18 @@ function slotOf(driveRoot: string, entry: Pick<TrashEntry, "url">): string {
   }
 }
 
-function validateOriginal(driveRoot: string, entry: TrashEntry): void {
+function validateOriginal(client: DriveClient, driveRoot: string, entry: TrashEntry): void {
   try {
     const original = new URL(entry.original);
+    // Docs keeps its snapshot and companion tree beside Drive, in the same pod.
+    const docs = new URL("docs/", client.storageUrl).href;
+    const documentPath = entry.original.slice(docs.length);
+    const docsItem = entry.original.startsWith(docs) && /^[^/]+(?:\.ttl|\/)$/.test(documentPath);
     if (
       original.href !== entry.original ||
       original.search ||
       original.hash ||
-      !entry.original.startsWith(driveRoot) ||
+      (!entry.original.startsWith(driveRoot) && !docsItem) ||
       entry.original === driveRoot ||
       entry.original.startsWith(trashFolderOf(driveRoot)) ||
       /%2f|%5c/i.test(original.pathname) ||
@@ -946,6 +1005,7 @@ async function removeRecoveryMarker(
   const expected = emptyTrashIndex();
   addTrashRecord(expected, entry);
   expected.record(entry.url).status = status;
+  expected.record(entry.url).restoredLocation = record.restoredLocation;
   await discardVersion({
     url,
     captured: { content: current.dataset, etag: current.etag },
@@ -989,6 +1049,33 @@ async function removeEmptySlot(client: DriveClient, slot: string): Promise<void>
 function restoredName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
+}
+
+/** Only Docs' immutable update logs can safely share a recreated companion tree. */
+async function isDocsUpdateTree(
+  client: DriveClient,
+  original: string,
+  document: PodDocument | undefined,
+): Promise<boolean> {
+  const docs = new URL("docs/", client.storageUrl).href;
+  if (!original.startsWith(docs) || !original.endsWith("/")) return false;
+  if (
+    !document?.updateLog?.startsWith(original) ||
+    !/^updates(?:-\d+)?\/$/.test(document.updateLog.slice(original.length))
+  )
+    return false;
+  for (const child of await client.list(original)) {
+    if (child.kind !== "folder" || !/^updates(?:-\d+)?$/.test(child.name)) return false;
+    for (const update of await client.list(child.url)) {
+      if (
+        update.kind !== "file" ||
+        update.contentType !== "application/octet-stream" ||
+        !/^\d{15}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(update.name)
+      )
+        return false;
+    }
+  }
+  return true;
 }
 
 /** Merge recovery copies into their original tree, never replacing survivors. */
@@ -1166,15 +1253,228 @@ async function restoreItemsUnlocked(
   driveRoot: string,
   entries: readonly TrashEntry[],
 ): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
+  // Selecting either half restores the pair. The trash index, rather than the
+  // selected batch, owns the relationship and its persisted destinations.
+  const selected = new Map(entries.map((entry) => [entry.url, entry]));
+  const docs = new URL("docs/", client.storageUrl).href;
+  const partnerOriginal = (entry: TrashEntry) =>
+    entry.original.endsWith("/")
+      ? `${entry.original.slice(0, -1)}.ttl`
+      : docContainerUrls(entry.original).container;
+  const docsEntries = entries.filter((entry) => {
+    try {
+      slotOf(driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
+    } catch {
+      return false; // Normal per-item validation below reports the error without I/O.
+    }
+    return entry.original.startsWith(docs);
+  });
+  const pairings = new Map<string, string>();
+  if (docsEntries.length)
+    try {
+      const current = await client.readRdf(indexUrlOf(driveRoot));
+      const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
+      const available = trashEntries(index);
+      for (const entry of docsEntries) {
+        const paired = index.record(entry.url).pairedWith;
+        const original = partnerOriginal(entry);
+        // Paths locate possible conflicts, never establish a relationship.
+        // Refuse mixed generations before moving either half, even when the
+        // caller selected both and their original paths happen to match.
+        if (entries.some((other) => other.original === original && other.url !== paired))
+          throw new DriveError("invalid-trash-record", 409, entry.url);
+        const partner = available.find((other) => other.url === paired);
+        if (!paired && available.some((other) => other.original === original))
+          throw new DriveError("invalid-trash-record", 409, entry.url);
+        if (partner) {
+          if (partner.original !== original || index.record(partner.url).pairedWith !== entry.url)
+            throw new DriveError("invalid-trash-record", 409, entry.url);
+          pairings.set(entry.url, partner.url);
+          pairings.set(partner.url, entry.url);
+          selected.set(partner.url, partner);
+        }
+      }
+      entries = [...selected.values()];
+    } catch (error) {
+      return { done: [], failed: entries.map((entry) => ({ url: entry.url, error })) };
+    }
+  // Pair discovery can add an unselected companion. Extend the explicit scope
+  // through index settlement, reusing reservations already held by our caller.
+  return exclusiveBatch(
+    client,
+    entries.flatMap((entry) => [entry.url, entry.original]),
+    (scoped) => restoreEntriesUnlocked(scoped, driveRoot, entries, pairings),
+    entries.map((entry) => entry.url),
+  );
+}
+
+async function restoreEntriesUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+  pairings: ReadonlyMap<string, string>,
+): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
   const result: BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }> = {
     done: [],
     failed: [],
   };
-  for (const entry of entries) {
+  // Classify the complete batch while all trash resources are still present.
+  // Cache the snapshot bytes and validator once, including for renamed pairs.
+  const snapshots = new Map<
+    string,
+    Promise<
+      | {
+          data: PodDocument;
+          etag: string | undefined;
+          verifyHeaders?: ResourceAssertion["verifyHeaders"];
+        }
+      | undefined
+    >
+  >();
+  const snapshotFor = (documentUrl: string) => {
+    let pending = snapshots.get(documentUrl);
+    if (!pending) {
+      pending = (async () => {
+        const docs = new URL("docs/", client.storageUrl).href;
+        if (!documentUrl.startsWith(docs)) return undefined;
+        const source = entries.find((entry) => entry.original === documentUrl)?.url ?? documentUrl;
+        if (!(await exists(client, source))) return undefined;
+        // A failed read is an error, never evidence that this isn't a companion.
+        const { body, etag, verifyHeaders } = await client.readVersion(source);
+        try {
+          const { dataset } = await fetchRdf(documentUrl, {
+            fetch: async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+          });
+          const data = parseDocument(documentUrl, dataset);
+          return data ? { data, etag, ...discoveryOptions({ verifyHeaders }) } : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+      snapshots.set(documentUrl, pending);
+    }
+    return pending;
+  };
+  const plans = await mapConcurrent(entries, async (entry) => {
     try {
       const slot = slotOf(driveRoot, entry);
-      validateOriginal(driveRoot, entry);
-      const status = await requireTrashEntry(client, driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
+      let restoredLocation: string | undefined;
+      const status = await requireTrashEntry(
+        client,
+        driveRoot,
+        entry,
+        false,
+        undefined,
+        (record) => {
+          restoredLocation = record.restoredLocation;
+        },
+      );
+      if (restoredLocation === undefined)
+        await recoveryStatus(client, driveRoot, entry, (record) => {
+          restoredLocation = record.restoredLocation;
+        });
+      if (restoredLocation)
+        validateOriginal(client, driveRoot, { ...entry, original: restoredLocation });
+      const occupied = status !== "partial" && (await exists(client, entry.original));
+      const folder = entry.original.endsWith("/");
+      const merge =
+        status === "partial" ||
+        (occupied &&
+          folder &&
+          (await isDocsUpdateTree(
+            client,
+            entry.original,
+            (
+              await snapshotFor(`${entry.original.slice(0, -1)}.ttl`)
+            )?.data,
+          )));
+      const target =
+        restoredLocation ??
+        (occupied && !merge
+          ? childUrl(parentOf(entry.original) as string, restoredName(entry.name), folder)
+          : entry.original);
+      return {
+        entry,
+        slot,
+        status,
+        merge,
+        resume: restoredLocation !== undefined,
+        target,
+        snapshot: undefined as Awaited<ReturnType<typeof snapshotFor>>,
+      };
+    } catch (error) {
+      return { entry, error };
+    }
+  });
+  // A paired snapshot and companion are one restore. A live lease (or any
+  // validation failure) on either half must stop both before destination writes.
+  for (const plan of plans) {
+    if (!("error" in plan)) continue;
+    const partner = plans.find((other) => other.entry.url === pairings.get(plan.entry.url));
+    if (partner) Object.assign(partner, { error: plan.error });
+  }
+  for (const plan of plans) {
+    if ("error" in plan || plan.entry.original.endsWith("/")) continue;
+    const tree = `${plan.entry.original.slice(0, -4)}/`;
+    const companion = plans.find(
+      (other) => !("error" in other) && other.entry.url === pairings.get(plan.entry.url),
+    );
+    if (
+      plan.target === plan.entry.original &&
+      (!companion || "error" in companion || companion.target === tree)
+    )
+      continue;
+    try {
+      plan.snapshot = await snapshotFor(plan.entry.original);
+      if (!plan.snapshot) continue;
+      if (plan.target === plan.entry.original && companion && !("error" in companion))
+        plan.target = `${companion.target.slice(0, -1)}.ttl`;
+      if (companion && !("error" in companion)) {
+        companion.target = docContainerUrls(plan.target).container;
+        companion.merge = false;
+      }
+    } catch (error) {
+      Object.assign(plan, { error });
+      if (companion) Object.assign(companion, { error });
+    }
+  }
+  const ready = plans.filter((plan) => !("error" in plan));
+  if (ready.length)
+    try {
+      // Every restore owns its destination before the first write, including
+      // unrenamed snapshots, companions and ordinary files/folders. A retry
+      // must reconcile a completed copy there rather than rename it as a collision.
+      await updateIndex(client, driveRoot, (index) => {
+        for (const plan of ready)
+          transferRecord(index, plan.entry.url).restoredLocation = plan.target;
+      });
+    } catch (error) {
+      for (const plan of ready)
+        try {
+          // A paired/rewritten document needs the atomic index plan. Ordinary
+          // restores can use the existing slot receipt when index writes fail.
+          if (pairings.has(plan.entry.url) || plan.snapshot) throw error;
+          await markRecovery(
+            client,
+            driveRoot,
+            plan.entry,
+            plan.status === "partial" ? "partial" : "complete",
+            plan.target,
+          );
+        } catch (error) {
+          Object.assign(plan, { error });
+        }
+    }
+  const outcomes = new Map<TrashEntry, typeof result>();
+  const restore = async (plan: (typeof plans)[number]) => {
+    const { entry } = plan;
+    const outcome: typeof result = { done: [], failed: [] };
+    try {
+      if ("error" in plan) throw plan.error;
+      const { slot, status, target } = plan;
+      const renamed = target !== entry.original;
       if (entry.etag !== undefined) {
         const current = await client.stat(
           entry.url,
@@ -1184,7 +1484,12 @@ async function restoreItemsUnlocked(
       }
       const archive = await capturePolicyArchive(client, entry.url);
       client.bindRecoveryPolicy?.(entry.url, archive);
-      if (status === "partial") {
+      if (plan.merge || (plan.resume && !(renamed && plan.snapshot))) {
+        // A failed merge must retry in place even after assets have been restored.
+        if (status !== "partial" && !plan.resume)
+          await updateIndex(client, driveRoot, (index) => {
+            transferRecord(index, entry.url).status = "partial";
+          });
         const current = await client.readRdf(indexUrlOf(driveRoot));
         const owner = current && trashIndexFrom(current.dataset).record(entry.url).leaseOwner;
         const settled =
@@ -1194,7 +1499,7 @@ async function restoreItemsUnlocked(
         const remaining = await restoreMissing(
           client,
           entry.url,
-          entry.original,
+          target,
           settled,
           entry.etag,
           [],
@@ -1204,39 +1509,75 @@ async function restoreItemsUnlocked(
         await removeRecoveryMarker(client, driveRoot, entry);
         await removePolicyArchive(client, entry.url, archive);
         await removeEmptySlot(client, slot);
-        result.done.push({ entry, url: entry.original, renamed: false });
-        continue;
+        outcome.done.push({ entry, url: target, renamed });
+        outcomes.set(entry, outcome);
+        return outcome;
       }
-      const folder = entry.original.endsWith("/");
-      const parent = parentOf(entry.original) as string;
-      let target = entry.original;
-      let renamed = false;
-      const exists = await client.stat(target).then(
-        () => true,
-        (error: unknown) => {
-          if (error instanceof DriveError && error.kind === "not-found") return false;
-          throw error;
-        },
-      );
-      if (exists) {
-        target = childUrl(parent, restoredName(entry.name), folder);
-        renamed = true;
-      }
+      if (renamed && plan.snapshot) {
+        const companion = plans.find((other) => other.entry.url === pairings.get(entry.url));
+        const failedCompanion = companion && outcomes.get(companion.entry);
+        if (failedCompanion?.failed.length)
+          throw new TrashRestorePartialError(failedCompanion.failed);
+        const { data, etag, verifyHeaders } = plan.snapshot;
+        if (!etag || etag.startsWith("W/"))
+          throw new DriveError("missing-validator", 409, entry.url);
+        const body = await relocateDocument(client, entry.original, target, data, entry.trashedAt);
+        const written = await writeRestoreSnapshot(client, target, body, {
+          ifNoneMatch: "*",
+          restoreFrom: { url: entry.url, etag, ...discoveryOptions({ verifyHeaders }) },
+        });
+        if (!written.etag || written.etag.startsWith("W/"))
+          throw new DriveError("missing-validator", 409, target);
+        const current = await client.stat(target, { ifMatch: written.etag });
+        if (current.etag !== written.etag) throw new DriveError("conflict", 412, target);
+        try {
+          await client.remove(entry.url, {
+            ifMatch: etag,
+            ...discoveryOptions({ verifyHeaders: entry.verifyHeaders ?? verifyHeaders }),
+            commit: {
+              survivors: [{ url: target, etag: written.etag, ...discoveryOptions(current) }],
+              identityChecks: [
+                async () => {
+                  const final = await client.stat(target, {
+                    ifMatch: written.etag as string,
+                    ...discoveryOptions(current),
+                  });
+                  if (final.etag !== written.etag) throw new DriveError("conflict", 412, target);
+                },
+              ],
+            },
+          });
+        } catch (error) {
+          await recheckDeletionFailure(client, error);
+          if (await exists(client, entry.url)) throw error;
+        }
+      } else
+        await client.move(
+          entry.url,
+          target,
+          { kind: "preserve-source" },
+          confirmationOptions(entry),
+        );
       // The client verifies original or owner-only ACLs on missing ancestors first.
-      const { url } = await client.move(
-        entry.url,
-        target,
-        { kind: "preserve-source" },
-        confirmationOptions(entry),
-      );
       await removeRecoveryMarker(client, driveRoot, entry);
       // The slot may contain another writer's resources; only remove it empty.
       await removePolicyArchive(client, entry.url, archive);
       await removeEmptySlot(client, slot);
-      result.done.push({ entry, url, renamed });
+      outcome.done.push({ entry, url: target, renamed });
     } catch (error) {
-      result.failed.push({ url: entry.url, error });
+      outcome.failed.push({ url: entry.url, error });
     }
+    outcomes.set(entry, outcome);
+    return outcome;
+  };
+  // A renamed snapshot is advertised only after its companion has been restored.
+  for (const plan of plans.filter(({ entry }) => entry.original.endsWith("/"))) await restore(plan);
+  for (const plan of plans.filter(({ entry }) => !entry.original.endsWith("/")))
+    await restore(plan);
+  for (const entry of entries) {
+    const outcome = outcomes.get(entry) as typeof result;
+    result.done.push(...outcome.done);
+    result.failed.push(...outcome.failed);
   }
   return removeCompletedRecords(
     client,
@@ -1313,7 +1654,11 @@ async function removeTrashItem(
     });
   } catch (error) {
     const cause = error instanceof DrivePartialFailureError ? error.cause : error;
-    if (!isMissingItem(cause)) throw error;
+    await recheckDeletionFailure(client, error);
+    if (!isMissingItem(cause)) {
+      if (!(await exists(client, url))) return;
+      throw error;
+    }
     if (!(await exists(client, url))) return;
     // Starting another traversal would replace every descendant's captured
     // validator, even when the approved top-level container is unchanged.
