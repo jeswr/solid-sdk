@@ -25,7 +25,7 @@ scroll lock and Sonner insert them at runtime, and the scroll lock's body holds 
 pixel values, so no build-time hash could match. Zod runs jitless (`src/instrumentation-client.ts`)
 so its `Function` probe never meets the eval-free script policy.
 
-Staging excludes `src/app/dev/` and public fixtures. The web session uses the installed Solid
+Staging excludes `src/app/dev/`, the `src/app/.well-known/` route handlers (the deployed suite serves the Client ID Document, E7) and public fixtures. The web session uses the installed Solid
 extension's granted pod, falling back to a seeded demo pod. Native staging replaces the web
 session with a sign-in placeholder and omits the demo code. Native authentication is a later
 integration. Native `/` opens `/drive/my/`,

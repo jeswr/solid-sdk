@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Badge,
@@ -133,6 +134,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       <div className="mus-content">
         <h1>Music</h1>
         <LoadingSkeleton label="Opening Music" preset="grid" />
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="mus-content">
+        <h1>Music</h1>
+        <p role="status">Sign in to open your Music</p>
       </div>
     );
   if (state.status === "error")

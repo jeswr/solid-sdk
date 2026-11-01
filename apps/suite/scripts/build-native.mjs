@@ -18,8 +18,10 @@ const www = browserTest ? join(stage, "www") : join(root, "www");
 const info = nativeSettings(process.env);
 const adaptations = [
   "dev/ routes excluded from the native build graph",
-  "native / entry redirects to /drive/my (web has no root page)",
+  ".well-known/ route handlers excluded (the Client ID Document is served by the deployed suite)",
+  "native / entry redirects to /drive/my (the web / chooses by session)",
   "demo pod session replaced by the native sign-in placeholder (mobile auth integration pending)",
+  "shell demo account disabled; demo-pod modules replaced by inert stand-ins",
   "Drive preview interception uses the plain /drive/p/[ref] route on native",
 ];
 await rm(stage, { recursive: true, force: true });
@@ -27,7 +29,9 @@ await rm(www, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await cp(join(root, "src"), join(stage, "src"), {
   recursive: true,
-  filter: (path) => path !== join(root, "src/app/dev"),
+  // The Client ID Document is served by the deployed suite (MOB-P3 E7), never by the bundle.
+  filter: (path) =>
+    path !== join(root, "src/app/dev") && path !== join(root, "src/app/.well-known"),
 });
 await stageCalendarRoutes(join(stage, "src"));
 // The web deployment has no / route; the local WebView starts at /.
@@ -38,14 +42,83 @@ import { redirect } from "next/navigation";
 export default function NativeEntry() { redirect("/drive/my/"); }
 `,
 );
-// Do not include seed code even in an unreferenced staged module.
+// Do not include seed code even in an unreferenced staged module. The shell still imports these
+// two modules for its demo account, which the native build turns off (NEXT_PUBLIC_SUITE_DEMO=0),
+// so inert stand-ins keep the imports resolving and fail closed if anything calls them.
 await rm(join(stage, "src/lib/demo-pod"), { recursive: true });
+await mkdir(join(stage, "src/lib/demo-pod"));
+await writeFile(
+  join(stage, "src/lib/demo-pod/seed.ts"),
+  `// AUTHORED-BY Claude Opus 5.5
+export async function buildDemoSeed(_now: number): Promise<never> {
+  throw new Error("The native app has no demo pod");
+}
+`,
+);
+// The shell's demo account and demo search items, without the seed's names or data.
+await writeFile(
+  join(stage, "src/shell/session/demo-backend.ts"),
+  `// AUTHORED-BY Claude Opus 5.5
+import type { SessionBackend, SuiteAccount } from "./types";
+
+export const demoAccount: SuiteAccount = {
+  id: "demo",
+  webId: "https://demo.invalid/profile/card#me",
+  name: "Demo",
+  storageUrl: "https://demo.invalid/",
+  kind: "demo",
+};
+
+const unavailable = () => Promise.reject(new Error("The native app has no demo pod"));
+
+export class DemoBackend implements SessionBackend {
+  readonly kind = "demo";
+  async restore(): Promise<SuiteAccount | null> {
+    return null;
+  }
+  signIn(): Promise<SuiteAccount> {
+    return unavailable();
+  }
+  async signOut(): Promise<void> {}
+  fetchFor(): typeof fetch {
+    return unavailable;
+  }
+  onExpired(): () => void {
+    return () => {};
+  }
+}
+`,
+);
+await writeFile(
+  join(stage, "src/shell/search/demo-items.ts"),
+  `// AUTHORED-BY Claude Opus 5.5
+import type { LocalSearchItem } from "./local-source";
+export function demoSearchItems(_seed: readonly unknown[]): LocalSearchItem[] {
+  return [];
+}
+`,
+);
+await writeFile(
+  join(stage, "src/lib/demo-pod/browser.ts"),
+  `// AUTHORED-BY Claude Opus 5.5
+export class DemoStorageError extends Error {}
+interface DemoPodStandIn {
+  fetch: typeof globalThis.fetch;
+  snapshot(): { resources: [string, { body: Uint8Array }][] };
+}
+export async function getDemoPod(): Promise<DemoPodStandIn> {
+  throw new Error("The native app has no demo pod");
+}
+export async function resetDemoPod(): Promise<never> {
+  throw new Error("The native app has no demo pod");
+}
+`,
+);
 await cp(
   join(root, "src/lib/session/native-session.tsx"),
   join(stage, "src/lib/session/pod-session.tsx"),
 );
 if (browserTest) {
-  await mkdir(join(stage, "src/lib/demo-pod"));
   await cp(join(root, "src/lib/demo-pod/pod.ts"), join(stage, "src/lib/demo-pod/pod.ts"));
   await cp(
     join(root, "test/native-browser/session.tsx"),
@@ -110,6 +183,8 @@ await new Promise((resolve, reject) => {
         NEXT_PUBLIC_APP_BASE_URL: info.appBaseUrl,
         NEXT_PUBLIC_PUBLIC_SUITE_URL: info.publicSuiteUrl,
         NEXT_PUBLIC_CLIENT_ID_URL: info.clientIdUrl,
+        // The demo pod is web-only; staging replaces it with inert stand-ins.
+        NEXT_PUBLIC_SUITE_DEMO: "0",
         NEXT_TELEMETRY_DISABLED: "1",
       },
     },

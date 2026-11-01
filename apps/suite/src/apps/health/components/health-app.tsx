@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import {
@@ -137,6 +138,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       <div className="hlt-page">
         <h1>Opening Health</h1>
         <LoadingSkeleton preset="grid" />
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="hlt-page">
+        <h1>Health</h1>
+        <p role="status">Sign in to open your Health</p>
       </div>
     );
   if (state.status === "error")
