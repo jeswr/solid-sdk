@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Worker-owned, document-confined reads. No replica, page gate, or persistent cache. */
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
@@ -28,12 +29,13 @@ export function createInternalRead(options: {
   allowedOrigins: ReadonlySet<string>;
   budget: ResolutionBudget;
   signal?: AbortSignal;
-  /** Must perform exactly one manual GET/HEAD, rechecking live worker authority. */
+  /** Manual GET/HEAD, rechecking live authority and calling beforeSend before EVERY network read. */
   send: (
     url: string,
     authenticated: boolean,
     method: string,
     signal: AbortSignal,
+    beforeSend: () => void,
   ) => Promise<Response>;
 }): InternalRead {
   const { budget } = options;
@@ -66,12 +68,13 @@ export function createInternalRead(options: {
       budget.signal.addEventListener('abort', cancel, { once: true });
       options.signal?.addEventListener('abort', cancel, { once: true });
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      let body: ReadableStream<Uint8Array> | null = null;
       const cancelBody = () => {
-        void reader?.cancel().catch(() => {});
+        if (reader) void reader.cancel().catch(() => {});
+        else void body?.cancel().catch(() => {});
       };
       controller.signal.addEventListener('abort', cancelBody, { once: true });
       try {
-        if (!budget.document()) return failed;
         let current = url;
         for (let hops = 0; ; hops++) {
           if (!confined(current, authenticated)) return failed;
@@ -80,10 +83,31 @@ export function createInternalRead(options: {
           if (hops > 0 && known && !aliases.has(hopKey))
             return await budget.run(() => known, controller.signal);
           aliases.add(hopKey);
-          const response = await budget.run(
-            () => options.send(current, authenticated, method, controller.signal),
-            controller.signal,
-          );
+          // Reserve this uncached hop here, even for a simple one-shot transport.
+          if (!budget.document()) return failed;
+          let firstAttempt = true;
+          const response = await budget.run(async () => {
+            const response = await options.send(
+              current,
+              authenticated,
+              method,
+              controller.signal,
+              () => {
+                controller.signal.throwIfAborted();
+                if (!budget.active()) budget.signal.throwIfAborted();
+                // The first attempt is reserved above; nonce retries are fresh network reads.
+                if (firstAttempt) firstAttempt = false;
+                else if (!budget.document()) budget.signal.throwIfAborted();
+              },
+            );
+            // Also dispose a late response from a transport that ignores abort.
+            if (controller.signal.aborted) {
+              void response.body?.cancel().catch(() => {});
+              controller.signal.throwIfAborted();
+            }
+            return response;
+          }, controller.signal);
+          body = response.body;
           // Never probe an opaque redirect: a follow probe would visit unchecked intermediate hops.
           if (response.type === 'opaqueredirect' || response.status === 0) return failed;
           if (response.status >= 300 && response.status < 400) {
@@ -132,7 +156,7 @@ export function createInternalRead(options: {
       } catch {
         return failed;
       } finally {
-        void reader?.cancel().catch(() => {});
+        controller.abort();
         controller.signal.removeEventListener('abort', cancelBody);
         budget.signal.removeEventListener('abort', cancel);
         options.signal?.removeEventListener('abort', cancel);

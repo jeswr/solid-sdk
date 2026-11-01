@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RESOLUTION_LIMITS,
@@ -172,6 +173,25 @@ describe('resolver internal capability', () => {
     expect(h.send).toHaveBeenCalledTimes(1);
     expect(h.budget.truncated).toBe(false);
   });
+
+  it('discards and cancels headers delivered after request cancellation', async () => {
+    const controller = new AbortController();
+    const h = harness({}, controller.signal);
+    let release!: (response: Response) => void;
+    h.send.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = h.read.fetch(webId, false);
+    controller.abort();
+    expect(await pending).toMatchObject({ ok: false, text: '' });
+    const cancel = vi.fn();
+    release(new Response(new ReadableStream({ cancel })));
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    expect(h.send.mock.calls[0][3].aborted).toBe(true);
+  });
 });
 
 describe('Preferences discovery', () => {
@@ -196,6 +216,19 @@ describe('Preferences discovery', () => {
       [publicIndex, false],
       [privateIndex, true],
     ]);
+  });
+
+  it('skips preferences entirely when the profile advertises a private index', async () => {
+    const h = harness({
+      [webId]: `<${webId}> <${solid}privateTypeIndex> <${pod}/private>; <${pim}preferencesFile> <${pod}/prefs> .`,
+      [`${pod}/private`]: index(),
+      [`${pod}/prefs`]: 'x'.repeat(RESOLUTION_LIMITS.bytes + 1),
+    });
+    expect(await h.resolve()).toMatchObject({
+      truncated: false,
+      targets: [{ url: `${pod}/contacts/` }],
+    });
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([webId, `${pod}/private`]);
   });
 
   it.each([
@@ -224,6 +257,31 @@ describe('Preferences discovery', () => {
 });
 
 describe('whole-resolution limits', () => {
+  it('charges every uncached redirect hop and rejects the incomplete final chain', async () => {
+    const h = harness();
+    const urls = Array.from({ length: 33 }, (_, chain) =>
+      Array.from({ length: 4 }, (_, hop) => `${pod}/chain${chain}/hop${hop}`),
+    );
+    for (const chain of urls) for (const url of chain) h.read.allowDocument(url, false);
+    // Include the profile in the same request-wide limit, leaving 127 reads for chains.
+    await h.read.fetch(webId, false);
+    h.send.mockImplementation(async (url) => {
+      const chain = urls.find((chain) => chain.includes(url))!;
+      const hop = chain.indexOf(url);
+      return hop === 3
+        ? new Response(index())
+        : new Response(null, { status: 302, headers: { location: chain[hop + 1] } });
+    });
+    for (const chain of urls.slice(0, 31))
+      expect(await h.read.fetch(chain[0], false)).toMatchObject({ ok: true });
+    expect(await h.read.fetch(urls[31][0], false)).toMatchObject({ ok: false, text: '' });
+    expect(h.budget.truncated).toBe(true);
+    expect(h.send).toHaveBeenCalledTimes(128);
+    expect(h.send.mock.calls.at(-1)![0]).toBe(urls[31][2]);
+    expect(await h.read.fetch(urls[32][0], false)).toMatchObject({ ok: false });
+    expect(h.send).toHaveBeenCalledTimes(128);
+  });
+
   it('shares 128 documents across SAI, preferences, indexes and subsequent classes', async () => {
     const docs: Record<string, string> = {
       [webId]: `<${webId}> <${interop}hasRegistrySet> <${pod}/set>; <${pim}preferencesFile> <${pod}/prefs>; <${solid}publicTypeIndex> ${Array.from({ length: 140 }, (_, i) => `<${pod}/index${i}>`).join(', ')} .`,

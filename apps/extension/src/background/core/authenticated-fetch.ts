@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The authenticated resource fetch — DPoP-bound, origin-gated, fail-closed, with the
  * RFC 9449 §8 nonce-challenge retry. This is the one place the user's access token is
@@ -133,6 +134,8 @@ export async function authenticatedFetch(
         isUseDpopNonceChallenge(response) &&
         serverNonce
       ) {
+        // This response is discarded. Stop its stream before minting/sending the retry.
+        void response.body?.cancel().catch(() => {});
         response = await send(serverNonce);
         serverNonce = response.headers.get('dpop-nonce') ?? serverNonce;
       }

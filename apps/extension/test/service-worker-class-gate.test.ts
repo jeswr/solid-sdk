@@ -3537,7 +3537,7 @@ describe('worker-owned class discovery', () => {
   const privateIndex = `${pod}/settings/private`;
   const secret = 'internal RDF bytes must stay inside the resolver';
   const dataClass = classGrant().dataClass;
-  function request(classes = [dataClass], sender = APPX) {
+  function request(classes = [dataClass], sender: CapturedSender = APPX) {
     return send(
       {
         type: 'SOLID_REQUEST_ACCESS',
@@ -3555,6 +3555,219 @@ describe('worker-owned class discovery', () => {
     const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
     await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
   }
+
+  it.each([
+    'close tab',
+    'deadline',
+  ])('cancels a profile-queue wait on %s without starting preflight later', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = profileDb.write.bind(profileDb);
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state) => {
+      entered();
+      await held;
+      return write(state);
+    });
+    const removing = send({ type: 'SOLID_PROFILE_REMOVE', profileId: '1' }, EXT_SENDER);
+    await started;
+    vi.useFakeTimers();
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await vi.advanceTimersByTimeAsync(0);
+      if (ending === 'close tab') removedTab(75);
+      else await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(vi.getTimerCount()).toBe(0);
+      release();
+      expect((await removing).ok).toBe(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCalls).toHaveLength(0);
+      expect(createdWindows).toHaveLength(0);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a shared refresh alive for another origin after one request closes its tab', async () => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === 'https://idp.example/token') {
+        started();
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }
+      return new Response('');
+    };
+    const first = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const session = WorkerStore.prototype.session;
+    let joined!: () => void;
+    const joining = new Promise<void>((resolve) => {
+      joined = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+      this: ProfileStore,
+      id,
+    ) {
+      const result = await session.call(this, id);
+      joined();
+      return result;
+    });
+    const other = { origin: 'https://other.example', url: 'https://other.example/app' };
+    const second = request([dataClass], other);
+    await joining;
+    // Let the second ensureSession attach to the in-flight redemption.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    removedTab(75);
+    expect(await first).toMatchObject({ error: expect.any(String) });
+    expect(fetchCalls[0].init?.signal?.aborted).toBe(false);
+    release(
+      Response.json({
+        access_token: 'shared-access',
+        refresh_token: 'shared-refresh',
+        expires_in: 3600,
+      }),
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await second).ok).toBe(false);
+    expect(profileDb.state.records[0].session?.accessToken).toBe('shared-access');
+    expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(1);
+  });
+
+  it.each([
+    'close tab',
+    'deadline',
+    'revoke',
+  ])('cancels a stalled refresh on %s and fences its late success', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const before = structuredClone(profileDb.state);
+    vi.useFakeTimers();
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async () => {
+      started();
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    };
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await entered;
+      const signal = fetchCalls[0].init?.signal;
+      expect(fetchCalls[0].url).toBe('https://idp.example/token');
+      expect(signal).toBeInstanceOf(AbortSignal);
+      if (ending === 'close tab') removedTab(75);
+      else if (ending === 'deadline') await vi.advanceTimersByTimeAsync(10_000);
+      else await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(signal!.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      release(
+        Response.json({
+          access_token: 'late-access',
+          refresh_token: 'late-refresh',
+          expires_in: 3600,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(profileDb.state).toEqual(before);
+      expect(fetchCalls).toHaveLength(1);
+      expect(createdWindows).toHaveLength(0);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('charges nonce re-sends against the same 128 network reads and discards the last challenge', async () => {
+    await seedSession();
+    await loadWorker();
+    const attempts = new Set<string>();
+    const cancelled = vi.fn();
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(
+          `<${WEBID}> <${solid}privateTypeIndex> ${Array.from({ length: 70 }, (_, i) => `<${pod}/index${i}>`).join(', ')} .`,
+        );
+      if (!attempts.has(url)) {
+        attempts.add(url);
+        return new Response(new ReadableStream({ cancel: cancelled }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${url}/target/> .`,
+      );
+    };
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([{ truncated: true, targets: expect.any(Array) }]);
+      expect((view.classes as { targets: unknown[] }[])[0].targets).toHaveLength(63);
+      expect(fetchCalls).toHaveLength(128);
+      expect(cancelled).toHaveBeenCalledTimes(64);
+      expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
+    } finally {
+      await deny();
+    }
+    expect((await pending).ok).toBe(false);
+  });
+
+  it('cleans a streamed nonce challenge and its transport before consent denial', async () => {
+    await seedSession();
+    await loadWorker();
+    const cancel = vi.fn();
+    let challenged = false;
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}privateTypeIndex> <${privateIndex}> .`);
+      if (!challenged) {
+        challenged = true;
+        return new Response(new ReadableStream({ cancel }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      expect(cancel).toHaveBeenCalledOnce();
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await pending).ok).toBe(false);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchCalls).toHaveLength(3);
+    expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
+  });
 
   it('reads preferences before first consent, authenticates only pod documents, and exposes no bytes to page or replica', async () => {
     await seedSession();

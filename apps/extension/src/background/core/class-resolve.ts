@@ -250,24 +250,35 @@ async function resolveTypeIndexTargets(
       );
     refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url, opts.budget);
     const store = parse(profile.url, profile.text, opts.budget);
-    for (const q of store.getQuads(
-      DataFactory.namedNode(opts.webId),
-      DataFactory.namedNode(PREFERENCES_FILE),
-      null,
-      null,
-    )) {
-      if (q.object.termType !== 'NamedNode' || !opts.budget?.active()) continue;
-      const url = q.object.value;
-      if (!opts.authenticatedOrigins || !isAllowedOrigin(url, opts.authenticatedOrigins)) continue;
-      opts.read?.allowDocument(url, true);
-      const preferences = await safeFetch(opts.fetch, url, true);
-      if (!preferences) continue;
-      try {
-        refs.push(
-          ...parseTypeIndexRefs(opts.webId, preferences.text, preferences.url, opts.budget),
-        );
-      } catch {
-        /* An unreadable/malformed preferences document contributes nothing. */
+    // C1: preferences are a fallback only when the WebID has no private-index pointer.
+    if (
+      !store.countQuads(
+        DataFactory.namedNode(opts.webId),
+        DataFactory.namedNode(PRIVATE_TYPE_INDEX),
+        null,
+        null,
+      )
+    ) {
+      for (const q of store.getQuads(
+        DataFactory.namedNode(opts.webId),
+        DataFactory.namedNode(PREFERENCES_FILE),
+        null,
+        null,
+      )) {
+        if (q.object.termType !== 'NamedNode' || !opts.budget?.active()) continue;
+        const url = q.object.value;
+        if (!opts.authenticatedOrigins || !isAllowedOrigin(url, opts.authenticatedOrigins))
+          continue;
+        opts.read?.allowDocument(url, true);
+        const preferences = await safeFetch(opts.fetch, url, true);
+        if (!preferences) continue;
+        try {
+          refs.push(
+            ...parseTypeIndexRefs(opts.webId, preferences.text, preferences.url, opts.budget),
+          );
+        } catch {
+          /* An unreadable/malformed preferences document contributes nothing. */
+        }
       }
     }
     // Public declarations take precedence across profile + preferences, including fragments.

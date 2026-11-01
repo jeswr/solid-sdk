@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6
 /** Worker-only profile authority. Credentials are never part of the public projection. */
 import type { Profile } from '../../shared/messages';
 import type { StoredProfile, StoredSession } from '../session-store';
@@ -174,18 +175,22 @@ export class ProfileStore {
     });
   }
 
-  updateSession(id: string, session: StoredSession): Promise<void> {
-    return this.change(id, async (record) => {
-      if (
-        record.profile.sessionState !== 'active' ||
-        session.webId !== record.profile.webId ||
-        session.issuer !== record.profile.issuer ||
-        !(await this.keyMatches(session, record.keyPair))
-      ) {
-        throw new Error('Session does not belong to this profile.');
-      }
-      record.session = session;
-    });
+  updateSession(id: string, session: StoredSession, signal?: AbortSignal): Promise<void> {
+    return this.change(
+      id,
+      async (record) => {
+        if (
+          record.profile.sessionState !== 'active' ||
+          session.webId !== record.profile.webId ||
+          session.issuer !== record.profile.issuer ||
+          !(await this.keyMatches(session, record.keyPair))
+        ) {
+          throw new Error('Session does not belong to this profile.');
+        }
+        record.session = session;
+      },
+      signal,
+    );
   }
 
   /** Capability writes are internal to the SW; no page-facing message accepts these arrays. */
@@ -235,10 +240,17 @@ export class ProfileStore {
     await this.persistence.write(state);
   }
 
-  private change(id: string, op: (record: ProfileRecord) => void | Promise<void>): Promise<void> {
+  private change(
+    id: string,
+    op: (record: ProfileRecord) => void | Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<void> {
     return this.locked(async () => {
+      signal?.throwIfAborted();
       const state = await this.persistence.read();
+      signal?.throwIfAborted();
       await op(this.find(state, id));
+      signal?.throwIfAborted();
       await this.persistence.write(state);
     });
   }

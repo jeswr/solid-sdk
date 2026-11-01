@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
@@ -260,7 +261,8 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   repeated call), and remains callable on an ungranted stub.
 - **`resolveClass`** first walks the WebID's SAI registry set → data registries → data
   registrations, then its public/private Solid Type Indexes for `solid:forClass`. It merges
-  index links from the profile and its authenticated `pim:preferencesFile` documents. It
+  index links from the profile, following authenticated `pim:preferencesFile` documents
+  only when the profile lacks `solid:privateTypeIndex`. It
   deduplicates container/instance targets by kind and URL on allowed pod origins.
   SAI registrations must be containers strictly inside their registry on the same origin.
   Their shape tree must match the class through the reviewed shipped table (currently
@@ -268,8 +270,10 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   `sh:targetClass`. Other ShEx-only trees do not match. SAI discovery is bounded to four
   registries, 64 registrations and 16 public tree/shape documents per resolution; the internal
   result reports truncation. One request-wide budget covers all requested classes and rungs:
-  128 documents, 10 seconds, three redirects per document, 1 MiB per streamed body and 50,000
-  quads per document. Exhaustion preserves already discovered targets as unchecked and shows
+  128 network document reads (including redirect hops and nonce retries), 10 seconds,
+  three redirects per document, 1 MiB per streamed body and 50,000 quads per document.
+  The deadline and request cancellation also cover session refresh and profile-queue waits.
+  Exhaustion preserves already discovered targets as unchecked and shows
   “Some data could not be checked” in consent. Documents are memoised within the request.
   The worker supplies a document-confined internal GET/HEAD capability, cancelled on session
   changes, revocation, or the requesting tab closing or leaving its origin. Every redirect hop
