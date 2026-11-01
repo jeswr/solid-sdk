@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import { describe, expect, it } from "vitest";
-import { htmlToText } from "../src/htmlText.js";
+import { htmlToText, MAX_HTML_INPUT_CHARS } from "../src/htmlText.js";
 
 describe("htmlToText", () => {
   it("returns empty for empty", () => {
@@ -74,5 +74,11 @@ describe("htmlToText on hostile input (linear time)", () => {
 
   it("caps the scanned input", () => {
     expect(htmlToText("a".repeat(2 * 1024 * 1024)).length).toBe(1024 * 1024);
+  });
+
+  it("truncation at the input cap does not split a surrogate pair", () => {
+    const out = htmlToText(`${"a".repeat(MAX_HTML_INPUT_CHARS - 1)}\u{1F600}tail`);
+    expect(out.endsWith("\uD83D")).toBe(false);
+    expect(out.length).toBe(MAX_HTML_INPUT_CHARS - 1);
   });
 });

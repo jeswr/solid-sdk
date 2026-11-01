@@ -72,7 +72,13 @@ export function htmlToText(input: string): string {
   if (input === "") {
     return "";
   }
-  const html = input.length > MAX_HTML_INPUT_CHARS ? input.slice(0, MAX_HTML_INPUT_CHARS) : input;
+  // Do not cut a surrogate pair in half at the cap.
+  const cut =
+    input.length > MAX_HTML_INPUT_CHARS &&
+    /[\uD800-\uDBFF]/.test(input[MAX_HTML_INPUT_CHARS - 1] ?? "")
+      ? MAX_HTML_INPUT_CHARS - 1
+      : MAX_HTML_INPUT_CHARS;
+  const html = input.length > MAX_HTML_INPUT_CHARS ? input.slice(0, cut) : input;
   const lower = asciiLower(html);
   const parts: string[] = [];
   // Once no `>` follows some index, none follows any later index either.

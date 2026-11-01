@@ -194,6 +194,35 @@ describe("MatrixFeedSource hostile events", () => {
     expect(two.messages).toHaveLength(0);
   });
 
+  it("a non-string formatted_body or a lone-surrogate id skips that event, not the room", async () => {
+    const hostile = (n: number, extra: Record<string, unknown>) => ({
+      type: "m.room.message",
+      event_id: `$h${n}`,
+      sender: "@mallory:evil.example",
+      origin_server_ts: 1_780_000_000_000 + n,
+      content: { msgtype: "m.text", body: "plain", format: "org.matrix.custom.html" },
+      ...extra,
+    });
+    const { fetch } = stubWith([
+      ...MATRIX_MESSAGES.chunk,
+      hostile(1, {
+        content: { body: "plain", format: "org.matrix.custom.html", formatted_body: 1 },
+      }),
+      hostile(2, {
+        content: { body: "plain", format: "org.matrix.custom.html", formatted_body: ["<b>"] },
+      }),
+      hostile(3, { event_id: "$\ud800" }),
+      hostile(4, { sender: "@\udc00:evil.example" }),
+    ]);
+    const thread = await new MatrixFeedSource(
+      { homeserverUrl: HS, accessToken: TOKEN },
+      { fetch },
+    ).getRoomThread(ROOM_ID);
+    expect(thread.messages.map((m) => m.id)).toEqual(["$evt2", "$evt1", "$h2", "$h1"]);
+    expect(thread.messages[2]?.body).toBe("plain");
+    expect(thread.messages[2]?.bodyHtml).toBeUndefined();
+  });
+
   it("a hostile formatted_body does not stall the thread read", async () => {
     const { fetch } = stubWith(
       Array.from({ length: 20 }, (_, n) => ({
