@@ -262,7 +262,10 @@ export class WacSharingAdapter implements SharingAdapter {
     const identifier = principal.kind === "public" ? PUBLIC : principal.webId;
     // A container (the comments container) is governed by accessTo for itself and default
     // for its members; they must move together or a downgrade leaves member access behind.
-    // Only symmetric authorizations are changed; any other shape fails closed.
+    // Only symmetric authorizations are changed; any other shape fails closed. Known cost:
+    // a commenter's Append also reaches existing comment resources through acl:default (they
+    // could add triples to another person's comment). Narrowing members to Read needs an
+    // asymmetric shape this projection does not read yet; tracked in the tracker.
     const container = new URL(resource).pathname.endsWith("/");
     const modes = new Set<string>();
     for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
