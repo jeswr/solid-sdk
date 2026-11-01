@@ -206,6 +206,14 @@ describe("option validation fails closed", () => {
     expect(r.code).toBe("INVALID_OPTIONS");
   });
 
+  it("an object that only claims to be a Date denies instead of throwing", async () => {
+    const r = await verifyInternal(internalChain(), {
+      now: { [Symbol.toStringTag]: "Date" } as unknown as Date,
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("INVALID_OPTIONS");
+  });
+
   it("a non-integer maxChainLength denies", async () => {
     const r = await verifyInternal(internalChain(), { maxChainLength: Number.NaN });
     expect(r.authorized).toBe(false);
@@ -241,6 +249,35 @@ describe("Phase D input guards", () => {
       expect(r.code).toBe("POLICY_DENIED");
     });
   }
+
+  it("a multi-valued request attribute denies (solid-odrl would read one element)", async () => {
+    const attributes = { dateTime: base.now.toISOString() };
+    const single = await verifyInternal(internalChain(), {
+      request: { ...readRequest(), attributes: { ...attributes, purpose: CAST.purpose } },
+    });
+    expect(single.authorized).toBe(true);
+    const multi = await verifyInternal(internalChain(), {
+      request: {
+        ...readRequest(),
+        attributes: { ...attributes, purpose: [CAST.purpose, "https://evil.example/marketing"] },
+      },
+    });
+    expect(multi.authorized).toBe(false);
+    expect(multi.phase).toBe("D");
+    expect(multi.code).toBe("POLICY_DENIED");
+  });
+
+  it("a null content entry denies with POLICY_INTEGRITY instead of throwing", async () => {
+    const r = await verifyInternal(
+      internalChain({
+        policyContents: {
+          [CAST.instituteInternalId]: null,
+        } as unknown as PresentedChain["policyContents"],
+      }),
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_INTEGRITY");
+  });
 
   it("an over-long chain is refused before any key is resolved", async () => {
     let resolutions = 0;

@@ -510,11 +510,15 @@ function checkOptions(
   options: VerifyAuthorityOptions,
 ): CheckedOptions | VerifyAuthorityResult {
   const invalid = (reason: string) => deny("assembly", "INVALID_OPTIONS", reason);
-  // Brand check rather than instanceof, so a Date from another realm is accepted.
-  const nowMs =
-    Object.prototype.toString.call(options.now) === "[object Date]"
-      ? Date.prototype.getTime.call(options.now)
-      : Number.NaN;
+  // Read the internal time value rather than trust instanceof, so a Date from
+  // another realm is accepted; getTime throws on anything without that slot (a
+  // spoofed Symbol.toStringTag included), which is refused below as NaN.
+  let nowMs = Number.NaN;
+  try {
+    nowMs = Date.prototype.getTime.call(options.now);
+  } catch {
+    // not a Date
+  }
   if (!Number.isFinite(nowMs)) {
     return invalid("`now` is not a valid Date — refusing to evaluate validity windows.");
   }
@@ -759,6 +763,14 @@ export async function verifyAgentAuthority(
     const raw: PresentedResourceContent | undefined = Object.hasOwn(contents, hop.id)
       ? contents[hop.id]
       : undefined;
+    if (raw !== undefined && (typeof raw !== "object" || raw === null)) {
+      return deny(
+        "B",
+        "POLICY_INTEGRITY",
+        `The content presented for chain hop <${hop.id}> is not a content object.`,
+        chainIds,
+      );
+    }
     const presented: PresentedResourceContent | undefined =
       raw === undefined
         ? undefined
@@ -998,6 +1010,19 @@ export async function verifyAgentAuthority(
       "D",
       "POLICY_DENIED",
       `Phase D denied: the requested action ${JSON.stringify(String(request.action))} is not an ODRL action.`,
+      chainIds,
+    );
+  }
+  // solid-odrl reads only the first element of a multi-valued attribute under a
+  // scalar operator and lets one element decide a set operator, so a value set
+  // could ride an `eq` permission or switch off an `isNoneOf` prohibition. The
+  // verifier takes single-valued attributes only.
+  const multiValued = Object.entries(request.attributes ?? {}).find(([, v]) => Array.isArray(v));
+  if (multiValued !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the request attribute ${JSON.stringify(multiValued[0])} is multi-valued; the verifier evaluates single-valued attributes only.`,
       chainIds,
     );
   }
