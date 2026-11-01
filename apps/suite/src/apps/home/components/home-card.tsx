@@ -76,7 +76,7 @@ export function HomeCard({
     return (url: string, signal: AbortSignal) =>
       inStorage(url, storage) ? resolve(url, signal) : Promise.resolve(undefined);
   }, [session, storage]);
-  const actions = itemActions(item, storage);
+  const actions = itemActions(item, storage, undefined, webId);
   const open = actions[0]?.href as string;
   const title = itemTitle(item);
   const provenance = provenanceOf(item.dataset, item.subject, item.containerUrl, {

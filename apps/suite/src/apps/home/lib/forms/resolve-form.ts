@@ -17,7 +17,8 @@
  */
 
 import { canonicalize, NS } from "@jeswr/suite-vocab";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
+import { TermAs } from "@rdfjs/wrapper";
 import { subjectOf } from "../model/rdf";
 import { autoFormFor } from "./auto-form.js";
 import { editFieldsFor } from "./edit-map.js";
@@ -53,12 +54,16 @@ export interface ResolveFormOptions {
 export function resolveForm(
   _url: string,
   dataset: DatasetCore,
-  subject: string,
+  subject: string | Term,
   opts: ResolveFormOptions = {},
 ): ResolvedForm {
   // 1. An authored ui: form wins.
   if (opts.formDataset) {
-    const fields = parseUiForm(opts.formDataset, opts.formSubject);
+    const fields = bindPredicates(
+      parseUiForm(opts.formDataset, opts.formSubject),
+      dataset,
+      subject,
+    );
     if (fields.length > 0) return { fields, source: "ui-form" };
   }
 
@@ -88,9 +93,25 @@ export function resolveForm(
         ? { ...field, predicate: titlePredicate }
         : field,
     );
-    return { fields, source: "typed-view", viewerId };
+    return { fields: bindPredicates(fields, dataset, subject), source: "typed-view", viewerId };
   }
 
   // 3. Auto-generate from the subject's own properties.
   return { fields: autoFormFor(dataset, subject), source: "auto" };
+}
+
+/** Bind canonical fields to the vocabulary spelling actually present on this subject. */
+function bindPredicates(
+  fields: readonly FieldSpec[],
+  dataset: DatasetCore,
+  subject: string | Term,
+): FieldSpec[] {
+  const term = subjectOf(dataset, subject);
+  const predicates = [...dataset.match(TermAs.term(term))].map((quad) => quad.predicate.value);
+  return fields.map((field) => ({
+    ...field,
+    predicate:
+      predicates.find((predicate) => canonicalize(predicate) === canonicalize(field.predicate)) ??
+      field.predicate,
+  }));
 }

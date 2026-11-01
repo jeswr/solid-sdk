@@ -15,13 +15,14 @@ import {
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
 import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
-import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
+import { inStorage, readResource } from "../lib/model/rdf";
 import {
   type DiscoveryFailure,
   type RegisteredLocation,
   readTypeIndexes,
 } from "../lib/model/type-index";
 import { cardView } from "./presentation";
+import { storageUsage } from "./storage-usage";
 
 interface Snapshot {
   status: "loading" | "ready" | "error" | "offline";
@@ -31,7 +32,7 @@ interface Snapshot {
   counts: ReadonlyMap<string, number>;
   truncated: boolean;
   refreshing: boolean;
-  used: number;
+  used: number | undefined;
   updated: number;
 }
 const initial: Snapshot = {
@@ -42,7 +43,7 @@ const initial: Snapshot = {
   counts: new Map(),
   truncated: false,
   refreshing: false,
-  used: 0,
+  used: undefined,
   updated: 0,
 };
 export interface HomeSession extends Omit<PodSession, "mode"> {
@@ -82,7 +83,8 @@ function reconcileItems(
     const unvisited =
       preserveUnvisited(item) &&
       !result.etags.has(item.url) &&
-      !result.etags.has(item.containerUrl);
+      (!result.listings.has(item.containerUrl) ||
+        result.listings.get(item.containerUrl)?.has(item.url));
     if (
       !items.has(key(item)) &&
       (failedRead || unvisited) &&
@@ -137,14 +139,20 @@ function createDomainStore(session: HomeSession) {
     const profileUrl = session.webId.split("#")[0] as string;
     pending = (async () => {
       try {
-        const sizes = new Map<string, number>();
         const unavailable: string[] = [];
+        // One response per request within this refresh: the per-domain scans and the
+        // usage walk overlap on containers and registrations.
+        const responses = new Map<string, Promise<Response>>();
         const fetch: typeof globalThis.fetch = async (input, init) => {
-          const response = await session.fetch(input, init);
+          const key = `${init?.method ?? "GET"} ${String(input)}`;
+          let responsePromise = responses.get(key);
+          if (!responsePromise) {
+            responsePromise = session.fetch(input, init);
+            responses.set(key, responsePromise);
+          }
+          const response = (await responsePromise).clone();
           // Discovery omits expected 404s; retain their outcome for cache eviction.
           if ([401, 403, 404, 410].includes(response.status)) unavailable.push(String(input));
-          const length = response.headers.get("content-length");
-          if (response.ok && length !== null) sizes.set(String(input), Number(length));
           return response;
         };
         const profileFetch: typeof globalThis.fetch = inStorage(profileUrl, session.storageUrl)
@@ -167,14 +175,31 @@ function createDomainStore(session: HomeSession) {
           budget,
           onIndex: (url, locations, via) => freshIndexes.set(url, { locations, via }),
         });
-        const result = await discoverDomainItems("all", {
-          fetch,
-          storage: session.storageUrl,
-          webId: session.webId,
-          profile,
-          typeIndex: indexes.locations,
-          budget,
-        });
+        // Usage is a separate, complete walk; it runs alongside discovery.
+        const usage = storageUsage(fetch, session.storageUrl);
+        // Independent budgets keep a large domain from starving every other domain.
+        const domains = await Promise.all(
+          [...DOMAINS, UNCATEGORISED].map((domain) =>
+            discoverDomainItems(domain, {
+              fetch,
+              storage: session.storageUrl,
+              webId: session.webId,
+              profile,
+              typeIndex: indexes.locations,
+            }),
+          ),
+        );
+        const result: DomainItems = {
+          items: domains.flatMap((domain) => domain.items),
+          failures: [
+            ...new Map(
+              domains.flatMap((domain) => domain.failures).map((failure) => [failure.url, failure]),
+            ).values(),
+          ],
+          truncated: domains.some((domain) => domain.truncated),
+          etags: new Map(domains.flatMap((domain) => [...domain.etags])),
+          listings: new Map(domains.flatMap((domain) => [...domain.listings])),
+        };
         const failures = [...profileFailures, ...indexes.failures, ...result.failures];
         const indexFailures = [...profileFailures, ...indexes.failures];
         const preservedLocations: RegisteredLocation[] = [];
@@ -205,14 +230,7 @@ function createDomainStore(session: HomeSession) {
                 (location.container !== undefined && inStorage(item.url, location.container)),
             ),
         );
-        for (const item of items) {
-          // Listing sizes include binaries that discovery deliberately does not download.
-          for (const quad of item.dataset) {
-            const node = subjectOf(item.dataset, quad.subject);
-            const size = Number(node.texts("http://www.w3.org/ns/posix/stat#size")[0]);
-            if (Number.isFinite(size) && size >= 0) sizes.set(quad.subject.value, size);
-          }
-        }
+        const used = await usage;
         const views = new Map(
           await Promise.all(
             items.map(
@@ -238,7 +256,7 @@ function createDomainStore(session: HomeSession) {
           counts: countItems(items),
           truncated: indexes.truncated || result.truncated,
           refreshing: false,
-          used: [...sizes.values()].reduce((sum, size) => sum + size, 0),
+          used,
           updated: background ? snapshot.updated + 1 : snapshot.updated,
         });
       } catch (error) {

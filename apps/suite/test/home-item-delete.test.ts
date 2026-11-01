@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6
-import { afterEach, expect, it, vi } from "vitest";
+import { Store } from "n3";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readItem } from "../src/apps/home/components/item/data";
 import {
   createDeleteController,
   UNDO_MS,
 } from "../src/apps/home/components/item/delete-controller";
+import { classificationForType } from "../src/apps/home/lib/model/classify";
+import { itemActions } from "../src/apps/home/state/presentation";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
 const root = "https://pod.example/alice/";
@@ -31,7 +34,237 @@ async function setup() {
   const item = (await readItem(session, url)).item;
   return { pod, session, fetch, controller, item, refresh };
 }
-afterEach(() => vi.useRealTimers());
+let saved: Map<string, string>;
+beforeEach(() => {
+  saved = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => saved.set(key, value),
+    removeItem: (key: string) => saved.delete(key),
+  });
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+const profileBody =
+  '<#me> a <http://xmlns.com/foaf/0.1/Person>; <http://xmlns.com/foaf/0.1/name> "Alice"; <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://issuer.example/>; <http://www.w3.org/ns/pim/space#storage> <../>.';
+it.each([
+  "identity",
+  "contact-details",
+])("protects the %s card's whole WebID document while allowing field editing", async (type) => {
+  const { session, controller, pod, fetch } = await setup();
+  const profile = session.webId.split("#")[0] as string;
+  await pod.fetch(profile, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: profileBody,
+  });
+  const read = await readItem(session, profile, session.webId);
+  const item = { ...read.item, ...classificationForType(type) };
+  const actions = itemActions(item, root, true, session.webId).map((action) => action.id);
+  expect(actions).toContain("edit");
+  expect(actions).not.toContain("delete");
+  // Even a caller that never learns the WebID cannot offer Delete for the profile.
+  expect(itemActions(item, root, true).map((action) => action.id)).not.toContain("delete");
+  expect(await controller.remove(item, vi.fn())).toBe(false);
+  // A card that lost its profile statements is still refused by URL.
+  expect(await controller.remove({ ...item, dataset: new Store() }, vi.fn())).toBe(false);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  expect(await (await pod.fetch(profile)).text()).toBe(profileBody);
+});
+it("still deletes identity documents that are not the WebID profile", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller } = await setup();
+  const permit = `${root}personal/passport.ttl`;
+  await pod.fetch(permit, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: '<#it> a <https://schema.org/GovernmentPermit>; <https://schema.org/name> "Passport".',
+  });
+  const item = (await readItem(session, permit)).item;
+  expect(item.dataType?.id).toBe("identity");
+  expect(itemActions(item, root, true, session.webId).map((action) => action.id)).toContain(
+    "delete",
+  );
+  expect(await controller.remove(item, vi.fn())).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(pod.has(permit)).toBe(false);
+});
+it.each([
+  ["settings/prefs.ttl", '<#x> <https://schema.org/name> "Plain settings".'],
+  ["settings/privateTypeIndex.ttl", '<#x> <https://schema.org/name> "Plain index".'],
+  ["settings/publicTypeIndex.ttl", '<#x> <https://schema.org/name> "Plain index".'],
+  ["meta/description", "<> a <http://www.w3.org/ns/solid/terms#StorageDescription>."],
+  ["meta/index", "<> a <http://www.w3.org/ns/solid/terms#TypeIndex>."],
+  ["meta/prefs", "<#me> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <index>."],
+])("refuses whole-resource deletion of infrastructure: %s", async (path, content) => {
+  const { session, pod, controller } = await setup();
+  const target = new URL(path, root).href;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: content,
+  });
+  expect(await controller.remove((await readItem(session, target)).item, vi.fn())).toBe(false);
+  expect(pod.has(target)).toBe(true);
+});
+it("refuses untyped settings linked from the profile or the storage root", async () => {
+  const { session, pod, controller, fetch } = await setup();
+  const prefs = `${root}config/mine.ttl`;
+  const description = `${root}config/about`;
+  await pod.fetch(session.webId.split("#")[0] as string, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: `<#me> <http://www.w3.org/ns/pim/space#preferencesFile> <${prefs}>.`,
+  });
+  for (const target of [prefs, description])
+    await pod.fetch(target, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: '<#x> <https://schema.org/name> "Looks ordinary".',
+    });
+  fetch.mockImplementation(async (input, init) => {
+    const response = await pod.fetch(input, init);
+    if (String(input) !== root || init?.method !== "HEAD") return response;
+    const headers = new Headers(response.headers);
+    headers.append(
+      "link",
+      '<config/about>; rel="http://www.w3.org/ns/solid/terms#storageDescription"',
+    );
+    return new Response(null, { status: response.status, headers });
+  });
+  for (const target of [prefs, description])
+    expect(await controller.remove((await readItem(session, target)).item, vi.fn())).toBe(false);
+  // An unreadable profile fails closed rather than allowing deletion.
+  fetch.mockImplementation(async (input, init) =>
+    String(input).endsWith("profile/card")
+      ? new Response(null, { status: 500 })
+      : pod.fetch(input, init),
+  );
+  await expect(controller.remove((await readItem(session, url)).item, vi.fn())).rejects.toThrow();
+  expect(controller.getSnapshot().size).toBe(0);
+});
+it("reads an external WebID profile without credentials when checking linked settings", async () => {
+  const { session, pod } = await setup();
+  const external = { ...session, webId: "https://id.example/card#me" };
+  const publicFetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(`<#me> <http://www.w3.org/ns/pim/space#preferencesFile> <${url}>.`, {
+        headers: { "content-type": "text/turtle" },
+      }),
+  );
+  vi.stubGlobal("fetch", publicFetch);
+  const controller = createDeleteController(external, async () => {});
+  expect(await controller.remove((await readItem(external, url)).item, vi.fn())).toBe(false);
+  expect(publicFetch).toHaveBeenCalledWith(
+    "https://id.example/card",
+    expect.objectContaining({ credentials: "omit", redirect: "error" }),
+  );
+  publicFetch.mockResolvedValue(new Response(null, { status: 404 }));
+  expect(await controller.remove((await readItem(external, url)).item, vi.fn())).toBe(true);
+  expect(pod.has(url)).toBe(true);
+  controller.dispose();
+});
+it.each([
+  4_000, 9_000,
+])("finishes a durable pending delete after a reload at %i ms", async (elapsed) => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, refresh } = await setup();
+  await controller.remove(item, vi.fn());
+  // Only the target and its validator are stored; never the item's content.
+  expect([...saved.values()].join()).not.toContain("My bookmark");
+  controller.dispose();
+  await vi.advanceTimersByTimeAsync(elapsed);
+  const other = createDeleteController(
+    { ...session, webId: "https://other.example/card#me" },
+    refresh,
+  );
+  expect(other.getSnapshot().size).toBe(0);
+  const reloaded = createDeleteController({ ...session }, refresh);
+  expect(reloaded.getSnapshot().has(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(Math.max(1, UNDO_MS - elapsed));
+  expect(pod.has(url)).toBe(false);
+  expect(reloaded.getSnapshot().has(url)).toBe(false);
+  expect(saved.size).toBe(0);
+  expect(createDeleteController({ ...session }, refresh).getSnapshot().size).toBe(0);
+});
+it("cancels a resumed delete with Undo after a reload during the undo window", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, refresh, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  controller.dispose();
+  await vi.advanceTimersByTimeAsync(1_000);
+  const reloaded = createDeleteController({ ...session }, refresh);
+  expect(await reloaded.undo(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(pod.has(url)).toBe(true);
+  expect(
+    fetch.mock.calls.some(([, init]) => init?.method === "DELETE" || init?.method === "PUT"),
+  ).toBe(false);
+  expect(saved.size).toBe(0);
+});
+it("lets Undo in one tab cancel the same deletion resumed in another", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, refresh, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  const otherTab = createDeleteController({ ...session }, refresh);
+  expect(otherTab.getSnapshot().has(url)).toBe(true);
+  expect(await controller.undo(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(pod.has(url)).toBe(true);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  expect(otherTab.getSnapshot().size).toBe(0);
+});
+it("re-checks a resumed target and ignores malformed or out-of-storage tombstones", async () => {
+  vi.useFakeTimers();
+  const { session, pod, refresh } = await setup();
+  const key = `suite.home.pending-deletes:${session.webId}\u0000${root}`;
+  const prefs = `${root}settings/prefs.ttl`;
+  await pod.fetch(prefs, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: '<#x> <https://schema.org/name> "Settings".',
+  });
+  saved.set(
+    key,
+    JSON.stringify([
+      { url: prefs, etag: "x", deleteAt: 0 },
+      { url: "https://evil.example/x", etag: "x", deleteAt: 0 },
+      { url: session.webId.split("#")[0], etag: "x", deleteAt: 0 },
+      { url: 7 },
+      null,
+    ]),
+  );
+  const failed = vi.fn();
+  const resumed = createDeleteController({ ...session }, refresh, failed);
+  expect([...resumed.getSnapshot()]).toEqual([prefs]);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(failed).toHaveBeenCalledOnce();
+  expect(pod.has(prefs)).toBe(true);
+  saved.set(key, "{not json");
+  expect(createDeleteController({ ...session }, refresh).getSnapshot().size).toBe(0);
+  saved.set(key, JSON.stringify({ entries: [] }));
+  expect(createDeleteController({ ...session }, refresh).getSnapshot().size).toBe(0);
+});
+it("still deletes from this page when browser storage is unavailable", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("localStorage", {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+    removeItem: () => {
+      throw new Error("blocked");
+    },
+  });
+  const { controller, item, pod } = await setup();
+  expect(await controller.remove(item, vi.fn())).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(pod.has(url)).toBe(false);
+});
 it("removes optimistically, waits eight seconds, and conditionally commits once across route changes", async () => {
   vi.useFakeTimers();
   const { controller, item, fetch, pod, refresh } = await setup();

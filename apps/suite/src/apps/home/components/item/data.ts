@@ -2,6 +2,7 @@
 import { extractMediaType, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
+import type { Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
 import { classificationForType, classifySubject } from "../../lib/model/classify";
 import { type DomainItem, nameFromUrl } from "../../lib/model/discovery";
@@ -45,7 +46,7 @@ export function canWrite(url: string, storage: string, wac: string | null): bool
 export async function readItem(
   session: HomeSession,
   url: string,
-  subject?: string,
+  subject?: string | Term,
   signal?: AbortSignal,
 ): Promise<ItemRead> {
   const target = assertWithinPodScope(session.storageUrl, url);
@@ -64,7 +65,7 @@ export async function readItem(
     : await parseResource(body as string, contentType, target);
   const node = binary
     ? subjectOf(dataset, target)
-    : subject
+    : subject && (typeof subject === "string" || subject.termType !== "BlankNode")
       ? subjectOf(dataset, subject)
       : primarySubject(dataset, target);
   if (!node || ![...dataset].some((quad) => quad.subject.equals(TermAs.term(node))))
@@ -87,20 +88,13 @@ export async function readItem(
     size: bytes.byteLength,
   };
 }
-/** Match the resource itself or an inherited grant on a real ancestor, never a lookalike path. */
+/** Rows come from this resource’s effective policy; consent expiry is informational. */
 export function accessSummary(rows: readonly AgentRow[], url: string, owner: string) {
   const relevant = rows.filter(
     (row) =>
       row.id !== owner &&
-      row.lines.some(
-        (line) =>
-          (!line.expiresAt || Date.parse(line.expiresAt) > Date.now()) &&
-          line.resources.some(
-            (resource) =>
-              resource.modes.includes("read") &&
-              (resource.url === url ||
-                (resource.isContainer && resource.inherited && inStorage(url, resource.url))),
-          ),
+      row.lines.some((line) =>
+        line.resources.some((resource) => resource.modes.includes("read") && resource.url === url),
       ),
   );
   const people = [

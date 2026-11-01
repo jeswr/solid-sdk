@@ -17,7 +17,8 @@
  * edit-map paths, so an auto-form round-trips through the same
  * preserve-unrelated-triples engine.
  */
-import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
+import { DataFactory } from "n3";
 import {
   type FieldKind,
   type FieldSpec,
@@ -81,12 +82,13 @@ function inferWidget(object: Quad["object"]): {
  * from the FIRST object seen for each predicate. Returns `[]` when the subject
  * has no editable statements.
  */
-export function autoFormFor(ds: DatasetCore, subject: string): FieldSpec[] {
+export function autoFormFor(ds: DatasetCore, subject: string | Term): FieldSpec[] {
   const fields: FieldSpec[] = [];
   const seen = new Set<string>();
 
   for (const q of ds.match(null, null, null, null) as Iterable<Quad>) {
-    if (q.subject.value !== subject) continue;
+    if (!q.subject.equals(typeof subject === "string" ? DataFactory.namedNode(subject) : subject))
+      continue;
     const predicate = q.predicate.value;
     if (SKIP_PREDICATES.has(predicate) || seen.has(predicate)) continue;
     seen.add(predicate);
@@ -107,9 +109,13 @@ export function autoFormFor(ds: DatasetCore, subject: string): FieldSpec[] {
 }
 
 /** True iff `subject` has at least one auto-editable statement. */
-export function hasAutoForm(ds: DatasetCore, subject: string): boolean {
+export function hasAutoForm(ds: DatasetCore, subject: string | Term): boolean {
   for (const q of ds.match(null, null, null, null) as Iterable<Quad>) {
-    if (q.subject.value === subject && !SKIP_PREDICATES.has(q.predicate.value)) return true;
+    if (
+      q.subject.equals(typeof subject === "string" ? DataFactory.namedNode(subject) : subject) &&
+      !SKIP_PREDICATES.has(q.predicate.value)
+    )
+      return true;
   }
   return false;
 }

@@ -16,6 +16,13 @@ const render = (props: Partial<HomeHeaderProps> = {}) =>
   renderToStaticMarkup(createElement(HomeHeader, { ...base, ...props }));
 
 describe("Home header access seam", () => {
+  it("settles unavailable access and storage usage without a misleading total or perpetual loading", () => {
+    const html = render({ access: "failed", used: undefined });
+    expect(html).toContain("Couldn&#x27;t check who has access.");
+    expect(html).not.toContain("Checking who has access");
+    expect(html).toContain("Storage usage unavailable");
+    expect(html).not.toContain("Your storage doesn&#x27;t report a limit");
+  });
   it("uses interim copy while access counts are unavailable", () => {
     const html = render();
     expect(html).toContain("See who has access");
@@ -31,8 +38,15 @@ describe("Home header access seam", () => {
     const multiple = render({ access: { apps: 2, people: 3, publicItems: 4 } });
     expect(multiple).toContain("2 apps and 3 people have access");
     expect(multiple).toContain("Anyone with the link can see 4 items");
-    expect(render({ access: { apps: 0, people: 0, publicItems: 0 } })).not.toContain(
-      "Anyone with the link",
+    expect(render({ access: { apps: 0, people: 0, publicItems: 3 } })).toContain(
+      "0 apps and 0 people have access",
     );
+  });
+  it("settles an empty access snapshot as owner-only access", () => {
+    const empty = render({ access: { apps: 0, people: 0, publicItems: 0 } });
+    expect(empty).toContain("Only you have access");
+    expect(empty).toContain('href="/permissions"');
+    expect(empty).not.toContain("Anyone with the link");
+    expect(empty).not.toContain("Checking who has access");
   });
 });

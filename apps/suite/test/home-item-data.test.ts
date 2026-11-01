@@ -52,7 +52,7 @@ function row(
     ],
   };
 }
-it("summarises only effective resource access and inherited ancestor access without exposing identifiers", () => {
+it("summarises only the resource's own effective policy rows without exposing identifiers", () => {
   expect(accessSummary([], url, owner).text).toBe("Only you");
   const rows = [
     row("person", owner),
@@ -66,7 +66,7 @@ it("summarises only effective resource access and inherited ancestor access with
   ];
   const summary = accessSummary(rows, url, owner);
   expect(summary.text).toBe("You and 2 people");
-  expect(summary.people.map((person) => person.id)).toEqual(["Ada", "Bram"]);
+  expect(summary.people.map((person) => person.id)).toEqual(["Ada", "Expired"]);
   expect(summary.apps).toHaveLength(1);
   expect(accessSummary([...rows, row("authenticated", "Signed in")], url, owner).text).toBe(
     "Anyone signed in",
@@ -216,4 +216,60 @@ it("offers deletion and sharing for file cards without treating their listing as
     "delete",
     "copy",
   ]);
+});
+
+it("keeps expired consent metadata visible while the public ACL remains active", () => {
+  expect(
+    accessSummary([row("public", "public", [{ url }], "2000-01-01T00:00:00Z")], url, owner).text,
+  ).toBe("Anyone with the link");
+});
+
+it("re-resolves a blank-node subject after a reread and saves it without minting a named subject", async () => {
+  const { createDemoPod } = await import("../src/lib/demo-pod/pod");
+  const { resolveForm } = await import("../src/apps/home/lib/forms/resolve-form");
+  const { saveFormEdits } = await import("../src/apps/home/lib/forms/write");
+  const { readFieldValue } = await import("../src/apps/home/lib/forms/subject-edit");
+  const target = `${root}notes/blank.ttl`;
+  const pod = createDemoPod({
+    root,
+    seed: [
+      {
+        path: "notes/blank.ttl",
+        contentType: "text/turtle",
+        body: '[] a <https://schema.org/TextDigitalDocument>; <https://schema.org/name> "Before"; <https://schema.org/text> "Body".',
+      },
+    ],
+  });
+  const session = {
+    fetch: pod.fetch,
+    storageUrl: root,
+    webId: owner,
+    mode: "demo",
+    displayName: "Alice",
+    subscribe: pod.subscribe,
+    reset: async () => {},
+  } as const;
+  const first = await readItem(session, target);
+  expect(first.item.subject.termType).toBe("BlankNode");
+  const fields = resolveForm(target, first.item.dataset, first.item.subject).fields;
+  const name = fields.find((field) => field.predicate === "https://schema.org/name");
+  expect(name && readFieldValue(first.item.dataset, first.item.subject, name)).toBe("Before");
+  // A reread parses fresh blank-node labels; the old term must not be used as an IRI.
+  const baseline = await readItem(session, target, first.item.subject);
+  expect(baseline.item.subject.termType).toBe("BlankNode");
+  const result = await saveFormEdits(
+    target,
+    baseline.item.dataset,
+    baseline.item.subject,
+    fields,
+    {
+      [name?.id as string]: "After",
+    },
+    { etag: baseline.item.etag, fetchImpl: pod.fetch },
+  );
+  expect(result.ok).toBe(true);
+  const saved = await readItem(session, target);
+  expect(saved.item.subject.termType).toBe("BlankNode");
+  expect(saved.item.title).toBe("After");
+  expect([...saved.item.dataset].every((quad) => quad.subject.termType === "BlankNode")).toBe(true);
 });

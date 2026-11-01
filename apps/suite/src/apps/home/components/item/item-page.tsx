@@ -148,8 +148,11 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
     return () => window.removeEventListener("keydown", key);
   }, [url, editing, router]);
   const actions = useMemo(
-    () => (state.read ? itemActions(state.read.item, session.storageUrl, state.read.writable) : []),
-    [state.read, session.storageUrl],
+    () =>
+      state.read
+        ? itemActions(state.read.item, session.storageUrl, state.read.writable, session.webId)
+        : [],
+    [state.read, session.storageUrl, session.webId],
   );
   useEffect(() => {
     if (state.read && window.location.hash === "#access")

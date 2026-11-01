@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button } from "@jeswr/suite-ui";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import { useId, useState } from "react";
 import type { FieldSpec } from "../../lib/forms/field-types";
-import { FieldValidationError, readFieldValue, valueToTerm } from "../../lib/forms/subject-edit";
+import {
+  FieldValidationError,
+  readFieldValue,
+  toDatetimeLocal,
+  valueToTerm,
+} from "../../lib/forms/subject-edit";
 
 /** Raw strings stay in React until submit; typed setters never run on partial keystrokes. */
 export function ItemForm({
@@ -21,7 +26,7 @@ export function ItemForm({
 }: {
   fields: readonly FieldSpec[];
   dataset: DatasetCore;
-  subject: string;
+  subject: string | Term;
   blank?: boolean;
   locked?: boolean;
   online: boolean;
@@ -33,7 +38,7 @@ export function ItemForm({
   const id = useId();
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      fields.map((field) => [field.id, blank ? "" : readFieldValue(dataset, subject, field)]),
+      fields.map((field) => [field.id, blank ? "" : inputValue(dataset, subject, field)]),
     ),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -65,9 +70,7 @@ export function ItemForm({
         }
         const edits = Object.fromEntries(
           fields
-            .filter(
-              (field) => blank || values[field.id] !== readFieldValue(dataset, subject, field),
-            )
+            .filter((field) => blank || values[field.id] !== inputValue(dataset, subject, field))
             .map((field) => [field.id, values[field.id] ?? ""]),
         );
         onSave(edits);
@@ -132,9 +135,7 @@ export function ItemForm({
                         : "text"
                 }
                 step={field.kind === "decimal" ? "any" : undefined}
-                value={
-                  field.kind === "datetime" ? values[field.id]?.slice(0, 16) : values[field.id]
-                }
+                value={values[field.id]}
                 onChange={(event) => change(event.target.value)}
               />
             )}
@@ -162,4 +163,10 @@ export function ItemForm({
       </div>
     </form>
   );
+}
+
+/** datetime-local holds wall time in the user's time zone, never a sliced UTC string. */
+function inputValue(dataset: DatasetCore, subject: string | Term, field: FieldSpec): string {
+  const value = readFieldValue(dataset, subject, field);
+  return field.kind === "datetime" && value ? toDatetimeLocal(value) : value;
 }

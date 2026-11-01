@@ -12,7 +12,11 @@ const empty: ReadonlySet<string> = new Set();
 export function deletionStore(session: HomeSession) {
   let controller = controllers.get(session);
   if (!controller) {
-    controller = createDeleteController(session, () => domainStore(session).refresh());
+    controller = createDeleteController(
+      session,
+      () => domainStore(session).refresh(),
+      () => toast.error("Couldn't delete this item. Please try again."),
+    );
     controllers.set(session, controller);
   }
   return controller;

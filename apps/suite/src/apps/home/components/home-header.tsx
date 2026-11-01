@@ -5,15 +5,16 @@ import Link from "next/link";
 import type { DomainItem } from "../lib/model/discovery";
 import { sortItems } from "../lib/model/discovery";
 import { greeting, itemTitle, relativeTime } from "../state/presentation";
+import type { HomeAccess } from "../state/use-home-access";
 
 export interface HomeHeaderProps {
   displayName: string;
   items: readonly DomainItem[];
-  used: number;
+  used: number | undefined;
   status: "loading" | "ready" | "error" | "offline";
   now: number;
   quota?: number;
-  access?: { apps: number; people: number; publicItems: number };
+  access?: HomeAccess | undefined;
   onRetry: () => void;
 }
 
@@ -52,8 +53,12 @@ export function HomeHeader({
                 </>
               ) : (
                 <>
-                  <PodMeter used={used} {...(quota === undefined ? {} : { quota })} />
-                  {quota === undefined ? (
+                  {used === undefined ? (
+                    <p>Storage usage unavailable</p>
+                  ) : (
+                    <PodMeter used={used} {...(quota === undefined ? {} : { quota })} />
+                  )}
+                  {used !== undefined && quota === undefined ? (
                     <p className="hm-muted">Your storage doesn't report a limit</p>
                   ) : null}
                 </>
@@ -61,11 +66,13 @@ export function HomeHeader({
             </div>
             <div className="hm-access">
               <Link href="/permissions">
-                {access
-                  ? `${access.apps} ${access.apps === 1 ? "app" : "apps"} and ${access.people} ${access.people === 1 ? "person" : "people"} have access`
+                {access && access !== "failed"
+                  ? access.apps + access.people + access.publicItems === 0
+                    ? "Only you have access"
+                    : `${access.apps} ${access.apps === 1 ? "app" : "apps"} and ${access.people} ${access.people === 1 ? "person" : "people"} have access`
                   : "See who has access"}
               </Link>
-              {access ? (
+              {access && access !== "failed" ? (
                 access.publicItems > 0 ? (
                   <p className="hm-warning">
                     Anyone with the link can see {access.publicItems}{" "}
@@ -73,7 +80,11 @@ export function HomeHeader({
                   </p>
                 ) : null
               ) : (
-                <p className="hm-muted">Checking who has access…</p>
+                <p className="hm-muted">
+                  {access === "failed"
+                    ? "Couldn't check who has access."
+                    : "Checking who has access…"}
+                </p>
               )}
             </div>
             <div className="hm-last-change">

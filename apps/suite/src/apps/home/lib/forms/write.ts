@@ -19,7 +19,7 @@
 
 import { ResourceWriteError } from "@jeswr/pod-connectors/pod/resource";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import type { FieldSpec } from "./field-types.js";
 import { applyFieldEdit, applyFieldEdits, FieldValidationError } from "./subject-edit.js";
 
@@ -101,7 +101,7 @@ function toResult(err: unknown): SaveResult {
 export async function saveFieldEdit(
   url: string,
   dataset: DatasetCore,
-  subject: string,
+  subject: string | Term,
   spec: FieldSpec,
   rawValue: string,
   opts: SaveOptions = {},
@@ -129,7 +129,7 @@ export async function saveFieldEdit(
 export async function saveFormEdits(
   url: string,
   dataset: DatasetCore,
-  subject: string,
+  subject: string | Term,
   fields: readonly FieldSpec[],
   values: Readonly<Record<string, string>>,
   opts: SaveOptions = {},

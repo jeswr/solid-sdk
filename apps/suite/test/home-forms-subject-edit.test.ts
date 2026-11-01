@@ -17,6 +17,8 @@ import {
   applyFieldEdits,
   FieldValidationError,
   readFieldValue,
+  readFieldValues,
+  toDatetimeLocal,
   valueToTerm,
 } from "../src/apps/home/lib/forms/subject-edit";
 
@@ -172,4 +174,41 @@ describe("applyFieldEdits — multi-field, validate-first", () => {
       }),
     ).toThrow(FieldValidationError);
   });
+});
+
+it("round trips a blank subject through all editor operations without minting a named subject", async () => {
+  const { DataFactory, Store } = await import("n3");
+  const { resolveForm } = await import("../src/apps/home/lib/forms/resolve-form");
+  const { autoFormFor, hasAutoForm } = await import("../src/apps/home/lib/forms/auto-form");
+  const subject = DataFactory.blankNode("b0");
+  const predicate = "https://schema.org/name";
+  const dataset = new Store([
+    DataFactory.quad(subject, DataFactory.namedNode(predicate), DataFactory.literal("Before")),
+  ]);
+  const form = resolveForm("https://pod.test/item", dataset, subject);
+  const field = form.fields[0] as (typeof form.fields)[number];
+  expect(autoFormFor(dataset, subject)).toHaveLength(1);
+  expect(hasAutoForm(dataset, subject)).toBe(true);
+  expect(readFieldValue(dataset, subject, field)).toBe("Before");
+  expect(readFieldValues(dataset, subject, field)).toEqual(["Before"]);
+  const single = applyFieldEdit(dataset, subject, field, "Single");
+  const multiple = applyFieldEdits(single, subject, [field], { [field.id]: "After" });
+  expect([...multiple].map((quad) => quad.subject.termType)).toEqual(["BlankNode"]);
+  expect(readFieldValue(multiple, subject, field)).toBe("After");
+});
+
+it("edits instants as local wall time and saves the same instant outside UTC", async () => {
+  // vitest.config pins Europe/London; July is BST (UTC+1), so a sliced ISO string would be wrong.
+  const start = EVENT_FIELDS.find(
+    (field) => field.kind === "datetime",
+  ) as (typeof EVENT_FIELDS)[number];
+  const data = await ds(`<#it> <${start.predicate}> "2026-07-01T12:00:00Z".`);
+  const shown = toDatetimeLocal(readFieldValue(data, SUBJECT, start));
+  expect(shown).toBe("2026-07-01T13:00");
+  // Saving the untouched value keeps the instant; a one-minute edit moves it by one minute.
+  expect(valueToTerm(start, shown)?.value).toBe("2026-07-01T12:00:00.000Z");
+  const edited = applyFieldEdit(data, SUBJECT, start, "2026-07-01T13:01");
+  expect(readFieldValue(edited, SUBJECT, start)).toBe("2026-07-01T12:01:00.000Z");
+  expect(toDatetimeLocal("2026-01-15T09:30:00Z")).toBe("2026-01-15T09:30");
+  expect(toDatetimeLocal("not a date")).toBe("");
 });

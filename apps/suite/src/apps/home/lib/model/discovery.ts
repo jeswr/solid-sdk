@@ -38,6 +38,8 @@ export interface DomainItems {
   /** True when discovery stopped at its request budget or deadline. Failures also imply partial data. */
   truncated: boolean;
   etags: ReadonlyMap<string, string | null>;
+  /** Listing membership is independent of whether child contents were visited. */
+  listings: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /** PM's friendly URL-tail fallback, tolerant of malformed percent escapes. */
@@ -92,7 +94,14 @@ export async function discoverDomainItems(
   if (!inStorage(storage, storage) || new URL(storage).hash)
     throw new TypeError("Expected a storage root ending in /");
   const budget = options.budget ?? new DiscoveryBudget(options);
-  const result: DomainItems = { items: [], failures: [], truncated: false, etags: new Map() };
+  const listings = new Map<string, ReadonlySet<string>>();
+  const result: DomainItems = {
+    items: [],
+    failures: [],
+    truncated: false,
+    etags: new Map(),
+    listings,
+  };
   const etags = new Map<string, string | null>();
   result.etags = etags;
   const queue: Visit[] = [];
@@ -199,6 +208,7 @@ export async function discoverDomainItems(
         node.types.includes(`${NS.LDP}BasicContainer`) ||
         node.contains.length > 0;
       if (isContainer) {
+        listings.set(url, new Set(node.contains.map(resourceUrl)));
         for (const childUrl of node.contains) {
           const child = subjectOf(dataset, childUrl);
           const childContainer =

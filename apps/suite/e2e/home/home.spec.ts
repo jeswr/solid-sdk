@@ -23,10 +23,10 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   await expect(page.getByRole("region", { name: "Your pod", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Alice Wilder", exact: true })).toBeVisible();
   await expect(page.getByText("Your storage doesn't report a limit")).toBeVisible();
-  await expect(page.getByRole("link", { name: "See who has access" })).toHaveAttribute(
-    "href",
-    "/permissions",
-  );
+  // The demo pod grants nobody else access, so the settled summary is owner-only.
+  await expect(
+    page.getByRole("link", { name: "Only you have access", exact: true }),
+  ).toHaveAttribute("href", "/permissions");
   await accessible(page);
   await page.keyboard.press("6");
   await expect(page).toHaveURL("/home/media");

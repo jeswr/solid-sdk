@@ -25,10 +25,12 @@ export function WhoCanSee({
     if (!online) return;
     const controller = new AbortController();
     setFailed(false);
+    setSnapshot(undefined);
     loadPermissions({
       fetch: session.fetch,
       storage: session.storageUrl,
       webId: session.webId,
+      resource: url,
       signal: controller.signal,
     }).then(
       (result) => {
@@ -39,7 +41,7 @@ export function WhoCanSee({
       },
     );
     return () => controller.abort();
-  }, [session, online, retry]);
+  }, [session, url, online, retry]);
   const summary = snapshot && accessSummary(snapshot.rows, url, session.webId);
   const incomplete = snapshot && (snapshot.failures.length > 0 || snapshot.truncated);
   return (

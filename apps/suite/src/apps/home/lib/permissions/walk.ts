@@ -93,6 +93,8 @@ export interface LoadPermissionsOptions {
   signal?: AbortSignal;
   maxDepth?: number;
   maxRequests?: number;
+  /** Resolve only this resource's governing policy, without a storage-wide walk. */
+  resource?: string;
 }
 function failureReason(error: unknown): PermissionsSnapshot["failures"][number]["reason"] {
   if (error instanceof UnsupportedAccessError) return "unsupported";
@@ -175,7 +177,8 @@ export async function loadPermissions(
   // identifiers and makes one inherited authorization look like separate rules.
   const aclDocuments = new Map<string, ReturnType<typeof readResource>>();
   const seen = new Set<string>();
-  const queue = [{ url: storage, depth: 0, isContainer: true }];
+  const start = options.resource ? assertWithinPodScope(storage, options.resource) : storage;
+  const queue = [{ url: start, depth: 0, isContainer: start.endsWith("/") }];
   for (const visit of queue) {
     if (exhausted) break;
     if (seen.has(visit.url)) continue;
@@ -193,7 +196,7 @@ export async function loadPermissions(
         const primary = primarySubject(resource.dataset, visit.url);
         if (!classes.get(visit.url)?.dataType && primary)
           classes.set(visit.url, classifySubject(primary, options.webId));
-        if (visit.isContainer) {
+        if (visit.isContainer && !options.resource) {
           const container = new ContainerDataset(resource.dataset, DataFactory).container;
           for (const member of container?.contains ?? []) {
             try {

@@ -7,13 +7,16 @@ import { DataFactory, Store } from "n3";
 import type { FieldSpec } from "../../lib/forms/field-types";
 import { applyFieldEdits } from "../../lib/forms/subject-edit";
 import type { DataType } from "../../lib/model/domains";
-import { readResource, serializeTurtle, subjectOf } from "../../lib/model/rdf";
+import { inStorage, readResource, serializeTurtle, subjectOf } from "../../lib/model/rdf";
 import { registrationsFrom } from "../../lib/model/type-index";
+import { ensurePrivateAcl, verifyPrivateDocument } from "./private-acl";
 
 export interface ManualSession {
   storageUrl: string;
   webId: string;
   fetch: typeof fetch;
+  /** Credential-free transport for a public profile hosted outside storage. */
+  publicFetch?: typeof fetch;
 }
 class WritableNode extends TermWrapper {
   setIri(predicate: string, value: string) {
@@ -45,11 +48,16 @@ export function manualUrl(
   return assertWithinPodScope(storage, new URL(`${type.container}${slug}-${id}.ttl`, storage).href);
 }
 
-/** Re-read and reapply a small graph change on 412, preserving all unrelated statements. */
+/**
+ * Re-read and reapply a small graph change on 412, preserving all unrelated statements.
+ * A private document that does not exist yet gets a verified owner-only ACL before its
+ * first write; if that or the post-write check fails, nothing is left behind to link.
+ */
 async function update(
   session: ManualSession,
   url: string,
   edit: (dataset: Store) => boolean,
+  privateDocument = false,
 ): Promise<void> {
   const target = assertWithinPodScope(session.storageUrl, url);
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -67,6 +75,7 @@ async function update(
     }
     if (!edit(dataset)) return;
     if (!missing && !etag) throw new Error("Reload and try saving again");
+    const acl = privateDocument && missing ? await ensurePrivateAcl(session, target) : undefined;
     const response = await session.fetch(target, {
       method: "PUT",
       redirect: "error",
@@ -76,10 +85,35 @@ async function update(
       },
       body: await serializeTurtle(dataset),
     });
-    if (response.ok) return;
+    if (response.ok) {
+      if (acl === undefined) return;
+      try {
+        await verifyPrivateDocument(session, target, acl);
+        return;
+      } catch (error) {
+        const created = response.headers.get("etag");
+        await session
+          .fetch(target, {
+            method: "DELETE",
+            redirect: "error",
+            ...(created ? { headers: { "if-match": created } } : {}),
+          })
+          .catch(() => undefined);
+        throw error;
+      }
+    }
     if (response.status !== 412) throw new Error("Couldn't finish saving. Please try again.");
   }
   throw new Error("This item keeps changing. Please try again.");
+}
+
+/** Settings advertised by a profile must live in this storage before any authenticated I/O. */
+function settingsInStorage(session: ManualSession, urls: readonly string[]): void {
+  for (const url of urls)
+    if (!inStorage(url, session.storageUrl))
+      throw new Error(
+        "Your profile keeps its settings somewhere else, so Home can't register this here. Skip registration to keep the item.",
+      );
 }
 
 export async function registerManualType(
@@ -89,51 +123,83 @@ export async function registerManualType(
 ): Promise<void> {
   assertWithinPodScope(session.storageUrl, container);
   const profileUrl = session.webId.split("#")[0] as string;
-  assertWithinPodScope(session.storageUrl, profileUrl);
-  const profile = (await readResource(session.fetch, profileUrl)).dataset;
+  const internalProfile = inStorage(profileUrl, session.storageUrl);
+  // A WebID hosted elsewhere is public: read it without credentials or redirects so
+  // the storage's authenticated transport never reaches another host.
+  const profileFetch: typeof fetch = internalProfile
+    ? session.fetch
+    : (input, init) =>
+        (session.publicFetch ?? globalThis.fetch)(input, {
+          ...init,
+          credentials: "omit",
+          redirect: "error",
+        });
+  const profile = (await readResource(profileFetch, profileUrl)).dataset;
   const person = subjectOf(profile, session.webId);
-  let index = person.iris(`${NS.SOLID}privateTypeIndex`)[0];
-  const preferences = person.iris("http://www.w3.org/ns/pim/space#preferencesFile")[0];
+  const indexes = person.iris(`${NS.SOLID}privateTypeIndex`);
+  const preferenceFiles = person.iris("http://www.w3.org/ns/pim/space#preferencesFile");
+  settingsInStorage(session, [...indexes, ...preferenceFiles]);
+  let index = indexes[0];
+  const preferences = preferenceFiles[0];
   if (!index && preferences) {
-    assertWithinPodScope(session.storageUrl, preferences);
     try {
       const prefs = await readResource(session.fetch, preferences);
-      index = subjectOf(prefs.dataset, session.webId).iris(`${NS.SOLID}privateTypeIndex`)[0];
+      const linked = subjectOf(prefs.dataset, session.webId).iris(`${NS.SOLID}privateTypeIndex`);
+      settingsInStorage(session, linked);
+      index = linked[0];
     } catch (error) {
       if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
     }
   }
-  const indexUrl = index ?? new URL("settings/privateTypeIndex.ttl", session.storageUrl).href;
-  await update(session, indexUrl, (dataset) => {
-    if (
-      registrationsFrom(dataset).some(
-        (reg) => reg.forClass === classIri && reg.container === container,
-      )
-    )
-      return false;
-    const document = new WritableNode(indexUrl, dataset, DataFactory);
-    document.type(`${NS.SOLID}TypeIndex`);
-    document.type(`${NS.SOLID}UnlistedDocument`);
-    const node = new WritableNode(
-      `${indexUrl}#manual-${crypto.randomUUID()}`,
-      dataset,
-      DataFactory,
+  // Updating an external profile needs its own host's editor, never this storage's transport.
+  if (!index && !preferences && !internalProfile)
+    throw new Error(
+      "Your profile doesn't link any settings in this storage yet. Skip registration to keep the item.",
     );
-    node.type(`${NS.SOLID}TypeRegistration`);
-    node.setIri(`${NS.SOLID}forClass`, classIri);
-    node.setIri(`${NS.SOLID}instanceContainer`, container);
-    return true;
-  });
+  const indexUrl = assertWithinPodScope(
+    session.storageUrl,
+    index ?? new URL("settings/privateTypeIndex.ttl", session.storageUrl).href,
+  );
+  await update(
+    session,
+    indexUrl,
+    (dataset) => {
+      if (
+        registrationsFrom(dataset).some(
+          (reg) => reg.forClass === classIri && reg.container === container,
+        )
+      )
+        return false;
+      const document = new WritableNode(indexUrl, dataset, DataFactory);
+      document.type(`${NS.SOLID}TypeIndex`);
+      document.type(`${NS.SOLID}UnlistedDocument`);
+      const node = new WritableNode(
+        `${indexUrl}#manual-${crypto.randomUUID()}`,
+        dataset,
+        DataFactory,
+      );
+      node.type(`${NS.SOLID}TypeRegistration`);
+      node.setIri(`${NS.SOLID}forClass`, classIri);
+      node.setIri(`${NS.SOLID}instanceContainer`, container);
+      return true;
+    },
+    true,
+  );
   if (!index) {
     const prefsUrl = preferences ?? new URL("settings/prefs.ttl", session.storageUrl).href;
-    await update(session, prefsUrl, (dataset) => {
-      const node = new WritableNode(session.webId, dataset, DataFactory);
-      const existing = subjectOf(dataset, session.webId).iris(`${NS.SOLID}privateTypeIndex`);
-      if (existing.includes(indexUrl)) return false;
-      if (existing.length) throw new Error("Your settings changed. Try saving again.");
-      node.setIri(`${NS.SOLID}privateTypeIndex`, indexUrl);
-      return true;
-    });
+    await update(
+      session,
+      prefsUrl,
+      (dataset) => {
+        const node = new WritableNode(session.webId, dataset, DataFactory);
+        const existing = subjectOf(dataset, session.webId).iris(`${NS.SOLID}privateTypeIndex`);
+        if (existing.includes(indexUrl)) return false;
+        if (existing.length) throw new Error("Your settings changed. Try saving again.");
+        node.setIri(`${NS.SOLID}privateTypeIndex`, indexUrl);
+        return true;
+      },
+      true,
+    );
     if (!preferences)
       await update(session, profileUrl, (dataset) => {
         const existing = subjectOf(dataset, session.webId).iris(

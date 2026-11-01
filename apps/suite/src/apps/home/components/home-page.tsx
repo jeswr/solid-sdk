@@ -26,6 +26,7 @@ import {
   serializeTypes,
 } from "../state/presentation";
 import { useDomainItems } from "../state/use-domain-items";
+import { useHomeAccess } from "../state/use-home-access";
 import { DomainIcon } from "./domain-icon";
 import { DomainNavigation } from "./domain-navigation";
 import { useHomeSession } from "./home-app";
@@ -38,6 +39,7 @@ import { useItemActions } from "./item/use-item-actions";
 export function HomePage({ domain }: { domain: string }) {
   const session = useHomeSession();
   const loaded = useDomainItems(session);
+  const access = useHomeAccess(session, loaded.updated);
   const { hidden } = useItemActions(session);
   const visibleItems = loaded.items.filter((item) => !hidden.has(item.url));
   const data = {
@@ -115,6 +117,7 @@ export function HomePage({ domain }: { domain: string }) {
         displayName={session.displayName}
         items={data.items}
         used={data.used}
+        access={access}
         status={data.status}
         now={now}
         onRetry={retry}

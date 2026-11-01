@@ -28,7 +28,7 @@ export function EditForm({
   const [error, setError] = useState<string>();
   const [conflict, setConflict] = useState<Record<string, string>>();
   const fields = useMemo(() => {
-    const resolved = resolveForm(item.url, item.dataset, item.subject.value).fields;
+    const resolved = resolveForm(item.url, item.dataset, item.subject).fields;
     if (item.url !== session.webId.split("#")[0]) return resolved;
     const allowed = [
       "name",
@@ -73,7 +73,7 @@ export function EditForm({
     setBusy(true);
     setError(undefined);
     try {
-      const baseline = reRead ? await readItem(session, item.url, item.subject.value) : read;
+      const baseline = reRead ? await readItem(session, item.url, item.subject) : read;
       if (!baseline.writable) {
         setError("You do not have permission to edit this item.");
         return;
@@ -81,7 +81,7 @@ export function EditForm({
       const result = await saveFormEdits(
         item.url,
         baseline.item.dataset,
-        item.subject.value,
+        baseline.item.subject,
         fields,
         values,
         { etag: baseline.item.etag, fetchImpl: session.fetch },
@@ -103,7 +103,7 @@ export function EditForm({
       <ItemForm
         fields={fields}
         dataset={item.dataset}
-        subject={item.subject.value}
+        subject={item.subject}
         online={online}
         busy={busy}
         error={error}

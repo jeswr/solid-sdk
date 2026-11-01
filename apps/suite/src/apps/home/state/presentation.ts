@@ -6,6 +6,7 @@ import { type DomainItem, nameFromUrl, sortItems } from "../lib/model/discovery"
 import type { DataCategory } from "../lib/model/domains";
 import { CONNECTORS, connectorForUrl, provenanceOf } from "../lib/model/provenance";
 import { httpUrl, inStorage, primarySubject, subjectOf } from "../lib/model/rdf";
+import { protectedDocument } from "./protected-document";
 
 export function greeting(date: Date, displayName: string): string {
   const hour = date.getHours();
@@ -190,6 +191,7 @@ export function itemActions(
   item: DomainItem,
   storage: string,
   writable = inStorage(item.url, storage),
+  webId?: string,
 ): ItemAction[] {
   const href = itemHref(item);
   const actions: ItemAction[] = [
@@ -205,6 +207,7 @@ export function itemActions(
   const node = subjectOf(item.dataset, item.subject);
   if (
     writable &&
+    !protectedDocument(item, storage, webId) &&
     !item.url.endsWith("/") &&
     !node.types.some((type) => /(?:#Container|#BasicContainer|#DriveRoot)$/.test(type)) &&
     !node.contains.length

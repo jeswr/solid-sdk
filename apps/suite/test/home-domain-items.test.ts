@@ -52,6 +52,49 @@ async function registerCustomNote(pod: ReturnType<typeof createDemoPod>) {
 }
 
 describe("Home session discovery cache", () => {
+  it("gives every domain a budget and retains listed but unread cached cards beyond 256 requests", async () => {
+    const { store, session, pod, fetch } = await setup();
+    await store.refresh();
+    const original = store.getSnapshot().items;
+    const originalNote = original.find((item) => item.dataType?.id === "notes");
+    expect(originalNote).toBeDefined();
+    for (let index = 0; index < 300; index++)
+      await pod.fetch(`${DEMO_ROOT}notes/aaa-${index}.ttl`, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: `<#it> a <https://schema.org/TextDigitalDocument>; <https://schema.org/name> "Note ${index}".`,
+      });
+    fetch.mockClear();
+    await store.refresh();
+    const refreshed = store.getSnapshot();
+    expect(refreshed.truncated).toBe(true);
+    expect(refreshed.items).toContain(originalNote);
+    for (const card of original)
+      expect(refreshed.items.some((item) => item.url === card.url)).toBe(true);
+    expect(fetch.mock.calls.length).toBeGreaterThan(256);
+    const cold = domainStore({ ...session });
+    await cold.refresh();
+    expect(cold.getSnapshot().counts.get("calendar")).toBeGreaterThan(0);
+    expect(cold.getSnapshot().counts.get("socials")).toBe(2);
+    expect(cold.getSnapshot().counts.get("media")).toBe(3);
+    // A successfully read listing can still confirm removal during a capped scan.
+    await pod.fetch(originalNote?.url as string, { method: "DELETE" });
+    await store.refresh();
+    expect(store.getSnapshot().items.some((item) => item.url === originalNote?.url)).toBe(false);
+  });
+  it("counts nested files in authoritative storage metadata accounting", async () => {
+    const { store, pod } = await setup();
+    await store.refresh();
+    const before = store.getSnapshot().used as number;
+    expect(before).toBeGreaterThan(0);
+    await pod.fetch(`${DEMO_ROOT}drive/nested/deep/file.bin`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: new Uint8Array(1024 * 1024),
+    });
+    await store.refresh();
+    expect(store.getSnapshot().used).toBe(before + 1024 * 1024);
+  });
   it("retries registrations that failed rather than permanently caching their failure", async () => {
     const { store, fetch, pod } = await setup();
     fetch.mockImplementation(async (input, init) =>

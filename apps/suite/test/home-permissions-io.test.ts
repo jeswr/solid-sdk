@@ -4,6 +4,7 @@
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { accessSummary } from "../src/apps/home/components/item/data";
 import {
   applyRevoke,
   dpvPurposeLabel,
@@ -74,6 +75,33 @@ function fixture(entries: Record<string, Doc> = {}) {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("bounded Home permission discovery", () => {
+  it("resolves a detail resource at its nearest ACL without ancestor public bleed", async () => {
+    const folder = `${ROOT}contacts/`;
+    const secret = `${folder}secret.ttl`;
+    const pod = fixture({
+      [secret]: { body: '<#it> <https://schema.org/name> "Secret".' },
+      [folder]: { body: listing(folder, [secret]) },
+      [`${folder}.acl`]: {
+        body: acl(
+          folder,
+          `<#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:default <${folder}>; acl:mode acl:Read.`,
+        ),
+      },
+      [`${secret}.acl`]: {
+        body: `${PREFIX} <#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${secret}>; acl:mode acl:Read, acl:Write, acl:Control.`,
+      },
+    });
+    let snapshot = await pod.load({ resource: secret });
+    expect(snapshot.failures).toEqual([]);
+    expect(accessSummary(snapshot.rows, secret, OWNER).text).toBe("Only you");
+    expect(pod.fetch.mock.calls.some(([url]) => String(url) === `${folder}.acl`)).toBe(false);
+    pod.docs.delete(`${secret}.acl`);
+    snapshot = await pod.load({ resource: secret });
+    expect(accessSummary(snapshot.rows, secret, OWNER).text).toBe("Anyone with the link");
+    const container = await pod.load({ resource: folder });
+    expect(container.truncated).toBe(false);
+    expect(container.rows).toHaveLength(1);
+  });
   it("walks default grants, classifies registered folders, compacts children and caches ACL documents", async () => {
     const folder = `${ROOT}docs/`;
     const file = `${folder}a`;

@@ -150,7 +150,19 @@ function literalTermFor(spec: FieldSpec, value: string): Term {
   }
 }
 
-/** A browser `datetime-local` value (`yyyy-mm-ddThh:mm`) → an ISO-8601 string. */
+/**
+ * A stored xsd:dateTime → the browser `datetime-local` value (`yyyy-mm-ddThh:mm`) in the
+ * user's time zone. Slicing the ISO string would show UTC wall time and shift the instant
+ * on save; {@link valueToTerm} converts the local wall time back to the same instant.
+ */
+export function toDatetimeLocal(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${String(date.getFullYear()).padStart(4, "0")}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** A browser `datetime-local` value (local wall time) → an ISO-8601 UTC instant. */
 function toIsoDateTime(value: string): string | undefined {
   const t = Date.parse(value);
   if (Number.isNaN(t)) return undefined;
@@ -178,15 +190,16 @@ function absoluteHttpUrl(value: string): string | undefined {
  */
 export function applyFieldEdit(
   dataset: DatasetCore,
-  subject: string,
+  subject: string | Term,
   spec: FieldSpec,
   rawValue: string,
 ): Store {
   const store = cloneToStore(dataset);
-  new EditableSubject(subject, store, DataFactory).replace(
-    spec.predicate,
-    valueToTerm(spec, rawValue),
-  );
+  new EditableSubject(
+    typeof subject === "string" ? namedNode(subject) : subject,
+    store,
+    DataFactory,
+  ).replace(spec.predicate, valueToTerm(spec, rawValue));
   return store;
 }
 
@@ -199,7 +212,7 @@ export function applyFieldEdit(
  */
 export function applyFieldEdits(
   dataset: DatasetCore,
-  subject: string,
+  subject: string | Term,
   fields: readonly FieldSpec[],
   values: Readonly<Record<string, string>>,
 ): Store {
@@ -211,10 +224,11 @@ export function applyFieldEdits(
   const store = cloneToStore(dataset);
   for (const f of fields) {
     if (f.readOnly || !Object.hasOwn(values, f.id)) continue;
-    new EditableSubject(subject, store, DataFactory).replace(
-      f.predicate,
-      valueToTerm(f, values[f.id] as string),
-    );
+    new EditableSubject(
+      typeof subject === "string" ? namedNode(subject) : subject,
+      store,
+      DataFactory,
+    ).replace(f.predicate, valueToTerm(f, values[f.id] as string));
   }
   return store;
 }
@@ -225,8 +239,12 @@ export function applyFieldEdits(
  * object's lexical form, with `mailto:`/`tel:` stripped for display. Absent →
  * empty string.
  */
-export function readFieldValue(dataset: DatasetCore, subject: string, spec: FieldSpec): string {
-  const s = namedNode(subject);
+export function readFieldValue(
+  dataset: DatasetCore,
+  subject: string | Term,
+  spec: FieldSpec,
+): string {
+  const s = typeof subject === "string" ? namedNode(subject) : subject;
   const p = namedNode(spec.predicate);
   for (const q of dataset.match(s, p, null, null) as Iterable<Quad>) {
     const o = q.object;
@@ -240,8 +258,12 @@ export function readFieldValue(dataset: DatasetCore, subject: string, spec: Fiel
 }
 
 /** Read every value of a (possibly multi-valued) field as display strings. */
-export function readFieldValues(dataset: DatasetCore, subject: string, spec: FieldSpec): string[] {
-  const s = namedNode(subject);
+export function readFieldValues(
+  dataset: DatasetCore,
+  subject: string | Term,
+  spec: FieldSpec,
+): string[] {
+  const s = typeof subject === "string" ? namedNode(subject) : subject;
   const p = namedNode(spec.predicate);
   const out: string[] = [];
   for (const q of dataset.match(s, p, null, null) as Iterable<Quad>) {

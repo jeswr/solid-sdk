@@ -47,3 +47,31 @@ describe("resolveForm — precedence", () => {
     expect(resolved.fields.map((f) => f.predicate)).toEqual(["https://example.org/colour"]);
   });
 });
+
+it("binds legacy schema predicates for event reads and writes without parallel HTTPS fields", async () => {
+  const { applyFieldEdits, readFieldValue } = await import(
+    "../src/apps/home/lib/forms/subject-edit"
+  );
+  const data = await ds(
+    `<#it> a <http://schema.org/Event>; <http://schema.org/name> "Legacy"; <http://schema.org/startDate> "2026-11-01T12:00:00Z".`,
+  );
+  const form = resolveForm(URL, data, SUBJECT);
+  const title = form.fields.find(
+    (field) => field.label === "Title",
+  ) as (typeof form.fields)[number];
+  const start = form.fields.find((field) =>
+    field.predicate.endsWith("startDate"),
+  ) as (typeof form.fields)[number];
+  expect(title.predicate).toBe("http://schema.org/name");
+  expect(start.predicate).toBe("http://schema.org/startDate");
+  expect(readFieldValue(data, SUBJECT, title)).toBe("Legacy");
+  expect(readFieldValue(data, SUBJECT, start)).toBe("2026-11-01T12:00:00Z");
+  const next = applyFieldEdits(data, SUBJECT, form.fields, {
+    [title.id]: "Updated",
+    [start.id]: "2026-11-01T12:01:00Z",
+  });
+  expect(readFieldValue(next, SUBJECT, title)).toBe("Updated");
+  expect([...next].some((quad) => quad.predicate.value.startsWith("https://schema.org/"))).toBe(
+    false,
+  );
+});

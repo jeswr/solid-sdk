@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import {
   Button,
   LoadingSkeleton,
@@ -115,9 +116,19 @@ export function AddManuallySheet({
       toast.success(`Added ${type.label}`);
       onOpenChange(false);
     } catch (error) {
+      // Once the item exists only registration can fail: say why, then offer retry or skip.
+      const registering = saved !== undefined || error instanceof ManualRegistrationError;
       if (error instanceof ManualRegistrationError) setSaved(error.url);
+      const cause = error instanceof ManualRegistrationError ? error.cause : error;
       setError(
-        error instanceof Error ? error.message : "Couldn't save this item. Please try again.",
+        registering
+          ? cause instanceof Error &&
+            !(cause instanceof RdfFetchError || cause instanceof TypeError)
+            ? cause.message
+            : "Couldn't add this type to Home. Please try again."
+          : error instanceof Error
+            ? error.message
+            : "Couldn't save this item. Please try again.",
       );
     } finally {
       setBusy(false);
@@ -154,14 +165,33 @@ export function AddManuallySheet({
             ))}
           </select>
         </div>
-        {template ? (
+        {saved ? (
+          <div className="hm-item-form">
+            <p role="alert">{error}</p>
+            <p>Your item is saved. Try again to add it to Home, or skip and keep it as it is.</p>
+            <div className="hm-item-form-actions">
+              <Button disabled={busy || !online} onClick={() => void save({})}>
+                Retry registration
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  void domainStore(session).refresh();
+                  onOpenChange(false);
+                }}
+              >
+                Skip registration
+              </Button>
+            </div>
+          </div>
+        ) : template ? (
           <ItemForm
             key={`${template.type.id}-${retry}`}
             fields={fields}
             dataset={template.dataset}
             subject={template.subject}
             blank
-            locked={Boolean(saved)}
             online={online}
             busy={busy}
             error={error}
