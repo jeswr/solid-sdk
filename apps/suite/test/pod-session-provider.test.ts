@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriveSidebar } from "../src/apps/drive/components/sidebar";
 import { getDemoPod } from "../src/lib/demo-pod/browser";
@@ -6,8 +7,15 @@ import {
   ExtensionSessionError,
   openExtensionSession,
   requestStorageAccess,
+  STORAGE_CLASS,
 } from "../src/lib/session/extension-pod-session";
-import { EXTENSION_MARKER } from "../src/lib/session/extension-session";
+import {
+  EXTENSION_CHANNEL,
+  EXTENSION_MARKER,
+  EXTENSION_READY_EVENT,
+  type SolidExtensionApi,
+  type SolidExtensionGrant,
+} from "../src/lib/session/extension-session";
 import {
   type ExtensionPodSession,
   PodSessionProvider,
@@ -24,7 +32,6 @@ vi.mock("../src/lib/session/extension-pod-session", async (original) => ({
   openExtensionSession: vi.fn(),
   requestStorageAccess: vi.fn(),
 }));
-vi.mock("@/lib/session/pod-session", async () => import("../src/lib/session/pod-session"));
 vi.mock("next/navigation", () => ({ usePathname: () => "/drive/my" }));
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   useDrive: () => {
@@ -39,7 +46,28 @@ vi.mock("../src/apps/drive/state/ui", () => ({
 
 const WEBID = "https://alice.example/profile#me";
 let state: ReturnType<typeof usePodSessionState>;
-let api: { webId: string | null; fetch: typeof fetch | undefined };
+let grants: SolidExtensionGrant[];
+const storageGrant = (): SolidExtensionGrant => ({
+  grantId: "storage",
+  dataClass: STORAGE_CLASS,
+  modes: ["read", "write"],
+  purpose: "Solid Suite",
+  expiresAt: Date.now() + 60_000,
+  targets: [{ url: "https://alice.example/", kind: "container" }],
+});
+function makeApi() {
+  return {
+    webId: null as string | null,
+    fetch: undefined as typeof fetch | undefined,
+    listGrants: vi.fn(async () => grants),
+    revokeGrant: vi.fn(async (id: string) => {
+      grants = grants.filter((grant) => grant.grantId !== id);
+      return true;
+    }),
+    disconnect: undefined as SolidExtensionApi["disconnect"],
+  };
+}
+let api: ReturnType<typeof makeApi>;
 const extensionSession = (webId = WEBID): ExtensionPodSession => ({
   mode: "extension",
   webId,
@@ -55,12 +83,28 @@ function Probe({ sidebar = false }: { sidebar?: boolean }) {
 }
 const render = (sidebar = false) => mount(h(PodSessionProvider, null, h(Probe, { sidebar })));
 const focus = () => act(() => window.dispatchEvent(new Event("focus")));
-const grant = () => Object.assign(api, { webId: WEBID, fetch: vi.fn() });
-const revoke = () => Object.assign(api, { webId: null, fetch: undefined });
+const grant = () => {
+  grants = [storageGrant()];
+  Object.assign(api, { webId: WEBID, fetch: vi.fn() });
+};
+const revoke = () => {
+  grants = [];
+  Object.assign(api, { webId: null, fetch: undefined });
+};
+const stateMessage = () =>
+  act(() =>
+    window.dispatchEvent(
+      new window.MessageEvent("message", {
+        source: window,
+        data: { channel: EXTENSION_CHANNEL, dir: "to-page", type: "SOLID_STATE_UPDATE" },
+      }),
+    ),
+  );
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api = { webId: null, fetch: undefined };
+  grants = [];
+  api = makeApi();
   Object.defineProperty(window, "solid", { configurable: true, value: api });
   document.documentElement.setAttribute(EXTENSION_MARKER, "1");
   vi.mocked(getDemoPod).mockResolvedValue({
@@ -73,9 +117,224 @@ beforeEach(() => {
 
 afterEach(() => {
   document.documentElement.removeAttribute(EXTENSION_MARKER);
+  vi.restoreAllMocks();
 });
 
 describe("PodSessionProvider", () => {
+  it("keeps an announced, unpopulated stub loading until delayed granted state arrives", async () => {
+    const listGrants = api.listGrants;
+    Object.assign(api, { listGrants: undefined });
+    const timers = vi.spyOn(window, "setTimeout");
+    await render();
+    expect(state.status).toBe("loading");
+    expect(getDemoPod).not.toHaveBeenCalled();
+    expect(timers).toHaveBeenCalledWith(expect.any(Function), 1500);
+    grant();
+    Object.assign(api, { listGrants });
+    await stateMessage();
+    expect(state).toMatchObject({ status: "ready", session: { mode: "extension" } });
+    expect(getDemoPod).not.toHaveBeenCalled();
+  });
+
+  it("handles an announcement received after mounting without opening demo first", async () => {
+    document.documentElement.removeAttribute(EXTENSION_MARKER);
+    await render();
+    expect(state.status).toBe("loading");
+    grant();
+    document.documentElement.setAttribute(EXTENSION_MARKER, "1");
+    await act(() => window.dispatchEvent(new Event(EXTENSION_READY_EVENT)));
+    expect(state).toMatchObject({ session: { mode: "extension" } });
+    expect(getDemoPod).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "unpopulated",
+    "unresponsive",
+  ])("bounds initial %s state to 1.5 seconds", async (initial) => {
+    const decision = deferred<SolidExtensionGrant[]>();
+    if (initial === "unpopulated") Object.assign(api, { listGrants: undefined });
+    else api.listGrants.mockReturnValueOnce(decision.promise);
+    const timers = vi.spyOn(window, "setTimeout");
+    await render();
+    expect(state.status).toBe("loading");
+    expect(getDemoPod).not.toHaveBeenCalled();
+    const fallback = timers.mock.calls.find(([, ms]) => ms === 1500)?.[0] as () => void;
+    await act(fallback);
+    expect(state).toMatchObject({ status: "ready", session: { mode: "demo" } });
+    if (initial === "unresponsive") await act(() => decision.resolve([]));
+  });
+
+  it.each([
+    "focus",
+    "message",
+  ])("returns to demo on storage-only revocation via %s with privileged properties intact", async (event) => {
+    grant();
+    const view = await render(true);
+    grants = [{ ...storageGrant(), grantId: "contacts", dataClass: "https://schema.org/Person" }];
+    if (event === "focus") await focus();
+    else await stateMessage();
+    expect(state).toMatchObject({
+      status: "ready",
+      session: { mode: "demo" },
+      extension: { granted: true, webId: WEBID },
+    });
+    expect(view.host.textContent).toContain("Reset demo");
+    expect(view.host.textContent).toContain("Use your pod through the Solid extension");
+    expect(view.host.textContent).toContain("No storage grant yet. Connect to use your pod.");
+  });
+
+  it("returns to demo at storage-grant expiry without a state message or focus", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    grant();
+    grants = [{ ...storageGrant(), expiresAt: now + 2000 }];
+    const timers = vi.spyOn(window, "setTimeout");
+    await render();
+    expect(state).toMatchObject({ session: { mode: "extension" } });
+    vi.spyOn(Date, "now").mockReturnValue(now + 2000);
+    const expire = timers.mock.calls.find(([, ms]) => ms === 2000)?.[0] as () => void;
+    await act(expire);
+    expect(state).toMatchObject({ session: { mode: "demo" }, extension: { granted: true } });
+  });
+
+  it("caps the expiry timer for a 30-day grant to the browser timer limit", async () => {
+    grant();
+    grants = [{ ...storageGrant(), expiresAt: Date.now() + 30 * 86400_000 }];
+    const timers = vi.spyOn(window, "setTimeout");
+    await render();
+    expect(timers).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647);
+  });
+
+  it("keeps demo recovery controls visible when grant introspection fails", async () => {
+    grant();
+    api.listGrants.mockRejectedValue(new Error("extension unreachable"));
+    const view = await render(true);
+    expect(state).toMatchObject({ session: { mode: "demo" }, extension: { granted: true } });
+    expect(view.host.textContent).toContain("Couldn't reach the extension. Please try again.");
+    expect(view.host.textContent).toContain("Reset demo");
+    expect(view.host.textContent).toContain("Use your pod through the Solid extension");
+  });
+
+  it("ignores a delayed Alice grant decision once Bob has opened", async () => {
+    grant();
+    const decision = deferred<SolidExtensionGrant[]>();
+    api.listGrants.mockReturnValueOnce(decision.promise);
+    await render();
+    api.webId = "https://bob.example/profile#me";
+    vi.mocked(openExtensionSession).mockResolvedValueOnce(extensionSession(api.webId));
+    await focus();
+    await act(() => decision.resolve([storageGrant()]));
+    expect(state).toMatchObject({ session: { mode: "extension", webId: api.webId } });
+    expect(openExtensionSession).toHaveBeenCalledOnce();
+  });
+
+  it("invalidates Alice's generation on switch and does not revive it on switching back", async () => {
+    grant();
+    await render();
+    const options = vi.mocked(openExtensionSession).mock.calls[0]?.[1];
+    const aliceGeneration = options?.generation as number;
+    expect(options?.isCurrent?.(aliceGeneration)).toBe(true);
+    api.webId = "https://bob.example/profile#me";
+    const decision = deferred<SolidExtensionGrant[]>();
+    api.listGrants.mockReturnValueOnce(decision.promise);
+    await focus();
+    expect(options?.isCurrent?.(aliceGeneration)).toBe(false);
+    grant();
+    await focus();
+    await act(() => decision.resolve([storageGrant()]));
+    expect(options?.isCurrent?.(aliceGeneration)).toBe(false);
+  });
+
+  it("keeps Bob active when Alice's delayed public-profile opening finishes", async () => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    const profile = deferred<Response>();
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("public profile offline"))
+      .mockReturnValueOnce(profile.promise);
+    grant();
+    await render();
+    expect(state.status).toBe("loading");
+    api.webId = "https://bob.example/profile#me";
+    grants = [
+      {
+        ...storageGrant(),
+        grantId: "bob",
+        targets: [{ url: "https://bob.example/", kind: "container" }],
+      },
+    ];
+    await focus();
+    await act(() => profile.resolve(new Response("Alice's profile")));
+    expect(state).toMatchObject({
+      status: "ready",
+      session: { mode: "extension", webId: api.webId, storageUrl: "https://bob.example/" },
+    });
+    expect(getDemoPod).not.toHaveBeenCalled();
+  });
+
+  it("rejects retained Alice fetches, uploads and disconnects even after switching back to Alice", async () => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    const response = deferred<Response>();
+    const forwarded = vi.fn<typeof fetch>(() => response.promise);
+    api.fetch = forwarded;
+    await render();
+    if (state.status !== "ready" || state.session.mode !== "extension")
+      throw new Error("Expected Alice");
+    const alice = state.session;
+    const fetching = alice.fetch("https://alice.example/file");
+    const body = deferred<ArrayBuffer>();
+    const uploading = (async () =>
+      alice.fetch("https://alice.example/upload", { method: "PUT", body: await body.promise }))();
+    api.webId = "https://bob.example/profile#me";
+    await focus();
+    grant();
+    await focus();
+    expect(state).toMatchObject({ session: { webId: WEBID } });
+    response.resolve(new Response("old Alice bytes"));
+    body.resolve(new Uint8Array([0, 128, 255]).buffer);
+    await act(async () => {
+      await expect(fetching).rejects.toMatchObject({ code: "stale" });
+      await expect(uploading).rejects.toMatchObject({ code: "stale" });
+      await expect(alice.disconnect()).rejects.toMatchObject({ code: "stale" });
+    });
+    expect(forwarded).toHaveBeenCalledOnce();
+    expect(api.revokeGrant).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "native",
+    "class",
+  ])("re-runs the decision after a %s disconnect without a reload", async (method) => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    const disconnect = vi.fn(async () => {
+      grants = [];
+      return true;
+    });
+    if (method === "native") api.disconnect = disconnect;
+    await render();
+    const session =
+      state.status === "ready" && state.session.mode === "extension" ? state.session : undefined;
+    expect(session).toBeDefined();
+    await act(() => session?.disconnect());
+    expect(state).toMatchObject({ session: { mode: "demo" }, extension: { granted: true } });
+    if (method === "native") {
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(api.revokeGrant).not.toHaveBeenCalled();
+    } else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
+  });
+
   it("waits for detection before falling back to the demo when the extension is absent", async () => {
     document.documentElement.removeAttribute(EXTENSION_MARKER);
     const timers = vi.spyOn(window, "setTimeout");
@@ -100,7 +359,14 @@ describe("PodSessionProvider", () => {
     grant();
     await render();
     expect(state).toMatchObject({ status: "ready", session: { mode: "extension", webId: WEBID } });
-    expect(openExtensionSession).toHaveBeenCalledExactlyOnceWith(api);
+    expect(openExtensionSession).toHaveBeenCalledExactlyOnceWith(
+      api,
+      expect.objectContaining({
+        grant: grants[0],
+        generation: expect.any(Number),
+        isCurrent: expect.any(Function),
+      }),
+    );
     expect(getDemoPod).not.toHaveBeenCalled();
   });
 
@@ -115,8 +381,11 @@ describe("PodSessionProvider", () => {
       extensionError: error,
     });
     expect(view.host.textContent).toContain(
-      "Couldn't open your pod through the extension: no storage found in your profile",
+      "Your storage grant has no usable root. Connect again to choose your pod.",
     );
+    await focus();
+    expect(state.extensionError).toBe(error);
+    expect(view.host.textContent).toContain("Reset demo");
   });
 
   it("switches from demo to extension on a grant, then back on a side-panel revoke", async () => {
@@ -148,6 +417,8 @@ describe("PodSessionProvider", () => {
   });
 
   it("offers extension access in the demo card and disconnect in the extension card", async () => {
+    const opened = extensionSession();
+    vi.mocked(openExtensionSession).mockResolvedValueOnce(opened);
     const view = await render(true);
     const connect = [...view.host.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Use your pod through the Solid extension"),
@@ -167,7 +438,7 @@ describe("PodSessionProvider", () => {
     await click(disconnect as HTMLButtonElement);
     const session = state.status === "ready" ? state.session : undefined;
     expect(session?.mode).toBe("extension");
-    if (session?.mode === "extension") expect(session.disconnect).toHaveBeenCalledOnce();
+    expect(opened.disconnect).toHaveBeenCalledOnce();
   });
 
   it("keeps the demo after denied consent and exposes consent errors", async () => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * Detects the Solid browser extension (apps/extension) and reads its credential-free state.
@@ -15,13 +16,27 @@ import { useSyncExternalStore } from "react";
 export const EXTENSION_MARKER = "data-solid-extension";
 export const EXTENSION_READY_EVENT = "solid-extension:ready";
 
+/** The credential-free grant shape exposed by the extension's page API. */
+export interface SolidExtensionGrant {
+  readonly grantId: string;
+  readonly dataClass: string;
+  readonly modes: readonly string[];
+  readonly purpose: string | null;
+  readonly expiresAt: number;
+  readonly targets: ReadonlyArray<{
+    readonly url: string;
+    readonly kind: "instance" | "container";
+  }>;
+}
+
 /** The subset of `window.solid` the suite reads. Privileged members exist only while granted. */
 export interface SolidExtensionApi {
   readonly webId?: string | null;
   readonly fetch?: typeof globalThis.fetch;
   requestAccess?(request: unknown): Promise<{ ok: boolean }>;
-  listGrants?(): Promise<ReadonlyArray<{ readonly grantId: string; readonly dataClass: string }>>;
+  listGrants?(): Promise<readonly SolidExtensionGrant[]>;
   revokeGrant?(grantId: string): Promise<boolean>;
+  disconnect?(): Promise<boolean>;
   login?(webId: string): Promise<void>;
 }
 

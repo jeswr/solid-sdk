@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 /** Drive sidebar (04-drive §2.1): New menu, navigation, usage and demo reset. */
 
@@ -194,11 +195,13 @@ export function DriveSidebar({
             ) : null}
             {extensionError ? (
               <p role="status">
-                Couldn't open your pod through the extension:{" "}
                 {extensionError instanceof ExtensionSessionError &&
                 extensionError.code === "no-storage"
-                  ? "no storage found in your profile"
-                  : "please check the extension and try again"}
+                  ? "Your storage grant has no usable root. Connect again to choose your pod."
+                  : extensionError instanceof ExtensionSessionError &&
+                      extensionError.code === "not-granted"
+                    ? "No storage grant yet. Connect to use your pod."
+                    : "Couldn't reach the extension. Please try again."}
               </p>
             ) : null}
           </div>
