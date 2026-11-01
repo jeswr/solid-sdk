@@ -13,7 +13,7 @@ harness or server package into application code that defines a layout.
 ## Layout rules
 
 - Paths are pod-root-relative and begin with `/`; never target `.acl`, `.acr` or `.meta`, and
-  never percent-encode an unreserved character, `/` or `\`. `baseUrl` is an origin, not a path-based pod.
+  never percent-encode an unreserved character, `/`, `\` or `%`. `baseUrl` is an origin, not a path-based pod.
 - Prefer `{ instance }` for generated RDF, `{ dataset }` for caller-owned RDF/JS data, and
   `{ body }` only for already-issued artifacts such as JSON-LD VCs.
 - Assign one generated instance to one resource per pod. Cross-instance references are rebased
@@ -41,8 +41,8 @@ the group output is one consistency unit.
 
 Specify access through `AccessSpec`; never emit `.acl` Turtle yourself. The package uses
 `@solid/object` wrappers and always preserves owner read/write/control. Access needs a WAC server
-that advertises `<resource>.acl` via `Link: rel="acl"`; the ACL is written before the data, and
-anything else fails closed. Test pure behavior with an
+that advertises `<resource>.acl` via `Link: rel="acl"`; an owner-only ACL is written before the data and
+the requested grants only after it, and anything else fails closed. Test pure behavior with an
 injected Fetch implementation, and keep one integration suite against the selected Solid server
 outside the browser-safe core. Assert content types, conditional headers, read-back bytes, group
 manifest states, and typed ACL authorization values.

@@ -75,18 +75,22 @@ read, write, and control, then adds the requested public or named-agent rules. A
 with `@solid/object`'s `Authorization` wrapper and serialized with `n3.Writer`; there are no Turtle
 string templates.
 
-A resource with an `access` entry is written in three steps so its data never sits under an
-inherited (possibly public) container ACL: an empty placeholder is created, its ACL is written, and
-only then is the data written. Before writing the ACL the seeder requires the server to advertise
-it at `<resource>.acl` with `Link: rel="acl"`; a server that uses another location (ACP `.acr`) or
-none fails the seed rather than storing an ACL that grants nothing. If the ACL or data write fails,
-a placeholder created by this run (with the ACL this run wrote for it) is deleted. A container's
-description is skipped when the server answers 409 to a PUT on an existing container, as CSS does
-(CSS also ignores a container body on creation). A process that dies between placeholder and data leaves the empty
-placeholder, which `ensure` cannot tell from real data; re-run with `replace` after a crash.
+A resource with an `access` entry is written so that neither its new nor its old data is ever
+governed by broader grants than intended: an empty placeholder is created (or the existing resource
+found), an owner-only ACL is written, then the data, and only then the ACL with the requested grants.
+A replacement therefore never exposes the superseded content to the new grants. Before writing any
+ACL the seeder requires the server to advertise it at `<resource>.acl` with `Link: rel="acl"`; a
+server that uses another location (ACP `.acr`) or none fails the seed rather than storing an ACL
+that grants nothing. If a later step fails, a failed replacement keeps the owner-only ACL, and a
+resource this run created is deleted while its ACL still protects it; the ACL is then deleted only
+once the resource is confirmed gone (a successful DELETE or 404). If the resource cannot be removed,
+the ACL is kept and the error says so. A container's description is skipped when the server answers
+409 to a PUT on an existing container, as CSS does (CSS also ignores a container body on creation).
+A process that dies between placeholder and data leaves the empty placeholder under the owner-only
+ACL, which `ensure` cannot tell from real data; re-run with `replace` after a crash.
 
 `baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
-auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/` or `\`
-(servers such as CSS decode `/x.%61cl` to `/x.acl`); this includes `%7E`, so write `~` as is. Every request is sent with
+auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/`, `\` or `%`
+(servers such as CSS decode `/x.%61cl` to `/x.acl`, and a double encoding like `%2561` depends on how often the server decodes); this includes `%7E`, so write `~` as is. Every request is sent with
 `redirect: "error"`, so an `authFetch` wrapper must pass `init.redirect` through; error details read
 at most 4 KiB of a response.

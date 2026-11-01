@@ -30,6 +30,8 @@ interface MaterializedResource {
   instance?: GeneratedInstance;
   body?: string;
   aclBody?: string;
+  /** Owner-only ACL held while the data is written, before `aclBody`'s grants. */
+  ownerAclBody?: string;
 }
 
 interface MaterializedAction {
@@ -58,13 +60,14 @@ function instanceKey(shape: string, index = 0): string {
 
 /**
  * True when the path percent-encodes a character that needs no encoding (RFC 3986
- * unreserved), "/" or "\\". Servers such as CSS decode and re-encode each segment
+ * unreserved), "/", "\\" or "%" (a double encoding whose meaning depends on how
+ * many times the server decodes). Servers such as CSS decode and re-encode each segment
  * before lookup, so `/x.%61cl` would reach `/x.acl`; the only legitimate escapes
  * are for characters that must be escaped.
  */
 function encodesPlainCharacter(path: string): boolean {
   for (const [, hex] of path.matchAll(/%([0-9a-f]{2})/gi)) {
-    if (/[A-Za-z0-9._~/\\-]/.test(String.fromCharCode(Number.parseInt(hex as string, 16))))
+    if (/[A-Za-z0-9._~/\\%-]/.test(String.fromCharCode(Number.parseInt(hex as string, 16))))
       return true;
   }
   return false;
@@ -265,6 +268,12 @@ async function materializePod(
         target.webid,
         resource.spec.access,
       );
+      resource.ownerAclBody = await serializeAcl(
+        `${resource.outcome.url}.acl`,
+        resource.outcome.url,
+        target.webid,
+        {},
+      );
     }
   }
 
@@ -350,14 +359,47 @@ async function put(
   await response.body?.cancel();
 }
 
-/** Best-effort removal of a placeholder this run created; the original error wins. */
-async function removePlaceholder(target: SeedTarget, url: string): Promise<void> {
-  try {
-    const response = await podFetch(target, url, { method: "DELETE" });
-    await response.body?.cancel();
-  } catch {
-    // The caller rethrows the failure that made the removal necessary.
+/**
+ * Remove a resource this run created after a later step failed, then the ACL this
+ * run wrote for it. A failed write does not prove nothing was stored, and an ACL
+ * removed first would leave stored data under the inherited (possibly broader)
+ * ACL, so the resource goes first while its ACL still protects it, and the ACL is
+ * removed only once the resource is confirmed gone. Returns the error to throw:
+ * the original one, or one that also reports a removal that could not be confirmed.
+ */
+async function removeCreated(
+  target: SeedTarget,
+  url: string,
+  aclWritten: boolean,
+  original: unknown,
+): Promise<unknown> {
+  const gone = async (resource: string): Promise<string | undefined> => {
+    try {
+      const response = await podFetch(target, resource, { method: "DELETE" });
+      await response.body?.cancel();
+      return response.ok || response.status === 404 ? undefined : `status ${response.status}`;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+  const failure = await gone(url);
+  if (failure !== undefined) {
+    return new Error(
+      `${original instanceof Error ? original.message : String(original)}; could not remove ${url} (${failure}), so its ACL was kept`,
+      { cause: original },
+    );
   }
+  // Not every server deletes a resource's ACL with it.
+  if (aclWritten) {
+    const aclFailure = await gone(`${url}.acl`);
+    if (aclFailure !== undefined) {
+      return new Error(
+        `${original instanceof Error ? original.message : String(original)}; removed ${url} but not its ACL (${aclFailure})`,
+        { cause: original },
+      );
+    }
+  }
+  return original;
 }
 
 /**
@@ -435,15 +477,22 @@ async function writeResource(
 }
 
 /**
- * Write a resource that carries an access spec so its data never sits under an
- * inherited (possibly public) ACL: create an empty placeholder, confirm the
- * server's ACL location, write the ACL, and only then write the data. If the ACL
- * or the data cannot be written, a placeholder this run created (and the ACL this
- * run wrote for it) is removed, so a re-run starts again. A container's
- * description is skipped when the server refuses a PUT to an existing container
- * (409, as CSS does; CSS also ignores a container body on creation).
- * A process that dies between placeholder and data leaves the placeholder, and
- * `ensure` cannot tell it from real data; re-run with `replace` after a crash.
+ * Write a resource that carries an access spec so neither its new data nor its
+ * old data is ever governed by grants broader than intended:
+ *  1. create an empty placeholder (or find the existing resource);
+ *  2. confirm the server's ACL location;
+ *  3. write an owner-only ACL;
+ *  4. write the data;
+ *  5. only then write the final ACL with its grants.
+ * A replacement therefore never exposes the superseded content to the new grants,
+ * and a failed replacement leaves the owner-only ACL. If a step fails after this
+ * run created the placeholder, the resource is removed and then its ACL (see
+ * {@link removeCreated}), so a re-run starts again. `ensure` on an existing
+ * resource leaves the data alone and reconciles the final ACL only. A container's
+ * description is skipped when the server answers 409 to a PUT on an existing
+ * container (CSS refuses it and ignores container bodies on creation).
+ * A process that dies mid-way leaves the placeholder under the owner-only ACL;
+ * `ensure` cannot tell it from real data, so re-run with `replace` after a crash.
  */
 async function writeProtected(
   pod: MaterializedPod,
@@ -452,6 +501,7 @@ async function writeProtected(
   mode: SeedMode,
 ): Promise<"created" | "skipped" | "replaced"> {
   const url = resource.outcome.url;
+  const aclUrl = `${url}.acl`;
   const contentType = resource.spec.contentType ?? DEFAULT_CONTENT_TYPE;
   let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
   let createdPlaceholder = false;
@@ -461,31 +511,40 @@ async function writeProtected(
   } catch (error) {
     if (!(error instanceof HttpFailure && error.status === 412) || mode === "create") throw error;
     // The resource exists: ensure leaves its data alone; replace keeps the old data
-    // under its old ACL until the new ACL is in place.
+    // under its old ACL until the owner-only ACL is in place.
     if (mode === "ensure") outcome = "skipped";
   }
+  let aclWritten = false;
   try {
     await assertAclLocation(pod.target, url);
-    await writeAcl(pod, resource, mode === "create");
-  } catch (error) {
-    if (createdPlaceholder) await removePlaceholder(pod.target, url);
-    throw error;
-  }
-  if (outcome === "skipped") return outcome;
-  try {
-    await put(pod.target, url, body, contentType, false);
-  } catch (error) {
-    // CSS refuses any PUT to an existing container and ignores a container's body
-    // even on creation, so there is no description to write.
-    if (url.endsWith("/") && error instanceof HttpFailure && error.status === 409) return outcome;
-    if (createdPlaceholder) {
-      // Not every server deletes a resource's ACL with it; this run wrote this one.
-      await removePlaceholder(pod.target, `${url}.acl`);
-      await removePlaceholder(pod.target, url);
+    if (outcome === "skipped") {
+      await writeAcl(pod, resource, false);
+      return outcome;
     }
+    // In create mode a stale ACL fails the seed (If-None-Match) rather than being overwritten.
+    await put(
+      pod.target,
+      aclUrl,
+      resource.ownerAclBody as string,
+      DEFAULT_CONTENT_TYPE,
+      mode === "create",
+    );
+    aclWritten = true;
+    try {
+      await put(pod.target, url, body, contentType, false);
+    } catch (error) {
+      // CSS refuses any PUT to an existing container and ignores a container's body
+      // even on creation, so there is no description to write.
+      if (!(url.endsWith("/") && error instanceof HttpFailure && error.status === 409)) throw error;
+    }
+    // The grants go on only now that the data is in place (none to add for owner-only access).
+    if (resource.aclBody !== resource.ownerAclBody) await writeAcl(pod, resource, false);
+    return outcome;
+  } catch (error) {
+    // A replacement that fails keeps its owner-only ACL over whichever data is there.
+    if (createdPlaceholder) throw await removeCreated(pod.target, url, aclWritten, error);
     throw error;
   }
-  return outcome;
 }
 
 function currentManifest(completed: readonly PodManifest[], current: PodManifest): SeedManifest {

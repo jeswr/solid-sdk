@@ -151,11 +151,15 @@ describe("expander groups", () => {
         status: "written",
       },
     ]);
-    // Every creating PUT (placeholder, ACL) is conditional; the data PUT then
-    // fills the placeholder this run just created.
+    // Every creating PUT (placeholder, owner-only ACL) is conditional; the data PUT
+    // then fills the placeholder this run just created, and the public grant
+    // replaces the owner-only ACL this run just wrote.
+    const seen = new Set<string>();
     for (const record of pod.putRecords()) {
       const conditional = record.headers.get("if-none-match") === "*";
-      expect(conditional).toBe(record.url.endsWith(".acl") || record.body === "");
+      const first = !seen.has(record.url);
+      seen.add(record.url);
+      expect(conditional).toBe(first);
     }
 
     const ensured = await seedPods({ layout, mode: "ensure" });
@@ -429,7 +433,8 @@ describe("RDF rebasing and typed ACLs", () => {
         (authorization) => authorization.accessibleToAny,
       ),
     ).toBe(false);
-    expect(pod.putRecords("/private/report.acl")).toHaveLength(2);
+    // create: owner-only, then the public grant after the data; ensure: reconciled once.
+    expect(pod.putRecords("/private/report.acl")).toHaveLength(3);
     expect(pod.putRecords("/private/report.acl").at(-1)?.headers.get("if-none-match")).toBeNull();
   });
 
@@ -648,6 +653,124 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(pod.resources.get(Secret)?.body).toBe("private data");
   });
 
+  const grantsPublicRead = (body: string | undefined, aclUrl: string): boolean =>
+    [
+      ...new AclResource(
+        new Store(new Parser({ format: "text/turtle", baseIRI: aclUrl }).parse(body ?? "")),
+        DataFactory,
+      ).authorizations,
+    ].some((authorization) => authorization.accessibleToAny);
+  const access = (pod: MemoryPod, body: string, publicRead: boolean): PodLayout => ({
+    pods: [
+      {
+        account: { target: pod },
+        resources: [{ path: "/public/secret", source: { body }, access: { publicRead } }],
+      },
+    ],
+  });
+
+  it("a replacement holds an owner-only ACL until the new data is written, then grants", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: access(pod, "old private data", false) });
+    const before = pod.requests.length;
+    await seedPods({ layout: access(pod, "new public data", true), mode: "replace" });
+    const writes = pod.requests
+      .slice(before)
+      .filter((r) => r.method === "PUT")
+      .map((r) => [new URL(r.url).pathname, r.body]);
+    // The old data is never governed by the new public grant.
+    expect(writes.map(([path]) => path)).toEqual([
+      "/public/secret",
+      "/public/secret.acl",
+      "/public/secret",
+      "/public/secret.acl",
+    ]);
+    expect(grantsPublicRead(writes[1]?.[1], `${Secret}.acl`)).toBe(false);
+    expect(writes[2]?.[1]).toBe("new public data");
+    expect(grantsPublicRead(writes[3]?.[1], `${Secret}.acl`)).toBe(true);
+  });
+
+  it("a failed replacement leaves the owner-only ACL over the resource", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: access(pod, "old private data", false) });
+    pod.failNextPut("/public/secret", 500, 1);
+    await expect(
+      seedPods({ layout: access(pod, "new public data", true), mode: "replace" }),
+    ).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.get(Secret)?.body).toBe("old private data");
+    expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
+  });
+
+  it("cleanup deletes a partly written resource before its ACL", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1, true);
+    await expect(seedPods({ layout: access(pod, "private data", true) })).rejects.toBeInstanceOf(
+      SeedError,
+    );
+    const deletes = pod.requests
+      .filter((r) => r.method === "DELETE")
+      .map((r) => new URL(r.url).pathname);
+    expect(deletes).toEqual(["/public/secret", "/public/secret.acl"]);
+    expect(pod.resources.has(Secret)).toBe(false);
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(false);
+  });
+
+  it("a cleanup DELETE that fails keeps the ACL and reports both errors", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1, true);
+    pod.deleteFailures.set("/public/secret", 500);
+    const error = await seedPods({ layout: access(pod, "private data", true) }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(SeedError);
+    expect(String((error as SeedError).cause)).toMatch(
+      /could not remove .*status 500.*ACL was kept/,
+    );
+    // The partly written data stays under the owner-only ACL, never the inherited one.
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(true);
+    expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
+  });
+
+  it("a cleanup that removes the resource but not its ACL says so", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1);
+    pod.deleteFailures.set("/public/secret.acl", 403);
+    const error = await seedPods({ layout: access(pod, "private data", true) }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(String((error as SeedError).cause)).toMatch(/but not its ACL \(status 403\)/);
+    expect(pod.resources.has(Secret)).toBe(false);
+  });
+
+  it("a cleanup DELETE that throws keeps the ACL", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const inner = pod.authFetch;
+    const target = {
+      webid: pod.webid,
+      baseUrl: pod.baseUrl,
+      authFetch: (async (input, init) => {
+        if (init?.method === "DELETE") throw new Error("network down");
+        return inner(input, init);
+      }) as typeof fetch,
+    };
+    pod.failNextPut("/public/secret", 500, 1, true);
+    const error = await seedPods({
+      layout: {
+        pods: [
+          {
+            account: { target },
+            resources: [
+              { path: "/public/secret", source: { body: "x" }, access: { publicRead: true } },
+            ],
+          },
+        ],
+      },
+    }).catch((caught: unknown) => caught);
+    expect(String((error as SeedError).cause)).toMatch(/could not remove .*network down/);
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(true);
+  });
+
   it("every pod request refuses redirects", async () => {
     const pod = new MemoryPod("https://pod.example");
     await seedPods({ layout: layout(pod) });
@@ -670,6 +793,8 @@ describe("resource path guard", () => {
     "/x.%61cr",
     "/x.%6Deta",
     "/a%7Eb",
+    "/a%25b",
+    "/x.%2561cl",
   ]) {
     it(`refuses ${path}`, async () => {
       const pod = new MemoryPod("https://pod.example");

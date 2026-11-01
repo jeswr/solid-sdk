@@ -31,7 +31,9 @@ export class MemoryPod implements SeedTarget {
   headUnsupported = false;
   /** Refuse a PUT to an existing container with 409, as CSS does. */
   containerPutConflict = false;
-  #failure?: { path: string; remaining: number; status: number; skip: number };
+  /** Paths whose DELETE is refused with the given status. */
+  readonly deleteFailures = new Map<string, number>();
+  #failure?: { path: string; remaining: number; status: number; skip: number; partial: boolean };
 
   constructor(origin: string, webid = `${origin}/profile/card#me`) {
     this.baseUrl = origin;
@@ -55,6 +57,12 @@ export class MemoryPod implements SeedTarget {
         this.#failure.skip-- <= 0
       ) {
         this.#failure.remaining -= 1;
+        if (this.#failure.partial) {
+          this.resources.set(request.url, {
+            body,
+            contentType: request.headers.get("content-type") ?? "",
+          });
+        }
         return new Response("injected failure", { status: this.#failure.status });
       }
       if (request.method === "HEAD" && this.headUnsupported) {
@@ -79,6 +87,8 @@ export class MemoryPod implements SeedTarget {
         });
       }
       if (request.method === "DELETE") {
+        const refused = this.deleteFailures.get(path);
+        if (refused !== undefined) return new Response("delete refused", { status: refused });
         const existed = this.resources.delete(request.url);
         return new Response(null, { status: existed ? 205 : 404 });
       }
@@ -103,9 +113,12 @@ export class MemoryPod implements SeedTarget {
     };
   }
 
-  /** Fail one PUT to `path`, after letting `skip` earlier PUTs to it through. */
-  failNextPut(path: string, status = 500, skip = 0): void {
-    this.#failure = { path, status, remaining: 1, skip };
+  /**
+   * Fail one PUT to `path`, after letting `skip` earlier PUTs to it through. With
+   * `partial`, the body is stored anyway, as a write that fails after landing.
+   */
+  failNextPut(path: string, status = 500, skip = 0, partial = false): void {
+    this.#failure = { path, status, remaining: 1, skip, partial };
   }
 
   putRecords(path?: string): RequestRecord[] {
