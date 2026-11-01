@@ -6,7 +6,7 @@
 // LockoutError and updateAclWithRetry. Inherited revocations edit the parent ACL,
 // so materializeOwnAcl is intentionally unnecessary here.
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import type { Grant, Subject } from "@jeswr/pod-access";
+import type { Grant, PodImplementation, Subject } from "@jeswr/pod-access";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource } from "@solid/object";
@@ -54,6 +54,8 @@ export interface RevokeChange {
   signature?: string;
   /** Original authorization graph, compared independently of blank-node labels. */
   authorization?: string;
+  /** Trusted discovery dialect used when re-reading the current WAC policy. */
+  implementation?: PodImplementation;
 }
 export interface RevokePlan {
   changes: RevokeChange[];
@@ -96,6 +98,7 @@ export function planRevoke(
         ...(r.clause ? { clause: [...r.clause] } : {}),
         ...(r.signature ? { signature: r.signature } : {}),
         ...(r.authorization ? { authorization: r.authorization } : {}),
+        ...(r.implementation ? { implementation: r.implementation } : {}),
       };
       changes.set(
         JSON.stringify([
@@ -236,10 +239,11 @@ async function resolveChanges(
         grantSignature({ who: [], except: [], modes: new Set(change.modes) })
       );
     }
-    let policy = policies.get(change.resource);
+    const policyKey = JSON.stringify([change.resource, change.implementation]);
+    let policy = policies.get(policyKey);
     if (!policy) {
-      policy = readWacPolicy(dataset, change.resource, change.source);
-      policies.set(change.resource, policy);
+      policy = readWacPolicy(dataset, change.resource, change.source, change.implementation);
+      policies.set(policyKey, policy);
     }
     const grant = policy.grants.find((grant) => grant.source.node === node.value) as Grant;
     return grantSignature(grant) === change.signature;

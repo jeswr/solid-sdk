@@ -220,6 +220,7 @@ export function aggregateHoldings(
                   }
                 : {}),
               system: node.system,
+              ...(node.implementation ? { implementation: node.implementation } : {}),
               scope,
             });
           line.modes = unionModes([...line.modes, ...grant.modes]);

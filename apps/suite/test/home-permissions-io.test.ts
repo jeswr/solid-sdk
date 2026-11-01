@@ -49,6 +49,12 @@ function fixture(entries: Record<string, Doc> = {}) {
     const url = String(input);
     expect(url.startsWith(ROOT)).toBe(true);
     const doc = docs.get(url);
+    if (init?.method === "PUT") {
+      expect(doc).toBeDefined();
+      expect(new Headers(init.headers).get("if-match")).toBe('"1"');
+      docs.set(url, { ...doc, body: String(init.body) });
+      return new Response(null, { status: 205 });
+    }
     return new Response(init?.method === "HEAD" ? null : (doc?.body ?? ""), {
       status: doc?.status ?? (doc ? 200 : 404),
       headers: {
@@ -98,6 +104,81 @@ describe("bounded Home permission discovery", () => {
     });
     expect(pod.fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}.acl`)).toHaveLength(1);
     expect(pod.fetch.mock.calls.some(([url]) => String(url).includes("ignored.acr"))).toBe(false);
+  });
+  it("loads, plans and revokes one blank-node default authorization inherited by a folder and file", async () => {
+    const folder = `${ROOT}docs/`;
+    const file = `${folder}book`;
+    const endpoint = `${ROOT}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [folder]) },
+      [folder]: { body: listing(folder, [file]) },
+      [file]: { type: "application/octet-stream" },
+      [endpoint]: {
+        body: acl(
+          ROOT,
+          `[] a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    // Distinct classifications keep all three holdings visible before planning.
+    const typeIndex = [
+      { forClass: `${NS.SCHEMA}Photograph`, container: ROOT },
+      { forClass: `${NS.SCHEMA}TextDigitalDocument`, container: folder },
+      { forClass: `${NS.SCHEMA}Book`, instance: file },
+    ];
+    const state = await pod.load({ typeIndex });
+    expect(state.failures).toEqual([]);
+    const resources = state.rows[0]!.lines.flatMap((line) => line.resources);
+    expect(resources.map((resource) => resource.url)).toEqual([ROOT, folder, file]);
+    expect(new Set(resources.map((resource) => resource.node)).size).toBe(1);
+    const plan = planRevoke(state, "all");
+    expect(plan.changes).toEqual([
+      expect.objectContaining({ source: endpoint, resource: ROOT, scope: "members" }),
+    ]);
+    expect(pod.fetch.mock.calls.filter(([url]) => String(url) === endpoint)).toHaveLength(1);
+    const { undo } = await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect(pod.fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+    expect((await pod.load({ typeIndex })).rows).toEqual([]);
+    await applyRevoke(undo, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect(planRevoke(await pod.load({ typeIndex }), "all").changes).toHaveLength(1);
+  });
+  it("loads and revokes NSS defaultForNew grants using the dialect retained in the plan", async () => {
+    const folder = `${ROOT}docs/`;
+    const endpoint = `${ROOT}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [folder]) },
+      [folder]: { body: listing(folder) },
+      [endpoint]: {
+        body: acl(
+          ROOT,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:defaultForNew <${ROOT}>; acl:mode acl:Read.`,
+        ).replace("acl:default ", "acl:defaultForNew "),
+      },
+    });
+    for (const implementation of [undefined, "css", "ess"] as const) {
+      const unsupported = await pod.load(implementation ? { implementation } : {});
+      expect(unsupported.rows).toEqual([]);
+      expect(unsupported.failures).toContainEqual({ url: endpoint, reason: "unsupported" });
+    }
+    const state = await pod.load({ implementation: "nss" });
+    expect(state.failures).toEqual([]);
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]!.lines[0]!.resources).toEqual([
+      expect.objectContaining({
+        url: ROOT,
+        inherited: true,
+        inheritedFrom: ROOT,
+        implementation: "nss",
+      }),
+    ]);
+    const plan = planRevoke(state, "all");
+    expect(plan.changes).toEqual([
+      expect.objectContaining({ source: endpoint, scope: "members", implementation: "nss" }),
+    ]);
+    const { undo } = await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load({ implementation: "nss" })).rows).toEqual([]);
+    await applyRevoke(undo, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load({ implementation: "nss" })).summary.people).toBe(1);
   });
   it("uses each node's registered type, primary RDF type, or first known child class", async () => {
     const folder = `${ROOT}notes/`;
@@ -463,6 +544,34 @@ describe("bounded Home permission discovery", () => {
       url: `${ROOT}policy.acr`,
       reason: "unsupported",
     });
+  });
+  it("reads ESS ACP modes and a typed ACR without acp:resource only with an established ESS dialect", async () => {
+    const endpoint = `${ROOT}policy.acr`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT), headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: `${PREFIX} <> a acp:AccessControlResource; acp:accessControl <#access>. <#access> acp:apply <#policy>. <#policy> acp:allow acp:Read; acp:anyOf <#match>. <#match> acp:agent <${BOB}>.`,
+      },
+    });
+    for (const implementation of [undefined, "css", "nss"] as const) {
+      const unsupported = await pod.load(implementation ? { implementation } : {});
+      expect(unsupported.rows).toEqual([]);
+      expect(unsupported.failures).toEqual([{ url: endpoint, reason: "unsupported" }]);
+    }
+    const state = await pod.load({ implementation: "ess" });
+    expect(state.failures).toEqual([]);
+    expect(state.warnings).toEqual([]);
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]).toMatchObject({
+      kind: "person",
+      id: BOB,
+      lines: [{ modes: ["read"], resources: [{ source: endpoint, system: "acp" }] }],
+    });
+    // Reading ESS permissions does not make ACP mutation supported.
+    await expect(
+      applyRevoke(planRevoke(state, "all"), { fetch: pod.fetch, storage: ROOT, webId: OWNER }),
+    ).rejects.toThrow(UnsupportedAccessError);
+    expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });
   it("parses multiple rel tokens and ignores unrelated Link relations", () => {
     expect(

@@ -30,6 +30,8 @@ export interface PermissionResource {
   /** Original authorization graph, including metadata, for exact WAC matching. */
   authorization?: string;
   system?: AccessSystem;
+  /** Trusted discovery dialect retained for WAC revoke revalidation. */
+  implementation?: PodImplementation;
   scope?: "resource" | "members";
 }
 export interface PermissionLine {

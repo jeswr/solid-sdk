@@ -67,10 +67,11 @@ export function readWacPolicy(
   dataset: DatasetCore,
   resource: string,
   endpoint: string,
+  implementation?: PodImplementation,
 ): EffectivePolicy {
   // Keep the original conjunction for display and surgical revocation. Exposure
   // aggregation takes its widest reading instead of the migrator's source reading.
-  const policy = readWac(dataset, resource, endpoint);
+  const policy = readWac(dataset, resource, endpoint, implementation);
   for (const grant of policy.grants)
     if (!grant.who.length) {
       const authorization = [...new AclResource(dataset, DataFactory).authorizations].find(
@@ -170,6 +171,9 @@ export async function loadPermissions(
   }
   const nodes: WalkedAccess[] = [];
   const aclDatasets = new Map<WalkedAccess, DatasetCore>();
+  // Reuse parsed documents as well as responses: reparsing changes blank-node
+  // identifiers and makes one inherited authorization look like separate rules.
+  const aclDocuments = new Map<string, ReturnType<typeof readResource>>();
   const seen = new Set<string>();
   const queue = [{ url: storage, depth: 0, isContainer: true }];
   for (const visit of queue) {
@@ -221,7 +225,12 @@ export async function loadPermissions(
         if (acpHeaders(headers) && !aclLink(headers, current)) throw new UnsupportedAccessError();
         let document: Awaited<ReturnType<typeof readResource>>;
         try {
-          document = await readResource(scoped, endpoint, signal);
+          let pending = aclDocuments.get(endpoint);
+          if (!pending) {
+            pending = readResource(scoped, endpoint, signal);
+            aclDocuments.set(endpoint, pending);
+          }
+          document = await pending;
         } catch (error) {
           if (error instanceof RdfFetchError && error.status === 404) {
             current = parent(current, storage);
@@ -237,10 +246,17 @@ export async function loadPermissions(
         try {
           policy =
             system === "acp"
-              ? readAcp(document.dataset, current, endpoint, undefined, false, () => {
-                  inactive = true;
-                })
-              : readWacPolicy(document.dataset, current, endpoint);
+              ? readAcp(
+                  document.dataset,
+                  current,
+                  endpoint,
+                  options.implementation === "nss" ? undefined : options.implementation,
+                  false,
+                  () => {
+                    inactive = true;
+                  },
+                )
+              : readWacPolicy(document.dataset, current, endpoint, options.implementation);
         } catch {
           throw new UnsupportedAccessError();
         }
