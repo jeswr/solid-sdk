@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Exercise an unwrapped public client through the worker, with consuming Cache.put. */
+import type { ChangeEvent } from '@jeswr/pod-notifications';
+import { createPollChannel } from '@jeswr/pod-notifications/channels/poll';
+import { FakeTimers } from '@jeswr/pod-notifications/testing';
 import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -131,6 +134,104 @@ function streaming(length?: string, chunkSize = 1_000_000) {
   };
   return { transport, cancel, pulls: () => pulls };
 }
+
+it('polls fresh listing pages through the worker without falsely deleting a retained member', async () => {
+  const second = `${root}pages?cursor=2`;
+  const third = `${root}pages?cursor=3`;
+  const members = ['a', 'b', 'c'].map((name) => `${root}${name}`);
+  let changed = false;
+  const { pageFetch, cache, network, send } = await worker(async (input, init) => {
+    const request = new Request(input, init);
+    if (members.includes(request.url)) return new Response('offline copy');
+    const index = request.url === root ? 0 : request.url === second ? 1 : 2;
+    const current = changed ? members.slice(1) : members;
+    const etag = changed ? 'listing-v2' : 'listing-v1';
+    const headers = {
+      'content-type': 'application/lws+json',
+      vary: 'Accept',
+      etag,
+      ...(index + 1 < current.length
+        ? { link: `<${index === 0 ? second : third}>; rel="next"` }
+        : {}),
+    };
+    if (request.method === 'HEAD') return new Response(null, { headers });
+    if (request.headers.get('if-none-match') === etag) return new Response(null, { status: 304 });
+    return new Response(
+      JSON.stringify({ type: 'ContainerPage', items: [{ id: current[index] }] }),
+      { headers },
+    );
+  });
+  const storage = createLwsBackend({
+    root,
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (changed && request.url === second) {
+        // Let page one's refresh evict the old cursors before the next read.
+        // A stale first page would now combine A with fresh C and falsely delete B.
+        await vi.waitFor(async () => {
+          const first = await cache.match(keyRequest(root, 'accept=text/turtle'));
+          expect(first?.headers.get('etag')).toBe('listing-v2');
+        });
+      }
+      return pageFetch(request);
+    },
+  });
+  send({
+    type: 'config',
+    config: {
+      webId: scopedWebId,
+      storageRoot: root,
+      storageBackend: { protocol: 'lws', id: root },
+    },
+  });
+  const timers = new FakeTimers();
+  const subscription = createPollChannel({
+    storage,
+    topics: [root],
+    timers,
+    now: timers.now,
+    intervalMs: 10,
+  });
+  const changes: ChangeEvent[] = [];
+  subscription.on('change', (event) => {
+    changes.push(event);
+    send({ type: 'notification', frame: event });
+  });
+  try {
+    await timers.advanceBy(0);
+    expect(changes).toEqual([]);
+    const meta = await MetadataStore.open(scopedWebId);
+    try {
+      // Prove all three pages are cached before membership shifts across pages.
+      for (const page of [root, second, third]) expect(await meta.getByUrl(page)).toHaveLength(1);
+      for (const member of members) await storage.read(member);
+      network.mockClear();
+      changed = true;
+      await timers.advanceBy(10);
+      expect(changes.map(({ type, object }) => [type, object])).toEqual([
+        ['Update', root],
+        ['Delete', members[0]],
+      ]);
+      const gets = network.mock.calls
+        .map(([input, init]) => new Request(input, init))
+        .filter((request) => request.method === 'GET');
+      for (const page of [root, second]) {
+        expect(gets).toContainEqual(expect.objectContaining({ url: page, cache: 'no-cache' }));
+      }
+    } finally {
+      meta.close();
+    }
+  } finally {
+    await subscription.close();
+    await dispose?.();
+  }
+  for (const member of members.slice(1)) {
+    expect(await (await cache.match(keyRequest(member, 'accept=text/turtle')))?.text()).toBe(
+      'offline copy',
+    );
+  }
+  expect(await cache.match(keyRequest(members[0] ?? '', 'accept=text/turtle'))).toBeUndefined();
+});
 
 it.each([
   'solid',

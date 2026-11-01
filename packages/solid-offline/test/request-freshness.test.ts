@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Request-directed freshness (security-critical: no-stale-ACL-for-mutations).
  *
@@ -9,7 +10,7 @@
  *     HTTP caching ahead of a read-modify-write on a security-sensitive doc (an
  *     `.acl` before a grant/revoke). The SW must not serve a stale ACL into that.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { keyRequest } from '../src/cache-policy.js';
 import { MetadataStore } from '../src/metadata-store.js';
 import { handleFetch, type SwrDeps } from '../src/swr.js';
@@ -246,7 +247,76 @@ describe('Cache-Control: no-cache forces synchronous revalidation (no stale serv
   });
 });
 
-describe('Cache-Control: no-store bypasses the cache entirely', () => {
+describe.each(['no-cache', 'reload'] as const)('Request.cache = %s forces fresh reads', (cache) => {
+  it.each(['200', '304'])('awaits a %s before returning confirmed bytes', async (status) => {
+    let resolveFresh!: (response: Response) => void;
+    const fresh = new Promise<Response>((resolve) => {
+      resolveFresh = resolve;
+    });
+    const h = await harness([() => turtleResponse('cached', { etag: '"v1"' }), () => fresh]);
+    await handleFetch(makeGet(URL_A), h.deps);
+    const request = new Request(URL_A, { cache, headers: { accept: 'text/turtle' } });
+    expect(request.headers.has('cache-control')).toBe(false);
+    let settled = false;
+    const pending = handleFetch(request, h.deps).then((result) => {
+      settled = true;
+      return result;
+    });
+    try {
+      await vi.waitFor(() => expect(h.calls).toHaveLength(2));
+      expect(settled).toBe(false);
+    } finally {
+      resolveFresh(
+        status === '304' ? notModifiedResponse() : turtleResponse('fresh', { etag: '"v2"' }),
+      );
+      await pending;
+    }
+    const result = await pending;
+    expect(result.source).toBe('request-no-cache-revalidated');
+    expect(result.revalidation).toBeUndefined();
+    expect(await result.response.text()).toBe(status === '304' ? 'cached' : 'fresh');
+    expect(h.calls[1]?.cache).toBe('no-cache');
+    expect(h.calls[1]?.headers.get('cache-control')).toBe('no-cache');
+    expect(h.calls[1]?.headers.get('if-none-match')).toBe('"v1"');
+    expect((await h.meta.getByUrl(URL_A))[0]?.etag).toBe(status === '304' ? '"v1"' : '"v2"');
+  });
+
+  it('revalidates a cached negative response before its TTL expires', async () => {
+    const h = await harness([
+      () => turtleResponse('', { status: 404 }),
+      () => turtleResponse('restored', { etag: '"v2"' }),
+    ]);
+    await handleFetch(makeGet(URL_A), h.deps);
+    const result = await handleFetch(
+      new Request(URL_A, { cache, headers: { accept: 'text/turtle' } }),
+      h.deps,
+    );
+    expect(result.source).toBe('request-no-cache-revalidated');
+    expect(await result.response.text()).toBe('restored');
+    expect(h.calls).toHaveLength(2);
+  });
+
+  it('keeps the existing stale-tagged fallback while offline', async () => {
+    const h = await harness([() => turtleResponse('cached', { etag: '"v1"' })]);
+    await handleFetch(makeGet(URL_A), h.deps);
+    h.setOnline(false);
+    const result = await handleFetch(
+      new Request(URL_A, { cache, headers: { accept: 'text/turtle' } }),
+      h.deps,
+    );
+    expect(result.source).toBe('cache-hit-offline');
+    expect(result.response.headers.get('x-offline')).toBe('stale');
+    expect(await result.response.text()).toBe('cached');
+    expect(h.calls).toHaveLength(1);
+  });
+});
+
+describe.each(['header', 'cache-mode'] as const)('no-store via %s bypasses the cache', (via) => {
+  const noStoreGet = () =>
+    via === 'header'
+      ? freshGet(URL_A, 'no-store')
+      : new Request(URL_A, { cache: 'no-store', headers: { accept: 'text/turtle' } });
+
   it('never reads the cache and never writes it', async () => {
     const h = await harness([
       () => turtleResponse('<#a> .', { etag: '"v1"' }),
@@ -256,10 +326,16 @@ describe('Cache-Control: no-store bypasses the cache entirely', () => {
     const first = await handleFetch(makeGet(URL_A), h.deps);
     await first.revalidation;
     const rowsBefore = await h.meta.getByUrl(URL_A);
+    const lookup = vi.spyOn(h.meta, 'getByUrl');
+    const match = vi.spyOn(h.cache, 'match');
+    const put = vi.spyOn(h.cache, 'put');
 
-    const result = await handleFetch(freshGet(URL_A, 'no-store'), h.deps);
+    const result = await handleFetch(noStoreGet(), h.deps);
     expect(result.source).toBe('request-no-store');
     expect(await result.response.text()).toBe('<#network> .');
+    expect(lookup).not.toHaveBeenCalled();
+    expect(match).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
 
     // The cache was NOT updated by the no-store read (still the original entry).
     const rowsAfter = await h.meta.getByUrl(URL_A);
@@ -268,8 +344,28 @@ describe('Cache-Control: no-store bypasses the cache entirely', () => {
 
   it("forwards the fetch with cache mode 'no-store' (roborev Medium)", async () => {
     const h = await harness([() => turtleResponse('<#network> .', { etag: '"v1"' })]);
-    await handleFetch(freshGet(URL_A, 'no-store'), h.deps);
+    await handleFetch(noStoreGet(), h.deps);
     // The outgoing request must not be able to hit the browser HTTP cache.
     expect(h.calls[0]?.cache).toBe('no-store');
   });
+});
+
+it.each([
+  { cache: 'no-store', directive: 'no-cache' },
+  { cache: 'no-cache', directive: 'no-store' },
+  { cache: 'reload', directive: 'no-store' },
+] as const)('keeps no-store precedence for cache=$cache and header=$directive', async ({
+  cache,
+  directive,
+}) => {
+  const h = await harness([() => turtleResponse('network')]);
+  const request = new Request(URL_A, {
+    cache,
+    headers: { accept: 'text/turtle', 'cache-control': directive },
+  });
+  const result = await handleFetch(request, h.deps);
+  expect(result.source).toBe('request-no-store');
+  expect(h.calls[0]?.cache).toBe('no-store');
+  expect(h.cache.size).toBe(0);
+  expect(await h.meta.getByUrl(URL_A)).toEqual([]);
 });
