@@ -1,0 +1,272 @@
+// AUTHORED-BY Claude Opus 5.5
+"use client";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Progress,
+  toast,
+} from "@jeswr/suite-ui";
+import { FileJson, FolderOpen } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  KEEP_SKIP_REASONS,
+  type KeepImportItem,
+  type KeepImportPlan,
+  type KeepNoteFile,
+  keepFingerprint,
+  MAX_KEEP_NOTE_BYTES,
+  planKeepImport,
+} from "../lib/keep";
+import { useNotesContext } from "../state/notes-context";
+
+type Phase =
+  | { kind: "choose"; reading?: boolean }
+  | { kind: "review"; plan: KeepImportPlan }
+  | { kind: "importing"; total: number; done: number }
+  | {
+      kind: "finished";
+      imported: number;
+      failed: KeepImportItem[];
+      remaining: KeepImportItem[];
+      unarchived: number;
+    };
+
+const plural = (count: number, one: string, many = `${one}s`) =>
+  `${count.toLocaleString()} ${count === 1 ? one : many}`;
+
+/** Read only the small JSON files of a selection; Takeout also includes HTML copies and media. */
+async function readSelection(list: FileList) {
+  const files: KeepNoteFile[] = [];
+  const oversized: { fileName: string; reason: string }[] = [];
+  let ignored = 0;
+  for (const file of Array.from(list)) {
+    const fileName = file.webkitRelativePath || file.name;
+    if (!/\.json$/i.test(file.name)) ignored++;
+    else if (file.size > MAX_KEEP_NOTE_BYTES)
+      oversized.push({ fileName, reason: KEEP_SKIP_REASONS.NOTE_TOO_LARGE });
+    else files.push({ fileName, json: await file.text() });
+  }
+  return { files, oversized, ignored };
+}
+
+export function KeepImportDialog({ open, close }: { open: boolean; close: () => void }) {
+  const { notes, create, move, refresh } = useNotesContext();
+  const [phase, setPhase] = useState<Phase>({ kind: "choose" });
+  const stopped = useRef(false);
+  const filesInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
+
+  const choose = async (list: FileList | null) => {
+    if (!list?.length) return;
+    setPhase({ kind: "choose", reading: true });
+    try {
+      const { files, oversized, ignored } = await readSelection(list);
+      const plan = planKeepImport(
+        files,
+        notes.filter((note) => note.location !== "trashed"),
+      );
+      setPhase({
+        kind: "review",
+        plan: {
+          ...plan,
+          skipped: [...oversized, ...plan.skipped],
+          ignored: plan.ignored + ignored,
+        },
+      });
+    } catch {
+      setPhase({ kind: "choose" });
+      toast.error("Couldn't read those files. Try choosing them again.");
+    }
+  };
+
+  const run = async (selected: readonly KeepImportItem[]) => {
+    stopped.current = false;
+    // A failed save may still have reached the pod: never import a note that is now there.
+    const present = new Set(
+      notes.filter((note) => note.location !== "trashed").map(keepFingerprint),
+    );
+    const items = selected.filter((item) => !present.has(keepFingerprint(item.input)));
+    const failed: KeepImportItem[] = [];
+    let remaining: KeepImportItem[] = [];
+    let imported = 0;
+    let unarchived = 0;
+    setPhase({ kind: "importing", total: items.length, done: 0 });
+    for (const [index, item] of items.entries()) {
+      if (stopped.current) {
+        remaining = items.slice(index);
+        break;
+      }
+      try {
+        const note = await create(item.input, item.pinned, item.colour);
+        imported++;
+        if (item.archived) await move(note, "archive").catch(() => unarchived++);
+      } catch {
+        failed.push(item);
+      }
+      setPhase({ kind: "importing", total: items.length, done: index + 1 });
+    }
+    await refresh().catch(() => undefined);
+    setPhase({ kind: "finished", imported, failed, remaining, unarchived });
+  };
+
+  const dismiss = () => {
+    if (phase.kind === "importing") {
+      stopped.current = true;
+      return;
+    }
+    setPhase({ kind: "choose" });
+    close();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && dismiss()}>
+      <DialogContent className="notes-keep-import">
+        <DialogTitle>Import from Google Keep</DialogTitle>
+        <DialogDescription>
+          Choose the Keep folder from your Google Takeout download, or the note files inside it.
+          Notes keeps their text, checklists, labels, colours, pins and archive state.
+        </DialogDescription>
+        {phase.kind === "choose" && (
+          <div className="notes-keep-choose">
+            <input
+              ref={folderInput}
+              type="file"
+              hidden
+              multiple
+              aria-label="Keep folder"
+              {...{ webkitdirectory: "" }}
+              onChange={(event) => void choose(event.target.files)}
+            />
+            <input
+              ref={filesInput}
+              type="file"
+              hidden
+              multiple
+              accept=".json,application/json"
+              aria-label="Keep note files"
+              onChange={(event) => void choose(event.target.files)}
+            />
+            <Button disabled={phase.reading} onClick={() => folderInput.current?.click()}>
+              <FolderOpen size={18} aria-hidden="true" />
+              Choose Keep folder
+            </Button>
+            <Button
+              variant="outline"
+              disabled={phase.reading}
+              onClick={() => filesInput.current?.click()}
+            >
+              <FileJson size={18} aria-hidden="true" />
+              Choose note files
+            </Button>
+            {phase.reading && <p role="status">Reading your notes…</p>}
+          </div>
+        )}
+        {phase.kind === "review" && (
+          <div className="notes-keep-review">
+            <p role="status">
+              {phase.plan.ready.length
+                ? `${plural(phase.plan.ready.length, "note")} ready to import.`
+                : "No notes to import from these files."}
+            </p>
+            <ul>
+              {phase.plan.trashed > 0 && (
+                <li>{plural(phase.plan.trashed, "note")} from Keep's Trash will be left out.</li>
+              )}
+              {phase.plan.attachments > 0 && (
+                <li>
+                  {plural(phase.plan.attachments, "image or recording", "images or recordings")}{" "}
+                  will stay in Takeout. Notes can't store attachments yet.
+                </li>
+              )}
+              {phase.plan.adjusted > 0 && (
+                <li>
+                  {plural(phase.plan.adjusted, "note")} had a colour or link Notes can't use; the
+                  rest of {phase.plan.adjusted === 1 ? "it" : "them"} will be imported.
+                </li>
+              )}
+              {phase.plan.ignored > 0 && (
+                <li>
+                  {plural(phase.plan.ignored, "other file")} in the selection will be ignored.
+                </li>
+              )}
+            </ul>
+            {phase.plan.skipped.length > 0 && (
+              <details>
+                <summary>{plural(phase.plan.skipped.length, "file")} can't be imported</summary>
+                <ul className="notes-keep-skipped">
+                  {phase.plan.skipped.map((entry, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: Takeout file names can repeat.
+                    <li key={index}>
+                      <span>{entry.fileName}</span>: {entry.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            <div className="notes-keep-actions">
+              <Button variant="ghost" onClick={() => setPhase({ kind: "choose" })}>
+                Choose other files
+              </Button>
+              <Button
+                disabled={!phase.plan.ready.length}
+                onClick={() => void run(phase.plan.ready)}
+              >
+                {phase.plan.ready.length
+                  ? `Import ${plural(phase.plan.ready.length, "note")}`
+                  : "Import"}
+              </Button>
+            </div>
+          </div>
+        )}
+        {phase.kind === "importing" && (
+          <div className="notes-keep-progress">
+            <p role="status">
+              Importing {phase.done.toLocaleString()} of {phase.total.toLocaleString()}…
+            </p>
+            <Progress value={phase.done} max={phase.total} aria-label="Import progress" />
+            <Button variant="outline" onClick={() => (stopped.current = true)}>
+              Stop
+            </Button>
+          </div>
+        )}
+        {phase.kind === "finished" && (
+          <div className="notes-keep-review">
+            <p role="status">
+              {phase.imported
+                ? `Imported ${plural(phase.imported, "note")}.`
+                : "No notes were imported."}
+            </p>
+            {phase.unarchived > 0 && (
+              <p>
+                {plural(phase.unarchived, "note")} couldn't be moved to the Archive and{" "}
+                {phase.unarchived === 1 ? "is" : "are"} in Notes instead.
+              </p>
+            )}
+            {phase.remaining.length > 0 && (
+              <p>Stopped with {plural(phase.remaining.length, "note")} still to import.</p>
+            )}
+            {phase.failed.length > 0 && (
+              <p role="alert">
+                {plural(phase.failed.length, "note")} couldn't be saved to your pod.
+              </p>
+            )}
+            <div className="notes-keep-actions">
+              {phase.failed.length + phase.remaining.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => void run([...phase.failed, ...phase.remaining])}
+                >
+                  {phase.failed.length ? "Try again" : "Import the rest"}
+                </Button>
+              )}
+              <Button onClick={dismiss}>Done</Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
