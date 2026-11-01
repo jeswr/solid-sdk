@@ -130,10 +130,14 @@ describe("Univer engine adapter", () => {
     mock.emit({ ...mutation, options: { fromFormula: true } });
     await Promise.resolve();
     expect(change).toHaveBeenCalledTimes(2);
+    // Named ranges are formula.* mutations but persisted user state.
+    mock.emit({ ...mutation, id: "formula.mutation.set-defined-name" });
+    await Promise.resolve();
+    expect(change).toHaveBeenCalledTimes(3);
     unsubscribe();
     mock.emit(mutation);
     await Promise.resolve();
-    expect(change).toHaveBeenCalledTimes(2);
+    expect(change).toHaveBeenCalledTimes(3);
     engine.dispose();
     expect(mock.subscription.dispose).toHaveBeenCalledOnce();
     expect(mock.univer.dispose).toHaveBeenCalledOnce();

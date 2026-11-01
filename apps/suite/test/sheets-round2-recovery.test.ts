@@ -212,7 +212,8 @@ describe("Sheets create rollback ownership", () => {
       }
     });
     await expect(h.service.create({ title: "Incomplete" })).rejects.toMatchObject({ status: 503 });
-    expect(h.pod.has(`${ROOT}incomplete/index.ttl`)).toBe(resource === "index.ttl");
+    // An unverified snapshot means ownership is unknown, so the reservation stays too.
+    expect(h.pod.has(`${ROOT}incomplete/index.ttl`)).toBe(true);
     expect(h.pod.has(`${ROOT}incomplete/workbook.json`)).toBe(resource === "workbook.json");
     expect(
       h.calls

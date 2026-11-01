@@ -14,6 +14,18 @@ import { serializeSnapshot } from "../model/snapshot";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
+/**
+ * `formula.*` mutations are background calculation traffic, except these, which
+ * change persisted workbook state (named ranges, tables) and must autosave.
+ */
+const PERSISTED_FORMULA_MUTATIONS = new Set([
+  "formula.mutation.set-defined-name",
+  "formula.mutation.remove-defined-name",
+  "formula.mutation.set-super-table",
+  "formula.mutation.remove-super-table",
+  "formula.mutation.set-super-table-option",
+]);
+
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.EN_US,
@@ -56,7 +68,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       event.type !== CommandType.MUTATION ||
       loading ||
       event.options?.fromChangeset ||
-      event.id.startsWith("formula.") ||
+      (event.id.startsWith("formula.") && !PERSISTED_FORMULA_MUTATIONS.has(event.id)) ||
       event.params?.unitId !== workbook.getId()
     )
       return;

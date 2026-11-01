@@ -119,7 +119,12 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         );
         for (const url of [layout.snapshot, ...derived, layout.index]) {
           const etag = written.get(url);
-          if (etag === undefined) continue;
+          if (etag === undefined) {
+            // Written but its validator is unknown: ownership of the authoritative
+            // snapshot or index cannot be established, so leave everything.
+            if (written.has(url) && (url === layout.snapshot || url === layout.index)) return;
+            continue;
+          }
           try {
             await storage.deleteResource(url, { ifMatch: etag });
           } catch (error) {
