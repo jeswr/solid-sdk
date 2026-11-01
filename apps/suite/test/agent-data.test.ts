@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { issueApproval } from "@jeswr/agent-mandate/approval";
 
 import {
   digestOf,
@@ -28,8 +29,10 @@ import {
   resourceSlug,
   SOLID,
 } from "../src/apps/agent/lib/paths";
+import { readRdfDocument } from "../src/apps/agent/lib/rdf";
 import * as readers from "../src/apps/agent/lib/readers";
-import { buildAgentSeed } from "../src/apps/agent/lib/seed";
+import { buildAgentSeed, demoApprovalKey } from "../src/apps/agent/lib/seed";
+import { createAgentVerifier } from "../src/apps/agent/lib/verify";
 import { createDemoPod, type DemoSeedFile } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
@@ -52,8 +55,11 @@ async function meta(
 }
 const seedRecord = async (record: PodRecord): Promise<DemoSeedFile> => ({
   path: record.id,
-  body: await recordToTurtle(record),
-  contentType: "text/turtle",
+  body:
+    record.type === "approval"
+      ? await issueApproval(record, await demoApprovalKey(), new Date(record.createdAt))
+      : await recordToTurtle(record),
+  contentType: record.type === "approval" ? "application/trig" : "text/turtle",
 });
 async function fixturePod() {
   const locations = {
@@ -118,7 +124,14 @@ describe("agent paths and discovery", () => {
     ]) {
       expect(() => paths.resolveSlug("accounts", slug)).toThrow();
     }
-    expect(() => resourceSlug(DEMO_ROOT)).toThrow();
+    for (const ref of [
+      DEMO_ROOT,
+      "urn:test:proposal",
+      "not a URL",
+      url("a..b.ttl"),
+      "data:text/plain,a",
+    ])
+      expect(resourceSlug(ref)).toBeUndefined();
   });
   it("discovers the seeded private registration and refuses off-pod links", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW) });
@@ -199,6 +212,66 @@ describe("agent paths and discovery", () => {
 });
 
 describe("agent client", () => {
+  it("bounds and checks the format of every listing and discovery document", async () => {
+    const seed = await buildDemoSeed(NOW);
+    const pod = createDemoPod({ root: DEMO_ROOT, seed });
+    const responses = [
+      () =>
+        new Response("", {
+          headers: { "content-type": "text/turtle", "content-length": "1048577" },
+        }),
+      () =>
+        new Response(new Uint8Array(1048577), { headers: { "content-type": "application/trig" } }),
+      () => new Response("<html>", { headers: { "content-type": "text/html" } }),
+    ];
+    for (const response of responses) {
+      await expect(clientFor(async () => response()).list(url("accounts/"))).rejects.toThrow();
+      for (const target of [
+        `${DEMO_ROOT}profile/card`,
+        `${DEMO_ROOT}settings/privateTypeIndex.ttl`,
+      ]) {
+        const io: typeof fetch = async (input, init) =>
+          String(input) === target ? response() : pod.fetch(input, init);
+        await expect(discoverWorkspace(io, DEMO_WEBID)).rejects.toThrow();
+      }
+    }
+    // Preferences are also discovery input, with exactly the same read policy.
+    const profile = await meta("profile/card", (_, store) => {
+      const node = metadataNode(store, DEMO_WEBID);
+      node.setIri("http://www.w3.org/ns/pim/space#storage", DEMO_ROOT);
+      node.setIri(
+        "http://www.w3.org/ns/pim/space#preferencesFile",
+        `${DEMO_ROOT}settings/prefs.ttl`,
+      );
+    });
+    const preferencesPod = createDemoPod({ root: DEMO_ROOT, seed: [profile] });
+    for (const response of responses)
+      await expect(
+        discoverWorkspace(
+          async (input, init) =>
+            String(input).endsWith("prefs.ttl") ? response() : preferencesPod.fetch(input, init),
+          DEMO_WEBID,
+        ),
+      ).rejects.toThrow();
+    expect(
+      await clientFor(async () => new Response(null, { status: 410 })).list(url("accounts/")),
+    ).toEqual([]);
+    const exact = " ".repeat(1048576);
+    expect(
+      (
+        await readRdfDocument(
+          new Response(exact, { headers: { "content-type": "Text/Turtle; charset=utf-8" } }),
+        )
+      ).text.length,
+    ).toBe(1048576);
+    await expect(
+      readRdfDocument(
+        new Response(null, {
+          headers: { "content-type": "text/turtle", "content-length": "1048577" },
+        }),
+      ),
+    ).rejects.toThrow("1 MiB");
+  });
   it("conditional creates and replaces preserve validators and conflict", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT });
     const client = clientFor(pod.fetch);
@@ -228,8 +301,8 @@ describe("agent client", () => {
   it("reads TriG default claims and ignores conflicting proof graph claims", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT });
     const client = clientFor(pod.fetch);
-    for (const type of ["approval", "control-statement"] as const) {
-      const target = url(`${type === "approval" ? "approvals" : "control"}/proof.trig`);
+    for (const type of ["account", "control-statement"] as const) {
+      const target = url(`${type === "account" ? "accounts" : "control"}/proof.trig`);
       const record = { ...exampleRecords[type], id: target };
       const body = await serialize(
         [
@@ -261,14 +334,17 @@ describe("agent client", () => {
       request(new Response("bad", { status: 500 })).create(url("a"), "body", "application/trig"),
     ).rejects.toThrow("save");
     await expect(
-      request(new Response("", { headers: { "content-length": "1048577" } })).read(
-        url("a"),
-        "account",
-      ),
+      request(
+        new Response("", {
+          headers: { "content-length": "1048577", "content-type": "text/turtle" },
+        }),
+      ).read(url("a"), "account"),
     ).rejects.toThrow("1 MiB");
-    await expect(request(new Response(new Uint8Array(1048577))).graph(url("a"))).rejects.toThrow(
-      "1 MiB",
-    );
+    await expect(
+      request(
+        new Response(new Uint8Array(1048577), { headers: { "content-type": "text/turtle" } }),
+      ).graph(url("a")),
+    ).rejects.toThrow("1 MiB");
     await expect(
       request(new Response("<html>", { headers: { "content-type": "text/html" } })).read(
         url("a"),
@@ -286,12 +362,76 @@ describe("agent client", () => {
     await expect(request(new Response(null)).read(url("a"), "account")).rejects.toThrow(
       "Unsupported",
     );
-    const graph = await request(new Response(null, { status: 204 })).graph(url("a"));
+    const graph = await request(
+      new Response(null, { status: 204, headers: { "content-type": "text/turtle" } }),
+    ).graph(url("a"));
     expect(graph.dataset.size).toBe(0);
   });
 });
 
 describe("typed readers", () => {
+  it("selects newest audit sequence IRIs before fetching and caps concurrent reads at six", async () => {
+    const seed = await Promise.all(
+      Array.from({ length: 40 }, (_, seq) =>
+        seedRecord({
+          ...exampleRecords["audit-entry"],
+          id: url(`audit/${seq}.ttl`),
+          seq,
+          // Sequence order, rather than timestamps or lexicographic path order, is canonical.
+          at: new Date(NOW - seq * 1000).toISOString(),
+        }),
+      ),
+    );
+    const pod = createDemoPod({ root: DEMO_ROOT, seed });
+    let active = 0;
+    let peak = 0;
+    const reads: string[] = [];
+    const client = clientFor(async (input, init) => {
+      const target = String(input);
+      if (!target.endsWith(".ttl") || (init?.method && init.method !== "GET"))
+        return pod.fetch(input, init);
+      reads.push(target);
+      peak = Math.max(peak, ++active);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      try {
+        return await pod.fetch(input, init);
+      } finally {
+        --active;
+      }
+    });
+    expect(
+      readers.loadedRecords(await readers.readAudit(client, { limit: 1 })).map((r) => r.seq),
+    ).toEqual([39]);
+    expect(reads).toEqual([url("audit/39.ttl")]);
+    reads.length = 0;
+    expect(
+      readers
+        .loadedRecords(await readers.readAudit(client, { before: 20, limit: 12 }))
+        .map((r) => r.seq),
+    ).toEqual(Array.from({ length: 12 }, (_, i) => 19 - i));
+    expect(reads).toHaveLength(12);
+    expect(peak).toBe(6);
+    reads.length = 0;
+    expect(await readers.readAudit(client, { limit: 0 })).toEqual([]);
+    expect(await readers.readAudit(client, { before: 0 })).toEqual([]);
+    expect(reads).toEqual([]);
+    for (const limit of [-1, NaN, 1.5])
+      await expect(readers.readAudit(client, { limit })).rejects.toThrow("limit");
+    await client.create(url("audit/chain.ttl"), "");
+    await client.create(url("audit/subfolder/"), "");
+    for (const name of ["bad", "9007199254740992"])
+      await client.create(url(`audit/${name}.ttl`), "");
+    await client.replace(
+      url("audit/39.ttl"),
+      await recordToTurtle({ ...exampleRecords["audit-entry"], id: url("audit/39.ttl"), seq: 3 }),
+      (await pod.fetch(url("audit/39.ttl"))).headers.get("etag") as string,
+    );
+    const rows = await readers.readAudit(client);
+    expect(rows).toHaveLength(42);
+    expect(rows[0]).toMatchObject({ url: url("audit/39.ttl"), error: expect.any(Error) });
+    expect(rows.filter((row) => !isLoaded(row))).toHaveLength(3);
+    expect(reads.some((ref) => ref.endsWith("bad.ttl"))).toBe(false);
+  });
   it("round-trips every golden record family through the demo pod", async () => {
     const { client, expected } = await fixturePod();
     const results = await Promise.all([
@@ -313,7 +453,10 @@ describe("typed readers", () => {
         delete want.type;
         delete (want as Partial<import("@jeswr/agent-model").Approval>).proof;
       }
-      if (index === 5) delete (want as Partial<import("@jeswr/agent-model").Approval>).attributedTo;
+      if (index === 5) {
+        delete (want as Partial<import("@jeswr/agent-model").Approval>).attributedTo;
+        want.createdAt = new Date(String(want.createdAt)).toISOString();
+      }
       expect(rows[0] && isLoaded<unknown>(rows[0]) && rows[0].record).toMatchObject(want);
     });
     const conversations = readers.loadedRecords(await readers.readConversations(client));
@@ -352,6 +495,12 @@ describe("typed readers", () => {
       .loadedRecords(await readers.readConversations(client))
       .find((row) => row.id === url("conversations/empty/"));
     expect(empty).toMatchObject({ title: "empty", unread: false, updatedAt: "" });
+    await pod.fetch(url("conversations/bad%20slug/"), { method: "PUT" });
+    expect(
+      (await readers.readConversations(client)).find(
+        (row) => row.url === url("conversations/bad%20slug/"),
+      ),
+    ).toMatchObject({ error: expect.any(Error) });
     const forbidden = clientFor(async () => new Response(null, { status: 403 }));
     await expect(readers.readMandateCurrent(forbidden)).rejects.toMatchObject({ status: 403 });
     await expect(readers.readHeartbeat(forbidden)).rejects.toMatchObject({ status: 403 });
@@ -451,7 +600,10 @@ describe("agent demo seed", () => {
     const pod = createDemoPod({ root: DEMO_ROOT, seed });
     const client = clientFor(pod.fetch);
     for (const file of seed.filter(
-      (file) => !file.path.includes("heartbeat") && !file.path.includes(".triage."),
+      (file) =>
+        !file.path.includes("heartbeat") &&
+        !file.path.includes(".triage.") &&
+        !file.path.endsWith(".trig"),
     )) {
       const record = await recordFromTurtle(
         file.body as string,
@@ -468,6 +620,14 @@ describe("agent demo seed", () => {
     expect(await readers.readMandateCurrent(client)).toHaveLength(1);
     expect(await readers.readMandates(client)).toHaveLength(1);
     expect(await readers.readOutbox(client)).toHaveLength(1);
+    expect((await readers.readApprovals(client)).every(isLoaded)).toBe(true);
+    const fullPod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW) });
+    const verified = await readers.readApprovals(
+      clientFor(fullPod.fetch),
+      createAgentVerifier({ fetch: fullPod.fetch, webId: DEMO_WEBID }, () => new Date(NOW)),
+    );
+    expect(verified).toHaveLength(1);
+    expect(verified[0]).toMatchObject({ verified: "verified" });
     expect(await readers.readControl(client)).toHaveLength(1);
     expect(readers.loadedRecords(await readers.readHeartbeat(client))[0]?.at).toBe(
       new Date(NOW - 30_000).toISOString(),

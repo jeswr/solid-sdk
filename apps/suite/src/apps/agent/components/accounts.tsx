@@ -97,7 +97,9 @@ export function AccountsScreen({ id }: { id?: string }) {
                           </details>
                         </>
                       ) : (
-                        <Link href={`/agent/accounts/${encodeURIComponent(resourceSlug(row.id))}`}>
+                        <Link
+                          href={`/agent/accounts/${encodeURIComponent(resourceSlug(row.id) ?? "")}`}
+                        >
                           View {row.label ?? row.provider}
                         </Link>
                       )}

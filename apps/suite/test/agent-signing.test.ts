@@ -2,7 +2,6 @@
 import { createRequire } from "node:module";
 import { issueApproval, verifyApproval } from "@jeswr/agent-mandate/approval";
 import { issueControlStatement } from "@jeswr/agent-mandate/control";
-import { recordToTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
@@ -354,15 +353,22 @@ describe("signed approvals and controls", () => {
     if (!key) throw new Error("Missing test key");
     const id = `${client.paths.approvals}without-created.trig`;
     const plain = { ...exampleRecords.approval, id };
-    const graph = await parseRdf(await recordToTurtle(plain), "text/turtle");
+    const graph = await parseRdf(await issueApproval(plain, key, now), "application/trig");
     await client.create(
       id,
       await serialize(
-        [...graph].filter((q) => q.predicate.value !== "http://purl.org/dc/terms/created"),
+        [...graph].filter(
+          (q) =>
+            q.graph.termType === "DefaultGraph" &&
+            q.predicate.value !== "https://w3id.org/security#proof",
+        ),
       ),
       "application/trig",
     );
-    expect(loadedRecords(await readApprovals(client)).find((a) => a.id === id)?.createdAt).toBe("");
+    expect(loadedRecords(await readApprovals(client)).find((a) => a.id === id)).toMatchObject({
+      createdAt: "",
+      verification: "unchecked",
+    });
     const signedId = `${client.paths.approvals}signed.trig`;
     const doc = await issueApproval(
       {

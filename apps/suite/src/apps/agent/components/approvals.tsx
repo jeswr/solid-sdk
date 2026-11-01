@@ -12,51 +12,18 @@ import {
 import { Ban, Brain, Calendar, CreditCard, Mail, Plug } from "lucide-react";
 import Link from "next/link";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
-import type { Row, Unreadable } from "../lib/client";
+import { formatRelativeTime } from "../lib/format";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { resourceSlug } from "../lib/paths";
-import { canBulkApprove, type PendingApproval, pendingApprovals } from "../lib/queue";
-import {
-  loadedRecords,
-  readAccounts,
-  readApprovals,
-  readOutbox,
-  readProposals,
-} from "../lib/readers";
+import { canBulkApprove, type PendingApproval } from "../lib/queue";
+import { loadedRecords, readAccounts } from "../lib/readers";
 import { createAgentSigner } from "../lib/sign";
-import { createAgentVerifier } from "../lib/verify";
+import { useApprovalQueue } from "../lib/use-queue";
 import { AgentControl } from "./agent-control";
 import { useApprovalDevice } from "./approval-key-setup-sheet";
 import { DetailScreen, DisabledAction, QueryRows, Screen } from "./states";
 import { OfflineBanner, useDaemonStatus } from "./status-pill";
 
-function useQueue() {
-  const { session } = useAgentWorkspace();
-  return useAgentQuery(session.storageUrl, async (c) => {
-    const [proposals, approvals, outbox] = await Promise.all([
-      readProposals(c),
-      readApprovals(c, createAgentVerifier(session)),
-      readOutbox(c),
-    ]);
-    const errors = [...proposals, ...approvals, ...outbox].filter(
-      (row): row is Unreadable => "error" in row,
-    );
-    return [
-      ...errors,
-      ...pendingApprovals(
-        loadedRecords(proposals),
-        loadedRecords(approvals),
-        loadedRecords(outbox),
-        Date.now(),
-      ).map((record) => ({
-        record,
-        url: record.proposal.id,
-        etag: null,
-        verified: record.verification,
-      })),
-    ] satisfies Row<PendingApproval>[];
-  });
-}
 function Recipient({ hash, accounts }: { hash: string; accounts: Account[] }) {
   const own = accounts.find((account) => account.channelHandleHash === hash);
   return (
@@ -89,7 +56,7 @@ function ApprovalSummary({ row, accounts }: { row: PendingApproval; accounts: Ac
       <span>
         {proposal.intent.amount.value} {proposal.intent.amount.currency}
       </span>
-      <span>Expires in {Math.max(1, Math.ceil(row.expiresIn / 60_000))} minutes</span>
+      <span>{formatRelativeTime(row.expiresIn, 0, true)}</span>
       <Badge variant={reason === "Never" ? "destructive" : "secondary"}>{reason}</Badge>
     </>
   );
@@ -207,7 +174,7 @@ function DecisionState({ row }: { row: PendingApproval }) {
   );
 }
 export function ApprovalsScreen({ id }: { id?: string }) {
-  const query = useQueue();
+  const query = useApprovalQueue();
   const status = useDaemonStatus();
   const { client, session } = useAgentWorkspace();
   const device = useApprovalDevice();
@@ -297,7 +264,7 @@ export function ApprovalsScreen({ id }: { id?: string }) {
               >
                 Approve all
               </Button>
-              <ul className="agent-list">
+              <ul className="agent-list" aria-label="Approval requests">
                 {rows.map((row) => (
                   <li key={row.proposal.id} className="agent-card">
                     <label className="agent-row">
@@ -323,14 +290,15 @@ export function ApprovalsScreen({ id }: { id?: string }) {
                     <DecisionState row={row} />
                     <Link
                       data-agent-approval-link
-                      href={`/agent/approvals/${encodeURIComponent(resourceSlug(row.proposal.id))}`}
+                      href={`/agent/approvals/${encodeURIComponent(resourceSlug(row.proposal.id) ?? "")}`}
                       onKeyDown={(event: ReactKeyboardEvent<HTMLAnchorElement>) => {
                         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
                         event.preventDefault();
                         const links = [
-                          ...document.querySelectorAll<HTMLAnchorElement>(
-                            "[data-agent-approval-link]",
-                          ),
+                          ...(event.currentTarget
+                            .closest("ul")
+                            ?.querySelectorAll<HTMLAnchorElement>("[data-agent-approval-link]") ??
+                            []),
                         ];
                         const index = links.indexOf(event.currentTarget);
                         links[

@@ -27,6 +27,7 @@ export function ApprovalKeySetupSheet({
   const { session } = useAgentWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const setupButton = useRef<HTMLButtonElement>(null);
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
     const media = matchMedia("(max-width: 767px)");
@@ -60,6 +61,10 @@ export function ApprovalKeySetupSheet({
         side={mobile ? "bottom" : "right"}
         className="agent-app agent-detail-sheet"
         showCloseButton={!busy}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          setupButton.current?.focus();
+        }}
       >
         <SheetTitle>
           {status === "unavailable"
@@ -82,7 +87,7 @@ export function ApprovalKeySetupSheet({
           <p role="alert">Couldn't set up this device. Check your connection and try again.</p>
         )}
         <div className="agent-row">
-          <Button onClick={() => void setup()} disabled={busy}>
+          <Button ref={setupButton} onClick={() => void setup()} disabled={busy}>
             {busy
               ? "Setting up…"
               : error

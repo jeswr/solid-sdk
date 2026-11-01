@@ -157,6 +157,11 @@ describe("approval queue", () => {
       { ...approval(), verification: { invalid: "key" } },
     ])
       expect(pendingApprovals([proposal], [invalid], [], now)[0]?.approvedAwaitingSend).toBe(false);
+    // A denial from an unchecked document or another owner's key has no effect.
+    for (const verification of ["unchecked", { invalid: "key" }, { invalid: "signature" }] as const)
+      expect(
+        pendingApprovals([proposal], [{ ...approval("deny"), verification }], [], now)[0]?.state,
+      ).toBe("pending");
     for (const decisions of [
       [approval(), { ...approval("deny"), createdAt: at(-1) }],
       [{ ...approval("deny"), createdAt: at(-1) }, approval()],

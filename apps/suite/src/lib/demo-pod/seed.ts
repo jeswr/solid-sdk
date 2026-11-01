@@ -10,7 +10,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
-import { buildAgentSeed } from "../../apps/agent/lib/seed";
+import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 
@@ -43,6 +43,7 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
   const root = namedNode(DEMO_ROOT);
   const profile = await turtle(
     [
+      ...(await demoApprovalVerificationMethod()).quads,
       quad(me, RDF_TYPE, namedNode(`${FOAF}Person`)),
       quad(me, namedNode(`${FOAF}name`), literal(DEMO_NAME)),
       quad(me, namedNode(`${PIM}storage`), root),

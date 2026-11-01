@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { issueApproval } from "@jeswr/agent-mandate/approval";
 import {
   type AuditEntry,
   canonicalJson,
@@ -8,6 +9,7 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { serialize } from "@jeswr/rdf-serialize";
+import { type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
 import { Store } from "n3";
 import type { DemoSeedFile } from "../../../lib/demo-pod/pod";
 import { AGENT, metadataNode, PROV, RDF } from "./paths";
@@ -15,7 +17,32 @@ import { AGENT, metadataNode, PROV, RDF } from "./paths";
 const ROOT = "https://alice.demo.pod/";
 const BASE = `${ROOT}agent/`;
 const OWNER = `${ROOT}profile/card#me`;
-/** Build synthetic, structurally valid records. No credentials, signing keys or authority. */
+// Publicly known P-256 test scalar 1. ONLY for the synthetic alice.demo.pod seed;
+// never persisted in the device keystore or used by the production signing path.
+const DEMO_PUBLIC_JWK = {
+  kty: "EC",
+  crv: "P-256",
+  x: "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY",
+  y: "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+};
+export async function demoApprovalKey(): Promise<KeyPair> {
+  const algorithm = { name: "ECDSA", namedCurve: "P-256" };
+  return {
+    verificationMethod: `${ROOT}profile/card#agent-demo-test-key`,
+    publicKey: await crypto.subtle.importKey("jwk", DEMO_PUBLIC_JWK, algorithm, true, ["verify"]),
+    privateKey: await crypto.subtle.importKey(
+      "jwk",
+      { ...DEMO_PUBLIC_JWK, d: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE" },
+      algorithm,
+      false,
+      ["sign"],
+    ),
+  };
+}
+export async function demoApprovalVerificationMethod() {
+  return publishVerificationMethod({ controller: OWNER, key: await demoApprovalKey() });
+}
+/** Build synthetic records, with approvals issued by the real signing library. */
 export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
   const at = (offset: number) => new Date(now + offset).toISOString();
   const id = (path: string) => `${BASE}${path}`;
@@ -195,19 +222,10 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
     id: id("outbox/sent-demo.ttl"),
     proposal: id("proposals/previous-reply.ttl"),
     underMandate: mandate.credential,
-    underApproval: id("approvals/previous-reply.ttl"),
+    underApproval: id("approvals/previous-reply.trig"),
     status: "sent",
     startedAt: at(-3_600_000),
     endedAt: at(-3_599_000),
-  });
-  records.push({
-    ...exampleRecords.approval,
-    id: id("approvals/previous-reply.ttl"),
-    approves: id("proposals/previous-reply.ttl"),
-    attributedTo: OWNER,
-    decision: "approve",
-    createdAt: at(-3_700_000),
-    expires: at(86_400_000),
   });
   records.push({
     ...exampleRecords["control-statement"],
@@ -242,6 +260,22 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       modified: now,
     })),
   );
+  files.push({
+    path: "agent/approvals/previous-reply.trig",
+    body: await issueApproval(
+      {
+        id: id("approvals/previous-reply.trig"),
+        approves: id("proposals/previous-reply.ttl"),
+        termsDigest: exampleRecords.approval.termsDigest,
+        decision: "approve",
+        expires: at(86_400_000),
+      },
+      await demoApprovalKey(),
+      new Date(at(-3_700_000)),
+    ),
+    contentType: "application/trig",
+    modified: now,
+  });
   const metadata = async (
     path: string,
     configure: (node: ReturnType<typeof metadataNode>) => void,

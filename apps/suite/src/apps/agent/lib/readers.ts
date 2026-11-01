@@ -241,6 +241,7 @@ export async function readConversations(client: AgentClient): Promise<Row<Conver
       containers.map((m) =>
         attempt(m.url, async () => {
           const id = resourceSlug(m.url);
+          if (!id) throw new Error("Invalid conversation identifier");
           const turns = await readTurns(client, id);
           const error = turns.find((t) => !isLoaded(t));
           if (error && !isLoaded(error)) throw error.error;
@@ -267,12 +268,33 @@ export async function readAudit(
   client: AgentClient,
   options: { limit?: number; before?: number } = {},
 ) {
-  const rows = await records(client, client.paths.audit, "audit-entry", [client.paths.auditChain]);
-  return rows
-    .filter(
-      (row) => !isLoaded(row) || options.before === undefined || row.record.seq < options.before,
-    )
-    .slice(0, options.limit ?? rows.length);
+  if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 0))
+    throw new Error("Invalid audit limit");
+  const members = (await client.list(client.paths.audit))
+    .filter((m) => !m.container && m.url !== client.paths.auditChain)
+    .map((member) => {
+      const slug = resourceSlug(member.url);
+      const seq = slug && /^\d+$/.test(slug) ? Number(slug) : NaN;
+      return { ...member, seq: Number.isSafeInteger(seq) ? seq : -1 };
+    })
+    .filter((m) => options.before === undefined || m.seq < options.before)
+    .sort((a, b) => b.seq - a.seq || a.url.localeCompare(b.url))
+    .slice(0, options.limit);
+  const rows: Row<Extract<PodRecord, { type: "audit-entry" }>>[] = [];
+  const work = members.entries();
+  await Promise.all(
+    Array.from({ length: Math.min(6, members.length) }, async () => {
+      for (const [index, member] of work) {
+        rows[index] = await attempt(member.url, async () => {
+          if (member.seq < 0) throw new Error("Invalid audit sequence");
+          const loaded = await client.read(member.url, "audit-entry");
+          if (loaded.record.seq !== member.seq) throw new Error("Audit sequence mismatch");
+          return loaded;
+        });
+      }
+    }),
+  );
+  return rows;
 }
 export const loadedRecords = <T>(rows: Row<T>[]) =>
   rows.filter(isLoaded<T>).map((row) => row.record);

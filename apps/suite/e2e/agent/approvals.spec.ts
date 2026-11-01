@@ -2,7 +2,7 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
 import { daemonDouble } from "./daemon-double";
 
 async function accessible(page: Page, info: TestInfo, state: string) {
@@ -31,20 +31,15 @@ async function setup(page: Page) {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("Key ready", { exact: true })).toBeVisible();
 }
-async function tabTo(page: Page, name: string) {
-  for (let n = 0; n < 100; n++) {
-    if (
-      (
-        await page
-          .locator(":focus")
-          .textContent()
-          .catch(() => "")
-      )?.trim() === name
-    )
-      return;
+async function tabTo(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  for (let n = 0; n < 60; n++) {
+    // :focus may match nothing before the first Tab. A locator text read would
+    // auto-wait for the full timeout instead of advancing the keyboard.
+    if (await target.evaluate((element) => document.activeElement === element)) return;
     await page.keyboard.press("Tab");
   }
-  throw new Error(`Keyboard could not reach ${name}`);
+  throw new Error("Keyboard could not reach the approval list");
 }
 async function proposalOnPod(page: Page) {
   const daemon = daemonDouble(page);
@@ -113,7 +108,7 @@ test("2: live queue proposal verifies, sends and appears in Activity", async ({ 
   await accessible(page, info, "detail");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
-  expect(await daemon.tick(proposal)).toBe("sent");
+  await expect.poll(() => daemon.tick(proposal)).toBe("sent");
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
   await accessible(page, info, "sent");
   await open(page, "activity");
@@ -128,10 +123,19 @@ test("2: live queue proposal verifies, sends and appears in Activity", async ({ 
 });
 test("2 keyboard: review and approve without a pointer", async ({ page }, info) => {
   await open(page);
-  await tabTo(page, "Review Project catch-up");
+  const links = page.getByRole("list", { name: "Approval requests" }).getByRole("link");
+  await expect(links).toHaveCount(3);
+  await tabTo(page, links.nth(0));
+  await expect(links.nth(0)).toBeFocused();
+  expect(await links.nth(0).evaluate((element) => getComputedStyle(element).outlineStyle)).toBe(
+    "solid",
+  );
   await page.keyboard.press("ArrowDown");
-  await expect(page.locator("[data-agent-approval-link]").first()).toBeFocused();
+  await expect(links.nth(1)).toBeFocused();
   await page.keyboard.press("ArrowUp");
+  await expect(links.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(links.nth(2)).toBeFocused();
   await expect(
     page.getByRole("link", { name: "Review Project catch-up", exact: true }),
   ).toBeFocused();
@@ -141,13 +145,28 @@ test("2 keyboard: review and approve without a pointer", async ({ page }, info) 
   await expect(
     page.getByRole("dialog").filter({ hasText: "Set up approvals on this device" }),
   ).toBeVisible();
-  await tabTo(page, "Set up this device");
+  await expect(
+    page.getByRole("dialog").getByRole("button", { name: "Set up this device", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);
-  expect(await daemon.tick(proposal)).toBe("sent");
+  await expect.poll(() => daemon.tick(proposal)).toBe("sent");
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
   await accessible(page, info, "keyboard-sent");
+});
+
+test("seeded approvals are readable and a malformed file still shows the warning", async ({
+  page,
+}) => {
+  await open(page, "approvals/send-reply");
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  await expect(page.getByText(/record.*couldn't be read/)).toHaveCount(0);
+  const daemon = daemonDouble(page);
+  await daemon.client.create(`${daemon.client.paths.approvals}bad.trig`, "bad", "application/trig");
+  await expect(page.getByRole("alert").filter({ hasText: "couldn't be read" })).toContainText(
+    "1 record couldn't be read.",
+  );
 });
 test("3: changed terms refuse the old approval and enable a new approval", async ({
   page,
@@ -157,7 +176,8 @@ test("3: changed terms refuse the old approval and enable a new approval", async
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);
-  expect(await daemon.tick(await daemon.edit(proposal))).toBe("terms-digest-mismatch");
+  const changed = await daemon.edit(proposal);
+  await expect.poll(() => daemon.tick(changed)).toBe("terms-digest-mismatch");
   await expect(page.getByText("Needs a new approval", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
   await accessible(page, info, "needs-new-approval");
@@ -168,7 +188,7 @@ test("4: deny records refusal without an external send", async ({ page }, info) 
   await page.keyboard.press("d");
   await expect(page.getByText("Denied", { exact: true })).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);
-  expect(await daemon.tick(proposal)).toBe("denied");
+  await expect.poll(() => daemon.tick(proposal)).toBe("denied");
   const tx = await daemon.client.read(
     `${daemon.client.paths.outbox}send-reply.ttl`,
     "transmission",
@@ -282,6 +302,6 @@ test("prohibitions stay disabled, and bulk approval requires matching kinds and 
   await accessible(page, info, "bulk-selected");
   await page.getByRole("button", { name: "Approve all", exact: true }).click();
   await expect(page.getByText("Approved, the agent will send within a minute")).toHaveCount(2);
-  expect(await daemon.tick(first)).toBe("sent");
-  expect(await daemon.tick(second)).toBe("sent");
+  await expect.poll(() => daemon.tick(first)).toBe("sent");
+  await expect.poll(() => daemon.tick(second)).toBe("sent");
 });

@@ -12,10 +12,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
-import { pendingApprovals } from "../lib/queue";
-import { loadedRecords, readApprovals, readOutbox, readProposals } from "../lib/readers";
-import { createAgentVerifier } from "../lib/verify";
+import { loadedRecords } from "../lib/readers";
+import { useApprovalQueue } from "../lib/use-queue";
 import { StatusPill, useDaemonStatus } from "./status-pill";
 
 const NAV = [
@@ -29,16 +27,8 @@ const NAV = [
 ] as const;
 export function AgentSidebar() {
   const pathname = usePathname();
-  const { session } = useAgentWorkspace();
   const status = useDaemonStatus();
-  const queue = useAgentQuery(session.storageUrl, async (c) =>
-    pendingApprovals(
-      loadedRecords(await readProposals(c)),
-      loadedRecords(await readApprovals(c, createAgentVerifier(session))),
-      loadedRecords(await readOutbox(c)),
-      Date.now(),
-    ),
-  );
+  const queue = useApprovalQueue();
   return (
     <div className="agent-app agent-sidebar">
       <StatusPill status={status} />
@@ -54,7 +44,9 @@ export function AgentSidebar() {
                 {label}
                 {slug === "approvals" && queue.status === "ready" && (
                   <CountBadge
-                    count={queue.data.filter((row) => row.state === "pending").length}
+                    count={
+                      loadedRecords(queue.data).filter((row) => row.state === "pending").length
+                    }
                     label="waiting for approval"
                   />
                 )}

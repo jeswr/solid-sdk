@@ -2,10 +2,11 @@
 import { fromRdf, type PodRecord, type RecordType, recordFromTurtle } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
-import { readContainerMembers } from "@jeswr/ldp-container";
+import { parseContainerMembers } from "@jeswr/ldp-container";
 import { Store } from "n3";
 import type { PodSession } from "../../../lib/session/pod-session";
 import { agentPaths } from "./paths";
+import { readRdfDocument } from "./rdf";
 import type { Verification } from "./verify";
 
 export interface Loaded<T> {
@@ -33,28 +34,6 @@ export class AgentReadError extends Error {
     this.status = status;
   }
 }
-const MAX_BYTES = 1024 * 1024;
-async function boundedText(response: Response): Promise<string> {
-  if (Number(response.headers.get("content-length")) > MAX_BYTES)
-    throw new Error("Record exceeds 1 MiB");
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let text = "";
-  try {
-    for (;;) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > MAX_BYTES) throw new Error("Record exceeds 1 MiB");
-      text += decoder.decode(part.value, { stream: true });
-    }
-    return text + decoder.decode();
-  } finally {
-    await reader.cancel();
-  }
-}
 export function createAgentClient(options: {
   fetch: PodSession["fetch"];
   storage: string;
@@ -69,11 +48,7 @@ export function createAgentClient(options: {
       headers: { accept: "text/turtle, application/trig" },
     });
     if (!response.ok) throw new AgentReadError(response.status);
-    return {
-      text: await boundedText(response),
-      contentType: response.headers.get("content-type"),
-      etag: response.headers.get("etag"),
-    };
+    return readRdfDocument(response);
   };
   const graph = async (url: string) => {
     const doc = await document(url);
@@ -99,21 +74,21 @@ export function createAgentClient(options: {
     paths: agentPaths(workspace),
     graph,
     async list(container: string) {
-      return (
-        (await readContainerMembers(scoped, check(container), {
-          scope: container,
-          package: "agent",
-        })) ?? []
-      );
+      try {
+        const doc = await graph(container);
+        return parseContainerMembers(doc.dataset, container, { scope: container });
+      } catch (error) {
+        if (error instanceof AgentReadError && (error.status === 404 || error.status === 410))
+          return [];
+        throw error;
+      }
     },
     async read<T extends RecordType>(
       url: string,
       type: T,
     ): Promise<Loaded<Extract<PodRecord, { type: T }>>> {
       const doc = await document(url);
-      const trig = doc.contentType?.split(";")[0]?.trim().toLowerCase() === "application/trig";
-      if (!trig && doc.contentType?.split(";")[0]?.trim().toLowerCase() !== "text/turtle")
-        throw new Error("Unsupported agent record format");
+      const trig = doc.contentType === "application/trig";
       const record = trig
         ? fromRdf(
             new Store(

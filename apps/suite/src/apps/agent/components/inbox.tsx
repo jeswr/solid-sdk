@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { type InboxMessage, readAccounts, readInbox } from "../lib/readers";
 import { QueryRows, Screen } from "./states";
@@ -48,6 +48,7 @@ function MessageDetail({ message }: { message: InboxMessage }) {
 export function InboxScreen({ binding }: { binding?: string }) {
   const { client } = useAgentWorkspace();
   const [selected, setSelected] = useState<InboxMessage>();
+  const opener = useRef<HTMLButtonElement>(null);
   const accounts = useAgentQuery(client.paths.accounts, readAccounts);
   const messages = useAgentQuery(
     binding ? `${client.paths.inbox}${binding}/` : client.paths.inbox,
@@ -84,7 +85,13 @@ export function InboxScreen({ binding }: { binding?: string }) {
           <ul className="agent-list">
             {rows.map((message) => (
               <li className="agent-card" key={message.id}>
-                <Button variant="ghost" onClick={() => setSelected(message)}>
+                <Button
+                  variant="ghost"
+                  onClick={(event) => {
+                    opener.current = event.currentTarget;
+                    setSelected(message);
+                  }}
+                >
                   {message.subject ?? "Message"}
                 </Button>
                 <p>{message.text.slice(0, 120)}</p>
@@ -107,7 +114,14 @@ export function InboxScreen({ binding }: { binding?: string }) {
           if (!open) setSelected(undefined);
         }}
       >
-        <SheetContent side="bottom" className="agent-app agent-detail-sheet">
+        <SheetContent
+          side="bottom"
+          className="agent-app agent-detail-sheet"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            opener.current?.focus();
+          }}
+        >
           <SheetTitle>{selected?.subject ?? "Message"}</SheetTitle>
           <SheetDescription>Plain text message and extracted structured data.</SheetDescription>
           {selected && <MessageDetail message={selected} />}

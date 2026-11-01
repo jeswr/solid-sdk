@@ -8,8 +8,9 @@ import {
   SheetTitle,
   StatusDot,
 } from "@jeswr/suite-ui";
-import { useEffect, useState } from "react";
-import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
+import { useState } from "react";
+import { formatRelativeTime } from "../lib/format";
+import { useAgentClock, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { loadedRecords, readControl, readHeartbeat } from "../lib/readers";
 import { type AgentStatus, agentStatus } from "../lib/status";
 import { createAgentVerifier } from "../lib/verify";
@@ -17,19 +18,15 @@ import { AgentControl } from "./agent-control";
 
 export function useDaemonStatus() {
   const { session } = useAgentWorkspace();
-  const [now, setNow] = useState(Date.now);
+  const now = useAgentClock();
   const query = useAgentQuery(session.storageUrl, async (c) => ({
     heartbeat: await readHeartbeat(c),
     controls: await readControl(c, createAgentVerifier(session)),
   }));
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
   const status = agentStatus({
     heartbeatAt: query.status === "ready" ? loadedRecords(query.data.heartbeat)[0]?.at : undefined,
     controls: query.status === "ready" ? loadedRecords(query.data.controls) : [],
-    now: Math.max(now, Date.now()),
+    now,
     loading: query.status === "loading",
     owner: session.webId,
   });
@@ -43,9 +40,7 @@ export function StatusPill({ status }: { status: AgentStatus }) {
     offline: "Agent offline",
     unknown: "Checking agent status",
   };
-  const elapsed = status.lastSeen
-    ? Math.max(0, Math.floor((Date.now() - Date.parse(status.lastSeen)) / 60_000))
-    : undefined;
+  const now = useAgentClock();
   return (
     <div className="agent-status">
       <AgentControl
@@ -64,9 +59,7 @@ export function StatusPill({ status }: { status: AgentStatus }) {
           />
         }
       />
-      {status.lastSeen && (
-        <small>last seen {elapsed === 0 ? "just now" : `${elapsed} minutes ago`}</small>
-      )}
+      {status.lastSeen && <small>last seen {formatRelativeTime(status.lastSeen, now)}</small>}
     </div>
   );
 }

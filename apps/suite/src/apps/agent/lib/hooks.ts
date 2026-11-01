@@ -23,6 +23,11 @@ export interface Workspace {
   client: AgentClient;
 }
 const WorkspaceContext = createContext<Workspace | undefined>(undefined);
+const ClockContext = createContext(0);
+/** Shared by status, queue expiry, countdowns, and the sidebar waiting count. */
+export function useAgentClock() {
+  return Math.max(useContext(ClockContext), Date.now());
+}
 export function useAgentWorkspace(): Workspace {
   const context = useContext(WorkspaceContext);
   if (!context) throw new Error("Agent workspace is not ready");
@@ -38,6 +43,16 @@ export function AgentWorkspaceProvider({
   fallback: (query: Query<Workspace>) => ReactNode;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const timer = setInterval(tick, 5000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<Query<Workspace>>({ status: "loading", reload });
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries this query
@@ -70,7 +85,11 @@ export function AgentWorkspaceProvider({
   }, [session, reload, attempt]);
   if (state.status !== "ready") return fallback(state);
   if (state.data.session !== session) return fallback({ status: "loading", reload });
-  return createElement(WorkspaceContext, { value: state.data }, children);
+  return createElement(
+    WorkspaceContext,
+    { value: state.data },
+    createElement(ClockContext, { value: now }, children),
+  );
 }
 /** Loads are fenced on unmount, retry, notifications and account changes. */
 export function useAgentQuery<T>(

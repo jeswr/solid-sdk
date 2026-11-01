@@ -26,7 +26,7 @@ export function ChatScreen({ id }: { id?: string }) {
               <ul className="agent-list">
                 {rows.map((row) => (
                   <li key={row.id}>
-                    <Link href={`/agent/chat/c/${encodeURIComponent(resourceSlug(row.id))}`}>
+                    <Link href={`/agent/chat/c/${encodeURIComponent(resourceSlug(row.id) ?? "")}`}>
                       {row.title}
                     </Link>
                     {row.unread && <Badge variant="secondary">Unread</Badge>}
@@ -45,15 +45,20 @@ export function ChatScreen({ id }: { id?: string }) {
                   <li key={turn.id} data-role={turn.role}>
                     <strong>{turn.role === "owner" ? "You" : "Agent"}</strong>
                     <p className="agent-plaintext">{turn.text}</p>
-                    {[...new Set(turn.refersToProposal)].map((proposal) => (
-                      <Link
-                        className="agent-proposal-link"
-                        key={proposal}
-                        href={`/agent/approvals/${encodeURIComponent(resourceSlug(proposal))}`}
-                      >
-                        Review proposal · {resourceSlug(proposal)}
-                      </Link>
-                    ))}
+                    {[...new Set(turn.refersToProposal)].map((proposal) => {
+                      const slug = resourceSlug(proposal);
+                      return slug ? (
+                        <Link
+                          className="agent-proposal-link"
+                          key={proposal}
+                          href={`/agent/approvals/${encodeURIComponent(slug)}`}
+                        >
+                          Review proposal · {slug}
+                        </Link>
+                      ) : (
+                        <span key={proposal}>{proposal}</span>
+                      );
+                    })}
                   </li>
                 ))}
               </ol>

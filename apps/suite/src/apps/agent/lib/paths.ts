@@ -16,6 +16,7 @@ import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
 
 import type { PodSession } from "../../../lib/session/pod-session";
+import { readRdfDocument } from "./rdf";
 
 export const AGENT = "https://jeswr.org/ns/agent#";
 export const SOLID = "http://www.w3.org/ns/solid/terms#";
@@ -53,9 +54,15 @@ export function guardSlug(slug: string): string {
     throw new Error("Invalid resource identifier");
   return slug;
 }
-export function resourceSlug(url: string): string {
-  const path = new URL(url).pathname.replace(/\/$/, "");
-  return guardSlug(path.slice(path.lastIndexOf("/") + 1).replace(/\.(ttl|trig)$/, ""));
+export function resourceSlug(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return undefined;
+    const path = parsed.pathname.replace(/\/$/, "");
+    return guardSlug(path.slice(path.lastIndexOf("/") + 1).replace(/\.(ttl|trig)$/, ""));
+  } catch {
+    return undefined;
+  }
 }
 export function agentPaths(workspace: string) {
   const base = normalizePodBase(workspace);
@@ -103,7 +110,8 @@ export async function discoverWorkspace(
       headers: { accept: "text/turtle" },
     });
     if (!response.ok) throw new Error(`Workspace discovery failed (${response.status})`);
-    return parseRdf(await response.text(), response.headers.get("content-type"), { baseIRI: url });
+    const doc = await readRdfDocument(response);
+    return parseRdf(doc.text, doc.contentType, { baseIRI: url });
   };
   const profile = await get(profileUrl.href);
   const storages = [...new Agent(webId, profile, DataFactory).storageUrls];
