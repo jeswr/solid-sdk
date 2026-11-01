@@ -396,3 +396,32 @@ describe("terms n3 cannot encode faithfully", () => {
     expect(stored).toHaveLength(2);
   });
 });
+
+describe("blank-node relabelling", () => {
+  test("relabels deterministically around labels already in use", () => {
+    const safe = injectionSafe([
+      quad(blankNode("x0"), p, blankNode("bad 1")),
+      quad(blankNode("x2"), p, blankNode("bad 2")),
+      quad(blankNode("x3"), p, blankNode("bad 3")),
+      quad(blankNode("bad 1"), p, blankNode("x5")),
+    ]);
+    expect(safe.map((q) => `${q.subject.value} ${q.object.value}`)).toEqual([
+      "x0 x1",
+      "x2 x4",
+      "x3 x6",
+      "x1 x5",
+    ]);
+  });
+
+  test("stays linear when many xN labels are already in use", () => {
+    const n = 20_000;
+    const input = Array.from({ length: n }, (_, i) =>
+      quad(blankNode(`x${i}`), p, blankNode(`bad ${i}`)),
+    );
+    const started = performance.now();
+    const safe = injectionSafe(input);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(new Set(safe.map((q) => q.object.value)).size).toBe(n);
+    expect(safe[0]?.object.value).toBe(`x${n}`);
+  });
+});

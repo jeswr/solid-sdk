@@ -139,6 +139,8 @@ export function injectionSafe(
       .filter((t) => t.termType === "BlankNode")
       .map((t) => t.value),
   ]);
+  // Monotonic, so each occupied `xN` label is skipped once rather than once per relabelled node.
+  let nextIndex = 0;
   const term = (value: Term): Term => {
     switch (value.termType) {
       case "NamedNode":
@@ -147,9 +149,8 @@ export function injectionSafe(
         if (BLANK_LABEL.test(value.value) && !reservedLabels.has(value.value)) return value;
         let label = labels.get(value.value);
         if (label === undefined) {
-          let index = labels.size;
           do {
-            label = `x${index++}`;
+            label = `x${nextIndex++}`;
           } while (taken.has(label));
           taken.add(label);
           labels.set(value.value, label);
