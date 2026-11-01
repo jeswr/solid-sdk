@@ -365,11 +365,40 @@ test("storage lists the largest photos and moving one to trash moves its space",
   await capture(page, info, "storage");
   const first = rows.first();
   const name = (await first.locator(".pho-storage-name > span").first().textContent()) ?? "";
+  const secondName =
+    (await rows.nth(1).locator(".pho-storage-name > span").first().textContent()) ?? "";
   await first.getByRole("button", { name: `Move ${name} to trash`, exact: true }).click();
   await saved(page);
   await expect(rows).toHaveCount(11);
+  // Focus stays in the list on the row that took the trashed row's place.
+  await expect(
+    page.getByRole("button", { name: `Move ${secondName} to trash`, exact: true }),
+  ).toBeFocused();
   await expect(summary.getByText(/· 1 photo · Review trash$/)).toBeVisible();
   await summary.getByRole("link", { name: "Review trash", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Trash", exact: true })).toBeVisible();
   await expect(opens(page)).toHaveCount(1);
+});
+
+test("storage still shows trash space when every photo is in the trash", async ({ page }) => {
+  await page.goto("/photos");
+  await expect(opens(page)).toHaveCount(12);
+  await navigate(page, "Storage");
+  const rows = page
+    .getByRole("region", { name: "Largest photos", exact: true })
+    .getByRole("listitem");
+  for (let left = 12; left > 0; left--) {
+    await expect(rows).toHaveCount(left);
+    await rows
+      .first()
+      .getByRole("button", { name: /^Move .* to trash$/ })
+      .click();
+    await saved(page);
+  }
+  await expect(page.getByText("No photos in your pod yet", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Storage summary", exact: true });
+  await expect(summary.getByText(/· 12 photos · Review trash$/)).toBeVisible();
+  await page.reload();
+  await expect(summary.getByText(/· 12 photos · Review trash$/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Storage", exact: true })).toBeVisible();
 });

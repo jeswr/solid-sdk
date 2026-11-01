@@ -3,7 +3,7 @@
 import { Button, EmptyState, ErrorState, formatBytes, LoadingSkeleton } from "@jeswr/suite-ui";
 import { HardDrive, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { LibraryPhoto } from "../lib/data/library";
 import {
@@ -27,6 +27,10 @@ export function StorageScreen() {
   const [attempt, setAttempt] = useState(0);
   const [measured, setMeasured] = useState<Measured>({ status: "loading" });
   const [shown, setShown] = useState(PAGE);
+  const [refreshing, setRefreshing] = useState(false);
+  /** Row to focus after its predecessor moves to trash; null focuses the list heading. */
+  const [focusAfter, setFocusAfter] = useState<string | null>();
+  const list = useRef<HTMLElement>(null);
   const sizer = useMemo(
     () => createBinarySizer(state.session.fetch, state.io.root),
     [state.session, state.io],
@@ -48,12 +52,14 @@ export function StorageScreen() {
     () => state.trash.map((item) => ({ key: item.url, photo: item.photo })),
     [state.trash],
   );
-  const ready = state.status === "ready";
+  // "empty" means no library photos; the trash may still hold space worth showing.
+  const ready = state.status === "ready" || state.status === "empty";
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly recalculates
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
     setMeasured((current) => (current.status === "ready" ? current : { status: "loading" }));
+    setRefreshing(true);
     Promise.all([
       measureUsage(sizer, librarySources, { signal: controller.signal }),
       measureUsage(sizer, trashSources, { signal: controller.signal }),
@@ -63,9 +69,24 @@ export function StorageScreen() {
       })
       .catch(() => {
         if (!controller.signal.aborted) setMeasured({ status: "error" });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRefreshing(false);
       });
     return () => controller.abort();
   }, [ready, sizer, librarySources, trashSources, attempt]);
+
+  useEffect(() => {
+    if (focusAfter === undefined) return;
+    const target =
+      (focusAfter !== null &&
+        list.current?.querySelector<HTMLButtonElement>(
+          `[data-trash-for="${CSS.escape(focusAfter)}"]`,
+        )) ||
+      list.current?.querySelector<HTMLElement>("#pho-largest");
+    target?.focus();
+    setFocusAfter(undefined);
+  }, [focusAfter]);
 
   if (state.status === "loading" || (ready && measured.status === "loading"))
     return <LoadingSkeleton preset="list" label="Calculating storage…" />;
@@ -73,7 +94,13 @@ export function StorageScreen() {
     return (
       <div className="pho-page">
         <h1>Storage</h1>
-        <ErrorState error="unreachable" actions={{ retry: () => setAttempt((n) => n + 1) }} />
+        <ErrorState
+          error="unreachable"
+          actions={{
+            retry: () =>
+              state.status === "error" ? void state.refresh() : setAttempt((n) => n + 1),
+          }}
+        />
       </div>
     );
   if (measured.status !== "ready") return null;
@@ -88,9 +115,16 @@ export function StorageScreen() {
           <p>See what takes up space in your pod and free some up.</p>
         </div>
         <div className="pho-header-actions">
-          <Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+          <Button
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => {
+              sizer.clear();
+              setAttempt((n) => n + 1);
+            }}
+          >
             <RefreshCw size={18} aria-hidden="true" />
-            Recalculate
+            {refreshing ? "Recalculating…" : "Recalculate"}
           </Button>
         </div>
       </header>
@@ -136,8 +170,10 @@ export function StorageScreen() {
           </p>
         )}
       </section>
-      <section aria-labelledby="pho-largest">
-        <h2 id="pho-largest">Largest photos</h2>
+      <section aria-labelledby="pho-largest" ref={list}>
+        <h2 id="pho-largest" tabIndex={-1}>
+          Largest photos
+        </h2>
         {stored.length === 0 ? (
           <EmptyState
             title="No photos in your pod yet"
@@ -146,7 +182,7 @@ export function StorageScreen() {
         ) : (
           <>
             <ol className="pho-storage-list">
-              {stored.slice(0, shown).map((item) => {
+              {stored.slice(0, shown).map((item, index) => {
                 const photo = byRef.get(item.key);
                 if (!photo) return null;
                 return (
@@ -172,7 +208,12 @@ export function StorageScreen() {
                         size="icon"
                         aria-label={`Move ${photo.name} to trash`}
                         title="Move to trash"
-                        onClick={() => void state.moveToTrash([photo])}
+                        data-trash-for={item.key}
+                        onClick={() => {
+                          // Keep keyboard users in the list once this row disappears.
+                          setFocusAfter((stored[index + 1] ?? stored[index - 1])?.key ?? null);
+                          void state.moveToTrash([photo]);
+                        }}
                       >
                         <Trash2 size={18} aria-hidden="true" />
                       </Button>

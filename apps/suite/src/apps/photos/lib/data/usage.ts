@@ -85,12 +85,23 @@ export function createBinarySizer(fetch: typeof globalThis.fetch, root: string) 
     }
     return total;
   }
+  // Binary URLs are create-only (fresh names per upload), so a measured size stays valid.
+  // Failures are not cached, so the next run retries them.
+  const known = new Map<string, number>();
   return {
     inScope,
+    /** Forget measured sizes (Recalculate). */
+    clear() {
+      known.clear();
+    },
     async measure(url: string, signal?: AbortSignal): Promise<number | undefined> {
       if (!inScope(url)) return undefined;
+      const cached = known.get(url);
+      if (cached !== undefined) return cached;
       try {
-        return await size(url, signal);
+        const measured = await size(url, signal);
+        if (measured !== undefined) known.set(url, measured);
+        return measured;
       } catch (error) {
         if (signal?.aborted) throw error;
         return undefined;

@@ -115,6 +115,29 @@ describe("createBinarySizer", () => {
     ]);
   });
 
+  it("caches measured sizes until cleared, but retries failures", async () => {
+    const good = `${PHOTOS}originals/good.png`;
+    const flaky = `${PHOTOS}originals/flaky.png`;
+    let flakyUp = false;
+    const { fetch, calls } = scripted({
+      [good]: () => new Response(null, { status: 200, headers: { "content-length": "10" } }),
+      [flaky]: () =>
+        flakyUp
+          ? new Response(null, { status: 200, headers: { "content-length": "20" } })
+          : new Response(null, { status: 503 }),
+    });
+    const sizer = createBinarySizer(fetch, PHOTOS);
+    expect(await sizer.measure(good)).toBe(10);
+    expect(await sizer.measure(good)).toBe(10);
+    expect(calls.filter((call) => call.url === good)).toHaveLength(1);
+    expect(await sizer.measure(flaky)).toBeUndefined();
+    flakyUp = true;
+    expect(await sizer.measure(flaky)).toBe(20);
+    sizer.clear();
+    expect(await sizer.measure(good)).toBe(10);
+    expect(calls.filter((call) => call.url === good)).toHaveLength(2);
+  });
+
   it("reports transport failures as unmeasured but propagates aborts", async () => {
     const url = `${PHOTOS}originals/a.png`;
     const sizer = createBinarySizer(async () => {
@@ -202,6 +225,21 @@ describe("measureUsage", () => {
       "foreign-thumb": [10, false],
     });
     expect(report.incompleteCount).toBe(2);
+  });
+
+  it("rejects when aborted mid-run", async () => {
+    const controller = new AbortController();
+    const fetch: typeof globalThis.fetch = async () => {
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    };
+    await expect(
+      measureUsage(
+        createBinarySizer(fetch, PHOTOS),
+        [source("a", `${PHOTOS}originals/a.jpg`), source("b", `${PHOTOS}originals/b.jpg`)],
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow("aborted");
   });
 
   it("returns an empty report without requests", async () => {
