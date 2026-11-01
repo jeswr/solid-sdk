@@ -27,11 +27,19 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory as N3DataFactory, Store, Writer } from "n3";
 import { type DatatypeMapper, iriMapper, literalMapper } from "./datatypes.js";
-import { httpIriOrUndefined, isSafeAbsoluteIri, sanitizeText, tryRead } from "./guards.js";
+import {
+  httpIriOrUndefined,
+  isSafeAbsoluteIri,
+  isTurtlePrefixName,
+  sanitizeText,
+  subjectIri,
+  tryRead,
+} from "./guards.js";
 import {
   type CompositeManifestEntity,
   isCompositeEntity,
   type ManifestEntity,
+  ManifestError,
   type ManifestField,
   type ManifestNode,
   type ModelManifest,
@@ -537,10 +545,6 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   );
 }
 
-function subjectIri(convention: "hash-it" | "self", resourceUrl: string): string {
-  return convention === "hash-it" ? `${resourceUrl}#it` : resourceUrl;
-}
-
 /**
  * Build a Wrapper class that stamps `typeIris` (via `mark`) and installs a per-field
  * accessor for each plan (a live set for a set field; a guarded getter/setter for a
@@ -553,6 +557,14 @@ function makeWrapperClass(
   aliasTypeIris: string[] = [],
 ): EntityWrapperConstructor {
   class Wrapper extends TermWrapper {
+    constructor(term: string | Term, dataset: DatasetCore, factory: DataFactory) {
+      // A model Wrapper represents a named subject, never a literal or blank node.
+      if (typeof term !== "string" && term.termType !== "NamedNode") {
+        throw new TypeError("model subject must be a NamedNode");
+      }
+      subjectIri(typeof term === "string" ? term : term.value);
+      super(typeof term === "string" ? factory.namedNode(term) : term, dataset, factory);
+    }
     get id(): string {
       return this.value;
     }
@@ -765,6 +777,13 @@ function assembleEntity(
   factory: DataFactory,
 ): ModelEntity {
   const storeToTurtle = (store: Store): Promise<string> => {
+    // Recheck mutable manifests immediately before crossing the writer boundary.
+    for (const name of Object.keys(manifest.prefixes)) {
+      if (!isTurtlePrefixName(name)) throw new ManifestError("invalid Turtle prefix name");
+    }
+    for (const quad of store) {
+      if (quad.subject.termType === "NamedNode") subjectIri(quad.subject.value);
+    }
     const aliases = manifest.entities
       .flatMap<ManifestEntity | ManifestNode>((entity) =>
         isCompositeEntity(entity) ? entity.nodes : [entity],
@@ -791,6 +810,7 @@ function assembleEntity(
     body: string,
     contentType: string | null = "text/turtle",
   ): Promise<EntityData | undefined> => {
+    if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
     const resolvedContentType = contentType ?? "text/turtle";
     const { parseRdf } = await import("@jeswr/fetch-rdf");
     const dataset = await parseRdf(body, resolvedContentType, { baseIRI: resourceUrl });
@@ -808,7 +828,7 @@ function makeEntity(
   const Wrapper = makeWrapperClass(entity.typeIris, plans, entity.aliasTypeIris);
 
   const subject = (resourceUrl: string): string =>
-    subjectIri(entity.subject.convention, resourceUrl);
+    subjectIri(resourceUrl, entity.subject.convention === "hash-it" ? "it" : undefined);
 
   const build = (resourceUrl: string, data: EntityData): Store => {
     const store = new Store();
@@ -819,6 +839,9 @@ function makeEntity(
   };
 
   const parse = (resourceUrl: string, dataset: DatasetCore): EntityData | undefined => {
+    if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
+    const iri = entity.subject.convention === "hash-it" ? `${resourceUrl}#it` : resourceUrl;
+    if (!isSafeAbsoluteIri(iri)) return undefined;
     const doc = new Wrapper(subject(resourceUrl), dataset, factory);
     if (!doc.isInstance) return undefined;
     const data: EntityData = {};
@@ -878,7 +901,7 @@ interface NestedTargetResolution {
 /**
  * Resolve the SINGLE target of a `nested` (maxCount-1) link FAIL-CLOSED, streaming the raw
  * object terms with EARLY exit — never materialising the full candidate list. A non-http(s)
- * / unsafe IRI rejects the link; non-NamedNode objects are skipped. The instant a
+ * / unsafe IRI rejects the link. All raw term kinds count towards ambiguity. The instant a
  * SECOND distinct RDF target is seen the link is rejected; and if the raw object
  * reads exceed {@link MAX_LINK_READS} before resolving, the link is rejected (a hostile
  * fan-out on one predicate must not force unbounded work). Safe lexical IRIs are followed
@@ -889,16 +912,18 @@ interface NestedTargetResolution {
 function resolveNestedTarget(doc: TermWrapper, predicate: string): NestedTargetResolution {
   const pred = doc.factory.namedNode(predicate);
   let target: string | undefined;
+  let raw: Term | undefined;
   let reads = 0;
   for (const object of matchObjects(doc.dataset, doc as unknown as Term, pred)) {
     if (++reads > MAX_LINK_READS) return { reject: true };
+    if (raw !== undefined && !raw.equals(object)) return { reject: true };
+    raw = object;
     if (object.termType !== "NamedNode") continue;
     // Validate the lexical IRI without URL.href rewriting RDF subject identity.
     if (!isSafeAbsoluteIri(object.value) || !/^https?:\/\//i.test(object.value)) {
       return { reject: true };
     }
     if (target === undefined) target = object.value;
-    else if (object.value !== target) return { reject: true };
   }
   return { reject: false, target };
 }
@@ -924,7 +949,7 @@ function makeCompositeEntity(
   if (!rootRt) throw new Error(`composite root "${entity.root}" has no node runtime`);
 
   const nodeIri = (rt: NodeRuntime, resourceUrl: string): string =>
-    `${resourceUrl}#${rt.node.fragment}`;
+    subjectIri(resourceUrl, rt.node.fragment);
 
   const subject = (resourceUrl: string): string => nodeIri(rootRt, resourceUrl);
 
@@ -970,11 +995,15 @@ function makeCompositeEntity(
   };
 
   const parse = (resourceUrl: string, dataset: DatasetCore): EntityData | undefined => {
+    if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
+    const rootIri = `${resourceUrl}#${rootRt.node.fragment}`;
+    if (!isSafeAbsoluteIri(rootIri)) return undefined;
     // Fail-closed budget on total sub-node parse attempts (bounds the graph-walk's
     // backtracking against a hostile document — see MAX_NODE_VISITS).
     let visits = 0;
     const parseNode = (rt: NodeRuntime, iri: string): EntityData | undefined => {
       if (++visits > MAX_NODE_VISITS) return undefined;
+      if (!isSafeAbsoluteIri(iri)) return undefined;
       const doc = new rt.Wrapper(iri, dataset, factory);
       // A node MUST carry its rdf:type — an untyped subject at a fragment is not a
       // conforming node (fail-closed cross-node type check).
@@ -1018,7 +1047,7 @@ function makeCompositeEntity(
       }
       return data;
     };
-    return parseNode(rootRt, subject(resourceUrl));
+    return parseNode(rootRt, rootIri);
   };
 
   return assembleEntity(

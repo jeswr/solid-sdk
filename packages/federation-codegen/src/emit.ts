@@ -58,7 +58,7 @@ const NODE_VIEWS_TEMPLATE =
   `              typeIri: view.typeIri,\n` +
   `              fragment: view.fragment,\n` +
   `              Wrapper: nodeViews.entities[view.entity].Wrapper,\n` +
-  `              subject: (resourceUrl) => \`\${resourceUrl}#\${view.fragment}\`,\n` +
+  `              subject: (resourceUrl) => subjectIri(resourceUrl, view.fragment),\n` +
   `            }),\n` +
   `          ]),\n` +
   `        ),\n` +
@@ -72,7 +72,7 @@ export function emitModelJs(manifest: ModelManifest, nodeViews?: NodeViews): str
   const json = JSON.stringify(manifest, null, 2);
   const base =
     `${GENERATED_HEADER}` +
-    `import { defineModel } from "@jeswr/model-runtime";\n\n` +
+    `import { defineModel${nodeViews === undefined ? "" : ", subjectIri"} } from "@jeswr/model-runtime";\n\n` +
     `const manifest = ${json};\n\n` +
     `const model = defineModel(manifest);\n` +
     `export default model;\n` +

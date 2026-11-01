@@ -37,7 +37,9 @@ export {
   httpIriOrUndefined,
   isHttpIri,
   isSafeAbsoluteIri,
+  isTurtlePrefixName,
   sanitizeText,
+  subjectIri,
   tryRead,
 } from "./guards.js";
 

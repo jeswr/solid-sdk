@@ -15,7 +15,7 @@
  */
 
 import { literalMapper } from "./datatypes.js";
-import { isSafeAbsoluteIri } from "./guards.js";
+import { isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
 
 /** The manifest schema version this runtime interprets. */
 export const MANIFEST_VERSION = 1 as const;
@@ -780,6 +780,7 @@ export function validateManifest(input: unknown): ModelManifest {
   const prefixes: Record<string, string> = {};
   for (const key of prefixKeys) {
     if (key === "__proto__") fail('manifest.prefixes may not use the key "__proto__"');
+    if (!isTurtlePrefixName(key)) fail("manifest.prefixes contains an invalid Turtle prefix name");
     prefixes[key] = checkIri(input.prefixes[key], `manifest.prefixes["${key}"]`);
   }
 
