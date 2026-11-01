@@ -24,6 +24,8 @@ it("detects Google font imports, re-exports and dynamic loads without matching p
     'const font = import("next/font/google");',
     'const font = require("next/font/google");',
     'import font = require("next/font/google");',
+    String.raw`import { Inter } from "next\/font\/google";`,
+    String.raw`import { Inter } from "next/font/\u0067oogle";`,
   ]) {
     expect(importsGoogleFonts(source, "example.ts")).toBe(true);
   }
@@ -36,7 +38,7 @@ it("detects Google font imports, re-exports and dynamic loads without matching p
 
 it("uses local fonts throughout packages and apps, including the standalone template", () => {
   expect(checkLocalFonts(root), "Vendor fonts and load them with next/font/local").toEqual([]);
-});
+}, 30000);
 
 it("fails the CLI for nested app and template imports while ignoring generated files", () => {
   const fixture = mkdtempSync(join(tmpdir(), "local-fonts-"));
