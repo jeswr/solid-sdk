@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * LIVE authorization-code + PKCE + DPoP flow against a real in-memory CSS v8 pod (booted by
  * live-setup on port 3086).
@@ -179,7 +180,7 @@ async function fullLogin(
   opts: { prompt?: "consent"; debug?: boolean } = {},
 ): Promise<AuthCodeSession> {
   const pkce = generatePkce();
-  const state = randomBytes(16).toString("base64url");
+  const state = listener.state ?? randomBytes(16).toString("base64url");
   const authUrl = buildAuthorizationUrl({
     meta,
     client,
@@ -199,6 +200,7 @@ async function fullLogin(
   const { code, state: returnedState } = await driveInteraction(authUrl, listener, jar, opts.debug);
   expect(returnedState).toBe(state);
   return exchangeCode({
+    allowInsecureLoopback: true,
     meta,
     client,
     redirectUri: listener.redirectUri,
@@ -215,7 +217,7 @@ describe("live authorization-code + PKCE + DPoP against CSS v8", () => {
   it.skipIf(!ready)(
     "completes the full flow: DCR → PKCE auth → headless interaction → DPoP-bound token",
     async () => {
-      const meta = await discoverProvider(issuer!);
+      const meta = await discoverProvider(issuer!, undefined, { allowInsecureLoopback: true });
       expect(meta.registration_endpoint).toBeTruthy();
       const listener = await startLoopbackListener();
       try {
@@ -241,7 +243,7 @@ describe("live authorization-code + PKCE + DPoP against CSS v8", () => {
   it.skipIf(!ready)(
     "authedFetch reads & writes a protected resource with an ath-bound proof",
     async () => {
-      const meta = await discoverProvider(issuer!);
+      const meta = await discoverProvider(issuer!, undefined, { allowInsecureLoopback: true });
       const listener = await startLoopbackListener();
       try {
         const client = await registerClient(meta, listener.redirectUri);
@@ -274,7 +276,7 @@ describe("live authorization-code + PKCE + DPoP against CSS v8", () => {
   );
 
   it.skipIf(!ready)("refreshes the session (refresh-token grant with DPoP)", async () => {
-    const meta = await discoverProvider(issuer!);
+    const meta = await discoverProvider(issuer!, undefined, { allowInsecureLoopback: true });
     const listener = await startLoopbackListener();
     try {
       const client = await registerClient(meta, listener.redirectUri);
@@ -302,7 +304,7 @@ describe("live authorization-code + PKCE + DPoP against CSS v8", () => {
   });
 
   it.skipIf(!ready)("a second full flow with prompt=consent also completes", async () => {
-    const meta = await discoverProvider(issuer!);
+    const meta = await discoverProvider(issuer!, undefined, { allowInsecureLoopback: true });
     const listener = await startLoopbackListener();
     try {
       const client = await registerClient(meta, listener.redirectUri);
