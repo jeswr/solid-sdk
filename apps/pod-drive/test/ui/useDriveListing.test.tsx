@@ -10,7 +10,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { breadcrumbFor } from "../../src/ui/breadcrumb.js";
 import { useDriveListing } from "../../src/ui/useDriveListing.js";
 
 afterEach(() => {
@@ -168,7 +167,7 @@ describe("useDriveListing", () => {
     expect(result.current.error).toBeNull();
 
     // Breadcrumb now roots at the NEW container.
-    const crumbs = breadcrumbFor(result.current.currentUrl, "https://pod.example/other/");
+    const crumbs = result.current.breadcrumbs;
     expect(crumbs).toEqual([{ url: "https://pod.example/other/", label: "Drive" }]);
   });
 

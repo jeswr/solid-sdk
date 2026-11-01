@@ -1,8 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { assert, expect, it, vi } from "vitest";
+import { FileBrowser } from "../../src/ui/FileBrowser.js";
 import { useDriveListing } from "../../src/ui/useDriveListing.js";
 
 // Exercise the hook through real SDK discovery and LWS listing requests.
@@ -52,6 +61,7 @@ it("preserves LWS identifiers on mount, navigation, refresh, and root changes", 
   );
   await waitFor(() => expect(result.current.listing?.url).toBe(root));
   expect(result.current.currentUrl).toBe(root);
+  expect(result.current.breadcrumbs).toEqual([{ url: root, label: "Drive" }]);
   expect(result.current.error).toBeNull();
   const folderEntry = result.current.listing?.container.entries[0];
   assert(folderEntry);
@@ -63,6 +73,10 @@ it("preserves LWS identifiers on mount, navigation, refresh, and root changes", 
   act(() => result.current.navigate(folderEntry.url));
   await waitFor(() => expect(result.current.listing?.url).toBe(folder));
   expect(result.current.currentUrl).toBe(folder);
+  expect(result.current.breadcrumbs).toEqual([
+    { url: root, label: "Drive" },
+    { url: folder, label: "opaque-folder" },
+  ]);
   expect(result.current.listing?.container.entries.map((entry) => entry.url)).toEqual([file]);
   expect(result.current.error).toBeNull();
 
@@ -77,9 +91,76 @@ it("preserves LWS identifiers on mount, navigation, refresh, and root changes", 
   rerender({ rootUrl: `${root}/` });
   await waitFor(() => expect(result.current.listing?.url).toBe(`${root}/`));
   expect(result.current.currentUrl).toBe(`${root}/`);
+  expect(result.current.breadcrumbs).toEqual([{ url: `${root}/`, label: "Drive" }]);
   expect(result.current.listing?.container.entries).toEqual([]);
   rerender({ rootUrl: root });
   await waitFor(() => expect(result.current.listing?.url).toBe(root));
   expect(result.current.currentUrl).toBe(root);
   expect(result.current.error).toBeNull();
+});
+
+it.each([
+  "unrelated",
+  "path-shaped",
+])("navigates LWS breadcrumbs using visited %s identifiers without inventing ancestors", async (shape) => {
+  const storageRoot = `https://lws-breadcrumb-${shape}.example/`;
+  const root = `${storageRoot}drive`;
+  const folder = shape === "unrelated" ? `${storageRoot}folder` : `${root}/unvisited/folder`;
+  const child = shape === "unrelated" ? `${storageRoot}elsewhere/child` : `${folder}/gap/child`;
+  const description = `${storageRoot}storage`;
+  const containers = new Map([
+    [root, [{ id: folder, type: "Container" }]],
+    [folder, [{ id: child, type: "Container" }]],
+    [child, []],
+  ]);
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+    const url = String(input);
+    if (url === description)
+      return new Response(
+        JSON.stringify({
+          "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
+          id: description,
+          type: "Storage",
+          service: [{ type: "StorageRoot", serviceEndpoint: storageRoot }],
+        }),
+        { headers: { "content-type": "application/lws+cid" } },
+      );
+    const items = containers.get(url);
+    if (!items) return new Response(null, { status: 404 });
+    return new Response(
+      init?.method === "HEAD" ? null : JSON.stringify({ type: "Container", items }),
+      {
+        headers: {
+          "content-type": "application/lws+json",
+          link: `<${description}>; rel="https://www.w3.org/ns/lws#storage", <https://www.w3.org/ns/lws#Container>; rel="type"`,
+        },
+      },
+    );
+  });
+  render(<FileBrowser rootUrl={root} fetch={fetch} />);
+  fireEvent.click(await screen.findByRole("button", { name: /folder/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /child/ }));
+  await screen.findByText("This folder is empty.");
+  const breadcrumb = within(screen.getByRole("navigation", { name: "Breadcrumb" }));
+  expect(breadcrumb.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+    "Drive",
+    "folder",
+    "child",
+  ]);
+
+  fireEvent.click(breadcrumb.getByRole("button", { name: "folder" }));
+  await screen.findByRole("button", { name: /child/ });
+  expect(breadcrumb.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+    "Drive",
+    "folder",
+  ]);
+  fireEvent.click(breadcrumb.getByRole("button", { name: "Drive" }));
+  await screen.findByRole("button", { name: /folder/ });
+  expect(breadcrumb.getAllByRole("listitem")).toHaveLength(1);
+  const gets = fetch.mock.calls
+    .filter(([, init]) => init?.method === "GET")
+    .map(([url]) => String(url));
+  expect(gets.filter((url) => url === root)).toHaveLength(2);
+  expect(gets.filter((url) => url === folder)).toHaveLength(2);
+  expect(gets.every((url) => [description, root, folder, child].includes(url))).toBe(true);
 });

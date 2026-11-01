@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ContainerListing, DriveAccessError, listContainer } from "../drive.js";
+import { breadcrumbFromTrail, type Crumb } from "./breadcrumb.js";
 import { errorMessage } from "./format.js";
 
 /** What the view needs to render a folder + its breadcrumb + states. */
@@ -39,6 +40,8 @@ export interface DriveListingState {
   isAccessError: boolean;
   /** The requested container identifier, preserved as supplied by the caller. */
   currentUrl: string;
+  /** Visited containers from the root to the current URL, preserving their identifiers. */
+  breadcrumbs: Crumb[];
   /** Navigate into a sub-container (or any container URL). */
   navigate: (url: string) => void;
   /** Re-fetch the current container (e.g. a manual "retry" after an error). */
@@ -71,6 +74,7 @@ export function useDriveListing(
 ): DriveListingState {
   const { fetch: authedFetch } = options;
   const [currentUrl, setCurrentUrl] = useState(rootUrl);
+  const [trail, setTrail] = useState([rootUrl]);
   const [listing, setListing] = useState<ContainerListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +102,7 @@ export function useDriveListing(
   if (prevRoot !== rootUrl) {
     setPrevRoot(rootUrl);
     setCurrentUrl(rootUrl);
+    setTrail([rootUrl]);
     setListing(null);
     setError(null);
     setIsAccessError(false);
@@ -154,6 +159,10 @@ export function useDriveListing(
   }, [currentUrl, authedFetch, reloadToken]);
 
   const navigate = useCallback((url: string) => {
+    setTrail((previous) => {
+      const ancestor = previous.indexOf(url);
+      return ancestor === -1 ? [...previous, url] : previous.slice(0, ancestor + 1);
+    });
     setCurrentUrl(url);
   }, []);
 
@@ -167,6 +176,7 @@ export function useDriveListing(
     error,
     isAccessError,
     currentUrl,
+    breadcrumbs: breadcrumbFromTrail(trail),
     navigate,
     refresh,
   };
