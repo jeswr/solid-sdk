@@ -201,7 +201,11 @@ export async function authedFetch(
       redirect: "manual",
       ...(init.body !== undefined ? { body: init.body } : {}),
     });
-    if (init.redirect === "error" && response.status >= 300 && response.status < 400) {
+    // 304 Not Modified is a 3xx but not a redirect: conditional requests must still see it.
+    if (
+      init.redirect === "error" &&
+      (response.type === "opaqueredirect" || [301, 302, 303, 307, 308].includes(response.status))
+    ) {
       discardBody(response);
       throw new TypeError("Authenticated request redirect refused.");
     }

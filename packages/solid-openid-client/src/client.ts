@@ -564,9 +564,6 @@ export async function createSolidOidcClient(
     }
     const accessToken = currentTokens.accessToken;
     const reqInput = input instanceof Request ? input : undefined;
-    if (reqInput?.bodyUsed) {
-      throw new TypeError("authedFetch: Request body has already been consumed.");
-    }
     // A `Request` always carries an absolute `.url`. A string/URL input may be RELATIVE (browser
     // `fetch` resolves it against the document base); resolve it the same way so we don't reject a
     // valid relative URL — and so the transport check + `htu` + the fetch all use one absolute URL.
@@ -615,6 +612,10 @@ export async function createSolidOidcClient(
         maxReplayBodyBytes,
       );
     } else if (reqInput && reqInput.body !== null) {
+      // An explicit init body replaces the Request's, so only its own body must be unread.
+      if (reqInput.bodyUsed) {
+        throw new TypeError("authedFetch: Request body has already been consumed.");
+      }
       // A Request body is a stream; read it (abort-aware, cancellable, size-capped) so we can send
       // it more than once across the original + nonce retry.
       bufferedBody = await readStreamWithSignal(
@@ -641,7 +642,8 @@ export async function createSolidOidcClient(
         ...(bufferedBody !== undefined ? { body: bufferedBody } : {}),
       };
       const response = await userFetch(url, req);
-      if (baseInit.redirect === "error" && response.status >= 300 && response.status < 400) {
+      // 304 Not Modified is a 3xx but not a redirect: conditional requests must still see it.
+      if (baseInit.redirect === "error" && isRedirect(response)) {
         cancelResponse(response);
         throw new TypeError("Authenticated request redirect refused.");
       }
@@ -1024,4 +1026,9 @@ function adaptCustomFetch(
       removeAbortListener();
     }
   };
+}
+
+/** A real redirect (not 304 Not Modified), or a browser opaque redirect. */
+function isRedirect(response: Response): boolean {
+  return response.type === "opaqueredirect" || [301, 302, 303, 307, 308].includes(response.status);
 }

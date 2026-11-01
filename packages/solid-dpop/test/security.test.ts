@@ -325,6 +325,16 @@ describe("resource transport (findings 2 and 4)", () => {
     else expect((await result).status).toBe(302);
     expect(seen).toBe("manual");
   });
+  it("passes a 304 Not Modified through under redirect: error (conditional GET)", async () => {
+    const session = { keyPair, accessToken: "access", expiresAt: Date.now() + 60_000 };
+    const fetchImpl: FetchLike = async () => new Response(null, { status: 304 });
+    const fetch = rdfFetchFor(session, undefined, fetchImpl);
+    const response = await fetch("https://pod.example/", {
+      redirect: "error",
+      headers: { "if-none-match": '"v1"' },
+    });
+    expect(response.status).toBe(304);
+  });
   it("cancels a discarded resource nonce response without waiting", async () => {
     const cancel = vi.fn(() => new Promise<void>(() => {}));
     let hits = 0;

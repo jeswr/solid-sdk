@@ -57,6 +57,35 @@ describe("credentialed resource redirects (finding 2)", () => {
   });
 });
 
+it("passes a 304 Not Modified through under redirect: error (conditional GET)", async () => {
+  const transport = vi.fn(async () => new Response(null, { status: 304 }));
+  const { client } = await login(transport);
+  const response = await client.fetch("https://op.example/resource", {
+    redirect: "error",
+    headers: { "if-none-match": '"v1"' },
+  });
+  expect(response.status).toBe(304);
+});
+
+it("accepts an explicit replacement body for an already-consumed Request", async () => {
+  let sent: unknown;
+  const transport = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    sent = init?.body;
+    return new Response("ok");
+  });
+  const { client } = await login(transport);
+  const request = new Request("https://op.example/resource", { method: "PUT", body: "original" });
+  await request.text();
+  expect(request.bodyUsed).toBe(true);
+  const response = await client.fetch(request, { body: "replacement" });
+  expect(response.status).toBe(200);
+  expect(
+    new TextDecoder().decode(
+      sent instanceof ArrayBuffer ? sent : new TextEncoder().encode(String(sent)),
+    ),
+  ).toBe("replacement");
+});
+
 it("nonce retries start cancellation without awaiting it (finding 4)", async () => {
   const cancel = vi.fn(() => new Promise<void>(() => {}));
   let hits = 0;
