@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -8,14 +9,17 @@
 // quads (the house rule). Reading uses SetFrom.subjectPredicate; writing uses
 // NamedNodeFrom/LiteralFrom + the dataset add, all from @rdfjs/wrapper.
 
+import {
+  addIriTriple,
+  addLiteralTriple,
+  objectTerms as sharedObjectTerms,
+} from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
   DatasetWrapper,
   LiteralFrom,
   NamedNodeFrom,
-  SetFrom,
-  TermAs,
   TermFrom,
   TermWrapper,
   type TermWrapper as TermWrapperType,
@@ -41,28 +45,9 @@ import {
   SCHEMA_TARGET,
 } from "./vocab.js";
 
-/**
- * Read a property as a Set of the OBJECT TERMS themselves (not their lexical
- * `.value`) — so the term type survives the read and the read layer can reject
- * malformed objects (e.g. a literal where an IRI is required). The factory is
- * shared so term identity / Set de-duplication hold.
- */
+/** Read canonical and legacy aliases as an ordered, de-duplicated snapshot. */
 export function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  const values: TermWrapperType[] = [];
-  for (const iri of new Set([predicate, legacyA2aIri(predicate)])) {
-    const terms = SetFrom.subjectPredicate(
-      node,
-      iri,
-      TermAs.instance(TermWrapper),
-      TermFrom.instance,
-    );
-    for (const term of terms) {
-      if (!values.some((value) => value.equals(TermFrom.instance(term, node.factory)))) {
-        values.push(term);
-      }
-    }
-  }
-  return new Set(values);
+  return sharedObjectTerms(node, predicate, legacyA2aIri(predicate));
 }
 
 /** A typed view of an `a2a:Parameter` node. */
@@ -181,40 +166,16 @@ export function actionKindOf(action: ActionNode): IntentAction | undefined {
 
 // --- the write path (intentToRdf / buildShapeForIntent / buildProtocolDocument) -
 
-/**
- * Add a single `(subject, predicate-IRI, object-IRI)` triple through the factory.
- * The object IRI is escaped through {@link escapeIri} as a universal chokepoint so a
- * breakout character can never reach n3.Writer verbatim (a no-op on the trusted vocab
- * IRIs and on the already-`safeHttpIri`-normalised values the setters pass). The
- * predicate is always a trusted vocab constant, never untrusted input.
- */
-function addIri(node: TermWrapper, predicate: string, objectIri: string): void {
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(escapeIri(objectIri), factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
-/** Add a single `(subject, predicate-IRI, string-literal)` triple through the factory. */
-function addLiteral(node: TermWrapper, predicate: string, value: string): void {
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = LiteralFrom.string(value, factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
 /** A `a2a:Parameter` node opened for writing. */
 class WritableParameter extends TermWrapper {
   typeParameter(): void {
-    addIri(this, RDF_TYPE, legacyA2aIri(A2A_PARAMETER_CLASS));
+    addIriTriple(this, RDF_TYPE, legacyA2aIri(A2A_PARAMETER_CLASS));
   }
   setKey(key: string): void {
-    addLiteral(this, legacyA2aIri(A2A_PARAM_KEY), key);
+    addLiteralTriple(this, legacyA2aIri(A2A_PARAM_KEY), key);
   }
   setValue(value: string): void {
-    addLiteral(this, legacyA2aIri(A2A_PARAM_VALUE), value);
+    addLiteralTriple(this, legacyA2aIri(A2A_PARAM_VALUE), value);
   }
 }
 
@@ -229,13 +190,13 @@ class WritableParameter extends TermWrapper {
  * (the object-desync / fail-open class). `field` names the offending field in the error.
  */
 function addRequiredIri(node: TermWrapper, predicate: string, iri: string, field: string): void {
-  addIri(node, predicate, requireIri(iri, field));
+  addIriTriple(node, predicate, requireIri(iri, field));
 }
 
 /** The action node (a schema:Action subclass), opened for writing. */
 class WritableAction extends TermWrapper {
   typeAction(actionTypeIri: string): void {
-    addIri(this, RDF_TYPE, actionTypeIri);
+    addIriTriple(this, RDF_TYPE, actionTypeIri);
   }
   setObject(iri: string): void {
     addRequiredIri(this, SCHEMA_OBJECT, iri, "target (schema:object)");
@@ -250,14 +211,14 @@ class WritableAction extends TermWrapper {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri: string): void {
-    addIri(this, legacyA2aIri(A2A_MODE), modeIri);
+    addIriTriple(this, legacyA2aIri(A2A_MODE), modeIri);
   }
 }
 
 /** An `a2a:Intent` node opened for WRITING. */
 class WritableIntent extends TermWrapper {
   typeIntent(): void {
-    addIri(this, RDF_TYPE, legacyA2aIri(A2A_INTENT));
+    addIriTriple(this, RDF_TYPE, legacyA2aIri(A2A_INTENT));
   }
   setAgent(iri: string): void {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");

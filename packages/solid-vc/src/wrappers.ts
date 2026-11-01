@@ -9,6 +9,7 @@
 // house rule). Reading uses SetFrom.subjectPredicate; writing uses
 // NamedNodeFrom/LiteralFrom/BlankNodeFrom + the dataset add.
 
+import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -42,16 +43,6 @@ import {
   VC_VALID_UNTIL,
   VC_VERIFIABLE_CREDENTIAL,
 } from "./vocab.js";
-
-/**
- * Read a property as a Set of the OBJECT TERMS themselves (not their lexical
- * `.value`) so the term type survives the read and the reader can reject
- * malformed objects (e.g. a literal where an IRI is required). The shared factory
- * keeps term identity / Set de-duplication consistent.
- */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
 
 /** Read-only authorization claims; every present namespace must agree. */
 export class AuthorizationSubjectNode extends TermWrapper {
