@@ -125,3 +125,37 @@ test("both guarded bridges register SuitePush and OS delivery is private", () =>
     "connectionOptions.notificationResponse",
   );
 });
+
+test("iOS delivery paths share request-bound presentation claims and strip rejected payloads", () => {
+  const service = read("ios/App/NotificationService/NotificationService.swift");
+  const coordinator = read("ios/App/App/SuitePushCoordinator.swift");
+  expect(service).toContain(
+    "generic.userInfo = PushReceiver.placeholderInfo(request.content.userInfo)",
+  );
+  expect(service).toContain(
+    "accept($0, request: request.identifier, localReplacement: Self.filtering)",
+  );
+  expect(service).toContain(
+    "content.userInfo[PushReceiver.presentationKey] = delivery.presentationToken",
+  );
+  expect(coordinator).toContain(
+    "safe.userInfo[PushReceiver.presentationKey] = delivery.presentationToken",
+  );
+  expect(coordinator).toContain("notification.request.trigger is UNPushNotificationTrigger");
+  expect(coordinator).toContain(".remote(request: notification.request.identifier, token: token)");
+  expect(coordinator).toContain(".local(request: notification.request.identifier, token: token)");
+  expect(coordinator).toContain("withPresentation(payload, source: source)");
+  const receiver = read("ios/App/Shared/PushReceiver.swift");
+  expect(receiver).toContain('safe.removeValue(forKey: "p")');
+  expect(receiver).toContain("safe.removeValue(forKey: presentationKey)");
+});
+
+test("Android foreground and background data delivery use the same deduplicating service", () => {
+  const service = read("android/app/src/main/java/org/jeswr/suite/SuitePushService.java");
+  const receiver = read("android/app/src/main/java/org/jeswr/suite/PushReceiver.java");
+  expect(service).toContain('PushReceiver.receive(message.getData().get("p")');
+  expect(service).toContain("() -> SuitePushPlugin.store(this)");
+  expect(receiver).toContain("PushStore.Delivery delivery = store.accept(payload)");
+  expect(service).toContain("result.kind == PushReceiver.Kind.NOTIFY");
+  expect(service).toContain("SuitePushPlugin.store(this).withActive(result.payload");
+});

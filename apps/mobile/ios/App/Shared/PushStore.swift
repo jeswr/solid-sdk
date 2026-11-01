@@ -21,17 +21,30 @@ final class PushStore {
     struct Launch { let registrationId: String?; let route: String }
     // Optional index safely migrates old saved routes; their route text is never used.
     private struct PendingLaunch: Codable { let registrationId: String; let topicIndex: Int? }
+    private struct PresentationClaim: Codable {
+        let request: String
+        let token: String
+        let local: Bool
+        let count: Int
+    }
     private struct State: Codable {
         var registrations = [String: Registration]()
         var seen = [String]()
         var counts = [String: Int]()
         var launch: PendingLaunch?
+        // Optional for migration: previously seen IDs never gain a replacement permit.
+        var presentations: [String: PresentationClaim]?
+    }
+    enum PresentationSource {
+        case remote(request: String, token: String?)
+        case local(request: String, token: String?)
     }
     struct Delivery {
         let payload: PushPayload
         let body: String
         let group: String
         let count: Int
+        let presentationToken: String
     }
     let root: URL
     init(root: URL) throws {
@@ -45,7 +58,7 @@ final class PushStore {
         guard let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.org.jeswr.suite") else { throw PushCrypto.Failure.invalid }
         return try PushStore(root: group.appendingPathComponent("push", isDirectory: true))
     }
-    private func transaction<T>(_ action: (inout State) throws -> T) throws -> T {
+    private func transaction<T>(afterCommit: (T) -> Void = { _ in }, _ action: (inout State) throws -> T) throws -> T {
         let lockURL = root.appendingPathComponent("state.lock")
         let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         guard fd >= 0 else { throw PushCrypto.Failure.invalid }
@@ -62,6 +75,8 @@ final class PushStore {
         }
         let result = try action(&state)
         try JSONEncoder().encode(state).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        // Presentation runs only after its decision is durable, still under the silence/dedupe lock.
+        afterCommit(result)
         return result
     }
     func setTopics(registration: String, topics: [Topic]) throws {
@@ -92,14 +107,24 @@ final class PushStore {
               let topic = reg.topics.first(where: { $0.index == index && $0.enabled }), PushPolicy.route(topic.route) else { return nil }
         return topic
     }
-    func accept(_ payload: PushPayload) throws -> Delivery? {
+    private static func claim(_ payload: PushPayload, topic: Topic, state: inout State,
+                              request: String, local: Bool) -> Delivery? {
+        guard !state.seen.contains(payload.id) else { return nil }
+        state.seen.append(payload.id); state.seen = Array(state.seen.suffix(50))
+        var presentations = (state.presentations ?? [:]).filter { state.seen.contains($0.key) }
+        let group = PushPolicy.group(payload.registrationId, payload.topicIndex)
+        let count = min(state.counts[group, default: 0], 999998) + 1; state.counts[group] = count
+        let token = UUID().uuidString
+        presentations[payload.id] = PresentationClaim(request: local ? group : request, token: token, local: local, count: count)
+        state.presentations = presentations
+        return Delivery(payload: payload, body: PushPolicy.text(kind: topic.kind, label: topic.label),
+                        group: group, count: count, presentationToken: token)
+    }
+    func accept(_ payload: PushPayload, request: String = "", localReplacement: Bool = false) throws -> Delivery? {
         try transaction { state in
             guard payload.kind != "challenge", let topic = Self.topic(state, payload.registrationId, payload.topicIndex),
-                  topic.kind == payload.kind, !state.seen.contains(payload.id) else { return nil }
-            state.seen.append(payload.id); state.seen = Array(state.seen.suffix(50))
-            let group = PushPolicy.group(payload.registrationId, payload.topicIndex)
-            let count = min(state.counts[group, default: 0], 999998) + 1; state.counts[group] = count
-            return Delivery(payload: payload, body: PushPolicy.text(kind: payload.kind, label: topic.label), group: group, count: count)
+                  topic.kind == payload.kind else { return nil }
+            return Self.claim(payload, topic: topic, state: &state, request: request, local: localReplacement)
         }
     }
     /// Serialize the final content delivery with local silence, including across app/NSE processes.
@@ -109,16 +134,35 @@ final class PushStore {
             action(); return true
         }
     }
-    /// Foreground presentation never trusts APNs content, even when an NSE did not run.
-    func withPresentation(_ payload: PushPayload, action: (Delivery) -> Void) throws -> Bool {
-        try transaction { state in
+    /// Claim remote delivery once, or consume a native one-use handoff. Local callbacks cannot claim unseen IDs.
+    func withPresentation(_ payload: PushPayload, source: PresentationSource, action: (Delivery) -> Void) throws -> Bool {
+        let delivery: Delivery? = try transaction(afterCommit: { delivery in
+            if let delivery = delivery { action(delivery) }
+        }) { state in
             guard payload.kind != "challenge", let topic = Self.topic(state, payload.registrationId, payload.topicIndex),
-                  topic.kind == payload.kind else { return false }
+                  topic.kind == payload.kind else { return nil }
             let group = PushPolicy.group(payload.registrationId, payload.topicIndex)
-            action(Delivery(payload: payload, body: PushPolicy.text(kind: topic.kind, label: topic.label),
-                            group: group, count: max(1, state.counts[group, default: 1])))
-            return true
+            switch source {
+            case let .remote(request, token):
+                if !state.seen.contains(payload.id) {
+                    return Self.claim(payload, topic: topic, state: &state, request: request, local: true)
+                }
+                guard let claim = state.presentations?[payload.id], !claim.local,
+                      claim.request == request, claim.token == token else { return nil }
+                // The accepted NSE request may become one local replacement, without recounting the ID.
+                let localToken = UUID().uuidString
+                state.presentations?[payload.id] = PresentationClaim(request: group, token: localToken, local: true, count: claim.count)
+                return Delivery(payload: payload, body: PushPolicy.text(kind: topic.kind, label: topic.label),
+                                group: group, count: claim.count, presentationToken: localToken)
+            case let .local(request, token):
+                guard let claim = state.presentations?[payload.id], claim.local,
+                      request == group, claim.request == request, claim.token == token else { return nil }
+                state.presentations?.removeValue(forKey: payload.id)
+                return Delivery(payload: payload, body: PushPolicy.text(kind: topic.kind, label: topic.label),
+                                group: group, count: claim.count, presentationToken: claim.token)
+            }
         }
+        return delivery != nil
     }
     func launch(registration: String, index: Int) throws {
         guard PushPolicy.identifier(registration), (0..<16).contains(index) else { throw PushCrypto.Failure.invalid }

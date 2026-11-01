@@ -4,7 +4,15 @@ import Foundation
 
 /// The NSE's decision seam. No key or map access is attempted before protected data is readable.
 enum PushReceiver {
+    static let presentationKey = "suitePushPresentation"
     enum Outcome { case placeholder, hidden, notify(PushStore.Delivery) }
+    /// Rejected/expired NSE work must never give the foreground delegate another encrypted delivery.
+    static func placeholderInfo(_ info: [AnyHashable: Any]) -> [AnyHashable: Any] {
+        var safe = info
+        safe.removeValue(forKey: "p"); safe.removeValue(forKey: presentationKey)
+        safe.removeValue(forKey: "suitePushGroup")
+        return safe
+    }
     static func foreground(_ encoded: String?, decrypt: (String) throws -> Data,
                            present: (PushPayload) throws -> Bool) -> Bool {
         guard let encoded = encoded, encoded.utf8.count <= 5462 else { return false }

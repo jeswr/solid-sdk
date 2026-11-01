@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import CryptoKit
 import Foundation
 import XCTest
 @testable import App
@@ -61,6 +62,8 @@ final class PushStateTests: XCTestCase {
         try store.silenceAll(); XCTAssertNil(try store.accept(Self.payload("all", "a")))
         try store.setTopics(registration: "a", topics: topics); XCTAssertNotNil(try store.accept(Self.payload("reenabled", "a")))
         for index in 0..<50 { _ = try store.accept(Self.payload("m\(index)", "a")) }
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("topics.json"))) as? [String: Any])
+        XCTAssertEqual((saved["presentations"] as? [String: Any])?.count, 50)
         XCTAssertNotNil(try store.accept(Self.payload("reenabled", "a")))
     }
     func testTopicValidationAndOneShotColdWarmTaps() throws {
@@ -228,17 +231,196 @@ final class PushStateTests: XCTestCase {
         let store = try PushStore(root: root); try store.setTopics(registration: "b", topics: topics)
         var bodies = [String]()
         let present: (PushPayload) throws -> Bool = { payload in
-            try store.withPresentation(payload) { bodies.append($0.body) }
+            try store.withPresentation(payload, source: .remote(request: "remote", token: nil)) { bodies.append($0.body) }
         }
         XCTAssertTrue(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
         XCTAssertEqual(bodies, ["New message in Book club"])
         try store.silence("b")
-        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
+        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json(id: "silenced")) }, present: present))
         try store.setTopics(registration: "b", topics: [])
-        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json()) }, present: present))
+        XCTAssertFalse(PushReceiver.foreground("p", decrypt: { _ in Self.padded(Self.json(id: "forgotten")) }, present: present))
         XCTAssertFalse(PushReceiver.foreground(nil, decrypt: { _ in XCTFail("Decrypted absent data"); return Data() }, present: present))
         XCTAssertFalse(PushReceiver.foreground("bad", decrypt: { _ in throw PushCrypto.Failure.invalid }, present: present))
         XCTAssertFalse(PushReceiver.foreground("bad", decrypt: { _ in Data("unvalidated".utf8) }, present: present))
         XCTAssertEqual(bodies.count, 1)
+    }
+    private func encryptedFixture() throws -> (String, (String) throws -> Data) {
+        let key = P256.KeyAgreement.PrivateKey(), auth = Data(repeating: 1, count: 16)
+        let encoded = try PushCryptoTests.encrypt(Self.padded(Self.json()), receiver: key, auth: auth)
+        return (encoded, { try PushCrypto.decrypt($0, key: key, auth: auth) })
+    }
+    private func nse(_ encoded: String, request: String, filtering: Bool = false,
+                     decrypt: (String) throws -> Data) -> PushReceiver.Outcome {
+        PushReceiver.receive(encoded, readable: true, filtering: filtering, decrypt: decrypt,
+            accept: { try PushStore(root: self.root).accept($0, request: request, localReplacement: filtering) })
+    }
+    private func foreground(_ encoded: String?, source: PushStore.PresentationSource,
+                            decrypt: (String) throws -> Data, action: (PushStore.Delivery) -> Void) -> Bool {
+        PushReceiver.foreground(encoded, decrypt: decrypt, present: { payload in
+            try PushStore(root: self.root).withPresentation(payload, source: source, action: action)
+        })
+    }
+    func testNSEThenForegroundPresentsIdenticalPayloadOnce() throws {
+        let store = try PushStore(root: root), (encoded, decrypt) = try encryptedFixture()
+        try store.setTopics(registration: "b", topics: topics)
+        guard case let .notify(accepted) = nse(encoded, request: "first", decrypt: decrypt) else { return XCTFail("First NSE delivery rejected") }
+        var replacement: PushStore.Delivery?, bodies = [String]()
+        XCTAssertTrue(foreground(encoded, source: .remote(request: "first", token: accepted.presentationToken), decrypt: decrypt) { replacement = $0 })
+        let local = try XCTUnwrap(replacement)
+        XCTAssertNotEqual(local.presentationToken, accepted.presentationToken); XCTAssertEqual(local.count, 1)
+        XCTAssertTrue(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { bodies.append($0.body) })
+        // A second delivery of identical ciphertext cannot schedule or present again, even with old native metadata.
+        for request in ["first", "second"] {
+            XCTAssertFalse(foreground(encoded, source: .remote(request: request, token: accepted.presentationToken), decrypt: decrypt) { _ in XCTFail("Replayed NSE handoff") })
+        }
+        XCTAssertFalse(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { _ in XCTFail("Replayed local handoff") })
+        XCTAssertEqual(bodies, ["New message in Book club"])
+        XCTAssertEqual(try PushStore(root: root).accept(Self.payload("next"))?.count, 2)
+    }
+    func testForegroundThenForegroundClaimsAndCountsIdenticalPayloadOnce() throws {
+        let store = try PushStore(root: root), (encoded, decrypt) = try encryptedFixture()
+        try store.setTopics(registration: "b", topics: topics)
+        var scheduled = [PushStore.Delivery](), presented = [String]()
+        XCTAssertTrue(foreground(encoded, source: .remote(request: "first", token: nil), decrypt: decrypt) { scheduled.append($0) })
+        XCTAssertFalse(foreground(encoded, source: .remote(request: "second", token: nil), decrypt: decrypt) { scheduled.append($0) })
+        XCTAssertEqual(scheduled.count, 1)
+        let local = try XCTUnwrap(scheduled.first); XCTAssertEqual(local.count, 1)
+        XCTAssertTrue(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { presented.append($0.body) })
+        XCTAssertFalse(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { presented.append($0.body) })
+        // Foreground claims are visible to the NSE too.
+        if case .placeholder = nse(encoded, request: "third", decrypt: decrypt) {} else { XCTFail("NSE accepted foreground duplicate") }
+        XCTAssertEqual(presented, ["New message in Book club"])
+        XCTAssertEqual(try PushStore(root: root).accept(Self.payload("next"))?.count, 2)
+    }
+    func testNSEDuplicateThenForegroundCannotStealPendingReplacement() throws {
+        let store = try PushStore(root: root), (encoded, decrypt) = try encryptedFixture()
+        try store.setTopics(registration: "b", topics: topics)
+        guard case let .notify(first) = nse(encoded, request: "first", decrypt: decrypt) else { return XCTFail("First NSE delivery rejected") }
+        let info: [AnyHashable: Any] = ["p": encoded, PushReceiver.presentationKey: first.presentationToken, "suitePushGroup": first.group]
+        for filtering in [false, true] {
+            switch nse(encoded, request: "duplicate", filtering: filtering, decrypt: decrypt) {
+            case .placeholder: XCTAssertFalse(filtering)
+            case .hidden: XCTAssertTrue(filtering)
+            case .notify: XCTFail("NSE accepted duplicate")
+            }
+            let placeholder = PushReceiver.placeholderInfo(info)
+            XCTAssertNil(placeholder["p"]); XCTAssertNil(placeholder[PushReceiver.presentationKey]); XCTAssertNil(placeholder["suitePushGroup"])
+            XCTAssertFalse(foreground(placeholder["p"] as? String, source: .remote(request: "duplicate", token: nil),
+                decrypt: { _ in XCTFail("Rejected placeholder decrypted again"); return Data() }) { _ in XCTFail("Duplicate presented") })
+        }
+        // Defence in depth if a duplicate still carries p, or copies the original handoff onto a different request.
+        for token in [nil, first.presentationToken] as [String?] {
+            XCTAssertFalse(foreground(encoded, source: .remote(request: "duplicate", token: token), decrypt: decrypt) { _ in XCTFail("Duplicate claimed pending ID") })
+        }
+        var replacement: PushStore.Delivery?, presentations = 0
+        XCTAssertTrue(foreground(encoded, source: .remote(request: "first", token: first.presentationToken), decrypt: decrypt) { replacement = $0 })
+        let local = try XCTUnwrap(replacement)
+        XCTAssertTrue(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { _ in presentations += 1 })
+        XCTAssertFalse(foreground(encoded, source: .remote(request: "duplicate", token: nil), decrypt: decrypt) { _ in presentations += 1 })
+        XCTAssertEqual(presentations, 1); XCTAssertEqual(try store.accept(Self.payload("next"))?.count, 2)
+    }
+    func testFilteringNSEAuthorizesOnlyOneLocalPresentation() throws {
+        let store = try PushStore(root: root), (encoded, decrypt) = try encryptedFixture()
+        try store.setTopics(registration: "b", topics: topics)
+        guard case let .notify(local) = nse(encoded, request: "nse", filtering: true, decrypt: decrypt) else { return XCTFail("First NSE delivery rejected") }
+        XCTAssertFalse(foreground(encoded, source: .remote(request: "nse", token: local.presentationToken), decrypt: decrypt) { _ in XCTFail("Local permit used remotely") })
+        var presentations = 0
+        XCTAssertTrue(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { _ in presentations += 1 })
+        XCTAssertFalse(foreground(encoded, source: .local(request: local.group, token: local.presentationToken), decrypt: decrypt) { _ in presentations += 1 })
+        XCTAssertFalse(foreground(encoded, source: .remote(request: "duplicate", token: nil), decrypt: decrypt) { _ in presentations += 1 })
+        XCTAssertEqual(presentations, 1); XCTAssertEqual(try store.accept(Self.payload("next"))?.count, 2)
+    }
+    func testPresentationRequiresNativePermitRequestAndCurrentSilenceState() throws {
+        let store = try PushStore(root: root), payload = try Self.payload("id")
+        try store.setTopics(registration: "b", topics: topics)
+        let group = PushPolicy.group("b", 1)
+        XCTAssertFalse(try store.withPresentation(payload, source: .local(request: group, token: "forged")) { _ in XCTFail("Local delivery claimed unseen ID") })
+        let accepted = try XCTUnwrap(store.accept(payload, request: "nse"))
+        for source in [PushStore.PresentationSource.remote(request: "nse", token: nil),
+                       .remote(request: "nse", token: "forged"), .remote(request: "other", token: accepted.presentationToken),
+                       .local(request: group, token: accepted.presentationToken)] {
+            XCTAssertFalse(try store.withPresentation(payload, source: source) { _ in XCTFail("Invalid handoff accepted") })
+        }
+        var local: PushStore.Delivery?
+        XCTAssertTrue(try store.withPresentation(payload, source: .remote(request: "nse", token: accepted.presentationToken)) { local = $0 })
+        let replacement = try XCTUnwrap(local)
+        XCTAssertFalse(try store.withPresentation(payload, source: .local(request: "other", token: replacement.presentationToken)) { _ in XCTFail("Wrong local request") })
+        try store.silence("b")
+        XCTAssertFalse(try PushStore(root: root).withPresentation(payload, source: .local(request: group, token: replacement.presentationToken)) { _ in XCTFail("Presented after silence") })
+    }
+    func testConcurrentNSEAndForegroundClaimsUseOneDurableDecision() throws {
+        let store = try PushStore(root: root), payload = try Self.payload("race")
+        try store.setTopics(registration: "b", topics: topics)
+        let resultsLock = NSLock()
+        var deliveries = [PushStore.Delivery](), errors = [Error]()
+        func record(_ delivery: PushStore.Delivery) { resultsLock.lock(); deliveries.append(delivery); resultsLock.unlock() }
+        DispatchQueue.concurrentPerform(iterations: 16) { index in
+            do {
+                let participant = try PushStore(root: self.root)
+                if index % 2 == 0 {
+                    if let delivery = try participant.accept(payload, request: "nse-\(index)") { record(delivery) }
+                } else {
+                    _ = try participant.withPresentation(payload, source: .remote(request: "foreground-\(index)", token: nil), action: record)
+                }
+            } catch { resultsLock.lock(); errors.append(error); resultsLock.unlock() }
+        }
+        XCTAssertTrue(errors.isEmpty); XCTAssertEqual(deliveries.count, 1); XCTAssertEqual(deliveries.first?.count, 1)
+        XCTAssertEqual(try PushStore(root: root).accept(Self.payload("next"))?.count, 2)
+    }
+    func testConcurrentHandoffConsumptionPresentsOnce() throws {
+        let store = try PushStore(root: root), payload = try Self.payload("race-local")
+        try store.setTopics(registration: "b", topics: topics)
+        let accepted = try XCTUnwrap(store.accept(payload, request: "nse"))
+        let resultsLock = NSLock(); var scheduled = [PushStore.Delivery](), presentations = 0, errors = [Error]()
+        DispatchQueue.concurrentPerform(iterations: 16) { _ in
+            do {
+                _ = try PushStore(root: self.root).withPresentation(payload, source: .remote(request: "nse", token: accepted.presentationToken)) { delivery in
+                    resultsLock.lock(); scheduled.append(delivery); resultsLock.unlock()
+                }
+            } catch { resultsLock.lock(); errors.append(error); resultsLock.unlock() }
+        }
+        XCTAssertTrue(errors.isEmpty); XCTAssertEqual(scheduled.count, 1)
+        let local = try XCTUnwrap(scheduled.first)
+        DispatchQueue.concurrentPerform(iterations: 16) { _ in
+            do {
+                _ = try PushStore(root: self.root).withPresentation(payload, source: .local(request: local.group, token: local.presentationToken)) { _ in
+                    resultsLock.lock(); presentations += 1; resultsLock.unlock()
+                }
+            } catch { resultsLock.lock(); errors.append(error); resultsLock.unlock() }
+        }
+        XCTAssertTrue(errors.isEmpty); XCTAssertEqual(presentations, 1)
+        XCTAssertEqual(try store.accept(Self.payload("next"))?.count, 2)
+    }
+    func testForegroundDecisionsArePersistedBeforeSchedulingAndPresentation() throws {
+        let store = try PushStore(root: root), payload = try Self.payload("durable")
+        try store.setTopics(registration: "b", topics: topics)
+        var scheduled: PushStore.Delivery?
+        // Read the file directly: re-entering the store while holding flock would deadlock.
+        let url = root.appendingPathComponent("topics.json")
+        XCTAssertTrue(try store.withPresentation(payload, source: .remote(request: "first", token: nil)) { delivery in
+            let saved = try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+            XCTAssertTrue((saved?["seen"] as? [String])?.contains(payload.id) == true)
+            XCTAssertEqual((saved?["counts"] as? [String: Int])?[delivery.group], 1)
+            let claim = (saved?["presentations"] as? [String: [String: Any]])?[payload.id]
+            XCTAssertEqual(claim?["token"] as? String, delivery.presentationToken)
+            XCTAssertEqual(claim?["local"] as? Bool, true); scheduled = delivery
+        })
+        let local = try XCTUnwrap(scheduled)
+        XCTAssertTrue(try store.withPresentation(payload, source: .local(request: local.group, token: local.presentationToken)) { _ in
+            let saved = try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+            XCTAssertTrue((saved?["seen"] as? [String])?.contains(payload.id) == true)
+            let claims = saved?["presentations"] as? [String: Any]
+            XCTAssertNotNil(claims); XCTAssertNil(claims?[payload.id])
+        })
+    }
+    func testLegacySeenIDsCannotAcquireNewPresentationPermits() throws {
+        let store = try PushStore(root: root), payload = try Self.payload("legacy")
+        try store.setTopics(registration: "b", topics: topics); XCTAssertNotNil(try store.accept(payload))
+        let url = root.appendingPathComponent("topics.json")
+        var state = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        state.removeValue(forKey: "presentations"); try JSONSerialization.data(withJSONObject: state).write(to: url)
+        let migrated = try PushStore(root: root)
+        XCTAssertFalse(try migrated.withPresentation(payload, source: .remote(request: "retry", token: nil)) { _ in XCTFail("Legacy duplicate presented") })
+        XCTAssertEqual(try migrated.accept(Self.payload("next"))?.count, 2)
     }
 }

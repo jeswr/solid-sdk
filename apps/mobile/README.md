@@ -62,8 +62,12 @@ Without filtering it removes the previously delivered notification for the same 
 replaces the remote content with a count. With filtering it suppresses that remote notification
 and issues a local request using the stable topic identifier. Different topics have different
 keys (first 16 SHA-256 bytes of UTF-8 `registrationId:topicIndex`, lowercase hex).
-The iOS foreground delegate revalidates encrypted payloads and current silence state, replacing
-remote text with content built from the local topic map before presentation.
+The NSE and iOS foreground delegate claim payload IDs and increment counts in the same App Group
+file transaction. A persisted, request-bound, one-use native token allows the accepted NSE delivery
+to become one local foreground replacement. Duplicate deliveries within the last 50 IDs are suppressed.
+Local callbacks consume their own one-use permit and revalidate content and current silence state.
+NSE fallback placeholders strip `p` and native presentation metadata, including on duplicate rejection
+and timeout. Foreground deliveries without NSE processing use the same dedupe and count updates.
 
 The relay (P2a/b), `@jeswr/suite-native/push` registrar and UI (P2d), end-to-end push fixtures
 (P2e), and Firebase/APNs credentials and signed provisioning (P2f/P1) remain separate work.

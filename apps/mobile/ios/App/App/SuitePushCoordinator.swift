@@ -59,23 +59,29 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let completion = PushCompletion<UNNotificationPresentationOptions>(placeholder: [], callback: completionHandler)
         let info = notification.request.content.userInfo
+        let remote = notification.request.trigger is UNPushNotificationTrigger
+        let token = info[PushReceiver.presentationKey] as? String
+        let source: PushStore.PresentationSource = remote
+            ? .remote(request: notification.request.identifier, token: token)
+            : .local(request: notification.request.identifier, token: token)
         let presented = PushReceiver.foreground(info["p"] as? String, decrypt: { encoded in
             let keys = try PushKeys()
             return try PushCrypto.decrypt(encoded, key: keys.key, auth: keys.auth)
         }, present: { payload in
-            try PushStore.shared().withPresentation(payload) { delivery in
+            try PushStore.shared().withPresentation(payload, source: source) { delivery in
                 let safe = UNMutableNotificationContent()
                 safe.title = "Solid Suite"
                 safe.body = delivery.body + (delivery.count > 1 ? " (\(delivery.count))" : "")
                 safe.threadIdentifier = payload.kind
                 safe.userInfo = ["p": info["p"] ?? "", "suitePushGroup": delivery.group]
-                if notification.request.trigger is UNPushNotificationTrigger {
+                safe.userInfo[PushReceiver.presentationKey] = delivery.presentationToken
+                if remote {
                     // Suppress remote text. Only a freshly constructed local notice can be presented.
                     if completion.finish([]) {
                         center.add(UNNotificationRequest(identifier: delivery.group, content: safe, trigger: nil), withCompletionHandler: nil)
                     }
                 } else {
-                    // Local replacements from here/the NSE must still match current validated state.
+                    // The one-use local permit and freshly validated content must both match.
                     let content = notification.request.content
                     completion.finish(content.title == safe.title && content.body == safe.body &&
                         content.threadIdentifier == safe.threadIdentifier ? [.banner, .list, .sound] : [])

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import Foundation
 import UserNotifications
 
@@ -17,7 +18,7 @@ final class NotificationService: UNNotificationServiceExtension {
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         let generic = UNMutableNotificationContent()
         generic.title = "Solid Suite"; generic.body = PushPolicy.generic
-        generic.userInfo = request.content.userInfo
+        generic.userInfo = PushReceiver.placeholderInfo(request.content.userInfo)
         let completion = PushCompletion<UNNotificationContent>(placeholder: generic, callback: contentHandler)
         requestLock.lock(); current = completion; requestLock.unlock()
         let keys: PushKeys
@@ -28,7 +29,7 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         let outcome = PushReceiver.receive(request.content.userInfo["p"] as? String, readable: true, filtering: Self.filtering,
             decrypt: { try PushCrypto.decrypt($0, key: keys.key, auth: keys.auth) },
-            accept: { try PushStore.shared().accept($0) })
+            accept: { try PushStore.shared().accept($0, request: request.identifier, localReplacement: Self.filtering) })
         switch outcome {
         case .placeholder: completion.expire()
         case .hidden: completion.finish(UNMutableNotificationContent())
@@ -38,6 +39,7 @@ final class NotificationService: UNNotificationServiceExtension {
             content.title = "Solid Suite"; content.body = delivery.body + (delivery.count > 1 ? " (\(delivery.count))" : "")
             content.threadIdentifier = payload.kind; content.userInfo = request.content.userInfo
             content.userInfo["suitePushGroup"] = delivery.group
+            content.userInfo[PushReceiver.presentationKey] = delivery.presentationToken
             let center = UNUserNotificationCenter.current()
             center.getDeliveredNotifications { notifications in
                 guard completion.pending else { return }
