@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { digestBytes, digestOf } from "@jeswr/agent-model";
 import type { guardedFetch } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
@@ -6,6 +7,7 @@ import { readFileSync } from "fs";
 import { expect, it, vi } from "vitest";
 import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
 import { emailMessageIdFor, MAX_EMAIL_BYTES } from "../src/email-mime.js";
+import { ProviderRejectedError } from "../src/errors.js";
 import {
   gmailRest,
   historyId,
@@ -16,7 +18,12 @@ import {
   responseBody,
 } from "../src/gmail/rest.js";
 import { createGmailSend } from "../src/gmail/send.js";
-import { createGmailReader, ORIGINS } from "../src/gmail.js";
+import {
+  createGmailReader,
+  GmailSetupRequiredError,
+  mapGmailError,
+  ORIGINS,
+} from "../src/gmail.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../src/profiles.js";
 import { RecordingTokenProvider } from "../src/testing.js";
 import { account, at, message, signed, verifyMessage } from "./fixtures/signed.js";
@@ -56,7 +63,7 @@ function fixtureTransport(replies: unknown[]) {
     },
   };
 }
-function reader(replies: unknown[]) {
+function reader(replies: unknown[], extra: Record<string, unknown> = {}) {
   const fake = fixtureTransport(replies);
   const tokens = new RecordingTokenProvider();
   const config = {
@@ -66,6 +73,7 @@ function reader(replies: unknown[]) {
     ownAccounts: new Set([recipient]),
     footer: AGENT_FOOTER,
     transport: fake.options,
+    ...extra,
   };
   return { ...fake, tokens, config, binding: createGmailReader(config) };
 }
@@ -99,6 +107,153 @@ function sender(replies: unknown[], extra: Record<string, unknown> = {}) {
   };
   return { ...fake, config, tokens, verifyApproval, send: createGmailSend(config) };
 }
+
+it("maps exact OAuth errors to setup state with trusted tenant guidance and no provider details", () => {
+  for (const tenant of [undefined, "google_workspace", "ODI"] as const) {
+    const policy = mapGmailError(
+      { error: "admin_policy_enforced", error_description: "private provider details" },
+      tenant,
+    );
+    expect(policy).toBeInstanceOf(GmailSetupRequiredError);
+    expect(policy).toBeInstanceOf(ProviderRejectedError);
+    expect(policy).toMatchObject({
+      state: "setup-required",
+      code: "admin_policy_enforced",
+      detail: `ask ${tenant === "ODI" ? "ODI" : "Google Workspace"} admin to allow-list client id`,
+    });
+    expect(policy?.message).toBe(`setup-required: ${policy?.detail}`);
+    expect(policy).not.toHaveProperty("cause");
+    expect(JSON.stringify(policy)).not.toContain("private provider details");
+    const denied = mapGmailError("access_denied", tenant);
+    expect(denied).toMatchObject({
+      state: "setup-required",
+      code: "access_denied",
+      detail: "Google access denied; review consent for the configured account",
+    });
+    expect(denied?.message).not.toContain("admin");
+  }
+  expect(mapGmailError("admin_policy_enforced")?.state).toBe("setup-required");
+  expect(mapGmailError({ error: "access_denied" })?.state).toBe("setup-required");
+  for (const unknown of [
+    undefined,
+    null,
+    403,
+    [],
+    {},
+    { error: null },
+    { error: { message: "admin_policy_enforced" } },
+    { error_description: "admin_policy_enforced" },
+    { error: "invalid_grant" },
+    "ADMIN_POLICY_ENFORCED",
+    "access_denied private details",
+    new Error("admin_policy_enforced"),
+  ])
+    expect(mapGmailError(unknown, "ODI")).toBeUndefined();
+});
+
+it.each([
+  "admin_policy_enforced",
+  "access_denied",
+])("maps %s from read and send grants before any provider request", async (error) => {
+  const tokens = {
+    read: vi.fn(async () => {
+      throw { error };
+    }),
+    send: vi.fn(async () => {
+      throw { error };
+    }),
+  };
+  const r = reader([], { tokens, tenant: "ODI" });
+  await expect(r.binding.ingest.list(account, undefined, bounds)).rejects.toMatchObject({
+    state: "setup-required",
+    code: error,
+  });
+  expect(tokens.read).toHaveBeenCalledExactlyOnceWith(account);
+  expect(tokens.send).not.toHaveBeenCalled();
+  expect(r.requests).toEqual([]);
+  const s = sender([], { tokens, tenant: "ODI" });
+  const wire = await s.send.render(signed(), EMAIL_MIME);
+  await expect(s.send.transmit(wire, { account, tokens, dryRun: false })).rejects.toMatchObject({
+    state: "setup-required",
+    code: error,
+  });
+  expect(tokens.send).toHaveBeenCalledExactlyOnceWith(account);
+  expect(s.verifyApproval).not.toHaveBeenCalled();
+  expect(s.requests).toEqual([]);
+  expect(r.binding.describe("setup-required")).toMatchObject({
+    binding: "gmail",
+    credentialState: "setup-required",
+  });
+});
+
+it("preserves unrelated credential failures without treating them as tenant policy", async () => {
+  const failure = new Error("unrelated credential failure");
+  const tokens = {
+    read: vi.fn(async () => {
+      throw failure;
+    }),
+    send: vi.fn(),
+  };
+  const r = reader([], { tokens, tenant: "ODI" });
+  await expect(r.binding.ingest.list(account, undefined, bounds)).rejects.toBe(failure);
+  expect(r.requests).toEqual([]);
+});
+
+it("snapshots Workspace guidance and leaves dry-run independent of account setup", async () => {
+  const s = sender([Response.json({ error: "admin_policy_enforced" }, { status: 403 })], {
+    tenant: "ODI",
+  });
+  const wire = await s.send.render(signed(), EMAIL_MIME);
+  const io = { account, tokens: s.tokens };
+  expect(await s.send.transmit(wire, io)).toEqual({ outcome: "rejected", detail: "dry-run" });
+  expect(s.tokens.calls).toEqual([]);
+  expect(s.requests).toEqual([]);
+  Object.assign(s.config, { tenant: "google_workspace" });
+  await expect(s.send.transmit(wire, { ...io, dryRun: false })).rejects.toMatchObject({
+    message: "setup-required: ask ODI admin to allow-list client id",
+  });
+});
+
+it.each([
+  400, 401, 403,
+])("maps explicit HTTP %s OAuth refusals without retrying", async (status) => {
+  for (const error of ["admin_policy_enforced", "access_denied"]) {
+    const refusal = () =>
+      Response.json({ error, error_description: "private details" }, { status });
+    const r = reader([refusal()], { tenant: "ODI" });
+    await expect(r.binding.ingest.list(account, historyCursor(), bounds)).rejects.toMatchObject({
+      state: "setup-required",
+      code: error,
+    });
+    expect(r.requests).toHaveLength(1);
+    const s = sender([refusal()], { tenant: "ODI" });
+    const wire = await s.send.render(signed(), EMAIL_MIME);
+    await expect(
+      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+    ).rejects.toBeInstanceOf(GmailSetupRequiredError);
+    expect(s.requests).toHaveLength(1);
+    s.queue.push(refusal());
+    expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    expect(s.send.finalAbsence).toBeUndefined();
+  }
+});
+
+it("keeps ambiguous HTTP failures uncertain even when their body mentions policy", async () => {
+  for (const response of [
+    Response.json({ error: "admin_policy_enforced" }, { status: 500 }),
+    Response.json({ error: "access_denied" }, { status: 429 }),
+    Response.json({ error_description: "admin_policy_enforced" }, { status: 403 }),
+    Response.json({ error: "other", message: "access_denied" }, { status: 403 }),
+    new Response("private malformed JSON", { status: 403 }),
+  ]) {
+    const s = sender([response], { tenant: "ODI" });
+    const wire = await s.send.render(signed(), EMAIL_MIME);
+    await expect(
+      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+    ).rejects.toThrow("uncertain");
+    expect(s.requests).toHaveLength(1);
+  }
+});
 
 it.each([
   "",
