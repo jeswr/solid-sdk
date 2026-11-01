@@ -108,6 +108,90 @@ it("keeps pending IDs and continuation links until item and aggregate-byte bound
 });
 
 it.each([
+  0,
+  MAX_EMAIL_BYTES + 1,
+])("skips refused MIME of %i bytes without consuming item bounds or retaining its pending ID", async (size) => {
+  const next = link("page2", "$skiptoken");
+  const r = reader([
+    { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
+    mime("x".repeat(size)),
+    mime(),
+    mime(),
+    fixtures.empty,
+  ]);
+  const first = await r.binding.ingest.list(account, undefined, { ...bounds, maxItems: 1 });
+  expect(first.items.map((item) => item.id)).toEqual(["a"]);
+  expect(JSON.parse(first.next)).toEqual({
+    account: account.id,
+    url: DELTA_INITIAL,
+    pending: ["b"],
+    resume: next,
+  });
+  const second = await r.binding.ingest.list(account, first.next, bounds);
+  expect(second.items.map((item) => item.id)).toEqual(["b"]);
+  expect(JSON.parse(second.next)).toMatchObject({ url: next, pending: [], resume: "" });
+  await r.binding.ingest.list(account, second.next, bounds);
+  expect(r.requests.at(-1)?.url.href).toBe(next);
+  expect(
+    r.requests.filter((request) => request.url.pathname.endsWith("/refused/$value")),
+  ).toHaveLength(1);
+  expect(r.queue).toEqual([]);
+});
+
+it("advances past a delta page containing only refused MIME", async () => {
+  const next = link("after-refused");
+  const r = reader([
+    { value: [{ id: "refused" }], "@odata.deltaLink": next },
+    mime("x".repeat(MAX_EMAIL_BYTES + 1)),
+    { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
+    mime(),
+  ]);
+  const first = await r.binding.ingest.list(account, undefined, bounds);
+  expect(first.items).toEqual([]);
+  expect(JSON.parse(first.next)).toMatchObject({ url: next, pending: [], resume: "" });
+  const second = await r.binding.ingest.list(account, first.next, bounds);
+  expect(second.items.map((item) => item.id)).toEqual(["valid"]);
+  expect(r.requests[3]?.url.href).toBe(next);
+  expect(r.queue).toEqual([]);
+});
+
+it.each([
+  "HTTP 429",
+  "HTTP 503",
+  "transport",
+  "body stream",
+])("preserves pending IDs for retry after a transient MIME %s failure", async (failure) => {
+  const stream = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("body stream failed"));
+      },
+    }),
+  );
+  const failed =
+    failure === "transport"
+      ? new Error("transport failed")
+      : failure === "body stream"
+        ? stream
+        : new Response(null, { status: Number(failure.slice(5)) });
+  const saved = cursor({ pending: ["a", "b"], resume: link("resumed") });
+  const r = reader([failed, mime(), mime()]);
+  await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(
+    failure === "transport" ? "transport failed or refused redirect" : failure,
+  );
+  expect(r.requests).toHaveLength(2);
+  const retry = await r.binding.ingest.list(account, saved, bounds);
+  expect(retry.items.map((item) => item.id)).toEqual(["a", "b"]);
+  expect(JSON.parse(retry.next)).toMatchObject({
+    url: link("resumed"),
+    pending: [],
+    resume: "",
+  });
+  expect(r.requests[1]?.url.href).toBe(r.requests[2]?.url.href);
+  expect(r.queue).toEqual([]);
+});
+
+it.each([
   "mailfolders/inbox",
   "mailFolders/INBOX",
   "mailfolders('inbox')",

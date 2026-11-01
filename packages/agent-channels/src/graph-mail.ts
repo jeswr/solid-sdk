@@ -156,7 +156,15 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
             state.pending.shift();
             continue;
           }
-          const raw = await mimeBody(response);
+          let raw: Uint8Array;
+          try {
+            raw = await mimeBody(response);
+          } catch (error) {
+            // Definitive MIME size refusals skip one item; failed reads remain retryable.
+            if (!(error instanceof ChannelParseError)) throw error;
+            state.pending.shift();
+            continue;
+          }
           if (bytes + raw.byteLength > maxBytes) {
             if (!items.length) throw new RangeError("next item exceeds byte bound");
             break;
