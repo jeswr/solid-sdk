@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Adversarial tests for the SSRF guard. The registry URL is a user/config-supplied
 // remote origin, so the guard is the security boundary: https-only, no userinfo,
@@ -11,20 +12,18 @@
 
 import { isIP } from "node:net";
 // `GuardError` is the non-SSRF policy-refusal error @jeswr/guarded-fetch raises (a
-// disallowed port / content-type). It is NOT part of THIS package's published surface (we
-// kept the public API identical to the pre-adoption one), so the test imports it directly
-// from the underlying guard to assert the new, STRICTER port-gate refusal.
-import { GuardError } from "@jeswr/guarded-fetch";
-import { afterEach, describe, expect, it, vi } from "vitest";
+// disallowed port / content-type). General guard helpers and GuardError come directly
+// from guarded-fetch; SsrfError and guard option types remain available from this root.
 import {
+  classifyIpLiteral,
   createGuardedFetch,
-  type DnsLookup,
+  GuardError,
   guardedFetch,
   isLoopbackAddress,
   isPublicAddress,
-  SsrfError,
-} from "../src/index.js";
-import { classifyIpLiteral } from "../src/ssrf.js";
+} from "@jeswr/guarded-fetch";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type DnsLookup, SsrfError } from "../src/index.js";
 
 const PUBLIC_DNS: DnsLookup = async () => [{ address: "93.184.216.34", family: 4 }];
 

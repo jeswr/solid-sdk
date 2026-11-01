@@ -1430,6 +1430,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../../packages/fetch-rdf
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../../../packages/pod-connectors
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -2620,6 +2623,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@jeswr/solid-chat-interop':
         specifier: workspace:*
         version: link:../solid-chat-interop
