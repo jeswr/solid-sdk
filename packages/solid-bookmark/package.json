@@ -50,7 +50,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
-    "codegen": "federation-codegen gen --ontology bookmark.ttl --shapes bookmark.shacl.ttl --config codegen.config.json --out src/generated",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology bookmark.ttl --shapes bookmark.shacl.ttl --config codegen.config.json --out src/generated",
     "lint": "biome check src scripts test codegen.config.json package.json",
     "lint:fix": "biome check --write src scripts test codegen.config.json package.json",
     "typecheck": "tsc --noEmit",
