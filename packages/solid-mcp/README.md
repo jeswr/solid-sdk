@@ -470,3 +470,12 @@ unauthenticated POST preflight responses. No wildcard CORS or cookie credentials
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Session capture integration
+
+The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)`
+and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
+configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
+keeps write permission checks; callers must supply `readOnly: false` explicitly.

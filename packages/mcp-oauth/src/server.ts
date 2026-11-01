@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5 — protectedResourceMetadataUrl (MCP-01F)
-// AUTHORED-BY Codex GPT-6
 import { timingSafeEqual } from "node:crypto";
 import { Clients, clientMetadata } from "./clients.js";
 import { generateSigningKey, JwtService } from "./jwt.js";
