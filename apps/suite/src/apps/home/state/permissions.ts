@@ -24,7 +24,12 @@ import {
   resolveClientName,
   UnsupportedAccessError,
 } from "../lib/permissions";
-import { agentName, consequenceText, type PermissionsView } from "../lib/permissions/view";
+import {
+  agentName,
+  consequenceText,
+  type PermissionsView,
+  relativePath,
+} from "../lib/permissions/view";
 
 interface RemovedLine {
   row: AgentRow;
@@ -52,6 +57,7 @@ export const initialPermissionsState: PermissionsState = {
 export type PermissionsAction =
   | { type: "reset" }
   | { type: "undo-start" }
+  | { type: "settled" }
   | { type: "loaded"; snapshot: PermissionsSnapshot }
   | { type: "error" }
   | { type: "start"; row: AgentRow; line?: PermissionLine }
@@ -70,6 +76,8 @@ export function permissionsReducer(
   switch (action.type) {
     case "undo-start":
       return { ...state, busy: true };
+    case "settled":
+      return { ...state, busy: false };
     case "reset":
       return initialPermissionsState;
     case "loaded": {
@@ -216,9 +224,33 @@ interface SessionCache {
   /** Resolved display names by agent key, applied to every later snapshot. */
   names: Record<string, string>;
   /** Undo plans outlive the page, so a toast's Undo still works after navigating away. */
-  undos: Map<string, RevokePlan>;
+  undos: Map<string, UndoEntry>;
+  /** One access write at a time per session, including writes from an earlier mount. */
+  writing?: object | undefined;
+  /** The mounted page's refresh, run when a write started by an earlier mount settles. */
+  settled: Set<() => void>;
+}
+interface UndoEntry {
+  plan: RevokePlan;
+  /** Pod-relative item names by ACL document, to say which parts an Undo restored. */
+  items: Record<string, string[]>;
 }
 const CHANGED_ELSEWHERE = "This access was changed elsewhere, so it can't be restored here";
+function undoEntry(plan: RevokePlan, changes: RevokePlan, storage: string): UndoEntry {
+  const items: Record<string, string[]> = {};
+  for (const change of changes.changes) {
+    const path = relativePath(change.resource, storage);
+    const names = items[change.source] ?? [];
+    items[change.source] = [...new Set([...names, path === "/" ? "your pod" : path])];
+  }
+  return { plan, items };
+}
+function itemNames(entry: UndoEntry, sources: string[]): string {
+  const names = [...new Set(sources.flatMap((source) => entry.items[source] ?? []))];
+  return names.length
+    ? names.join(", ")
+    : `${sources.length} ${sources.length === 1 ? "item" : "items"}`;
+}
 const caches = new WeakMap<typeof globalThis.fetch, SessionCache>();
 export function readPermissionsView(): PermissionsView {
   try {
@@ -253,6 +285,7 @@ export function usePermissions() {
       clients: {},
       names: {},
       undos: new Map(),
+      settled: new Set(),
     };
     caches.set(session.fetch, cache);
   }
@@ -270,14 +303,13 @@ export function usePermissions() {
   const [clients, setClients] = useState(sessionCache.clients);
   const generation = useRef(0);
   const mounted = useRef(false);
-  const writing = useRef<number | undefined>(undefined);
   const stateOwner = useRef(sessionCache);
   const stateRef = useRef(state);
   const scopedState = stateOwner.current === sessionCache ? state : initialPermissionsState;
   stateRef.current = scopedState;
 
   const refresh = useCallback(async () => {
-    if (writing.current || (!navigator.onLine && sessionCache.snapshot)) return;
+    if (sessionCache.writing || (!navigator.onLine && sessionCache.snapshot)) return;
     const seq = ++generation.current;
     try {
       // Existing discovery supplies registrations; the permissions model owns all aggregation.
@@ -347,10 +379,16 @@ export function usePermissions() {
 
   useEffect(() => {
     mounted.current = true;
-    writing.current = undefined;
     stateOwner.current = sessionCache;
     dispatch({ type: "reset" });
     if (sessionCache.snapshot) dispatch({ type: "loaded", snapshot: sessionCache.snapshot });
+    // A write from an earlier mount may still be saving; it refreshes this page when done.
+    if (sessionCache.writing) dispatch({ type: "undo-start" });
+    const settled = () => {
+      dispatch({ type: "settled" });
+      void refresh();
+    };
+    sessionCache.settled.add(settled);
     setClients({ ...sessionCache.clients });
     setOnline(navigator.onLine);
     void refresh();
@@ -376,6 +414,7 @@ export function usePermissions() {
     return () => {
       mounted.current = false;
       generation.current++;
+      sessionCache.settled.delete(settled);
       clearTimeout(timer);
       unsubscribe?.();
       window.removeEventListener("focus", focus);
@@ -384,17 +423,28 @@ export function usePermissions() {
     };
   }, [refresh, session, sessionCache]);
 
+  /** Release the session's write lock; refresh this page, or the one mounted now. */
+  const settle = useCallback(
+    (lock: object, live: boolean) => {
+      if (sessionCache.writing === lock) sessionCache.writing = undefined;
+      if (live) void refresh();
+      else for (const listener of sessionCache.settled) listener();
+    },
+    [refresh, sessionCache],
+  );
+
   const undo = useCallback(
     async (token: string) => {
-      const plan = sessionCache.undos.get(token);
-      if (!plan || writing.current || !navigator.onLine) return;
+      const entry = sessionCache.undos.get(token);
+      if (!entry || sessionCache.writing || !navigator.onLine) return;
+      const lock = {};
+      sessionCache.writing = lock;
       const seq = ++generation.current;
-      writing.current = seq;
       dispatch({ type: "undo-start" });
       // The result is always announced, even after navigating away from the page.
       const live = () => mounted.current && seq === generation.current;
       try {
-        await applyRevoke(plan, {
+        await applyRevoke(entry.plan, {
           fetch: session.fetch,
           storage: session.storageUrl,
           webId: session.webId,
@@ -403,16 +453,28 @@ export function usePermissions() {
         if (live()) dispatch({ type: "undo-done", token });
         toast.success("Access restored");
       } catch (error) {
-        const cause = error instanceof PartialRevokeError ? error.cause : error;
-        if (error instanceof PartialRevokeError) {
-          // Documents already restored are done; a retry only covers the rest.
-          const restored = new Set(error.undo.restore?.map((delta) => delta.source));
-          sessionCache.undos.set(token, {
-            changes: [],
-            restore: (plan.restore ?? []).filter((delta) => !restored.has(delta.source)),
-          });
-        }
-        if (cause instanceof RestoreConflictError) {
+        const partial = error instanceof PartialRevokeError ? error : undefined;
+        const cause = partial ? partial.cause : error;
+        const restored = [...new Set(partial?.undo.restore?.map((delta) => delta.source))];
+        if (restored.length) {
+          // Documents already restored are done; this Undo keeps only the rest.
+          const remaining = (entry.plan.restore ?? []).filter(
+            (delta) => !restored.includes(delta.source),
+          );
+          sessionCache.undos.set(token, { ...entry, plan: { changes: [], restore: remaining } });
+          if (live()) dispatch({ type: "write-error" });
+          const rest = itemNames(
+            entry,
+            remaining.map((delta) => delta.source),
+          );
+          toast.error(
+            `Access restored for ${itemNames(entry, restored)}. ${
+              cause instanceof RestoreConflictError
+                ? `Access to ${rest} was changed elsewhere, so it can't be restored here`
+                : `Couldn't restore access to ${rest}. Refresh and try again.`
+            }`,
+          );
+        } else if (cause instanceof RestoreConflictError) {
           sessionCache.undos.delete(token);
           if (live()) dispatch({ type: "undo-unavailable", token });
           toast.error(CHANGED_ELSEWHERE);
@@ -421,16 +483,15 @@ export function usePermissions() {
           toast.error("Couldn't restore access. Refresh and try again.");
         }
       } finally {
-        if (writing.current === seq) writing.current = undefined;
-        if (live()) void refresh();
+        settle(lock, live());
       }
     },
-    [refresh, session, sessionCache],
+    [session, sessionCache, settle],
   );
 
   const revoke = useCallback(
     async (target: AgentRow | PermissionLine | "makePrivate") => {
-      if (writing.current || !navigator.onLine) return;
+      if (sessionCache.writing || !navigator.onLine) return;
       const current = stateRef.current;
       const line = typeof target !== "string" && "resources" in target ? target : undefined;
       const rows =
@@ -447,11 +508,15 @@ export function usePermissions() {
         lines: r.lines.filter((l) => !current.removed[l.key]),
       }));
       if (line && current.removed[line.key]) return;
+      const lock = {};
+      sessionCache.writing = lock;
       const seq = ++generation.current;
-      writing.current = seq;
+      // The plan and its toast outlive the page; only this page's state needs it live.
+      const live = () => mounted.current && seq === generation.current;
       dispatch({ type: "start", row, ...(line ? { line } : {}) });
+      let plan: RevokePlan = { changes: [] };
       try {
-        const plan = line
+        plan = line
           ? planRevoke(line, "line")
           : planRevoke(
               {
@@ -467,11 +532,12 @@ export function usePermissions() {
           storage: session.storageUrl,
           webId: session.webId,
         });
-        if (!mounted.current || seq !== generation.current) return;
         const token = crypto.randomUUID();
-        sessionCache.undos.set(token, result.undo);
-        if (line) dispatch({ type: "line-done", key: line.key, token });
-        else dispatch({ type: "row-done", keys: rows.map((r) => r.key) });
+        sessionCache.undos.set(token, undoEntry(result.undo, plan, session.storageUrl));
+        if (live()) {
+          if (line) dispatch({ type: "line-done", key: line.key, token });
+          else dispatch({ type: "row-done", keys: rows.map((r) => r.key) });
+        }
         toast.success(
           line
             ? consequenceText(line, name, session.storageUrl)
@@ -484,8 +550,7 @@ export function usePermissions() {
           },
         );
       } catch (error) {
-        if (!mounted.current || seq !== generation.current) return;
-        dispatch({ type: "write-error", ...(line ? { key: line.key } : {}) });
+        if (live()) dispatch({ type: "write-error", ...(line ? { key: line.key } : {}) });
         const message =
           error instanceof UnsupportedAccessError
             ? "This storage doesn't support changing access here yet"
@@ -494,7 +559,7 @@ export function usePermissions() {
               : `Couldn't change access for ${name}`;
         if (error instanceof PartialRevokeError) {
           const token = crypto.randomUUID();
-          sessionCache.undos.set(token, error.undo);
+          sessionCache.undos.set(token, undoEntry(error.undo, plan, session.storageUrl));
           toast.error(message, {
             duration: Infinity,
             description: "Some changes were saved. Undo them or refresh before trying again.",
@@ -502,11 +567,10 @@ export function usePermissions() {
           });
         } else toast.error(message, { duration: Infinity });
       } finally {
-        if (writing.current === seq) writing.current = undefined;
-        if (mounted.current && seq === generation.current) void refresh();
+        settle(lock, live());
       }
     },
-    [refresh, session, sessionCache, undo],
+    [session, sessionCache, settle, undo],
   );
 
   return {

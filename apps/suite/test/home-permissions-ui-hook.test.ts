@@ -371,34 +371,120 @@ it("disables an Undo whose rules were changed elsewhere instead of suggesting a 
   expect(mocks.apply).toHaveBeenCalledTimes(2);
 });
 
-it("retries only the unrestored documents after a partial Undo", async () => {
-  const { token } = await revokedToken();
-  const restore = ["a", "b"].map((name) => ({
-    source: `${ROOT}${name}/.acl`,
-    remove: [],
-    add: [],
-  }));
-  mocks.apply.mockReset();
+it("keeps only the unrestored documents after a partial Undo and names what came back", async () => {
+  const line = bob.lines[0] as NonNullable<(typeof bob.lines)[0]>;
+  const resource = line.resources[0] as NonNullable<(typeof line.resources)[0]>;
+  const names = ["a", "b", "c"];
+  const spread: AgentRow = {
+    ...bob,
+    lines: [
+      {
+        ...line,
+        resources: names.map((name) => ({
+          ...resource,
+          url: `${ROOT}${name}/`,
+          source: `${ROOT}${name}/.acl`,
+          node: `${ROOT}${name}/.acl#bob`,
+        })),
+      },
+    ],
+  };
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [spread] });
+  await mount(h(Probe));
+  const restore = names.map((name) => ({ source: `${ROOT}${name}/.acl`, remove: [], add: [] }));
+  const [a, b, c] = restore as [(typeof restore)[0], (typeof restore)[0], (typeof restore)[0]];
   mocks.apply.mockResolvedValueOnce({ undo: { changes: [], restore } });
-  await act(() => binding.revoke(bob));
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(spread));
   const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
   mocks.apply.mockRejectedValueOnce(
-    new PartialRevokeError(
-      { changes: [], restore: [restore[0] as (typeof restore)[0]] },
-      new Error("offline"),
-    ),
+    new PartialRevokeError({ changes: [], restore: [a] }, new Error("offline")),
   );
   await act(async () => toastUndo());
-  expect(mocks.error).toHaveBeenLastCalledWith("Couldn't restore access. Refresh and try again.");
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "Access restored for a/. Couldn't restore access to b/, c/. Refresh and try again.",
+  );
   mocks.apply.mockRejectedValueOnce(
-    new PartialRevokeError({ changes: [], restore: [] }, new RestoreConflictError()),
+    new PartialRevokeError({ changes: [], restore: [b] }, new RestoreConflictError()),
   );
   await act(async () => toastUndo());
-  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [restore[1]] });
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [b, c] });
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "Access restored for b/. Access to c/ was changed elsewhere, so it can't be restored here",
+  );
+  // The rest of the plan stays available; only a refusal of all of it retires the Undo.
+  mocks.apply.mockRejectedValueOnce(new RestoreConflictError());
+  await act(async () => toastUndo());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [c] });
   expect(mocks.error).toHaveBeenLastCalledWith(
     "This access was changed elsewhere, so it can't be restored here",
   );
+  const calls = mocks.apply.mock.calls.length;
+  await act(async () => toastUndo());
+  expect(mocks.apply).toHaveBeenCalledTimes(calls);
+});
+
+it("keeps the Undo and toast of a revoke that finishes after leaving the page", async () => {
+  const line = bob.lines[0] as NonNullable<(typeof bob.lines)[0]>;
+  const plan = {
+    changes: [],
+    restore: [{ source: `${ROOT}drive/Work/.acl`, remove: [], add: [] }],
+  };
+  const leave = async (
+    settle: (pending: ReturnType<typeof deferred<{ undo: typeof plan }>>) => void,
+  ) => {
+    const view = await mount(h(Probe));
+    const pending = deferred<{ undo: typeof plan }>();
+    mocks.apply.mockReturnValueOnce(pending.promise);
+    let writing!: Promise<void>;
+    await act(() => {
+      writing = binding.revoke(line);
+    });
+    await view.unmount();
+    await act(async () => {
+      settle(pending);
+      await writing;
+    });
+  };
+  await leave((pending) => pending.reject(new Error("offline")));
+  expect(mocks.error).toHaveBeenLastCalledWith("Couldn't change access for bob.test", {
+    duration: Infinity,
+  });
+  await leave((pending) => pending.reject(new PartialRevokeError(plan, new Error("offline"))));
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "Couldn't change access for bob.test",
+    expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
+  );
+  await leave((pending) => pending.resolve({ undo: plan }));
+  expect(mocks.success).toHaveBeenLastCalledWith(
+    "bob.test will lose access to your Files",
+    expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
+  );
+  const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
+  await act(async () => toastUndo());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual(plan);
+  expect(mocks.success).toHaveBeenLastCalledWith("Access restored");
+});
+
+it("holds one write lock per session and refreshes the mounted page when an earlier page's Undo ends", async () => {
+  const { token, view } = await revokedToken();
+  const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
+  await view.unmount();
+  const pending = deferred<{ undo: { changes: []; restore: [] } }>();
+  mocks.apply.mockReturnValueOnce(pending.promise);
+  await act(async () => toastUndo());
   expect(token).toBeTruthy();
+  await mount(h(Probe));
+  expect(binding.busy).toBe(true);
+  const loads = mocks.load.mock.calls.length;
+  await act(() => binding.revoke(bob));
+  await act(() => binding.refresh());
+  expect(mocks.apply).toHaveBeenCalledTimes(2);
+  expect(mocks.load).toHaveBeenCalledTimes(loads);
+  await act(async () => pending.resolve({ undo: { changes: [], restore: [] } }));
+  expect(mocks.success).toHaveBeenLastCalledWith("Access restored");
+  expect(mocks.load).toHaveBeenCalledTimes(loads + 1);
+  expect(binding.busy).toBe(false);
 });
 
 it("still announces a toast Undo's result after leaving the page", async () => {

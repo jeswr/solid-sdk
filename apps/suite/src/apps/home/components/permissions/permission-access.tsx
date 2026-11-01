@@ -38,7 +38,20 @@ import {
 } from "../../lib/permissions/view";
 import type { PermissionsBinding } from "../../state/permissions";
 
-export function DisabledHint({ reason, children }: { reason: string; children: ReactNode }) {
+/**
+ * Explains a disabled control in a tooltip. The wrapper is a tab stop only when the
+ * child can't take focus itself; a focusable child (an aria-disabled switch while
+ * saving) opens the tooltip on focus, so a second tab stop would only repeat it.
+ */
+export function DisabledHint({
+  reason,
+  focusable = false,
+  children,
+}: {
+  reason: string;
+  focusable?: boolean;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Tooltip open={!!reason && open} onOpenChange={setOpen}>
@@ -48,7 +61,7 @@ export function DisabledHint({ reason, children }: { reason: string; children: R
         <div
           role="group"
           className="hm-permission-hint"
-          tabIndex={reason ? 0 : -1}
+          tabIndex={reason && !focusable ? 0 : -1}
           aria-label={reason || undefined}
         >
           {children}
@@ -141,7 +154,7 @@ export function PermissionLines({
                 </p>
                 <p className="hm-permission-muted">{roleLabel(line.role)}</p>
               </div>
-              <DisabledHint reason={reason}>
+              <DisabledHint reason={reason} focusable={!blocked}>
                 <Switch
                   ref={(node: HTMLButtonElement | null) => {
                     if (node) switches.current.set(line.key, node);
@@ -225,13 +238,12 @@ export function PermissionAccessRow({
   const name = agentName(row);
   const pseudo = row.kind === "public" || row.kind === "authenticated";
   const unsupported = row.lines.some((line) => line.resources.some((r) => r.system === "acp"));
-  const reason = !binding.online
+  const blocked = !binding.online
     ? "Reconnect to change access"
     : unsupported
       ? "This storage doesn't support changing access here yet"
-      : binding.busy
-        ? "Saving access changes"
-        : "";
+      : "";
+  const reason = blocked || (binding.busy ? "Saving access changes" : "");
   const active = row.lines.filter((line) => !binding.removed[line.key]);
   const allCopy = revokeCopy({ ...row, lines: active }, storage);
   const revokeAll = () => binding.revoke(pseudo ? "makePrivate" : { ...row, lines: active });
@@ -289,7 +301,7 @@ export function PermissionAccessRow({
         {/* PermissionRow exposes no slots. Portal the local extensions into its existing
             semantic header and controlled region; CSS hides only its stock line children. */}
         {slots ? createPortal(nameLink, slots.header) : nameLink}
-        <DisabledHint reason={reason}>
+        <DisabledHint reason={reason} focusable={!blocked}>
           <PermissionRow
             name={name}
             since={row.since ? permissionDate(row.since) : ""}
