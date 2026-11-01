@@ -2,6 +2,7 @@
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { createSolidPod, type SolidPod } from "@sparq-org/solid-server";
+import { recordingSession } from "../recording.js";
 import type { ConformanceTarget } from "../types.js";
 
 /** Adapt fetch to the published dispatcher without opening sockets or using global fetch. */
@@ -42,7 +43,8 @@ export const sparqSolidTarget: ConformanceTarget = {
     const webId = "https://identity.example/alice#me";
     const pod = await createSolidPod({ baseUrl: root, ownerWebid: webId, oidc: false });
     try {
-      const transport = podFetch(pod);
+      const session = recordingSession("sparq-solid", podFetch(pod));
+      const transport = session.fetch;
       // The published pod starts empty. Provision its root through the real protocol.
       const seeded = await transport(root, {
         method: "PUT",
@@ -64,6 +66,8 @@ export const sparqSolidTarget: ConformanceTarget = {
         webId,
         fetch: transport,
         storage,
+        recordScenario: session.recordScenario,
+        requestCount: session.requestCount,
         claims: {
           protocol: "solid",
           move: {

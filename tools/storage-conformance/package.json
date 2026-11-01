@@ -42,8 +42,10 @@
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-auth": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
+    "@solid/community-server": "7.2.0",
     "@sparq-org/solid-server": "0.1.6"
   }
 }

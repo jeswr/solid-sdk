@@ -5190,12 +5190,18 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
       '@sparq-org/solid-server':
         specifier: 0.1.6
         version: 0.1.6

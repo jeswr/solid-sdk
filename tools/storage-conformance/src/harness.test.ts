@@ -143,6 +143,35 @@ describe("capability gating", () => {
 });
 
 describe("lifecycle", () => {
+  test("records runner discovery separately and selects each scenario before executing it", async () => {
+    const { running, features } = await fixture();
+    const events: string[] = [];
+    running.recordScenario = (name) => {
+      events.push(name);
+    };
+    running.resolveFeatures = async () => {
+      events.push("resolve");
+      return features;
+    };
+    await runTarget({ name: "recording", start: async () => running }, [
+      {
+        id: "SC-first",
+        requires: [],
+        run: async () => {
+          events.push("first");
+        },
+      },
+      {
+        id: "SC-second",
+        requires: [],
+        run: async () => {
+          events.push("second");
+        },
+      },
+    ]);
+    expect(events).toEqual(["discovery", "resolve", "SC-first", "first", "SC-second", "second"]);
+  });
+
   test("continues after an assertion failure, stops once and redacts errors", async () => {
     const { running } = await fixture();
     const stop = vi.fn(running.stop);

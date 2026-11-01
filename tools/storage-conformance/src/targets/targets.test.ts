@@ -14,7 +14,7 @@ test("selection expands both memory protocols, deduplicates and refuses typos", 
     "sparq-solid",
   ]);
   expect(selectTargets("memory,memory-lws,memory-solid,sparq-solid")).toHaveLength(3);
-  expect(() => selectTargets("css")).toThrow("Unknown conformance target");
+  expect(selectTargets("css").map((target) => target.name)).toEqual(["css"]);
   expect(() => selectTargets("")).toThrow();
 });
 

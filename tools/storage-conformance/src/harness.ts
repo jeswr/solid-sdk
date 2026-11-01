@@ -107,11 +107,13 @@ export async function runTarget(
     return report;
   }
   try {
+    running.recordScenario?.("discovery");
     const features = running.resolveFeatures
       ? await running.resolveFeatures()
       : await capabilities(running.root, { fetch: running.fetch, cache: createMemoryCache() });
     report.results.push(...compareClaims(running.claims, features));
     for (const scenario of scenarios) {
+      running.recordScenario?.(scenario.id);
       report.results.push(...(await evaluateCase(scenario, running, features)));
     }
   } catch {

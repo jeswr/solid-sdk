@@ -18,6 +18,10 @@ export interface RunningTarget {
   paginationWitnessSize?: number;
   /** Memory has no HTTP server; derive from its synthetic description instead. */
   resolveFeatures?(): Promise<Features>;
+  /** Select a fresh fixture directory before each scenario; setup records separately. */
+  recordScenario?(name: string): void;
+  /** Count calls at the injected storage transport, for before-request refusals. */
+  requestCount?(): number;
   stop(): Promise<void>;
 }
 

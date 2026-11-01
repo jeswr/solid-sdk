@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ConformanceTarget } from "../types.js";
+import { cssTarget } from "./css.js";
 import { memoryTarget } from "./memory.js";
 import { sparqSolidTarget } from "./sparq-solid.js";
 
@@ -16,7 +17,9 @@ export function selectTargets(selection = "memory,sparq-solid"): ConformanceTarg
             ? [memoryTarget("lws")]
             : name === "sparq-solid"
               ? [sparqSolidTarget]
-              : null;
+              : name === "css"
+                ? [cssTarget]
+                : null;
     if (!selected) throw new TypeError("Unknown conformance target");
     for (const target of selected) targets.set(target.name, target);
   }
