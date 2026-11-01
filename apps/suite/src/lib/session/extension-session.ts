@@ -56,7 +56,12 @@ export interface SolidExtensionState {
 /** The window members this module touches, so tests can pass a fake. */
 export interface ExtensionWindow {
   readonly solid?: SolidExtensionApi;
-  readonly document: { readonly documentElement: { getAttribute(name: string): string | null } };
+  readonly document: {
+    readonly documentElement: { getAttribute(name: string): string | null };
+    readonly visibilityState?: string;
+    addEventListener?(type: string, listener: () => void): void;
+    removeEventListener?(type: string, listener: () => void): void;
+  };
   addEventListener(type: string, listener: (event?: unknown) => void): void;
   removeEventListener(type: string, listener: (event?: unknown) => void): void;
   setTimeout(handler: () => void, ms: number): unknown;
@@ -120,17 +125,14 @@ function isStateMessage(win: ExtensionWindow, event: unknown): boolean {
   const { source, data } = (event ?? {}) as { source?: unknown; data?: unknown };
   if (source !== win || typeof data !== "object" || data === null) return false;
   const { channel, dir, type } = data as Record<string, unknown>;
-  return (
-    channel === EXTENSION_CHANNEL &&
-    dir === "to-page" &&
-    (type === "SOLID_STATE_UPDATE" || type === "SOLID_ACCESS_RESPONSE")
-  );
+  return channel === EXTENSION_CHANNEL && dir === "to-page" && type === "SOLID_STATE_UPDATE";
 }
 
 /**
  * Subscribes to presence and grant changes: the ready event, the extension's own state
  * messages, and window focus, which covers a grant made in the consent window or a revoke in
- * the side panel. Every event notifies at once and again on the next task, because our
+ * the side panel, and visibility changes. Request replies never notify. Events notify at
+ * once and share one recheck on the next task, because our
  * listener may run before the extension's (if we subscribed before it injected) and would
  * then read the stub before the extension updates it. Pending re-checks die on unsubscribe.
  */
@@ -139,29 +141,33 @@ export function subscribeSolidExtension(
   win: ExtensionWindow | undefined = browserWindow(),
 ): () => void {
   if (!win) return () => {};
-  const pending = new Set<unknown>();
+  let pending: unknown;
   let active = true;
   const notify = () => {
     onChange();
-    const timer = win.setTimeout(() => {
-      pending.delete(timer);
+    if (pending !== undefined) return;
+    pending = win.setTimeout(() => {
+      pending = undefined;
       if (active) onChange();
     }, 0);
-    pending.add(timer);
   };
   const onMessage = (event?: unknown) => {
     if (isStateMessage(win, event)) notify();
   };
+  const onVisibility = () => {
+    if (win.document.visibilityState === "visible") notify();
+  };
   win.addEventListener(EXTENSION_READY_EVENT, notify);
   win.addEventListener("focus", notify);
   win.addEventListener("message", onMessage);
+  win.document.addEventListener?.("visibilitychange", onVisibility);
   return () => {
     active = false;
     win.removeEventListener(EXTENSION_READY_EVENT, notify);
     win.removeEventListener("focus", notify);
     win.removeEventListener("message", onMessage);
-    for (const timer of pending) win.clearTimeout(timer);
-    pending.clear();
+    win.document.removeEventListener?.("visibilitychange", onVisibility);
+    win.clearTimeout(pending);
   };
 }
 

@@ -32,30 +32,32 @@ export interface ExtensionPodSessionDeps {
   readonly grant?: SolidExtensionGrant;
 }
 
-/** An origin binding or another data class never selects Drive's session. */
+function isLiveStorageGrant(grant: SolidExtensionGrant, now: number): boolean {
+  return (
+    grant.dataClass === STORAGE_CLASS &&
+    grant.expiresAt > now &&
+    grant.modes.includes("read") &&
+    grant.modes.includes("write")
+  );
+}
+
+/** Empty or unusable old grants must not shadow a later, usable consent. */
 export function chooseSession(
   grants: readonly SolidExtensionGrant[],
   now = Date.now(),
 ): SolidExtensionGrant | undefined {
   return grants.find(
     (grant) =>
-      grant.dataClass === STORAGE_CLASS &&
-      grant.expiresAt > now &&
-      grant.modes.includes("read") &&
-      grant.modes.includes("write"),
+      isLiveStorageGrant(grant, now) &&
+      grant.targets.some((target) => target.kind === "container" && storageUrl(target.url)),
   );
 }
 
 function storageUrl(value: string): URL | undefined {
   try {
     const url = new URL(value);
-    const loopback =
-      url.hostname === "localhost" ||
-      url.hostname.endsWith(".localhost") ||
-      url.hostname === "[::1]" ||
-      /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
     if (
-      (url.protocol === "https:" || (url.protocol === "http:" && loopback)) &&
+      (url.protocol === "https:" || url.protocol === "http:") &&
       !url.username &&
       !url.password &&
       !url.hash &&
@@ -107,8 +109,11 @@ export async function openExtensionSession(
     const grants = await checked(() => listGrants.call(api));
     assertCurrent();
     grant = chooseSession(grants);
+    if (!grant && grants.some((candidate) => isLiveStorageGrant(candidate, Date.now())))
+      throw new ExtensionSessionError("no-storage");
   }
-  if (!grant || !chooseSession([grant])) throw new ExtensionSessionError("not-granted");
+  if (!grant || !isLiveStorageGrant(grant, Date.now()))
+    throw new ExtensionSessionError("not-granted");
   expiresAt = grant.expiresAt;
   const documentUrl = new URL(webId);
   documentUrl.hash = "";
@@ -122,11 +127,13 @@ export async function openExtensionSession(
   const root = ordered.find((url) => new URL(url).origin === documentUrl.origin) ?? ordered[0];
   if (!root) throw new ExtensionSessionError("no-storage");
 
+  const pageFetch = deps.fetch ?? globalThis.fetch;
+  // inject.ts leaves Request inputs on the page's native fetch path. Using a string here
+  // would enter its transparency patch even with credentials:"omit".
+  const publicFetch: typeof fetch = (input, init) =>
+    checked(() => pageFetch(new Request(input, { ...init, credentials: "omit" })));
   let displayName = webId;
   try {
-    const pageFetch = deps.fetch ?? globalThis.fetch;
-    const publicFetch: typeof fetch = (input, init) =>
-      checked(() => pageFetch(input, { ...init, credentials: "omit" }));
     const { dataset } = await checked<{ dataset: DatasetCore }>(() =>
       (deps.fetchRdf ?? fetchRdf)(documentUrl.href, { fetch: publicFetch }),
     );
@@ -151,6 +158,7 @@ export async function openExtensionSession(
     webId,
     displayName,
     storageUrl: root,
+    publicFetch,
     fetch: async (input, init) => {
       assertCurrent();
       const fetch = api.fetch;

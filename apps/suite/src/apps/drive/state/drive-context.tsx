@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 /**
@@ -20,11 +21,11 @@ import {
   useRef,
   useState,
 } from "react";
+import type { PodSession } from "../../../lib/session/pod-session";
 import {
   discoverProfileRegistrations,
   ensureTypeRegistrations,
-} from "@/apps/docs/lib/model/type-index";
-import type { PodSession } from "@/lib/session/pod-session";
+} from "../../docs/lib/model/type-index";
 import { driveBootstrapFetch } from "../lib/client/bootstrap";
 import {
   createSolidDriveClient,
@@ -71,6 +72,7 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
       session.webId,
       session.fetch,
       session.storageUrl,
+      session.mode === "extension" ? session.publicFetch : undefined,
     );
     // Reuse the first DriveRoot container in discovery order (public, then private).
     // A DriveRoot can also be registered as an instance of the root container.
@@ -83,8 +85,12 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
     const root = existing?.container ?? existing?.instance;
     if (root) return root;
   } catch (cause) {
+    if (session.mode === "extension") return session.storageUrl;
     throw new DriveRootDiscoveryError(cause);
   }
+  // Extension storage grants don't confer access to the profile/preferences or Control
+  // needed to bootstrap a private Type Index. Browse the granted root without provisioning.
+  if (session.mode === "extension") return session.storageUrl;
   const root = `${session.storageUrl}drive/`;
   try {
     await client.createFolder(root, { kind: "inherit-verified" });

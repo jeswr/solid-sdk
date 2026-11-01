@@ -103,7 +103,8 @@ describe("live storage grants", () => {
     "127.12.0.2",
     "[::1]",
     "dev.localhost",
-  ])("allows HTTP on loopback host %s", async (host) => {
+    "pod.example",
+  ])("allows HTTP container targets on host %s", async (host) => {
     const root = `http://${host}:3000/alice/`;
     const f = fixture([root]);
     expect((await openExtensionSession(f.api, f.deps)).storageUrl).toBe(root);
@@ -113,12 +114,10 @@ describe("live storage grants", () => {
       "file:///pod/",
       "javascript:alert(1)",
       "data:text/plain,pod",
-      "http://pod.example/",
       "not a url",
       "https://user:secret@pod.example/",
       "https://:secret@pod.example/",
       "https://pod.example/#fragment",
-      "http://127.evil.example/",
       "https://pod.example/file",
       "https://pod.example/?query",
     ]);
@@ -176,6 +175,16 @@ describe("live storage grants", () => {
     expect(chooseSession([{ ...grant, dataClass: "contacts" }, grant])).toBe(grant);
     expect(chooseSession([])).toBeUndefined();
   });
+  it("recovers when consent appends a usable grant after an empty one", async () => {
+    const f = fixture();
+    const empty = { ...f.grant, grantId: "old", targets: [] };
+    expect(chooseSession([empty])).toBeUndefined();
+    const grants = [empty, f.grant];
+    expect(chooseSession(grants)).toBe(f.grant);
+    f.api.listGrants.mockResolvedValue(grants);
+    expect((await openExtensionSession(f.api, f.deps)).storageUrl).toBe("https://alice.example/");
+    expect(grants[0]).toBe(empty);
+  });
 });
 
 describe("public profile decoration", () => {
@@ -189,10 +198,13 @@ describe("public profile decoration", () => {
     expect(f.read).toHaveBeenCalledWith("https://alice.example/profile/card", {
       fetch: expect.any(Function),
     });
-    expect(f.pageFetch).toHaveBeenCalledExactlyOnceWith("https://alice.example/profile/card", {
-      headers: { accept: "text/turtle" },
+    expect(f.pageFetch).toHaveBeenCalledExactlyOnceWith(expect.any(Request));
+    const request = f.pageFetch.mock.calls[0]?.[0] as Request;
+    expect(request).toMatchObject({
+      url: "https://alice.example/profile/card",
       credentials: "omit",
     });
+    expect(request.headers.get("accept")).toBe("text/turtle");
     expect(f.fetch).not.toHaveBeenCalled();
   });
   it.each([
@@ -234,10 +246,11 @@ describe("public profile decoration", () => {
     vi.stubGlobal("fetch", pageFetch);
     const session = await openExtensionSession(f.api);
     expect(session.displayName).toBe("Public Alice");
-    expect(pageFetch).toHaveBeenCalledWith(
-      "https://alice.example/profile/card",
-      expect.objectContaining({ credentials: "omit" }),
-    );
+    expect(pageFetch).toHaveBeenCalledWith(expect.any(Request));
+    expect(pageFetch.mock.calls[0]?.[0]).toMatchObject({
+      url: "https://alice.example/profile/card",
+      credentials: "omit",
+    });
     expect(f.fetch).not.toHaveBeenCalled();
     const listener = vi.fn();
     const stop = session.subscribe(listener);

@@ -74,6 +74,7 @@ const extensionSession = (webId = WEBID): ExtensionPodSession => ({
   displayName: "Alice",
   storageUrl: "https://alice.example/",
   fetch: vi.fn(),
+  publicFetch: vi.fn(),
   subscribe: vi.fn(() => () => {}),
   disconnect: vi.fn(),
 });
@@ -121,6 +122,90 @@ afterEach(() => {
 });
 
 describe("PodSessionProvider", () => {
+  it("ignores bridge reply storms and coalesces state broadcasts during grant checks", async () => {
+    grant();
+    const first = deferred<SolidExtensionGrant[]>();
+    const second = deferred<SolidExtensionGrant[]>();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const reply = (requestId: string, extra: object = {}) =>
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          source: window,
+          data: {
+            channel: EXTENSION_CHANNEL,
+            dir: "to-page",
+            type: "SOLID_ACCESS_RESPONSE",
+            requestId,
+            grants,
+            ...extra,
+          },
+        }),
+      );
+    api.listGrants.mockImplementation(async () => {
+      const index = api.listGrants.mock.calls.length;
+      maxInFlight = Math.max(maxInFlight, ++inFlight);
+      try {
+        const result = await (index === 1 ? first.promise : second.promise);
+        reply(`list-${index}`);
+        return result;
+      } finally {
+        --inFlight;
+      }
+    });
+    await render();
+    expect(api.listGrants).toHaveBeenCalledOnce();
+    await act(() => {
+      for (let i = 0; i < 100; i++) reply(`unrelated-${i}`);
+    });
+    expect(api.listGrants).toHaveBeenCalledOnce();
+    const timers = vi.spyOn(window, "setTimeout");
+    for (let i = 0; i < 12; i++) await stateMessage();
+    await act(() => {
+      for (const [callback, ms] of timers.mock.calls) if (ms === 0) (callback as () => void)();
+    });
+    expect(api.listGrants).toHaveBeenCalledOnce();
+    await act(() => first.resolve(grants));
+    expect(api.listGrants).toHaveBeenCalledTimes(2);
+    await act(() => second.resolve(grants));
+    await act(() => {
+      for (let i = 0; i < 100; i++) reply(`late-${i}`);
+    });
+    expect(api.listGrants).toHaveBeenCalledTimes(2);
+    expect(maxInFlight).toBe(1);
+    expect(state).toMatchObject({ status: "ready", session: { mode: "extension" } });
+  });
+
+  it("rechecks grants when the page becomes visible", async () => {
+    await render();
+    grant();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    await act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(state).toMatchObject({ session: { mode: "extension" } });
+  });
+
+  it("uses an appended valid grant after reconnect without deleting an empty grant", async () => {
+    grant();
+    const empty = { ...storageGrant(), grantId: "old", targets: [] };
+    grants = [empty];
+    await render();
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    vi.mocked(requestStorageAccess).mockImplementation(async () => {
+      grants.push(storageGrant());
+      return true;
+    });
+    await act(() => state.connectExtension());
+    expect(state).toMatchObject({ session: { mode: "extension" } });
+    expect(grants[0]).toBe(empty);
+    expect(openExtensionSession).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ grant: grants[1] }),
+    );
+  });
+
   it("keeps an announced, unpopulated stub loading until delayed granted state arrives", async () => {
     const listGrants = api.listGrants;
     Object.assign(api, { listGrants: undefined });
@@ -461,6 +546,26 @@ describe("PodSessionProvider", () => {
     await act(() => state.connectExtension());
     expect(state).toMatchObject({ session: { mode: "extension" } });
     expect(state.extensionError).toBeUndefined();
+  });
+
+  it("preserves a completed-consent retry when a focus event queues another check", async () => {
+    grant();
+    vi.mocked(openExtensionSession).mockRejectedValueOnce(new ExtensionSessionError("no-storage"));
+    await render();
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    const decision = deferred<SolidExtensionGrant[]>();
+    api.listGrants.mockReturnValueOnce(decision.promise);
+    let connecting!: Promise<void>;
+    await act(() => {
+      connecting = state.connectExtension();
+    });
+    await focus();
+    await act(async () => {
+      decision.resolve(grants);
+      await connecting;
+    });
+    expect(state).toMatchObject({ session: { mode: "extension" } });
+    expect(openExtensionSession).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a slow extension opening after its grant is revoked", async () => {

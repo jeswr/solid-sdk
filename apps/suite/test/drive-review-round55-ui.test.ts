@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   params: new URLSearchParams({ q: "secret" }),
   router: { push: vi.fn(), replace: vi.fn() },
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

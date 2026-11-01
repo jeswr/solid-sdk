@@ -50,6 +50,8 @@ export interface DemoPodSession extends SessionAccount {
 
 export interface ExtensionPodSession extends SessionAccount {
   readonly mode: "extension";
+  /** Native page reads of public profiles/indexes, always without credentials. */
+  readonly publicFetch: typeof globalThis.fetch;
   disconnect(): Promise<void>;
 }
 
@@ -106,6 +108,9 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
     let failed = false;
     let pending = Promise.resolve();
     let connecting: Promise<void> | undefined;
+    let checking: Promise<void> | undefined;
+    let queued = false;
+    let queuedRetry = false;
     let fallbackTimer: unknown;
     let expiryTimer: unknown;
     const win = window as unknown as ExtensionWindow;
@@ -160,7 +165,7 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
             if (!isCurrent(captured)) return;
             if (error instanceof ExtensionSessionError && error.code === "stale") {
               requestedKey = undefined;
-              await refresh(true);
+              void refresh(true);
               return;
             }
             failed = true;
@@ -177,8 +182,7 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
       return pending;
     };
 
-    const refresh = async (retry = false): Promise<void> => {
-      const request = ++decisionGeneration;
+    const observe = () => {
       const next = readSolidExtension();
       setExtension(next);
       if (next.webId !== observedWebId) {
@@ -187,6 +191,11 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
         requestedKey = undefined;
         setState({ status: "loading" });
       }
+      return next;
+    };
+
+    const recheck = async (request: number, retry: boolean): Promise<void> => {
+      const next = observe();
       try {
         const api = win.solid;
         if (!next.present || !api?.listGrants) {
@@ -194,7 +203,7 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
           if (next.present && initialDecision) return;
           finishInitialDecision();
           win.clearTimeout(expiryTimer);
-          await select(
+          void select(
             null,
             undefined,
             next.present ? new ExtensionSessionError("not-granted") : undefined,
@@ -202,9 +211,12 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
           return;
         }
         const grants = await api.listGrants();
-        if (!live || request !== decisionGeneration) return;
+        if (!live || request !== decisionGeneration) {
+          if (live) queuedRetry ||= retry;
+          return;
+        }
         if (readSolidExtension().webId !== next.webId || win.solid !== api) {
-          await refresh(retry);
+          void refresh(retry);
           return;
         }
         finishInitialDecision();
@@ -217,22 +229,47 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
             Math.min(grant.expiresAt - Date.now(), 2_147_483_647),
           );
         }
-        await select(
+        void select(
           next.webId,
           next.webId && api.fetch ? grant : undefined,
           grant ? undefined : new ExtensionSessionError("not-granted"),
           retry,
         );
       } catch (error) {
-        if (!live || request !== decisionGeneration) return;
+        if (!live || request !== decisionGeneration) {
+          if (live) queuedRetry ||= retry;
+          return;
+        }
         if (readSolidExtension().webId !== next.webId) {
-          await refresh(retry);
+          void refresh(retry);
           return;
         }
         finishInitialDecision();
         win.clearTimeout(expiryTimer);
-        await select(null, undefined, error);
+        void select(null, undefined, error);
       }
+    };
+
+    // Serialize grant introspection, keeping only one queued check for an event burst.
+    // Session opening is separate: a slow public profile must not block an account switch.
+    const refresh = async (retry = false): Promise<void> => {
+      if (!live) return;
+      observe(); // Invalidate retained sessions immediately, even while a check is pending.
+      ++decisionGeneration;
+      queued = true;
+      queuedRetry ||= retry;
+      checking ??= (async () => {
+        while (live && queued) {
+          queued = false;
+          const retry = queuedRetry;
+          queuedRetry = false;
+          await recheck(decisionGeneration, retry);
+        }
+      })().finally(() => {
+        checking = undefined;
+      });
+      await checking;
+      await pending;
     };
 
     connect.current = () => {
