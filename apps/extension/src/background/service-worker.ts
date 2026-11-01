@@ -292,17 +292,28 @@ function withProfileTask<T>(id: string, task: () => Promise<T>): Promise<T> {
 /** Concurrent requests retain their own cancellation scope; lifecycle changes cancel all of them. */
 const profileOperations = new Map<string, Map<AbortController, string | undefined>>();
 
-async function cancellable<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+async function cancellable<T>(
+  signal: AbortSignal,
+  task: () => Promise<T>,
+  onDiscard?: (result: T) => void,
+): Promise<T> {
   signal.throwIfAborted();
   let onAbort = () => {};
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);
     signal.addEventListener('abort', onAbort, { once: true });
   });
+  let pending: Promise<T> | undefined;
   try {
-    const result = await Promise.race([aborted, task()]);
+    pending = task();
+    const result = await Promise.race([aborted, pending]);
     signal.throwIfAborted();
     return result;
+  } catch (error) {
+    // The abort fence can discard an already-created resource before its consumer runs.
+    // Also clean up a late result from a task that ignores abort, without waiting for it.
+    if (pending && onDiscard) void pending.then(onDiscard).catch(() => {});
+    throw error;
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
@@ -811,18 +822,27 @@ async function handleProfileFetch(
             if ('deny' in latest) throw new Error(await latest.deny.text());
           },
           fetchImpl: (input, init) =>
-            cancellable(signal, async () => {
-              const hopUrl = input.toString();
-              // A probe discovers a GET/HEAD target, so check the original method's
-              // grant. Its HEAD method does not grant it any additional authority.
-              const probing = init!.redirect === 'follow';
-              const hopMethod = probing ? method : init!.method!;
-              const latest = await gate(hopUrl, hopMethod);
-              if ('deny' in latest) throw new Error(await latest.deny.text());
-              if (!probing) sent.set(`${hopMethod} ${hopUrl}`, { url: hopUrl, method: hopMethod });
-              onEgress();
-              return fetch(input, { ...init, signal });
-            }),
+            cancellable(
+              signal,
+              async () => {
+                const hopUrl = input.toString();
+                // A probe discovers a GET/HEAD target, so check the original method's
+                // grant. Its HEAD method does not grant it any additional authority.
+                const probing = init!.redirect === 'follow';
+                const hopMethod = probing ? method : init!.method!;
+                const latest = await gate(hopUrl, hopMethod);
+                if ('deny' in latest) throw new Error(await latest.deny.text());
+                if (!probing)
+                  sent.set(`${hopMethod} ${hopUrl}`, { url: hopUrl, method: hopMethod });
+                onEgress();
+                return fetch(input, { ...init, signal });
+              },
+              (response) => {
+                // Until the bounded reader takes ownership, discarded fetch results still
+                // own a stream that aborting the request alone may leave open.
+                void response.body?.cancel(signal.reason).catch(() => {});
+              },
+            ),
         });
         // Consume network bodies outside the lifecycle queue, including cache.put's body.
         // Chrome exposes an empty body stream on a 304 revalidation, but the Response
