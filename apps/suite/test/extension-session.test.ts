@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   ABSENT,
@@ -11,6 +13,7 @@ import {
   readSolidExtension,
   type SolidExtensionApi,
   subscribeSolidExtension,
+  useSolidExtension,
 } from "../src/lib/session/extension-session";
 
 type Listener = (event?: unknown) => void;
@@ -107,6 +110,35 @@ describe("readSolidExtension", () => {
     expect(readSolidExtension(win)).toBe(ABSENT);
   });
 
+  it("treats throwing fetch or webId getters on the stub as absent", () => {
+    const hostile = (key: "fetch" | "webId") => {
+      const solid = { fetch: vi.fn(), webId: "https://a.example/#me" } as Record<string, unknown>;
+      Object.defineProperty(solid, key, {
+        get() {
+          throw new Error("hostile getter");
+        },
+      });
+      return fakeWindow({ marker: "1", solid: solid as SolidExtensionApi }).win;
+    };
+    expect(readSolidExtension(hostile("fetch"))).toBe(ABSENT);
+    expect(readSolidExtension(hostile("webId"))).toBe(ABSENT);
+  });
+
+  it("reads each stub property once", () => {
+    let reads = 0;
+    const solid = {
+      fetch: vi.fn(),
+      get webId() {
+        reads += 1;
+        return reads === 1 ? "https://a.example/#me" : 42;
+      },
+    } as unknown as SolidExtensionApi;
+    expect(readSolidExtension(fakeWindow({ marker: "1", solid }).win).webId).toBe(
+      "https://a.example/#me",
+    );
+    expect(reads).toBe(1);
+  });
+
   it("defaults to the global window (absent under node)", () => {
     expect(readSolidExtension()).toBe(ABSENT);
   });
@@ -167,10 +199,42 @@ describe("subscribeSolidExtension", () => {
       );
     }
     expect(onChange).toHaveBeenCalledTimes(4);
+    fake.runTimers();
+    expect(onChange).toHaveBeenCalledTimes(8);
     stop();
     fake.emit("focus");
-    expect(onChange).toHaveBeenCalledTimes(4);
+    fake.runTimers();
+    expect(onChange).toHaveBeenCalledTimes(8);
     expect(fake.count("message")).toBe(0);
+  });
+
+  it("re-reads on the next task when it subscribed before the extension's own listener", () => {
+    // Our listener runs first; the extension updates the stub only after we have read it.
+    const fake = fakeWindow({ marker: "1", solid: { requestAccess: vi.fn() } });
+    const read = createSnapshotReader(() => readSolidExtension(fake.win));
+    const seen: boolean[] = [];
+    subscribeSolidExtension(() => seen.push(read().granted), fake.win);
+    fake.win.addEventListener("message", () => fake.set(granted()));
+    const update = { channel: EXTENSION_CHANNEL, dir: "to-page", type: "SOLID_STATE_UPDATE" };
+    fake.emit("message", stateMessage(fake.win, update));
+    expect(seen).toEqual([false]);
+    fake.runTimers();
+    expect(seen).toEqual([false, true]);
+    // And the revoke direction.
+    fake.win.addEventListener("message", () => fake.set({ requestAccess: vi.fn() }));
+    fake.emit("message", stateMessage(fake.win, update));
+    fake.runTimers();
+    expect(seen.at(-1)).toBe(false);
+  });
+
+  it("cancels pending re-checks on unsubscribe", () => {
+    const fake = fakeWindow();
+    const onChange = vi.fn();
+    const stop = subscribeSolidExtension(onChange, fake.win);
+    fake.emit("focus");
+    stop();
+    fake.runTimers();
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it("ignores foreign, malformed, outbound and unrelated messages", () => {
@@ -215,5 +279,15 @@ describe("createSnapshotReader", () => {
     read();
     present = false;
     expect(read()).toBe(ABSENT);
+  });
+});
+
+describe("useSolidExtension", () => {
+  it("renders the absent state on the server", () => {
+    function Probe() {
+      const state = useSolidExtension();
+      return createElement("span", null, `${state.present}/${state.granted}/${state.webId}`);
+    }
+    expect(renderToString(createElement(Probe))).toBe("<span>false/false/null</span>");
   });
 });

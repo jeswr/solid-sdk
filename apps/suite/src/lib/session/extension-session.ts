@@ -22,6 +22,10 @@ export interface SolidExtensionApi {
   login?(webId: string): Promise<void>;
 }
 
+/**
+ * UI hints only. Any page script can forge the marker, the stub and same-window state
+ * messages, so nothing here authorises anything: the extension's worker gates every request.
+ */
 export interface SolidExtensionState {
   /** The extension is installed and has announced itself on this page. */
   readonly present: boolean;
@@ -56,19 +60,17 @@ export function readSolidExtension(
   win: ExtensionWindow | undefined = browserWindow(),
 ): SolidExtensionState {
   if (!win) return ABSENT;
-  let solid: SolidExtensionApi | undefined;
-  let marker: string | null = null;
   try {
-    solid = win.solid;
-    marker = win.document.documentElement.getAttribute(EXTENSION_MARKER);
+    const solid = win.solid;
+    const marker = win.document.documentElement.getAttribute(EXTENSION_MARKER);
+    if (marker !== "1" || typeof solid !== "object" || solid === null) return ABSENT;
+    // Each page-realm property is read once, inside the guard: a getter may throw or change.
+    const granted = typeof solid.fetch === "function";
+    const rawWebId = granted ? solid.webId : null;
+    return { present: true, granted, webId: typeof rawWebId === "string" ? rawWebId : null };
   } catch {
     return ABSENT;
   }
-  const present = marker === "1" && typeof solid === "object" && solid !== null;
-  if (!present) return ABSENT;
-  const granted = typeof solid?.fetch === "function";
-  const webId = granted && typeof solid?.webId === "string" ? solid.webId : null;
-  return { present, granted, webId };
 }
 
 /**
@@ -109,24 +111,39 @@ function isStateMessage(win: ExtensionWindow, event: unknown): boolean {
 
 /**
  * Subscribes to presence and grant changes: the ready event, the extension's own state
- * messages (its listener runs first, so the stub is already updated when ours runs), and
- * window focus, which covers a grant made in the consent window or a revoke in the side panel.
+ * messages, and window focus, which covers a grant made in the consent window or a revoke in
+ * the side panel. Every event notifies at once and again on the next task, because our
+ * listener may run before the extension's (if we subscribed before it injected) and would
+ * then read the stub before the extension updates it. Pending re-checks die on unsubscribe.
  */
 export function subscribeSolidExtension(
   onChange: () => void,
   win: ExtensionWindow | undefined = browserWindow(),
 ): () => void {
   if (!win) return () => {};
-  const onMessage = (event?: unknown) => {
-    if (isStateMessage(win, event)) onChange();
+  const pending = new Set<unknown>();
+  let active = true;
+  const notify = () => {
+    onChange();
+    const timer = win.setTimeout(() => {
+      pending.delete(timer);
+      if (active) onChange();
+    }, 0);
+    pending.add(timer);
   };
-  win.addEventListener(EXTENSION_READY_EVENT, onChange);
-  win.addEventListener("focus", onChange);
+  const onMessage = (event?: unknown) => {
+    if (isStateMessage(win, event)) notify();
+  };
+  win.addEventListener(EXTENSION_READY_EVENT, notify);
+  win.addEventListener("focus", notify);
   win.addEventListener("message", onMessage);
   return () => {
-    win.removeEventListener(EXTENSION_READY_EVENT, onChange);
-    win.removeEventListener("focus", onChange);
+    active = false;
+    win.removeEventListener(EXTENSION_READY_EVENT, notify);
+    win.removeEventListener("focus", notify);
     win.removeEventListener("message", onMessage);
+    for (const timer of pending) win.clearTimeout(timer);
+    pending.clear();
   };
 }
 
