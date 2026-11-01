@@ -117,3 +117,7 @@ private ingestion, deterministic triage, proposal eligibility, signed approval a
 halt, executor transmission, audit mirroring, scheduler and shutdown races, CLI
 validation and confirmation-gated plist creation. On macOS the installer test also
 runs `plutil -lint`; elsewhere Python plistlib validates the XML plist.
+
+The [D-2 spending-limit demo](demos/README.md) exercises hostile email and A2A
+fixtures, Transfer prohibition, cumulative GBP 30/day soft caps and printed audit
+evidence against local CSS. Run it with `pnpm --filter @jeswr/app-agent-daemon run demo:d2`.
