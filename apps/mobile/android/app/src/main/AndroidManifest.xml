@@ -66,6 +66,13 @@
             </intent-filter>
         </activity>
 
+        <!-- AUTHORED-BY Codex GPT-6.1-Sol: encrypted data pushes, including direct-boot fallback. -->
+        <service android:name=".SuitePushService" android:exported="false" android:directBootAware="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -80,4 +87,5 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
