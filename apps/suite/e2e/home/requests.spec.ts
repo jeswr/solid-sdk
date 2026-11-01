@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-// 03-home-permissions §9 scenarios 9 and 10. The server and this runner share SUITE_TEST_CAPS:
+// 03-home-permissions §9 scenarios 9 and 10. The server and this runner share SUITE_TEST_CAPS
+// (the Playwright web server sets SUITE_E2E=1, without which the server ignores it):
 //   SUITE_TEST_CAPS='{"accessRequests":true,"grantExpiry":true}'  scenario 9 (expiring access)
 //   SUITE_TEST_CAPS='{"accessRequests":true}'                     scenario 9 (WAC: no expiry)
 //   SUITE_TEST_CAPS unset                                         scenario 10
