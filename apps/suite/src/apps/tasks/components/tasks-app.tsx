@@ -3,7 +3,15 @@
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
@@ -47,6 +55,18 @@ function TasksChrome({ children }: { children: ReactNode }) {
   } catch {
     /* Show not found inside details. */
   }
+  // The persistent route owner handles initial moves and retries using current selection.
+  // A detail may unmount optimistically or be closed while the write is still in flight.
+  useLayoutEffect(
+    () =>
+      tasks.cache.subscribeTaskMoves(({ from, to }) => {
+        if (taskUrl !== from) return;
+        const query = new URLSearchParams(params.toString());
+        query.set("task", encodeRef(to));
+        router.replace(`${pathname}?${query}`, { scroll: false });
+      }),
+    [tasks.cache, taskUrl, params, pathname, router],
+  );
   const origin = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (taskRef !== null && origin.current === undefined) {

@@ -3,6 +3,7 @@
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError } from "../lib/model/errors";
+import type { TaskMove } from "../lib/model/move";
 import { DataFactory } from "../lib/model/rdf";
 import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
@@ -61,6 +62,10 @@ interface Pending {
   urls: string[];
 }
 export type MutationFailure = (error: unknown, retry: () => void) => void;
+export interface TaskMoveMapping {
+  from: string;
+  to: string;
+}
 const replaceProject = (state: TasksSnapshot, project: StoredProject): TasksSnapshot => ({
   ...state,
   projects: [...state.projects.filter((item) => item.url !== project.url), project],
@@ -100,6 +105,7 @@ export class TasksCache {
   private snapshot = this.baseline;
   private pending: Pending[] = [];
   private listeners = new Set<() => void>();
+  private moveListeners = new Set<(mapping: TaskMoveMapping) => void>();
   private tail: Promise<unknown> = Promise.resolve();
   private started: Promise<void> | undefined;
   private epoch = 0;
@@ -121,6 +127,13 @@ export class TasksCache {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  };
+  /** Successful moves, including toast retries, share one route-independent notification. */
+  readonly subscribeTaskMoves = (listener: (mapping: TaskMoveMapping) => void) => {
+    this.moveListeners.add(listener);
+    return () => {
+      this.moveListeners.delete(listener);
     };
   };
   private emit() {
@@ -553,36 +566,66 @@ export class TasksCache {
     if (source.url === target.url) return Promise.resolve(item);
     const id = crypto.randomUUID();
     const url = `${target.tracker.stateStore}${id}.ttl`;
-    const relocate = (state: TasksSnapshot, moved: StoredTask) =>
-      replaceTask(replaceTask(state, source.url, item.url), target.url, url, moved);
-    return this.mutate(
-      (state) => {
-        const current = state.tasks[source.url]?.items.find((task) => task.url === item.url);
-        const from = state.projects.find((project) => project.url === source.url);
-        const to = state.projects.find((project) => project.url === target.url);
-        if (!current || !from || !to) return state;
-        const dataset = createTask(url, projectMoveData(current, from, to));
-        return relocate(state, {
-          url,
-          dataset,
-          etag: null,
-          task: new TaskItem(`${url}#it`, dataset, DataFactory),
-        });
-      },
-      async () => {
-        const moved = await this.store.moveTaskToProject(
-          this.task(source.url, item.url),
-          this.project(source.url),
-          this.project(target.url),
-          id,
-        );
-        return { result: moved, commit: (state) => relocate(state, moved) };
-      },
-      () => {
-        void this.moveTaskToProject(item, target);
-      },
-      [item.url, url],
-    );
+    let operation: TaskMove | undefined;
+    let settled: StoredTask | undefined;
+    let notified = false;
+    const relocate = (state: TasksSnapshot, moved: StoredTask, confirmed = false) => {
+      let next = replaceTask(replaceTask(state, source.url, item.url), target.url, url, moved);
+      for (const project of state.projects)
+        for (const child of state.tasks[project.url]?.items ?? []) {
+          const saved = confirmed ? operation?.children.get(child.url) : undefined;
+          if (saved || child.task.parent === item.task.id)
+            next = replaceTask(
+              next,
+              project.url,
+              child.url,
+              saved ??
+                changeTask(child, (task) => {
+                  task.parent = moved.task.id;
+                }),
+            );
+        }
+      return next;
+    };
+    const attempt = (): Promise<StoredTask | undefined> =>
+      this.mutate(
+        (state) => {
+          const current = state.tasks[source.url]?.items.find((task) => task.url === item.url);
+          const from = state.projects.find((project) => project.url === source.url);
+          const to = state.projects.find((project) => project.url === target.url);
+          if (!current || !from || !to) return state;
+          const dataset = createTask(url, projectMoveData(current, from, to));
+          return relocate(state, {
+            url,
+            dataset,
+            etag: null,
+            task: new TaskItem(`${url}#it`, dataset, DataFactory),
+          });
+        },
+        async () => {
+          if (settled) return { result: settled, commit: (state) => state };
+          operation ??= this.store.prepareTaskMove(
+            this.task(source.url, item.url),
+            this.project(source.url),
+            this.project(target.url),
+            id,
+          );
+          const moved = await operation.run();
+          settled = moved;
+          return { result: moved, commit: (state) => relocate(state, moved, true) };
+        },
+        () => {
+          void attempt();
+        },
+        [item.url, url],
+      ).then((moved) => {
+        if (moved && !notified) {
+          notified = true;
+          for (const listener of this.moveListeners) listener({ from: item.url, to: moved.url });
+        }
+        return moved;
+      });
+    return attempt();
   }
   deleteTask(item: StoredTask): Promise<boolean | undefined> {
     const project = this.snapshot.projects.find((project) =>

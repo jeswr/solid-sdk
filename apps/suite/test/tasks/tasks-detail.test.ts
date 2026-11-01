@@ -1,19 +1,45 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { RecurrenceRule as EditorRule } from "@jeswr/suite-ui/date-time/model";
 import { describe, expect, it } from "vitest";
-import { fromEditorRule, toEditorRule } from "../../src/apps/tasks/lib/detail/recurrence-map";
+import {
+  fromEditorRule,
+  recurrenceAnchor,
+  toEditorRule,
+} from "../../src/apps/tasks/lib/detail/recurrence-map";
 import {
   copyTaskData,
   duplicateTaskData,
   projectMoveData,
 } from "../../src/apps/tasks/lib/detail/task-data";
 import { DataFactory, NS, node, Store } from "../../src/apps/tasks/lib/model/rdf";
+import { humanise } from "../../src/apps/tasks/lib/model/recurrence";
 import type { StoredTask } from "../../src/apps/tasks/lib/model/store";
 import { createTask, TaskItem } from "../../src/apps/tasks/lib/model/task";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 
 const due = new Date("2026-11-03T17:00:00Z");
 describe("detail recurrence adapter", () => {
+  it("anchors all-day yearly validation and copy to the marker across Tokyo and Los Angeles", () => {
+    const previous = process.env.TZ;
+    try {
+      process.env.TZ = "Asia/Tokyo";
+      const instant = new Date(2026, 10, 3);
+      expect(instant.toISOString()).toBe("2026-11-02T15:00:00.000Z");
+      process.env.TZ = "America/Los_Angeles";
+      expect(instant.getDate()).toBe(2);
+      const anchor = recurrenceAnchor(instant, "2026-11-03");
+      expect(anchor.getDate()).toBe(3);
+      const rule = fromEditorRule(
+        { freq: "YEARLY", interval: 1, byMonth: [11], byMonthDay: [3] },
+        anchor,
+      );
+      expect(rule).toEqual({ frequency: "YEARLY", interval: 1 });
+      expect(humanise(rule as NonNullable<typeof rule>, anchor)).toBe("Every year on 3 Nov");
+      expect(recurrenceAnchor(instant)).toBe(instant);
+    } finally {
+      process.env.TZ = previous;
+    }
+  });
   it("maps absent rules and default intervals", () => {
     expect(fromEditorRule(null, due)).toBeUndefined();
     expect(toEditorRule(undefined)).toBeNull();

@@ -15,7 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import { ArrowLeft, Ellipsis, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
@@ -52,6 +52,33 @@ function descriptionNodes(text: string) {
   });
 }
 
+/** Saved-value changes may reconcile a submitted edit, but never a newer local draft. */
+function useDetailDraft(saved: string) {
+  const [value, setValue] = useState(saved);
+  const dirty = useRef(false);
+  const editing = useRef(false);
+  useEffect(() => {
+    if (!dirty.current && !editing.current) setValue(saved);
+  }, [saved]);
+  return {
+    value,
+    focus: () => {
+      editing.current = true;
+    },
+    change: (text: string) => {
+      dirty.current = true;
+      setValue(text);
+    },
+    blur: (normalise: (text: string) => string = (text) => text) => {
+      editing.current = false;
+      const next = dirty.current ? normalise(value) : saved;
+      dirty.current = false;
+      setValue(next);
+      return next;
+    },
+  };
+}
+
 export function TaskDetail({
   stored,
   project,
@@ -62,22 +89,21 @@ export function TaskDetail({
   onClose: () => void;
 }) {
   const tasks = useTasks();
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const view = toTaskView(stored, project);
   const id = useId();
   const titleField = useRef<HTMLTextAreaElement>(null);
-  const [title, setTitle] = useState(view.title);
-  const [description, setDescription] = useState(view.description ?? "");
+  const titleDraft = useDetailDraft(view.title);
+  const descriptionDraft = useDetailDraft(view.description ?? "");
+  const title = titleDraft.value;
+  const description = descriptionDraft.value;
   const [editingDescription, setEditingDescription] = useState(false);
   const [childTitle, setChildTitle] = useState("");
   const [moveOpen, setMoveOpen] = useState(false);
   useEffect(() => {
     titleField.current?.focus();
   }, []);
-  useEffect(() => setTitle(view.title), [view.title]);
-  useEffect(() => setDescription(view.description ?? ""), [view.description]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Resize after each draft title change.
   useEffect(() => {
     const field = titleField.current;
@@ -93,8 +119,7 @@ export function TaskDetail({
   };
   const move = async (target: StoredProject) => {
     setMoveOpen(false);
-    const moved = await tasks.moveTaskToProject(stored, target);
-    if (moved) router.replace(href(moved.url), { scroll: false });
+    await tasks.moveTaskToProject(stored, target);
   };
   const children = tasks.views.filter((task) => task.parentId === view.id);
   const completed = children.filter((task) => task.state === "closed").length;
@@ -102,15 +127,18 @@ export function TaskDetail({
   const parent = tasks.views.find((task) => task.id === view.parentId);
   const section = project.tracker.sections.find((section) => section.id === view.sectionId);
   const commitTitle = () => {
-    const value = title.trim();
-    if (!value) setTitle(view.title);
-    else if (value !== view.title)
+    const value = titleDraft.blur((text) => text.trim() || view.title);
+    if (value !== view.title)
       void tasks.updateTask(stored, (task) => {
         task.title = value;
       });
   };
   const toggle = async (item: StoredTask, closed: boolean) => {
-    if (!closed) await completeTask(toTaskView(item, project), tasks);
+    const owner = tasks.projects.find((project) =>
+      tasks.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!owner) return;
+    if (!closed) await completeTask(toTaskView(item, owner), tasks);
     else if (
       await tasks.updateTask(item, (task) => {
         task.state = "open";
@@ -223,7 +251,8 @@ export function TaskDetail({
           aria-label="Task title"
           rows={1}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onFocus={titleDraft.focus}
+          onChange={(event) => titleDraft.change(event.target.value)}
           onBlur={commitTitle}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -239,13 +268,17 @@ export function TaskDetail({
           aria-label="Description"
           placeholder="Description"
           value={description}
-          onFocus={() => setEditingDescription(true)}
-          onChange={(event) => setDescription(event.target.value)}
+          onFocus={() => {
+            descriptionDraft.focus();
+            setEditingDescription(true);
+          }}
+          onChange={(event) => descriptionDraft.change(event.target.value)}
           onBlur={() => {
             setEditingDescription(false);
-            if (description !== (view.description ?? ""))
+            const value = descriptionDraft.blur();
+            if (value !== (view.description ?? ""))
               void tasks.updateTask(stored, (task) => {
-                task.description = description || undefined;
+                task.description = value || undefined;
               });
           }}
         />
