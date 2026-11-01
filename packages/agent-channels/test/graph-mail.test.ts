@@ -107,14 +107,22 @@ it("keeps pending IDs and continuation links until item and aggregate-byte bound
   ).rejects.toThrow("byte bound");
 });
 
-it.each([
-  0,
-  MAX_EMAIL_BYTES + 1,
-])("skips refused MIME of %i bytes without consuming item bounds or retaining its pending ID", async (size) => {
+const sizeRefusals = ["empty", "MIME cap", "declared transport cap", "streamed transport cap"];
+function refusedMime(kind: string): Response {
+  if (kind === "declared transport cap")
+    return new Response(null, { headers: { "content-length": String(1024 * 1024 + 1) } });
+  return mime(
+    "x".repeat(kind === "empty" ? 0 : kind === "MIME cap" ? MAX_EMAIL_BYTES + 1 : 1024 * 1024 + 1),
+  );
+}
+
+it.each(
+  sizeRefusals,
+)("skips refused MIME (%s) without consuming bounds or retaining its pending ID", async (kind) => {
   const next = link("page2", "$skiptoken");
   const r = reader([
     { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
-    mime("x".repeat(size)),
+    refusedMime(kind),
     mime(),
     mime(),
     fixtures.empty,
@@ -138,11 +146,13 @@ it.each([
   expect(r.queue).toEqual([]);
 });
 
-it("advances past a delta page containing only refused MIME", async () => {
+it.each(
+  sizeRefusals,
+)("advances past a delta page containing only refused MIME (%s)", async (kind) => {
   const next = link("after-refused");
   const r = reader([
     { value: [{ id: "refused" }], "@odata.deltaLink": next },
-    mime("x".repeat(MAX_EMAIL_BYTES + 1)),
+    refusedMime(kind),
     { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
     mime(),
   ]);
@@ -160,24 +170,33 @@ it.each([
   "HTTP 503",
   "transport",
   "body stream",
+  "untyped size refusal",
 ])("preserves pending IDs for retry after a transient MIME %s failure", async (failure) => {
+  const sizeMessage =
+    "Response body for https://graph.microsoft.com exceeds cap (1048577 bytes > 1048576).";
   const stream = new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.error(new Error("body stream failed"));
+        controller.error(
+          new Error(failure === "untyped size refusal" ? sizeMessage : "body stream failed"),
+        );
       },
     }),
   );
   const failed =
     failure === "transport"
       ? new Error("transport failed")
-      : failure === "body stream"
+      : failure === "body stream" || failure === "untyped size refusal"
         ? stream
         : new Response(null, { status: Number(failure.slice(5)) });
   const saved = cursor({ pending: ["a", "b"], resume: link("resumed") });
   const r = reader([failed, mime(), mime()]);
   await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(
-    failure === "transport" ? "transport failed or refused redirect" : failure,
+    failure === "transport"
+      ? "transport failed or refused redirect"
+      : failure === "untyped size refusal"
+        ? sizeMessage
+        : failure,
   );
   expect(r.requests).toHaveLength(2);
   const retry = await r.binding.ingest.list(account, saved, bounds);
@@ -188,6 +207,26 @@ it.each([
     resume: "",
   });
   expect(r.requests[1]?.url.href).toBe(r.requests[2]?.url.href);
+  expect(r.queue).toEqual([]);
+});
+
+it("preserves pending MIME IDs after a guard refusal unrelated to response size", async () => {
+  const r = reader([mime(), mime()]);
+  const dnsLookup = vi
+    .fn()
+    .mockResolvedValueOnce([{ address: "1.1.1.1", family: 4 }])
+    .mockResolvedValueOnce([{ address: "127.0.0.1", family: 4 }])
+    .mockResolvedValue([{ address: "1.1.1.1", family: 4 }]);
+  const binding = createGraphMailReader({
+    ...r.config,
+    transport: { ...r.config.transport, dnsLookup },
+  });
+  const saved = cursor({ pending: ["a", "b"], resume: link("resumed") });
+  await expect(binding.ingest.list(account, saved, bounds)).rejects.toThrow("127.0.0.1");
+  expect(r.requests).toHaveLength(1);
+  const retry = await binding.ingest.list(account, saved, bounds);
+  expect(retry.items.map((item) => item.id)).toEqual(["a", "b"]);
+  expect(JSON.parse(retry.next)).toMatchObject({ url: link("resumed"), pending: [], resume: "" });
   expect(r.queue).toEqual([]);
 });
 

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseBoundedJson } from "@jeswr/agent-model";
+import { SsrfError } from "@jeswr/guarded-fetch";
 import type { ChannelBinding } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
@@ -146,22 +147,30 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
         let bytes = 0;
         while (state.pending.length && items.length < maxItems) {
           const id = state.pending[0] as string;
-          const response = await rest(
-            `/messages/${encodeURIComponent(id)}/$value`,
-            ref,
-            tokens,
-            "read",
-          );
-          if (response.status === 404) {
-            state.pending.shift();
-            continue;
-          }
           let raw: Uint8Array;
           try {
+            const response = await rest(
+              `/messages/${encodeURIComponent(id)}/$value`,
+              ref,
+              tokens,
+              "read",
+            );
+            if (response.status === 404) {
+              state.pending.shift();
+              continue;
+            }
             raw = await mimeBody(response);
           } catch (error) {
             // Definitive MIME size refusals skip one item; failed reads remain retryable.
-            if (!(error instanceof ChannelParseError)) throw error;
+            // The transport uses SsrfError for size caps as well as unrelated guard refusals.
+            if (
+              !(error instanceof ChannelParseError) &&
+              !(
+                error instanceof SsrfError &&
+                /^Response body for .+ exceeds cap \(/.test(error.message)
+              )
+            )
+              throw error;
             state.pending.shift();
             continue;
           }
