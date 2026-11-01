@@ -227,6 +227,13 @@ describe("ACP expressions and writers", () => {
       expect.fail("Expected a bounded-representation refusal");
     } catch (error) {
       expect(isPolicyTooComplex(error)).toBe(true);
+      // A caught refusal exposes only built-in Error machinery, no package class.
+      expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
+      expect(
+        isPolicyTooComplex(
+          Object.assign(new Error((error as Error).message), { name: "PolicyTooComplex" }),
+        ),
+      ).toBe(false);
       expect(isPolicyTooComplex(new Error("ACP policy exceeds 64 clauses"))).toBe(false);
       expect(isPolicyTooComplex({ name: "PolicyTooComplex" })).toBe(false);
       expect(isPolicyTooComplex(null)).toBe(false);
