@@ -343,6 +343,51 @@ describe("WhatsApp webhook handler — end to end", () => {
     expect(slugs.size).toBe(2);
   });
 
+  it("imports a new message when a later delivery repeats an imported one", async () => {
+    // Raw anchors are keyed by wamid but hold the whole delivery, so wamid.AAA's anchor from
+    // the first delivery cannot match the second. That conflict must not block wamid.BBB.
+    const stored = new Map<string, string>();
+    const puts: string[] = [];
+    const pod = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET")
+        return new Response(stored.get(url) ?? null, { status: stored.has(url) ? 200 : 404 });
+      if (stored.has(url)) return new Response(null, { status: 412 });
+      puts.push(url);
+      const body = init?.body;
+      stored.set(
+        url,
+        typeof body === "string" ? body : new TextDecoder().decode(body as Uint8Array),
+      );
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    const events: WebhookAuditEvent[] = [];
+    const handler = createWebhookHandler({
+      channel: { channel: "whatsapp", appSecret: META_SECRET, verifyToken: VERIFY_TOKEN },
+      container: CONTAINER,
+      writeFetch: pod,
+      onEvent: (e) => events.push(e),
+      now,
+    });
+    const first = waBody([{ id: "wamid.AAA", from: "15551230000", text: "one" }]);
+    expect((await handler(req({ headers: metaSig(first), rawBody: enc(first) }))).status).toBe(200);
+    const firstPuts = [...puts];
+    expect(firstPuts).toHaveLength(3);
+    const firstBodies = firstPuts.map((url) => stored.get(url));
+
+    const second = waBody([
+      { id: "wamid.AAA", from: "15551230000", text: "one" },
+      { id: "wamid.BBB", from: "15551230001", text: "two" },
+    ]);
+    const res = await handler(req({ headers: metaSig(second), rawBody: enc(second) }));
+    expect(res.status).toBe(200);
+    expect(puts.slice(firstPuts.length)).toHaveLength(3); // only wamid.BBB's resource set
+    expect(firstPuts.map((url) => stored.get(url))).toEqual(firstBodies); // AAA untouched
+    expect(events).toContainEqual({ kind: "anchor-conflict", channel: "whatsapp" });
+    expect(events.filter((e) => e.kind === "written")).toHaveLength(2);
+  });
+
   it("acks (200) a status/receipt delivery carrying no messages, writing nothing", async () => {
     const body = JSON.stringify({
       object: "whatsapp_business_account",

@@ -46,7 +46,7 @@ import {
 } from "./request.js";
 import { metaVerificationChallenge, verifyMetaSignature } from "./verify-meta.js";
 import { verifySlackSignature } from "./verify-slack.js";
-import { writeMessageCreateOnly } from "./write.js";
+import { RawResourceMismatchError, writeMessageCreateOnly } from "./write.js";
 
 /** The default hard cap on the raw body (mirrors the adapters' per-event cap). */
 export const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -99,6 +99,8 @@ export type WebhookAuditEvent =
   | { readonly kind: "written"; readonly channel: string; readonly created: boolean }
   /** A verified delivery refused because its message count exceeded the fan-out cap. */
   | { readonly kind: "over-message-cap"; readonly channel: string; readonly count: number }
+  /** A message whose retained raw anchor holds a different delivery's bytes; it is left as imported. */
+  | { readonly kind: "anchor-conflict"; readonly channel: string }
   | { readonly kind: "error"; readonly channel: string };
 
 /** Options for {@link createWebhookHandler}. */
@@ -380,7 +382,19 @@ async function handleWhatsAppDelivery(
       }
       throw err;
     }
-    const result = await writeMessageCreateOnly(writeArgs(options, container, message, rawBody));
+    let result: Awaited<ReturnType<typeof writeMessageCreateOnly>>;
+    try {
+      result = await writeMessageCreateOnly(writeArgs(options, container, message, rawBody));
+    } catch (err) {
+      // The anchor is keyed by wamid but holds a whole delivery, so a later delivery that
+      // repeats an imported message alongside new ones carries different bytes. Keep the
+      // retained anchor and its provenance untouched, and import the rest of the delivery.
+      if (err instanceof RawResourceMismatchError) {
+        emit({ kind: "anchor-conflict", channel: "whatsapp" });
+        continue;
+      }
+      throw err;
+    }
     emit({ kind: "written", channel: "whatsapp", created: result.created });
   }
   return OK;
