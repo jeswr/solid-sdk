@@ -114,6 +114,46 @@ full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execu
 visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
 covered by the token gate and the browser tests.
 
+## DS-05 async surfaces
+
+`EmptyState` supports first-use, no-results, filtered-empty, no-access and
+not-available-offline. Supply a verb-first `primaryAction` and optional
+`secondaryAction`; filtered/offline variants also accept `onClearFilters` / `onRetry`.
+`LoadingSkeleton preset="list|grid|document|detail|table"` reserves density-backed rows
+and cards. Decorative placeholders are hidden from assistive technology; loading and
+empty feedback use status regions, while `ErrorState` uses alert regions.
+
+Pass the façade's category to `ErrorState error={category}` or
+`error={{ category, retryAfterMs }}`. `errorStateCopy` and `errorActionLabels` are the
+01 §9 copy/action map. Supply `actions` keyed by recovery action, with callbacks or
+native-link destinations. Access requests additionally require `accessRequests={true}`.
+Reauth retains a skeleton; the host supplies session/conflict dialogs via callbacks
+and `children`. Retry stays disabled until `retryAfterMs` expires. Keep each classified
+error object stable between rerenders and replace it for each new error occurrence,
+including repeated errors with the same category and delay. Report links must
+be supplied with redacted context; this component never reads raw exceptions.
+Collections accept `errorActions`, `accessRequests`, and error-state `retryAfterMs`.
+
+`renderAsync({ loading, error, empty, children })` takes conditional React nodes,
+prioritises first-load → error → empty → content, and accepts a lazy `children` function.
+Both collections and the content/upload feedback adapters use it. For refreshes, pass
+no loading node and keep content; the host owns the TopBar progress indicator.
+
+Use the exported `toast` with `Toaster`: ordinary messages default to 5 seconds, actions
+labelled `Undo` last 8 seconds, and errors persist with a dismiss button. For React-node
+or localised Undo labels, select the same window explicitly with
+`{ duration: toastDurations.undo, action: { label: <span>Undo</span>, onClick: undo } }`.
+This duration option also applies to promise options and extended success results;
+explicit durations override non-error defaults, while errors always persist. ID updates
+preserve the window when `action` and `duration` are omitted; clearing `action` restores
+the normal default unless the update supplies a duration.
+Errors announce alerts; ordinary messages announce status.
+Toast only when the outcome is not already visible in place.
+
+Dev routes: `/dev/components/{empty-state,error-state,loading-skeleton,toasts,render-async}`.
+The DS-05 browser spec writes all viewport/theme captures to `artifacts/screens/DS-05/`;
+Chromium execution and visual review belong to the dispatcher.
+
 ## DS-06 collections and selection
 
 `DataTable`, `FileGrid` and `useSelection` are client components/hooks. Import
@@ -212,7 +252,8 @@ The host owns preview navigation, metadata retrieval, headings and the enclosing
 
 All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `query`,
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
-classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
+classify SDK errors themselves. Error feedback keeps that callback available as Sign in
+for reauth and Retry for every other category. Fixtures live at `/dev/components/upload-dock`,
 `/dev/components/drop-zone-overlay`, and `/dev/components/preview-pane` in `apps/suite`.
 
 ## DS-12 typed content and storage
@@ -242,6 +283,9 @@ share dialog. Render it inside the shell's `DetailsPane` (`@jeswr/suite-ui/shell
 owns the responsive pane or sheet; the consumer owns loading, refresh and errors.
 `PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
 percentage. All three accept `ContentSurfaceState` for loading, empty and classified errors.
+Its error branch accepts `actions: ErrorRecovery`, `accessRequests`, and `retryAfterMs`,
+including `ItemDetails.accessState`. Legacy `onRetry` remains a fallback for Sign in on
+reauth and Retry on other categories; explicit `signIn` / `retry` actions take precedence.
 Upload and preview components use the separately exported `SurfaceState`.
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 ## App navigation (DS-03)

@@ -1,44 +1,28 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import { AlertCircle, File, WifiOff } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
+import { type ErrorCategory, errorStateCopy } from "../components/async-copy.js";
+import { EmptyState } from "../components/empty-state.js";
+import { type ErrorRecovery, ErrorState } from "../components/error-state.js";
+import { LoadingSkeleton } from "../components/loading-skeleton.js";
+import { renderAsync } from "../components/render-async.js";
 
-export type CollectionErrorKind =
-  | "reauth"
-  | "forbidden"
-  | "not-found"
-  | "conflict"
-  | "name-taken"
-  | "quota"
-  | "too-large"
-  | "unreachable"
-  | "unsupported"
-  | "unknown";
+// Collections already represent offline through the cached/uncached state branch.
+export type CollectionErrorKind = Exclude<ErrorCategory, "offline">;
 export type CollectionState =
   | { status: "ready" | "loading" | "refreshing" }
   | { status: "offline"; cached: boolean }
-  | { status: "error"; kind: CollectionErrorKind; actions?: ReactNode };
+  | { status: "error"; kind: CollectionErrorKind; retryAfterMs?: number; actions?: ReactNode };
 export interface CollectionSurfaceProps {
   state?: CollectionState;
   filterQuery?: string;
   emptyAction?: ReactNode;
   onClearFilters?: () => void;
   onRetry?: () => void;
+  errorActions?: ErrorRecovery;
+  accessRequests?: boolean;
 }
-const errorCopy: Record<CollectionErrorKind, string> = {
-  reauth: "Sign in to continue",
-  forbidden: "You don't have access to this",
-  "not-found": "This item isn't here any more",
-  conflict: "This item changed somewhere else",
-  "name-taken": "A file with this name already exists",
-  quota: "Your pod is full",
-  "too-large": "This file is too large for your storage",
-  unreachable: "Can't reach your storage",
-  unsupported: "Not available on this storage",
-  unknown: "Something went wrong",
-};
-
 export function CollectionPlaceholder({
   kind,
   count,
@@ -47,78 +31,57 @@ export function CollectionPlaceholder({
   emptyAction,
   onClearFilters,
   onRetry,
+  errorActions,
+  accessRequests,
 }: CollectionSurfaceProps & { kind: "table" | "grid"; count: number }) {
-  if (state?.status === "loading" || (state?.status === "error" && state.kind === "reauth")) {
-    return (
-      <div
-        className="suite-collection-state"
-        role="status"
-        aria-label="Loading files"
-        aria-busy="true"
-      >
-        <span className="suite-sr-only">Loading files</span>
-        <div className={kind === "grid" ? "suite-skeleton-grid" : ""} aria-hidden="true">
-          {["one", "two", "three", "four", "five", "six"].map((key) => (
-            <div className={`suite-skeleton-${kind}`} key={key}>
-              <span />
-            </div>
-          ))}
-        </div>
-        {state.status === "error" && (
-          <div role="alert">
-            <p>{errorCopy.reauth}</p>
-            {state.actions}
-          </div>
-        )}
-      </div>
-    );
-  }
-  if (state?.status === "error")
-    return (
-      <div className="suite-collection-state suite-collection-error" role="alert">
-        <AlertCircle aria-hidden="true" size={24} strokeWidth={1.5} />
-        <h3>{errorCopy[state.kind]}</h3>
-        {state.actions ??
-          (onRetry && (
-            <button type="button" onClick={onRetry}>
-              Retry
-            </button>
-          ))}
-      </div>
-    );
-  if (state?.status === "offline" && !state.cached)
-    return (
-      <div className="suite-collection-state" role="status">
-        <WifiOff aria-hidden="true" size={24} strokeWidth={1.5} />
-        <h3>Not available offline</h3>
-        {onRetry && (
-          <button type="button" onClick={onRetry}>
-            Retry
-          </button>
-        )}
-      </div>
-    );
-  if (count > 0) return null;
-  return (
-    <div className="suite-collection-state" role="status">
-      <span className="suite-empty-icon">
-        <File aria-hidden="true" size={24} strokeWidth={1.5} />
-      </span>
-      <h3>{filterQuery !== undefined ? `No results for '${filterQuery}'` : "No files yet"}</h3>
-      <p>
-        {filterQuery !== undefined
-          ? "Try another search or clear your filters."
-          : "Add a file to get started."}
-      </p>
-      {filterQuery !== undefined ? (
-        <button type="button" onClick={onClearFilters}>
-          Clear filters
-        </button>
-      ) : (
-        emptyAction
-      )}
-    </div>
+  const error = useMemo(
+    () =>
+      state?.status === "error"
+        ? { category: state.kind, retryAfterMs: state.retryAfterMs }
+        : undefined,
+    [state],
   );
+  const hasErrorRecovery =
+    state?.status === "error" &&
+    errorStateCopy[state.kind].actions.some(
+      (name) => errorActions?.[name] && (name !== "requestAccess" || accessRequests),
+    );
+  return renderAsync({
+    loading: state?.status === "loading" && <LoadingSkeleton preset={kind} label="Loading files" />,
+    error: state?.status === "error" && error && (
+      <ErrorState
+        error={error}
+        actions={{
+          ...(onRetry && state.actions == null ? { retry: onRetry } : {}),
+          ...errorActions,
+        }}
+        accessRequests={accessRequests}
+        loadingPreset={kind}
+      >
+        {state.actions ??
+          (onRetry &&
+            state.kind !== "reauth" &&
+            state.kind !== "unreachable" &&
+            !hasErrorRecovery && (
+              <button type="button" className="suite-async-action" onClick={onRetry}>
+                Retry
+              </button>
+            ))}
+      </ErrorState>
+    ),
+    empty:
+      state?.status === "offline" && !state.cached ? (
+        <EmptyState variant="not-available-offline" onRetry={onRetry} />
+      ) : count === 0 ? (
+        <EmptyState
+          variant={filterQuery !== undefined ? "filtered-empty" : "first-use"}
+          query={filterQuery ?? ""}
+          primaryAction={filterQuery !== undefined ? undefined : emptyAction}
+          onClearFilters={onClearFilters}
+        />
+      ) : null,
+    children: null,
+  });
 }
 
 export function CollectionStatus({
