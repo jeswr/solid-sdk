@@ -99,6 +99,11 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
 - **Identity.** `provider.identity(request)` reports validated ID token claims (issuer, subject, `webid`,
   `azp`), optionally checked against the WebID profile (`verifyWebId: true`). Tokens are never exposed.
 
+`DPoPTokenProvider.session` exposes its `OidcSession` for composition. Pass that session and the same
+`fence` to `SolidUmaTokenProvider`'s `session` option to reuse the Solid credential context, or to
+`OidcIdTokenSource`'s `session` and `context` options for LWS exchange. A different fence is rejected.
+Without these options, the providers retain their independent-session behavior.
+
 ## Automatic credential boundary
 
 Applications that cannot list storages in advance can opt into `AutomaticCredentialBoundary`. No roots are
