@@ -84,12 +84,8 @@ test("quick-create, edit one occurrence and delete following with accessible for
     .getByRole("alertdialog")
     .getByRole("button", { name: "This event", exact: true })
     .click();
-  await expect(
-    planning(page, "2027-01-11"),
-  ).toHaveAccessibleName(/^Personal planning,/);
-  await expect(
-    planning(page, "2027-01-04"),
-  ).toHaveAccessibleName(/^Weekly planning,/);
+  await expect(planning(page, "2027-01-11")).toHaveAccessibleName(/^Personal planning,/);
+  await expect(planning(page, "2027-01-04")).toHaveAccessibleName(/^Weekly planning,/);
   const later = await editOccurrence(page, "2027-01-18", "Weekly planning");
   await later.getByRole("button", { name: "Delete", exact: true }).click();
   await page
