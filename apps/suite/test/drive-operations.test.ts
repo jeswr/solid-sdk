@@ -164,6 +164,8 @@ describe("Drive names and media types", () => {
     expect(childUrl(DRIVE, "Café 💡", true)).toBe(`${DRIVE}Caf%C3%A9%20%F0%9F%92%A1/`);
     expect(trashFolderOf(DRIVE)).toBe(`${DRIVE}.trash/`);
     expect(isHidden({ name: ".acl" })).toBe(true);
+    expect(isHidden({ name: "report.acl" })).toBe(true);
+    expect(isHidden({ name: "report.ACR" })).toBe(true);
     expect(isHidden({ name: "visible" })).toBe(false);
     expect(contentTypeFor("notes.md", "text/custom")).toBe("text/custom");
     expect(contentTypeFor("notes.md", "application/octet-stream")).toBe("text/markdown");
@@ -467,6 +469,61 @@ describe("app-managed trash against the demo pod", () => {
     expect(pod.has(parentOf(entry.url) as string)).toBe(false);
     expect(await listTrash(client, DRIVE)).toEqual([]);
     expectConditionalWrites(fetch);
+  });
+
+  it.each([
+    ["file", false],
+    ["folder", false],
+    ["file", true],
+    ["folder", true],
+  ] as const)("round43 restores an ordinary %s in place after trash deletion is denied (collision %s)", async (kind, collision) => {
+    const { pod, client } = await setup();
+    const source = kind === "file" ? NOTES : `${DRIVE}retry/`;
+    if (kind === "folder")
+      await pod.fetch(`${source}child.txt`, { method: "PUT", body: "Payload" });
+    const payload = kind === "file" ? source : `${source}child.txt`;
+    const before = await (await pod.fetch(payload)).text();
+    const entry = await trashOne(client, source);
+    if (collision)
+      await pod.fetch(kind === "file" ? source : `${source}unrelated`, {
+        method: "PUT",
+        body: "Occupant",
+      });
+    const target = collision
+      ? childUrl(
+          DRIVE,
+          kind === "file" ? "notes (restored).md" : "retry (restored)",
+          kind === "folder",
+        )
+      : source;
+    const interrupted = createSolidDriveClient({
+      storageUrl: DEMO_ROOT,
+      fetch: async (input, init) =>
+        String(input) === entry.url && init?.method === "DELETE"
+          ? new Response(null, { status: 403 })
+          : pod.fetch(input, init),
+    });
+    expect((await restoreItems(interrupted, DRIVE, [entry])).failed).toHaveLength(1);
+    const refreshed = await listTrash(client, DRIVE);
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]).toEqual({
+      ...entry,
+      etag: expect.any(String),
+      verifyHeaders: expect.any(Function),
+    });
+    const retry = await restoreItems(client, DRIVE, refreshed);
+    expect(retry).toEqual({
+      done: [{ entry: refreshed[0], url: target, renamed: collision }],
+      failed: [],
+    });
+    expect(await (await pod.fetch(kind === "file" ? target : `${target}child.txt`)).text()).toBe(
+      before,
+    );
+    if (collision)
+      expect(await (await pod.fetch(kind === "file" ? source : `${source}unrelated`)).text()).toBe(
+        "Occupant",
+      );
+    expect(await listTrash(client, DRIVE)).toEqual([]);
   });
 
   it.each([

@@ -70,8 +70,9 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   await accessible(page);
   await page.keyboard.press("3");
   await expect(page).toHaveURL("/home/calendar");
-  const event = page.getByRole("listitem", { name: "Coffee with Ada", exact: true });
-  await expect(event.getByText("The corner café", { exact: true })).toBeVisible();
+  // A registered Calendar app event, discovered through the shared Type Index.
+  const event = page.getByRole("listitem", { name: "Project planning", exact: true });
+  await expect(event.getByText("Studio", { exact: true })).toBeVisible();
 });
 
 test("empty domains offer the appropriate actions", async ({ page }) => {

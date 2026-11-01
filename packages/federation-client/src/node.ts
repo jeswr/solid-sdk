@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // `@jeswr/federation-client/node` — the SSRF-safe NODE fetch path that fully closes the
 // DNS-rebinding (TOCTOU) hole on the server side. The undici DNS-pinning machinery is the
@@ -26,17 +27,15 @@
 // BROWSER ISOLATION (#92) PRESERVED. `@jeswr/guarded-fetch/node` is the ONLY artifact that
 // imports `undici` / `node:*` builtins; the package's default `.` entry (`./index.ts` →
 // `./ssrf.ts` → `@jeswr/guarded-fetch`) imports the browser-safe ROOT entry only, so the
-// browser bundle never sees `undici`. The committed `dist/node.js` keeps `undici` external
+// browser bundle never sees `undici`. The built `dist/node.js` keeps `undici` external
 // (a consumer-resolved npm dep) and references the SAME runtime `SsrfError` class as
-// `dist/index.js` (both resolve to the inlined guarded-fetch root via the build's
-// share-guarded-fetch-root plugin), so an error thrown by `@jeswr/federation-client/node`
+// `dist/index.js` (esbuild shares the bundled guarded-fetch root in a private chunk),
+// so an error thrown by `@jeswr/federation-client/node`
 // still satisfies `instanceof SsrfError` imported from `@jeswr/federation-client`.
 //
-// SsrfError IDENTITY. `SsrfError` is re-exported from THIS package's root (`./index.ts`),
-// not separately from `@jeswr/guarded-fetch/node`, so the class a consumer catches from the
-// `.` entry and the `./node` entry is one and the same (the inlined guarded-fetch root is
-// shared between dist/index.js and dist/node.js by the build keeping `./index.js` external
-// in the node bundle).
+// Guard helpers come directly from `@jeswr/guarded-fetch/node`; they never resolve through
+// this package's root. The root retains error classes and guard option types for callers
+// of federation-client's own functions; general guard helpers belong to guarded-fetch.
 //
 // PARITY of the bare `createPinningDispatcher` (the reason the override could be dropped).
 // guarded-fetch's `createPinningDispatcher` is now at least as strict as this package's prior

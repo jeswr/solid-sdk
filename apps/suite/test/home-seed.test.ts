@@ -6,6 +6,7 @@ import { parseDocument } from "../src/apps/docs/lib/model/document";
 import { discoverDomainItems } from "../src/apps/home/lib/model/discovery";
 import { provenanceOf } from "../src/apps/home/lib/model/provenance";
 import { readResource } from "../src/apps/home/lib/model/rdf";
+import { readTypeIndexes } from "../src/apps/home/lib/model/type-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import { buildHomeSeed } from "../src/lib/demo-pod/seed-home";
@@ -26,10 +27,15 @@ it("round-trips the shared Launch plan fixture through the Docs parser", async (
 it("discovers the Home acceptance fixtures through the actual demo pod", async () => {
   const seed = await buildDemoSeed(Date.now());
   const pod = createDemoPod({ root: DEMO_ROOT, seed });
+  // Contacts and Calendar fixtures are registered in the Type Index, as Home reads them.
+  const { dataset: profile } = await readResource(pod.fetch, `${DEMO_ROOT}profile/card`);
+  const index = await readTypeIndexes(pod.fetch, DEMO_WEBID, profile, DEMO_ROOT);
+  expect(index.failures).toEqual([]);
   const { items, failures, truncated } = await discoverDomainItems("all", {
     fetch: pod.fetch,
     storage: DEMO_ROOT,
     webId: DEMO_WEBID,
+    typeIndex: index.locations,
   });
   expect(failures).toEqual([]);
   expect(truncated).toBe(false);
@@ -43,8 +49,14 @@ it("discovers the Home acceptance fixtures through the actual demo pod", async (
   expect(new Set(inDomain("documents").map((item) => item.dataType?.id))).toEqual(
     new Set(["files", "docs", "notes", "bookmarks"]),
   );
-  expect(inDomain("socials")).toHaveLength(2);
-  expect(inDomain("calendar")).toHaveLength(1);
+  // The address book plus the two registered Pod Manager contacts.
+  expect(inDomain("socials").map((item) => item.title)).toEqual(
+    expect.arrayContaining(["Contacts", "Pax Orchard", "Tess Harbor"]),
+  );
+  expect(inDomain("socials")).toHaveLength(3);
+  // Every event from the two registered calendars (3 work, 9 personal).
+  expect(inDomain("calendar")).toHaveLength(12);
+  expect(inDomain("calendar").every((item) => item.dataType?.id === "agenda")).toBe(true);
   expect(inDomain("mobility")).toEqual([]);
 });
 
@@ -56,22 +68,27 @@ it("propagates serialization errors in Home seed resources", async () => {
 });
 
 // AUTHORED-BY Claude Opus 5.5 — finding 12
-it("writes contact emails as mailto: IRIs that the contact editor reads back", async () => {
+it("seeds contact emails as mailto: IRIs that the contact editor reads back", async () => {
   const { CONTACT_FIELDS } = await import("../src/apps/home/lib/forms/edit-map");
   const { readFieldValue } = await import("../src/apps/home/lib/forms/subject-edit");
-  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildHomeSeed(Date.now()) });
-  const url = `${DEMO_ROOT}contacts/ada.ttl`;
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+  const url = `${DEMO_ROOT}contacts-pm/person-0.ttl`;
   const { dataset } = await readResource(pod.fetch, url);
   const emails = [...dataset].filter(
     (quad) => quad.predicate.value === "http://www.w3.org/2006/vcard/ns#hasEmail",
   );
   expect(emails.map((quad) => [quad.object.termType, quad.object.value])).toEqual([
-    ["NamedNode", "mailto:ada@example.org"],
+    ["NamedNode", "mailto:legacy0@example.org"],
   ]);
   const email = CONTACT_FIELDS.find((field) => field.label === "Email");
   expect(readFieldValue(dataset, `${url}#it`, email as NonNullable<typeof email>)).toBe(
-    "ada@example.org",
+    "legacy0@example.org",
   );
+});
+
+it("writes Home seed modification times as xsd:dateTime literals", async () => {
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildHomeSeed(Date.now()) });
+  const { dataset } = await readResource(pod.fetch, `${DEMO_ROOT}notes/weekend.ttl`);
   const modified = [...dataset].find(
     (quad) => quad.predicate.value === "http://purl.org/dc/terms/modified",
   );

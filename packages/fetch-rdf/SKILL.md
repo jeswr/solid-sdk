@@ -71,67 +71,106 @@ in-memory dataset plus the validators you need for conditional writes. Never par
 npm install @jeswr/fetch-rdf      # deps (content-type, jsonld-streaming-parser, n3) come with it
 ```
 
-Pure ESM, Node ≥ 20. The README's "until we publish, use a git dep" note is stale — it **is**
-published.
+Pure ESM, Node ≥24. Workspace dependencies use `workspace:*`.
 
-## API surface (complete, v0.1.0)
+## API surface
 
 ```ts
 import {
-  fetchRdf, parseRdf, extractMediaType,
-  SUPPORTED_RDF_MEDIA_TYPES, DEFAULT_ACCEPT,
-  RdfFetchError,
+  fetchRdf, parseRdf, extractMediaType, SUPPORTED_RDF_MEDIA_TYPES,
+  createFetchDocumentLoader, RdfFetchError,
 } from "@jeswr/fetch-rdf";
-import type { FetchRdfOptions, ParseRdfOptions, FetchedRdf, RdfFetchErrorOptions } from "@jeswr/fetch-rdf";
+import type {
+  FetchRdfOptions, ParseRdfOptions, FetchedRdf, RdfFetchErrorOptions,
+  DocumentLoader, RdfBody, RdfMediaType, RdfParser, DatasetCore, Quad, Term,
+} from "@jeswr/fetch-rdf";
 ```
 
-```ts
-function fetchRdf(url: string, options?: FetchRdfOptions): Promise<FetchedRdf>;
-function parseRdf(body: string | ReadableStream<Uint8Array>, contentTypeHeader: string | null,
-                  options?: ParseRdfOptions): Promise<Store>;   // n3.Store
+`parseRdf(body: RdfBody, contentType: string | null, options?)` returns
+`Promise<Store>` by default or `Promise<DatasetCore>` with `engine`.
+`fetchRdf(url: string, options?)` returns `Promise<FetchedRdf>` by default or
+`Promise<FetchedRdf<DatasetCore>>` with `engine`. Options typed with an optional
+engine select the general DatasetCore overload. `RdfBody` is a string or web
+`ReadableStream<Uint8Array>`.
 
-interface FetchRdfOptions {
-  fetch?: typeof fetch;   // defaults to globalThis.fetch — see auth note below
-  accept?: string;        // defaults to DEFAULT_ACCEPT: "text/turtle, application/ld+json;q=0.9"
-  headers?: HeadersInit;  // merged in; any `accept` here is overridden by the option above
-  signal?: AbortSignal;
-}
-interface ParseRdfOptions { baseIRI?: string }  // set this to the resource URL
+`FetchedRdf` contains `dataset`, `headers: Headers`, `etag: string | null`,
+`contentType: string | null` (normalized media type), `response: Response` (consumed)
+and `url: string` (final URL). Retain `headers.get("etag")` for conditional writes.
 
-interface FetchedRdf {
-  dataset: DatasetCore;        // n3.Store at runtime; type via @rdfjs/types
-  etag: string | null;         // strong validator — keep for If-Match on writes
-  contentType: string | null;  // media type, parameters stripped, lowercased
-  response: Response;          // raw response for further headers
-  url: string;                 // final URL after redirects
-}
-```
+`ParseRdfOptions` accepts `baseIRI`, `documentLoader`, `engine`, `signal`, and the
+budgets below. `FetchRdfOptions` accepts the same options except `baseIRI` (derived
+from the final URL), plus `fetch` and `headers`. The fixed Accept header is
+`text/turtle, application/ld+json;q=0.9`; caller `headers.accept` is overridden.
+There is no `accept` option or exported `DEFAULT_ACCEPT`.
+
+| Option | Default | Scope |
+| --- | --- | --- |
+| `maxBytes` | 16,777,216 | UTF-8 bytes, checked during reads and before parsing strings; includes engine buffers and each helper-loaded context response. |
+| `maxJsonDepth` | 128 | Nested JSON objects and arrays in default-parser JSON-LD documents and loaded contexts; the root container counts as depth 1. |
+| `maxQuads` | 1,000,000 | Constructed quads, including duplicates, before dataset deduplication. |
+| `maxTermLength` | 1,048,576 | Characters per expanded term value, including graph and datatype IRIs. |
+| `maxTotalTermLength` | 67,108,864 | Aggregate constructed term characters and aggregate term values across quads (each bounded independently), including repeats, datatype IRIs and language tags. |
+| `maxContextRequests` | 32 | Per-parse context load attempts after in-flight coalescing, including nested contexts. |
+| `maxContextConcurrency` | 4 | Simultaneous context loads per parse; excess loads queue. |
+
+Limits are finite nonnegative integers; concurrency must be positive. Character
+counts use UTF-16 code units. Budget violations throw `RdfFetchError` with
+`code: "PARSE_LIMIT"` and cancel the input. The data factory checks term construction and
+quad budgets before expansion/output buffering. Fixed parser vocabulary constants
+created during initialization are excluded from the construction count. JSON depth
+is scanned on raw text before each chunk reaches the JSON-LD parser, retaining string
+and escape state across chunks. The context helper scans while reading before
+`JSON.parse`; custom-loader results are copied into plain JSON data (own enumerable properties only) with the depth checked during the copy, and the parser receives only that copy.
+The engine path gets byte-capped input, applies its own parse limits, and its result
+is checked against `maxQuads`. Term-length and JSON-depth budgets apply only to the
+default parser. These limits do not provide a general CPU budget.
+
+## Security and transport
+
+The default is `globalThis.fetch`, a browser-safe, transport-neutral choice.
+**Server-side callers handling untrusted URLs must inject a guarded fetch**, e.g.
+`createNodeGuardedFetch` from `@jeswr/guarded-fetch/node`, for address validation
+and DNS pinning. Inject authenticated fetch explicitly for protected resources;
+this package does not initialize authentication. The transport remains responsible
+for any credentials it adds and for URL-bound DPoP proof regeneration.
+
+Native redirect following is unchanged when caller headers are limited to Accept,
+Accept-Language, Cache-Control, Pragma, If-None-Match and If-Modified-Since.
+Any other caller header enables manual redirects, at most ten HTTP(S) hops.
+Same-origin hops keep caller headers; cross-origin hops drop every caller header
+except Accept, permanently for the rest of the chain. All requests remain GETs,
+including 301/302/303. Non-HTTP(S) locations and browser `opaqueredirect` responses
+reject with `RdfFetchError` (`code: "REDIRECT"`). Injected guarded transports may
+refuse redirects more strictly. The context helper refuses redirects entirely.
+
+Both functions accept `signal` and reject promptly with the signal's reason (`AbortError` by default) on abort,
+including during parsing and context loading. No dataset is returned after abort.
+Custom loaders receive an optional second argument `{ signal, maxBytes, maxJsonDepth }`; honor
+it in I/O. Opaque engines or custom loaders that ignore signals may keep running
+internally, but late results cannot complete the operation. Error messages, `.url`
+and nested causes redact URL userinfo, query and fragment; successful metadata
+retains the actual final URL. Branch on structured fields, not message text.
+
+Remote JSON-LD contexts are refused by default. `createFetchDocumentLoader` takes
+`{ allow, signal?, timeoutMs?, maxBytes? }`. It checks every context URL, including
+nested contexts, refuses redirects, coalesces loads sharing an operation signal,
+and bounds response bytes (default 16 MiB). A per-context `timeoutMs` deadline
+includes body reading and aborts parsing with `AbortError`; it has no default.
+The context byte limit is the smaller of the helper limit and the parse limit.
+Each parse owns its coalescing cache, request cap and concurrency queue, including
+when using a custom offline loader.
 
 ## Usage
 
 ```ts
-const { dataset, etag } = await fetchRdf(resourceUrl);
+const { dataset, headers } = await fetchRdf(resourceUrl, { fetch: authenticatedFetch });
+const etag = headers.get("etag");
+const parsed = await parseRdf(turtle, "text/turtle", { baseIRI: resourceUrl });
 ```
 
-- **Auth**: pass no `fetch` — `@solid/reactive-authentication` patches `globalThis.fetch`, so
-  authentication is automatic. The package's own TSDoc suggests passing a fetch from
-  `@uvdsl/solid-oidc-client-browser` — **ignore that** (banned in this stack).
-- **Errors**: non-2xx, network, and parse failures all throw `RdfFetchError` with `.status`,
-  `.url`, `.contentType`, `.cause`. Branch with `instanceof` + `.status`, never string-match:
-
-  ```ts
-  try { await fetchRdf(url); }
-  catch (e) {
-    if (e instanceof RdfFetchError && e.status === 404) { /* create the resource */ }
-    else throw e;
-  }
-  ```
-
-- **Pure parse** (body already in hand): `await parseRdf(turtle, "text/turtle", { baseIRI: url })`.
-  A `null` content-type defaults to `text/turtle`.
-- **Formats** (`SUPPORTED_RDF_MEDIA_TYPES`): `text/turtle`, `application/n-triples`,
-  `application/n-quads`, `application/trig` (via n3) and `application/ld+json` (via
-  jsonld-streaming-parser). Anything else throws — no RDF/XML by design.
+A null content type defaults to Turtle. Supported formats are `text/turtle`,
+`application/n-triples`, `application/n-quads`, `application/trig` (n3) and
+`application/ld+json` (jsonld-streaming-parser). No RDF/XML.
 
 ## What this package does NOT do
 
@@ -182,11 +221,10 @@ await scopedFetch(target, {
 
 | Gotcha | Detail |
 |---|---|
-| `headers.accept` is ignored | Set the `accept` *option*, not an `accept` header |
+| `headers.accept` is ignored | The Solid Accept header is fixed; there is no `accept` option |
 | `etag` may be `null` | Some servers (legacy NSS) send no ETag — handle the degraded no-`If-Match` write path (see `solid-server-matrix`) |
 | `dataset` typed as `DatasetCore` | It is an `n3.Store` at runtime, but write code against the RDF/JS interface |
-| README lags | Trust this skill + the `.d.ts` in `node_modules` over the repo README |
-| AS2 `application/activity+json` is rejected by `parseRdf`, and `parseRdf` alone is not safe for AS2 server-side | ActivityStreams 2.0 senders use `application/activity+json`, not in `SUPPORTED_RDF_MEDIA_TYPES`. The bytes are JSON-LD-compatible, but AS2 embeds a remote `@context` URL — using `parseRdf` after a content-type normalisation risks a live outbound context fetch (SSRF). Use the underlying `jsonld` layer with a guarded `documentLoader` instead. See the "Receiver-side" section below. (Receiver/server-side; learned building the LDN suggest-inbox in jeswr/solid-webid-index.) |
+| AS2 `application/activity+json` is rejected | Normalize it to `application/ld+json` and pass an offline `{ load }` loader for bundled allowlisted contexts; other remote contexts remain refused. See the receiver example below. |
 | A foreign pod's claim about *you* is **untrusted** | `fetchRdf` returns whatever the bytes say. A resource in someone else's pod asserting "this task is assigned to *you*" / "*you* are a member" is an unverified claim — anyone can write that triple. Before acting on cross-pod data, verify provenance: authorised source **and** the data resides in that source's own `pim:storage`. See "Receiver-side: trusting cross-pod claims" below. (Learned building the Pod Manager assigned-to-me view, jeswr/solid-pod-manager.) |
 | A search-index's links (`hydra:next`, `foaf:img`) are attacker-controlled | An external Hydra/TPF index returns index-controlled URLs. Follow `hydra:next` verbatim but **same-origin-only**; fetch through a **pristine fetch + `credentials:"omit"`** (the `registerGlobally()`-patched global retries a `401` with a token — `omit` covers cookies but NOT that DPoP retry); reject non-`https:` image IRIs before an `<img src>`; for existence use a non-redirecting JSON mode and fail closed on 3xx/error. See "Consuming an external Hydra / TPF search index safely" below. (Learned building the solid-webid-index consumer client, 2026-06.) |
 | A bespoke `safeFetch`/SSRF guard was hand-rolled (again) | Seven-plus independent copies were found across the suite, each re-deriving private-IP classification, origin checks, and redirect handling. Use **[`@jeswr/guarded-fetch`](../../packages/guarded-fetch/README.md)** instead of writing another one — it also refuses to silently follow a redirect (`redirect: "manual"`), which a from-scratch guard easily misses even when its origin/scheme checks are otherwise correct |
@@ -217,49 +255,27 @@ const effectiveContentType =
     : rawContentType;
 ```
 
-**2. Remote `@context` fetch = SSRF + reliability hazard (and `parseRdf` cannot prevent it).**
-The AS2 `@context` URL (`https://www.w3.org/ns/activitystreams`) is embedded in every AS2
-document. `parseRdf` does **not** expose a `documentLoader` option, so if you call
-`parseRdf(body, "application/ld+json")` directly, the underlying JSON-LD layer will attempt a
-live outbound HTTP fetch for that context on every notification — an SSRF vector and a hard
-runtime dependency on a remote server. **Do not use `parseRdf` directly for AS2 on a server
-request path.** Instead, parse through the underlying JSON-LD layer with a `documentLoader` that
-serves the bundled context and hard-refuses all other remote fetches:
+**2. Use an explicit offline context loader.** `parseRdf` refuses remote contexts
+by default. For AS2, return the bundled context only for its exact allowlisted URL:
 
 ```ts
-import jsonld from "jsonld";
-import { Store, Parser } from "n3";
-import AS2_CONTEXT from "./contexts/activitystreams.json" assert { type: "json" };
+import { parseRdf } from "@jeswr/fetch-rdf";
+import AS2_CONTEXT from "./contexts/activitystreams.json" with { type: "json" };
 
-const AS2_CONTEXT_URL = "https://www.w3.org/ns/activitystreams";
-
-const safeDocumentLoader = async (url: string) => {
-  if (url === AS2_CONTEXT_URL) {
-    return { contextUrl: null, documentUrl: url, document: AS2_CONTEXT };
-  }
-  throw new Error(`Remote context fetch refused (SSRF guard): ${url}`);
-};
-
-const doc = JSON.parse(await req.text());
-
-// Request N-Quads string output (a stable serialisation format); parse with n3 for typed quads.
-// No outbound network calls — context is served from the bundled safeDocumentLoader.
-const nquadsString = await jsonld.toRDF(doc, {
-  documentLoader: safeDocumentLoader,
-  format: "application/n-quads",  // returns string when format is given
-}) as unknown as string;
-
-const store = new Store();
-const parser = new Parser({ format: "application/n-quads" });
-store.addQuads(parser.parse(nquadsString));
+const dataset = await parseRdf(await req.text(), effectiveContentType, {
+  signal: req.signal,
+  documentLoader: {
+    async load(url) {
+      if (url === "https://www.w3.org/ns/activitystreams") return AS2_CONTEXT;
+      throw new Error("Context refused");
+    },
+  },
+});
 ```
 
-`jsonld.expand` produces expanded JSON-LD objects (not RDF/JS quads); use `jsonld.toRDF` when you
-need an RDF dataset to query. Use `parseRdf` only when the incoming body is known to be Turtle or
-flat JSON-LD with no remote context references (e.g. you control the sender). For any untrusted
-AS2 input on a server, the `jsonld` + guarded `documentLoader` path above is the safe default.
-
-(Learned building the LDN suggest-inbox in jeswr/solid-webid-index.)
+This performs no network context loads. The package does not bundle AS2 contexts;
+applications supply their reviewed context artifact. For bounded input reading,
+pass `req.body` to `parseRdf` instead of buffering with `req.text()`.
 
 ## Receiver-side: trusting cross-pod claims (provenance)
 

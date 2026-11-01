@@ -49,10 +49,13 @@ const initial: Snapshot = {
   used: undefined,
   updated: 0,
 };
-export interface HomeSession extends Omit<PodSession, "mode"> {
-  readonly mode: "demo" | "solid";
+/** Drops `mode` from each member of a session union, keeping the members distinct. */
+type WithoutMode<T> = T extends unknown ? Omit<T, "mode"> : never;
+/** Any suite pod session; `mode` also admits a direct Solid login. */
+export type HomeSession = WithoutMode<PodSession> & {
+  readonly mode: PodSession["mode"] | "solid";
   readonly caps?: { readonly liveUpdates: boolean };
-}
+};
 
 function affectsItem(url: string, item: DomainItem): boolean {
   return url === item.url || (url.endsWith("/") && inStorage(item.url, url));

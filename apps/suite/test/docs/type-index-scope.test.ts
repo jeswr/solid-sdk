@@ -2,6 +2,7 @@
 import { PodScopeError, RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import {
+  discoverProfileRegistrations,
   discoverRegistrations,
   ensureTypeRegistrations,
 } from "../../src/apps/docs/lib/model/type-index.js";
@@ -26,6 +27,22 @@ const unsafe = [
 ];
 
 describe("Type Index scope", () => {
+  it.each([
+    "file:///settings/publicTypeIndex.ttl",
+    "https://user@pod.example/alice/settings/publicTypeIndex.ttl",
+    "https://:secret@pod.example/alice/settings/publicTypeIndex.ttl",
+  ])("rejects unsafe public index %s in extension mode before index I/O", async (index) => {
+    const storageFetch = vi.fn<typeof fetch>();
+    const { fetch: publicFetch, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: `<${WEBID}> <${NS.SOLID}publicTypeIndex> <${index}>.` },
+    });
+    await expect(
+      discoverProfileRegistrations(WEBID, storageFetch, POD, publicFetch),
+    ).rejects.toThrow("Invalid public profile document URL.");
+    expect(calls.map((call) => call.url)).toEqual([WEBID]);
+    expect(storageFetch).not.toHaveBeenCalled();
+  });
+
   it.each(unsafe)("rejects linked %s before authenticated index I/O", async (index) => {
     const { fetch, calls } = mockFetch({ [`GET ${WEBID}`]: { body: profile(index) } });
     await expect(

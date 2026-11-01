@@ -75,7 +75,7 @@ describe("Home session discovery cache", () => {
     const cold = domainStore({ ...session });
     await cold.refresh();
     expect(cold.getSnapshot().counts.get("calendar")).toBeGreaterThan(0);
-    expect(cold.getSnapshot().counts.get("socials")).toBe(2);
+    expect(cold.getSnapshot().counts.get("socials")).toBe(3);
     expect(cold.getSnapshot().counts.get("media")).toBe(3);
     // A successfully read listing can still confirm removal during a capped scan.
     await pod.fetch(originalNote?.url as string, { method: "DELETE" });
@@ -138,7 +138,7 @@ describe("Home session discovery cache", () => {
     const first = store.getSnapshot();
     expect(first.status).toBe("ready");
     expect(first.counts.get("media")).toBe(3);
-    expect(first.counts.get("socials")).toBe(2);
+    expect(first.counts.get("socials")).toBe(3);
     expect(first.counts.get("mobility")).toBe(0);
     expect(first.views.size).toBe(first.items.length);
     expect(first.used).toBeGreaterThan(0);

@@ -52,23 +52,23 @@ test("scenario 3: contact detail, saved name, and a concurrent demo pod write", 
   context,
 }) => {
   await ready(page, "/home/socials");
-  await page.getByRole("link", { name: "Ada Rivers", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Ada Rivers" })).toBeVisible();
-  await expect(page.getByText("ada@example.org", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Pax Orchard", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Pax Orchard" })).toBeVisible();
+  await expect(page.getByText("legacy0@example.org", { exact: true })).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(/http|WebID|ACL|RDF|container|Type Index/);
   await accessible(page);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
-  await page.getByLabel("Name (required)", { exact: true }).fill("Ada Lovelace");
+  await page.getByLabel("Name (required)", { exact: true }).fill("Pax Meadow");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ada Lovelace");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pax Meadow");
   await page.getByRole("link", { name: "Socials", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Ada Lovelace", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Ada Lovelace", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Pax Meadow", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Pax Meadow", exact: true }).click();
   await expect(page).toHaveURL(/\/home\/socials\/i\//);
-  await expect(page.getByRole("heading", { level: 1, name: "Ada Lovelace" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Pax Meadow" })).toBeVisible();
   const route = page.url();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
-  await page.getByLabel("Name (required)", { exact: true }).fill("My Ada");
+  await page.getByLabel("Name (required)", { exact: true }).fill("My Pax");
   // Another page writes through the same demo pod's conditional HTTP surface.
   const other = await context.newPage();
   await ready(other, route);
@@ -82,7 +82,7 @@ test("scenario 3: contact detail, saved name, and a concurrent demo pod write", 
   await accessible(page);
   await conflict.getByRole("button", { name: "Keep my changes", exact: true }).click();
   await expect(conflict).toBeHidden();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("My Ada");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("My Pax");
   // Keeping only changed fields also keeps the other editor's changed email.
   await expect(page.getByText("new@example.org", { exact: true })).toBeVisible();
   await other.close();
@@ -157,7 +157,7 @@ test("HM-05: add an Address, discover its card and register its data type", asyn
 
 test("focused card and detail shortcuts open item-filtered access management", async ({ page }) => {
   await ready(page, "/home/socials");
-  const card = page.getByRole("link", { name: "Bram Kerst", exact: true });
+  const card = page.getByRole("link", { name: "Tess Harbor", exact: true });
   const route = await card.getAttribute("href");
   await card.focus();
   await page.keyboard.press(".");

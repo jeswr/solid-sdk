@@ -4,8 +4,7 @@
  * The message protocol shared across the four contexts (MAIN-world inject, ISOLATED
  * content script, service worker, popup). All payloads MUST be JSON-serialisable —
  * `window.postMessage` (page ↔ content) and `chrome.runtime` (content/popup ↔ worker)
- * both structured-clone, and Response bodies are serialised as text (Solid resources are
- * predominantly text/RDF; binary support is a documented future extension).
+ * carry text directly and binary bodies as bounded standard base64 strings.
  *
  * The injected `window.solid` NEVER receives a token — only the WebID + a proxied fetch
  * result. The credential boundary is enforced entirely in the service worker.
@@ -25,7 +24,10 @@ export interface FetchRequest {
   readonly url: string;
   readonly method: string;
   readonly headers: Record<string, string>;
-  readonly body: string | null;
+  /** Text request body, absent when bodyBase64 is present or there is no body. */
+  readonly body?: string;
+  /** Binary request bytes as standard base64 (at most 25 MiB raw), exclusive with body. */
+  readonly bodyBase64?: string;
   /**
    * The page-supplied requesting origin (`window.location.origin`), stamped by the content
    * script. ADVISORY ONLY — the worker cross-checks it against the browser-attested
@@ -156,6 +158,13 @@ export interface RevokeGrantRequest {
   readonly stampedOrigin?: string;
 }
 
+/** End THIS origin's binding and all nested grants without signing the account out. */
+export interface DisconnectRequest {
+  readonly type: 'SOLID_DISCONNECT';
+  readonly requestId: string;
+  readonly stampedOrigin?: string;
+}
+
 /** `window.solid.resolveClass(classIRI)` — read-only introspection of a class → targets. */
 export interface ResolveClassRequest {
   readonly type: 'SOLID_RESOLVE_CLASS';
@@ -164,7 +173,7 @@ export interface ResolveClassRequest {
   readonly stampedOrigin?: string;
 }
 
-/** The worker's reply to any of the four access-management requests (correlated by requestId). */
+/** The worker's reply to an access-management request (correlated by requestId). */
 export interface AccessResponse {
   /** Sent only after explicit origin consent; enables the newly granted API before resolving. */
   readonly webId?: string;
@@ -187,8 +196,12 @@ export interface GetPendingConsentRequest {
 export interface ConsentDecisionMessage {
   readonly type: 'SOLID_CONSENT_DECISION';
   readonly consentId: string;
-  /** The data-class IRIs the user APPROVED (a subset of the requested set); [] ⇒ denied all. */
-  readonly approvedClasses: readonly string[];
+  /**
+   * Per approved class, the opaque ids of the targets the person selected (BWC3 C5). Every id
+   * must belong to that class in the pending snapshot or the decision is refused; a class with
+   * no selected id is not granted; `{}` denies everything.
+   */
+  readonly approvedTargets: Readonly<Record<string, readonly string[]>>;
   readonly profileId?: string;
 }
 
@@ -204,8 +217,17 @@ export interface PendingConsentView {
     readonly modes: readonly string[];
     readonly purpose: string | null;
     readonly expiresAt: number;
-    readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+    readonly targets: ReadonlyArray<{
+      readonly id: string;
+      readonly url: string;
+      readonly kind: 'instance' | 'container';
+      /** Which rung found it: SAI data registries or the Type Index. */
+      readonly source: 'sai' | 'type-index';
+      readonly check: 'conforms' | 'mixed' | 'unchecked';
+      readonly preselected: boolean;
+    }>;
     readonly shape: string | null;
+    readonly truncated?: boolean;
   }>;
 }
 
@@ -278,6 +300,7 @@ export type WorkerRequest =
   | RequestAccessRequest
   | ListGrantsRequest
   | RevokeGrantRequest
+  | DisconnectRequest
   | ResolveClassRequest
   | GetPendingConsentRequest
   | ConsentDecisionMessage;
@@ -293,7 +316,10 @@ export interface FetchResponse {
   /** Whether the worker followed a resource redirect before serving this response. */
   readonly redirected?: boolean;
   readonly headers?: Record<string, string>;
+  /** Valid UTF-8 textual response body, exclusive with bodyBase64. */
   readonly body?: string;
+  /** Binary or invalid-UTF-8 response bytes as standard base64 (at most 25 MiB raw). */
+  readonly bodyBase64?: string;
   readonly error?: string;
   /**
    * A PASSTHROUGH SENTINEL: `true` ⇒ the SW declined this `autoDivert` request WITHOUT
