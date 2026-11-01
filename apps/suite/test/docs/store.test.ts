@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex — preferences-based index bootstrap
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -21,7 +21,11 @@ import {
   type Snapshot,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
-import { ProfileTypeIndexAnchor } from "../../src/apps/docs/lib/model/type-index.js";
+import {
+  ProfileTypeIndexAnchor,
+  TypeRegistration,
+} from "../../src/apps/docs/lib/model/type-index.js";
+import { DOCUMENT_CLASS } from "../../src/apps/docs/lib/model/vocab.js";
 import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
@@ -34,6 +38,7 @@ const WAIT = async () => {};
 
 async function document(title = "Plan", body = "old"): Promise<StoredDocument> {
   const dataset = buildDocument(DOC, {
+    instanceId: "fixture-document",
     title,
     body,
     now: NOW,
@@ -414,13 +419,39 @@ describe("listing", () => {
     ]);
     expect(s.calls.some((c) => c.url.includes("evil.example"))).toBe(false);
   });
-  it("ignores unregistered legacy containers and absent/forbidden canonical locations", async () => {
-    for (const status of [403, 404]) {
+  it("ignores unregistered legacy containers and absent canonical locations", async () => {
+    for (const status of [404]) {
       const s = await server();
       const f: typeof fetch = async (url, init) =>
         String(url) === `${POD}docs/` ? new Response(null, { status }) : s.fetchImpl(url, init);
       expect(await new DocsStore(POD, WEBID, f).list()).toEqual([]);
       expect(s.calls.some((c) => c.url === `${POD}pod-docs/`)).toBe(false);
+    }
+  });
+  it.each([
+    "docs/",
+    "pod-docs/",
+  ])("round47 a denied %s container fails the listing instead of returning partial or empty rows", async (slug) => {
+    const s = await server();
+    const dataset = new Store();
+    const registration = new TypeRegistration(`${INDEX}#legacy`, dataset, DataFactory);
+    registration.markRegistration();
+    registration.forClasses.add(DOCUMENT_CLASS);
+    registration.instanceContainers.add(`${POD}pod-docs/`);
+    s.resources.set(INDEX, {
+      body: await serializeTurtle(dataset),
+      etag: '"i"',
+      contentType: "text/turtle",
+    });
+    s.resources.set(`${POD}docs/`, {
+      body: listing([DOC]),
+      etag: '"c"',
+      contentType: "text/turtle",
+    });
+    for (const status of [401, 403, 500]) {
+      const f: typeof fetch = async (url, init) =>
+        String(url) === `${POD}${slug}` ? new Response(null, { status }) : s.fetchImpl(url, init);
+      await expect(new DocsStore(POD, WEBID, f).list()).rejects.toMatchObject({ status });
     }
   });
   it("handles a dataset with no container and propagates server failures", async () => {
@@ -434,6 +465,52 @@ describe("listing", () => {
 });
 
 describe("snapshot conflicts", () => {
+  it.each([
+    undefined,
+    7,
+  ])("round52 metadata retries rebase the complete snapshot on every 412 (wordCount %j)", async (wordCount) => {
+    const s = await server();
+    const stored = await document();
+    let conflicts = 0;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      if (init?.method === "PUT" && conflicts < 2) {
+        conflicts++;
+        s.resources.set(DOC, {
+          body: await serializeTurtle(
+            buildDocument(DOC, {
+              ...stored.data,
+              body: `Remote body ${conflicts}`,
+              format: "text/markdown",
+              wordCount,
+            }),
+          ),
+          etag: `"remote-${conflicts}"`,
+          contentType: "text/turtle",
+        });
+        return new Response(null, { status: 412 });
+      }
+      return s.fetchImpl(url, init);
+    };
+    const store = new DocsStore(POD, WEBID, fetchImpl);
+    const wait = vi.fn(WAIT);
+    const saved = await store.save(
+      stored,
+      {
+        title: "Renamed",
+        assets: `${POD}docs/plan/new-assets/`,
+      },
+      { wait },
+    );
+    expect(wait.mock.calls).toEqual([[2000], [4000]]);
+    expect(saved.data).toMatchObject({
+      title: "Renamed",
+      body: "Remote body 2",
+      format: "text/markdown",
+      wordCount,
+      assets: `${POD}docs/plan/new-assets/`,
+    });
+    expect(await store.read(DOC)).toEqual(saved);
+  });
   it.each([
     ["text/markdown", "text/html", "<p>Regenerated HTML</p>"],
     ["text/html", "text/markdown", "# Regenerated Markdown"],
@@ -534,6 +611,27 @@ describe("snapshot conflicts", () => {
       s.calls.filter((call) => call.method === "PUT").map((call) => call.headers["if-match"]),
     ).toEqual(['"v1"']);
     expect(s.resources.get(DOC)).toEqual(remote);
+  });
+  it("rejects a replacement discovered during a snapshot 412 retry", async () => {
+    const s = await server();
+    const stored = await document();
+    const replacement = {
+      body: await serializeTurtle(
+        buildDocument(DOC, { title: "Plan", body: "Replacement", instanceId: "replacement" }),
+      ),
+      etag: '"replacement"',
+      contentType: "text/turtle",
+    };
+    s.resources.set(DOC, replacement);
+    await expect(
+      s.store.save(
+        stored,
+        { body: "Offline edits" },
+        { regenerate: () => ({ body: "Offline edits", format: "text/html" }), wait: WAIT },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(s.resources.get(DOC)).toEqual(replacement);
+    expect(s.calls.filter((call) => call.method === "PUT")).toHaveLength(1);
   });
   it("regenerates every retry, uses the fresh ETag, and preserves remote metadata/history", async () => {
     const s = await server();
@@ -680,6 +778,131 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it("refuses to acknowledge a conflicting finalisation when the target cannot be re-read", async () => {
+    const s = await server();
+    let finalising = false;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (String(input) === `${POD}docs/plan-copy.ttl`) {
+        if (init?.method === "PUT" && new Headers(init.headers).has("if-match")) {
+          finalising = true;
+          return new Response(null, { status: 412 });
+        }
+        if (finalising) return new Response(null, { status: 403 });
+      }
+      return s.fetchImpl(input, init);
+    };
+    await expect(
+      new DocsStore(POD, WEBID, fetchImpl).makeCopy(await document(), {
+        assets: [],
+        snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("retains a concurrent edit to a reserved copy when its owner retries", async () => {
+    const s = await server();
+    const source = await document();
+    let reservation: StoredDocument | undefined;
+    const state = {
+      assets: [],
+      snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+      persistFullState: async () => {
+        throw new Error("interrupted");
+      },
+      onReserved: async (copy: StoredDocument) => {
+        reservation = copy;
+      },
+    };
+    await expect(s.store.makeCopy(source, state)).rejects.toThrow("interrupted");
+    assert(reservation);
+    const remote = await s.store.save(
+      reservation,
+      { body: "Another tab's copy edit" },
+      { regenerate: () => ({ body: "Another tab's copy edit", format: "text/html" }) },
+    );
+    await expect(
+      s.store.makeCopy(source, { ...state, reservation, persistFullState: async () => {} }),
+    ).rejects.toBeInstanceOf(ResourceWriteError);
+    expect((await s.store.read(remote.url))?.data.body).toBe("Another tab's copy edit");
+  });
+  it.each(["missing", "empty", "unrelated"])("rejects a %s recovery reservation", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const reservation = { ...source, url: `${POD}docs/reservation.ttl` };
+    if (kind !== "missing")
+      s.resources.set(reservation.url, {
+        body:
+          kind === "empty"
+            ? ""
+            : await serializeTurtle(buildDocument(reservation.url, { title: "Unrelated" })),
+        etag: '"other"',
+        contentType: "text/turtle",
+      });
+    await expect(
+      s.store.makeCopy(source, {
+        reservation,
+        assets: [],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: kind === "missing" ? 404 : 422 });
+  });
+  it.each([
+    "same",
+    "different",
+    "longer",
+    "unreadable",
+    "unavailable",
+  ])("resumes copied assets only when their bytes agree (%s)", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const asset = `${docContainerUrls(DOC).assets}chart.png`;
+    s.resources.set(asset, { body: "png", contentType: "image/png", etag: '"asset"' });
+    let reservation: StoredDocument | undefined;
+    await expect(
+      s.store.makeCopy(source, {
+        assets: [asset],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        onReserved: async (copy) => {
+          reservation = copy;
+        },
+        persistFullState: async () => {
+          throw new Error("interrupted");
+        },
+      }),
+    ).rejects.toThrow("interrupted");
+    assert(reservation);
+    const target = `${docContainerUrls(reservation.url).assets}chart.png`;
+    if (kind === "different" || kind === "longer")
+      s.resources.set(target, {
+        body: kind === "longer" ? "longer" : "bad",
+        contentType: "image/png",
+        etag: '"changed"',
+      });
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (
+        String(input) === target &&
+        ((kind === "unreadable" && !init?.method) ||
+          (kind === "unavailable" && init?.method === "PUT"))
+      )
+        return new Response(null, { status: 503 });
+      return s.fetchImpl(input, init);
+    };
+    const retry = new DocsStore(POD, WEBID, fetchImpl).makeCopy(source, {
+      reservation,
+      assets: [asset],
+      snapshot: () => ({ body: "live", format: "text/html" }),
+      persistFullState: async () => {},
+    });
+    if (kind === "same") {
+      expect((await retry).url).toBe(reservation.url);
+      expect(s.resources.get(target)?.body).toBe("png");
+    } else
+      await expect(retry).rejects.toBeInstanceOf(
+        kind === "unreadable" ? ResourceReadError : ResourceWriteError,
+      );
+    expect(s.resources.has(`${POD}docs/plan-copy-2.ttl`)).toBe(false);
+  });
   it.each([
     'W/"reservation"',
     null,
@@ -755,6 +978,7 @@ describe("makeCopy", () => {
       `${POD}docs/plan-copy-2/updates/`,
       expect.any(Function),
       new Map(),
+      copy.data.instanceId,
     );
     expect(s.resources.get(oldContainer)).toEqual(old);
     expect(s.resources.has(`${POD}docs/plan-copy.ttl`)).toBe(false);

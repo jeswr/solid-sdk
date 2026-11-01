@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +8,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // AUTHORED-BY Codex GPT-6.1-Sol: capture push taps before the WebView exists.
+        SuitePushCoordinator.shared.install()
         return true
+    }
+
+    // AUTHORED-BY Codex GPT-6.1-Sol: APNs token and background-only activation challenge paths.
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        SuitePushCoordinator.shared.registered(deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        SuitePushCoordinator.shared.registrationFailed(error)
+    }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        SuitePushCoordinator.shared.background(userInfo, completion: completionHandler)
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

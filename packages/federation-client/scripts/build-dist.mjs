@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.
@@ -38,8 +39,8 @@
  * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -196,26 +197,21 @@ const EXTERNAL = [
 ];
 
 /**
- * The Node entry (`./node` → dist/node.js) additionally keeps external:
+ * The Node entry (`./node` → dist/node.js) keeps external:
  *   - `undici` — an npm-published runtime `dependency` resolved by the consumer (NOT
  *     inlined). The `./node` entry is the ONLY artifact that references `undici`, so the
  *     default `.` entry (dist/index.js) is unaffected and the browser bundle never sees
  *     it (task #92);
- *   - `./index.js` — this package's ROOT bundle. `node.ts` re-exports
- *     `@jeswr/guarded-fetch/node`, whose `createNodeGuardedFetch` throws the guarded-fetch
- *     ROOT's `SsrfError` and uses its `isPublicAddress`/`isLoopbackAddress`. For an error
- *     thrown by `@jeswr/federation-client/node` to satisfy `instanceof SsrfError` imported
- *     from `@jeswr/federation-client`, BOTH emitted bundles must share ONE guarded-fetch
- *     root at runtime. We achieve that by (a) keeping `./index.js` external in the node
- *     bundle and (b) ALIASING the guarded-fetch root (`@jeswr/guarded-fetch`, which
- *     guarded-fetch's own `node` module imports as `./index.js`) to THIS package's
- *     `dist/index.js` — which is the SOLE place the guarded-fetch root is inlined. So
- *     `dist/node.js` references the SAME `SsrfError` class as `dist/index.js` (roborev:
- *     avoid two split `SsrfError` classes / two ipaddr copies);
  *   - Node builtins (`node:dns`, `node:net`) — external on `platform:"node"` by default;
  *     named for clarity.
+ *
+ * Bundle BOTH entries in one build with code splitting. esbuild resolves guarded-fetch's
+ * own `./index.js` normally and shares that module in a private chunk. This preserves one
+ * SsrfError / RedirectRefusedError class across entries without making the Node guard
+ * import helpers from federation-client's public root. All chunks stay inside dist/ for
+ * self-contained mirror installs; no runtime guarded-fetch dependency is introduced.
  */
-const NODE_EXTERNAL = [...EXTERNAL, "undici", "./index.js", "node:dns", "node:net"];
+const NODE_EXTERNAL = [...EXTERNAL, "undici", "node:dns", "node:net"];
 
 async function main(buildDir = outdir) {
   // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
@@ -225,71 +221,28 @@ async function main(buildDir = outdir) {
     stdio: ["ignore", "ignore", "inherit"],
   });
 
-  // 2. Clean target then bundle the runtime JS (esbuild owns dist/index.js).
+  // 2. Bundle the root and Node entries together, sharing guarded-fetch privately.
   rmSync(buildDir, { recursive: true, force: true });
   await build({
-    entryPoints: [join(root, "src", "index.ts")],
-    outfile: join(buildDir, "index.js"),
+    entryPoints: [join(root, "src", "index.ts"), join(root, "src", "node.ts")],
+    outdir: buildDir,
     bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node24",
-    // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
-    external: EXTERNAL,
-    sourcemap: true,
-    legalComments: "none",
-    logLevel: "warning",
-  });
-
-  // 2b. Bundle the SEPARATE Node entry (dist/node.js). It INLINES
-  //     `@jeswr/guarded-fetch/node` (the off-npm undici DNS-pinning fetch) but keeps
-  //     `undici` + node: builtins external (undici is a consumer-resolved npm dep). The
-  //     load-bearing part: guarded-fetch's own `dist/node.js` imports the guarded-fetch
-  //     ROOT via a RELATIVE `./index.js`; we must NOT let esbuild inline that root a SECOND
-  //     time (it is already inlined into THIS package's `dist/index.js`), or `dist/node.js`
-  //     would carry a split `SsrfError` (+ ipaddr) class and break `instanceof` across the
-  //     `.` and `./node` entries. The plugin below intercepts THAT relative `./index.js`
-  //     (only when it is imported from inside the installed `@jeswr/guarded-fetch` package)
-  //     and marks it EXTERNAL as `./index.js`, so at runtime it resolves to the sibling
-  //     `dist/index.js` (this package's root) — the SOLE inlined guarded-fetch root. So
-  //     both emitted bundles share ONE `SsrfError`. (`./index.js` is also in NODE_EXTERNAL
-  //     for the direct `node.ts` import; the plugin covers the guarded-fetch-internal one.)
-  const shareGuardedFetchRootPlugin = {
-    name: "share-guarded-fetch-root",
-    setup(buildApi) {
-      const guardedFetchDir = `${sep}node_modules${sep}@jeswr${sep}guarded-fetch${sep}`;
-      buildApi.onResolve({ filter: /^\.\/index\.js$/ }, (args) => {
-        // Only the guarded-fetch package's OWN internal `./index.js` import (its node module
-        // referencing its root). A `./index.js` from our own src is handled by NODE_EXTERNAL.
-        if (args.importer.includes(guardedFetchDir)) {
-          return { path: "./index.js", external: true };
-        }
-        return null;
-      });
-    },
-  };
-  await build({
-    entryPoints: [join(root, "src", "node.ts")],
-    outfile: join(buildDir, "node.js"),
-    bundle: true,
+    splitting: true,
     format: "esm",
     platform: "node",
     target: "node24",
     external: NODE_EXTERNAL,
-    plugins: [shareGuardedFetchRootPlugin],
     sourcemap: true,
     legalComments: "none",
     logLevel: "warning",
   });
 
-  // 2c. Normalise esbuild's inlined-module path comments (in `.js`) AND the
-  //     `sources[]` arrays (in `.js.map`) so the committed artifacts are
-  //     reproducible + carry no local `/Users/…` filesystem path (see
-  //     `normalizeBundlePaths` / `normalizeSourceMap`). Applied to BOTH bundles.
-  normalizeBundlePaths(join(buildDir, "index.js"));
-  normalizeBundlePaths(join(buildDir, "node.js"));
-  normalizeSourceMap(join(buildDir, "index.js.map"));
-  normalizeSourceMap(join(buildDir, "node.js.map"));
+  // Normalise both entries AND every shared chunk so mirror artifacts are reproducible
+  // and carry no local filesystem paths.
+  for (const file of readdirSync(buildDir)) {
+    if (file.endsWith(".js")) normalizeBundlePaths(join(buildDir, file));
+    if (file.endsWith(".js.map")) normalizeSourceMap(join(buildDir, file));
+  }
 
   // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(

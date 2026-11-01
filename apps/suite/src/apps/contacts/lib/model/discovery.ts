@@ -59,21 +59,26 @@ export class TypeIndexDataset extends DatasetWrapper {
 }
 
 /** Register into an existing, caller-selected index, preserving every other registration. */
-export async function registerAddressBook(model: ContactsModel, indexUrl: string): Promise<void> {
+export async function registerAddressBook(
+  model: ContactsModel,
+  indexUrl: string,
+  confirmed?: (url: string) => void,
+  bookUrl = model.bookUrl,
+): Promise<void> {
   const snapshot = await model.transport.read(indexUrl, (dataset) => dataset);
   const dataset = new Store([...snapshot.dataset]);
   const registrations = [...new TypeIndexDataset(dataset, DataFactory).registrations];
   const locations = [
-    { classIri: BOOK_CLASS, instance: `${model.bookUrl}#this`, container: undefined },
+    { classIri: BOOK_CLASS, instance: `${bookUrl}#this`, container: undefined },
     {
       classIri: CONTACT_CLASS,
       instance: undefined,
-      container: new URL("people/", model.bookUrl).href,
+      container: new URL("people/", bookUrl).href,
     },
     {
       classIri: GROUP_CLASS,
       instance: undefined,
-      container: new URL("groups/", model.bookUrl).href,
+      container: new URL("groups/", bookUrl).href,
     },
   ];
   for (const [i, location] of locations.entries()) {
@@ -97,7 +102,7 @@ export async function registerAddressBook(model: ContactsModel, indexUrl: string
     entry.container = location.container;
   }
   if (dataset.size !== snapshot.dataset.size) {
-    await model.transport.commit([replacement(snapshot, dataset)]);
+    await model.transport.commit([replacement(snapshot, dataset)], confirmed);
   }
 }
 

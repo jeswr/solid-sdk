@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -8,7 +9,7 @@ import { click, h, key, mount } from "./drive-ui-dom";
 import { OWNER, PUBLIC, ROOT, turtle, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ params: new URLSearchParams() }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

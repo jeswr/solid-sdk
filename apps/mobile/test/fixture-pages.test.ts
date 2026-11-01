@@ -1,8 +1,14 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
-import { createContext, runInContext } from "node:vm";
+import { type Context, createContext, runInContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { CAPABILITIES, checkFixture } from "../e2e/checks.ts";
+import {
+  CAPABILITIES,
+  checkFixture,
+  checkGatedUnwrap,
+  checkSecureStoreFixture,
+} from "../e2e/checks.ts";
 
 const script = (name: string) =>
   readFileSync(new URL(`../e2e/fixture/${name}.js`, import.meta.url), "utf8");
@@ -26,31 +32,110 @@ const verdict = (attempts: unknown) =>
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-async function hostile(window: object, advance = 0) {
+// Execute the scripts requested by the real page code, so tests cover platform-specific loading.
+function secureStoreLoader(context: Context, fails = false) {
+  const append = vi.fn((element: { src: string; onload: () => void; onerror: () => void }) => {
+    expect(element.src).toBe("/secure-store.js");
+    if (fails) element.onerror();
+    else {
+      runInContext(script("secure-store"), context);
+      element.onload();
+    }
+  });
+  context.document ??= {};
+  context.document.createElement = vi.fn(() => ({}));
+  context.document.head = { append };
+  return append;
+}
+
+async function hostile(window: object, advance = 2000, ios = false, secure = false) {
   const postMessage = vi.fn();
   const context = createContext({
     window,
     location: {
       origin: foreignOrigin,
-      search: `?parent=${encodeURIComponent(suiteOrigin)}&nonce=probe`,
+      search: `?parent=${encodeURIComponent(suiteOrigin)}&nonce=probe${ios ? "&platform=ios" : ""}`,
     },
     URLSearchParams,
     parent: { postMessage },
     setTimeout,
     clearTimeout,
+    performance: { now: () => Date.now() },
   });
+  const loadSecureStore = secureStoreLoader(context);
+  if (ios) runInContext(script("ios-probes"), context);
   const completion = runInContext(script("hostile"), context);
   await vi.advanceTimersByTimeAsync(advance);
   await completion;
+  expect(loadSecureStore).toHaveBeenCalledTimes(ios ? 0 : 1);
   expect(postMessage).toHaveBeenCalledOnce();
   expect(postMessage.mock.calls[0]?.[1]).toBe(suiteOrigin);
   const message = postMessage.mock.calls[0]?.[0];
   expect(message.nonce).toBe("probe");
   expect(message.result.origin).toBe(foreignOrigin);
-  return message.result.attempts;
+  return secure ? message.result : message.result.attempts;
 }
 
 describe("hostile-frame JavaScript", () => {
+  test("iOS sends a typed getPending message and the actual Capacitor prompt command", async () => {
+    const postMessage = vi.fn();
+    const prompt = vi.fn(() => null);
+    const attempts = await hostile(
+      { webkit: { messageHandlers: { bridge: { postMessage } } }, prompt },
+      2000,
+      true,
+    );
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "message",
+      callbackId: "mob07-hostile-probe-webkit",
+      pluginId: "SuiteShareIntake",
+      methodName: "getPending",
+      options: {},
+    });
+    expect(prompt).toHaveBeenCalledWith(JSON.stringify({ type: "CapacitorCookies.isEnabled" }));
+    expect(attempts).toEqual({
+      webkitBridge: {
+        status: "no-response",
+        callbackId: "mob07-hostile-probe-webkit",
+        observedMs: 2000,
+        data: undefined,
+      },
+      prompt: { status: "no-response", observedMs: 2000, value: null },
+    });
+  });
+  test("iOS records native effects and preserves normal callback delivery", async () => {
+    const original = vi.fn();
+    const window = {
+      Capacitor: { fromNative: original },
+      webkit: {
+        messageHandlers: {
+          bridge: {
+            postMessage: (call: object) => {
+              window.Capacitor.fromNative({ ...call, success: true, data: { batches: [] } });
+            },
+          },
+        },
+      },
+      prompt: vi.fn(() => "false"),
+    };
+    const attempts = await hostile(window, 2000, true);
+    expect(attempts.webkitBridge.status).toBe("resolved");
+    expect(attempts.prompt.status).toBe("response");
+    expect(original).toHaveBeenCalledOnce();
+  });
+  test("missing or throwing iOS transports fail instead of claiming isolation", async () => {
+    const attempts = await hostile(
+      {
+        prompt: () => {
+          throw new Error("broken");
+        },
+      },
+      0,
+      true,
+    );
+    expect(attempts.webkitBridge.status).toBe("error");
+    expect(attempts.prompt.status).toBe("error");
+  });
   test("reports unavailable native transports", async () => {
     const attempts = await hostile({});
     expect(Object.keys(attempts)).toHaveLength(5);
@@ -69,8 +154,12 @@ describe("hostile-frame JavaScript", () => {
       CapacitorHttpAndroidInterface: { isEnabled: http },
       Capacitor: { Plugins: { SuiteShareIntake: { getPending } } },
     });
-    expect(postMessage).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(postMessage.mock.calls[0]?.[0])).toEqual({
+    expect(postMessage).toHaveBeenCalledTimes(6);
+    expect(
+      postMessage.mock.calls
+        .map(([message]) => JSON.parse(message))
+        .find((message) => message.pluginId === "SuiteShareIntake"),
+    ).toEqual({
       callbackId: "mob07-hostile-probe",
       pluginId: "SuiteShareIntake",
       methodName: "getPending",
@@ -185,21 +274,75 @@ describe("hostile-frame JavaScript", () => {
   });
 });
 
-function topFrame(hasPlugin = true) {
+function fakeSecureStore() {
+  let epoch = 0;
+  const entries = new Map<string, { value: string | null; version: number }>();
+  const get = vi.fn(async ({ key }: { key: string }) => ({
+    ...(entries.get(key) ?? { value: null, version: epoch }),
+  }));
+  const set = vi.fn(
+    async ({
+      key,
+      value,
+      version,
+    }: {
+      key: string;
+      value: string;
+      version: number;
+      userPresence: boolean;
+    }) => {
+      const current = entries.get(key)?.version ?? epoch;
+      if (version !== current) throw Object.assign(new Error("stale"), { code: "stale" });
+      entries.set(key, { value, version: version + 1 });
+      return { version: version + 1 };
+    },
+  );
+  return {
+    status: vi.fn(async () => ({ available: true, userPresence: true, hardwareBacked: false })),
+    get,
+    set,
+    remove: vi.fn(async ({ key }: { key: string }) => {
+      entries.set(key, { value: null, version: (entries.get(key)?.version ?? epoch) + 1 });
+      return {};
+    }),
+    clear: vi.fn(async () => {
+      epoch = Math.max(epoch, ...[...entries.values()].map((row) => row.version)) + 1;
+      entries.clear();
+      return {};
+    }),
+    cancel: vi.fn(async () => ({})),
+  };
+}
+
+function topFrame(hasPlugin = true, ios = false, secureStoreLoadFails = false) {
+  const secureStore = fakeSecureStore();
   const listeners = new Map<string, (event: object) => void>();
   const contentWindow = {};
   const frame = { contentWindow, src: "" };
+  const result = { value: "" };
   const getPending = vi.fn(async () => ({ batches: [] as object[] }));
   let received: ((batch: object) => void) | undefined;
-  const addListener = vi.fn(async (_name: string, callback: (batch: object) => void) => {
+  const addListener = vi.fn((_name: string, callback: (batch: object) => void) => {
     received = callback;
+    const handle = { remove: async () => {} };
+    // Capacitor iOS returns the JS removal handle synchronously, without a native response.
+    return ios ? handle : Promise.resolve(handle);
   });
   const acknowledge = vi.fn(async () => {});
+  const toNative = vi.fn(() => "callback-id");
+  const fromNative = vi.fn();
   const window = {
     isSecureContext: true,
     crypto: { subtle: {} },
     Capacitor: hasPlugin
-      ? { Plugins: { SuiteShareIntake: { getPending, addListener, acknowledge } } }
+      ? {
+          toNative,
+          fromNative,
+          Plugins: {
+            SuiteShareIntake: { getPending, addListener, acknowledge },
+            SuiteSecureStore: secureStore,
+          },
+        }
       : undefined,
     addEventListener: (name: string, callback: (event: object) => void) =>
       listeners.set(name, callback),
@@ -210,20 +353,48 @@ function topFrame(hasPlugin = true) {
     location: { origin: suiteOrigin },
     navigator: { locks: {}, serviceWorker: {} },
     crypto: { randomUUID: () => "nonce" },
-    document: { querySelector: () => frame },
+    document: { querySelector: (selector: string) => (selector === "#hostile" ? frame : result) },
     fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
     setTimeout,
     clearTimeout,
+    performance: { now: () => Date.now() },
   });
+  if (ios) {
+    Object.assign(window, {
+      webkit: {
+        messageHandlers: {
+          bridge: {
+            postMessage: (call: object) => {
+              queueMicrotask(() =>
+                context.window.Capacitor.fromNative({
+                  ...call,
+                  success: true,
+                  data: { batches: [] },
+                }),
+              );
+            },
+          },
+        },
+      },
+      prompt: vi.fn(() => "false"),
+    });
+    runInContext(script("ios-probes"), context);
+  }
+  const loadSecureStore = secureStoreLoader(context, secureStoreLoadFails);
   runInContext(script("index"), context);
   return {
     context,
+    secureStore,
     listeners,
     frame,
     contentWindow,
     getPending,
     addListener,
     acknowledge,
+    result,
+    toNative,
+    fromNative,
+    loadSecureStore,
     receive: (batch: object) => received?.(batch),
   };
 }
@@ -295,13 +466,60 @@ describe("top-frame fixture JavaScript", () => {
       "Error: Native call or hostile frame timed out",
     );
   });
+  test("renders iOS evidence and watches hostile replies delivered to the top frame", async () => {
+    const top = topFrame(true, true);
+    await vi.advanceTimersByTimeAsync(2000);
+    const state = top.context.window.__e2e;
+    expect(state.ios.top.webkitBridge).toMatchObject({ status: "resolved", data: { batches: [] } });
+    expect(state.ios.top.prompt).toMatchObject({ status: "response", value: "false" });
+    expect(state.listenerSubscriptionRequested).toBe(true);
+    expect(state).not.toHaveProperty("listenerReady");
+    expect(top.frame.src).toContain("&platform=ios");
+    expect(top.loadSecureStore).not.toHaveBeenCalled();
+    expect(top.context.window).not.toHaveProperty("__e2eSecureStore");
+    expect(top.context.window.Capacitor.toNative).toBe(top.toNative);
+    expect(top.secureStore.status).not.toHaveBeenCalled();
+    expect(top.fromNative).toHaveBeenCalledOnce();
+    top.context.window.Capacitor.fromNative({
+      callbackId: "mob07-hostile-nonce-webkit",
+      success: true,
+      data: { batches: [] },
+    });
+    top.listeners.get("message")?.({
+      source: top.contentWindow,
+      origin: foreignOrigin,
+      data: {
+        type: "mob07-hostile",
+        nonce: "nonce",
+        result: {
+          origin: foreignOrigin,
+          attempts: {
+            webkitBridge: {
+              status: "no-response",
+              callbackId: "mob07-hostile-nonce-webkit",
+              observedMs: 2000,
+            },
+            prompt: { status: "no-response", observedMs: 2000, value: null },
+          },
+        },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(JSON.parse(top.result.value)).toMatchObject({ done: true, platform: "ios" });
+    expect(checkFixture(state, suiteOrigin, foreignOrigin, "ios")).toContain(
+      "Hostile frame native effect accessible or unproven: webkitBridge",
+    );
+  });
 });
 
 test("navigation fixture attempts the foreign origin and checks the surviving document", async () => {
   const assign = vi.fn();
   const context = createContext({
     window: {},
-    location: { origin: suiteOrigin, assign },
+    location: { origin: suiteOrigin, href: `${suiteOrigin}/navigation.html`, search: "", assign },
+    crypto: { randomUUID: () => "navigation-id" },
+    URLSearchParams,
+    document: { querySelector: () => ({ value: "", addEventListener: vi.fn() }) },
     setTimeout,
     fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
   });
@@ -313,5 +531,247 @@ test("navigation fixture attempts the foreign origin and checks the surviving do
   expect(context.window.__e2e).toMatchObject({
     done: true,
     navigation: { attempted: true, refused: true },
+  });
+});
+
+test("manual navigation exposes a pre-attempt result and waits for a real link activation", async () => {
+  const assign = vi.fn();
+  const result = { value: "" };
+  let click: ((event: { preventDefault: () => void }) => void) | undefined;
+  const link = {
+    href: "",
+    addEventListener: (_name: string, callback: typeof click) => {
+      click = callback;
+    },
+  };
+  const location = {
+    origin: suiteOrigin,
+    href: `${suiteOrigin}/navigation.html?manual=1`,
+    search: "?manual=1",
+    assign,
+  };
+  const context = createContext({
+    window: {},
+    location,
+    crypto: { randomUUID: () => "navigation-id" },
+    URLSearchParams,
+    document: { querySelector: (selector: string) => (selector === "#e2e-result" ? result : link) },
+    setTimeout,
+    fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
+  });
+  runInContext(script("navigation"), context);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(assign).not.toHaveBeenCalled();
+  expect(link.href).toBe(`${foreignOrigin}/foreign.html`);
+  expect(JSON.parse(result.value)).toMatchObject({
+    done: false,
+    documentId: "navigation-id",
+    navigation: { attempted: false },
+  });
+  const preventDefault = vi.fn();
+  click?.({ preventDefault });
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(assign).toHaveBeenCalledWith(`${foreignOrigin}/foreign.html`);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(JSON.parse(result.value)).toMatchObject({
+    done: true,
+    href: location.href,
+    origin: suiteOrigin,
+    navigation: { refused: true },
+  });
+});
+
+describe("secure-store fixture JavaScript", () => {
+  test("reports an Android probe script load failure instead of running partial checks", async () => {
+    const top = topFrame(true, false, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(top.loadSecureStore).toHaveBeenCalledOnce();
+    expect(top.context.window.__e2e).toMatchObject({
+      done: true,
+      errors: ["Error: Could not load Android secure-store probes"],
+    });
+    expect(top.secureStore.status).not.toHaveBeenCalled();
+  });
+
+  test("runs the full trusted bridge sequence and retains the marker until host cleanup", async () => {
+    const top = topFrame();
+    await vi.advanceTimersByTimeAsync(0);
+    const result = await top.context.window.__e2eSecureStore.ungated();
+    const hostileResult = await hostile({}, 2000, false, true);
+    expect(
+      checkSecureStoreFixture({
+        secureStore: result,
+        hostile: hostileResult,
+        secureStoreResponses: [],
+      }),
+    ).toEqual([]);
+    expect(top.secureStore.set).toHaveBeenCalledWith(
+      expect.objectContaining({ value: result.marker, userPresence: false }),
+    );
+    expect(top.secureStore.remove).toHaveBeenCalledWith({ key: "p4-e2e:first" });
+    expect(result.retained.value).toBe(result.marker);
+    expect((await top.context.window.__e2eSecureStore.cleanup()).value).toBeNull();
+    expect(top.secureStore.cancel).toHaveBeenCalled();
+  });
+  test("does not swallow a broken native call or falsely label a stale success", async () => {
+    const top = topFrame();
+    await vi.advanceTimersByTimeAsync(0);
+    top.secureStore.status.mockRejectedValueOnce(new Error("broken status"));
+    await expect(top.context.window.__e2eSecureStore.ungated()).rejects.toThrow("broken status");
+    const set = top.secureStore.set.getMockImplementation();
+    top.secureStore.set.mockImplementation(async (args) =>
+      args.value === "stale-must-not-commit"
+        ? { version: args.version + 1 }
+        : (set?.(args) as Promise<{ version: number }>),
+    );
+    const result = await top.context.window.__e2eSecureStore.ungated();
+    expect(result.staleCode).toBe("resolved");
+    expect(checkSecureStoreFixture({ secureStore: result })).toContain(
+      "Secure-store old version was not rejected as stale",
+    );
+  });
+  test("gated get stays pending until a native reply and records the exact committed version", async () => {
+    const top = topFrame();
+    await vi.advanceTimersByTimeAsync(0);
+    const get = top.secureStore.get.getMockImplementation();
+    let unlock: ((read: { value: string; version: number }) => void) | undefined;
+    top.secureStore.get.mockImplementation(async (args) => {
+      const read = await get?.(args);
+      if (read?.value?.startsWith("p4-e2e-gated-"))
+        return new Promise((resolve) => {
+          unlock = resolve;
+        });
+      if (!read) throw new Error("missing mock read");
+      return read;
+    });
+    top.context.window.__e2eSecureStore.startGated("fingerprint");
+    await vi.advanceTimersByTimeAsync(0);
+    const evidence = top.context.window.__e2eSecureStore.gated();
+    expect(evidence.stage).toBe("waiting");
+    expect(evidence.read).toBeUndefined();
+    unlock?.({ value: evidence.value, version: evidence.committed.version });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      checkGatedUnwrap({
+        status: "passed",
+        promptObserved: true,
+        authenticationSent: true,
+        evidence,
+      }),
+    ).toEqual([]);
+    top.secureStore.set.mockRejectedValueOnce(
+      Object.assign(new Error("failed"), { code: "failed" }),
+    );
+    top.context.window.__e2eSecureStore.startGated("credential");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(top.context.window.__e2eSecureStore.gated()).toMatchObject({
+      stage: "error",
+      code: "failed",
+    });
+  });
+  test("hostile secure-store calls cover get and set on every Android channel for a full window", async () => {
+    const result = await hostile({}, 2000, false, true);
+    expect(Object.keys(result.secureStore)).toHaveLength(10);
+    for (const probe of Object.values(result.secureStore))
+      expect(probe).toMatchObject({ status: "no-response", observedMs: 2000, transport: false });
+    const postMessage = vi.fn();
+    const get = vi.fn(async () => ({}));
+    const set = vi.fn(async () => ({}));
+    const exposed = await hostile(
+      {
+        androidBridge: { postMessage },
+        CapacitorCookiesAndroidInterface: { postMessage },
+        CapacitorHttpAndroidInterface: { postMessage },
+        Capacitor: { Plugins: { SuiteSecureStore: { get, set } } },
+      },
+      2000,
+      false,
+      true,
+    );
+    const calls = postMessage.mock.calls
+      .map(([message]) => JSON.parse(message))
+      .filter((message) => message.pluginId === "SuiteSecureStore");
+    expect(calls).toHaveLength(8);
+    expect(new Set(calls.map((call) => call.callbackId)).size).toBe(8);
+    expect(calls.filter((call) => call.methodName === "get")).toHaveLength(4);
+    expect(calls.filter((call) => call.methodName === "set")).toHaveLength(4);
+    expect(get).toHaveBeenCalledWith({ key: "p4-e2e:retained" });
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({ userPresence: false, version: 0 }));
+    expect(exposed.secureStore["capacitorPlugin.get"].status).toBe("response");
+    expect(exposed.secureStore["androidBridge.get"].transport).toBe(true);
+  });
+  test("hostile proxy accepts only a local known missing-plugin rejection", async () => {
+    const Capacitor = {
+      nativePromise: async (plugin: string) => {
+        throw Object.assign(new Error(`"${plugin}" plugin is not implemented on web`), {
+          code: "UNIMPLEMENTED",
+        });
+      },
+    };
+    const result = await hostile({ Capacitor }, 2000, false, true);
+    expect(result.secureStore["capacitorPlugin.get"]).toMatchObject({
+      status: "no-response",
+      localRejection: true,
+    });
+    for (const nativePromise of [
+      async () => {
+        throw Object.assign(new Error("blocked"), { code: "UNIMPLEMENTED" });
+      },
+      async () => {
+        throw new Error("broken");
+      },
+    ]) {
+      const broken = await hostile({ Capacitor: { nativePromise } }, 2000, false, true);
+      expect(broken.secureStore["capacitorPlugin.set"].status).toBe("error");
+    }
+  });
+  test("records hostile native replies in the top document and preserves delivery", async () => {
+    const original = vi.fn();
+    const context = createContext({ window: { Capacitor: { fromNative: original } } });
+    runInContext(script("secure-store"), context);
+    for (const callbackId of ["trusted", "p4-hostile-nonce-androidBridge.get"])
+      context.window.Capacitor.fromNative({ callbackId, success: false });
+    expect(original).toHaveBeenCalledTimes(2);
+    expect(context.window.__e2eSecureStore.responses).toEqual([
+      "p4-hostile-nonce-androidBridge.get",
+    ]);
+  });
+  test("observes WebMessage replies and generated proxy callbacks without flagging trusted calls", async () => {
+    const original = vi.fn();
+    const onmessage = vi.fn();
+    const toNative = vi.fn(() => "42");
+    const context = createContext({
+      window: { Capacitor: { fromNative: original, toNative }, androidBridge: { onmessage } },
+    });
+    runInContext(script("secure-store"), context);
+    expect(context.window.Capacitor.toNative("SuiteSecureStore", "get", {})).toBe("42");
+    context.window.Capacitor.fromNative({ callbackId: "42", pluginId: "SuiteSecureStore" });
+    expect(context.window.__e2eSecureStore.responses).toEqual([]);
+    context.window.Capacitor.fromNative({
+      callbackId: "43",
+      pluginId: "SuiteSecureStore",
+      success: false,
+    });
+    context.window.androidBridge.onmessage({
+      data: JSON.stringify({ callbackId: "p4-hostile-probe-webMessage-get", success: true }),
+    });
+    expect(context.window.__e2eSecureStore.responses).toEqual([
+      "43",
+      "p4-hostile-probe-webMessage-get",
+    ]);
+    expect(original).toHaveBeenCalledTimes(2);
+    expect(onmessage).toHaveBeenCalledOnce();
+    const window = {
+      androidBridge: {
+        onmessage: (_event: { data: string }) => {},
+        postMessage: (message: string) =>
+          window.androidBridge.onmessage({
+            data: JSON.stringify({ callbackId: JSON.parse(message).callbackId, success: false }),
+          }),
+      },
+    };
+    const result = await hostile(window, 2000, false, true);
+    expect(result.secureStore["webMessage.get"].status).toBe("response");
+    expect(result.secureStore["androidBridge.set"].status).toBe("response");
   });
 });

@@ -12,6 +12,8 @@ import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
+import { seedCalendar } from "./seed-calendar";
+import { seedContacts } from "./seed-contacts";
 import { seedPermissions } from "./seed-permissions";
 
 const { namedNode, literal, quad } = DataFactory;
@@ -93,7 +95,7 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     "- Draft the launch plan in Docs",
     "",
   ].join("\n");
-  return [
+  const files: DemoSeedFile[] = [
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
@@ -131,4 +133,5 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     { path: "drive/data.ttl", body: contact, contentType: "text/turtle", modified: now - 12 * DAY },
     { path: "drive/Archive/", body: "", contentType: "text/turtle", modified: now - 30 * DAY },
   ];
+  return seedContacts(await seedCalendar(files, now), now);
 }

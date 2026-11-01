@@ -5,7 +5,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 export const DEFAULT_SUITE_URL = "https://solid-suite.vercel.app";
 export const APP_ID = "org.jeswr.suite";
 
-// Emulators reach host servers through `adb reverse`, so the WebView sees a secure localhost.
+// Android uses `adb reverse`; iOS simulators share host loopback. Both see a secure localhost.
 const LOOPBACK = new Set(["localhost", "127.0.0.1"]);
 
 export interface MobileEnv {
@@ -37,7 +37,9 @@ export function mobileConfig(env: MobileEnv): CapacitorConfig {
     appId: APP_ID,
     appName: "Solid Suite",
     webDir: "www",
-    loggingBehavior: debug ? "debug" : "none",
+    // Capacitor's "debug" logging prints plugin call arguments and results, which would put
+    // SuiteSecureStore refresh tokens in the device log, so no build logs bridge payloads.
+    loggingBehavior: "none",
     server: {
       url: origin.origin,
       // No allowNavigation: the server origin is the only in-app origin, enforced exactly by
