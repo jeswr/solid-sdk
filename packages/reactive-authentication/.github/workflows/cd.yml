@@ -1,0 +1,43 @@
+name: Continuous Deployment (CD)
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npm audit --omit=dev --audit-level=moderate
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npm test
+  publish:
+    needs: [audit, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx tsc
+      - run: npm publish

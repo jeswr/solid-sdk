@@ -7,6 +7,7 @@ import * as testing from "./testing.js";
 test("public parser, errors, fixture and cache entry points load", () => {
   expect(Object.keys(api).sort()).toEqual([
     "CapabilitiesError",
+    "LinkHeaderOverflowError",
     "capabilities",
     "deriveFeatures",
     "parseLinkHeaders",
