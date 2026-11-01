@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
+import type { Store } from "n3";
 import { ResourceReadError, readBody } from "./resource-body.js";
 import type { PodHttp } from "./types.js";
 
@@ -25,9 +25,9 @@ export async function parse(
   http?: Pick<PodHttp, "get">,
   signal?: AbortSignal,
   securityRelevant = false,
-): Promise<Awaited<ReturnType<typeof parseRdf>>> {
+): Promise<Store> {
   return (await readBody(response, url, { http, signal, semantic: true, securityRelevant }))
-    .dataset as Awaited<ReturnType<typeof parseRdf>>;
+    .dataset as Store;
 }
 export function requireRepresentation(response: Response): Response {
   if (response.status !== 200)
