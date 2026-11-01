@@ -29,6 +29,19 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   whose fidelity assertion proves every field traces to `shapes.ttl` or the committed config.
 - Keep generated artifacts data-only. A manifest must never carry code, regex source,
   templates or path expressions; `validateManifest` rejects unknown keys and enforces caps.
+- Prefix names must follow Turtle `PN_PREFIX` (the empty default prefix is allowed).
+  Validate at manifest admission and recheck immediately before `n3.Writer` on both
+  `serialize` and `storeToTurtle`, since the validated manifest is mutable.
+- Resource URLs and every derived subject pass `isSafeAbsoluteIri` without rewriting
+  their lexical identity. `subject`, `build`, `serialize`, and direct `Wrapper`
+  construction throw `TypeError` on an unsafe or relative IRI; `parse` and
+  `parseDocument` return `undefined` (before parsing an unsafe document base).
+  Wrappers accept strings or safe absolute NamedNodes; other term kinds throw `TypeError`.
+  `storeToTurtle` also throws `TypeError` for unsafe NamedNode subjects.
+  The exported `subjectIri(resourceUrl, fragment?)` validates both the resource and
+  the minted subject; flat, composite, and generated per-node handles use it.
+  Reject instead of escaping: `rdf-serialize`'s `escapeIri` percent-encodes forbidden
+  characters and changes identity, while `n3.Writer` does not validate IRIREF safety.
 - Every IRI field with `iriScheme: "http-https"` or `iriScheme: "https"` goes through `httpIriOrUndefined` on read
   and write. Do not add a bypass; widen schemes only with a new reviewed guard.
 - A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse when
@@ -54,6 +67,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   members. Setters clear aliases even on `undefined`/invalid input; `mark` clears alias
   types. Serialisation migrates known aliases in a copy and writes canonical IRIs only.
 - Composite entities graph-walk exact link terms from the root; never assume fragments.
+  Count distinct raw object terms of every kind before filtering NamedNodes; more
+  than one rejects a required link's record or drops an optional link's whole subtree.
   A linked NamedNode must be an absolute http(s) IRI without IRIREF-forbidden characters.
   Follow that exact term without URL canonicalisation; an unsafe required link rejects
   the record and an optional link drops its subtree.
@@ -65,6 +80,6 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 
 `defineModel`, `validateManifest`, `ManifestError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
-`tryRead`, `isSafeAbsoluteIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
+`tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter
 behaviour stays byte-identical.

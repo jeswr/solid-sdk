@@ -37,6 +37,16 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   `--allow-unadmitted` in committed generation scripts.
 - Requiredness comes from SHACL severity (G1): only `sh:Violation` `minCount >= 1` is
   fail-closed. SHOULD constraints are `sh:Warning`. Config cannot disable a MUST.
+  A present `sh:severity` must have exactly one value; duplicate declarations fail
+  admission before any value-only projection, regardless of order.
+- Reject multiple property shapes sharing a path within one NodeShape, including
+  canonical/alternativePath-member overlaps, in either order. Do not conjoin them
+  or overwrite one shape's constraints with another's.
+- Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
+  Runtime manifest validation checks config prefixes, and shape serialization
+  rechecks names before `n3.Writer`. Generated per-node `subject()` handles call
+  runtime `subjectIri`, rejecting unsafe resources with `TypeError` and preserving
+  exact lexical identity for safe resources and derived fragment IRIs.
 - `iriScheme: "https"` is the HTTPS-only guard compiled from `sh:pattern "^https://"`;
   `"http-https"` permits both schemes. Fidelity rejects widening an HTTPS-only shape.
 - SHACL admission is closed: unsupported property/node constraint components and unknown

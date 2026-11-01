@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable
+// AUTHORED-BY Codex GPT-6
 //
 // COMPOSITE PER-NODE VIEWS — the derivation (`deriveNodeViews`), the emitted
 // model.js / model.d.ts surface, and an EXECUTION test that writes the emitted
@@ -240,6 +241,17 @@ describe("EXECUTION — the emitted per-node handles drive a real composite docu
   writeFileSync(modelJsPath, emitModelJs(manifest, views));
 
   const resourceUrl = "https://pod.example/scrobbles/1.ttl";
+
+  it.each([
+    "https://ex.test/a|b",
+    "https://ex.test/x> <urn:p> <urn:o> . #",
+    "relative",
+  ])("H3: per-node subjects reject unsafe resource %s", async (resource) => {
+    const mod = await import(pathToFileURL(modelJsPath).href);
+    for (const node of [mod.nodes.Tree.parent, mod.nodes.Tree.child]) {
+      expect(() => node.subject(resource)).toThrow(TypeError);
+    }
+  });
 
   it("imports; handles expose name/typeIri/fragment and a fragment-correct subject()", async () => {
     const mod = await import(pathToFileURL(modelJsPath).href);

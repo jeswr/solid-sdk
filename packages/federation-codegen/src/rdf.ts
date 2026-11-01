@@ -8,6 +8,7 @@
  * `n3.Writer`, reads go through `Store`.
  */
 
+import { isTurtlePrefixName } from "@jeswr/model-runtime";
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 
@@ -101,6 +102,7 @@ export function serializeCanonicalTurtle(
   const sorted = [...quads].sort(compareQuads);
   const orderedPrefixes: Record<string, string> = {};
   for (const key of Object.keys(prefixes).sort()) {
+    if (!isTurtlePrefixName(key)) throw new TypeError("invalid Turtle prefix name");
     orderedPrefixes[key] = prefixes[key] as string;
   }
   const writer = new Writer({ prefixes: orderedPrefixes });

@@ -108,11 +108,17 @@ const IRI_PARAMETERS = new Set(["datatype", "class", "nodeKind", "severity"]);
 
 /** Validate raw terms BEFORE any value-only projection can erase their RDF types. */
 function validateParameters(quads: Quad[]): void {
+  const severityOwners = new Set<string>();
   for (const q of quads) {
     if (!q.predicate.value.startsWith(SH)) continue;
     const parameter = q.predicate.value.slice(SH.length);
     const term = q.object;
     const reject = () => rejectParameter(q.subject.value, parameter);
+    if (parameter === "severity") {
+      const owner = `${q.subject.termType}:${q.subject.value}`;
+      if (severityOwners.has(owner)) reject();
+      severityOwners.add(owner);
+    }
     if (COUNT_PARAMETERS.has(parameter) || BOUND_PARAMETERS.has(parameter)) {
       if (term.termType !== "Literal") rejectParameter(q.subject.value, parameter);
       if (COUNT_PARAMETERS.has(parameter) && term.datatype.value !== `${XSD}integer`) reject();
@@ -327,9 +333,25 @@ export function parseShapes(
     if (subject.termType === "BlankNode") skolem.set(subject.value, shapeIri);
 
     const usedPropIris = new Set<string>();
+    const usedPaths = new Set<string>();
     const properties: ShapeConstraint[] = [];
     for (const propObj of graph.objects(subject, `${SH}property`)) {
       const { pathIri, aliasPredicates } = resolvePath(graph, propObj, ontology);
+      // Multiple property shapes cannot be flattened into one predicate-keyed
+      // field without conjoining constraints. Reject every canonical/alias overlap.
+      for (const path of [pathIri, ...(aliasPredicates ?? [])]) {
+        if (usedPaths.has(path)) {
+          throw new AdmissionError([
+            {
+              code: "duplicate-property-path",
+              severity: "error",
+              subject: subject.value,
+              message: "multiple property shapes on the same node shape share a path",
+            },
+          ]);
+        }
+        usedPaths.add(path);
+      }
       const pathRoot = graph.object(propObj, `${SH}path`);
       if (aliasPredicates && pathRoot?.termType === "BlankNode") pathRoots.add(pathRoot.value);
       const pathLocal = localName(pathIri);
