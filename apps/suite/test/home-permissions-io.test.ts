@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Explicit fixtures and cardinality assertions establish these entries.
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyRevoke,
   dpvPurposeLabel,
   loadPermissions,
+  planRevoke,
   readGrantRecords,
   resolveClientName,
 } from "../src/apps/home/lib/permissions";
@@ -119,6 +122,80 @@ describe("bounded Home permission discovery", () => {
         .rows[0]!.lines[0]!.dataType?.id,
     ).toBe("photos");
     expect((await pod.load({ typeIndex: [{ forClass: "urn:unknown" }] })).failures).toEqual([]);
+  });
+  it("keeps Notes and Photos under one root default grant with root revocation targets", async () => {
+    const notes = `${ROOT}notes/`;
+    const photos = `${ROOT}photos/`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [notes, photos]) },
+      [notes]: { body: listing(notes) },
+      [photos]: { body: listing(photos) },
+      [`${ROOT}.acl`]: {
+        body: acl(
+          ROOT,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const snapshot = await pod.load({
+      typeIndex: [
+        { forClass: `${NS.SCHEMA}TextDigitalDocument`, container: notes },
+        { forClass: `${NS.SCHEMA}Photograph`, container: photos },
+      ],
+    });
+    expect(snapshot.failures).toEqual([]);
+    expect(snapshot.rows[0]!.lines.map((line) => line.dataType?.label).sort()).toEqual([
+      "Notes",
+      "Photos",
+    ]);
+    for (const line of snapshot.rows[0]!.lines)
+      expect(planRevoke(line, "line").changes).toEqual([
+        expect.objectContaining({ source: `${ROOT}.acl`, resource: ROOT, scope: "members" }),
+      ]);
+  });
+  it("discovers and revokes readable ACLs even when the resource Turtle is corrupt", async () => {
+    const file = `${ROOT}broken.ttl`;
+    const endpoint = `${ROOT}broken-access`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [file]) },
+      [file]: { body: "invalid turtle !!!", headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: acl(
+          file,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const snapshot = await pod.load();
+    expect(snapshot.failures).toEqual([{ url: file, reason: "unreadable" }]);
+    expect(snapshot.summary.people).toBe(1);
+    const line = snapshot.rows[0]!.lines[0]!;
+    expect(line.dataType).toBeUndefined();
+    expect(line.domainId).toBe("other");
+    const plan = planRevoke(line, "line");
+    expect(plan.changes[0]).toMatchObject({ source: endpoint, resource: file });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PUT") {
+        expect(String(input)).toBe(endpoint);
+        expect(new Headers(init.headers).get("if-match")).toBe('"1"');
+        pod.docs.set(endpoint, { body: String(init.body) });
+        return new Response(null, { status: 205 });
+      }
+      return pod.fetch(input, init);
+    };
+    await applyRevoke(plan, { fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load()).rows).toEqual([]);
+    // Known registrations survive content failures too.
+    pod.docs.set(endpoint, {
+      body: acl(
+        file,
+        `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+      ),
+    });
+    expect(
+      (await pod.load({ typeIndex: [{ forClass: `${NS.SCHEMA}Photograph`, instance: file }] }))
+        .rows[0]!.lines[0]!.dataType?.id,
+    ).toBe("photos");
   });
   it("pins pseudo agents and recognizes an origin-only app rule", async () => {
     const pod = fixture({
@@ -542,7 +619,7 @@ describe("public Client ID Document resolver", () => {
       Response.json(12),
       new Response("{}", { headers: { "content-type": "text/html" } }),
       new Response("", { status: 403 }),
-      new Response("{}"),
+      new Response(null),
       new Error("offline"),
     ];
     for (const [i, response] of responses.entries()) {

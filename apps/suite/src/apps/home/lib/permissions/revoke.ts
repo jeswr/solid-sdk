@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Scoped WAC removal, owner lockout guard and CAS retry ported from
 // apps/access-manager/src/lib/acl.ts: detachResourceScope, removeAgentFromEntry,
 // removePublicFromEntry, removeAuthenticatedFromEntry, ownerRetainsAnyControl,
 // LockoutError and updateAclWithRetry. Inherited revocations edit the parent ACL,
 // so materializeOwnAcl is intentionally unnecessary here.
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import type { Subject } from "@jeswr/pod-access";
+import type { Grant, Subject } from "@jeswr/pod-access";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource } from "@solid/object";
@@ -17,12 +18,14 @@ import {
   ACL,
   AccessNode,
   AUTHENTICATED,
+  authorizationQuads,
+  grantSignature,
   PUBLIC,
   SCOPES,
   SELECTORS,
   UnsupportedAccessError,
 } from "./vocab";
-import { accessSystem } from "./walk";
+import { accessSystem, readWacPolicy } from "./walk";
 
 export class LockoutError extends Error {
   override name = "LockoutError";
@@ -44,6 +47,10 @@ export interface RevokeChange {
   resource: string;
   scope: "resource" | "members";
   modes: ModeId[];
+  /** Full principal expression and modes, independent of parser-local node labels. */
+  signature?: string;
+  /** Original authorization graph, compared independently of blank-node labels. */
+  authorization?: string;
 }
 export interface RevokePlan {
   changes: RevokeChange[];
@@ -83,6 +90,8 @@ export function planRevoke(
         resource: r.inheritedFrom ?? r.url,
         scope: r.scope ?? (r.inherited ? "members" : "resource"),
         modes: [...r.modes],
+        ...(r.signature ? { signature: r.signature } : {}),
+        ...(r.authorization ? { authorization: r.authorization } : {}),
       };
       changes.set(
         JSON.stringify([change.source, change.node, change.subject, change.resource, change.scope]),
@@ -152,35 +161,113 @@ function detachResourceScope(
   for (const name of chosen) node.values(ACL + name).delete(resource);
   return copy;
 }
+function matchesScope(node: AccessNode, change: RevokeChange): boolean {
+  const [predicate, id] = selector(change.subject);
+  const scopes = change.scope === "resource" ? ["accessTo"] : ["default", "defaultForNew"];
+  return (
+    node.iris(ACL + predicate).includes(id) &&
+    scopes.some((scope) => node.iris(ACL + scope).includes(change.resource))
+  );
+}
+/** Resolve the whole document before any selector or scope edits alter signatures. */
+async function resolveChanges(
+  dataset: DatasetCore,
+  changes: RevokeChange[],
+): Promise<RevokeChange[]> {
+  const nodes = authorizations(dataset);
+  const descriptions = new Map<string, DatasetCore>();
+  for (const change of changes)
+    if (change.authorization && !descriptions.has(change.authorization))
+      descriptions.set(
+        change.authorization,
+        await parseResource(change.authorization, "text/turtle", change.source),
+      );
+  const originals = new Map<string, RevokeChange[]>();
+  for (const change of changes) {
+    const group = originals.get(change.node) ?? [];
+    group.push(change);
+    originals.set(change.node, group);
+  }
+  const policies = new Map<string, ReturnType<typeof readWacPolicy>>();
+  const matches = (node: AccessNode, change: RevokeChange) => {
+    if (!matchesScope(node, change)) return false;
+    if (
+      change.authorization &&
+      !isomorphic(
+        [...(descriptions.get(change.authorization) as DatasetCore)],
+        authorizationQuads(dataset, TermAs.term(node)),
+      )
+    )
+      return false;
+    if (!change.signature) {
+      // Older caller-built plans have no full signature. Blank-node fallback still
+      // requires exact modes, rather than a subset that can select a broader rule.
+      if (change.node.includes(":")) return true;
+      const modeIris = node.iris(`${ACL}mode`);
+      const modes: ModeId[] = ["read", "append", "write", "control"];
+      const actual = modes.filter((mode) =>
+        modeIris.includes(ACL + mode.charAt(0).toUpperCase() + mode.slice(1)),
+      );
+      return (
+        grantSignature({ who: [], except: [], modes: new Set(actual) }) ===
+        grantSignature({ who: [], except: [], modes: new Set(change.modes) })
+      );
+    }
+    let policy = policies.get(change.resource);
+    if (!policy) {
+      policy = readWacPolicy(dataset, change.resource, change.source);
+      policies.set(change.resource, policy);
+    }
+    const grant = policy.grants.find((grant) => grant.source.node === node.value) as Grant;
+    return grantSignature(grant) === change.signature;
+  };
+  const buckets = new Map<string, { candidates: AccessNode[]; originals: string[] }>();
+  for (const [original, group] of originals) {
+    const candidates = nodes.filter(
+      (node) =>
+        (original.includes(":") ? node.value === original : node.termType === "BlankNode") &&
+        group.every((change) => matches(node, change)),
+    );
+    if (!candidates.length) throw new AclConflictError();
+    const key = JSON.stringify(candidates.map((node) => node.value).sort());
+    const bucket = buckets.get(key) ?? { candidates, originals: [] };
+    bucket.originals.push(original);
+    buckets.set(key, bucket);
+  }
+  const resolved = new Map<string, string>();
+  const used = new Set<string>();
+  for (const { candidates, originals } of buckets.values()) {
+    // Equivalent blank rules are interchangeable only when all of them are selected.
+    if (candidates.length !== originals.length) throw new AclConflictError();
+    for (const [index, candidate] of candidates.entries()) {
+      if (used.has(candidate.value)) throw new AclConflictError();
+      used.add(candidate.value);
+      resolved.set(originals[index] as string, candidate.value);
+    }
+  }
+  return changes.map((change) => ({ ...change, node: resolved.get(change.node) as string }));
+}
 function removeSubject(
   dataset: DatasetCore,
   change: RevokeChange,
   detached: Map<string, string>,
 ): void {
   const [predicate, id] = selector(change.subject);
-  const scopes = change.scope === "resource" ? ["accessTo"] : ["default", "defaultForNew"];
-  const matches = (node: AccessNode) =>
-    node.iris(ACL + predicate).includes(id) &&
-    scopes.some((scope) => node.iris(ACL + scope).includes(change.resource));
-  const nodes = authorizations(dataset);
   const key = JSON.stringify([change.node, change.resource, change.scope]);
   const handle = detached.get(key) ?? change.node;
-  let node = nodes.find((node) => node.value === handle && matches(node));
-  // Parser-local blank-node labels change between reads. Resolve only an unambiguous
-  // equivalent subject/scope; ambiguity requires a fresh snapshot instead of guessing.
-  if (!node && !change.node.includes(":")) {
-    const candidates = nodes.filter((node) => node.termType === "BlankNode" && matches(node));
-    if (candidates.length === 1) node = candidates[0];
-  }
-  if (!node) throw new AclConflictError();
+  const node = authorizations(dataset).find((node) => node.value === handle);
+  // A previous change can remove the entire resolved rule (e.g. its last origin).
+  if (!node) return;
   const target = detachResourceScope(node, change.resource, change.scope);
   detached.set(key, target.value);
   target.values(ACL + predicate).delete(id);
   // An origin is a condition on principals; removing the final origin must NEVER
   // turn a constrained principal grant into an unconstrained grant.
   const noOrigins = predicate === "origin" && !target.iris(`${ACL}origin`).length;
-  if (noOrigins || !SELECTORS.some((name) => target.iris(ACL + name).length))
-    dropDescription(target);
+  const noPrincipals =
+    predicate !== "origin" &&
+    !SELECTORS.some((name) => name !== "origin" && target.iris(ACL + name).length);
+  if (noOrigins || noPrincipals) dropDescription(target);
 }
 export class PartialRevokeError extends Error {
   override name = "PartialRevokeError";
@@ -243,7 +330,8 @@ export async function applyRevoke(
             }
         } else {
           const detached = new Map<string, string>();
-          for (const change of changes) removeSubject(dataset, change, detached);
+          for (const change of await resolveChanges(dataset, changes))
+            removeSubject(dataset, change, detached);
           for (const change of changes)
             if (
               !ownerRetainsAnyControl(

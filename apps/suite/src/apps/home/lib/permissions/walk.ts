@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Bounded BFS ported from apps/access-manager/src/lib/storage-walk.ts; ACL resolution
 // ported from apps/access-manager/src/lib/acl.ts (readEffectiveAcl).
 import { RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
@@ -60,6 +61,23 @@ export function accessSystem(dataset: DatasetCore, url: string, headers: Headers
 }
 function parent(url: string, storage: string): string | undefined {
   return url === storage ? undefined : new URL(url.endsWith("/") ? ".." : ".", url).href;
+}
+/** Retain origin-only app holdings alongside the neutral reader's principal clauses. */
+export function readWacPolicy(
+  dataset: DatasetCore,
+  resource: string,
+  endpoint: string,
+): EffectivePolicy {
+  const policy = readWac(dataset, resource, endpoint);
+  for (const grant of policy.grants)
+    if (!grant.who.length) {
+      const authorization = [...new AclResource(dataset, DataFactory).authorizations].find(
+        (auth) => auth.value === grant.source.node,
+      );
+      const auth = new AccessNode(authorization as Term, dataset, DataFactory);
+      grant.who = auth.iris(`${ACL}origin`).map((origin) => [{ kind: "origin", origin }]);
+    }
+  return policy;
 }
 class BudgetError extends Error {}
 export interface LoadPermissionsOptions {
@@ -148,6 +166,13 @@ export async function loadPermissions(
           status: head.status,
         });
       headers = head.headers;
+    } catch (error) {
+      fail(visit.url, error);
+      continue;
+    }
+    // Content is only needed for classification and discovering children. Its
+    // failure must not hide an independently readable access-control document.
+    try {
       const rdf = SUPPORTED_RDF_MEDIA_TYPES.some(
         (type) => type === headers.get("content-type")?.split(";")[0],
       );
@@ -173,7 +198,6 @@ export async function loadPermissions(
       }
     } catch (error) {
       fail(visit.url, error);
-      continue;
     }
     let current: string | undefined = visit.url;
     let endpoint = visit.url;
@@ -212,20 +236,7 @@ export async function loadPermissions(
               ? readAcp(document.dataset, current, endpoint, undefined, false, () => {
                   inactive = true;
                 })
-              : readWac(document.dataset, current, endpoint);
-          if (system === "wac") {
-            // pod-access represents origin conditions on principals. Preserve an origin-only
-            // authorization as an app holding as well, using the same typed WAC mode reader.
-            for (const grant of policy.grants)
-              if (!grant.who.length) {
-                const authorization = [
-                  ...new AclResource(document.dataset, DataFactory).authorizations,
-                ].find((auth) => auth.value === grant.source.node);
-                // The neutral reader's source node comes from this same authorization set.
-                const auth = new AccessNode(authorization as Term, document.dataset, DataFactory);
-                grant.who = auth.iris(`${ACL}origin`).map((origin) => [{ kind: "origin", origin }]);
-              }
-          }
+              : readWacPolicy(document.dataset, current, endpoint);
         } catch {
           throw new UnsupportedAccessError();
         }
@@ -252,6 +263,7 @@ export async function loadPermissions(
           inherited,
           ...(inherited ? { inheritedFrom: current } : {}),
           records: recordsFrom(document.dataset),
+          dataset: document.dataset,
         };
         nodes.push(walked);
         aclDatasets.set(walked, document.dataset);

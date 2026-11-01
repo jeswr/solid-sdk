@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { AccessSystem, EffectivePolicy, Mode, Subject } from "@jeswr/pod-access";
+import type { DatasetCore } from "@rdfjs/types";
 import type { Classification } from "../model/domains";
 
 export type AgentKind = "person" | "app" | "public" | "authenticated";
@@ -15,6 +17,12 @@ export interface PermissionResource {
   node: string;
   /** Retained for safe writes, including origin-constrained WAC clauses. */
   subject?: Subject;
+  /** Complete conjunction containing this subject; every atom is required. */
+  clause?: Subject[];
+  /** Canonical principal expression and modes for matching parser-local WAC nodes. */
+  signature?: string;
+  /** Original authorization graph, including metadata, for exact WAC matching. */
+  authorization?: string;
   system?: AccessSystem;
   scope?: "resource" | "members";
 }
@@ -27,6 +35,8 @@ export interface PermissionLine {
   modes: ModeId[];
   expiresAt?: string;
   purpose?: { iri?: string; label: string };
+  /** Other atoms required alongside the row's principal (conjunctive, not alternatives). */
+  conditions?: Subject[];
   inherited: boolean;
 }
 export interface AgentRow {
@@ -68,4 +78,6 @@ export interface WalkedAccess {
   classification?: Classification;
   /** Metadata on authorization nodes, overridden by linked consent records. */
   records?: GrantRecordIndex;
+  /** Original ACL graph when available; retained only while aggregating. */
+  dataset?: DatasetCore;
 }
