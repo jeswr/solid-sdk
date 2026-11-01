@@ -1,24 +1,56 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import type { AddressBookData, ContactData, ContactGroupData } from "../lib/model";
 // The model barrel also exports the server-side DAV importer. Keep the browser graph
 // on its client-safe modules so bundlers never pull in Node's HTTP implementation.
 import { ContactsModel } from "../lib/model/book";
 import { discoverContacts } from "../lib/model/discovery";
-import { openDocument, saveDocument } from "../lib/model/intent";
-import { ContactsWriteError, PartialWriteError, type Snapshot } from "../lib/model/transport";
+import { absentOr, ensureDeleted, openDocument, saveDocument } from "../lib/model/intent";
+import {
+  ContactsWriteError,
+  PartialWriteError,
+  replacement,
+  type Snapshot,
+} from "../lib/model/transport";
+import {
+  isExpired,
+  parseTrash,
+  type TrashData,
+  trashContainer,
+  trashDocument,
+  trashedPerson,
+} from "../lib/model/trash";
 import { applyContactPatch, type ContactPatch, decodeContactRef, encodeContactRef } from "./data";
 import { type DeleteToken, IntentConflictError, IntentRunner, newIntent } from "./intents";
-import { browserIntentStorage, type Intent, IntentJournal, type IntentStorage } from "./journal";
+import {
+  browserIntentStorage,
+  type Intent,
+  IntentJournal,
+  type IntentStorage,
+  type MergeDuplicate,
+} from "./journal";
+import {
+  applyMerge,
+  MERGE_FIELDS,
+  type MergeSelection,
+  mergeContactData,
+  mergedDocument,
+} from "./merge";
 import { optionalDocument } from "./recovery";
 
 export interface ContactsData {
   book: Snapshot<AddressBookData> | null;
   people: Snapshot<ContactData>[];
   groups: Snapshot<ContactGroupData>[];
+  /** App-managed trash, newest first. Trashed contacts are in no other list. */
+  trash: Snapshot<TrashData>[];
+  /** Some trash documents could not be read, so the trash may be missing items. */
+  trashIncomplete: boolean;
   flat: { id: string; data: ContactData }[];
   incomplete: boolean;
   registrationPending: boolean;
@@ -33,6 +65,8 @@ const empty = (): ContactsData => ({
   book: null,
   people: [],
   groups: [],
+  trash: [],
+  trashIncomplete: false,
   flat: [],
   incomplete: false,
   registrationPending: false,
@@ -56,8 +90,35 @@ export async function mapContacts<T, R>(
   return result;
 }
 
+/** Another, different merge of these contacts is unfinished; reconciliation resumes it. */
+export class PendingMergeError extends Error {
+  constructor() {
+    super(
+      "An earlier merge of these contacts hadn't finished, so it was completed instead. Review the duplicates again.",
+    );
+    this.name = "PendingMergeError";
+  }
+}
+/**
+ * Why a merge rejected: nothing was written; it is journaled and resumes on the next load;
+ * a conflict stopped it (unmerged contacts were kept); or the result could not be confirmed.
+ */
+export type MergeOutcome = "unchanged" | "pending" | "conflict" | "unknown";
+export class MergeFailure extends Error {
+  constructor(
+    readonly outcome: MergeOutcome,
+    cause: unknown,
+  ) {
+    super(`Contacts merge failed (${outcome}).`, { cause });
+    this.name = "MergeFailure";
+  }
+}
+const selectionKey = (selection: MergeSelection) =>
+  JSON.stringify(MERGE_FIELDS.map((field) => selection[field] ?? null));
+
 export function writeMessage(error: unknown): string {
-  if (error instanceof IntentConflictError) return error.message;
+  if (error instanceof IntentConflictError || error instanceof PendingMergeError)
+    return error.message;
   if (error instanceof PartialWriteError) return writeMessage(error.cause);
   return error instanceof ContactsWriteError && error.status === 412
     ? "This contact changed elsewhere. The latest version has been loaded; try again."
@@ -171,10 +232,19 @@ export class ContactsController {
     bookUrl: string,
     matches: (intent: Intent) => boolean,
     prepare: () => Promise<Intent>,
+    blocked?: (intent: Intent) => boolean,
+    chosen?: (intent: Intent) => void,
   ) {
     const journal = this.journal(bookUrl);
     return journal.lock(async () => {
-      const intent = journal.list().find(matches) ?? (await prepare());
+      const pending = journal.list();
+      let intent = pending.find(matches);
+      if (!intent) {
+        // Never silently run (or race) a different unfinished operation on the same contacts.
+        if (blocked && pending.some(blocked)) throw new PendingMergeError();
+        intent = await prepare();
+      }
+      chosen?.(intent);
       journal.put(intent); // Must precede the first pod write.
       await this.runner.run(journal, intent);
       return intent;
@@ -208,7 +278,76 @@ export class ContactsController {
       registrationPending: this.registrationPending,
       people: await mapContacts(people.data, (entry) => this.model.loadContact(safe(entry.id))),
       groups: await mapContacts(groups.data, (entry) => this.model.loadGroup(safe(entry.id))),
+      ...(await this.loadTrash(book.url)),
     };
+  }
+  /** A trashed contact may only return to a person document inside its own book container. */
+  private trashOriginal(bookUrl: string, original: string) {
+    const url = decodeContactRef(bookUrl, encodeContactRef(bookUrl, original));
+    if (url.startsWith(trashContainer(bookUrl))) throw new TypeError("Invalid contact reference");
+    return url;
+  }
+  /**
+   * List the trash container and purge expired items. Trash problems never block the address
+   * book: unreadable items are reported as incomplete, and failed purges are retried next load.
+   */
+  private async loadTrash(bookUrl: string) {
+    const container = trashContainer(bookUrl);
+    let trashIncomplete = false;
+    const listing = await absentOr(() =>
+      this.model.transport.read(container, (dataset) => dataset),
+    ).catch(() => {
+      trashIncomplete = true;
+      return undefined;
+    });
+    const children = listing
+      ? [...new Container(listing.url, listing.dataset, DataFactory).contains]
+          .map((child) => child.value)
+          .filter((url) => url.startsWith(container) && !url.endsWith("/"))
+      : [];
+    const items = await mapContacts(children, async (url) => {
+      try {
+        const item = await this.model.transport.read(url, (dataset) => parseTrash(url, dataset));
+        this.trashOriginal(bookUrl, item.data.original);
+        return item;
+      } catch (error) {
+        // Malformed documents are not trashed contacts; anything else may be one we can't see.
+        if (
+          !(error instanceof TypeError || (error instanceof RdfFetchError && error.status === 404))
+        )
+          trashIncomplete = true;
+        return undefined;
+      }
+    });
+    const now = Date.now();
+    const trash: Snapshot<TrashData>[] = [];
+    for (const item of items) {
+      if (!item) continue;
+      if (isExpired(item.data.deletedAt, now)) {
+        try {
+          await ensureDeleted(this.model, item);
+          continue;
+        } catch {
+          // Kept listed; the purge is retried on the next load.
+        }
+      }
+      trash.push(item);
+    }
+    trash.sort(
+      (a, b) =>
+        b.data.deletedAt.getTime() - a.data.deletedAt.getTime() || a.url.localeCompare(b.url),
+    );
+    return { trash, trashIncomplete };
+  }
+  /** The initial restore requires an unoccupied document. Replays check the saved UID. */
+  private async unoccupied(url: string) {
+    await this.model.transport
+      .read(url, () => {
+        throw new ContactsWriteError(412, url, null);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+      });
   }
   async refresh(discovery = true) {
     if (this.pending.length) {
@@ -336,17 +475,40 @@ export class ContactsController {
       },
     });
   }
+  /**
+   * Move a contact to the app-managed trash: one journaled intent copies its full RDF and former
+   * labels into `.trash/`, then removes its memberships, index entry and document.
+   */
   delete(id: string): Promise<DeleteToken> {
     let token: DeleteToken;
+    const name = `${crypto.randomUUID()}.ttl`;
+    const deletedAt = new Date();
     return this.mutate({
-      apply: (data) => ({
-        ...data,
-        people: data.people.filter((p) => `${p.url}#this` !== id),
-        groups: data.groups.map((g) => ({
-          ...g,
-          data: { ...g.data, members: (g.data.members ?? []).filter((member) => member !== id) },
-        })),
-      }),
+      apply: (data) => {
+        const person = data.people.find((p) => `${p.url}#this` === id);
+        const labels = data.groups
+          .filter((g) => g.data.members?.includes(id))
+          .map((g) => `${g.url}#this`);
+        return {
+          ...data,
+          people: data.people.filter((p) => p !== person),
+          groups: data.groups.map((g) => ({
+            ...g,
+            data: { ...g.data, members: (g.data.members ?? []).filter((member) => member !== id) },
+          })),
+          trash: person
+            ? [
+                {
+                  url: new URL(name, trashContainer(this.bookUrl)).href,
+                  etag: null,
+                  dataset: person.dataset,
+                  data: { original: person.url, deletedAt, labels, contact: person.data },
+                },
+                ...data.trash,
+              ]
+            : data.trash,
+        };
+      },
       write: async (data) => {
         const book = this.book(data);
         this.person(data, id);
@@ -358,22 +520,103 @@ export class ContactsController {
             const person = await this.model.loadContact(id);
             const changes = await this.model.planDeleteContact(book, person);
             const labels = changes.slice(0, -2).map((change) => change.url);
+            const url = new URL(name, trashContainer(book.url)).href;
+            const dataset = trashDocument(url, person, {
+              deletedAt: new Date(),
+              labels: labels.map((label) => `${label}#this`),
+              deletedBy: this.webId,
+            });
             return newIntent("delete", book.url, person.url, {
               person: await saveDocument(person),
+              trash: await saveDocument({ url, etag: null, dataset }),
               labels,
-              destinations: changes.map((change) => change.url),
+              destinations: [url, ...changes.map((change) => change.url)],
             });
           },
         );
-        token = { person: intent.person as DeleteToken["person"], labels: intent.labels };
+        token = {
+          person: intent.person as DeleteToken["person"],
+          labels: intent.labels,
+          ...(intent.trash ? { trash: intent.trash.url } : {}),
+        };
       },
     }).then(() => token);
   }
+  /** Undo a delete: restore from the trash, or re-create a contact deleted before trash. */
   async undo(token: DeleteToken) {
+    if (token.trash) return this.restoreTrash(token.trash);
     return this.restore(
       await openDocument(token.person),
       token.labels.map((url) => `${url}#this`),
     );
+  }
+  /**
+   * Put a trashed contact back at its original document, index entry and surviving labels, then
+   * remove the trash document (`If-Match`). An occupied original document is a conflict.
+   */
+  restoreTrash(url: string) {
+    return this.mutate({
+      apply: (data) => {
+        const item = data.trash.find((entry) => entry.url === url);
+        if (!item) return data;
+        const id = `${item.data.original}#this`;
+        const person = {
+          url: item.data.original,
+          etag: null,
+          dataset: trashedPerson(item.url, item.dataset),
+          data: item.data.contact,
+        };
+        return {
+          ...data,
+          trash: data.trash.filter((entry) => entry !== item),
+          people: [...data.people, person],
+          groups: data.groups.map((g) =>
+            item.data.labels.includes(`${g.url}#this`)
+              ? { ...g, data: { ...g.data, members: [...(g.data.members ?? []), id] } }
+              : g,
+          ),
+        };
+      },
+      write: async (data) => {
+        const book = this.book(data);
+        await this.perform(
+          book.url,
+          (intent) => intent.kind === "restore" && intent.source?.url === url,
+          async () => {
+            const trash = await this.model.transport.read(url, (dataset) =>
+              parseTrash(url, dataset),
+            );
+            replacement(trash); // The trash document must be conditionally deletable.
+            const original = this.trashOriginal(book.url, trash.data.original);
+            await this.unoccupied(original);
+            return newIntent("restore", book.url, original, {
+              person: await saveDocument({
+                url: original,
+                etag: null,
+                dataset: trashedPerson(url, trash.dataset),
+              }),
+              labels: trash.data.labels.map((label) => label.replace(/#this$/, "")),
+              source: await saveDocument(trash),
+            });
+          },
+        );
+      },
+    });
+  }
+  /** Delete trash documents for ever (`If-Match`); one already gone counts as deleted. */
+  purge(urls: readonly string[]) {
+    const targets = new Set(urls);
+    return this.mutate({
+      apply: (data) => ({ ...data, trash: data.trash.filter((entry) => !targets.has(entry.url)) }),
+      write: async (data) => {
+        for (const item of data.trash)
+          if (targets.has(item.url)) await ensureDeleted(this.model, item);
+      },
+    });
+  }
+  /** Delete everything currently shown in the trash. */
+  emptyTrash() {
+    return this.purge(this.current.data.trash.map((entry) => entry.url));
   }
 
   /** Preserve the document identity and memberships; If-None-Match protects an occupied URL. */
@@ -395,14 +638,7 @@ export class ContactsController {
           book.url,
           (intent) => intent.kind === "restore" && intent.destination === person.url,
           async () => {
-            // The initial Undo still requires an unoccupied document. Replays check the saved UID.
-            await this.model.transport
-              .read(person.url, () => {
-                throw new ContactsWriteError(412, person.url, null);
-              })
-              .catch((error: unknown) => {
-                if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
-              });
+            await this.unoccupied(person.url);
             return newIntent("restore", book.url, person.url, {
               person: await saveDocument(person),
               labels: labels.map((label) => label.replace(/#this$/, "")),
@@ -410,6 +646,81 @@ export class ContactsController {
           },
         );
       },
+    });
+  }
+  /**
+   * Merge duplicates into the primary as one journaled intent: the merged primary is written
+   * first (from its reviewed revision), then label memberships, then each duplicate is removed.
+   * Contact points and labels are unioned from fresh RDF when the queued write starts.
+   */
+  merge(primary: string, duplicates: readonly string[], selection: MergeSelection) {
+    const others = [...new Set(duplicates)].filter((other) => other !== primary);
+    const documents = [primary, ...others].map((id) => id.replace(/#this$/, ""));
+    const wanted = JSON.stringify([...others].sort());
+    let journaled: Intent | undefined;
+    return this.mutate({
+      apply: (data) => applyMerge(data, primary, others, selection),
+      write: async (data) => {
+        const book = this.book(data);
+        if (!others.length) throw new Error("Choose at least two contacts to merge.");
+        for (const id of [primary, ...others]) this.person(data, id);
+        await this.perform(
+          book.url,
+          // Resume only the identical request: same primary, duplicates and choices.
+          (intent) =>
+            intent.kind === "merge" &&
+            `${intent.destination}#this` === primary &&
+            JSON.stringify(
+              (intent.duplicates as MergeDuplicate[]).map((d) => `${d.person.url}#this`).sort(),
+            ) === wanted &&
+            selectionKey(intent.selection as MergeSelection) === selectionKey(selection),
+          async () => {
+            const person = await this.model.loadContact(primary);
+            const copies = await mapContacts(others, (id) => this.model.loadContact(id));
+            // Every document must be conditionally writable before anything is journaled.
+            for (const snapshot of [person, ...copies]) replacement(snapshot);
+            const merged = mergeContactData(
+              person.data,
+              copies.map((copy) => copy.data),
+              selection,
+            );
+            const index = await this.model.loadGroups(book);
+            const groups = await mapContacts(index.data, (entry) => this.model.loadGroup(entry.id));
+            const labelsOf = (id: string) =>
+              groups.filter((group) => group.data.members?.includes(id)).map((group) => group.url);
+            const own = labelsOf(primary);
+            return newIntent("merge", book.url, person.url, {
+              person: await saveDocument({ ...person, dataset: mergedDocument(person, merged) }),
+              labels: [...new Set(others.flatMap(labelsOf))].filter((url) => !own.includes(url)),
+              duplicates: await Promise.all(
+                copies.map(async (copy) => ({
+                  person: await saveDocument(copy),
+                  labels: labelsOf(`${copy.url}#this`),
+                })),
+              ),
+              destinations: [person.url, ...copies.map((copy) => copy.url)],
+              selection,
+            });
+          },
+          (intent) =>
+            intent.kind === "merge" && intent.destinations.some((url) => documents.includes(url)),
+          (intent) => {
+            journaled = intent;
+          },
+        );
+      },
+    }).catch((error: unknown) => {
+      const intent = journaled;
+      let outcome: MergeOutcome = "unknown";
+      if (!intent) outcome = "unchanged";
+      else if (
+        this.journal(intent.bookUrl)
+          .list()
+          .some((entry) => entry.id === intent.id)
+      )
+        outcome = "pending";
+      else if (error instanceof IntentConflictError) outcome = "conflict";
+      throw new MergeFailure(outcome, error);
     });
   }
   setLabel(id: string, label: string, add: boolean) {

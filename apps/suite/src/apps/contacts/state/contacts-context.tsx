@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -7,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -22,12 +24,17 @@ import {
   toggleStar,
 } from "./data";
 import { browserIntentStorage } from "./journal";
+import { dismissedKey, dismissGroup, findDuplicates, readDismissed } from "./merge";
 
 const Context = createContext<ContactsController | null>(null);
 const StarsContext = createContext<{ stars: ReadonlySet<string>; toggle(id: string): void }>({
   stars: new Set(),
   toggle: () => {},
 });
+const DismissedContext = createContext<{
+  dismissed: ReadonlySet<string>;
+  dismiss(contactIds: readonly string[]): void;
+}>({ dismissed: new Set(), dismiss: () => {} });
 export function ContactsProvider({ children }: { children: ReactNode }) {
   const session = usePodSessionState();
   const controller = useMemo(() => {
@@ -39,7 +46,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
       (message) => toast.error(message, { duration: Infinity }),
       browserIntentStorage,
       (token) =>
-        toast("Contact deleted", {
+        toast("Contact moved to Trash", {
           duration: 8000,
           action: {
             label: "Undo",
@@ -52,6 +59,10 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     return controller;
   }, [session]);
   const [stars, setStars] = useState<ReadonlySet<string>>(new Set());
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
+  // Consecutive dismissals before a re-render must build on each other.
+  const latestDismissed = useRef(dismissed);
+  latestDismissed.current = dismissed;
   useEffect(() => {
     if (session.status !== "ready" || !controller) return;
     const { session: pod } = session;
@@ -62,7 +73,15 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
         setStars(new Set());
       }
     };
+    const syncDismissed = () => {
+      try {
+        setDismissed(readDismissed(localStorage, pod.webId));
+      } catch {
+        setDismissed(new Set());
+      }
+    };
     syncStars();
+    syncDismissed();
     void controller.refresh();
     let timer: ReturnType<typeof setTimeout>;
     const unsubscribe = pod.subscribe(() => {
@@ -73,6 +92,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     });
     const sync = (event: StorageEvent) => {
       if (event.key === starsKey(pod.webId)) syncStars();
+      if (event.key === dismissedKey(pod.webId)) syncDismissed();
       if (event.key?.startsWith(`solid-suite:contacts:intent:${encodeURIComponent(pod.webId)}:`)) {
         clearTimeout(timer);
         timer = setTimeout(() => {
@@ -104,7 +124,26 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
           },
         }}
       >
-        {children}
+        <DismissedContext
+          value={{
+            dismissed,
+            dismiss: (contactIds) => {
+              try {
+                latestDismissed.current = dismissGroup(
+                  localStorage,
+                  session.session.webId,
+                  latestDismissed.current,
+                  contactIds,
+                );
+                setDismissed(latestDismissed.current);
+              } catch {
+                toast.error("This browser could not remember that these contacts are different.");
+              }
+            },
+          }}
+        >
+          {children}
+        </DismissedContext>
       </StarsContext>
     </Context>
   );
@@ -153,6 +192,13 @@ export function useContact(ref: string) {
 }
 export function useContactMutations() {
   return useController();
+}
+/** Likely duplicate groups over the visible (optimistic) people, minus dismissed pairs. */
+export function useDuplicates() {
+  const { data } = useAddressBook();
+  const { dismissed, dismiss } = useContext(DismissedContext);
+  const groups = useMemo(() => findDuplicates(data.people, dismissed), [data.people, dismissed]);
+  return { groups, dismiss };
 }
 export function useStarred() {
   return useContext(StarsContext);

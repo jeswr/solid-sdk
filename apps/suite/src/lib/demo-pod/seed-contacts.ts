@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   buildAddressBook,
@@ -38,18 +39,18 @@ const names = [
   "Noah Lake",
   "Nora Bloom",
   "Omar Pine",
-  "Opal Rain",
+  "L. Frost",
   "Pia Dawn",
   "Quinn Cedar",
   "Rae Maple",
   "Remy Coast",
-  "Rina Vale",
+  "Theodore Sage",
   "Rory Grove",
   "Sam Briar",
   "Sana Hill",
   "Tali Ember",
   "Theo Sage",
-  "Uma Field",
+  "Omar Pine",
   "Vera Snow",
   "Wren Stone",
   "Xavi Clay",
@@ -57,6 +58,12 @@ const names = [
   "Zara Cloud",
   "Zoe River",
 ];
+// Deliberate duplicates for Merge duplicates: L. Frost shares Lena Frost's phone, Theodore Sage
+// shares Theo Sage's email (spelt with capitals) and the second Omar Pine has the same email.
+const duplicateEmails: Record<number, string[]> = {
+  27: ["mailto:Theo.Sage@example.org", "mailto:theodore.sage@example.org"],
+};
+const duplicatePhones: Record<number, string[]> = { 22: ["tel:+12025550117"] };
 function turtle(dataset: Store | ReturnType<typeof buildPerson>): Promise<string> {
   const writer = new Writer({ format: "text/turtle" });
   writer.addQuads([...dataset]);
@@ -121,8 +128,14 @@ export async function seedContacts(
       .replace(/[^a-z0-9]+/g, ".")}@example.org`;
     const personDataset = buildPerson(url, {
       name,
-      emails: [`mailto:${email}`],
-      ...(i % 5 ? { phones: [`tel:+1202555${String(100 + (i % 100)).padStart(4, "0")}`] } : {}),
+      emails: duplicateEmails[i] ?? [`mailto:${email}`],
+      ...(i % 5
+        ? {
+            phones: duplicatePhones[i] ?? [
+              `tel:+1202555${String(100 + (i % 100)).padStart(4, "0")}`,
+            ],
+          }
+        : {}),
       ...(i % 3 === 0
         ? {
             organization: "Fictional Observatory",

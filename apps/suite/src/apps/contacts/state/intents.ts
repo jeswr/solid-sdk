@@ -1,23 +1,29 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { ContactsModel } from "../lib/model/book";
 import { registerAddressBook } from "../lib/model/discovery";
 import {
   absentOr,
+  discardCreated,
+  ensureCreated,
   ensureDeleted,
   ensurePerson,
+  ensureReplaced,
   membership,
   openDocument,
   personLink,
   type SavedDocument,
 } from "../lib/model/intent";
 import { ContactsWriteError, PartialWriteError } from "../lib/model/transport";
-import type { Intent, IntentJournal } from "./journal";
+import type { Intent, IntentJournal, MergeDuplicate } from "./journal";
 import { ensureBook, ensurePrivateIndex } from "./recovery";
 
 export interface DeleteToken {
   person: SavedDocument;
   labels: string[];
+  /** The trash document holding the contact; absent for records journaled before trash. */
+  trash?: string;
 }
 export class IntentConflictError extends ContactsWriteError {
   constructor(cause: ContactsWriteError) {
@@ -32,7 +38,12 @@ export function newIntent(
   kind: Intent["kind"],
   bookUrl: string,
   destination: string,
-  details: Partial<Pick<Intent, "person" | "source" | "labels" | "destinations">> = {},
+  details: Partial<
+    Pick<
+      Intent,
+      "person" | "source" | "trash" | "labels" | "destinations" | "duplicates" | "selection"
+    >
+  > = {},
 ): Intent {
   return {
     id: crypto.randomUUID(),
@@ -71,9 +82,32 @@ export class IntentRunner {
           // Keep the surviving document even when its links cannot safely be repaired.
         }
       }
+      if (intent.kind === "merge") {
+        try {
+          await this.relinkDuplicates(intent);
+        } catch {
+          // As above: a surviving duplicate document is never deleted after a conflict.
+        }
+      }
       // Never clean up a created destination or retry a stale source DELETE after a conflict.
       journal.remove(intent);
       throw new IntentConflictError(cause);
+    }
+  }
+  /** A conflicting merge stops before deleting a duplicate; restore links it already lost. */
+  private async relinkDuplicates(intent: Intent): Promise<void> {
+    // A failing step is still recorded as attempting: its effect may have landed.
+    const touched = new Set([...intent.completed, intent.attempting]);
+    for (const duplicate of intent.duplicates as MergeDuplicate[]) {
+      const url = duplicate.person.url;
+      const surviving = await absentOr(() => this.model.loadContact(url));
+      if (!surviving) continue;
+      if (touched.has(`unlink:${url}`))
+        await personLink(this.model, intent.bookUrl, surviving, true);
+      for (const label of duplicate.labels) {
+        if (touched.has(`remove:${url}:${label}`))
+          await membership(this.model, intent.bookUrl, label, `${url}#this`, true);
+      }
     }
   }
   private async replay(journal: IntentJournal, intent: Intent): Promise<void> {
@@ -132,6 +166,10 @@ export class IntentRunner {
                       membership(this.model, intent.bookUrl, label, id, true),
                     );
                 }
+                // The contact survives, so the copy we may have put in the trash must not.
+                const trash = intent.trash;
+                if (trash && removed.has("trash"))
+                  await step("repair:trash", () => discardCreated(this.model, trash));
                 checkpoint("rolled-back");
               } else {
                 // A DELETE can finish after a failed response and the first reconciliation.
@@ -140,10 +178,32 @@ export class IntentRunner {
               }
             }
             if (intent.phase === "forward") {
+              // Copy first: nothing is unlinked until the contact is safely in the trash.
+              const trash = intent.trash;
+              if (trash) await step("trash", () => ensureCreated(this.model, trash));
               for (const label of intent.labels)
                 await step(label, () => membership(this.model, intent.bookUrl, label, id, false));
               await step("index", () => personLink(this.model, intent.bookUrl, person, false));
               await step("delete", () => ensureDeleted(this.model, saved));
+            }
+          } else if (intent.kind === "merge") {
+            // Merged primary first, then its labels, then each duplicate's labels, index and RDF.
+            await step("person", () => ensureReplaced(this.model, saved));
+            await step("index", () => personLink(this.model, intent.bookUrl, person, true));
+            for (const label of intent.labels)
+              await step(`add:${label}`, () =>
+                membership(this.model, intent.bookUrl, label, id, true),
+              );
+            for (const duplicate of intent.duplicates as MergeDuplicate[]) {
+              const url = duplicate.person.url;
+              for (const label of duplicate.labels)
+                await step(`remove:${url}:${label}`, () =>
+                  membership(this.model, intent.bookUrl, label, `${url}#this`, false),
+                );
+              await step(`unlink:${url}`, async () =>
+                personLink(this.model, intent.bookUrl, await openDocument(duplicate.person), false),
+              );
+              await step(`delete:${url}`, () => ensureDeleted(this.model, duplicate.person));
             }
           } else {
             await step("person", () => ensurePerson(this.model, saved));
@@ -151,14 +211,19 @@ export class IntentRunner {
             await step("index", () => personLink(this.model, intent.bookUrl, current, true));
             for (const label of intent.labels)
               await step(label, () => membership(this.model, intent.bookUrl, label, id, true));
-            if (intent.kind === "migrate")
-              await step("source", () => ensureDeleted(this.model, intent.source as SavedDocument));
+            // A migration's flat original, or the trash document a restore came from, goes last.
+            const source = intent.source;
+            if (source) await step("source", () => ensureDeleted(this.model, source));
           }
         }
         checkpoint("done");
       }
       if (intent.kind === "delete" && !intent.completed.includes("rolled-back"))
-        this.deleted({ person: intent.person as SavedDocument, labels: intent.labels });
+        this.deleted({
+          person: intent.person as SavedDocument,
+          labels: intent.labels,
+          ...(intent.trash ? { trash: intent.trash.url } : {}),
+        });
       journal.remove(intent);
     } catch (error) {
       if (error instanceof PartialWriteError) {
