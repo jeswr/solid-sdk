@@ -160,6 +160,32 @@ describe("recurring completion recovery after reload", () => {
     expect(await store.listTasks(result.inbox.tracker.stateStore as string)).toHaveLength(2);
   });
 
+  it("replans a conflicted recovery from the rescheduled task on Retry", async () => {
+    const result = await recurring(3);
+    const orphan = await copy(result, "orphan");
+    const { cache, store, failures, original } = await reload(result);
+    const december = new Date("2026-12-01T12:00:00Z");
+    result.pod.intercept = async (request) => {
+      if (request.method !== "PUT" || request.url !== original.url) return undefined;
+      result.pod.intercept = undefined;
+      // Another client reschedules the task before this recovery write lands.
+      await result.store.updateTask(original, (task) => {
+        task.dueDate = december;
+        task.reminders = [];
+      });
+      return new Response(null, { status: 412 });
+    };
+    expect(await cache.completeTask(original, now)).toBeUndefined();
+    expect(failures.mock.calls[0]?.[0]).toMatchObject({ status: 412 });
+    failures.mock.calls[0]?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    const updated = await store.readTask(original.url);
+    expect(updated.task.dueDate).toEqual(new Date("2026-12-02T12:00:00Z"));
+    expect(updated.task.reminders).toEqual([]);
+    expect([...updated.task.completionOperations]).toEqual([orphan.url]);
+    expect(await store.listTasks(result.inbox.tracker.stateStore as string)).toHaveLength(2);
+  });
+
   it.each([
     false,
     true,

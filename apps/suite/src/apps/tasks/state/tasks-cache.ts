@@ -511,16 +511,18 @@ export class TasksCache {
             copy.task.dueDate?.getTime() === item.task.dueDate?.getTime(),
       ) ?? (recent[0] as StoredTask);
     const excluded = new Set(orphans.map((copy) => copy.url));
-    const plan: CompletionPlan = {
+    const replan = (current: StoredTask, views: readonly TaskView[]): CompletionPlan => ({
       ...planComplete(
-        item,
-        this.snapshot.views.filter(
-          (view) => view.projectUrl === project.url && !excluded.has(view.url),
-        ),
+        current,
+        views.filter((view) => !excluded.has(view.url)),
         now,
       ),
       copyUrl: orphan.url,
-    };
+    });
+    let plan = replan(
+      item,
+      this.snapshot.views.filter((view) => view.projectUrl === project.url),
+    );
     const change = (task: TaskItem) => {
       if (plan.kind === "advance") {
         task.dueDate = plan.original.dueDate;
@@ -546,6 +548,14 @@ export class TasksCache {
           let current = refresh
             ? await this.store.readTask(item.url)
             : this.task(project.url, item.url);
+          if (refresh && !current.task.completionOperations.has(orphan.url)) {
+            // A conflict means the task changed; plan from its fresh scheduling inputs.
+            const currentProject = this.project(project.url);
+            const siblings = await this.store.listTasks(
+              currentProject.tracker.stateStore as string,
+            );
+            plan = replan(current, projectTasks(currentProject, siblings).views);
+          }
           if (!current.task.completionOperations.has(orphan.url)) {
             try {
               current = await this.store.updateTask(current, change);
