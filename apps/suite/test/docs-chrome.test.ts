@@ -313,7 +313,7 @@ it("runs View, Insert, Format, Edit, Tools and Help commands with right-aligned 
   await openMenu("Format");
   await openSub("Align and indent");
   await selectItem("Decrease indent");
-  expect(editor.getAttributes("heading").indent).toBe(0);
+  expect(editor.getAttributes("heading").indent).toBeNull();
   await openMenu("Format");
   await openSub("Line and paragraph spacing");
   await selectItem("1.5");
@@ -462,9 +462,7 @@ it("counts the selection or document in a dialog and retains the typing-count pr
 });
 
 it("scales and reserves page geometry as content grows and bounds zoom to 50–200%", async () => {
-  const view = render(
-    h(PageCanvas, { zoom: 150, title: "A page" }, h("p", null, "Text")),
-  );
+  const view = render(h(PageCanvas, { zoom: 150, title: "A page" }, h("p", null, "Text")));
   const scale = view.container.querySelector(".docs-page-scale") as HTMLElement;
   expect(scale.style.getPropertyValue("--docs-zoom")).toBe("1.5");
   await act(() => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import type { Editor } from "@tiptap/react";
+import { indentLevel } from "../lib/editor/styles";
 
 export function indentDocument(editor: Editor, direction: -1 | 1) {
   const item = editor.isActive("taskItem") ? "taskItem" : "listItem";
@@ -15,7 +16,7 @@ export function indentDocument(editor: Editor, direction: -1 | 1) {
         if (node.type.name === "paragraph" || node.type.name === "heading")
           tr.setNodeMarkup(pos, undefined, {
             ...node.attrs,
-            indent: Math.min(8, Math.max(0, Number(node.attrs.indent) + direction)),
+            indent: indentLevel(Math.min(8, (indentLevel(node.attrs.indent) ?? 0) + direction)),
           });
       });
       return true;

@@ -7,6 +7,7 @@ import { expect, it, vi } from "vitest";
 import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { importDocx } from "../src/apps/docs/lib/convert/docx-import";
 import { importHtml } from "../src/apps/docs/lib/convert/schema";
+import { BLOCK_STYLE_DEFAULTS } from "./helpers/docs-block-defaults";
 
 const extensions = baseExtensions(vi.fn(() => new Promise<Response>(() => {})));
 const schema = getSchema(extensions);
@@ -104,7 +105,10 @@ it.each([
       const expected = importHtml(html).json;
       expect(editor.getJSON()).toEqual({
         ...expected,
-        content: [...(expected.content ?? []), { type: "paragraph", attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null } }],
+        content: [
+          ...(expected.content ?? []),
+          { type: "paragraph", attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS } },
+        ],
       });
       expect(editor.getJSON().content?.[0]?.content).toHaveLength(2);
     } finally {

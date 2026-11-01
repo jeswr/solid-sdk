@@ -22,7 +22,14 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
-import { colourHex, fontFamily, fontSize, lineHeight, paragraphSpace } from "../editor/styles";
+import {
+  colourHex,
+  fontFamily,
+  fontSize,
+  indentLevel,
+  lineHeight,
+  paragraphSpace,
+} from "../editor/styles";
 import { wordListFormat } from "./docx-list-format";
 import { type QuoteAncestor, quoteStyleName } from "./docx-quotes";
 
@@ -212,10 +219,8 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
                 ? { after: Number.parseFloat(node.attrs?.spaceAfter) * 20 }
                 : {}),
             },
-            ...(Number.isInteger(node.attrs?.indent) &&
-            node.attrs?.indent > 0 &&
-            node.attrs?.indent <= 8
-              ? { indent: { left: Number(node.attrs?.indent) * 720 } }
+            ...(indentLevel(node.attrs?.indent)
+              ? { indent: { left: Number(indentLevel(node.attrs?.indent)) * 720 } }
               : {}),
             ...(node.type === "heading"
               ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }

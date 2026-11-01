@@ -8,7 +8,7 @@ import {
   TextStyle,
 } from "@tiptap/extension-text-style";
 import { type CommandProps, Extension } from "@tiptap/react";
-import { STYLE_RULES } from "../lib/editor/styles";
+import { indentLevel, STYLE_RULES } from "../lib/editor/styles";
 
 function attributes(keys: (keyof typeof STYLE_RULES)[]) {
   return Object.fromEntries(
@@ -94,18 +94,12 @@ export const textStyleExtensions = [
           attributes: {
             ...attributes(["spaceBefore", "spaceAfter"]),
             indent: {
-              default: 0,
-              parseHTML: (element: HTMLElement) =>
-                Math.min(8, Math.max(0, Number(element.dataset.indent) || 0)),
-              renderHTML: (attrs: Record<string, unknown>) =>
-                Number.isInteger(attrs.indent) &&
-                Number(attrs.indent) > 0 &&
-                Number(attrs.indent) <= 8
-                  ? {
-                      "data-indent": attrs.indent,
-                      style: `margin-left: ${Number(attrs.indent) * 36}pt`,
-                    }
-                  : {},
+              default: null,
+              parseHTML: (element: HTMLElement) => indentLevel(element.dataset.indent),
+              renderHTML: (attrs: Record<string, unknown>) => {
+                const level = indentLevel(attrs.indent);
+                return level ? { "data-indent": level, style: `margin-left: ${level * 36}pt` } : {};
+              },
             },
           },
         },

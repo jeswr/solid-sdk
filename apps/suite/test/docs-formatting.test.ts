@@ -230,7 +230,8 @@ it("indents paragraphs and both list kinds within bounds and clears formatting",
   for (let i = 0; i < 10; i++) indentDocument(editor, 1);
   expect(editor.getAttributes("paragraph").indent).toBe(8);
   for (let i = 0; i < 10; i++) indentDocument(editor, -1);
-  expect(editor.getAttributes("paragraph").indent).toBe(0);
+  // An unindented block stores the null default rather than a Yjs attribute.
+  expect(editor.getAttributes("paragraph").indent).toBeNull();
   for (const type of ["bulletList", "taskList"]) {
     editor.commands.setContent(
       type === "taskList"

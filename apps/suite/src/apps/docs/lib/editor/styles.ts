@@ -92,6 +92,17 @@ export function paragraphSpace(value: unknown): string | null {
   return typeof value === "string" && /^(0|6|8|12|18|24)pt$/.test(value) ? value : null;
 }
 
+/**
+ * Paragraph indent steps (0.5in each). Zero is stored as null, like the other
+ * defaults, so collaborative documents never write a no-op attribute per block.
+ */
+export function indentLevel(value: unknown): number | null {
+  const level = typeof value === "string" ? Number(value) : value;
+  return typeof level === "number" && Number.isInteger(level) && level > 0 && level <= 8
+    ? level
+    : null;
+}
+
 export const STYLE_RULES = {
   fontFamily: { css: "font-family", sanitise: fontFamily },
   fontSize: { css: "font-size", sanitise: fontSize },
@@ -118,9 +129,11 @@ export function sanitiseStyleAttrs(attrs: Record<string, unknown>): Record<strin
   return Object.fromEntries(
     Object.entries(attrs).map(([key, value]) => [
       key,
-      Object.hasOwn(STYLE_RULES, key)
-        ? STYLE_RULES[key as keyof typeof STYLE_RULES].sanitise(value)
-        : value,
+      key === "indent"
+        ? indentLevel(value)
+        : Object.hasOwn(STYLE_RULES, key)
+          ? STYLE_RULES[key as keyof typeof STYLE_RULES].sanitise(value)
+          : value,
     ]),
   );
 }

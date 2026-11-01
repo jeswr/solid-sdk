@@ -84,10 +84,7 @@ export function docxStyles(document: Document, definitions: Document) {
     if (styleId === "InlineCode" || value(direct(paragraphProps, "pStyle")) === "Code") continue;
     // Paragraph styles (headings, titles) and the Hyperlink character style are carried by the
     // block type and link mark; only the run's own formatting and other character styles become text styles.
-    const safe = css(
-      [...(styleId === "Hyperlink" ? [] : inherited(styleId, "rPr")), props],
-      false,
-    );
+    const safe = css([...(styleId === "Hyperlink" ? [] : inherited(styleId, "rPr")), props], false);
     if (!safe) continue;
     const id = `${prefix}${runs.size}`;
     runs.set(id, { styleId, css: safe });
