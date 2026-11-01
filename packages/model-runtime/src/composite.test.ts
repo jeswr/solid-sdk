@@ -592,33 +592,22 @@ function fieldOf(m: ReturnType<typeof scrobbleManifest>, ni: number, fi: number)
   return field;
 }
 
-describe("composite parse — OPTIONAL link failure DEGRADES (drop the field, admit)", () => {
-  // The documented grading (SHACL G1 / the composite design): only a Violation-graded
-  // (requiredFailClosed) link whose resolution fails rejects the WHOLE composite; a
-  // Warning/Info (optional) link that fails to resolve — ambiguous, over the read
-  // budget, absent, or a non-conforming target — DROPS its field and admits. An
-  // otherwise-usable scrobble must not vanish over a second performedByArtist triple.
-  const fullSansArtist = { ...FULL } as Record<string, unknown>;
-  delete fullSansArtist.artistName;
+describe("composite parse — optional link constraints inside sh:node", () => {
+  // A present violation inside Track makes Track non-conforming. The required
+  // event→Track edge therefore rejects the composite, even for optional artist edges.
 
-  it("drops the field + ADMITS on an ambiguous OPTIONAL link (>1 distinct target)", () => {
-    // Two distinct performedByArtist targets on the OPTIONAL track→artist link: the
-    // link fails as ambiguous, but ONLY the artist field is dropped — the composite
-    // (whose MUSTs are all met) is admitted. This is the solid-listening regression:
-    // the whole parse used to return undefined here.
+  it("rejects the enclosing required sh:node on an ambiguous OPTIONAL link (>1 distinct target)", () => {
     const store = Scrobble.build(RES, FULL);
     store.addQuad(
       DataFactory.namedNode(TRACK),
       DataFactory.namedNode(`${MEDIA}performedByArtist`),
       DataFactory.namedNode("https://alice.pod.example/artists/other#it"),
     );
-    expect(Scrobble.parse(RES, store)).toEqual(fullSansArtist);
+    expect(Scrobble.parse(RES, store)).toBeUndefined();
   });
 
-  it("drops the field + ADMITS when an OPTIONAL link exceeds the read budget (bounded)", () => {
-    // A hostile fan-out of NON-http objects on the optional link: no ambiguity fires,
-    // only the per-link READ BUDGET — the link fails, the field drops, the composite
-    // admits, and the scan stays bounded (the resolver's early exit is unweakened).
+  it("rejects the enclosing required sh:node when an OPTIONAL link exceeds the read budget (bounded)", () => {
+    // Hostile fan-out fails closed while the candidate scan stays bounded.
     const store = Scrobble.build(RES, FULL);
     const Fanout = 100000;
     for (let i = 0; i < Fanout; i++) {
@@ -640,26 +629,24 @@ describe("composite parse — OPTIONAL link failure DEGRADES (drop the field, ad
       }
     } as never;
     try {
-      expect(Scrobble.parse(RES, store)).toEqual(fullSansArtist);
+      expect(Scrobble.parse(RES, store)).toBeUndefined();
     } finally {
       s.readQuads = realReadQuads as never;
     }
     // Bounded: the resolver abandoned the optional link after the budget, never the
-    // full 100000-object fan-out (a degraded link must not cost unbounded reads).
+    // full 100000-object fan-out (a failed link must not cost unbounded reads).
     expect(objectsRead).toBeLessThan(1000);
   });
 
-  it("drops the field + ADMITS when an OPTIONAL link's target fails its own Violation MUST", () => {
-    // Grade artistName as a Violation MUST *within its node*, then strip it: the artist
-    // sub-node no longer conforms, so the OPTIONAL performedByArtist link fails — the
-    // field drops, the composite admits (the outer link's grade governs, not the inner).
+  it("rejects the enclosing required sh:node when an OPTIONAL link's target fails its own Violation MUST", () => {
+    // Artist fails its own constraint, which also makes the linked Track fail.
     const m = scrobbleManifest();
     fieldOf(m, 3, 0).guards = { requiredFailClosed: true }; // artist.artistName
     const S = defineModel(m).entities.Scrobble;
     if (!S) throw new Error("expected the Scrobble composite");
     const store = S.build(RES, FULL);
     store.removeQuads(store.getQuads(ARTIST, `${FOAF}name`, null, null));
-    expect(S.parse(RES, store)).toEqual(fullSansArtist);
+    expect(S.parse(RES, store)).toBeUndefined();
   });
 
   it("retains an OPTIONAL link's conforming fields without a child target type", () => {

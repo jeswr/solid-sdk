@@ -134,7 +134,7 @@ const CONFIG: CodegenConfig = {
         track: {
           targetClass: `${MEDIA}Track`,
           fragment: "track",
-          fields: { title: { rename: "trackTitle" } },
+          fields: { title: { rename: "trackTitle" }, durationSeconds: {} },
           links: { performedByArtist: "artist", inAlbum: "album" },
         },
         playedAt: {
@@ -157,7 +157,17 @@ const CONFIG: CodegenConfig = {
   ],
 };
 
-const generated = generateModel({ ontologyTtl: ONTOLOGY, shapesTtl: SHAPES, config: CONFIG });
+// The sector snapshot's class-only CreativeWork link cannot project TrackShape.
+// An explicit sh:node is required to request that narrower constraint set.
+const PROJECTED_SHAPES = SHAPES.replace(
+  "sh:class media:CreativeWork ;",
+  "sh:class media:CreativeWork ; sh:node mdsh:TrackShape ;",
+);
+const generated = generateModel({
+  ontologyTtl: ONTOLOGY,
+  shapesTtl: PROJECTED_SHAPES,
+  config: CONFIG,
+});
 const model = defineModel(generated.manifest);
 const Scrobble = model.entities.Scrobble;
 if (!Scrobble) throw new Error("expected the generated Scrobble composite entity");
@@ -180,7 +190,12 @@ function toStore(ttl: string): Store {
   return new Store(new Parser({ baseIRI: RES }).parse(ttl));
 }
 
-describe("generate a listening model from the ratcheted media sector (bc54846)", () => {
+describe("generate a listening model with explicit nested constraint coverage", () => {
+  it("rejects the sector snapshot's narrower class-only projection", () => {
+    expect(() =>
+      generateModel({ ontologyTtl: ONTOLOGY, shapesTtl: SHAPES, config: CONFIG }),
+    ).toThrow(/target class.*sh:class/);
+  });
   it("admits and generates ONE composite Scrobble spanning five nodes", () => {
     expect(generated.admission.ok).toBe(true);
     expect(generated.manifest.entities.map((e) => e.name)).toEqual(["Scrobble"]);
@@ -207,7 +222,7 @@ describe("generate a listening model from the ratcheted media sector (bc54846)",
   });
 
   it("fidelity PASSES for the generated composite (the P0 exit criterion)", () => {
-    const shapes = parseShapes(SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
+    const shapes = parseShapes(PROJECTED_SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
     expect(() => assertFidelity(shapes, compileManifest(shapes, CONFIG))).not.toThrow();
   });
 });
@@ -282,7 +297,7 @@ describe("cross-node MUSTs enforced on an untrusted scrobble document", () => {
 });
 
 describe("composite fidelity — the P0 exit criterion FAILS on a tampered composite", () => {
-  const shapes = parseShapes(SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
+  const shapes = parseShapes(PROJECTED_SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
 
   it("FAILS when a node drops a Violation-graded MUST (title) from its projection", () => {
     const compiled = compileManifest(shapes, CONFIG);

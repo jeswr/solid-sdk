@@ -85,6 +85,50 @@ export interface NormalizedShapes {
   nodeShapes: NodeShapeModel[];
 }
 
+/** Implicit class targets have no exact projection in the current manifest. */
+export function implicitClassTargets(quads: readonly Quad[]): string[] {
+  const shapes = new Set(
+    quads
+      .filter(
+        (q) =>
+          q.predicate.value.startsWith(SH) ||
+          (q.predicate.value === `${RDF}type` &&
+            [`${SH}NodeShape`, `${SH}PropertyShape`].includes(q.object.value)),
+      )
+      .map((q) => `${q.subject.termType}:${q.subject.value}`),
+  );
+  return [
+    ...new Set(
+      quads
+        .filter(
+          (q) =>
+            q.predicate.value === `${RDF}type` &&
+            q.object.termType === "NamedNode" &&
+            [`${RDFS}Class`, "http://www.w3.org/2002/07/owl#Class"].includes(q.object.value) &&
+            shapes.has(`${q.subject.termType}:${q.subject.value}`),
+        )
+        .map((q) => q.subject.value),
+    ),
+  ];
+}
+
+/** RDF permits co-typing; disjoint focus sets cannot be proved from this profile. */
+export function sharedAliasPredicates(shapes: NormalizedShapes): string[] {
+  const owners = new Map<string, ShapeConstraint[]>();
+  for (const shape of shapes.nodeShapes)
+    for (const property of shape.properties) {
+      const prior = owners.get(property.pathIri) ?? [];
+      prior.push(property);
+      owners.set(property.pathIri, prior);
+    }
+  return [...owners]
+    .filter(
+      ([, properties]) =>
+        properties.length > 1 && properties.some((property) => property.aliasPredicates?.length),
+    )
+    .map(([predicate]) => predicate);
+}
+
 /** The local name of an IRI (after the last `#` or `/`). */
 export function localName(iri: string): string {
   const cut = Math.max(iri.lastIndexOf("#"), iri.lastIndexOf("/"));
@@ -288,6 +332,16 @@ export function parseShapes(
     : ontologyOrQuads;
   const sourceQuads = Array.isArray(ontologyOrQuads) ? ontologyOrQuads : ontologyQuads;
   const quads = parseTurtle(shapesTtl);
+  const implicit = implicitClassTargets(quads);
+  if (implicit.length)
+    throw new AdmissionError(
+      implicit.map((subject) => ({
+        code: "implicit-class-target",
+        severity: "error",
+        subject,
+        message: "implicit class targets are not modeled by the runtime",
+      })),
+    );
   validateParameters(quads);
   const graph = new Graph(quads);
 

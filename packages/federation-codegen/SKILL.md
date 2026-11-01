@@ -60,11 +60,17 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   against original RDF terms before JS projection. IRI enums preserve exact identities on
   reads and writes; scheme policy filters them without rewriting. Set minimum cardinality
   counts distinct guarded raw terms before JS deduplication; required sets reject invalid terms.
+- Reject shapes that are also `rdfs:Class` or `owl:Class`: implicit class targets have no
+  exact runtime projection. Normalization, admission, compilation and fidelity fail closed.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
-  for string-valued nonblank fields. Advisory flat class hints may only be omitted with
-  a warning, because they cannot weaken a Violation MUST. Composite link targets must satisfy
-  their class (explicit ontology subclass ancestry allowed) and referenced node shape.
+  for string-valued nonblank fields. At the root, advisory flat class hints may only be
+  omitted with a warning, because they cannot weaken a Violation MUST. Composite link targets must satisfy
+  their class (explicit ontology subclass ancestry allowed when `sh:node` is present) and
+  referenced node shape. A class-only link may project only a shape targeting that exact
+  class, never a subclass. Emit `classOnly: true` so runtime manifest validation independently
+  checks exact equality with `hasClass`; fidelity verifies this source distinction.
+  Reject projecting a child shape from a bare IRI link with neither `sh:class` nor `sh:node`.
   Inline or unprojected `sh:node` values are admission errors. Every projected parameter
   retains strict RDF term-kind, datatype and lexical validation; enum literals use the
   runtime's `readLiteral` reader.
@@ -83,8 +89,13 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   across accepted classes; writes preserve the subject's subclass type assertions.
   A composite child's `sh:node` validation checks property constraints without requiring
   its shape's target type. `sh:targetClass` selects focus nodes; it does not constrain a value
-  reached through `sh:node`. Explicit link `sh:class` is still enforced; builds may assert
-  canonical child types.
+  reached through `sh:node`. Every present child value must satisfy its constraints,
+  including optional fields and deeper optional links; absent values obey the property's
+  minimum. Nested validation checks the raw path union before canonical-first projection.
+  Reject omitted child properties in compilation and fidelity, including optional constraints;
+  advisory flat class hints inside children require modeled composite links. Root parsing
+  keeps its documented optional-field drops. Explicit link `sh:class` is still enforced;
+  builds may assert canonical child types.
   Decimal/integer bounds and enums must preserve canonical decimal spelling through
   JS number conversion. Reject noncanonical literal enum members that the runtime
   writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.
@@ -98,6 +109,8 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   2–4 IRI `sh:alternativePath` list selects the unique ontology property as canonical and
   emits its other members, in list order, as `aliasPredicates`. Ambiguity, malformed/nested
   paths, and aliases overlapping any other canonical/alias field predicate fail admission.
+  If owners share a canonical predicate and any owner declares aliases for it, reject the
+  profile and manifest: RDF co-typing prevents proving their focus sets disjoint.
   Runtime structural predicates are reserved; type aliases cannot overlap any canonical
   type or an alias owned by another entity/node.
   Both keys are optional, read-only, and capped at four distinct absolute http(s) aliases
@@ -111,6 +124,11 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   normalization/deduplication belongs to the JS read projection,
   not migration. Singleton migration retains canonical-first selection. Only explicit API
   values pass through JS write normalization and text sanitization.
+- Before deleting alias types, migration materialises satisfied explicit link classes on
+  affected subjects. Then require identical recognition and parsed results under all previously
+  recognised entity/node shapes (even unreached typed nodes) and reached child focuses.
+  Runtime `MigrationError` prevents emission on a change or shared 10,000-read/visit budget
+  exhaustion. Include regressions for type-recognition loss and changed parsed values.
 - Composite nodes and derived views support aliases on types/flat fields. Structural
   `nested` links explicitly reject aliases; an aliased shape field cannot be omitted.
 - `parseShapes` needs the adapter's normalized ontology as its third argument for aliases;

@@ -66,6 +66,7 @@ export {
   type EntityData,
   type EntityWrapper,
   type EntityWrapperConstructor,
+  MigrationError,
   type Model,
   type ModelEntity,
 } from "./model.js";

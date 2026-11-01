@@ -48,8 +48,9 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   datatype/IRI term kinds, cardinality, enums, numeric bounds, string minimum length, and composite
   `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
   the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
-  are admission errors, including on node shapes. Flat Warning/Info class hints may be
-  omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
+  are admission errors, including on node shapes. Reject implicit class targets: a shape
+  that is also an `rdfs:Class` or `owl:Class` has no exact runtime projection. At the root,
+  flat Warning/Info class hints may be omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
   Inline or unprojected `sh:node` references are admission errors.
   Decimal/integer bounds and enum members must round-trip through a JS number with
   identical canonical decimal spelling; precision loss fails admission. Literal enum
@@ -97,7 +98,8 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
   one is declared as a property by the ontology adapter. That member becomes `predicate`;
   the remaining members become ordered `aliasPredicates`. Malformed/cyclic lists, blank
   or nested members, all other complex paths, ambiguous ownership, and aliases overlapping
-  any other field's canonical or alias predicate fail admission.
+  any other field's canonical or alias predicate fail admission. A canonical predicate shared
+  by multiple shape owners cannot carry aliases on any owner: their focus sets may overlap.
 - Fidelity compares both alias keys exactly against the normalized shapes in both
   directions, including order. Adding, removing, exchanging, or reordering manifest aliases
   fails the build. Composite nodes and derived node views preserve these keys; aliases on
@@ -116,6 +118,12 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
   writes still use the runtime's JS write guards and normalization. Node-type recognition
   accepts data-graph subclasses of canonical or alias classes through the runtime's bounded,
   cycle-safe class walk; it never uses ontology ancestry at runtime or changes subclass types.
+
+Migration materialises explicit link classes before deleting alias types when those types
+were proving membership. Its bounded backstop re-parses all previously recognised entity/node
+projections and reached children; any changed recognition or parsed result throws runtime
+`MigrationError` before emission. It includes unreached typed nodes, and shares a 10,000
+read/visit budget across scanning, class walks and re-parsing. The input store is unchanged.
 
 `parseShapes(ttl, shapesBase, ontology?, ontologyQuads?)` uses the adapter's normalized ontology
 to resolve aliases and raw ontology quads to check composite subclass ancestry. `generateModel`
@@ -159,8 +167,12 @@ generates a single composite entity over the runtime's composite kind:
   Track and an Album need distinct names); its `links` project **IRI-link** properties as `nested`
   links to a sub-node (the shape parser reads `sh:class` / `sh:node` / `sh:nodeKind sh:IRI`). The
   target must conform to both `sh:class` and the exact referenced `sh:node` shape. Generation
-  checks canonical target compatibility using identity or explicit ontology ancestry, and
-  retains each link's `sh:class` as `hasClass` in the manifest. Fidelity checks it exactly.
+  checks canonical target compatibility using identity or explicit ontology ancestry when
+  `sh:node` is present. A class-only link (`sh:class` without `sh:node`) may project only a
+  shape whose canonical target is exactly that class; the manifest records `classOnly: true`,
+  which runtime validation checks independently. Compilation and fidelity reject narrower
+  subclass mappings. A bare IRI link with neither `sh:class` nor `sh:node` cannot select a
+  child shape and is rejected. The generator retains each link's `sh:class` as `hasClass` in the manifest. Fidelity checks it exactly.
   This mapping check never proves a linked subject's class membership: the runtime checks
   its actual types and `rdfs:subClassOf*` chains in the **data graph**, including for aliases.
   Alias ancestry need not be declared in the ontology and ontology-only ancestry cannot
@@ -172,7 +184,12 @@ generates a single composite entity over the runtime's composite kind:
   At runtime the root requires a recognised target type. A child reached through `sh:node`
   is validated against its property constraints without requiring its shape's target type:
   `sh:targetClass` selects focus nodes, rather than constraining a `sh:node` value.
-  Any explicit `sh:class` remains enforced. Builds still assert canonical child types.
+  Any explicit `sh:class` remains enforced. Every present value inside a child must satisfy
+  its property constraints, including optional fields and deeper optional links. Absence
+  obeys the property's minimum. Nested conformance checks the raw path union before
+  canonical-first projection; root parsing retains its documented optional-field drops.
+  A non-conforming child rejects its required incoming link or drops an optional root link's
+  subtree. Builds still assert canonical child types.
   The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
 - Compilation and fidelity reject incompatible IRI/datatype constraints and impossible
   `minCount > maxCount` on every property before projection, including nested links.
@@ -181,8 +198,11 @@ generates a single composite entity over the runtime's composite kind:
   and **every presence-MUST (`minCount ≥ 1`, Violation) of a node MUST be covered** — a
   security-critical constraint can never be silently dropped from the projection.
 - A property that is neither a `field` nor a `link` is omitted (only Warning/Info properties may be —
-  a MUST omission fails fidelity). A composite claims its node target classes exclusively (they are not
-  also emitted as flat entities); each node has a distinct target class; composite documents are
+  a MUST omission fails fidelity) at the root. Every child property must be projected;
+  compilation and fidelity reject omitted child constraints, including optional properties.
+  Advisory flat class hints inside child shapes also require a modeled composite link.
+  A composite claims its node target classes exclusively (they are not also emitted as
+  flat entities); each node has a distinct target class; composite documents are
   http(s)-scoped; linked RDF terms must already equal their safe canonical form.
 
 ### Composite per-node wrappers (`nodes`)

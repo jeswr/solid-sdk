@@ -30,7 +30,7 @@ ex:Root a owl:Class; rdfs:label "Root"; rdfs:comment "Root" .
 ex:Child a owl:Class; rdfs:label "Child"; rdfs:comment "Child" .`;
 const SHAPES = `${HEADER}
 ex:RootShape a sh:NodeShape; sh:targetClass ex:Root; sh:property [
-  sh:path ex:link; sh:name "link"; sh:nodeKind sh:IRI; sh:minCount 1; sh:maxCount 1 ] .
+  sh:path ex:link; sh:name "link"; sh:nodeKind sh:IRI; sh:node ex:ChildShape; sh:minCount 1; sh:maxCount 1 ] .
 ex:ChildShape a sh:NodeShape; sh:targetClass ex:Child; sh:property [
   sh:path ex:title; sh:name "title"; sh:datatype xsd:string; sh:minCount 1; sh:maxCount 1 ] .`;
 function config(): CodegenConfig {

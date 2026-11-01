@@ -112,7 +112,7 @@ describe("M1: generation rejects configured defaults on Violation minCount field
         generate(
           shapesTtl("sh:datatype xsd:string; sh:minCount 1; sh:maxCount 1").replace(
             "sh:class ex:Child;",
-            "sh:severity sh:Warning;",
+            composite ? "sh:class ex:Child; sh:severity sh:Warning;" : "sh:severity sh:Warning;",
           ),
           cfg,
         ),
@@ -280,7 +280,7 @@ describe("M5: fidelity requires every shape-derived guard in flat and composite 
         // Flat Root's class hint is advisory, so it can be projected without a nested link.
         const ttl = shapesTtl(`${parameter}; sh:maxCount 1`).replace(
           "sh:class ex:Child;",
-          "sh:severity sh:Warning;",
+          composite ? "sh:class ex:Child; sh:severity sh:Warning;" : "sh:severity sh:Warning;",
         );
         const shapes = normalized(ttl);
         const compiled = compileManifest(shapes, config(composite));

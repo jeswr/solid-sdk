@@ -55,8 +55,9 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   retain their exact identity on reads and writes; the scheme filter checks but never
   rewrites them. Do not widen schemes without a new reviewed guard.
 - A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse when
-  missing, malformed, ambiguous, or outside its set cardinality bounds. Optional fields drop.
-  Required sets also reject any invalid raw member; optional sets retain valid members.
+  missing, malformed, ambiguous, or outside its set cardinality bounds. At the root,
+  optional fields drop and optional sets retain valid members. Nested validation checks all
+  present values before projection. Required sets also reject any invalid raw member.
 - build does not enforce requiredFailClosed: missing or invalid values are dropped and a
   typed shell may be returned. This preserves the bookmark facade's write contract. Parse
   the built store and require a defined result before publishing it if MUST validation is needed.
@@ -70,7 +71,9 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias
-  predicate across the manifest. `rdf:type` and structural link predicates are reserved
+  predicate across the manifest. A canonical predicate shared across owners must have no
+  aliases on any owner; co-typing means disjoint focus sets cannot be proved.
+  `rdf:type` and structural link predicates are reserved
   from flat fields and all aliases. Type aliases cannot overlap any canonical type or
   another owner's alias. `nested` links reject aliases, including empty arrays.
 - Singleton reads guard the canonical value first, then aliases in order; only `undefined`
@@ -93,7 +96,14 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   mutation. Preserve unrelated subjects and unreached composite nodes, including their
   alias predicates/types. Preserve subclass type assertions and never add target types
   to untyped children during migration.
-- Deliberate G5 migration exception: for singleton `sh:alternativePath` fields, SHACL
+- After serialization migration, re-parse every previously recognised entity and node
+  projection, including unreached typed nodes and reached untyped child focuses. Require
+  identical recognition and parsed results; throw exported `MigrationError` before emission
+  on any change, including an invalid-record repair or a newly exposed default. Bound all
+  candidate scans, class walks and re-parse reads/visits with a shared 10,000 budget; exhaustion
+  throws the same typed error. Before deleting alias types, materialise satisfied explicit
+  link classes on affected subjects, preserving ancestry proofs as builds do.
+- Deliberate G5 migration exception (root reads): for singleton `sh:alternativePath` fields, SHACL
   counts the union for `maxCount`, but runtime reads resolve canonical-first. A stale
   conflicting alias beside a valid canonical value can therefore parse even when the
   emitted SHACL rejects that union's cardinality. This preserves the reviewed bookmark
@@ -116,7 +126,13 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   explicit alias-to-canonical type migration. Builds assert the explicit link class on
   materialised children. For composite children, validate the property constraints without
   requiring the child shape's target type: `sh:targetClass` selects focus nodes,
-  while `sh:node` applies the child constraints directly. Explicit `hasClass` still applies.
+  while `sh:node` applies the child constraints directly. Every present child value must
+  satisfy its property constraints, even optional fields or deeper optional links. Absent
+  values obey the property's minimum. Check the raw path union for nested conformance before
+  canonical-first projection. A failed child rejects a required incoming link or drops an
+  optional root link's subtree. Root field parsing retains its drop-invalid-optional policy.
+  Explicit `hasClass` still applies. `classOnly: true` records `sh:class` without `sh:node`;
+  require `hasClass` to equal the child's sole canonical target class exactly.
   Reject a link whose `hasClass` names a type alias owned by ANY entity or node in the
   manifest, including optional links: type migration can delete that assertion.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
@@ -125,7 +141,7 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 
 ## Exports
 
-`defineModel`, `validateManifest`, `ManifestError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
+`defineModel`, `validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
 `tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter

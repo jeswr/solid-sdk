@@ -114,11 +114,10 @@ describe("R8 M1: migration retains guarded raw terms", () => {
     expect(emitted.getObjects(DOC, `${EX}p`, null).map((term) => term.value)).toEqual(["01"]);
     expect(e.parse(DOC, emitted)).toEqual({ val: 1 });
   });
-  it("migration filters invalid raw members while explicit API writes still normalize", async () => {
+  it("migration rejects repairs that change conformance while explicit API writes still normalize", async () => {
     const e = entity([{ ...numeric, minCount: 1 }]);
     const ds = store('ex:doc a ex:Thing; ex:old "01"^^xsd:integer, "bad"^^xsd:integer .');
-    const emitted = store(await e.storeToTurtle(ds));
-    expect(emitted.getObjects(DOC, `${EX}p`, null).map((term) => term.value)).toEqual(["01"]);
+    await expect(async () => e.storeToTurtle(ds)).rejects.toMatchObject({ name: "MigrationError" });
     expect(
       e
         .build(DOC, { val: [1] })

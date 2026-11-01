@@ -120,16 +120,10 @@ const status = (name: string, value: string, aliased = false): ManifestEntity =>
 });
 
 describe("R9 M2: alias migration follows the owning shape's focus nodes", () => {
-  it("preserves B's canonical value instead of applying A's enum guards", async () => {
-    const e = defineModel(manifest(status("A", "active", true), status("B", "pending"))).entities.B;
-    if (!e) throw new Error("missing B");
-    const ds = store('ex:doc a ex:B; ex:p "pending"; ex:old "active" .');
-    const before = [...ds];
-    expect(e.parse(DOC, ds)).toEqual({ status: "pending" });
-    const emitted = store(await e.storeToTurtle(ds));
-    expect(e.parse(DOC, emitted)).toEqual({ status: "pending" });
-    expect(emitted.getObjects(DOC, `${EX}old`, null)).toEqual(ds.getObjects(DOC, `${EX}old`, null));
-    expect([...ds]).toEqual(before);
+  it("rejects owners sharing an aliased canonical predicate", () => {
+    expect(() =>
+      defineModel(manifest(status("A", "active", true), status("B", "pending"))),
+    ).toThrow(/shared canonical predicate.*alias/i);
   });
   it("migrates recognized roots, including alias subclasses, while preserving unrelated data", async () => {
     const e = defineModel(manifest(status("A", "active", true))).entities.A;

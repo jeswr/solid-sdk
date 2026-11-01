@@ -92,6 +92,8 @@ export interface ManifestField {
   node?: string;
   /** Nested link's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
   hasClass?: string;
+  /** True when the source link has sh:class but no sh:node; its target must match exactly. */
+  classOnly?: true;
   /** Present ⇒ the field is a live set; absent ⇒ a single value. */
   collection?: "set";
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
@@ -280,6 +282,7 @@ const FIELD_KEYS = new Set<string>([
   "kind",
   "node",
   "hasClass",
+  "classOnly",
   "collection",
   "datatype",
   "minCount",
@@ -402,6 +405,11 @@ function validateNestedField(
   }
   const field: ManifestField = { name, predicate, kind: "nested", node };
   if (raw.hasClass !== undefined) field.hasClass = checkIri(raw.hasClass, "field.hasClass");
+  if (raw.classOnly !== undefined) {
+    if (raw.classOnly !== true) fail("field.classOnly must be true when present");
+    if (field.hasClass === undefined) fail("field.classOnly requires sh:class (hasClass)");
+    field.classOnly = true;
+  }
   if (raw.guards !== undefined) {
     if (!isObject(raw.guards)) fail("field.guards must be an object");
     assertKnownKeys(raw.guards, new Set(["requiredFailClosed"]), "nested field.guards");
@@ -435,6 +443,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   if (raw.node !== undefined) fail("field.node is only allowed on a nested field");
   if (raw.hasClass !== undefined) fail("field.hasClass is only allowed on a nested field");
+  if (raw.classOnly !== undefined) fail("field.classOnly is only allowed on a nested field");
   if (raw.kind !== "iri" && raw.kind !== "literal") {
     fail('field.kind must be "iri", "literal", or "nested"');
   }
@@ -576,6 +585,16 @@ function validatePredicateAliases(entities: AnyManifestEntity[]): void {
         fail(`field.aliasPredicates overlaps another field predicate or alias: ${alias}`);
       }
       aliases.add(alias);
+    }
+  }
+  for (const field of fields) {
+    if (
+      field.aliasPredicates?.length &&
+      fields.some((other) => other !== field && other.predicate === field.predicate)
+    ) {
+      fail(
+        `shared canonical predicate with aliases has potentially overlapping owners: ${field.predicate}`,
+      );
     }
   }
 }
@@ -728,6 +747,13 @@ function validateCompositeEntity(raw: Record<string, unknown>): CompositeManifes
       const target = field.node as string;
       if (!seenNodeNames.has(target)) {
         fail(`composite nested field "${field.name}" targets unknown node "${target}"`);
+      }
+      const child = nodes.find((candidate) => candidate.name === target);
+      if (
+        field.classOnly &&
+        (child?.typeIris.length !== 1 || child.typeIris[0] !== field.hasClass)
+      ) {
+        fail(`class-only link "${field.name}" target class must equal sh:class exactly`);
       }
       if (target === root) fail(`composite nested field "${field.name}" links into the root node`);
       if (target === node.name)
