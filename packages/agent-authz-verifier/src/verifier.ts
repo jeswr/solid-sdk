@@ -12,11 +12,12 @@
 // independently-checkable keystone of the accountability stack: neither
 // `@jeswr/solid-vc` nor `@jeswr/solid-odrl` owns the composition alone, by design.
 //
-// PURITY CONTRACT (load-bearing): this package does ZERO I/O and ZERO RDF
-// parsing. All network enters through the INJECTED seams —
-// {@link VerifyAuthorityOptions.resolveKey} / `isControlledBy` / `resolveStatus`
-// — and all RDF/crypto mechanics live in the composed packages (`solid-vc`
-// verifies credentials + digests; `solid-odrl` walks the delegation chain).
+// PURITY CONTRACT (load-bearing): this package does ZERO I/O. All network enters
+// through the INJECTED seams — {@link VerifyAuthorityOptions.resolveKey} /
+// `isControlledBy` / `resolveStatus` — and all RDF/crypto mechanics live in the
+// composed packages (`solid-vc` verifies credentials + digests; `solid-odrl`
+// parses the signed policy content and walks the delegation chain). The only RDF
+// this package reads is the presented policy content, through those packages.
 // A second, independent implementation reproduces exactly this composition.
 //
 // It composes, IN ORDER and FAIL-CLOSED, as TWO PASSES over the ordered chain:
@@ -36,7 +37,12 @@
 //              Plus the G1 policy-content digest gate (`verifyRelatedResources`
 //              over `policyContents`): the presented raw policy document must
 //              match the credential's SIGNED `relatedResource` digest,
-//              fail-closed (a digest failure → a `POLICY_INTEGRITY` deny).
+//              fail-closed (a digest failure → a `POLICY_INTEGRITY` deny). The
+//              policy Phase D evaluates is the one PARSED from that signed
+//              content, and only when its projection re-serialises to exactly
+//              the signed graph; the presenter's object is never evaluated for a
+//              content-bound hop. A hop without content denies unless the caller
+//              opts in with `allowProvisionalPolicy`.
 //   Phase C  — status ∪ revocation, fail-closed: each hop credential's W3C
 //              Bitstring Status List entry is resolved through solid-vc's
 //              `resolveStatus` seam — a set bit → `REVOKED`/`SUSPENDED`; an
@@ -60,13 +66,25 @@ import type {
   OdrlPolicy,
   RequestContext,
 } from "@jeswr/solid-odrl";
-import { evaluateDelegated } from "@jeswr/solid-odrl";
+import {
+  DEFAULT_MAX_CHAIN_LENGTH,
+  evaluateDelegated,
+  ODRL_ACTIONS,
+  parsePolicy,
+  policyToRdf,
+} from "@jeswr/solid-odrl";
 import type {
   PresentedResourceContent,
   VerifiableCredential,
   VerifyCredentialOptions,
 } from "@jeswr/solid-vc";
-import { SVC, verifyCredential, verifyRelatedResources } from "@jeswr/solid-vc";
+import {
+  digestQuads,
+  digestRdfContent,
+  SVC,
+  verifyCredential,
+  verifyRelatedResources,
+} from "@jeswr/solid-vc";
 import {
   PHASE_A_CODES,
   STATUS_GATE_CODES,
@@ -112,10 +130,19 @@ export interface BoundAuthorization {
  * (`verifyRelatedResources`) recomputes its RDFC-1.0 canonical digest and
  * compares it against the credential's SIGNED
  * `relatedResource` `digestMultibase`, fail-closed (`POLICY_INTEGRITY` deny on a
- * missing digest or a mismatch). When every hop's content is presented and passes,
- * the permit's `policyIntegrityProvisional` is `false`; a hop presented WITHOUT
- * content falls back to the trusted-by-location reading and keeps the honest
- * provisional marker.
+ * missing digest or a mismatch). The verifier then parses the policy from that
+ * content and evaluates THAT policy: the presented {@link OdrlPolicy} object for a
+ * content-bound hop only places the hop in the chain (its id and
+ * `delegatedUnder` must agree with the signed content). The parsed policy must
+ * re-serialise to exactly the signed graph, so signed statements the evaluator
+ * cannot represent deny rather than being dropped. Content must be Turtle,
+ * N-Triples/N-Quads/TriG, or JSON-LD with an inline context.
+ *
+ * When every hop's content is presented and passes, the permit's
+ * `policyIntegrityProvisional` is `false`. A hop presented WITHOUT content denies
+ * with `POLICY_INTEGRITY` unless {@link VerifyAuthorityOptions.allowProvisionalPolicy}
+ * is set, in which case Phase D evaluates the presenter's object for that hop and
+ * the permit carries the provisional marker.
  */
 export interface PresentedChain {
   readonly credentials: readonly VerifiableCredential[];
@@ -130,7 +157,10 @@ export interface VerifyAuthorityOptions {
   readonly request: RequestContext;
   /** The trusted root principal for the target — the resource owner for the primary chain. */
   readonly rootPrincipal: string;
-  /** The single evaluation instant across all phases (the note's one-instant rule). */
+  /**
+   * The single evaluation instant across all phases (the note's one-instant rule).
+   * Must be a valid `Date`; anything else denies with `INVALID_OPTIONS`.
+   */
   readonly now: Date;
   /**
    * Resolve a `verificationMethod` IRI to a public `CryptoKey` — the INJECTED key
@@ -142,15 +172,25 @@ export interface VerifyAuthorityOptions {
   /**
    * The issuer↔key controller check — the INJECTED controller seam: pass the SAME
    * `createWebIdKeyResolver()` instance's `isControlledBy` for the fail-closed
-   * two-directional document resolution. When omitted, solid-vc falls back to
-   * its documented prefix heuristic — acceptable only for closed test setups.
+   * two-directional document resolution. Required: solid-vc's fallback prefix
+   * heuristic lets a co-tenant on the issuer's origin pass a key as the issuer's,
+   * so a missing seam denies with `INVALID_OPTIONS`.
    */
-  readonly isControlledBy?: VerifyCredentialOptions["isControlledBy"];
+  readonly isControlledBy: NonNullable<VerifyCredentialOptions["isControlledBy"]>;
+  /**
+   * Accept a hop presented WITHOUT its raw policy content
+   * ({@link PresentedChain.policyContents}), evaluating the presenter's policy
+   * object for it. Off by default: such a hop denies with `POLICY_INTEGRITY`,
+   * because nothing ties the object to what the issuer signed. When set, a permit
+   * that rests on such a hop carries `policyIntegrityProvisional: true`.
+   */
+  readonly allowProvisionalPolicy?: boolean;
   /**
    * Phase C, the POLICY-level revocation input: policy IRIs revoked via the
    * delegation profile's `odrld:Revocation` (e.g. published in a trace's
    * `revocations.ttl`). Distinct from — and consulted IN ADDITION TO — the
-   * credential-level Bitstring status gate (`resolveStatus`).
+   * credential-level Bitstring status gate (`resolveStatus`). A single string is
+   * read as a one-element list; any other non-array value denies.
    */
   readonly revoked?: readonly string[];
   /**
@@ -177,7 +217,11 @@ export interface VerifyAuthorityOptions {
   readonly statusUnreachable?: boolean;
   /** Gate the permit on the AGGREGATE chain duties being discharged (Phase D). */
   readonly requireDuties?: boolean;
-  /** Absolute chain-length cap (Phase D structural guard). */
+  /**
+   * Absolute chain-length cap (default 8), applied to the presented policies and
+   * credentials before any key is resolved, and again in Phase D. Must be a
+   * positive integer.
+   */
   readonly maxChainLength?: number;
   /** The AUTHENTICATED acting WebID on the wire (D9 identity composition). */
   readonly actor?: string;
@@ -446,6 +490,94 @@ function deny(
   };
 }
 
+/** The validated, normalised options the phases read. */
+interface CheckedOptions {
+  readonly revoked: readonly string[];
+  readonly maxChainLength: number;
+}
+
+/**
+ * Validate the caller's options before any phase runs. Each check closes a
+ * fail-open: an Invalid Date makes every validity-window comparison false, a
+ * missing `isControlledBy` falls back to solid-vc's prefix heuristic, a bare
+ * string `revoked` becomes a set of characters, and a NaN cap never trips.
+ */
+function checkOptions(
+  chain: PresentedChain,
+  options: VerifyAuthorityOptions,
+): CheckedOptions | VerifyAuthorityResult {
+  const invalid = (reason: string) => deny("assembly", "INVALID_OPTIONS", reason);
+  if (!(options.now instanceof Date) || !Number.isFinite(options.now.getTime())) {
+    return invalid("`now` is not a valid Date — refusing to evaluate validity windows.");
+  }
+  if (typeof options.resolveKey !== "function") {
+    return invalid("No resolveKey seam was supplied.");
+  }
+  if (typeof options.isControlledBy !== "function") {
+    return invalid(
+      "No isControlledBy seam was supplied — refusing solid-vc's prefix heuristic for key control.",
+    );
+  }
+  const maxChainLength = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
+  if (!Number.isSafeInteger(maxChainLength) || maxChainLength < 1) {
+    return invalid("maxChainLength must be a positive integer.");
+  }
+  const rawRevoked: unknown = options.revoked ?? [];
+  const revoked = typeof rawRevoked === "string" ? [rawRevoked] : rawRevoked;
+  if (!Array.isArray(revoked) || !revoked.every((r) => typeof r === "string")) {
+    return invalid("revoked must be a policy IRI or a list of policy IRIs.");
+  }
+  if (!Array.isArray(chain.credentials) || !Array.isArray(chain.policies)) {
+    return deny("assembly", "CHAIN_MALFORMED", "The presented chain is not a list of hops.");
+  }
+  if (chain.policies.length > maxChainLength || chain.credentials.length > maxChainLength) {
+    return deny(
+      "assembly",
+      "CHAIN_MALFORMED",
+      `The presented chain exceeds the maximum length ${maxChainLength}.`,
+    );
+  }
+  return { revoked, maxChainLength };
+}
+
+/**
+ * The policy a content-bound hop is evaluated as: the one parsed from the SIGNED
+ * content (already digest-checked by the caller), never the presenter's object.
+ * Returns a reason string when the content cannot stand in for the hop:
+ *  - it holds no well-formed policy, or a policy with another id;
+ *  - its `delegatedUnder` differs from the hop's (the chain was assembled from
+ *    the presented objects, so the position must agree with the signature);
+ *  - the parsed policy does not re-serialise to exactly the signed graph — the
+ *    projection dropped something (an unknown action, operand or operator), and
+ *    evaluating it would weaken what the issuer signed.
+ */
+async function contentBoundPolicy(
+  hop: OdrlPolicy,
+  presented: PresentedResourceContent,
+): Promise<OdrlPolicy | string> {
+  try {
+    const contentType = presented.contentType ?? "text/turtle";
+    const parsed = await parsePolicy(presented.content, contentType);
+    if (parsed === undefined) return "the signed content holds no well-formed ODRL policy";
+    if (parsed.id !== hop.id) {
+      return `the signed content's policy is <${parsed.id}>, not <${hop.id}>`;
+    }
+    if (parsed.delegatedUnder !== hop.delegatedUnder) {
+      return "the signed content places the policy at a different chain position (odrld:delegatedUnder)";
+    }
+    const [signed, projected] = await Promise.all([
+      digestRdfContent(presented.content, contentType),
+      digestQuads(policyToRdf(parsed)),
+    ]);
+    if (signed !== projected) {
+      return "the signed content carries statements the evaluator cannot represent — refusing to evaluate a weaker policy than was signed";
+    }
+    return parsed;
+  } catch (e) {
+    return `the signed content could not be read as a policy (${e instanceof Error ? e.message : String(e)})`;
+  }
+}
+
 // --- the composed verifier -------------------------------------------------
 
 /**
@@ -458,14 +590,16 @@ export async function verifyAgentAuthority(
   chain: PresentedChain,
   options: VerifyAuthorityOptions,
 ): Promise<VerifyAuthorityResult> {
-  const { request, rootPrincipal, now, resolveKey } = options;
+  const checked = checkOptions(chain, options);
+  if ("authorized" in checked) return checked;
+  const { request, rootPrincipal, now, resolveKey, isControlledBy } = options;
 
   // --- assembly ------------------------------------------------------------
   const assembled = assembleChain(chain.policies);
   if ("error" in assembled) {
     return deny("assembly", "CHAIN_MALFORMED", `Chain assembly failed: ${assembled.error}`);
   }
-  const ordered = assembled.ordered;
+  let ordered: readonly OdrlPolicy[] = assembled.ordered;
   const chainIds = ordered.map((p) => p.id);
 
   // Map each hop policy to its binding credential (svc:policy ≡ policy.id).
@@ -553,7 +687,7 @@ export async function verifyAgentAuthority(
     const b = bound.get(hop.id)!;
     const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
-      ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+      isControlledBy,
       expectedProofPurpose: "assertionMethod",
       now,
     });
@@ -574,11 +708,15 @@ export async function verifyAgentAuthority(
   }
 
   // --- Pass 2: reached only once EVERY hop has passed Phase A above. Per hop,
-  // in order: subject-issuer anchor → G1 digest gate → G2 status gate.
+  // in order: subject-issuer anchor → G1 digest gate (+ the signed policy that
+  // replaces the presented object) → G2 status gate.
+  const signedPolicies = new Map<string, OdrlPolicy>();
   for (const hop of ordered) {
     // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
     const b = bound.get(hop.id)!;
-    const presented: PresentedResourceContent | undefined = contents[hop.id];
+    const presented: PresentedResourceContent | undefined = Object.hasOwn(contents, hop.id)
+      ? contents[hop.id]
+      : undefined;
 
     // SECURITY (delegation-trust anchor) — runs BEFORE the digest/status gates
     // below, for this hop. Each hop's self-asserted `credentialSubject.id`,
@@ -621,6 +759,18 @@ export async function verifyAgentAuthority(
           chainIds,
         );
       }
+      // The digest binds the CONTENT; evaluate the policy that content states,
+      // never a presenter-supplied object beside it.
+      const signedPolicy = await contentBoundPolicy(hop, presented);
+      if (typeof signedPolicy === "string") {
+        return deny(
+          "B",
+          "POLICY_INTEGRITY",
+          `Policy-content binding failed for <${hop.id}>: ${signedPolicy}.`,
+          chainIds,
+        );
+      }
+      signedPolicies.set(hop.id, signedPolicy);
     }
 
     // G2 status gate (Phase C — status ∪ revocation, fail-closed). A credential
@@ -641,7 +791,7 @@ export async function verifyAgentAuthority(
       // call is deterministic and can only newly fail on the status gate).
       const statusRes = await verifyCredential(b.vc, {
         resolveKey,
-        ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+        isControlledBy,
         resolveStatus: options.resolveStatus,
         expectedProofPurpose: "assertionMethod",
         now,
@@ -666,7 +816,9 @@ export async function verifyAgentAuthority(
   }
   // The permit is fully content-bound (non-provisional) only when EVERY hop's raw
   // policy content was presented — and therefore digest-checked above, fail-closed.
-  const allContentBound = ordered.every((p) => contents[p.id] !== undefined);
+  const allContentBound = ordered.every((p) => signedPolicies.has(p.id));
+  // From here on every phase reads the SIGNED policy for each content-bound hop.
+  ordered = ordered.map((p) => signedPolicies.get(p.id) ?? p);
 
   // --- Phase B: cross-binding (root/assigner/linkage) -----------------------
   // The subject↔issuer anchor + the G1/G2 gates already ran per hop above; here
@@ -689,8 +841,8 @@ export async function verifyAgentAuthority(
     // biome-ignore lint/style/noNonNullAssertion: every hop bound
     const b = bound.get(hop.id)!;
     // The hop's credential must be issued by (and self-assert a subject of) the
-    // hop's assigner (the delegator). solid-vc already tied issuer ≡ subject.id;
-    // here we tie both to the ODRL assigner.
+    // hop's assigner (the delegator). Pass 2 above already tied issuer ≡
+    // subject.id; here we tie both to the ODRL assigner.
     if (hop.assigner !== undefined && b.auth.principal !== hop.assigner) {
       return deny(
         "B",
@@ -764,22 +916,48 @@ export async function verifyAgentAuthority(
       chainIds,
     );
   }
-  const revoked = new Set(options.revoked ?? []);
+  const revoked = new Set(checked.revoked);
   for (const p of ordered) {
     if (revoked.has(p.id)) {
       return deny("C", "REVOKED", `Chain policy <${p.id}> has been revoked.`, chainIds);
     }
   }
 
+  // --- G1 completeness: a hop with no signed content -----------------------
+  // Checked after B and C so their codes keep precedence; before D because the
+  // evaluator would otherwise read a presenter-chosen policy.
+  const unbound = ordered.find((p) => !signedPolicies.has(p.id));
+  if (unbound !== undefined && options.allowProvisionalPolicy !== true) {
+    return deny(
+      "B",
+      "POLICY_INTEGRITY",
+      `Chain hop <${unbound.id}> was presented without its signed policy content — nothing ties the presented policy to what the issuer signed (set allowProvisionalPolicy to accept it as provisional).`,
+      chainIds,
+    );
+  }
+
   // --- Phase D: the delegation-profile chain walk --------------------------
   // Pin the requesting agent to the LEAF ASSIGNEE (D9): legal accountability
   // attaches to the party the leaf agreement names, not to whoever authenticated.
+  // An action outside the ODRL vocabulary (or a prototype key) has no implication
+  // entry; deny it here rather than let the evaluator throw.
+  if (
+    typeof request.action !== "string" ||
+    !(ODRL_ACTIONS as readonly string[]).includes(request.action)
+  ) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the requested action ${JSON.stringify(String(request.action))} is not an ODRL action.`,
+      chainIds,
+    );
+  }
   const primaryRequest: RequestContext = { ...request, agent: leafAssignee };
   const decision = evaluateDelegated(ordered, primaryRequest, {
     now,
     revoked: [...revoked],
     ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
-    ...(options.maxChainLength !== undefined && { maxChainLength: options.maxChainLength }),
+    maxChainLength: checked.maxChainLength,
   });
   if (decision.decision !== "permit") {
     return deny("D", "POLICY_DENIED", `Phase D denied: ${decision.reason}`, chainIds, {
@@ -812,14 +990,17 @@ export async function verifyAgentAuthority(
       requireLeafAssignee: options.actor,
       now,
       resolveKey,
-      ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+      isControlledBy,
       ...(options.resolveStatus !== undefined && { resolveStatus: options.resolveStatus }),
-      ...(options.revoked !== undefined && { revoked: options.revoked }),
+      revoked: checked.revoked,
+      ...(options.allowProvisionalPolicy !== undefined && {
+        allowProvisionalPolicy: options.allowProvisionalPolicy,
+      }),
       ...(options.statusUnreachable !== undefined && {
         statusUnreachable: options.statusUnreachable,
       }),
       ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
-      ...(options.maxChainLength !== undefined && { maxChainLength: options.maxChainLength }),
+      maxChainLength: checked.maxChainLength,
       // the actor of chain₂ is its own leaf assignee (w authenticates as itself)
     });
     if (!actorResult.authorized) {
@@ -832,18 +1013,6 @@ export async function verifyAgentAuthority(
           decision,
           actorResult,
         },
-      );
-    }
-    // The second chain must actually authorize the ACTOR (its leaf assignee ≡ w).
-    // verifyAgentAuthority already pins Phase D to chain₂'s leaf assignee; confirm
-    // that leaf assignee is the actor so the chain proves `w`, not a third party.
-    if (actorResult.decision === undefined) {
-      return deny(
-        "composition",
-        "IDENTITY_COMPOSITION_FAILED",
-        "The second chain produced no Phase-D decision.",
-        chainIds,
-        { decision },
       );
     }
   }

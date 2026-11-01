@@ -2476,8 +2476,8 @@ importers:
   packages/agent-authz-verifier:
     dependencies:
       '@jeswr/solid-odrl':
-        specifier: github:jeswr/solid-odrl#db97922d82f2ec016b7ef705827cf85429458668
-        version: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668
+        specifier: workspace:*
+        version: link:../solid-odrl
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../solid-vc
@@ -8479,16 +8479,6 @@ packages:
 
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
-
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
-    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b}
-    version: 0.1.0
-    engines: {node: '>=24'}
-
-  '@jeswr/solid-odrl@https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668':
-    resolution: {tarball: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668}
-    version: 0.1.0
-    engines: {node: '>=24'}
 
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     resolution: {integrity: sha512-cMh1ckDWspn8GqHJWhL1obqCNBa8x52fNUIrQfd3Z1LYNVLE5coN51NJymFyLXteEoc2stexlz8s5bQsCM6O+A==, tarball: file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz}
@@ -24333,20 +24323,6 @@ snapshots:
       fsevents: 2.3.3
     transitivePeerDependencies:
       - encoding
-
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
-    dependencies:
-      '@rdfjs/types': 2.0.1
-      n3: 2.1.1
-
-  '@jeswr/solid-odrl@https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668':
-    dependencies:
-      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b
-      '@rdfjs/wrapper': 0.34.0
-      '@solid/object': 0.6.0
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
 
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     dependencies:

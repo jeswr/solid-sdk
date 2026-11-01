@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/agent-authz-verifier",
   "version": "0.1.0",
-  "description": "The composed FOUR-PHASE agent-authorization delegation-chain verifier — the standalone, independently-checkable keystone of the accountable-agents stack. Verifies a presented chain of AgentAuthorizationCredentials + bound ODRL delegation policies FAIL-CLOSED across assembly → Phase A (credential integrity at one instant, incl. the signed policy-content digest) → Phase B (issuer↔subject↔assigner cross-binding + delegation linkage) → Phase C (status ∪ revocation) → Phase D (the ODRL agent-delegation chain walk), plus the D9 identity-composition rule. Pure and side-effect-free: ALL network enters through the injected resolveKey / isControlledBy / resolveStatus seams — the package itself does zero I/O and zero RDF parsing. Composes @jeswr/solid-vc + @jeswr/solid-odrl. Experimental, AI-agent-generated.",
+  "description": "The composed FOUR-PHASE agent-authorization delegation-chain verifier — the standalone, independently-checkable keystone of the accountable-agents stack. Verifies a presented chain of AgentAuthorizationCredentials + bound ODRL delegation policies FAIL-CLOSED across assembly → Phase A (credential integrity at one instant, incl. the signed policy-content digest) → Phase B (issuer↔subject↔assigner cross-binding + delegation linkage) → Phase C (status ∪ revocation) → Phase D (the ODRL agent-delegation chain walk), plus the D9 identity-composition rule. Pure and side-effect-free: ALL network enters through the injected resolveKey / isControlledBy / resolveStatus seams — the package itself does zero I/O; each hop is evaluated as parsed from its signed policy content. Composes @jeswr/solid-vc + @jeswr/solid-odrl. Experimental, AI-agent-generated.",
   "securityCritical": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
   },
   "homepage": "https://github.com/jeswr/agent-authz-verifier#readme",
   "dependencies": {
-    "@jeswr/solid-odrl": "github:jeswr/solid-odrl#db97922d82f2ec016b7ef705827cf85429458668",
+    "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",

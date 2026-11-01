@@ -14,9 +14,10 @@ exports[`the four-phase chain verifier — golden-master decision matrix > GOLDE
     "provisional": false,
   },
   "content-not-presented": {
-    "authorized": true,
-    "phase": "complete",
-    "provisional": true,
+    "authorized": false,
+    "code": "POLICY_INTEGRITY",
+    "phase": "B",
+    "provisional": false,
   },
   "expired": {
     "authorized": false,
@@ -67,8 +68,8 @@ exports[`the four-phase chain verifier — golden-master decision matrix > GOLDE
   },
   "over-length": {
     "authorized": false,
-    "code": "POLICY_DENIED",
-    "phase": "D",
+    "code": "CHAIN_MALFORMED",
+    "phase": "assembly",
     "provisional": false,
   },
   "policy-substituted": {
