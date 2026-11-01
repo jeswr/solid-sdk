@@ -159,9 +159,10 @@ then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows valid
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
 IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
-tombstones are skipped; a MIME 404 skips a deleted item. Only HTTP 410 on a saved
-delta state restarts the initial inbox sync. Other errors preserve the previous
-cursor for retry. Pages cap at 512 rows and cursors at 64 KiB.
+tombstones are skipped; a MIME 404 skips a deleted item. HTTP 410 or a 4xx response
+with error code `syncStateNotFound` on a saved delta state restarts the initial
+inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512
+rows and cursors at 64 KiB.
 
 Continuation URLs accept slash and parenthesized folder keys, including lowercase
 `mailfolders`, for the inbox alias or the independently resolved inbox ID. They must stay on the inbox delta operation at
@@ -198,7 +199,8 @@ boundaries and transfer encodings may differ. Sender and recipient headers must
 each contain exactly one pinned mailbox; bare addresses and quoted or unquoted
 display names with angle brackets are accepted. Subject, Message-ID and carriage
 header must still match exactly; duplicate headers and extra routing/reply
-destinations are refused. STRICT parity checks every human and structured MIME
+destinations are refused. Exchange's `Content-Description` metadata is allowed on
+the JSON-LD attachment. STRICT parity checks every human and structured MIME
 copy and requires the original signed carrier. Lookup works after expiry and
 returns `found` only with positive evidence. Misses, rewritten human content or
 stripped carriers return `unknown`; mail never advertises `finalAbsence`.

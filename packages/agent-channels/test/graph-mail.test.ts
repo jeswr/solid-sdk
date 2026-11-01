@@ -201,6 +201,84 @@ it("resets only expired delta state, skips deleted MIME and leaves failed cursor
   expect((await retry.binding.ingest.list(account, saved, bounds)).items).toHaveLength(1);
 });
 
+it.each([
+  400, 404, 409,
+])("restarts saved delta and page states on HTTP %s syncStateNotFound", async (status) => {
+  for (const code of ["syncStateNotFound", "SyncStateNotFound"]) {
+    for (const kind of ["$deltatoken", "$skiptoken"]) {
+      const saved = cursor({ url: link("expired", kind) });
+      const r = reader([
+        Response.json({ error: { code, message: "private provider detail" } }, { status }),
+        { value: [{ id: "a" }, { id: "b" }], "@odata.deltaLink": link("fresh") },
+        mime(),
+        mime(),
+        fixtures.empty,
+      ]);
+      const first = await r.binding.ingest.list(account, saved, { ...bounds, maxItems: 1 });
+      expect(first.items.map((item) => item.id)).toEqual(["a"]);
+      expect(r.requests[1]?.url.href).toBe(JSON.parse(saved).url);
+      expect(r.requests[2]?.url.href).toBe(DELTA_INITIAL);
+      expect(JSON.parse(first.next)).toMatchObject({
+        url: DELTA_INITIAL,
+        pending: ["b"],
+        resume: link("fresh"),
+      });
+      const second = await r.binding.ingest.list(account, first.next, bounds);
+      expect(second.items.map((item) => item.id)).toEqual(["b"]);
+      expect(JSON.parse(second.next).url).toBe(link("fresh"));
+      await r.binding.ingest.list(account, second.next, bounds);
+      expect(r.requests.at(-1)?.url.href).toBe(link("fresh"));
+      expect(r.tokens.calls.every((call) => call.access === "read")).toBe(true);
+      expect(r.queue).toEqual([]);
+    }
+  }
+});
+
+it("preserves cursors for unrelated, malformed and oversized errors without exposing their bodies", async () => {
+  const code = "syncStateNotFound";
+  for (const [status, body] of [
+    [400, { error: { code: "BadRequest", message: code } }],
+    [401, { error: { code: "InvalidAuthenticationToken" } }],
+    [403, { error: { code: "ErrorAccessDenied" } }],
+    [404, { error: { code: "ErrorItemNotFound" } }],
+    [429, { error: { code: "TooManyRequests" } }],
+    [500, { error: { code } }],
+    [400, null],
+    [400, {}],
+    [400, { error: null }],
+    [400, { error: { code: 42 } }],
+    [400, { error: { code, message: "x".repeat(65537) } }],
+  ] as const) {
+    const saved = cursor();
+    const r = reader([Response.json(body, { status }), fixtures.empty]);
+    await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(
+      `Graph read failed: HTTP ${status}`,
+    );
+    expect(r.requests).toHaveLength(2);
+    await r.binding.ingest.list(account, saved, bounds);
+    expect(r.requests[2]?.url.href).toBe(JSON.parse(saved).url);
+    expect(r.queue).toEqual([]);
+  }
+  const malformed = reader([new Response("private malformed JSON", { status: 400 })]);
+  await expect(malformed.binding.ingest.list(account, cursor(), bounds)).rejects.toThrow(
+    "Graph read failed: HTTP 400",
+  );
+  expect(malformed.requests).toHaveLength(2);
+});
+
+it("does not retry initial sync errors or loop when an expiry restart fails", async () => {
+  const expired = () => Response.json({ error: { code: "syncStateNotFound" } }, { status: 400 });
+  const initial = reader([expired()]);
+  await expect(initial.binding.ingest.list(account, undefined, bounds)).rejects.toThrow("HTTP 400");
+  expect(initial.requests).toHaveLength(2);
+  const restart = reader([expired(), expired(), fixtures.empty]);
+  const saved = cursor();
+  await expect(restart.binding.ingest.list(account, saved, bounds)).rejects.toThrow("HTTP 400");
+  expect(restart.requests).toHaveLength(3);
+  await restart.binding.ingest.list(account, saved, bounds);
+  expect(restart.requests[3]?.url.href).toBe(JSON.parse(saved).url);
+});
+
 it("refuses invalid bounds, account cursors and unsafe continuation URLs before requesting credentials", async () => {
   const r = reader([]);
   for (const bad of [
@@ -293,6 +371,13 @@ it("fails closed on malformed pages, tombstones and repeated page links", async 
 it("snapshots strict receiving policy and rejects wrong grants and invalid configuration", async () => {
   const r = reader([]);
   r.config.ownAccounts.clear();
+  const provider = raw.replace(
+    "Content-Type: application/ld+json;",
+    "Content-Description: agent-message.jsonld\r\nContent-Type: application/ld+json;",
+  );
+  expect(r.binding.ingest.parse({ id: "a", raw: provider }).warnings).toContain(
+    "signature-unverified",
+  );
   expect(() =>
     r.binding.ingest.parse({
       id: "a",

@@ -8,6 +8,7 @@ import { ChannelParseError } from "./errors.js";
 import {
   DELTA_INITIAL,
   deltaLink,
+  expiredDeltaState,
   graphMailOrigins,
   graphMailRest,
   messageId,
@@ -109,7 +110,7 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
         if (!state.pending.length) {
           let response = await rest(state.url, ref, tokens, "read");
           // Only an explicitly expired sync state starts a new inbox baseline.
-          if (response.status === 410 && state.url !== DELTA_INITIAL) {
+          if (state.url !== DELTA_INITIAL && (await expiredDeltaState(response))) {
             state = { account: ref.id, url: DELTA_INITIAL, pending: [], resume: "" };
             response = await rest(state.url, ref, tokens, "read");
           }

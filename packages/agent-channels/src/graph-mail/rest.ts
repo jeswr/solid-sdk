@@ -102,6 +102,18 @@ export async function responseBody(response: Response): Promise<Record<string, u
     throw new ChannelParseError("invalid Graph JSON response");
   }
 }
+/** Only explicit sync-state expiry permits discarding a saved delta cursor. */
+export async function expiredDeltaState(response: Response): Promise<boolean> {
+  if (response.status === 410) return true;
+  if (response.status < 400 || response.status >= 500) return false;
+  try {
+    const error = record(record(parseBoundedJson(await response.text())).error);
+    return typeof error.code === "string" && error.code.toLowerCase() === "syncstatenotfound";
+  } catch {
+    // Malformed or oversized errors are unrelated failures; never echo provider bodies.
+    return false;
+  }
+}
 export async function mimeBody(response: Response): Promise<Uint8Array> {
   if (!response.ok) throw new Error(`Graph MIME read failed: HTTP ${response.status}`);
   const raw = new Uint8Array(await response.arrayBuffer());
