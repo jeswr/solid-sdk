@@ -114,8 +114,9 @@ export function RequestsLink({ pending = 0 }: { pending?: number }) {
 
 /** The Requests link with the live pending count; mounted only when requests are available. */
 function PendingRequestsLink() {
-  const { pending, unreadable } = useRequests();
-  return <RequestsLink pending={pending.length + unreadable.length} />;
+  // Unreadable inbox items can't be answered, so they are never counted as pending.
+  const { pending } = useRequests();
+  return <RequestsLink pending={pending.length} />;
 }
 
 export function PermissionsPage() {

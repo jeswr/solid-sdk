@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+
 /**
  * Review one access request (03-home-permissions §2.5): the ConsentSheet content as a Dialog, so
  * the notifications tray can mount the same component. Built from the suite-ui sharing pieces
@@ -7,6 +8,7 @@
  * counts the Home model doesn't know.
  */
 
+import type { RequestDecision } from "@jeswr/pod-access/requests-solid";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +57,12 @@ import {
 import { useCardSummaries, useRequestCaps, useRequests } from "../../state/requests";
 
 export const EXPIRY_UNAVAILABLE = "Expiring access isn't available on this storage";
+/** Shown once an approval failed: it may already be pinned, so its choices can't change. */
+export const FROZEN_NOTE =
+  "Approving may have already started, so these choices stay as you sent them.";
+export const FROZEN_DURATION = "Kept as you sent it";
+/** The request's own status claims an approval; the requester could have written that. */
+export const FINISHING_TEXT = "This request says an approval was started. Finish it, or deny it.";
 
 export type ReviewOutcome = "approved" | "denied" | "already-decided" | "dismissed";
 
@@ -119,12 +127,60 @@ function CardItem({
  * account) whenever the account changes.
  */
 
+/** share: the editable choices; retry: the frozen payload again; finish: no choices at all. */
+type Attempt = "share" | "retry" | "finish" | "deny";
+
+interface FrozenApproval {
+  /** The exact approval that failed; Try again resends it unchanged. */
+  decision: { approve: true; dataTypes: string[]; expiresAt?: Date };
+  /** The card ids it was built from, for the success message. */
+  selected: string[];
+}
+
+type ShownError = Extract<ReviewError, { kind: "error" }> & { attempt: Attempt };
+
+function DenyButton({
+  name,
+  label,
+  prominent = false,
+  disabled,
+  onDeny,
+}: {
+  name: string;
+  label: string;
+  prominent?: boolean;
+  disabled: boolean;
+  onDeny: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant={prominent ? "default" : "outline"} disabled={disabled}>
+          {label}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Deny this request?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {name} won't get access to your data. You can still share with them later.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep reviewing</AlertDialogCancel>
+          <AlertDialogAction onClick={onDeny}>Deny</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const requests = useRequests();
   const caps = useRequestCaps();
   const name = requesterName(entry);
   const host = requesterHost(entry);
-  // An interrupted approval resumes the choices pinned when it started: nothing here is editable.
+  // The request claims an interrupted approval: resume whatever the owner's records pinned.
   const finishing = entry.status === "approving";
   const cards = useMemo(() => requestCards(entry), [entry]);
   const summaries = useCardSummaries(finishing ? [] : cards);
@@ -135,12 +191,16 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
       : { value: "until-revoked", customDate: "" },
   );
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<Extract<ReviewError, { kind: "error" }>>();
+  const [error, setError] = useState<ShownError>();
+  // After any failed approval the decision may already be pinned: its choices never change again.
+  const [frozen, setFrozen] = useState<FrozenApproval>();
+  // The SDK reported an approval already pinned: only finishing it (no choices) can succeed.
+  const [pinned, setPinned] = useState(false);
+  // The SDK refused approving outright (a claimed approval with no record): only Deny is left.
+  const [denyOnly, setDenyOnly] = useState(false);
   const done = useRef(false);
   // One decision at a time, even for clicks that land before the disabled state renders.
   const busy = useRef(false);
-  // The last decision tried, for Retry.
-  const last = useRef<boolean>(undefined);
   const allId = useId();
 
   const shareable = cards.filter(isShareable);
@@ -150,56 +210,73 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
     done.current = true;
     onDone(outcome);
   };
-  const run = async (approve: boolean) => {
+  const run = async (attempt: Attempt) => {
     if (busy.current) return;
+    let approval: FrozenApproval | undefined;
+    if (attempt === "retry") approval = frozen;
+    else if (attempt === "share") {
+      const sentExpiry = expiresAt ?? undefined;
+      approval = {
+        decision: {
+          approve: true,
+          dataTypes: selectedDataTypes(cards, selected),
+          ...(sentExpiry ? { expiresAt: sentExpiry } : {}),
+        },
+        selected: [...selected],
+      };
+    }
+    if (attempt === "retry" && !approval) return;
+    // finish sends no choices, so the SDK resumes the pinned decision exactly as it was recorded;
+    // retry resends the frozen choices, which the SDK accepts only if they match any pin.
+    const decision: RequestDecision =
+      attempt === "deny"
+        ? { approve: false }
+        : attempt === "finish"
+          ? { approve: true }
+          : (approval as FrozenApproval).decision;
     busy.current = true;
-    last.current = approve;
     setSaving(true);
     setError(undefined);
-    const sentExpiry = approve && !finishing ? (expiresAt ?? undefined) : undefined;
     try {
-      const result = await requests.decide(
-        entry,
-        finishing
-          ? // Resume the pinned decision: explicit choices would be refused.
-            { approve: true }
-          : approve
-            ? {
-                approve: true,
-                dataTypes: selectedDataTypes(cards, selected),
-                ...(sentExpiry ? { expiresAt: sentExpiry } : {}),
-              }
-            : { approve: false },
-      );
-      let message = finishing
-        ? finishedMessage(name, result.notified)
-        : approve
-          ? approvedMessage(name, cards, selected, result.notified)
-          : deniedMessage(name, result.notified);
-      if (sentExpiry && !result.expiryEnforced) message = `${message} ${EXPIRY_NOT_ENFORCED}`;
+      const result = await requests.decide(entry, decision);
+      let message =
+        attempt === "deny"
+          ? deniedMessage(name, result.notified)
+          : approval
+            ? approvedMessage(name, cards, approval.selected, result.notified)
+            : finishedMessage(name, result.notified);
+      if (approval?.decision.expiresAt && !result.expiryEnforced)
+        message = `${message} ${EXPIRY_NOT_ENFORCED}`;
       toast.success(message);
-      finish(approve ? "approved" : "denied");
+      finish(attempt === "deny" ? "denied" : "approved");
     } catch (caught) {
-      const failure = reviewError(caught, approve, navigator.onLine);
+      const failure = reviewError(caught, attempt !== "deny", navigator.onLine);
       if (failure.kind === "conflict") {
         toast.info("This request was already decided");
         finish("already-decided");
         return;
       }
-      setError(failure);
+      if (attempt === "share") setFrozen(approval);
+      if (failure.finish) setPinned(true);
+      if (failure.deny) setDenyOnly(true);
+      setError({ ...failure, attempt });
       busy.current = false;
       setSaving(false);
     }
   };
-  const retry = () => {
-    if (last.current !== undefined) void run(last.current);
-  };
 
   const chosen = selected.filter((id) => shareable.some((card) => card.id === id));
   const allChecked = shareable.length > 0 && chosen.length === shareable.length;
-  const durationProps = caps.grantExpiry
-    ? {}
-    : { disabled: true as const, reason: EXPIRY_UNAVAILABLE };
+  // The choices can't change once an approval failed or is known to be pinned.
+  const fixed = frozen !== undefined || pinned;
+  const locked = saving || fixed;
+  const durationProps = !caps.grantExpiry
+    ? { disabled: true as const, reason: EXPIRY_UNAVAILABLE }
+    : fixed
+      ? { disabled: true as const, reason: FROZEN_DURATION }
+      : {};
+  // Only a failed denial is retried from the error; approvals answer from the footer.
+  const retryDenial = error?.attempt === "deny" && error.retry ? () => void run("deny") : undefined;
   return (
     <Dialog
       open
@@ -215,18 +292,19 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           <DialogTitle>{headline(name, entry.purpose)}</DialogTitle>
           <DialogDescription>
             {finishing
-              ? `You already chose what to share with ${name}, but approving didn't finish. Finish approving to give them that access.`
+              ? FINISHING_TEXT
               : "Choose what to share. You can revoke access at any time."}
           </DialogDescription>
           {host && host !== name && <p className="hm-request-muted">Request from {host}</p>}
         </DialogHeader>
         {!finishing && (
           <>
+            {fixed && <p className="hm-request-muted">{FROZEN_NOTE}</p>}
             <div className="hm-request-check hm-request-all">
               <Checkbox
                 id={allId}
                 checked={allChecked ? true : chosen.length ? "indeterminate" : false}
-                disabled={saving || shareable.length === 0}
+                disabled={locked || shareable.length === 0}
                 onCheckedChange={(value) =>
                   setSelected(value === true ? shareable.map((card) => card.id) : [])
                 }
@@ -239,7 +317,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
                   key={card.id}
                   card={card}
                   checked={selected.includes(card.id)}
-                  disabled={saving}
+                  disabled={locked}
                   count={summaries[card.id]?.count}
                   sources={summaries[card.id]?.sources ?? []}
                   onChange={(checked) =>
@@ -269,54 +347,71 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           <ErrorState
             key={error.message}
             error={error.category}
-            actions={error.category === "unreachable" && error.retry ? { retry } : {}}
+            actions={error.category === "unreachable" && retryDenial ? { retry: retryDenial } : {}}
           >
             <p className="hm-request-error">{error.message}</p>
-            {error.retry && error.category !== "unreachable" && (
-              <Button variant="outline" disabled={saving} onClick={retry}>
+            {retryDenial && error.category !== "unreachable" && (
+              <Button variant="outline" disabled={saving} onClick={retryDenial}>
                 Retry
               </Button>
             )}
           </ErrorState>
         )}
         <DialogFooter className="hm-request-actions" data-equal-weight="">
-          {finishing ? (
-            <Button variant="outline" disabled={saving} onClick={() => finish("dismissed")}>
-              Not now
-            </Button>
+          {!finishing && !fixed ? (
+            <>
+              <DenyButton
+                name={name}
+                label="Cancel"
+                disabled={saving}
+                onDeny={() => void run("deny")}
+              />
+              <Button
+                variant="outline"
+                disabled={
+                  saving || selectedDataTypes(cards, selected).length === 0 || expiresAt === null
+                }
+                aria-busy={saving || undefined}
+                onClick={() => void run("share")}
+              >
+                Share
+              </Button>
+            </>
           ) : (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" disabled={saving}>
-                  Cancel
+            <>
+              {finishing && (
+                <Button variant="outline" disabled={saving} onClick={() => finish("dismissed")}>
+                  Not now
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Deny this request?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {name} won't get access to your data. You can still share with them later.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep reviewing</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void run(false)}>Deny</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              )}
+              <DenyButton
+                name={name}
+                label="Deny"
+                prominent={denyOnly}
+                disabled={saving}
+                onDeny={() => void run("deny")}
+              />
+              {denyOnly ? null : finishing || pinned ? (
+                <Button
+                  variant="outline"
+                  disabled={saving}
+                  aria-busy={saving || undefined}
+                  onClick={() => void run("finish")}
+                >
+                  Finish approving
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled={saving || error?.retry === false}
+                  aria-busy={saving || undefined}
+                  onClick={() => void run("retry")}
+                >
+                  Try again
+                </Button>
+              )}
+            </>
           )}
-          <Button
-            variant="outline"
-            disabled={
-              saving ||
-              (!finishing &&
-                (selectedDataTypes(cards, selected).length === 0 || expiresAt === null))
-            }
-            aria-busy={saving || undefined}
-            onClick={() => void run(true)}
-          >
-            {finishing ? "Finish approving" : "Share"}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

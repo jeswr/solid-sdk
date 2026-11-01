@@ -49,10 +49,15 @@
     grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr) auto;
     align-items: center;
   }
-  /* No requester to show: the details take the first two columns. */
-  .hm-request-row[data-unreadable] {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
+}
+.hm-request-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
 }
 .hm-request-who {
   display: flex;
@@ -120,9 +125,16 @@
 .hm-request-error {
   overflow-wrap: anywhere;
 }
-/* Cancel and Share carry equal weight: same variant, same size, side by side. */
+/* The answers carry equal weight: same variant, same size, side by side. */
 .hm-request-actions[data-equal-weight] {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: var(--space-3);
+}
+/* Three answers don't fit side by side on a phone: stack them, still equal. */
+@media (max-width: 479px) {
+  .hm-request-actions[data-equal-weight]:has(> :nth-child(3)) {
+    grid-auto-flow: row;
+  }
 }

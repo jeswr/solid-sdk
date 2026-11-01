@@ -43,6 +43,8 @@ interface RequestsStore {
   generation: number;
   /** Requests decided in this session, hidden from the waiting lists whatever a listing says. */
   answered: Set<string>;
+  /** The owner dismissed the note about unreadable inbox items for this session. */
+  unreadableDismissed: boolean;
   listeners: Set<() => void>;
 }
 
@@ -58,6 +60,7 @@ function storeFor(session: PodSession): RequestsStore {
       loadedAt: 0,
       generation: 0,
       answered: new Set(),
+      unreadableDismissed: false,
       listeners: new Set(),
     };
     stores.set(session.fetch, store);
@@ -110,6 +113,9 @@ export interface RequestsBinding extends RequestLists {
    * the re-list runs or after it fails.
    */
   decide(entry: AccessRequestEntry, decision: RequestDecision): Promise<DecisionResult>;
+  /** Whether the note about unreadable inbox items was dismissed in this session. */
+  unreadableDismissed: boolean;
+  dismissUnreadable(): void;
 }
 
 export function useRequests(): RequestsBinding {
@@ -155,11 +161,18 @@ export function useRequests(): RequestsBinding {
     [store, session, refresh],
   );
 
+  const dismissUnreadable = useCallback(() => {
+    store.unreadableDismissed = true;
+    publish(store, { ...store.snapshot });
+  }, [store]);
+
   return {
     status: snapshot.status,
     ...splitRequests(snapshot.entries, new Date(), store.answered),
     refresh,
     decide,
+    unreadableDismissed: store.unreadableDismissed,
+    dismissUnreadable,
   };
 }
 

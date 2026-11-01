@@ -33,6 +33,17 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   toast: mocks.toast,
 }));
+vi.mock("../src/apps/home/state/permissions", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  usePermissions: () => ({
+    status: "loading",
+    rows: [],
+    failures: [],
+    online: true,
+    truncated: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -50,16 +61,20 @@ import {
   RequestConflictError,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
+import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
 import {
   EXPIRY_UNAVAILABLE,
+  FINISHING_TEXT,
+  FROZEN_NOTE,
   RequestReview,
 } from "../src/apps/home/components/requests/request-review";
 import {
   EMPTY_DECIDED,
   EMPTY_PENDING,
   RequestsPage,
-  UNREADABLE_TITLE,
+  unreadableText,
 } from "../src/apps/home/components/requests/requests-page";
+import { NOT_SAVED } from "../src/apps/home/lib/requests/model";
 import { ACTIVITY_CLASS } from "../src/lib/demo-pod/seed-requests";
 
 vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
@@ -139,13 +154,9 @@ it("lists pending requests with requester, data types, purpose, duration and Rev
   expect(row?.textContent).toContain("Build your training plan");
   expect(row?.textContent).toContain("For 1 month");
   expect(row?.textContent).not.toContain("https://");
-  // The unreadable notification gets its own row, counted as waiting.
-  const unreadable = view.host.querySelector(`[aria-label="${UNREADABLE_TITLE}"]`);
-  expect(unreadable?.querySelector("h3")?.textContent).toBe("Couldn't read this request");
-  expect([...(unreadable?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual([
-    "Deny",
-  ]);
-  expect(view.host.querySelector(".hm-permission-count")?.textContent).toBe("2 waiting");
+  // The unreadable notification can't be answered: it is neither a row nor counted as waiting.
+  expect(view.host.querySelectorAll(".hm-request-row")).toHaveLength(1);
+  expect(view.host.querySelector(".hm-permission-count")?.textContent).toBe("1 waiting");
   await click(button(row as Element, "Review"));
   expect(dialog().textContent).toContain(
     "To build your training plan, MaraCoach requests access to:",
@@ -321,41 +332,121 @@ it("asks before denying: Keep reviewing returns, Deny decides once", async () =>
   expect(onDone).toHaveBeenCalledWith("denied");
 });
 
-it("keeps the sheet open with the error's message, and closes on a lost race", async () => {
+it("keeps the sheet open with plain copy, and closes on a lost race", async () => {
   mocks.decide.mockRejectedValueOnce(new UnsupportedAccessModelError("acp"));
-  const { onDone } = await review();
+  const first = await review();
   await click(button(dialog(), "Share"));
   const alert = dialog().querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("Not available on this storage");
   expect(alert?.textContent).toContain("Approving requests isn't available on this storage yet");
-  expect(onDone).not.toHaveBeenCalled();
-  expect(button(dialog(), "Share").disabled).toBe(false);
-  mocks.decide.mockRejectedValueOnce(
-    new Error("The access records folder is shared; make it private first"),
-  );
-  await click(button(dialog(), "Share"));
-  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
-    "The access records folder is shared; make it private first",
-  );
+  expect(first.onDone).not.toHaveBeenCalled();
+  // Trying the same approval again can't help here.
+  expect(button(dialog(), "Try again").disabled).toBe(true);
+  await first.view.unmount();
+  const second = await review();
   mocks.decide.mockRejectedValueOnce(new RequestConflictError(request.id, "approved"));
   await click(button(dialog(), "Share"));
   expect(mocks.toast.info).toHaveBeenCalledWith("This request was already decided");
-  expect(onDone).toHaveBeenCalledWith("already-decided");
-  expect(mocks.list).toHaveBeenCalledTimes(4);
+  expect(second.onDone).toHaveBeenCalledWith("already-decided");
 });
 
-it("offers a retry when offline that runs the same decision again", async () => {
+it("never puts an unmapped SDK message in the page, only on the console", async () => {
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const raw = new Error(
+    "The access records folder https://pod.test/.access/records/ is shared; make it private first",
+  );
+  mocks.decide.mockRejectedValueOnce(raw);
+  await review();
+  await click(button(dialog(), "Share"));
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(NOT_SAVED);
+  expect(document.body.innerHTML).not.toContain("https://pod.test/.access");
+  expect(document.body.textContent).not.toContain("records folder");
+  expect(logged).toHaveBeenCalledWith(expect.any(String), raw);
+  logged.mockRestore();
+});
+
+it("after an offline failure, Try again resends exactly the same approval", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
   Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
   mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
   const { onDone } = await review();
   await click(checkbox(dialog(), "Vitals"));
   await click(button(dialog(), "Share"));
   expect(dialog().textContent).toContain("You're offline. Reconnect and try again.");
+  // Only the footer answers an approval: no second Retry inside the error.
+  expect(dialog().querySelector('[role="alert"] button')).toBeNull();
   Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
-  await click(button(dialog(), "Retry"));
+  await click(button(dialog(), "Try again"));
   expect(mocks.decide).toHaveBeenCalledTimes(2);
-  expect(mocks.decide.mock.calls[1]?.[1]).toEqual(mocks.decide.mock.calls[0]?.[1]);
-  expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true, dataTypes: [ACTIVITY_CLASS] });
+  const [first, second] = mocks.decide.mock.calls.map((call) => call[1]);
+  expect(second).toEqual(first);
+  expect(second.dataTypes).toEqual([ACTIVITY_CLASS]);
+  expect(second.expiresAt).toBe(first.expiresAt);
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    "MaraCoach can now see your Activity. We couldn't tell MaraCoach; they'll see it next time they check. Access won't end automatically on this storage; remove it from Permissions when you're done.",
+  );
+  expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("freezes the choices after any failed approval: no editing, only Try again or Deny", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.decide.mockRejectedValueOnce(new Error("socket hang up"));
+  await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  const sheet = dialog();
+  expect(sheet.textContent).toContain(FROZEN_NOTE);
+  for (const box of sheet.querySelectorAll<HTMLButtonElement>('[role="checkbox"]'))
+    expect(box.disabled).toBe(true);
+  expect(sheet.querySelector("fieldset")?.disabled).toBe(true);
+  const names = [...sheet.querySelectorAll("button")]
+    .map((item) => item.textContent?.trim())
+    .filter((name) =>
+      ["Share", "Cancel", "Deny", "Try again", "Finish approving"].includes(name ?? ""),
+    );
+  expect(names).toEqual(["Deny", "Try again"]);
+  // Clicking a frozen card changes nothing that is sent.
+  await click(checkbox(sheet, "Vitals"));
+  mocks.decide.mockRejectedValueOnce(new Error("socket hang up"));
+  await click(button(dialog(), "Try again"));
+  mocks.decide.mockResolvedValueOnce({
+    status: "approved",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: true,
+  });
+  await click(button(dialog(), "Try again"));
+  const sent = mocks.decide.mock.calls.map((call) => call[1]);
+  expect(sent).toHaveLength(3);
+  for (const decision of sent) expect(decision).toBe(sent[0]);
+  expect(sent[0]).toMatchObject({ approve: true, dataTypes: [ACTIVITY_CLASS] });
+  // The toast names what the accepted payload shared.
+  expect(mocks.toast.success).toHaveBeenCalledWith("MaraCoach can now see your Activity.");
+  logged.mockRestore();
+});
+
+it("offers Finish approving (no choices) when an earlier approval is still finishing", async () => {
+  mocks.decide.mockRejectedValueOnce(
+    new Error(
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+    ),
+  );
+  const { onDone } = await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  const sheet = dialog();
+  expect(sheet.querySelector('[role="alert"]')?.textContent).toContain(
+    "Choose Finish approving to complete it as it was first chosen, or deny it.",
+  );
+  expect(sheet.textContent).not.toContain("Try again");
+  expect(() => button(sheet, "Share")).toThrow();
+  await click(button(sheet, "Finish approving"));
+  expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });
+  // The pinned choices may differ from the cards on screen, so the toast names none.
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    "You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check.",
+  );
   expect(onDone).toHaveBeenCalledWith("approved");
 });
 
@@ -372,7 +463,7 @@ it("shows known SDK refusals in plain words; Retry re-runs a retryable denial", 
   expect(alert?.textContent).not.toContain("owner registration");
   expect(alert?.querySelector("button")).toBeNull();
   mocks.decide.mockRejectedValueOnce(new Error("Conditional write failed (412)"));
-  await click(button(dialog(), "Cancel"));
+  await click(button(dialog(), "Deny"));
   await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
   alert = dialog().querySelector('[role="alert"]');
   expect(alert?.textContent).toContain("Something else changed this request at the same time.");
@@ -409,12 +500,12 @@ it("finishes an interrupted approval read-only, resuming the pinned choices", as
   const sheet = dialog();
   expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
   expect(sheet.querySelector('[role="radio"]')).toBeNull();
-  expect(sheet.textContent).not.toContain("Deny");
-  expect(sheet.textContent).not.toContain("Cancel");
-  expect(sheet.textContent).toContain("approving didn't finish");
+  // The requester could have written "approving", so this never says the owner chose anything.
+  expect(sheet.textContent).toContain(FINISHING_TEXT);
+  expect(FINISHING_TEXT).toBe("This request says an approval was started. Finish it, or deny it.");
+  expect(sheet.textContent).not.toContain("You already chose");
   const names = [...sheet.querySelectorAll("button")].map((item) => item.textContent?.trim());
-  expect(names).toContain("Finish approving");
-  expect(names).toContain("Not now");
+  expect(names).toEqual(expect.arrayContaining(["Not now", "Deny", "Finish approving"]));
   mocks.decide.mockRejectedValueOnce(new Error("Cannot approve a denial"));
   await click(button(sheet, "Finish approving"));
   expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
@@ -430,6 +521,34 @@ it("finishes an interrupted approval read-only, resuming the pinned choices", as
   expect(onDone).toHaveBeenCalledWith("approved");
 });
 
+it("can deny a claimed approval, after asking, and puts Deny first when no approval was recorded", async () => {
+  const approving: Readable = { ...request, status: "approving" };
+  mocks.decide.mockRejectedValueOnce(
+    new Error("This request claims an approval that was never recorded"),
+  );
+  const { onDone } = await review(vi.fn(), approving);
+  await click(button(dialog(), "Finish approving"));
+  const sheet = dialog();
+  expect(sheet.querySelector('[role="alert"]')?.textContent).toContain("You can still deny it.");
+  expect(() => button(sheet, "Finish approving")).toThrow();
+  const deny = button(sheet, "Deny");
+  expect(deny.dataset.variant).toBe("default");
+  expect(button(sheet, "Not now").dataset.variant).toBe("outline");
+  mocks.decide.mockResolvedValueOnce({
+    status: "denied",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: false,
+  });
+  await click(deny);
+  const confirm = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  expect(confirm?.textContent).toContain("Deny this request?");
+  await click(button(confirm as HTMLElement, "Deny"));
+  expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: false });
+  expect(mocks.toast.success).toHaveBeenCalledWith("You denied MaraCoach's request.");
+  expect(onDone).toHaveBeenCalledWith("denied");
+});
+
 it("labels an interrupted approval's row Finish approving", async () => {
   mocks.list.mockResolvedValue([{ ...request, status: "approving" }]);
   const view = await mount(h(RequestsPage));
@@ -439,21 +558,20 @@ it("labels an interrupted approval's row Finish approving", async () => {
   expect(button(dialog(), "Finish approving")).toBeDefined();
 });
 
-it("plain-words the refusals of a stale or interrupted approval", async () => {
-  mocks.decide.mockRejectedValueOnce(
-    new Error(`Request ${request.id} is still finishing with different choices; finish it first`),
-  );
-  await review();
-  await click(button(dialog(), "Share"));
-  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
-    "An earlier approval of this request is still finishing. Close this and choose Finish approving.",
-  );
+it("plain-words a denial refused because approving already started, then offers Finish approving", async () => {
   mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  await review();
   await click(button(dialog(), "Cancel"));
   await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
-  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
+  const sheet = dialog();
+  expect(sheet.querySelector('[role="alert"]')?.textContent).toContain(
     "Approving this request has already started, so it can't be denied now.",
   );
+  // An approval is pinned: the choices lock and only finishing it is offered.
+  expect(sheet.textContent).toContain(FROZEN_NOTE);
+  expect(() => button(sheet, "Share")).toThrow();
+  await click(button(sheet, "Finish approving"));
+  expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });
 });
 
 it("leaves unsorted classes unchecked, named by class with the full IRI beneath", async () => {
@@ -526,43 +644,44 @@ it("disables Select all and Share when nothing in the request can be shared", as
   expect(button(sheet, "Share").disabled).toBe(true);
 });
 
-it("denies an unreadable request from its row, or says plainly when it can't be", async () => {
+it("notes unreadable inbox items in one quiet line, uncounted, with no Deny, dismissable", async () => {
   const bad: AccessRequestEntry = { id: `${ROOT}inbox/bad`, status: "unreadable" };
-  mocks.list.mockResolvedValue([bad]);
+  const worse: AccessRequestEntry = { id: `${ROOT}inbox/worse`, status: "unreadable" };
+  mocks.list.mockResolvedValue([bad, worse]);
   const view = await mount(h(RequestsPage));
-  const row = () => view.host.querySelector(`[aria-label="${UNREADABLE_TITLE}"]`);
-  expect(view.host.textContent).not.toContain(EMPTY_PENDING);
-  const deny = async () => {
-    await click(button(row() as Element, "Deny"));
-    const confirm = document.querySelector<HTMLElement>('[role="alertdialog"]');
-    expect(confirm?.textContent).toContain("Deny this request?");
-    await click(button(confirm as HTMLElement, "Deny"));
-  };
-  mocks.decide.mockRejectedValueOnce(new Error("Unreadable access request"));
-  await deny();
-  expect(mocks.decide).toHaveBeenCalledWith(bad, { approve: false }, expect.anything());
-  expect(row()?.querySelector('[role="alert"]')?.textContent).toBe(
-    "This request couldn't be read, so it can't be answered here.",
+  expect(view.host.textContent).toContain(EMPTY_PENDING);
+  expect(view.host.querySelector(".hm-permission-count")).toBeNull();
+  const note = view.host.querySelector(".hm-request-note") as HTMLElement;
+  expect(note.textContent).toContain(
+    "2 items in your inbox aren't access requests or couldn't be read.",
   );
-  // Asking again can't help, so the Deny button goes.
-  expect(row()?.querySelector("button")).toBeNull();
+  expect(unreadableText(1)).toBe(
+    "1 item in your inbox isn't an access request or couldn't be read.",
+  );
+  expect(() => button(view.host, "Deny")).toThrow();
+  await click(button(note, "Dismiss"));
+  expect(view.host.querySelector(".hm-request-note")).toBeNull();
+  expect(mocks.decide).not.toHaveBeenCalled();
+  // Dismissed for the session: coming back to the page doesn't bring it back.
   await view.unmount();
-
-  mocks.decide.mockResolvedValueOnce({
-    status: "denied",
-    receiptUrl: `${ROOT}r`,
-    notified: false,
-    expiryEnforced: false,
-  });
-  mocks.list.mockResolvedValueOnce([bad]).mockResolvedValue([]);
-  mocks.session = { ...mocks.session, fetch: vi.fn<typeof fetch>() };
   const again = await mount(h(RequestsPage));
-  const fresh = again.host.querySelector(`[aria-label="${UNREADABLE_TITLE}"]`) as Element;
-  await click(button(fresh, "Deny"));
-  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
-  expect(mocks.toast.success).toHaveBeenCalledWith("You denied the request.");
-  expect(again.host.querySelector(`[aria-label="${UNREADABLE_TITLE}"]`)).toBeNull();
-  expect(again.host.textContent).toContain(EMPTY_PENDING);
+  expect(again.host.querySelector(".hm-request-note")).toBeNull();
+});
+
+it("leaves unreadable inbox items out of the Permissions Requests badge", async () => {
+  mocks.list.mockResolvedValue([request, { id: `${ROOT}inbox/bad`, status: "unreadable" }]);
+  const view = await mount(h(PermissionsPage));
+  await vi.waitFor(() =>
+    expect(
+      view.host.querySelector(".hm-permission-requests .hm-permission-count")?.textContent,
+    ).toBe("1 pending"),
+  );
+  mocks.list.mockResolvedValue([{ id: `${ROOT}inbox/bad`, status: "unreadable" }]);
+  mocks.session = { ...mocks.session, fetch: vi.fn<typeof fetch>() };
+  const other = await mount(h(PermissionsPage));
+  await vi.waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(other.host.querySelector(".hm-permission-requests")?.textContent).toBe("Requests");
 });
 
 it("sends one decision for a double click", async () => {

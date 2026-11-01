@@ -196,6 +196,27 @@ it("drops a decided request from Pending at once, while the re-list runs and aft
   expect(binding.unreadable).toEqual([]);
 });
 
+it("remembers a dismissed unreadable-items note for the session, across surfaces", async () => {
+  const views: RequestsBinding[] = [];
+  const Both = () => {
+    views[0] = useRequests();
+    views[1] = useRequests();
+    return null;
+  };
+  const view = await mount(h(Both));
+  expect(views[0]?.unreadable).toHaveLength(1);
+  expect(views[0]?.unreadableDismissed).toBe(false);
+  await act(async () => views[0]?.dismissUnreadable());
+  expect(views[1]?.unreadableDismissed).toBe(true);
+  await view.unmount();
+  await mount(h(Probe));
+  expect(binding.unreadableDismissed).toBe(true);
+  // Another session starts with the note shown again.
+  mocks.session = session({ fetch: vi.fn<typeof fetch>() });
+  await mount(h(Probe));
+  expect(binding.unreadableDismissed).toBe(false);
+});
+
 it("refreshes on focus at most once a minute", async () => {
   await mount(h(Probe));
   expect(mocks.list).toHaveBeenCalledTimes(1);
