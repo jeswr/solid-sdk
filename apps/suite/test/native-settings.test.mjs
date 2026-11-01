@@ -41,3 +41,23 @@ it("rejects invalid public bases in the web URL helper too", async () => {
   vi.resetModules();
   await expect(import("../src/lib/urls.ts")).rejects.toThrow("Public base URLs");
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it.each([
+  "CLIENT_ID_URL",
+  "NEXT_PUBLIC_CLIENT_ID_URL",
+])("rejects an explicit %s with a fragment, userinfo or cleartext", (setting) => {
+  for (const value of [
+    "https://suite.example/id.jsonld#a",
+    "https://suite.example/id.jsonld#",
+    "https://user@suite.example/id.jsonld",
+    "http://suite.example/id.jsonld",
+  ])
+    expect(() => nativeSettings({ [setting]: value })).toThrow("Client ID URLs");
+});
+
+it("rejects an invalid explicit Client ID URL in the web URL helper too", async () => {
+  vi.stubEnv("NEXT_PUBLIC_CLIENT_ID_URL", "https://suite.example/id.jsonld#a");
+  vi.resetModules();
+  await expect(import("../src/lib/urls.ts")).rejects.toThrow("Client ID URLs");
+});

@@ -1,14 +1,16 @@
 // AUTHORED-BY Codex GPT-6
-import { publicBaseUrl } from "../src/lib/public-url.ts";
+// AUTHORED-BY Claude Opus 5.5
+import { clientIdDocumentUrl, publicBaseUrl } from "../src/lib/public-url.ts";
 
 export function nativeSettings(env) {
   const publicSuiteUrl = publicBaseUrl(
     env.NEXT_PUBLIC_PUBLIC_SUITE_URL ?? env.PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app",
   );
-  const clientIdUrl =
+  const clientIdUrl = clientIdDocumentUrl(
     env.NEXT_PUBLIC_CLIENT_ID_URL ??
-    env.CLIENT_ID_URL ??
-    `${publicSuiteUrl.replace(/\/$/, "")}/.well-known/solid-client-id-mobile.jsonld`;
+      env.CLIENT_ID_URL ??
+      `${publicSuiteUrl.replace(/\/$/, "")}/.well-known/solid-client-id-mobile.jsonld`,
+  );
   const appBaseUrl = env.NEXT_PUBLIC_APP_BASE_URL ?? env.APP_BASE_URL ?? "https://localhost";
   for (const value of [publicSuiteUrl, clientIdUrl]) {
     const url = new URL(value);

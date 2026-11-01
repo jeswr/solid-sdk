@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { useEffect, useSyncExternalStore } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, h, mount } from "./drive-ui-dom";
 
 const navigation = vi.hoisted(() => ({
@@ -111,4 +111,37 @@ it.each([
   }
   await mount(h(Probe));
   expect(result).toEqual(expected);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+// The hook and scripts/route-resolver.mjs are separate implementations; the shared vectors
+// keep them in agreement (transport suffixes stripped, since the hook sees page pathnames).
+describe("matchRouteParams agrees with the native resolver vectors", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const vectors = JSON.parse(
+    await readFile(new URL("../../mobile/test/vectors/routes.json", import.meta.url), "utf8"),
+  ) as {
+    manifest: { routes: { pattern: string; directory: string; files: string[] }[] };
+    cases: { request: string; path: string; status: number }[];
+  };
+  const { matchRouteParams } = await import("../src/lib/route-params");
+  const routes = vectors.manifest.routes;
+  const owner = (path: string) =>
+    routes.find((route) =>
+      route.files.some((file) => (route.directory ? `${route.directory}/${file}` : file) === path),
+    );
+  // A request naming a transport file (index.html, *.txt) is served for its page's pathname.
+  const transport = (request: string) => /\/(index\.html|[^/]*\.txt)$/.test(request);
+  const page = (request: string) => (transport(request) ? request.replace(/[^/]*$/, "") : request);
+  // Static assets have no route; the hook only ever sees page pathnames.
+  it.each(
+    vectors.cases.filter((c) => c.status === 200 && owner(c.path)),
+  )("matches $request like the resolver", ({ request, path }) => {
+    expect(matchRouteParams(owner(path)?.pattern ?? "", page(request))).toBeDefined();
+  });
+  it.each(
+    vectors.cases.filter((c) => c.status === 404 && !transport(c.request)),
+  )("rejects $request like the resolver", ({ request }) => {
+    for (const route of routes) expect(matchRouteParams(route.pattern, request)).toBeUndefined();
+  });
 });

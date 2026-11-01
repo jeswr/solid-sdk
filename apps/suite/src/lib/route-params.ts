@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { useParams, usePathname } from "next/navigation";
 
@@ -15,7 +16,14 @@ function useWebRouteParams<T extends Params>(): T {
 /** The export's router tree contains placeholders; only the pathname has the real values. */
 function useNativeRouteParams<T extends Params>(pattern: string): T | undefined {
   const pathname = usePathname();
-  if (!pathname) return undefined;
+  return pathname ? (matchRouteParams(pattern, pathname) as T | undefined) : undefined;
+}
+
+/**
+ * Match a raw (still percent-encoded) pathname against a route pattern, decoding each segment
+ * exactly once. Must agree with scripts/route-resolver.mjs on the shared vectors.
+ */
+export function matchRouteParams(pattern: string, pathname: string): Params | undefined {
   const segments = pattern.split("/").filter(Boolean);
   const result: Params = {};
   let index = 0;
@@ -48,5 +56,5 @@ function useNativeRouteParams<T extends Params>(pattern: string): T | undefined 
   } catch {
     return undefined;
   }
-  return result as T;
+  return result;
 }

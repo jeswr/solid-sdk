@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Build-time settings: public links and client identity always retain their deployed https URL. */
-import { publicBaseUrl } from "./public-url";
+import { clientIdDocumentUrl, publicBaseUrl } from "./public-url";
 
 export const PUBLIC_SUITE_URL = publicBaseUrl(
   process.env.NEXT_PUBLIC_PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app",
 );
-export const CLIENT_ID_URL =
+export const CLIENT_ID_URL = clientIdDocumentUrl(
   process.env.NEXT_PUBLIC_CLIENT_ID_URL ??
-  `${PUBLIC_SUITE_URL}/.well-known/solid-client-id-mobile.jsonld`;
+    `${PUBLIC_SUITE_URL}/.well-known/solid-client-id-mobile.jsonld`,
+);
 
 /** iOS and Android consume one export; the live local scheme wins once mounted in the WebView. */
 export function appBaseUrl(): string {

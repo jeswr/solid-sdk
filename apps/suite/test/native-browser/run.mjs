@@ -1,32 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { expect } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { serveExport } from "./server.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const origin = "https://localhost";
 const ref = (folder) => Buffer.from(`https://native-browser.pod/${folder}/`).toString("base64url");
 const href = (folder) => `/drive/f/${ref(folder)}/`;
-// Use the environment's preinstalled browser tool when supplied through NODE_PATH.
-// In CI the declared @playwright/test dependency supplies its matching Chromium build.
-const require = createRequire(import.meta.url);
-let chromium;
-try {
-  ({ chromium } = require("playwright"));
-} catch (error) {
-  if (error.code !== "MODULE_NOT_FOUND") throw error;
-  ({ chromium } = require("@playwright/test"));
-}
+// One Playwright version drives both the browser and the assertions.
 const browser = await chromium.launch();
 
-async function run(directory, exercise) {
+async function run(directory, exercise, expectedViolations = []) {
   const server = await serveExport(directory);
   const context = await browser.newContext({ serviceWorkers: "block" });
   const violations = [];
   const errors = [];
+  const consoleErrors = [];
   const external = [];
   try {
     // Keep the real native origin and CSP byte-for-byte. Only the TCP transport is proxied.
@@ -38,7 +29,9 @@ async function run(directory, exercise) {
         return route.abort();
       }
       const response = await fetch(`${server.url}${url.pathname}${url.search}`, {
+        method: request.method(),
         headers: request.headers(),
+        body: request.postDataBuffer() ?? undefined,
       });
       await route.fulfill({
         status: response.status,
@@ -62,6 +55,18 @@ async function run(directory, exercise) {
     });
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
+    // Hydration mismatches and recoverable React errors surface only on the console. CSP
+    // reports and failed loads also log there; they are asserted through the violation events
+    // and the server's request log instead.
+    page.on("console", (message) => {
+      const text = message.text();
+      if (
+        message.type() === "error" &&
+        !text.includes("Content Security Policy") &&
+        !text.startsWith("Failed to load resource")
+      )
+        consoleErrors.push(text);
+    });
     await exercise(page, server.requests);
     // Allow queued policy events to cross the exposed binding before asserting the report.
     await page.evaluate(
@@ -69,7 +74,13 @@ async function run(directory, exercise) {
     );
     expect(external, "no external network requests").toEqual([]);
     expect(errors, "no browser startup/navigation errors").toEqual([]);
-    expect(violations, "no violations under the final export CSP").toEqual([]);
+    expect(consoleErrors, "no console errors (hydration, recoverable React errors)").toEqual([]);
+    // The server sends the policy as a header as well as the page's meta tag, so the browser
+    // enforces two identical policies and reports each violation once per policy.
+    expect(
+      [...new Set(violations.map(({ directive }) => directive))],
+      "exactly the expected violations under the final export CSP",
+    ).toEqual(expectedViolations);
   } finally {
     await context.close();
     await server.close();
@@ -85,6 +96,23 @@ try {
     expect(await page.evaluate(() => window.isSecureContext)).toBe(true);
   });
   console.log("PASS production export: cold deep link and startup under final CSP");
+
+  // Positive control: the violation listener must report what the policy blocks.
+  await run(
+    `${root}www`,
+    async (page) => {
+      await page.goto(`${origin}${href("alpha")}`);
+      await expect(page.getByRole("heading", { name: "Sign in to open your Drive" })).toBeVisible();
+      await page.evaluate(() => {
+        const script = document.createElement("script");
+        script.textContent = "window.unhashed = true;";
+        document.head.append(script);
+      });
+      await expect.poll(() => page.evaluate(() => window.unhashed === true)).toBe(false);
+    },
+    ["script-src-elem"],
+  );
+  console.log("PASS control: an unhashed inline script is blocked and reported");
 
   // Same build pipeline, isolated fixture session + page-local observations. www stays untouched.
   await new Promise((resolve, reject) => {
@@ -169,9 +197,18 @@ try {
           (request.rawPath.startsWith("/_next/") || request.rawPath.startsWith("/drive/f/")),
       ),
     ).toEqual([]);
+    // The navigation sheet mounts Radix's scroll lock, which inserts a runtime <style>.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(page.getByRole("dialog", { name: "Navigation" })).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).overflow))
+      .toBe("hidden");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Navigation" })).toBeHidden();
   });
   console.log(
-    "PASS fixture export: cold deep link, Link, router.push, prefetch, sibling state, back/forward, final CSP",
+    "PASS fixture export: cold deep link, Link, router.push, prefetch, sibling state, back/forward, scroll-locked sheet, final CSP",
   );
 } finally {
   await browser.close();

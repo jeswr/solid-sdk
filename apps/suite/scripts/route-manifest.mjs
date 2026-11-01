@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -58,20 +59,28 @@ export async function checkServerFeatures(
     const visit = (node) => {
       // Biome's importNames restriction does not cover dynamic module namespaces.
       // Require static named imports so useParams cannot bypass the routing hook.
-      if (
+      const loader =
         ts.isCallExpression(node) &&
         (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
           node.expression.getText(source) === "require") &&
-        node.arguments[0] &&
-        ts.isStringLiteralLike(node.arguments[0]) &&
-        node.arguments[0].text === "next/navigation"
-      )
+        node.arguments[0];
+      if (loader && ts.isStringLiteralLike(loader) && nextModule(loader.text, "navigation"))
         throw new Error(
           `Native routing forbids dynamic next/navigation imports; use useRouteParams: ${path}`,
         );
+      // A computed specifier that starts inside next/ cannot be checked, so refuse it.
+      if (loader && !ts.isStringLiteralLike(loader) && /^next\//.test(leadingText(loader)))
+        throw new Error(`Native export forbids computed next/ module specifiers: ${path}`);
+      if (
+        ts.isImportDeclaration(node) &&
+        ts.isStringLiteralLike(node.moduleSpecifier) &&
+        node.moduleSpecifier.text !== "next/navigation" &&
+        nextModule(node.moduleSpecifier.text, "navigation")
+      )
+        throw new Error(`Native routing forbids aliased next/navigation imports: ${path}`);
       if (
         (ts.isStringLiteral(node) && node.text === "use server") ||
-        (ts.isStringLiteralLike(node) && node.text === "next/headers") ||
+        (ts.isStringLiteralLike(node) && nextModule(node.text, "headers")) ||
         (ts.isCallExpression(node) && /^(headers|cookies)$/.test(node.expression.getText(source)))
       )
         throw new Error(`Native export forbids server-only features: ${path}`);
@@ -81,6 +90,21 @@ export async function checkServerFeatures(
     if (/^route\.[jt]s$/.test(basename(path)) && !forceStatic)
       throw new Error(`Native route handler must be force-static: ${path}`);
   }
+}
+
+/** next/<name>, its .js spelling, or Next's internal dist path for the same module. */
+function nextModule(specifier, name) {
+  const bare = specifier.replace(/\.js$/, "");
+  return bare === `next/${name}` || new RegExp(`^next/dist/.*/${name}$`).test(bare);
+}
+
+/** The literal text a computed module specifier starts with (template head or leftmost string). */
+function leadingText(node) {
+  if (ts.isTemplateExpression(node)) return node.head.text;
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
+    return leadingText(node.left);
+  if (ts.isParenthesizedExpression(node)) return leadingText(node.expression);
+  return ts.isStringLiteralLike(node) ? node.text : "";
 }
 
 export function routeSegments(path) {

@@ -20,6 +20,10 @@ without a trailing slash before navigation and Client ID paths are appended.
 `appBaseUrl()` uses the live local scheme in the WebView so both platforms can
 consume the same bundle. Shared links use the public URL. The CSP permits executable assets
 only under `/_next/static/` at those two local origins and hashes each page's inline scripts.
+Inline `<style>` elements are allowed (`style-src 'unsafe-inline'`, no style hashes): Radix's
+scroll lock and Sonner insert them at runtime, and the scroll lock's body holds computed
+pixel values, so no build-time hash could match. Zod runs jitless (`src/instrumentation-client.ts`)
+so its `Function` probe never meets the eval-free script policy.
 
 Staging excludes `src/app/dev/` and public fixtures. The web session uses the installed Solid
 extension's granted pod, falling back to a seeded demo pod. Native staging replaces the web

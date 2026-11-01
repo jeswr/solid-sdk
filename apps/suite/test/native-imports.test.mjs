@@ -87,3 +87,50 @@ it.each([
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it.each([
+  'import { useSelectedLayoutSegment } from "next/navigation"; useSelectedLayoutSegment();',
+  'import { useSelectedLayoutSegments } from "next/navigation"; useSelectedLayoutSegments();',
+])("Biome rejects placeholder-tree segment hook %s", async (source) => {
+  const result = await lint(source);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("noRestrictedImports");
+});
+
+async function scan(source) {
+  const root = await mkdtemp(join(tmpdir(), "suite-imports-"));
+  try {
+    await writeFile(join(root, "page.tsx"), source);
+    return await checkServerFeatures(root).then(
+      () => null,
+      (error) => error.message,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+it.each([
+  ['import { useParams } from "next/navigation.js"; useParams();', "aliased next/navigation"],
+  [
+    'import { useParams } from "next/dist/client/components/navigation"; useParams();',
+    "aliased next/navigation",
+  ],
+  ['const n = await import("next/navigation.js"); n.useParams();', "useRouteParams"],
+  ["const x = 'navigation'; const n = await import(`next/${x}`);", "computed next/"],
+  ['const n = await import("next/" + "navigation");', "computed next/"],
+  ['const n = require(("next/") + "headers");', "computed next/"],
+  ['import { cookies } from "next/headers.js"; cookies();', "server-only"],
+  ['import { headers } from "next/dist/server/request/headers";', "server-only"],
+])("the native scanner rejects module-spelling bypass %s", async (source, message) => {
+  expect(await scan(source)).toContain(message);
+});
+
+it("the native scanner allows unrelated computed imports and plain navigation hooks", async () => {
+  expect(
+    await scan(
+      'import { useRouter } from "next/navigation"; const l = "en"; await import(`./locales/${l}.json`);',
+    ),
+  ).toBeNull();
+});

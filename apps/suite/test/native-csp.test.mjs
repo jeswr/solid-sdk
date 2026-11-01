@@ -10,7 +10,7 @@ import { nativeSettings } from "../scripts/native-settings.mjs";
 
 const inline = 'self.__next_f.push([1,"Flight data"]);';
 const html = `<html><head><script src="/_next/static/chunk.js" async></script><style>body{color:red}</style></head><body><script>${inline}</script><script>bootstrap()</script></body></html>`;
-it("hashes every inline bootstrap and Flight script and style, ahead of all scripts", () => {
+it("hashes every inline bootstrap and Flight script, ahead of all scripts", () => {
   const result = addCsp(html);
   const digest = createHash("sha256").update(inline).digest("base64");
   expect(result).toContain(`'sha256-${digest}'`);
@@ -19,6 +19,11 @@ it("hashes every inline bootstrap and Flight script and style, ahead of all scri
   expect(result).toContain("img-src https://localhost capacitor://localhost");
   expect(result).not.toContain("'self'");
   expect(result).not.toContain("script-src 'unsafe-inline'");
+  // Runtime-inserted <style> bodies cannot be hashed, so style elements are inline-allowed and
+  // no style hash may appear (a hash would silently disable 'unsafe-inline').
+  const styleSrc = /style-src ([^;]+)/.exec(result)?.[1] ?? "";
+  expect(styleSrc).toContain("'unsafe-inline'");
+  expect(styleSrc).not.toContain("sha256-");
   expect(result.indexOf("Content-Security-Policy")).toBeLessThan(result.indexOf("<script"));
   expect(() => assertCspHashes(result)).not.toThrow();
   expect(() => assertCspHashes(result.replace(`'sha256-${digest}'`, ""))).toThrow(
@@ -50,6 +55,16 @@ it.each([
   expect(result).toContain(`'sha256-${digest}'`);
   expect(() => assertCspHashes(result.replace(`'sha256-${digest}'`, ""))).toThrow(
     "Missing inline-script CSP hash",
+  );
+});
+
+it.each([
+  "<script data-x=a'b>window.a=1</script>",
+  '<script data-x=a"b>window.a=1</script>',
+  "<script data-x=<b>window.a=1</script>",
+])("fails closed on a script element the parser cannot read: %s", (element) => {
+  expect(() => addCsp(`<html><head></head>${element}</html>`)).toThrow(
+    "Unparseable script element",
   );
 });
 

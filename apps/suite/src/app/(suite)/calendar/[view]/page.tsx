@@ -7,8 +7,9 @@ import { CalendarScreen } from "@/apps/calendar/components/calendar-views";
 import { isView } from "@/apps/calendar/state/view";
 
 export const dynamicParams = true;
+// Native staging replaces this file with its own placeholder-param page.
 export function generateStaticParams() {
-  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ view: "__" }] : [];
+  return [];
 }
 
 export default async function CalendarViewPage({ params }: { params: Promise<{ view: string }> }) {

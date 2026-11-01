@@ -108,7 +108,12 @@
               "options": {
                 "paths": {
                   "next/navigation": {
-                    "importNames": ["useParams", "*"],
+                    "importNames": [
+                      "useParams",
+                      "useSelectedLayoutSegment",
+                      "useSelectedLayoutSegments",
+                      "*"
+                    ],
                     "message": "Use useRouteParams from @/lib/route-params for native routing."
                   }
                 }
