@@ -262,6 +262,10 @@ async function refreshListing(
     return { kind: 'not-cached' };
   }
 
+  // Follow the OLD listing's cached pagination links before replacing page one.
+  // Cursors are opaque URLs, so path/prefix matching cannot identify its pages.
+  await evictListingPages(container, records, deps);
+
   const req = rdfRequest(container);
   const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
   let fresh: Response;
@@ -318,6 +322,57 @@ async function refreshListing(
     return purge(container, records, deps);
   }
   return { kind: 'skipped' };
+}
+
+/** Resolve next-page links without splitting commas inside targets or quoted parameters. */
+function nextPages(url: string, header: string | null): string[] {
+  const pages: string[] = [];
+  for (const link of (header ?? '').matchAll(/<([^<>]*)>((?:[^<",]|"(?:[^"\\]|\\.)*")*)/g)) {
+    const params = new Map<string, string>();
+    for (const param of (link[2] ?? '').matchAll(
+      /;\s*([^=;\s]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))/g,
+    )) {
+      const name = param[1]?.toLowerCase() ?? '';
+      if (!params.has(name)) params.set(name, (param[2] ?? param[3] ?? '').replace(/\\(.)/g, '$1'));
+    }
+    if (!params.get('rel')?.toLowerCase().split(/\s+/).includes('next')) continue;
+    const anchor = params.get('anchor');
+    if (anchor !== undefined && (!URL.canParse(anchor, url) || new URL(anchor, url).href !== url))
+      continue;
+    const target = link[1];
+    if (target !== undefined && URL.canParse(target, url)) pages.push(new URL(target, url).href);
+  }
+  return pages;
+}
+
+/** Evict every cached cursor variant; cached Link chains associate pages with their listing. */
+async function evictListingPages(
+  container: string,
+  records: CacheMetadata[],
+  deps: InvalidateDeps,
+): Promise<void> {
+  const pending = [{ url: container, records }];
+  const seen = new Set([container]);
+  for (let index = 0; index < pending.length; index += 1) {
+    const page = pending[index];
+    if (!page) continue;
+    for (const record of page.records) {
+      const cached = await deps.cache.match(keyRequest(page.url, record.varyKey), IGNORE_VARY);
+      for (const next of nextPages(page.url, cached?.headers.get('link') ?? null)) {
+        if (seen.has(next) || !deps.storage.isWithinStorage(next)) continue;
+        seen.add(next);
+        pending.push({ url: next, records: await deps.meta.getByUrl(next) });
+      }
+      void cached?.body?.cancel().catch(() => undefined);
+    }
+    if (page.url === container) continue;
+    await deleteVariantBytes(
+      deps.cache,
+      page.url,
+      page.records.map((record) => record.varyKey),
+    );
+    for (const record of page.records) await deps.meta.delete(record.key);
+  }
 }
 
 /** Reconcile the warmed set using fresh HEADs, reading only changed/unversioned entries. */
