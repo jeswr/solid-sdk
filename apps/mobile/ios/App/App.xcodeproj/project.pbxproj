@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */; };
+		39109055553BED83ECA4B1C6 /* SuiteSchemeHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76DAAC37EC9C6F21D26A402 /* SuiteSchemeHandlerTests.swift */; };
 		6B24F5AA202B17FE20F62ABA /* RouteResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29859CBC34FA94A45846F22C /* RouteResolverTests.swift */; };
 		14E03E00A3139E5EE2B85FD8 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 9F8EFB09D532889909E021C3 /* CapApp-SPM */; };
 		186DFAEB4660B57133868B0A /* SuiteOrigin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDC852D88EB015D4D001F2A /* SuiteOrigin.swift */; };
@@ -39,6 +40,7 @@
 		F2DDA7AD1BD4EBD692449B01 /* FixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA97BA2BB663E63CD45C637 /* FixtureTests.swift */; };
 		F4B9B4E14754357C61BAA2A1 /* SuiteSecureStorePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */; };
 		8ADAA7BF2211267F5587DEDD /* SecureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F87F89D3293E5108720B588A /* SecureStore.swift */; };
+		6DD32503E71E53A35A225317 /* SuiteSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F145B7FE8FE09B27FF1F7ED /* SuiteSchemeHandler.swift */; };
 		73B034EA5ED1FE9905C24236 /* RouteResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A25C102554B76E91A6D8F2B /* RouteResolver.swift */; };
 		7F247B81197F10306C06213A /* SecureStoreState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */; };
 		0C95C5B31EC3F8AEBFAE0994 /* SecureStoreKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */; };
@@ -135,6 +137,7 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteOriginTests.swift; sourceTree = "<group>"; };
+		F76DAAC37EC9C6F21D26A402 /* SuiteSchemeHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteSchemeHandlerTests.swift; sourceTree = "<group>"; };
 		29859CBC34FA94A45846F22C /* RouteResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RouteResolverTests.swift; sourceTree = "<group>"; };
 		AF4BF16769184CC8BBB912E8 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteAuthSessionPluginTests.swift; sourceTree = "<group>"; };
@@ -154,6 +157,7 @@
 		AFBE66F4BD28F039A279BE0F /* AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteSecureStorePlugin.swift; sourceTree = "<group>"; };
 		F87F89D3293E5108720B588A /* SecureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStore.swift; sourceTree = "<group>"; };
+		4F145B7FE8FE09B27FF1F7ED /* SuiteSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteSchemeHandler.swift; sourceTree = "<group>"; };
 		7A25C102554B76E91A6D8F2B /* RouteResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteResolver.swift; sourceTree = "<group>"; };
 		0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreState.swift; sourceTree = "<group>"; };
 		353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreKeys.swift; sourceTree = "<group>"; };
@@ -235,6 +239,7 @@
 				A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */,
 				B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */,
 				972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */,
+				F76DAAC37EC9C6F21D26A402 /* SuiteSchemeHandlerTests.swift */,
 				29859CBC34FA94A45846F22C /* RouteResolverTests.swift */,
 			);
 			name = AppTests;
@@ -276,6 +281,7 @@
 				353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */,
 				0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */,
 				F87F89D3293E5108720B588A /* SecureStore.swift */,
+				4F145B7FE8FE09B27FF1F7ED /* SuiteSchemeHandler.swift */,
 				7A25C102554B76E91A6D8F2B /* RouteResolver.swift */,
 				621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */,
 				0BF2AA18A77CA5F18284C231 /* SuitePushPlugin.swift */,
@@ -569,6 +575,7 @@
 				0C95C5B31EC3F8AEBFAE0994 /* SecureStoreKeys.swift in Sources */,
 				7F247B81197F10306C06213A /* SecureStoreState.swift in Sources */,
 				8ADAA7BF2211267F5587DEDD /* SecureStore.swift in Sources */,
+				6DD32503E71E53A35A225317 /* SuiteSchemeHandler.swift in Sources */,
 				73B034EA5ED1FE9905C24236 /* RouteResolver.swift in Sources */,
 				F4B9B4E14754357C61BAA2A1 /* SuiteSecureStorePlugin.swift in Sources */,
 				48FBFA41AC02A3879AB98E86 /* PushCompletion.swift in Sources */,
@@ -619,6 +626,7 @@
 				6BD8BE4938FA4D25F66382B0 /* ShareOutStoreTests.swift in Sources */,
 				2EA93A5EBDAEC9295A53DC9C /* SuiteAuthSessionPluginTests.swift in Sources */,
 				13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */,
+				39109055553BED83ECA4B1C6 /* SuiteSchemeHandlerTests.swift in Sources */,
 				6B24F5AA202B17FE20F62ABA /* RouteResolverTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

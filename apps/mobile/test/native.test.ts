@@ -688,3 +688,43 @@ describe("mobile CI iOS fixture guardrails", () => {
     expect(driver).toMatch(/"-configuration",\s*"Debug"/);
   });
 });
+
+describe("bundled-mode wiring (MOB-P3 E4, E5)", () => {
+  test("Android serves the local origin before Capacitor and fails closed without a manifest", () => {
+    const client = read("android/app/src/main/java/org/jeswr/suite/SuiteWebViewClient.java");
+    const intercept = client.slice(
+      client.indexOf("public WebResourceResponse shouldInterceptRequest("),
+    );
+    const serve = intercept.indexOf("bundled.serve(");
+    expect(serve).toBeGreaterThan(-1);
+    expect(intercept.indexOf("BundledServer.isNativeFilePath(")).toBeLessThan(serve);
+    expect(
+      intercept.indexOf("return super.shouldInterceptRequest(view, request);"),
+    ).toBeGreaterThan(serve);
+    expect(client).toContain('getAssets().open("public/route-manifest.json")');
+    expect(client).toContain("if (isDocumentRequest(request)) return forbidden();");
+    const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
+    expect(activity).toMatch(
+      /client = new SuiteWebViewClient\(bridge\);\s*\} catch \(RuntimeException e\) \{/,
+    );
+  });
+
+  test("iOS wraps Capacitor's local scheme handler and blocks device-file navigations first", () => {
+    const controller = read("ios/App/App/MainViewController.swift");
+    expect(controller).toContain("SuiteBundledWebViewConfiguration.adopting(base)");
+    expect(controller).toContain('fatalError("Bundled mode needs public/route-manifest.json")');
+    const navigation = read("ios/App/App/SuiteNavigationPlugin.swift");
+    expect(navigation.indexOf("isLocalDeviceFile(url")).toBeLessThan(
+      navigation.indexOf("navigationAction.targetFrame?.isMainFrame"),
+    );
+    const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const file of [
+      "RouteResolver.swift",
+      "SuiteSchemeHandler.swift",
+      "RouteResolverTests.swift",
+      "SuiteSchemeHandlerTests.swift",
+    ]) {
+      expect(pbxproj).toContain(`/* ${file} in Sources */,`);
+    }
+  });
+});
