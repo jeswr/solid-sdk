@@ -374,7 +374,7 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
         const rules = communicationRules(snapshot.yaml);
         return stage(
           {
-            batch_id: `communication-rules-${snapshot.commit}`,
+            batch_id: `communication-rules-${pkgId("agent-memory", ownerWebId, agentId, snapshot.commit).slice(9)}`,
             worker: { agent_id: agentId, agent_label: "Agent memory import" },
             sources: [
               {

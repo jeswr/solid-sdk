@@ -127,3 +127,19 @@ it("does not reimport if approval finishes between the existence check and pendi
   expect(queue).not.toHaveBeenCalled();
   expect((await h.storage.list(`${CONTAINER}pending/`)).items).toHaveLength(0);
 });
+
+it("keeps imported nanopub identifiers distinct across owners and import agents", async () => {
+  const h = await harness();
+  const original = await h.memory.importCommunicationRules(input);
+  const otherOwner = await harness({ ownerWebId: "https://example.org/people/morgan#me" });
+  const otherAgent = await harness({ agentId: "https://example.org/agents/another" });
+  const ownerImport = await otherOwner.memory.importCommunicationRules(input);
+  const agentImport = await otherAgent.memory.importCommunicationRules(input);
+  expect(
+    new Set([
+      ...original.nanopublications,
+      ...ownerImport.nanopublications,
+      ...agentImport.nanopublications,
+    ]).size,
+  ).toBe(6);
+});
