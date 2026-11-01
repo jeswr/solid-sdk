@@ -249,10 +249,15 @@ export async function createManualItem(
     body: await serializeTurtle(dataset),
   });
   if (!response.ok) throw new Error("Couldn't save this item. Please try again.");
-  const created = await session.fetch(target, { method: "HEAD", redirect: "error" });
+  // A HEAD that rejects (a dropped connection, or a redirect under redirect: "error") can't
+  // confirm access either.
+  const created = await session
+    .fetch(target, { method: "HEAD", redirect: "error" })
+    .catch(() => undefined);
+  const checked = created?.ok === true;
   // Fail closed: an item whose access can't be confirmed is removed like a public one.
-  if (!created.ok || publiclyAccessible(created.headers)) {
-    const etag = (created.ok && created.headers.get("etag")) || response.headers.get("etag");
+  if (!created || !checked || publiclyAccessible(created.headers)) {
+    const etag = (checked && created.headers.get("etag")) || response.headers.get("etag");
     const removed = await session
       .fetch(target, {
         method: "DELETE",
@@ -263,8 +268,8 @@ export async function createManualItem(
         (deleted) => deleted.ok || deleted.status === 404,
         () => false,
       );
-    if (!removed) throw new ExposedItemError();
-    throw created.ok
+    if (!removed) throw new ExposedItemError(target, checked);
+    throw checked
       ? new PublicFolderError()
       : new Error("Couldn't check who can see this item, so it wasn't saved. Please try again.");
   }
@@ -282,8 +287,16 @@ export async function createManualItem(
 }
 /** A new item was found public (or unverifiable) and couldn't be removed again. */
 export class ExposedItemError extends Error {
-  constructor() {
-    super("This item may still be visible to anyone; make the folder private.");
+  constructor(
+    readonly url: string,
+    /** The server said the item is public; otherwise its access couldn't be checked. */
+    readonly verifiedPublic: boolean,
+  ) {
+    super(
+      verifiedPublic
+        ? "This item may still be visible to anyone; make the folder private."
+        : `Couldn't check who can see the new item at ${url}, and it couldn't be removed. Check who can see it, or delete it.`,
+    );
   }
 }
 export class ManualRegistrationError extends Error {

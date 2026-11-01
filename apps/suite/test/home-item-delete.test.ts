@@ -3,6 +3,7 @@ import { Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readItem } from "../src/apps/home/components/item/data";
 import {
+  CLAIM_STALE_MS,
   createDeleteController,
   HOLD_GRACE_MS,
   UNDO_MS,
@@ -522,4 +523,171 @@ it("refreshes when a resumed commit finds another tab already removed its tombst
   expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   expect(otherRefresh).toHaveBeenCalledOnce();
   expect(otherTab.getSnapshot().size).toBe(0);
+});
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 4 (findings 1, 3, 4)
+/** A promise this test settles by hand, to hold one request open. */
+function gate() {
+  let open = () => {};
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
+}
+const sends = (fetch: ReturnType<typeof vi.fn>, method: string) =>
+  fetch.mock.calls.filter(([, init]) => init?.method === method).length;
+/** Two tabs that both resumed the same tombstone after a reload. */
+async function twoResumedTabs() {
+  const setupResult = await setup();
+  const { session, controller, item } = setupResult;
+  await controller.remove(item, vi.fn());
+  controller.dispose();
+  const tabA = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  const failedB = vi.fn();
+  const tabB = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+    failedB,
+  );
+  expect(tabA.getSnapshot().has(url)).toBe(true);
+  expect(tabB.getSnapshot().has(url)).toBe(true);
+  // Tab A's Undo toast holds its own timer, as the page does.
+  expect(tabA.hold(url)).toBe(true);
+  return { ...setupResult, tabA, tabB, failedB };
+}
+it("says too late when Undo races another tab's commit that is still re-checking the item", async () => {
+  vi.useFakeTimers();
+  const { pod, fetch, tabA, failedB } = await twoResumedTabs();
+  const read = gate();
+  let reading = false;
+  fetch.mockImplementation(async (input, init) => {
+    if (String(input) === url && (init?.method ?? "GET") === "GET") {
+      reading = true;
+      await read.opened;
+    }
+    return pod.fetch(input, init);
+  });
+  // Tab B's timer fires: it claims the tombstone, then its readItem is held open.
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(reading).toBe(true);
+  expect(JSON.stringify([...saved.values()])).toContain("claim");
+  // Tab A's Undo now can't stop that DELETE, so it must not say it undid it.
+  const heads = sends(fetch, "HEAD");
+  expect(await tabA.undo(url)).toBe(false);
+  expect(sends(fetch, "HEAD")).toBe(heads);
+  read.open();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(failedB).not.toHaveBeenCalled();
+  expect(sends(fetch, "DELETE")).toBe(1);
+  expect(pod.has(url)).toBe(false);
+  expect(saved.size).toBe(0);
+});
+it("never deletes after Undo in another tab withdrew the tombstone, even mid-check", async () => {
+  vi.useFakeTimers();
+  const { pod, fetch, tabA, tabB } = await twoResumedTabs();
+  const head = gate();
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "HEAD") await head.opened;
+    return pod.fetch(input, init);
+  });
+  // Tab A's Undo withdraws the shared tombstone first; its HEAD is then held open.
+  const undone = tabA.undo(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(saved.size).toBe(0);
+  // Tab B's timer fires meanwhile: it finds nothing to claim and sends no DELETE.
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(tabB.getSnapshot().size).toBe(0);
+  head.open();
+  expect(await undone).toBe(true);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  expect(pod.has(url)).toBe(true);
+});
+it("leaves another tab's live claim in place and takes over a stale one", async () => {
+  vi.useFakeTimers();
+  const { session, pod, fetch, item, refresh } = await setup();
+  const key = `suite.home.pending-deletes:${session.webId}\u0000${root}`;
+  const claimed = (at: number) => [
+    { url, etag: item.etag, deleteAt: Date.now(), claim: { by: "other-tab", at } },
+  ];
+  const stored = JSON.stringify(claimed(Date.now()));
+  saved.set(key, stored);
+  const live = createDeleteController({ ...session }, refresh);
+  expect(await live.undo(url)).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  // The committing tab's tombstone is kept, so its own Undo answers stay right.
+  expect(JSON.parse(saved.get(key) as string)).toEqual(JSON.parse(stored));
+  // A claim left by a tab that closed mid-commit is finished by the next load.
+  saved.set(key, JSON.stringify(claimed(Date.now() - CLAIM_STALE_MS)));
+  createDeleteController({ ...session }, refresh);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  expect(pod.has(url)).toBe(false);
+  expect(saved.size).toBe(0);
+});
+it("says a resumed deletion another tab undid is undone, and only a 404 is too late", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  const otherTab = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  // Tab A undoes (removing the shared tombstone); tab B's own Undo then sees the item there.
+  expect(await controller.undo(url)).toBe(true);
+  fetch.mockClear();
+  expect(await otherTab.undo(url)).toBe(true);
+  expect(fetch).toHaveBeenCalledWith(url, expect.objectContaining({ method: "HEAD" }));
+  expect(sends(fetch, "PUT") + sends(fetch, "DELETE")).toBe(0);
+  expect(pod.has(url)).toBe(true);
+  // With the tombstone gone and the server unreachable, it can't claim success.
+  await controller.remove((await readItem(session, url)).item, vi.fn());
+  const third = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  expect(await controller.undo(url)).toBe(true);
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "HEAD") throw new TypeError("offline");
+    return pod.fetch(input, init);
+  });
+  expect(await third.undo(url)).toBe(false);
+});
+it("re-creates a saved copy when another tab's DELETE lands between the two PUTs", async () => {
+  vi.useFakeTimers();
+  const { controller, item, fetch, pod } = await setup();
+  await controller.remove(item, vi.fn());
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "PUT" && new Headers(init.headers).has("if-match")) {
+      await pod.fetch(input, { method: "DELETE" });
+      return new Response(null, { status: 412 });
+    }
+    return pod.fetch(input, init);
+  });
+  expect(await controller.undo(url)).toBe(true);
+  expect(sends(fetch, "PUT")).toBe(3);
+  expect(await (await pod.fetch(url)).text()).toBe(body);
+});
+it("reports a failed restore when every PUT is refused and the item isn't there", async () => {
+  vi.useFakeTimers();
+  const { controller, item, fetch, pod } = await setup();
+  await controller.remove(item, vi.fn());
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "PUT") return new Response(null, { status: 412 });
+    if (init?.method === "HEAD") return new Response(null, { status: 404 });
+    return pod.fetch(input, init);
+  });
+  await expect(controller.undo(url)).rejects.toThrow("Restore failed");
+  // A newer item in place (HEAD 200) is left as it is, and Undo succeeds.
+  await controller.remove(
+    (await readItem({ ...pod, storageUrl: root } as never, url)).item,
+    vi.fn(),
+  );
+  fetch.mockImplementation(async (input, init) =>
+    init?.method === "PUT" ? new Response(null, { status: 412 }) : pod.fetch(input, init),
+  );
+  expect(await controller.undo(url)).toBe(true);
 });

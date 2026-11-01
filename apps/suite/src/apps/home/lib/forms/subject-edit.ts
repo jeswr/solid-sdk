@@ -199,6 +199,8 @@ export function cloneToStore(source: DatasetCore): Store {
   return store;
 }
 
+/** A `%XX` escape that decodes to a control character (C0 or DEL). */
+const CONTROL_ESCAPE = /^%(?:[01][0-9A-Fa-f]|7[Ff])$/;
 /** Characters an email address may never carry into a `mailto:` IRI. */
 const UNSAFE_EMAIL = /[\s<>"{}|\\^`]/;
 /** One `@`, a dotted domain, and nothing that could break out of an IRI. */
@@ -210,7 +212,8 @@ export function isEmailAddress(value: string): boolean {
  * Wrap a bare email in a `mailto:` IRI; empty or unsafe → undefined. The address is
  * percent-encoded (`?` and `#` too, so it can't add headers or a fragment). Valid `%XX`
  * escapes are kept as they are, so a stored address shown undecoded doesn't gain another
- * `%25` on every edit; any other `%` is encoded.
+ * `%25` on every edit; any other `%` is encoded, and so is the `%` of an escape for a control
+ * character (`%00`–`%1F`, `%7F`), so a typed `%0D%0A` can never become a line break.
  */
 export function toMailto(email: string): string | undefined {
   const v = email.trim();
@@ -219,7 +222,11 @@ export function toMailto(email: string): string | undefined {
     const encoded = v
       .split(/(%[0-9A-Fa-f]{2})/)
       .map((part, index) =>
-        index % 2 ? part : encodeURI(part).replace(/[?#]/g, (ch) => encodeURIComponent(ch)),
+        index % 2
+          ? CONTROL_ESCAPE.test(part)
+            ? `%25${part.slice(1)}`
+            : part
+          : encodeURI(part).replace(/[?#]/g, (ch) => encodeURIComponent(ch)),
       )
       .join("");
     return `mailto:${encoded}`;

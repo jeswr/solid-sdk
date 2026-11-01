@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
   createManualItem,
+  ExposedItemError,
   manualUrl,
   registerManualType,
 } from "../src/apps/home/components/item/manual-data";
@@ -730,5 +731,47 @@ describe("manual items never land in a public folder", () => {
     );
     await expect(create(fetch, url)).rejects.toThrow("Couldn't check who can see this item");
     expect(pod.has(url)).toBe(false);
+  });
+  // AUTHORED-BY Claude Opus 5.5 — fix round 4 (findings 2, 7)
+  it.each([
+    ["a dropped connection", new TypeError("Failed to fetch")],
+    ["a redirect under redirect: error", new TypeError("unexpected redirect")],
+  ])("removes an item whose access check rejects with %s", async (_, failure) => {
+    const pod = makePod();
+    const url = manualUrl(root, address(), "Home", "headthrow");
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "HEAD" && String(input) === url) throw failure;
+      return pod.fetch(input, init);
+    });
+    await expect(create(fetch, url)).rejects.toThrow("Couldn't check who can see this item");
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
+    expect(pod.has(url)).toBe(false);
+  });
+
+  it("names an unchecked item it couldn't remove without calling the folder public", async () => {
+    const pod = makePod();
+    const url = manualUrl(root, address(), "Home", "unchecked");
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "HEAD" && String(input) === url) throw new TypeError("offline");
+      if (init?.method === "DELETE") return new Response(null, { status: 403 });
+      return pod.fetch(input, init);
+    });
+    const error = await create(fetch, url).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ExposedItemError);
+    expect(error).toMatchObject({ url, verifiedPublic: false });
+    const message = (error as Error).message;
+    expect(message).toContain(url);
+    expect(message).toContain("Couldn't check who can see");
+    expect(message).not.toMatch(/visible to anyone|public/i);
+    expect(pod.has(url)).toBe(true);
+    // The same failure on a 500 from the check reads the same way.
+    const second = manualUrl(root, address(), "Home", "unchecked2");
+    const status500 = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "HEAD" && String(input) === second)
+        return new Response(null, { status: 500 });
+      if (init?.method === "DELETE") return new Response(null, { status: 403 });
+      return pod.fetch(input, init);
+    });
+    await expect(create(status500, second)).rejects.toThrow(second);
   });
 });

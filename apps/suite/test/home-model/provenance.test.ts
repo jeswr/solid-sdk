@@ -120,20 +120,51 @@ describe("Home §5.3 provenance", () => {
     });
   });
 
-  // AUTHORED-BY Claude Opus 5.5 — fix round 3 (finding 7)
-  it("labels a bare WebID-shaped agent as another person without fetching its profile", async () => {
-    const bare = await rdf(`<#it> prov:wasAttributedTo <${person}> .`);
-    expect(provenanceOf(bare, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
-      kind: "person",
-      label: "another person",
-    });
+  // AUTHORED-BY Claude Opus 5.5 — fix round 4 (finding 6)
+  it("calls an unnamed, untyped WebID someone else: its shape doesn't prove a person", async () => {
+    for (const agent of [person, "https://agents.example/a#me"]) {
+      const bare = await rdf(`<#it> prov:wasAttributedTo <${agent}> .`);
+      expect(provenanceOf(bare, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "other",
+        label: "someone else",
+      });
+    }
     // A known name still wins.
+    const bare = await rdf(`<#it> prov:wasAttributedTo <${person}> .`);
     expect(provenanceOf(bare, subject, STORAGE, context)).toEqual({ kind: "person", label: "Bob" });
-    // Typed as a person in the loaded data, even without a fragment.
-    const typed = await rdf(
-      `<#it> prov:wasAttributedTo <https://bob.example/profile> . <https://bob.example/profile> a <http://xmlns.com/foaf/0.1/Person> .`,
+    // Typed as a person in the loaded data, with or without a fragment.
+    for (const [agent, type] of [
+      ["https://bob.example/profile", "http://xmlns.com/foaf/0.1/Person"],
+      ["https://bob.example/profile#me", "https://schema.org/Person"],
+    ]) {
+      const typed = await rdf(`<#it> prov:wasAttributedTo <${agent}> . <${agent}> a <${type}> .`);
+      expect(provenanceOf(typed, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "person",
+        label: "another person",
+      });
+    }
+  });
+
+  it("labels a WebID typed as software or an AI agent as another app", async () => {
+    const agent = "https://agents.example/a#me";
+    for (const type of [
+      "http://www.w3.org/ns/prov#SoftwareAgent",
+      "https://schema.org/SoftwareApplication",
+      "http://schema.org/SoftwareApplication",
+      "https://www.w3.org/ns/activitystreams#Application",
+      "https://www.w3.org/ns/activitystreams#Service",
+    ]) {
+      const dataset = await rdf(`<#it> prov:wasAttributedTo <${agent}> . <${agent}> a <${type}> .`);
+      expect(provenanceOf(dataset, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
+    // A typed person among the attributions still reads as a person.
+    const mixed = await rdf(
+      `<#it> prov:wasAttributedTo <${agent}>, <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person> .`,
     );
-    expect(provenanceOf(typed, subject, STORAGE, { userWebId: WEB_ID }).label).toBe(
+    expect(provenanceOf(mixed, subject, STORAGE, { userWebId: WEB_ID }).label).toBe(
       "another person",
     );
   });

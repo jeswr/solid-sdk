@@ -342,6 +342,17 @@ describe("fix round 3: stored addresses and nested inner values", () => {
     expect(toMailto("a%3F?b@example.org")).toBe("mailto:a%3F%3Fb@example.org");
   });
 
+  // AUTHORED-BY Claude Opus 5.5 — fix round 4 (finding 5)
+  it("never keeps an escape for a control character, so it can't add a line break", () => {
+    expect(toMailto("a%0D%0Ab@x.org")).toBe("mailto:a%250D%250Ab@x.org");
+    expect(toMailto("%00@x.org")).toBe("mailto:%2500@x.org");
+    expect(toMailto("a%7f%1Fb@x.org")).toBe("mailto:a%257f%251Fb@x.org");
+    // Escapes just outside the control ranges are still kept.
+    expect(toMailto("a%20%7E%80b@x.org")).toBe("mailto:a%20%7E%80b@x.org");
+    for (const typed of ["a%0D%0Ab@x.org", "%00@x.org"])
+      expect(decodeURIComponent(toMailto(typed) as string)).not.toMatch(/[\r\n\0]/);
+  });
+
   it("locks a structured value whose single inner value is a nested node and shows no label", async () => {
     const dataset = await parse(
       `<#me> <${VCARD}hasEmail> [ a <${VCARD}Work>; <${VCARD}value> [ <${VCARD}fn> "x" ] ].`,

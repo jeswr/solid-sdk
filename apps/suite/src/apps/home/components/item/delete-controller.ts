@@ -12,11 +12,18 @@ export const UNDO_MS = 8_000;
  * timer waits this much longer before committing anyway, e.g. when no toast is shown.
  */
 export const HOLD_GRACE_MS = 30_000;
+/**
+ * A claim older than this is from a tab that closed mid-commit: another tab may take it over.
+ * A live committer re-checks its claim right before its DELETE, so it never deletes after that.
+ */
+export const CLAIM_STALE_MS = 120_000;
 /** What survives a reload. Item content is never copied into browser storage. */
 interface Tombstone {
   url: string;
   etag: string;
   deleteAt: number;
+  /** Set by the tab that is committing the deletion, so no other tab can still undo it. */
+  claim?: { by: string; at: number };
 }
 interface PendingDelete {
   tombstone: Tombstone;
@@ -35,6 +42,9 @@ interface PendingDelete {
 const same = (a: Tombstone, b: Tombstone) =>
   a.url === b.url && a.etag === b.etag && a.deleteAt === b.deleteAt;
 
+const validClaim = (claim: unknown): claim is NonNullable<Tombstone["claim"]> =>
+  typeof (claim as { by?: unknown })?.by === "string" &&
+  Number.isFinite((claim as { at?: unknown }).at);
 /** Pending deletions keyed by account and storage; unavailable storage reads as empty. */
 function tombstoneQueue(session: HomeSession) {
   const key = `suite.home.pending-deletes:${session.webId}\u0000${session.storageUrl}`;
@@ -42,12 +52,35 @@ function tombstoneQueue(session: HomeSession) {
     const raw = localStorage.getItem(key);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is Tombstone =>
-        typeof entry?.url === "string" &&
-        typeof entry.etag === "string" &&
-        Number.isFinite(entry.deleteAt),
-    );
+    return parsed
+      .filter(
+        (entry): entry is Tombstone =>
+          typeof entry?.url === "string" &&
+          typeof entry.etag === "string" &&
+          Number.isFinite(entry.deleteAt),
+      )
+      .map(({ url, etag, deleteAt, claim }) => ({
+        url,
+        etag,
+        deleteAt,
+        ...(validClaim(claim) ? { claim: { by: claim.by, at: claim.at } } : {}),
+      }));
+  };
+  /**
+   * One synchronous read-modify-write: another tab sees the queue before or after it, never
+   * half-way. Undefined when browser storage is unavailable.
+   */
+  const transact = <T>(
+    change: (entries: Tombstone[]) => { next: Tombstone[]; result: T },
+  ): T | undefined => {
+    try {
+      const { next, result } = change(read());
+      if (next.length) localStorage.setItem(key, JSON.stringify(next));
+      else localStorage.removeItem(key);
+      return result;
+    } catch {
+      return undefined;
+    }
   };
   return {
     entries(): Tombstone[] | undefined {
@@ -57,16 +90,10 @@ function tombstoneQueue(session: HomeSession) {
         return undefined;
       }
     },
+    transact,
     /** Read-modify-write so another tab's tombstones are kept. */
     update(change: (entries: Tombstone[]) => Tombstone[]): boolean {
-      try {
-        const next = change(read());
-        if (next.length) localStorage.setItem(key, JSON.stringify(next));
-        else localStorage.removeItem(key);
-        return true;
-      } catch {
-        return false;
-      }
+      return transact((entries) => ({ next: change(entries), result: true })) ?? false;
     },
   };
 }
@@ -94,24 +121,66 @@ export function createDeleteController(
     hidden = next;
     for (const listener of listeners) listener();
   };
+  /** Identifies this page's claims in the shared queue. */
+  const owner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  /** Another live tab is committing this tombstone. */
+  const claimedElsewhere = (tombstone: Tombstone) =>
+    tombstone.claim !== undefined &&
+    tombstone.claim.by !== owner &&
+    Date.now() - tombstone.claim.at < CLAIM_STALE_MS;
   const forget = (entry: PendingDelete) => {
     pending.delete(entry.tombstone.url);
-    queue.update((entries) => entries.filter((other) => !same(other, entry.tombstone)));
+    // Leave a tombstone another tab is committing: its Undo must keep saying "too late".
+    queue.update((entries) =>
+      entries.filter((other) => !same(other, entry.tombstone) || claimedElsewhere(other)),
+    );
     publish(entry.tombstone.url, false);
   };
-  /** The item is already gone (e.g. another tab finished this deletion). */
-  const gone = async (url: string) =>
-    (await session.fetch(url, { method: "HEAD", redirect: "error" })).status === 404;
-  /** False once another tab undid or finished this deletion and removed its shared tombstone. */
-  const stillQueued = (entry: PendingDelete) => {
+  /**
+   * The HEAD status of the item, or undefined when the server can't be asked. 404 means it
+   * is gone (another tab finished this deletion); 2xx means it exists.
+   */
+  const status = (url: string) =>
+    session.fetch(url, { method: "HEAD", redirect: "error" }).then(
+      (response) => response.status,
+      () => undefined,
+    );
+  const gone = async (url: string) => (await status(url)) === 404;
+  const exists = (found: number | undefined) => found !== undefined && found >= 200 && found < 300;
+  /**
+   * Atomically take the shared tombstone: "ours" once this tab holds it, "missing" when
+   * another tab already undid or finished the deletion, "taken" while another tab commits it.
+   * `withdraw` removes it (Undo); otherwise it is marked as claimed by this tab (commit).
+   * Without browser storage this page can only act alone, so the answer is "ours".
+   */
+  const take = (entry: PendingDelete, withdraw: boolean): "ours" | "missing" | "taken" => {
+    if (!entry.durable) return "ours";
+    return (
+      queue.transact((entries) => {
+        const index = entries.findIndex((other) => same(other, entry.tombstone));
+        const found = entries[index];
+        if (!found) return { next: entries, result: "missing" as const };
+        if (claimedElsewhere(found)) return { next: entries, result: "taken" as const };
+        const next = [...entries];
+        if (withdraw) next.splice(index, 1);
+        else next[index] = { ...found, claim: { by: owner, at: Date.now() } };
+        return { next, result: "ours" as const };
+      }) ?? "ours"
+    );
+  };
+  /** Whether this tab still holds its claim; unreadable storage can't show otherwise. */
+  const holdsClaim = (entry: PendingDelete) => {
     const queued = entry.durable ? queue.entries() : undefined;
-    return !queued || queued.some((other) => same(other, entry.tombstone));
+    return (
+      !queued || queued.some((other) => same(other, entry.tombstone) && other.claim?.by === owner)
+    );
   };
   const commit = async (entry: PendingDelete, resumed: boolean) => {
     const { url, etag } = entry.tombstone;
-    // Undo in another tab removes the shared tombstone; respect it.
-    // Refresh so the card doesn't reappear when it was deleted (or restored) elsewhere.
-    if (!stillQueued(entry)) {
+    // Claim the deletion first, so Undo in another tab can no longer report success for it.
+    // When another tab already undid, finished or is finishing it, only refresh, so the card
+    // doesn't reappear when it was deleted (or restored) elsewhere.
+    if (take(entry, false) !== "ours") {
       await refresh();
       return;
     }
@@ -134,6 +203,11 @@ export function createDeleteController(
         (await linkedProtectedDocument(session, url))
       )
         throw new Error("This item can't be deleted");
+    }
+    // Re-check right before the DELETE: a claim that went stale meanwhile may have been taken.
+    if (!holdsClaim(entry)) {
+      await refresh();
+      return;
     }
     const response = await session.fetch(url, {
       method: "DELETE",
@@ -264,41 +338,52 @@ export function createDeleteController(
       entry.undoing = true;
       clearTimeout(entry.timer);
       try {
-        // A resumed entry has no copy, so cancelling its tombstone is the undo, but only while
-        // the deletion is still pending. Another tab removes the shared tombstone once its
-        // DELETE finished (or once it undid it, when saying "too late" is the safe answer), and
-        // a DELETE that finished just before a reload leaves the tombstone behind.
-        if (
-          !entry.restore &&
-          // An unreachable server can't show the item is gone; cancelling is then still safe.
-          (!stillQueued(entry) || (await gone(url).catch(() => false)))
-        ) {
+        // Withdraw the shared tombstone before anything else, so no other tab starts its DELETE
+        // afterwards. A tab already committing it holds a claim: then it is too late.
+        const taken = take(entry, true);
+        if (!entry.restore) {
+          // A resumed entry has no copy, so withdrawing its tombstone is the undo, but only
+          // while the deletion is still pending.
+          let undone: boolean;
+          if (taken === "taken") undone = false;
+          else {
+            const found = await status(url);
+            undone =
+              taken === "ours"
+                ? // A DELETE that finished just before a reload leaves its tombstone behind. An
+                  // unreachable server can't show the item is gone; withdrawing is then still safe.
+                  found !== 404
+                : // Another tab removed the tombstone: it undid the deletion when the item is
+                  // still there, or finished it. Unknown is reported as too late.
+                  exists(found);
+          }
           await refresh();
-          return false;
+          return undone;
         }
-        if (entry.restore) {
-          const { body, contentType } = entry.restore;
-          // Normally the delayed DELETE has not run. The create-only PUT also safely restores
-          // a resource removed elsewhere during the undo window, without overwriting a new one.
-          const response = await session.fetch(url, {
+        const { body, contentType } = entry.restore;
+        const put = (condition: Record<string, string>) =>
+          session.fetch(url, {
             method: "PUT",
             redirect: "error",
-            headers: { "content-type": contentType, "if-none-match": "*" },
+            headers: { "content-type": contentType, ...condition },
             body,
           });
+        const settle = (response: Response) => {
           if (!response.ok && response.status !== 412) throw new Error("Restore failed");
-          if (response.status === 412) {
-            // The original is still in place. Re-write it only while its captured validator
-            // still matches, so Undo has a fresh version without replacing a concurrent edit.
-            const restored = await session.fetch(url, {
-              method: "PUT",
-              redirect: "error",
-              headers: { "content-type": contentType, "if-match": entry.tombstone.etag },
-              body,
-            });
-            if (!restored.ok && restored.status !== 412) throw new Error("Restore failed");
-          }
-        }
+          return response.ok;
+        };
+        // Normally the delayed DELETE has not run. The create-only PUT also safely restores a
+        // resource removed elsewhere during the undo window, without overwriting a new one.
+        // While the original is still in place, re-write it only while its captured validator
+        // still matches, so Undo has a fresh version without replacing a concurrent edit. A
+        // DELETE (from another tab) can land between the two: then create it once more.
+        const written =
+          settle(await put({ "if-none-match": "*" })) ||
+          settle(await put({ "if-match": entry.tombstone.etag })) ||
+          settle(await put({ "if-none-match": "*" }));
+        // Every write was refused: a newer item is in place (Undo then leaves it), or the
+        // restore didn't happen.
+        if (!written && !exists(await status(url))) throw new Error("Restore failed");
         await refresh();
         return true;
       } finally {

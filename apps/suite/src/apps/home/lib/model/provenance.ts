@@ -7,7 +7,8 @@ import type { DatasetCore, Term } from "@rdfjs/types";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
-  kind: "source" | "app" | "person" | "you";
+  /** `other`: another agent the loaded data doesn't name or type, person or software. */
+  kind: "source" | "app" | "person" | "other" | "you";
   label: string;
   logoId?: string;
 }
@@ -102,17 +103,23 @@ const PERSON_TYPES = [
 function isPerson(dataset: DatasetCore, iri: string): boolean {
   return subjectOf(dataset, iri).types.some((type) => PERSON_TYPES.includes(type));
 }
-const SOFTWARE_TYPES = [`${NS.PROV}SoftwareAgent`, `${NS.SCHEMA}SoftwareApplication`];
+const SOFTWARE_TYPES = [
+  `${NS.PROV}SoftwareAgent`,
+  `${NS.SCHEMA}SoftwareApplication`,
+  "http://schema.org/SoftwareApplication",
+  // ActivityStreams actors that are not people (bots, AI agents).
+  "https://www.w3.org/ns/activitystreams#Application",
+  "https://www.w3.org/ns/activitystreams#Service",
+];
 /**
- * Whether an attributed agent reads as a person without fetching its profile: typed as one
- * in the loaded data, or an http(s) IRI with a fragment, the usual shape of a WebID
- * (`…/card#me`), unless the loaded data says it is software.
+ * What the loaded graph says an attributed agent is, without fetching its profile: a person
+ * only when typed as one, an app when typed as software (an AI agent included). An IRI's
+ * shape proves nothing: an AI agent's WebID (`…/agent#me`) looks just like a person's.
  */
-function looksLikePerson(dataset: DatasetCore, iri: string): boolean {
-  if (isPerson(dataset, iri)) return true;
-  if (subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))) return false;
-  const url = httpUrl(iri);
-  return url !== undefined && url.hash.length > 1;
+function typedAgent(dataset: DatasetCore, iri: string): "person" | "app" | undefined {
+  if (isPerson(dataset, iri)) return "person";
+  if (subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))) return "app";
+  return undefined;
 }
 
 /** Home §5.3, in precedence order; labels contain names, never raw identifiers. */
@@ -125,6 +132,7 @@ export function provenanceOf(
   const node = subjectOf(dataset, subject);
   let attributedToAnother = false;
   let attributedToPerson = false;
+  let attributedToSomeone = false;
   for (const value of node.sourceUrls) {
     const connector = connectorForUrl(value);
     if (connector) return providedBy(connector);
@@ -137,15 +145,17 @@ export function provenanceOf(
       // A person's WebID is labelled with that profile's name, never as an app.
       if (identity?.label.trim() && !/http/i.test(identity.label))
         return { kind: identity.kind, label: identity.label.trim() };
-      if (
-        identity?.kind === "person" ||
-        isPerson(dataset, iri) ||
-        // An activity (wasGeneratedBy) is no person, whatever its IRI looks like.
-        (predicate === "wasAttributedTo" &&
-          identity?.kind !== "app" &&
-          looksLikePerson(dataset, iri))
+      const typed = typedAgent(dataset, iri);
+      if (identity?.kind === "person" || typed === "person") attributedToPerson = true;
+      else if (
+        // An activity (wasGeneratedBy) is no person, and a resolved or typed app stays one.
+        predicate === "wasAttributedTo" &&
+        identity?.kind !== "app" &&
+        typed === undefined &&
+        (httpUrl(iri)?.hash.length ?? 0) > 1
       )
-        attributedToPerson = true;
+        // A fragment IRI is the usual shape of a WebID, a person's or an agent's alike.
+        attributedToSomeone = true;
     }
   }
   const url = httpUrl(containerUrl);
@@ -159,6 +169,7 @@ export function provenanceOf(
     if (connector) return providedBy(connector);
   }
   if (attributedToPerson) return { kind: "person", label: "another person" };
+  if (attributedToSomeone) return { kind: "other", label: "someone else" };
   return attributedToAnother
     ? { kind: "app", label: "another app" }
     : { kind: "you", label: "Added by you" };
