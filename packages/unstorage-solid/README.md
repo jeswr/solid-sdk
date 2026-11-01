@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/unstorage-solid
@@ -58,6 +59,9 @@ and returns `null` for 404/410. Invalid or unsafe member URLs are skipped indivi
 Headers, recursion, key mapping and scope/redirect checks stay local. The fetch option creates
 clients through the public `createPodClient` factory; discovery errors propagate. Driver and
 transaction headers apply to this transport; an injected client owns its own transport headers.
+Transaction headers override driver defaults; SDK operation headers take precedence over both,
+including `If-Match`, `If-None-Match`, and explicit content types. Resource reads retain a
+configured `Accept` when the SDK uses `*/*`; discovery and listings keep SDK media negotiation.
 `getMeta` reads resource headers, using listing metadata for optional size on injected clients;
 it does not fetch the separate RDF/linkset metadata document. Deletes read an ETag first and
 fail closed when a validator is unavailable. Clear still removes leaves before containers.

@@ -3,6 +3,7 @@ name: unstorage-solid
 description: Use when maintaining @jeswr/unstorage-solid, its Solid store, scope compatibility, or container listing behavior.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Solid unstorage keys and listings
 
@@ -22,6 +23,11 @@ do not restore local protocol discovery or socket parsing. Deletes use observed 
 Do not invent an identity index: the existing fixed-name key layout refuses server-renamed
 LWS creates, and never deletes the unfamiliar returned URL.
 This package is security-critical: no guard may be loosened.
+
+Merge driver defaults, then transaction headers, then SDK operation headers. Never let
+transaction headers replace generated `If-Match` / `If-None-Match` validators or explicit
+content types. Preserve configured resource Accept only when the SDK requests `*/*`;
+discovery, listings, and raw reads retain the SDK's specific media types.
 
 Scope wrappers use guarded-fetch's `snapshotFetchInput(input, init, { metadataOnly: true })` to validate fresh
 Request snapshots, never caller-shadowable `url` properties. Match main's transport boundary:

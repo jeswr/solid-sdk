@@ -3,15 +3,58 @@
 import type { StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { OutOfScopeError } from "./errors.js";
 import { deleteRdf, requireEtag, writeRdf } from "./rdf-io.js";
 import { createDocsStore } from "./store.js";
+import { discoverRegistrations, TypeIndexDataset } from "./type-index.js";
 import { DOCUMENT_CLASS } from "./vocab.js";
 
 const ROOT = "https://docs.example/";
 const WEBID = `${ROOT}card#me`;
+
+it("keeps document registration private when the profile links its private index via preferences", async () => {
+  const storage = createMemoryStorage({ root: ROOT });
+  const settings = await storage.create(ROOT, null, { kind: "container", name: "settings" });
+  const privateIndex = await storage.create(settings.url, "", {
+    name: "private.ttl",
+    contentType: "text/turtle",
+  });
+  const preferences = await storage.create(
+    settings.url,
+    `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${privateIndex.url}>.`,
+    { name: "prefs.ttl", contentType: "text/turtle" },
+  );
+  const publicIndex = await storage.create(ROOT, "", {
+    name: "public.ttl",
+    contentType: "text/turtle",
+  });
+  const profile = await storage.create(
+    ROOT,
+    `<${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> <${preferences.url}>;
+      <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${publicIndex.url}>.`,
+    { name: "card", contentType: "text/turtle" },
+  );
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+    throw new Error("Unexpected HTTP request");
+  });
+  const store = createDocsStore({ podRoot: ROOT, webId: WEBID, storage, fetchImpl: fetch });
+  const created = await store.create({ title: "Private collection" });
+  expect((await store.read(created.url))?.data.title).toBe("Private collection");
+  const registered = await storage.readRdf(privateIndex.url);
+  expect(new TypeIndexDataset(registered.dataset, DataFactory).locate(DOCUMENT_CLASS)).toEqual([
+    { forClass: DOCUMENT_CLASS, container: store.container, instance: undefined },
+  ]);
+  expect((await storage.head(publicIndex.url)).etag).toBe(publicIndex.etag);
+  expect(await (await storage.read(publicIndex.url)).text()).toBe("");
+  await expect(
+    discoverRegistrations(WEBID, (await storage.readRdf(profile.url)).dataset, fetch, storage),
+  ).resolves.toEqual([
+    { forClass: DOCUMENT_CLASS, container: store.container, instance: undefined },
+  ]);
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 async function setup(protocol: "solid" | "lws") {
   const storage = createMemoryStorage({ protocol, root: ROOT, pageSize: 1 });

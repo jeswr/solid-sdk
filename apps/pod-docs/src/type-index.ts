@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Solid Type Index — read + bootstrap-write, via typed `@rdfjs/wrapper`
@@ -12,7 +13,7 @@
  */
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { type StorageClient, StorageError, toStorageError } from "@jeswr/storage-client";
-import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
+import { canonicalize, NS as SUITE_NS, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
@@ -98,6 +99,19 @@ export interface TypeIndexLinks {
 
 /** The WebID subject's type-index links, readable AND (privateIndex) writable. */
 export class ProfileTypeIndexAnchor extends TermWrapper {
+  /** Preferences must resolve unambiguously before a public fallback is safe. */
+  get preferencesFile(): string | undefined {
+    const urls = [
+      ...SetFrom.subjectPredicate(
+        this,
+        `${SUITE_NS.PIM}preferencesFile`,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ),
+    ];
+    if (urls.length > 1) throw new StorageError("conflict", { url: this.value, method: "GET" });
+    return urls[0];
+  }
   get publicIndex(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SOLID}publicTypeIndex`, NamedNodeAs.string);
   }
@@ -124,6 +138,43 @@ export class TypeIndexDocument extends TermWrapper {
 export function typeIndexLinks(webId: string, profile: DatasetCore): TypeIndexLinks {
   const subject = new ProfileTypeIndexAnchor(webId, profile, DataFactory);
   return { publicIndex: subject.publicIndex, privateIndex: subject.privateIndex };
+}
+
+/** Resolve the standard private pointer before selecting or discovering indexes. */
+async function resolveTypeIndexLinks(
+  webId: string,
+  profile: DatasetCore,
+  fetchImpl?: typeof fetch,
+  storage?: StorageClient,
+): Promise<TypeIndexLinks> {
+  const links = typeIndexLinks(webId, profile);
+  const preferences = new ProfileTypeIndexAnchor(webId, profile, DataFactory).preferencesFile;
+  if (!preferences) return links;
+  const client = storage ?? (await storageFor(webId, fetchImpl));
+  if (!client.isWithinStorage(preferences))
+    throw new StorageError("scope", { url: preferences, method: "GET" });
+  // Unreadable, missing or malformed linked preferences are not proof that no private
+  // index exists. Propagate the failure rather than registering in the public index.
+  const { dataset } = await readRdf(preferences, fetchImpl, client);
+  const anchor = new ProfileTypeIndexAnchor(webId, dataset, DataFactory);
+  const indexes = [
+    ...SetFrom.subjectPredicate(
+      anchor,
+      `${SOLID}privateTypeIndex`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    ),
+  ];
+  if (indexes.length > 1) throw new StorageError("conflict", { url: preferences, method: "GET" });
+  const privateIndex = indexes[0];
+  if (privateIndex) {
+    if (!client.isWithinStorage(privateIndex))
+      throw new StorageError("scope", { url: privateIndex, method: "GET" });
+    if (links.privateIndex && documentUrl(links.privateIndex) !== documentUrl(privateIndex))
+      throw new StorageError("conflict", { url: preferences, method: "GET" });
+    links.privateIndex = privateIndex;
+  }
+  return links;
 }
 
 /** A registration the caller wants present: class → container. */
@@ -209,7 +260,8 @@ async function createIndexDocument(
 /**
  * Ensure every desired registration exists in the user's type index.
  *
- * Prefers the private index; falls back to the public one; bootstraps
+ * Resolves private links through preferences (and legacy profile links) before
+ * falling back to the public index. Unresolvable preferences fail closed. Bootstraps
  * `settings/privateTypeIndex.ttl` under the pod root — and links it from the
  * profile — when neither exists. Idempotent: existing registrations are left
  * untouched.
@@ -236,7 +288,7 @@ export async function ensureTypeRegistrations(opts: {
         fetch: fetchImpl ?? globalThis.fetch,
         headers: REVALIDATE_HEADERS,
       });
-  const links = typeIndexLinks(webId, profileDs);
+  const links = await resolveTypeIndexLinks(webId, profileDs, fetchImpl, storage);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
 
@@ -305,7 +357,9 @@ export async function ensureTypeRegistrations(opts: {
 /**
  * Read a WebID profile's type indexes and return every registered location.
  * The profile dataset must already be fetched (it carries the index links).
- * A missing/unreadable index (404/403) contributes nothing rather than failing.
+ * Resolves private indexes via preferences as well as legacy profile links.
+ * A missing/unreadable index (404/403) contributes nothing rather than failing;
+ * unresolved linked preferences propagate so an incomplete discovery is not hidden.
  */
 export async function discoverRegistrations(
   webId: string,
@@ -313,7 +367,7 @@ export async function discoverRegistrations(
   fetchImpl?: typeof fetch,
   storage?: StorageClient,
 ): Promise<RegisteredLocation[]> {
-  const links = typeIndexLinks(webId, profile);
+  const links = await resolveTypeIndexLinks(webId, profile, fetchImpl, storage);
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
   const out: RegisteredLocation[] = [];
   if (urls.length === 0) return out;

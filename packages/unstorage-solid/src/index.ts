@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/unstorage-solid` — an {@link https://unstorage.unjs.io | unstorage}
@@ -53,7 +54,8 @@ export interface SolidDriverOptions {
   notifications?: NotificationsClient;
   /**
    * Extra request headers merged into every request (e.g. a custom auth header).
-   * Per-transaction `opts.headers` override these.
+   * Per-transaction `opts.headers` override these. SDK operation headers (including
+   * conditional validators and explicit content types) take precedence over both.
    */
   headers?: Record<string, string>;
   /**

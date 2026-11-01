@@ -39,7 +39,14 @@ ACP sharing requires an independently established `acpDialect: 'css' | 'ess'`;
 unknown dialects and unsupported policy shapes fail closed.
 Only a missing or forbidden initial collection request produces an empty listing;
 continuation-page failures propagate, including after an empty first page.
-Solid Type Index registration is preserved; LWS has no Solid Type Index bootstrap,
+Solid Type Index registration resolves `pim:preferencesFile` and its private index before
+falling back to a profile-linked public index, while retaining legacy private profile links.
+Linked preferences and their private index must be inside the selected storage. Unreadable,
+missing, malformed, or ambiguous preferences fail closed; conflicting legacy and preferences
+private destinations also fail. Discovery follows the same preferences links. The local
+compatibility API retains separately hosted WebIDs and legacy external index documents;
+the shared `@jeswr/pod-type-index` client currently requires a storage-scoped WebID.
+LWS has no Solid Type Index bootstrap,
 and sharing reports unsupported where pod-access does not implement the access model.
 
 ## What it does

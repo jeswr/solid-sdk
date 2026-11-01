@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import solidDriver, { SolidPreconditionFailedError } from "../src/index.js";
 
@@ -104,14 +105,15 @@ describe("legacy fetch construction through the public factory", () => {
         expected === "*/*" ? "default" : "negotiated",
       );
       expect(seen.find(({ url }) => url === `${base}a`)?.headers.get("accept")).toBe(expected);
-      // Explicit transaction headers keep their existing precedence over driver/SDK headers.
+      // SDK discovery negotiation wins over caller representation defaults.
       expect(seen.find(({ url }) => url === description)?.headers.get("accept")).toBe(
-        new Headers(txHeaders).get("accept") ??
-          (protocol === "solid"
-            ? "application/ld+json, text/turtle;q=0.9"
-            : "application/lws+cid, application/cid;q=0.9, application/ld+json;q=0.8"),
+        protocol === "solid"
+          ? "application/ld+json, text/turtle;q=0.9"
+          : "application/lws+cid, application/cid;q=0.9, application/ld+json;q=0.8",
       );
-      expect(await driver.getItemRaw?.("a", {})).toEqual(new TextEncoder().encode("negotiated"));
+      expect(await driver.getItemRaw?.("a", { headers: { ACCEPT: "text/plain" } })).toEqual(
+        new TextEncoder().encode("negotiated"),
+      );
       expect(seen.at(-1)?.headers.get("accept")).toBe("application/octet-stream");
       expect(await driver.getKeys("", {})).toEqual([]);
       expect(seen.at(-1)?.headers.get("accept")).toBe(
@@ -121,6 +123,76 @@ describe("legacy fetch construction through the public factory", () => {
   });
 
   describe.each(["setItem", "setItemRaw"] as const)("%s preconditions", (method) => {
+    it.each([
+      "solid",
+      "lws",
+    ] as const)("preserves explicit ETags and content types over conflicting %s transaction headers", async (protocol) => {
+      const base = `https://unstorage-headers-${protocol}-${method.toLowerCase()}.example/kv/`;
+      const description = new URL("/.well-known/storage", base).href;
+      const currentEtag = '"current"';
+      let stored = "concurrent edit";
+      const writes: Headers[] = [];
+      const fetch: typeof globalThis.fetch = async (input, init) => {
+        const url = String(input);
+        const verb = init?.method ?? "GET";
+        if (url === base && verb === "HEAD")
+          return new Response(null, {
+            headers: {
+              link:
+                protocol === "solid"
+                  ? `${STORAGE_LINK}, <${description}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`
+                  : `<${description}>; rel="https://www.w3.org/ns/lws#storage"`,
+            },
+          });
+        if (url === description)
+          return protocol === "solid"
+            ? new Response("", { headers: { "content-type": "text/turtle" } })
+            : Response.json({
+                "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
+                id: description,
+                type: "Storage",
+                service: [{ type: "StorageRoot", serviceEndpoint: base }],
+              });
+        if (verb === "OPTIONS") return new Response(null, { status: 204 });
+        if (url === `${base}a` && verb === "PUT") {
+          const headers = new Headers(init?.headers);
+          writes.push(headers);
+          const matches = headers.get("if-match");
+          if (matches !== "*" && matches !== currentEtag)
+            return new Response(null, { status: 412 });
+          stored = await new Response(init?.body).text();
+          return new Response(null, { status: 204, headers: { etag: currentEtag } });
+        }
+        if (url === `${base}a` && verb === "GET")
+          return new Response(stored, { headers: { etag: currentEtag } });
+        throw new Error(`Unexpected ${verb} ${url}`);
+      };
+      const driver = solidDriver({
+        base,
+        fetch,
+        headers: { "IF-MATCH": "*", "Content-Type": "driver/type" },
+      });
+      const options = {
+        etag: '"stale"',
+        contentType: "application/test",
+        headers: { "iF-mAtCh": "*", "CONTENT-TYPE": "transaction/type" },
+      };
+      const overwrite = method === "setItem" ? "overwrite" : new TextEncoder().encode("overwrite");
+      await expect(driver[method]?.("a", overwrite, options)).rejects.toBeInstanceOf(
+        SolidPreconditionFailedError,
+      );
+      expect(stored).toBe("concurrent edit");
+      expect(writes).toHaveLength(1);
+      expect(writes[0]?.get("if-match")).toBe('"stale"');
+      const safe = method === "setItem" ? "safe update" : new TextEncoder().encode("safe update");
+      await expect(
+        driver[method]?.("a", safe, { ...options, etag: currentEtag }),
+      ).resolves.toBeUndefined();
+      expect(stored).toBe("safe update");
+      expect(writes[1]?.get("if-match")).toBe(currentEtag);
+      expect(writes[1]?.get("content-type")).toBe("application/test");
+    });
+
     it.each([
       ["cold", false],
       ["cold", true],
@@ -173,7 +245,13 @@ describe("legacy fetch construction through the public factory", () => {
         seen.length = 0;
       }
       const value = method === "setItem" ? "new value" : new Uint8Array([0, 255, 1]);
-      const write = driver[method]?.("a", value, { etag, headers: { "x-call": "yes" } });
+      const write = driver[method]?.("a", value, {
+        etag,
+        headers: {
+          "x-call": "yes",
+          ...(cache === "expired" ? { "IF-NONE-MATCH": "*" } : {}),
+        },
+      });
       if (stale) await expect(write).rejects.toBeInstanceOf(SolidPreconditionFailedError);
       else await expect(write).resolves.toBeUndefined();
       expect(seen).toContainEqual({
