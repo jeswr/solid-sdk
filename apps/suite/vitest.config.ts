@@ -33,6 +33,7 @@ export default defineConfig({
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/home/lib/permissions/**/*.ts",
+        "src/apps/home/lib/requests/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/editor/**/*.ts",
         "src/apps/docs/lib/convert/**/*.ts",
