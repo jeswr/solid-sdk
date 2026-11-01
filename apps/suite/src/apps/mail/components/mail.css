@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 .mail-boot {
   display: grid;
   place-content: center;
@@ -255,7 +256,8 @@
   font-size: var(--text-sm);
 }
 .mail-message-header time {
-  max-width: 9em;
+  white-space: nowrap;
+  flex-shrink: 0;
   text-align: end;
 }
 .mail-message-content {

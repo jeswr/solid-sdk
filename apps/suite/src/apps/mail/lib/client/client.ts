@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
@@ -48,12 +49,21 @@ function headerAddress(message: Message, iri: string, owner: string): string {
   const email = address(iri);
   return label === email ? email : `${label} <${email}>`;
 }
+function searchAddress(message: Message, iri: string): string {
+  const name = mailAddressName(message, iri);
+  const email = address(iri);
+  return name ? `${name} <${email}>` : email;
+}
 function quotedBody(text: string): { quoted: QuotedText; truncated: boolean } {
   try {
     return { quoted: splitQuotedText(text), truncated: false };
   } catch (error) {
-    if (!(error instanceof QuoteError) || error.code !== "BODY_TOO_LARGE") throw error;
-    const preview = text.slice(0, 64 * 1024);
+    if (!(error instanceof QuoteError)) throw error;
+    // Invalid text stays local to this message; keep the raw text and .eml for fidelity.
+    const preview = text
+      .slice(0, 64 * 1024)
+      .toWellFormed()
+      .replace(/\0/g, "\uFFFD");
     return {
       quoted: {
         segments: [{ kind: "body", text: preview, depth: 0 }],
@@ -249,7 +259,16 @@ export class MailClient {
     await setStarred(this.store, this.rootOf(iri), iri, on);
   }
   archive(iris: string[]): Promise<BatchResult> {
-    return this.batch(iris, (iri) => archive(this.store, this.rootOf(iri), iri));
+    return this.batch(iris, async (iri) => {
+      const root = this.rootOf(iri);
+      try {
+        await archive(this.store, root, iri);
+      } catch (error) {
+        if (!(error instanceof MailError) || error.code !== "conflict") throw error;
+        // Reconcile both sides after a partial write using fresh documents and validators.
+        await archive(this.store, root, iri);
+      }
+    });
   }
   async label(iri: string, folderIri: string, on: boolean): Promise<void> {
     if (this.rootOf(iri) !== this.rootOf(folderIri))
@@ -297,8 +316,8 @@ export class MailClient {
       messages
         .filter((m) =>
           evaluateQuery(ast, {
-            from: address(m.sender ?? ""),
-            to: [...m.to].map(address),
+            from: m.sender ? searchAddress(m, m.sender) : "",
+            to: [...m.to, ...m.cc].map((iri) => searchAddress(m, iri)),
             subject: m.subjectLine ?? "",
             snippet: (m.body ?? "").replace(/\s+/g, " ").slice(0, 140),
             hasAttachment: m.attachments.size > 0,

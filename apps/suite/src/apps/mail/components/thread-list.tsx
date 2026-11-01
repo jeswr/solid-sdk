@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Archive, MailCheck, MailOpen, Paperclip, RefreshCw, Star } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type KeyboardEvent, type MouseEvent, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { fileChunks, mailErrorMessage, type ThreadRow } from "../lib/client";
 import { useMail, useMailActions } from "../state/mail-context";
@@ -24,23 +25,52 @@ function dateLabel(date: Date) {
   }).format(date);
 }
 export function NoMail({ title, inbox = false }: { title: string; inbox?: boolean }) {
-  const { client, setAccount, invalidate } = useMail();
+  const { client, account, setAccount, invalidate } = useMail();
   const router = useRouter();
+  const pathname = usePathname();
   const [busy, setBusy] = useState(false);
+  const alive = useRef(false);
+  const generation = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  // An account or route change can reuse this empty-state component.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: account and pathname fence the import's owning view.
+  useEffect(() => {
+    alive.current = true;
+    setBusy(false);
+    return () => {
+      alive.current = false;
+      generation.current++;
+      controller.current?.abort();
+      controller.current = null;
+    };
+  }, [client, account, pathname]);
   const sample = async () => {
+    if (controller.current) return;
+    const run = ++generation.current;
+    const current = () => alive.current && generation.current === run;
+    const abort = new AbortController();
+    controller.current = abort;
     setBusy(true);
     try {
-      const response = await fetch("/samples/sample-mailbox.mbox");
+      const response = await fetch("/samples/sample-mailbox.mbox", { signal: abort.signal });
       if (!response.ok) throw new Error("Sample unavailable");
-      const result = await client.importMailbox("sample", fileChunks(await response.blob()));
+      const blob = await response.blob();
+      if (!current()) return;
+      const result = await client.importMailbox("sample", fileChunks(blob), {
+        signal: abort.signal,
+      });
+      if (!current()) return;
       if (result.failed) toast.error(`${result.failed} sample messages couldn't be imported`);
       setAccount("sample");
       invalidate();
       router.push("/mail/inbox");
     } catch (error) {
-      toast.error(mailErrorMessage(error));
+      if (current()) toast.error(mailErrorMessage(error));
     } finally {
-      setBusy(false);
+      if (current()) {
+        setBusy(false);
+        controller.current = null;
+      }
     }
   };
   return (

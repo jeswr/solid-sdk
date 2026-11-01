@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Badge,
@@ -36,8 +37,9 @@ function MessageCard({
     if (expandAll !== undefined) setOpen(expandAll);
   }, [expandAll]);
   const visible = open;
-  const name = message.from.replace(/<.*$/, "").trim();
-  const initials = name
+  const sender = /^(.*?)\s*<([^<>]+)>$/.exec(message.from);
+  const name = sender ? sender[1]?.trim() : message.from;
+  const initials = (name || message.from)
     .split(/[\s@.]+/)
     .slice(0, 2)
     .map((s) => s[0])
@@ -55,7 +57,14 @@ function MessageCard({
           {initials}
         </span>
         <span className="mail-message-person">
-          <strong>{message.from}</strong>
+          <span>
+            {name && <strong>{name}</strong>}
+            {sender && (
+              <span className="mail-sender-address mail-muted">
+                {name ? ` <${sender[2]}>` : sender[2]}
+              </span>
+            )}
+          </span>
           <span className="mail-muted">
             To: {message.to.join(", ") || "Undisclosed recipients"}
             {message.cc.length > 0 && ` · Cc: ${message.cc.join(", ")}`}
@@ -108,7 +117,7 @@ function MessageCard({
           )}
           {message.truncated && (
             <p className="mail-muted">
-              This message is too long to display in full.{" "}
+              This message is shown as a plain-text preview.{" "}
               {message.originalUrl && (
                 <a href={message.originalUrl} download>
                   Download the original message

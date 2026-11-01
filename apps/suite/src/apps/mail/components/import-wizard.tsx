@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, formatBytes, Input, Progress, toast } from "@jeswr/suite-ui";
 import Link from "next/link";
@@ -36,6 +37,12 @@ export function ImportWizard() {
   const leave = useCallback(() => {
     generation.current++;
     controller.current?.abort();
+    controller.current = null;
+    busy.current = false;
+    if (alive.current) {
+      setStep("choose");
+      setError("Import cancelled. Messages already saved are still available.");
+    }
   }, []);
   const nameId = useId();
   const fileId = useId();
@@ -73,6 +80,13 @@ export function ImportWizard() {
         return;
       const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!target) return;
+      const destination = new URL(target.getAttribute("href") ?? "", location.href);
+      if (
+        (destination.origin === location.origin && destination.pathname === location.pathname) ||
+        target.hasAttribute("download") ||
+        (target.getAttribute("target") && target.getAttribute("target") !== "_self")
+      )
+        return;
       if (!window.confirm("An import is in progress. Leave and cancel the remaining messages?")) {
         event.preventDefault();
         event.stopImmediatePropagation();

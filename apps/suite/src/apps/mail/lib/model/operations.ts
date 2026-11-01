@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import {
@@ -145,7 +146,9 @@ export async function archive(store: MailStore, root: string, messageIri: string
   }
   const combined = combine(docs.map((d) => d.mailbox));
   archiveMessage(combined, messageIri, inbox, target);
-  await saveSubjects(store, docs, combined);
+  // Preserve graph assembly order, but make the destination discoverable before
+  // changing either source membership. The destination folder is the last document.
+  await saveSubjects(store, [...docs.slice(-1), ...docs.slice(0, -1)], combined);
 }
 async function loadDistinct(store: MailStore, urls: string[]): Promise<LoadedMail[]> {
   const docs: LoadedMail[] = [];

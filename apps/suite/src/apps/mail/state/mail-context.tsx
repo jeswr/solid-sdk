@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -14,6 +15,7 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import {
   folderIriFromKey,
+  isMissing,
   MailClient,
   type MessageView,
   mailErrorMessage,
@@ -286,22 +288,29 @@ export function useMailActions() {
     });
     if (!changes.length) return;
     const result = await client.archive(changes.map((change) => change.iri));
-    const applied = changes.filter((change) => result.done.includes(change.iri));
-    if (applied.length)
-      toast("Mail archived", {
-        duration: 8000,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void mutate(thread, { archived: false }, async () => {
-              for (const change of applied) {
-                if (change.hadInbox) await client.label(change.iri, change.inbox, true);
-                if (!change.hadArchive) await client.label(change.iri, change.archive, false);
+    // Failed cross-document operations may have applied some memberships too.
+    // Retain every original membership so Undo can repair either outcome.
+    toast(result.failed.length ? "Archive incomplete" : "Mail archived", {
+      duration: 8000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          void mutate(thread, { archived: false }, async () => {
+            for (const change of changes) {
+              if (change.hadInbox) await client.label(change.iri, change.inbox, true);
+              if (!change.hadArchive) {
+                try {
+                  await client.label(change.iri, change.archive, false);
+                } catch (error) {
+                  // The destination may never have been created by the failed archive.
+                  if (!isMissing(error)) throw error;
+                }
               }
-            });
-          },
+            }
+          });
         },
-      });
+      },
+    });
     checkBatch(result);
   };
   const archive = (iris: string[], thread: string) =>

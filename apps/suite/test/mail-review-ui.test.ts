@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: DOM assertions establish the controls before use.
 import type { ComponentProps } from "react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type {
   ThreadView as Conversation,
   FolderView,
@@ -16,6 +17,8 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 const mocks = vi.hoisted(() => ({
   router: { push: vi.fn() },
   params: new URLSearchParams(),
+  pathname: "/mail/inbox",
+  account: "imported",
   actions: { markRead: vi.fn(), star: vi.fn(), archive: vi.fn(), forRows: vi.fn() },
   setAccount: vi.fn(),
   invalidate: vi.fn(),
@@ -23,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => mocks.router,
-  usePathname: () => "/mail/inbox",
+  usePathname: () => mocks.pathname,
   useSearchParams: () => mocks.params,
 }));
 vi.mock("next/link", () => ({ default: (props: ComponentProps<"a">) => h("a", props) }));
@@ -39,7 +42,7 @@ vi.mock("../src/apps/mail/state/mail-context", () => ({
     client,
     setAccount: mocks.setAccount,
     invalidate: mocks.invalidate,
-    account: "imported",
+    account: mocks.account,
   }),
   useMailActions: () => mocks.actions,
   useThread: () => ready(conversation),
@@ -75,8 +78,11 @@ const summary: ImportResult = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.params = new URLSearchParams();
+  mocks.pathname = "/mail/inbox";
+  mocks.account = "imported";
   vi.stubGlobal("history", window.history);
   vi.stubGlobal("location", window.location);
+  history.replaceState({}, "", "/mail/inbox");
   client = new MailClient(
     createDemoPod({ root: "https://mail.example/" }).fetch,
     "https://mail.example/",
@@ -128,7 +134,10 @@ beforeEach(() => {
     },
   ];
 });
+afterEach(() => vi.restoreAllMocks());
 async function startWizard() {
+  mocks.pathname = "/mail/import";
+  history.replaceState({}, "", "/mail/import");
   const completion = deferred<ImportResult>();
   const importMail = vi.spyOn(client, "importMailbox").mockReturnValue(completion.promise);
   const view = await mount(h(ImportWizard));
@@ -167,11 +176,106 @@ it("invalidates the import generation as soon as confirmed navigation begins", a
   link.addEventListener("click", (event) => event.preventDefault());
   view.host.append(link);
   await click(link);
+  expect(view.host.textContent).toContain("Import cancelled. Messages already saved");
+  expect(view.host.querySelector('[aria-label="Import progress"]')).toBeNull();
   await act(() => completion.resolve(summary));
   expect(mocks.setAccount).not.toHaveBeenCalled();
   expect(mocks.invalidate).not.toHaveBeenCalled();
   await view.unmount();
   vi.restoreAllMocks();
+});
+it.each([
+  "/mail/import",
+  "/mail/import?view=progress",
+  "#progress",
+])("lets a same-route link to %s keep importing without a leave confirmation", async (href) => {
+  const { view, completion, importMail } = await startWizard();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  const link = document.createElement("a");
+  link.href = href;
+  link.addEventListener("click", (event) => event.preventDefault());
+  view.host.append(link);
+  await click(link);
+  expect(confirm).not.toHaveBeenCalled();
+  expect(importMail.mock.calls[0]?.[2]?.signal?.aborted).toBe(false);
+  await act(() => completion.resolve({ ...summary, aborted: false }));
+  expect(view.host.querySelector("h2")?.textContent).toBe("Import complete");
+  expect(mocks.setAccount).toHaveBeenCalledWith("imported");
+  await view.unmount();
+});
+it("can restart a cancelled import when confirmed navigation leaves the wizard mounted", async () => {
+  const { view, completion, importMail } = await startWizard();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const link = document.createElement("a");
+  link.href = "/mail/inbox";
+  link.addEventListener("click", (event) => event.preventDefault());
+  view.host.append(link);
+  await click(link);
+  expect(importMail.mock.calls[0]?.[2]?.signal?.aborted).toBe(true);
+  const next = deferred<ImportResult>();
+  importMail.mockReturnValueOnce(next.promise);
+  await act(() =>
+    view.host
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(importMail).toHaveBeenCalledTimes(2);
+  await act(() => completion.resolve(summary));
+  expect(view.host.querySelector('[aria-label="Import progress"]')).not.toBeNull();
+  expect(mocks.setAccount).not.toHaveBeenCalled();
+  await act(() => next.resolve({ ...summary, aborted: false }));
+  expect(view.host.querySelector("h2")?.textContent).toBe("Import complete");
+  await view.unmount();
+});
+it.each([
+  "unmount",
+  "account",
+  "route",
+])("cancels sample import on %s and fences late completion and errors", async (departure) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("sample"));
+  const completion = deferred<ImportResult>();
+  const importer = vi.spyOn(client, "importMailbox").mockReturnValue(completion.promise);
+  const view = await mount(h(NoMail, { title: "Inbox", inbox: true }));
+  await click(button(view.host, "Try a sample mailbox"));
+  expect(importer).toHaveBeenCalledOnce();
+  if (departure === "unmount") await view.unmount();
+  else {
+    if (departure === "account") {
+      mocks.account = "newer-account";
+      mocks.setAccount(mocks.account);
+    } else mocks.pathname = "/mail/archive";
+    await view.render(h(NoMail, { title: "Inbox", inbox: true }));
+    expect(button(view.host, "Try a sample mailbox").disabled).toBe(false);
+  }
+  expect(importer.mock.calls[0]?.[2]?.signal?.aborted).toBe(true);
+  await act(() => completion.resolve({ ...summary, failed: 1 }));
+  expect(mocks.setAccount.mock.calls).toEqual(departure === "account" ? [["newer-account"]] : []);
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect(mocks.invalidate).not.toHaveBeenCalled();
+  expect(mocks.error).not.toHaveBeenCalled();
+  if (departure !== "unmount") await view.unmount();
+});
+it("cancels the sample download before importing and ignores its late rejection", async () => {
+  const download = deferred<Response>();
+  const fetchSample = vi.spyOn(globalThis, "fetch").mockReturnValue(download.promise);
+  const importer = vi.spyOn(client, "importMailbox");
+  const view = await mount(h(NoMail, { title: "Inbox", inbox: true }));
+  await click(button(view.host, "Try a sample mailbox"));
+  await view.unmount();
+  expect(fetchSample.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  await act(() => download.reject(new Error("cancelled download")));
+  expect(importer).not.toHaveBeenCalled();
+  expect(mocks.error).not.toHaveBeenCalled();
+});
+it("selects and opens the sample account after a live import finishes", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("sample"));
+  vi.spyOn(client, "importMailbox").mockResolvedValue({ ...summary, aborted: false });
+  const view = await mount(h(NoMail, { title: "Inbox", inbox: true }));
+  await click(button(view.host, "Try a sample mailbox"));
+  expect(mocks.setAccount).toHaveBeenCalledWith("sample");
+  expect(mocks.invalidate).toHaveBeenCalledOnce();
+  expect(mocks.router.push).toHaveBeenCalledWith("/mail/inbox");
+  await view.unmount();
 });
 it("shows cancellation results while the current wizard is still mounted", async () => {
   const { view, completion } = await startWizard();
@@ -271,6 +375,17 @@ it("uses h1 on full threads, medium dates, compact labels and a bounded body's o
   expect(view.host.querySelector<HTMLAnchorElement>("a[download]")?.href).toBe(
     "https://mail.example/original.eml",
   );
+  await view.unmount();
+});
+it.each([
+  ["Mira Vale <mira@example.org>", "Mira Vale", "<mira@example.org>"],
+  ["mira@example.org", "mira@example.org", undefined],
+])("separates the sender name and address in %s", async (from, name, email) => {
+  conversation.messages[0]!.from = from!;
+  const view = await mount(h(ThreadView, { iri: conversation.iri }));
+  expect(view.host.querySelector(".mail-message-person strong")?.textContent).toBe(name);
+  expect(view.host.querySelector(".mail-sender-address")?.textContent?.trim()).toBe(email);
+  if (email) expect(view.host.querySelector("strong .mail-sender-address")).toBeNull();
   await view.unmount();
 });
 it("uses envelope empty states with equal Button sizes and no skipped heading levels", async () => {

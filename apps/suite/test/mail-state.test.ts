@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Fixture assertions establish thread identities.
 import { expect, it, vi } from "vitest";
 import { folderIriFromKey, MailClient, type ThreadPage } from "../src/apps/mail/lib/client";
+import { documentOf, MailError } from "../src/apps/mail/lib/model";
 import {
   MailProvider,
   useMail,
@@ -133,6 +135,54 @@ it("archives optimistically and Undo restores real Inbox membership", async () =
   expect(
     (await writer.threads("imported", folderIriFromKey(writer.root("imported"), "archive"))).total,
   ).toBe(0);
+  await view.unmount();
+});
+
+it.each([
+  ["reader", "archive"],
+  ["reader", "message"],
+  ["reader", "inbox"],
+  ["list", "archive"],
+  ["list", "message"],
+  ["list", "inbox"],
+])("%s retains Undo after repeated conflicts on the %s document, including partial writes", async (entry, failing) => {
+  const { view, writer } = await setup();
+  const row = threads.data!.items[0]!;
+  const message = (await writer.thread(row.iri)).messages[0]!;
+  const inbox = folderIriFromKey(writer.root("imported"), "inbox");
+  const archive = folderIriFromKey(writer.root("imported"), "archive");
+  for (const label of message.labels)
+    if (label !== inbox) await writer.label(message.iri, label, false);
+  const save = context.client.store.save.bind(context.client.store);
+  const failureUrl = documentOf(
+    failing === "archive" ? archive : failing === "message" ? message.iri : inbox,
+  );
+  const failure = vi
+    .spyOn(context.client.store, "save")
+    .mockImplementation((doc, dataset) =>
+      doc.url === failureUrl ? Promise.reject(new MailError("conflict", 412)) : save(doc, dataset),
+    );
+  await act(async () => {
+    if (entry === "reader") await actions.archive([message.iri], row.iri);
+    else await actions.forRows([row], "archive");
+  });
+  expect(notices.error).toHaveBeenCalledOnce();
+  expect((await writer.thread(row.iri)).messages[0]?.labels).toEqual([
+    failing === "inbox" ? archive : inbox,
+  ]);
+  expect((await writer.threads("imported", archive)).total).toBe(failing === "archive" ? 0 : 1);
+  expect(await writer.search("imported", "Garden")).toHaveLength(1);
+  const [text, options] = notices.toast.mock.calls.at(-1)! as [
+    string,
+    { action: { onClick: () => void } },
+  ];
+  expect(text).toBe("Archive incomplete");
+  failure.mockRestore();
+  await act(() => options.action.onClick());
+  await settle(() => !context.patches.some((patch) => patch.confirmedAt === undefined));
+  expect((await writer.thread(row.iri)).messages[0]?.labels).toEqual([inbox]);
+  expect((await writer.threads("imported", inbox)).total).toBe(1);
+  expect((await writer.threads("imported", archive)).total).toBe(0);
   await view.unmount();
 });
 

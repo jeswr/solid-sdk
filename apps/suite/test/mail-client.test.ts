@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Integration assertions establish fixture entries before use.
 
 import { DataFactory } from "n3";
@@ -510,15 +511,14 @@ describe("Round one client regressions", () => {
     expect(message.truncated).toBe(true);
     expect((await client.markRead([message.iri], true)).failed).toEqual([]);
     expect((await client.archive([message.iri])).failed).toEqual([]);
-    // Only size limits use the fallback; malformed text and unexpected failures surface.
+    // Unexpected parser errors still surface; validation errors have a per-message fallback.
     const quotes = await import("../src/apps/mail/lib/quotes");
     const split = vi.spyOn(quotes, "splitQuotedText");
-    for (const error of [new quotes.QuoteError("INVALID_TEXT"), new Error("parser failure")]) {
-      split.mockImplementationOnce(() => {
-        throw error;
-      });
-      await expect(client.thread(thread.iri)).rejects.toBe(error);
-    }
+    const error = new Error("parser failure");
+    split.mockImplementationOnce(() => {
+      throw error;
+    });
+    await expect(client.thread(thread.iri)).rejects.toBe(error);
     split.mockRestore();
   });
   it("retains both neighbours of an oversized message, reports failure and preserves ancestry", async () => {
@@ -635,6 +635,137 @@ describe("Round one client regressions", () => {
   });
 });
 
+describe("Round two client regressions", () => {
+  it("reports an unexpected archive failure without retrying it", async () => {
+    const { client } = setup();
+    const error = new Error("connection lost");
+    const load = vi.spyOn(client.store, "load").mockRejectedValue(error);
+    const iri = `${client.root(account)}messages/missing.ttl#it`;
+    expect(await client.archive([iri])).toEqual({ done: [], failed: [{ iri, error }] });
+    expect(load).toHaveBeenCalledOnce();
+    load.mockRestore();
+  });
+  it.each([
+    "archive",
+    "message",
+    "inbox",
+  ] as const)("keeps Inbox-only mail discoverable after repeated %s conflicts and reconciles on retry", async (failing) => {
+    let blocked = false;
+    let failureUrl = "";
+    const attempts: string[] = [];
+    const { client, inbox, pod } = setup((fetch) => async (input, init) => {
+      const url = String(input);
+      if (blocked && init?.method === "PUT") {
+        attempts.push(url);
+        if (url === failureUrl) return new Response(null, { status: 412 });
+      }
+      return fetch(input, init);
+    });
+    await client.importMailbox(
+      account,
+      bytes(mailboxFixture(1).replace(/X-Gmail-Labels:.*/, "X-Gmail-Labels: Inbox")),
+    );
+    const row = (await client.threads(account, inbox)).items[0]!;
+    const message = (await client.thread(row.iri)).messages[0]!;
+    const destination = folderIriFromKey(client.root(account), "archive");
+    failureUrl = documentOf(
+      failing === "archive" ? destination : failing === "message" ? message.iri : inbox,
+    );
+    blocked = true;
+    const result = await client.archive([message.iri]);
+    expect(result.done).toEqual([]);
+    expect(result.failed).toMatchObject([{ iri: message.iri, error: { code: "conflict" } }]);
+    expect(attempts[0]).toBe(documentOf(destination));
+    expect(attempts.filter((url) => url === failureUrl)).toHaveLength(2);
+    // A new client simulates a refresh, with no optimistic state or recovery closure.
+    const reader = new MailClient(pod.fetch, root);
+    const sourcePage = await reader.threads(account, inbox);
+    const destinationPage = await reader.threads(account, destination);
+    expect(sourcePage.total + destinationPage.total).toBeGreaterThan(0);
+    expect(await reader.search(account, "Garden")).toHaveLength(1);
+    if (failing === "archive") expect(sourcePage.total).toBe(1);
+    else expect(destinationPage.total).toBe(1);
+    blocked = false;
+    expect(await client.archive([message.iri])).toEqual({ done: [message.iri], failed: [] });
+    expect((await reader.threads(account, inbox)).total).toBe(0);
+    expect((await reader.threads(account, destination)).total).toBe(1);
+    expect((await reader.thread(row.iri)).messages[0]?.labels).toEqual([destination]);
+  });
+  it("reconciles a partial archive with fresh validators and preserves a concurrent edit", async () => {
+    const { client, inbox } = await imported(1);
+    const row = (await client.threads(account, inbox)).items[0]!;
+    const message = (await client.thread(row.iri)).messages[0]!;
+    const original = client.store.save.bind(client.store);
+    let conflict = true;
+    const save = vi.spyOn(client.store, "save").mockImplementation(async (loaded, dataset) => {
+      if (conflict && loaded.url === documentOf(inbox)) {
+        conflict = false;
+        const concurrent = await client.store.load(loaded.url);
+        concurrent.mailbox.folder(inbox).title = "Concurrent title";
+        await original(concurrent);
+        // The old validator really fails at the transport, after Archive and message were saved.
+      }
+      return original(loaded, dataset);
+    });
+    expect(await client.archive([message.iri])).toEqual({ done: [message.iri], failed: [] });
+    expect(save.mock.calls.filter(([doc]) => doc.url === documentOf(inbox))).toHaveLength(2);
+    expect((await client.store.load(documentOf(inbox))).mailbox.folder(inbox).title).toBe(
+      "Concurrent title",
+    );
+    expect((await client.threads(account, inbox)).total).toBe(0);
+    save.mockRestore();
+  });
+  it("falls back per message for accepted NUL text while retaining the text and original", async () => {
+    const { client, inbox } = setup();
+    expect(
+      await client.importMailbox(
+        account,
+        bytes(mailboxFixture(2).replace("Hello friends,", "Hello\0friends,")),
+      ),
+    ).toMatchObject({ messages: 2, failed: 0 });
+    const row = (await client.threads(account, inbox)).items[0]!;
+    const messages = (await client.thread(row.iri)).messages;
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.text).toContain("Hello\0friends,");
+    expect(messages[0]?.quoted.visibleText).toContain("Hello\uFFFDfriends,");
+    expect(messages[0]?.truncated).toBe(true);
+    expect(messages[1]?.quoted.hasQuotedHistory).toBe(true);
+    expect(await (await client.binaryFetch(messages[0]!.originalUrl!)).text()).toContain(
+      "Hello\0friends,",
+    );
+    const iris = messages.map((message) => message.iri);
+    expect((await client.markRead(iris, true)).failed).toEqual([]);
+    await client.star(iris[0]!, true);
+    expect((await client.archive(iris)).failed).toEqual([]);
+  });
+  it("searches decoded sender, To and Cc names as well as their addresses, including the owner", async () => {
+    const { client, inbox, pod } = setup();
+    await client.importMailbox(
+      account,
+      bytes(
+        mailboxFixture(1)
+          .replace("Mira Vale", "=?UTF-8?Q?Ada_Moss?=")
+          .replace("mira@example.org", "a@example.org")
+          .replace("Garden friends", "=?UTF-8?Q?Ren=C3=A9_Leaf?="),
+      ),
+    );
+    const iri = (await client.threads(account, inbox)).items[0]!.iri;
+    const owner = new MailClient(pod.fetch, root, "mailto:a@example.org");
+    for (const reader of [client, owner])
+      for (const query of [
+        "from:Ada",
+        'from:"Ada Moss"',
+        "from:a@example.org",
+        "to:René",
+        "to:friends@example.org",
+        "to:Alex",
+        "to:alex@example.org",
+        "Moss",
+      ])
+        expect((await reader.search(account, query)).map((row) => row.iri)).toEqual([iri]);
+  });
+});
+
 it("falls back to addresses when headers have no display names", async () => {
   const { client, inbox } = setup();
   await client.importMailbox(
@@ -650,6 +781,8 @@ it("falls back to addresses when headers have no display names", async () => {
     to: ["reader@example.net"],
     cc: ["cc@example.org"],
   });
+  expect(await client.search(account, "from:sender@example.org")).toHaveLength(1);
+  expect(await client.search(account, "to:reader@example.net")).toHaveLength(1);
 });
 it("keeps folder-list network, server and access errors distinct from an empty account", async () => {
   for (const status of [401, 403, 500]) {

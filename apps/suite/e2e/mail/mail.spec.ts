@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -109,9 +110,13 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
     .filter({ visible: true });
   await expect(compose).toBeDisabled();
   await expect(compose).toHaveAccessibleDescription("Sending needs a connected mail account");
-  if ((page.viewportSize()?.width ?? 1280) < 1024) await page.keyboard.press("Escape");
+  if ((page.viewportSize()?.width ?? 1280) < 1024) {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Navigation", exact: true })).toBeHidden();
+  }
   const iri = await rows.first().getAttribute("data-thread");
   await rows.first().focus();
+  await expect(rows.first()).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
@@ -139,6 +144,20 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
     page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
   ).toBeVisible();
   await accessible(page);
+  expect(
+    await page.locator(".mail-message-header time").evaluateAll(
+      (dates) =>
+        dates.length > 0 &&
+        dates.every((date) => {
+          const text = document.createRange();
+          text.selectNodeContents(date);
+          return text.getClientRects().length === 1;
+        }),
+    ),
+  ).toBe(true);
+  const sender = page.locator(".mail-message-person").last();
+  await expect(sender.locator("strong")).toHaveText("Noel Hart");
+  await expect(sender.locator(".mail-sender-address")).toHaveText("<noel@example.org>");
   await capture(page, info, "thread");
   await expect(page.getByRole("status", { name: "Mail save status", exact: true })).toHaveText("");
   await nav(page, "Starred");
