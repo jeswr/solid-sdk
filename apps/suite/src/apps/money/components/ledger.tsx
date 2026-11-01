@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, DataTable, EmptyState, FilterChips, Input, useSelection } from "@jeswr/suite-ui";
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  FilterChips,
+  IconButton,
+  Input,
+  useSelection,
+} from "@jeswr/suite-ui";
 import { DateTimeField } from "@jeswr/suite-ui/date-time";
 import { ArrowLeftRight, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
@@ -102,17 +110,16 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
           </Link>
           <div className="mon-account-title">
             <h1>{account.label}</h1>
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
-              aria-label="Rename account"
+              label="Rename account"
               onClick={() => {
                 setName(account.label);
                 setRenaming(true);
               }}
             >
               <Pencil size={16} aria-hidden="true" />
-            </Button>
+            </IconButton>
           </div>
           <p className="mon-subtitle">
             {account.type} · {account.currency} · Current balance{" "}
