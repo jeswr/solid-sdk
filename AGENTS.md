@@ -80,6 +80,13 @@ dependencies and source import restrictions are outside this manifest check's sc
 Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
 an isolated workspace for testing the script.
 
+`pnpm run check:codegen` (also part of `lint:root`) runs `scripts/check-codegen.mjs`: every
+`packages/*` or `apps/*` project that commits a generated model (`src/generated/codegen.lock.json`)
+must have a `codegen` script that runs `@jeswr/federation-codegen` into `src/generated`, a
+`workspace:` dependency on the generator (so Turbo re-runs the project when the generator
+changes), and a drift test that runs `pnpm run codegen --out <tmp>` and compares every
+generated file byte-for-byte. Fixture tests are in `test/check-codegen.test.mjs`.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills
 
