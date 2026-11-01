@@ -41,7 +41,16 @@ async function menu(page: Page, title = "Work") {
 }
 async function closeNavigation(page: Page) {
   const navigation = page.getByRole("dialog", { name: "Navigation", exact: true });
-  if (await navigation.isVisible()) await page.keyboard.press("Escape");
+  if (await navigation.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(navigation).toBeHidden();
+  }
+}
+// The demo seed has a Mon/Wed/Fri stand-up, so match the planning series by title.
+function planning(page: Page, day: string) {
+  return page
+    .locator(`.cal-month [data-day="${day}"] button.cal-event`)
+    .filter({ hasText: /planning/ });
 }
 test("quick-create, edit one occurrence and delete following with accessible forms", async ({
   page,
@@ -67,7 +76,7 @@ test("quick-create, edit one occurrence and delete following with accessible for
   ).toEqual([]);
   await form.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/calendar\/month\?d=2027-01-01$/);
-  await expect(page.locator('.cal-month [data-day="2027-01-04"] button.cal-event')).toHaveCount(1);
+  await expect(planning(page, "2027-01-04")).toHaveCount(1);
   const occurrence = await editOccurrence(page, "2027-01-11", "Weekly planning");
   await occurrence.getByLabel("Title", { exact: true }).fill("Personal planning");
   await occurrence.getByRole("button", { name: "Save", exact: true }).click();
@@ -76,10 +85,10 @@ test("quick-create, edit one occurrence and delete following with accessible for
     .getByRole("button", { name: "This event", exact: true })
     .click();
   await expect(
-    page.locator('.cal-month [data-day="2027-01-11"] button.cal-event'),
+    planning(page, "2027-01-11"),
   ).toHaveAccessibleName(/^Personal planning,/);
   await expect(
-    page.locator('.cal-month [data-day="2027-01-04"] button.cal-event'),
+    planning(page, "2027-01-04"),
   ).toHaveAccessibleName(/^Weekly planning,/);
   const later = await editOccurrence(page, "2027-01-18", "Weekly planning");
   await later.getByRole("button", { name: "Delete", exact: true }).click();
@@ -87,10 +96,10 @@ test("quick-create, edit one occurrence and delete following with accessible for
     .getByRole("alertdialog")
     .getByRole("button", { name: "This and following events", exact: true })
     .click();
-  await expect(page.locator('.cal-month [data-day="2027-01-18"] button.cal-event')).toHaveCount(0);
-  await expect(page.locator('.cal-month [data-day="2027-01-25"] button.cal-event')).toHaveCount(0);
-  await expect(page.locator('.cal-month [data-day="2027-01-04"] button.cal-event')).toHaveCount(1);
-  await expect(page.locator('.cal-month [data-day="2027-01-11"] button.cal-event')).toHaveCount(1);
+  await expect(planning(page, "2027-01-18")).toHaveCount(0);
+  await expect(planning(page, "2027-01-25")).toHaveCount(0);
+  await expect(planning(page, "2027-01-04")).toHaveCount(1);
+  await expect(planning(page, "2027-01-11")).toHaveCount(1);
 });
 test("announces invalid dates and confirms discarding a dirty draft", async ({ page }) => {
   await open(page);
