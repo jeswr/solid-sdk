@@ -414,9 +414,6 @@ async function warmGetResponse(
   budget: ResolvedWarmBudget,
   discovered: FrontierItem[],
 ): Promise<FrontierItem[]> {
-  // ACL-aware descent: no read on the listing ⇒ don't enumerate its subtree.
-  // Absent header ⇒ proceed (a child 403 prunes later).
-  const canRead = res.allow?.read !== false;
   const contentType = res.contentType;
   const contentLength =
     warmContentLength(res) ?? policyResponse(res)?.headers.get('content-length') ?? null;
@@ -457,13 +454,14 @@ async function warmGetResponse(
 
   const buf = body.buffer ?? null;
   state.warmed += 1;
-  if (canRead) {
-    if (item.kind === 'typeIndex')
-      for (const url of typeIndexTargets(item.url, decodeBody(buf)))
-        discovered.push({ url, kind: 'child', depth: item.depth + 1 });
-    if (container && item.depth < budget.maxDepth)
-      await enumerateContainer(item, deps, discovered, budget);
-  }
+  // A successful GET establishes readability. StorageClient's allow describes
+  // user modes only, so allow.read=false can still mean public read access.
+  // Let a refused listing (or child GET) prune the subtree instead.
+  if (item.kind === 'typeIndex')
+    for (const url of typeIndexTargets(item.url, decodeBody(buf)))
+      discovered.push({ url, kind: 'child', depth: item.depth + 1 });
+  if (container && item.depth < budget.maxDepth)
+    await enumerateContainer(item, deps, discovered, budget);
   recordVisit(state, deps, {
     url: item.url,
     kind: item.kind,

@@ -9,7 +9,7 @@
  *   - BFS traversal over ldp:contains + dedup (cycles don't loop)
  *   - budget enforcement (maxResources / maxBytes / maxDepth stop the crawl)
  *   - ACL 403 pruning + negative-cache (subtree not descended, never throws)
- *   - WAC-Allow "no read" pruning
+ *   - public-only WAC-Allow read access + refused listing pruning
  *   - large-binary skip (metadata warmed, bytes not pulled)
  *   - concurrency cap (never more than N in flight)
  *   - page-driven invariant: every fetch flows through the injected page fetch
@@ -340,6 +340,23 @@ describe('warmer: budget enforcement', () => {
 });
 
 describe('warmer: ACL-aware pruning', () => {
+  it.each([
+    'public="read"',
+    'user="", public="read"',
+  ])('warms public container children with WAC-Allow %s', async (allow) => {
+    const root = `${BASE}/`;
+    const child = `${BASE}/public-child`;
+    const { storage } = routedFetch({
+      [root]: () => container([child], { 'wac-allow': allow }),
+      [child]: () => turtle('<> a <#Doc> .'),
+    });
+    // Exercise the public StorageClient boundary: it exposes user modes only.
+    expect((await storage.head(root)).allow?.read).toBe(false);
+    const result = await warm(WEBID, { storage }, resolveBudget(), '', { seeds: [root] });
+    expect(result.warmed).toBe(2);
+    expect(result.visits.some((visit) => visit.url === child && !visit.skipped)).toBe(true);
+  });
+
   it('catches a 403 child, negative-caches it, prunes its subtree, never throws', async () => {
     const negative: Array<{ url: string; status: number }> = [];
     const routes: Record<string, (url: string) => Response> = {
@@ -367,25 +384,34 @@ describe('warmer: ACL-aware pruning', () => {
     expect(result.visits.some((v) => v.url === `${BASE}/public` && !v.skipped)).toBe(true);
   });
 
-  it('prunes a subtree the user cannot read per WAC-Allow (no 403 needed)', async () => {
+  it('prunes a subtree when its listing denies read after a successful GET', async () => {
     const routes: Record<string, (url: string) => Response> = {
       [PROFILE_DOC]: () =>
         turtle(`<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${BASE}/> .`),
       [`${BASE}/`]: () =>
         container([`${BASE}/locked/`], { 'wac-allow': 'user="read", public="read"' }),
-      // The container is readable, but ITS listing grants no read → children pruned.
+      // The initial container read succeeds; the subsequent listing refuses read.
       [`${BASE}/locked/`]: () =>
         container([`${BASE}/locked/inner`], { 'wac-allow': 'user="append", public=""' }),
       [`${BASE}/locked/inner`]: () => turtle('<> a <#Leak> .'),
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { storage } = routedFetch(
+    const { fetch } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
+    let lockedGets = 0;
+    const storage = storageFor(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url === `${BASE}/locked/` && request.method === 'GET') {
+        lockedGets += 1;
+        if (lockedGets > 1) return new Response(null, { status: 403 });
+      }
+      return fetch(request);
+    });
     const result = await warm(WEBID, { storage });
-    // /locked/ itself was visited (we read it to learn we can't read its children),
-    // but its inner child was never fetched.
+    expect(lockedGets).toBe(2);
+    // The failed listing introduces no children despite the successful first GET.
     expect(result.visits.some((v) => v.url === `${BASE}/locked/inner`)).toBe(false);
   });
 });
