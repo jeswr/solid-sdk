@@ -127,7 +127,7 @@ export async function openExtensionSession(
     const pageFetch = deps.fetch ?? globalThis.fetch;
     const publicFetch: typeof fetch = (input, init) =>
       checked(() => pageFetch(input, { ...init, credentials: "omit" }));
-    const { dataset } = await checked(() =>
+    const { dataset } = await checked<{ dataset: DatasetCore }>(() =>
       (deps.fetchRdf ?? fetchRdf)(documentUrl.href, { fetch: publicFetch }),
     );
     assertCurrent();
