@@ -24,8 +24,9 @@ const SOLID = "http://www.w3.org/ns/solid/terms#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
 
-export const DEMO_ROOT = "https://alice.demo.pod/";
-export const DEMO_WEBID = `${DEMO_ROOT}profile/card#me`;
+import { DEMO_ROOT, DEMO_WEBID } from "./constants";
+
+export { DEMO_ROOT, DEMO_WEBID };
 export const DEMO_NAME = "Alice Wilder";
 export const DRIVE_ROOT_CLASS = `${NS.POD_DRIVE}DriveRoot`;
 

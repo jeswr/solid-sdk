@@ -14,7 +14,7 @@ import {
 } from "../../src/apps/agent/lib/readers";
 import { agentStatus } from "../../src/apps/agent/lib/status";
 import { createAgentVerifier } from "../../src/apps/agent/lib/verify";
-import { DEMO_ROOT, DEMO_WEBID } from "../../src/lib/demo-pod/seed";
+import { DEMO_ROOT, DEMO_WEBID } from "../../src/lib/demo-pod/constants";
 
 /** Offline executor subset, using real signatures and profile resolution through the app's durable pod. */
 export function daemonDouble(page: Page) {
