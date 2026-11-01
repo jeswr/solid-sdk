@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
-import { SessionOperations } from "./session-operations";
+import { NoWebIdFromProviderError, SessionOperations } from "./session-operations";
 import { loginProfile, WebIdIssuerAuthorityError } from "./session-identity";
 import type { WebIdDPoPTokenProvider } from "./webid-token-provider";
 import type { PodProfile } from "./profile";
@@ -34,6 +34,46 @@ function harness() {
 }
 
 describe("session operation publication ownership", () => {
+  it("an absent restored session leaves the remembered identity logged out", async () => {
+    const { operations, effects, provider } = harness();
+    const arrived = deferred<void>();
+    const restored = deferred<undefined>();
+    provider.restoreIssuer.mockImplementationOnce(() => { arrived.resolve(); return restored.promise; });
+    const restore = operations.restore(ALICE, ISSUER);
+    await arrived.promise;
+    expect(effects.publish).not.toHaveBeenCalled();
+    restored.resolve(undefined);
+    await restore;
+    expect(effects.loggedOut).toHaveBeenCalledOnce();
+    expect(effects.seedIdentity).not.toHaveBeenCalled();
+    expect(effects.loadProfile).not.toHaveBeenCalled();
+    expect(effects.publish).not.toHaveBeenCalled();
+  });
+
+  it.each(["webid", "issuer"] as const)("%s-first login without an authenticated WebID awaits owned cleanup and rejects", async (kind) => {
+    const { operations, effects, provider } = harness();
+    effects.resolveInput.mockResolvedValueOnce({ kind: "webid", webId: ALICE, issuers: [ISSUER], displayName: "Alice" });
+    provider.login.mockResolvedValueOnce({ webId: undefined, ownership: 7 });
+    const arrived = deferred<void>();
+    const cleanup = deferred<void>();
+    provider.forgetIssuerIfOwned.mockImplementationOnce(() => { arrived.resolve(); return cleanup.promise; });
+    let completed = false;
+    const attempt = (kind === "webid" ? operations.login(ALICE) : operations.loginWithIssuer(ISSUER))
+      .catch((error: unknown) => error).then((result) => { completed = true; return result; });
+    // On an unfixed implementation the attempt settles without owned cleanup.
+    await Promise.race([arrived.promise, attempt]);
+    const beforeRelease = { completed, publications: effects.publish.mock.calls.length };
+    cleanup.resolve();
+    expect(await attempt).toBeInstanceOf(NoWebIdFromProviderError);
+    expect(beforeRelease).toEqual({ completed: false, publications: 0 });
+    expect(effects.publish).not.toHaveBeenCalled();
+    expect(provider.forgetIssuerIfOwned).toHaveBeenCalledWith(new URL(ISSUER), 7);
+    expect(provider.forgetIssuer).not.toHaveBeenCalled();
+    expect(effects.seedIdentity).not.toHaveBeenCalled();
+    expect(effects.loadProfile).not.toHaveBeenCalled();
+    expect(effects.failed).toHaveBeenCalledOnce();
+  });
+
   it.each(["login", "restore"] as const)("late %s profile success cannot publish Alice over Bob", async (kind) => {
     const { operations, effects, provider, bob } = harness();
     const arrived = deferred<void>();

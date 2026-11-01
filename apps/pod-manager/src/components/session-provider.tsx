@@ -109,8 +109,7 @@ interface BlockedPopup {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const registeredRef = useRef(false);
   const podTransportRef = useRef<typeof fetch | null>(null);
-  // The WebID the provider's 401-upgrade path should resolve the issuer from
-  // when no issuer is pinned yet (the silent-restore path after a reload).
+  // Validated session identity for the provider's 401 issuer resolution.
   const pendingWebIdRef = useRef<string>(undefined);
   // Shared ownership for login, reload restore and logout.
   const operationsRef = useRef<SessionOperations | null>(null);
@@ -236,8 +235,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         // The app-owned popup drives the user through the authorization
         // endpoint (silent first, interactive retry in the same window).
         (uri, signal) => controller.getCode(uri, signal),
-        // 401-upgrade fallback (post-reload silent restore): the WebID whose
-        // issuer to authenticate against comes from the restored session.
+        // Issuer resolution is available only after validated login or restore.
         async () => {
           const id = pendingWebIdRef.current;
           if (!id) throw new Error("No WebID provided for login");

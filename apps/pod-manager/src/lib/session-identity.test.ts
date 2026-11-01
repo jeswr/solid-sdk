@@ -24,13 +24,13 @@ function deferred() {
 }
 
 describe("restored identity", () => {
-  it("adopts Bob's authenticated WebID when the active pointer still remembers Alice", () => {
-    expect(restoredIdentity(ALICE, { webId: BOB })).toBe(BOB);
+  it("uses the authenticated WebID", () => {
+    expect(restoredIdentity({ webId: BOB })).toBe(BOB);
   });
 
-  it("retains the remembered WebID only when no authenticated identity was restored", () => {
-    expect(restoredIdentity(ALICE, undefined)).toBe(ALICE);
-    expect(restoredIdentity(ALICE, { webId: ALICE })).toBe(ALICE);
+  it("has no session identity when no authenticated identity was restored", () => {
+    expect(restoredIdentity(undefined)).toBeUndefined();
+    expect(restoredIdentity({ webId: ALICE })).toBe(ALICE);
   });
 });
 

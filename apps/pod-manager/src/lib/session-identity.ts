@@ -4,12 +4,11 @@ import { resolveIssuers } from "./login-ux";
 import { readProfile, type PodProfile } from "./profile";
 import { freshRdf } from "./rdf-read";
 
-/** Reconcile a remembered pointer with the identity actually authenticated on reload. */
+/** Only an authenticated restore establishes a session identity. */
 export function restoredIdentity(
-  remembered: string,
   restored: { webId: string } | undefined,
-): string {
-  return restored?.webId ?? remembered;
+): string | undefined {
+  return restored?.webId;
 }
 
 /** An issuer claimed an identity whose own profile does not authorize that issuer. */

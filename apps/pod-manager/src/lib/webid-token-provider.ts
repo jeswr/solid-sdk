@@ -186,10 +186,10 @@ export class IssuerForgottenError extends Error {
   }
 }
 
-/** Background authentication cannot replace an established account. */
+/** Background authentication requires a known, unchanged account. */
 export class SessionIdentityChangedError extends Error {
   constructor(issuer: string) {
-    super(`The authenticated account changed at ${issuer}; sign in explicitly to switch accounts.`);
+    super(`Sign in explicitly to establish or confirm your account at ${issuer}.`);
     this.name = "SessionIdentityChangedError";
   }
 }
@@ -598,6 +598,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       options.silentFirst === true ? "silent-first" : "interactive";
     const generation = this.#generationOf(issuer.href).id;
     const session = await this.#getSession(issuer, generation, mode, options.expectedWebId, true);
+    await this.#storeMutations;
     this.#assertGeneration(issuer.href, generation);
     return { webId: session.webId, ownership: generation };
   }
@@ -705,7 +706,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * (transparently via the refresh-token grant where possible); else run the
    * code flow once, with `mode` deciding whether that flow tries `prompt=none`
    * first (background re-auth) or goes straight to the login page (explicit
-   * login).
+   * login). Background calls require an established authenticated WebID.
    */
   async #getSession(
     issuer: URL,
@@ -717,14 +718,19 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#assertGeneration(issuer.href, generation);
     const cached = this.#sessions.get(issuer.href);
     if (cached === undefined) {
+      const establishedWebId = this.#confirmedOwners.get(issuer.href);
+      if (!explicitLogin && establishedWebId === undefined) {
+        throw new SessionIdentityChangedError(issuer.href);
+      }
       return this.#begin(issuer, generation,
         (signal) => this.#authenticate(issuer, signal, mode), expectedWebId,
-        explicitLogin ? undefined : this.#confirmedOwners.get(issuer.href));
+        explicitLogin ? undefined : establishedWebId);
     }
 
     const session = await cached;
     // A waiter must never renew or recurse into the generation created by logout.
     this.#assertGeneration(issuer.href, generation);
+    if (!explicitLogin && session.webId === undefined) throw new SessionIdentityChangedError(issuer.href);
     if (!hasExpired(session)) return session;
 
     if (this.#sessions.get(issuer.href) === cached) {
@@ -947,7 +953,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // A newer renewal owns its own persistence and rescheduling.
       if (this.#sessions.get(issuer.href) !== inFlight) return;
       await this.#begin(issuer, generation,
-        (signal) => this.#refresh(issuer, current, current.refreshToken!, signal));
+        (signal) => this.#refresh(issuer, current, current.refreshToken!, signal), current.webId, current.webId);
     } catch (e) {
       if (this.#generationOf(issuer.href).id !== generation || e instanceof IssuerForgottenError) {
         outcome = "forgotten";
@@ -1096,7 +1102,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * written — only the long-lived, key-bound credential. No-op without a store.
    */
   #persist(issuer: URL, session: IssuerSession, generation: number): Promise<void> {
-    if (session.refreshToken === undefined || session.webId === undefined) return Promise.resolve();
+    // Publication still waits for earlier cleanup when there is nothing to write.
+    if (session.refreshToken === undefined || session.webId === undefined) return this.#storeMutations;
     const stored: PersistedSession = {
       issuer: issuer.href,
       webId: session.webId,

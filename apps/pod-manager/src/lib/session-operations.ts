@@ -109,8 +109,12 @@ export class SessionOperations {
     const authenticated = await provider.login(new URL(issuer), { silentFirst, expectedWebId: knownWebId });
     operation.check();
     this.#effects.closePopup();
-    const id = authenticated.webId ?? knownWebId;
-    if (!id) throw new NoWebIdFromProviderError(issuer);
+    const id = authenticated.webId;
+    if (!id) {
+      await provider.forgetIssuerIfOwned(new URL(issuer), authenticated.ownership);
+      operation.check();
+      throw new NoWebIdFromProviderError(issuer);
+    }
     const profile = await (this.#effects.loadProfile ?? loginProfile)(
       id, issuer, authenticated.ownership, provider, undefined, operation.isCurrent,
     );
@@ -138,14 +142,20 @@ export class SessionOperations {
       this.#pendingIssuers.add(issuer);
       const restored = await provider.restoreIssuer(new URL(issuer));
       operation.check();
-      const id = restoredIdentity(remembered, restored);
-      this.#effects.seedIdentity(id);
+      const id = restoredIdentity(restored);
+      if (!id) {
+        this.#pendingIssuers.delete(issuer);
+        this.#activeIssuer = undefined;
+        this.#effects.loggedOut();
+        return;
+      }
       const profile = await (this.#effects.loadProfile ?? loginProfile)(
         id, issuer, restored?.ownership, provider, undefined, operation.isCurrent,
       );
       operation.check();
       this.#activeIssuer = issuer;
       this.#pendingIssuers.delete(issuer);
+      this.#effects.seedIdentity(id);
       this.#effects.publish(id, profile, issuer, false);
     });
   }

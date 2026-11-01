@@ -17,6 +17,8 @@ import {
   createFakeAuthorizationServer,
 } from "./test-utils/fake-authorization-server";
 import { loginProfile, WebIdIssuerAuthorityError } from "./session-identity";
+import { SessionOperations } from "./session-operations";
+import type { PodProfile } from "./profile";
 import { StructuredCloneSessionStore } from "./test-utils/structured-clone-session-store";
 import {
   IssuerForgottenError,
@@ -669,6 +671,98 @@ describe("round 3 ownership regressions", () => {
     expect(store.peek(ISSUER.href)).toBeUndefined();
     const { provider: reloaded } = makeProvider();
     expect(await reloaded.restoreIssuer(ISSUER)).toBeUndefined();
+  });
+});
+
+describe("round 4 identity and durability regressions", () => {
+  it.each(["missing", "revoked"] as const)("a %s restore cannot arm an unbound lazy authentication", async (credential) => {
+    if (credential === "revoked") {
+      await makeProvider().provider.login(ISSUER);
+      as.activeRefreshTokens.clear();
+    }
+    asOptions.webIdClaim = BOB;
+    const hold = holdOperation();
+    const { provider, getCode } = makeProvider({
+      profileFetch: async (...args) => { await hold.wait(); return profileFetch(...args); },
+    });
+    expect(await provider.restoreIssuer(ISSUER)).toBeUndefined();
+    const request = new Request("https://pod.test/private");
+    const upgrade = provider.upgrade(request).catch((error: unknown) => error);
+    await hold.arrived;
+    hold.release();
+    expect(await upgrade).toBeInstanceOf(SessionIdentityChangedError);
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(getCode).not.toHaveBeenCalled();
+    expect(provider.canRenewWithoutInteraction(ISSUER)).toBe(false);
+    expect(store.peek(ISSUER.href)).toBeUndefined();
+  });
+
+  it("an unknown authenticated owner cannot release tokens on a later 401", async () => {
+    asOptions.webIdClaim = undefined;
+    const { provider } = makeProvider();
+    const hold = holdNextTokenRequest();
+    const login = provider.login(ISSUER);
+    await hold.arrived;
+    hold.release();
+    expect((await login).webId).toBeUndefined();
+    await expect(provider.upgrade(new Request("https://pod.test/private"))).rejects.toThrow(SessionIdentityChangedError);
+  });
+
+  it.each(["logout", "account switch"] as const)("a replacement without a refresh token waits for held %s cleanup before publication", async (kind) => {
+    const { provider, getCode } = makeProvider();
+    const publish = vi.fn();
+    const operations = new SessionOperations({
+      provider: async () => provider,
+      currentProvider: () => provider,
+      openPopup() {}, closePopup() {}, authenticating() {}, seedIdentity() {}, failed() {}, loggedOut() {},
+      publish,
+      resolveInput: async (webId) => ({ kind: "webid", webId, issuers: [ISSUER.href], displayName: webId }),
+      loadProfile: async (webId) => ({ webId, storages: [] }) as unknown as PodProfile,
+    });
+    await operations.login(ALICE);
+    publish.mockClear();
+    const hold = holdStore("delete");
+    const logout = kind === "logout" ? operations.logout() : undefined;
+    // Preserve Alice's redeemable credential at the same AS; Bob's grant omits offline_access.
+    asOptions.scopesSupported = ["openid", "webid"];
+    asOptions.webIdClaim = BOB;
+    const replacement = operations.login(BOB);
+    await hold.arrived;
+    let completed = false;
+    const settled = replacement.then(() => { completed = true; });
+    await vi.waitFor(() => expect(provider.canRenewWithoutInteraction(ISSUER, BOB)).toBe(true));
+    const beforeRelease = { completed, publications: publish.mock.calls.length, durableWebId: store.peek(ISSUER.href)?.webId };
+    hold.release();
+    await Promise.all([settled, logout]);
+    expect(beforeRelease).toEqual({ completed: false, publications: 0, durableWebId: ALICE });
+    expect(publish).toHaveBeenCalledOnce();
+    expect(publish.mock.calls[0][0]).toBe(BOB);
+    expect(getCode).toHaveBeenCalledTimes(2);
+    expect(store.peek(ISSUER.href)).toBeUndefined();
+    expect(await makeProvider().provider.restoreIssuer(ISSUER)).toBeUndefined();
+  });
+
+  it("matching explicit login joins a held proactive refresh with its established owner", async () => {
+    const settled = deferred<string>();
+    const { provider, getCode } = makeProvider({
+      proactive: true,
+      onProactiveRefreshSettled: (_issuer, outcome) => settled.resolve(outcome),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    await provider.login(ISSUER, { expectedWebId: ALICE });
+    const hold = holdNextTokenRequest();
+    await vi.advanceTimersToNextTimerAsync();
+    await hold.arrived;
+    expect(provider.canRenewWithoutInteraction(ISSUER, ALICE)).toBe(true);
+    const login = provider.login(ISSUER, { expectedWebId: ALICE });
+    hold.release();
+    expect((await login).webId).toBe(ALICE);
+    expect(await settled.promise).toBe("refreshed");
+    expect(getCode).toHaveBeenCalledTimes(1);
+    expect(refreshGrants()).toHaveLength(1);
+    expect(store.deletes).toHaveLength(0);
+    expect(store.peek(ISSUER.href)?.webId).toBe(ALICE);
+    expect(vi.getTimerCount()).toBe(1);
   });
 });
 
