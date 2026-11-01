@@ -280,7 +280,6 @@ function sendFetch(
       requestId: 'r1',
       method: 'GET',
       headers: {},
-      body: null,
       ...message,
     },
     sender,
@@ -2893,7 +2892,10 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       if ('solid:origin-grants' in items && ++writes === pruneWrite) await held;
       return set(items);
     });
-    const pending = fetchFinance({ method, body: method === 'PUT' ? 'updated finance' : null });
+    const pending = fetchFinance({
+      method,
+      body: method === 'PUT' ? 'updated finance' : undefined,
+    });
     try {
       await vi.waitFor(() => expect(writes).toBe(pruneWrite));
       expect(fetchCalls).toHaveLength(method === 'PUT' ? 0 : 1);

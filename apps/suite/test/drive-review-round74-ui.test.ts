@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import "./drive-ui-dom";
 import { expect, it, vi } from "vitest";
 import {
@@ -12,10 +13,6 @@ import { customAclPod } from "./drive-custom-acl-pod";
 import { act, h, mount } from "./drive-ui-dom";
 import { aclBody, OWNER, PRIVATE, ROOT } from "./drive-wac-pod";
 
-vi.mock(
-  "@/apps/docs/lib/model/type-index",
-  async () => import("../src/apps/docs/lib/model/type-index"),
-);
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 
 it.each([
