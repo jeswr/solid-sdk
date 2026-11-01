@@ -187,3 +187,32 @@ Edits, redactions, media and other non-message events refuse as new text stateme
 The envelope content key supplies unverified JSON-LD only; decryption and parsing grant
 no agent identity or authority. `MATRIX_CONTENT` retains its exported constant name
 but now advertises the brief's `matrix-event/0.1` carriage ID.
+
+`./matrix/send` exports `createMatrixSend({ account, homeserver, userId, recipients,
+tokens, verify, verifyApproval, eventIdFor?, crypto?, footer?, now?, transport? })`.
+`recipients` pins actors to rooms. The exact approved JSON wire contains the room ID,
+`txnId` equal to the signed proposal ID, and deterministic `m.text` content with the
+required footer and `org.jeswr.agent.envelope`. The room, transaction ID, body and
+carrier all participate in the digest and are re-derived before transmission.
+
+Real transmission requires explicit `dryRun: false`, the pinned sender account,
+verified signed content, current validity, a `TokenProvider.send` grant and
+`verifyApproval(wire, account) === true`. The executor must check the current mandate,
+halt/limits and owner approval bound to this exact wire/account in that callback;
+capability metadata is never authorization. Validity is checked again after credential
+and approval awaits. Dry-run obtains no credentials and makes no requests.
+
+This task's explicit `PUT /rooms/{id}/send/m.room.message/{proposalId}` path sends
+plaintext content only. A read-grant check of `m.room.encryption` must return 404;
+encrypted, unreadable or unknown room state refuses, so the binding never downgrades
+an encrypted room. Outbound E2EE key distribution is outside this binding's current
+send path. The provider's transaction ID supplies idempotency; this binding never
+retries sends. Malformed acknowledgements and ambiguous HTTP failures remain uncertain.
+
+Lookup obtains a known event ID from `eventIdFor(proposalId, account)`, which the
+executor should supply from persisted outbox evidence. It uses only read credentials
+for `GET /rooms/{id}/event/{eventId}`, requires the pinned Matrix sender and exact
+reviewed content, and can use the supplied crypto adapter for encrypted copies.
+Lookup remains valid after proposal expiry. Missing IDs, 404s, unreadable or changed
+events return `unknown`. It never claims `absent` and leaves `finalAbsence` unset
+(the contract's false value), so a miss cannot authorize another send.

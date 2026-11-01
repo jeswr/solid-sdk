@@ -131,3 +131,9 @@ it("keeps Matrix sends out of the reader and root surfaces", () => {
   expect(entry6).not.toHaveProperty("createMatrixSend");
   expect(entry6).toHaveProperty("createMatrixReader");
 });
+
+it("exposes Matrix sends only on the executor subpath", () => {
+  expect(entry22).toHaveProperty("createMatrixSend");
+  expect(entry0).not.toHaveProperty("createMatrixSend");
+  expect(entry6).not.toHaveProperty("createMatrixSend");
+});
