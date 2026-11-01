@@ -99,8 +99,15 @@ export async function openReadingList(
       validateUrl(data.url);
       // Create first: the bookmark's subject depends on the URL the server assigns.
       const created = await storage.create(location, null, { contentType: "text/turtle" });
-      const etag = requireEtag(created.etag ?? (await storage.head(created.url)).etag);
-      return save(created.url, { ...data, created: data.created ?? new Date() }, etag);
+      // Read it back (bytes and ETag together): a non-empty body means another writer got there first.
+      const fresh = await storage.read(created.url);
+      if ((await fresh.bytes()).length > 0)
+        throw new Error("Another writer filled the new bookmark");
+      return save(
+        created.url,
+        { ...data, created: data.created ?? new Date() },
+        requireEtag(fresh.etag),
+      );
     },
     update(item, changes) {
       // A stale ETag raises StorageError('precondition-failed'); let the caller handle it.

@@ -52,8 +52,9 @@ export const ui: PodAuthOptions['ui'] = {
 ```
 
 `getCode` must return the **complete** callback URL, including its `code`, `state` and `iss`
-query parameters, and must give up when `signal` aborts. A popup is the smoothest choice; a
-full-page redirect also works if your callback page hands the URL back.
+query parameters, and must give up when `signal` aborts. Use a popup (or another window) whose
+callback page posts its URL back to the opener. A full-page redirect does **not** work yet: the
+sign-in state lives in the page that called `login()`, so navigating that page away loses it.
 
 ## Design the sign-in screen
 

@@ -14,6 +14,8 @@ Domain packages turn RDF into typed objects. UI packages supply the chrome. Ever
 the app's own code.
 
 - Pass `auth.fetch` everywhere. Never patch global fetch or build `Authorization` headers.
+- Sign-in says who, not where: read the pod from the WebID profile (`pim:storage`).
+- Run `ui.getCode` in a popup; full-page redirect sign-in is not resumable yet.
 - Keep the URL and ETag the server returns. Never predict a URL from a container and a name.
 - Every edit is conditional (`ifMatch`). On `precondition-failed`, re-read and reapply.
 - Read and write RDF through a domain model or `@solid/object` / `@rdfjs/wrapper` accessors.
@@ -77,8 +79,8 @@ const identity = (await auth.restore()) ?? (await auth.login());
 // identity.storages is the credential boundary and can be empty after Solid login.
 if (identity.webId === null) throw new Error('This sketch expects a WebID');
 const profile = await fetchRdf(identity.webId, { fetch: auth.fetch });
-const [storageRoot] = new Agent(identity.webId, profile.dataset, DataFactory).storageUrls;
-if (storageRoot === undefined) throw new Error('Ask the user for their storage URL');
+declare function chooseStorage(candidates: string[]): Promise<string>; // UI: pick one, or type a URL when empty.
+const storageRoot = await chooseStorage([...new Agent(identity.webId, profile.dataset, DataFactory).storageUrls]);
 
 const { storage, features } = await createPodClient({ fetch: auth.fetch, storage: storageRoot });
 const notifications = createNotifications({ fetch: auth.fetch, storage });
@@ -98,7 +100,8 @@ In Node (bots, importers, MCP servers), replace `createPodAuth` with `forClientC
 - Pick a container per collection. Create it once, store its returned URL (preferences, or the
   Type Index once `@jeswr/pod-type-index` lands), and pass that URL back on the next start.
 - Create a resource before writing RDF that names it: on LWS the server picks the URL, and a
-  subject such as `<url>#it` needs that URL. Write the body with the ETag `create` returned.
+  subject such as `<url>#it` needs that URL. Then read it back (content and ETag in one request),
+  check it is still empty, and write with that ETag.
 - One small document per record suits lists of things. Split large collections by date or hash;
   see [solid-scale-and-sharding](../solid-scale-and-sharding/SKILL.md).
 - Write canonical suite IRIs from `@jeswr/suite-vocab`; accept legacy IRIs when reading.
@@ -109,8 +112,10 @@ import { StorageError, type StorageClient } from '@jeswr/storage-client';
 
 export async function saveLink(storage: StorageClient, container: string, link: string) {
   const created = await storage.create(container, null, { contentType: 'text/turtle' });
-  const etag = created.etag ?? (await storage.head(created.url)).etag;
-  if (etag === null) throw new Error('The server returned no ETag');
+  // Read back content and ETag together; non-empty means another writer got there first.
+  const fresh = await storage.read(created.url);
+  if ((await fresh.bytes()).length > 0 || fresh.etag === null) throw new Error('Retry with a new resource');
+  const etag = fresh.etag;
   const turtle = await serializeBookmark(created.url, { url: link, created: new Date() });
   return storage.write(created.url, turtle, { contentType: 'text/turtle', ifMatch: etag });
 }

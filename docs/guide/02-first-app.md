@@ -79,7 +79,11 @@ interface ReadingItem { readonly url: string; readonly etag: string; readonly bo
 export async function add(data: BookmarkData): Promise<ReadingItem> {
   // 1. Create an empty document, so the server tells us its URL.
   const created = await storage.create(container, null, { contentType: 'text/turtle' });
-  const etag = created.etag ?? (await storage.head(created.url)).etag;
+  //    Read it back, content and ETag together. If it is no longer empty, someone else
+  //    wrote to it first, and we must not overwrite their data.
+  const fresh = await storage.read(created.url);
+  if ((await fresh.bytes()).length > 0) throw new Error('Someone else wrote here first');
+  const etag = fresh.etag;
   if (etag === null) throw new Error('The server gave no ETag');
 
   // 2. Describe the bookmark. Its RDF subject is `<url>#it`, so it needs the URL from step 1.
@@ -118,8 +122,9 @@ declare const container: string;
 for await (const entry of storage.listAll(container)) {
   if (entry.kind !== 'resource') continue; // Skip sub-containers.
   const resource = await storage.read(entry.url, { accept: 'text/turtle' });
-  const bookmark = await parseBookmarkTtl(entry.url, await resource.text(), resource.contentType);
-  if (bookmark === undefined) continue; // Some other app's file: leave it alone.
+  const body = await resource.text(); // Network and permission errors still throw here.
+  const bookmark = await parseBookmarkTtl(entry.url, body, resource.contentType).catch(() => undefined);
+  if (bookmark === undefined) continue; // Some other app's file, or malformed: leave it alone.
   console.log(bookmark.title ?? bookmark.url, bookmark.archived ? '(read)' : '');
 }
 ```

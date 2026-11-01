@@ -232,7 +232,7 @@ describe.each(["solid", "lws"] as const)("reading list on %s", (protocol) => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("obtains a validator with HEAD when create returns no ETag", async () => {
+  it("takes the new document's validator from a read, not from create", async () => {
     const create = storage.create.bind(storage);
     vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => ({
       ...(await create(...args)),
@@ -240,8 +240,26 @@ describe.each(["solid", "lws"] as const)("reading list on %s", (protocol) => {
     }));
     const head = vi.spyOn(storage, "head");
     const item = await list.add(data);
-    expect(head).toHaveBeenCalledWith(item.url);
+    expect(head).not.toHaveBeenCalled();
     expect(await list.list()).toEqual([item]);
+  });
+
+  it("refuses to overwrite a new document another writer filled first", async () => {
+    const create = storage.create.bind(storage);
+    const competitor = { ...data, title: "Competing bookmark" };
+    // Simulate a competitor writing between POST and the backend's fallback HEAD.
+    vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => {
+      const created = await create(...args);
+      const written = await storage.write(
+        created.url,
+        await serializeBookmark(created.url, competitor),
+        { contentType: "text/turtle", ifMatch: created.etag ?? "*" },
+      );
+      return { ...created, etag: written.etag };
+    });
+    await expect(list.add(data)).rejects.toThrow("Another writer filled the new bookmark");
+    const items = await list.list();
+    expect(items.map((item) => item.bookmark.title)).toEqual(["Competing bookmark"]);
   });
 
   it("re-reads the content and ETag when an update commits without returning a validator", async () => {
