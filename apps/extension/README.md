@@ -110,6 +110,12 @@ Requests the worker does not authorize fall back to the page's captured native f
 with normal CORS behavior.
 Explicit `solid.fetch` calls retain the worker's denial response.
 
+Both fetch APIs accept `Request` inputs and text, `ArrayBuffer`, typed-array/DataView,
+Blob/File, and `URLSearchParams` bodies. Binary requests and responses preserve their
+bytes through the bridge. Each request or response body is limited to 25 MiB raw.
+Explicit `solid.fetch` rejects FormData and ReadableStream bodies; the global fetch
+patch leaves those bodies on native fetch.
+
 ## Auth + session
 
 - **Login:** Solid-OIDC **authorization-code + PKCE + DPoP**, driven by

@@ -5,6 +5,10 @@ import ts from "typescript";
 import { expect, it } from "vitest";
 
 it.each([
+  ["../src/app/(suite)/calendar/[view]/page.tsx", "view"],
+  ["../src/app/(suite)/contacts/c/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/contacts/c/[ref]/edit/page.tsx", "ref"],
+  ["../src/app/(suite)/contacts/label/[group]/page.tsx", "group"],
   ["../src/app/(suite)/drive/f/[ref]/page.tsx", "ref"],
   ["../src/app/(suite)/drive/p/[ref]/page.tsx", "ref"],
   ["../src/app/dev/components/[component]/page.tsx", "component"],

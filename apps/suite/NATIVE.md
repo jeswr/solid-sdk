@@ -19,9 +19,10 @@ must be https. `appBaseUrl()` uses the live local scheme in the WebView so both 
 consume the same bundle. Shared links use the public URL. The CSP permits executable assets
 only under `/_next/static/` at those two local origins and hashes each page's inline scripts.
 
-Staging excludes `src/app/dev/` and public fixtures. The current web session is backed by a
-seeded demo pod, so native staging explicitly replaces it with a sign-in placeholder and omits
-the demo code. Native authentication is a later integration. Native `/` opens `/drive/my/`,
+Staging excludes `src/app/dev/` and public fixtures. The web session uses the installed Solid
+extension's granted pod, falling back to a seeded demo pod. Native staging replaces the web
+session with a sign-in placeholder and omits the demo code. Native authentication is a later
+integration. Native `/` opens `/drive/my/`,
 and Drive preview interception falls back to `/drive/p/[ref]`. The manifest reports these
 adaptations. The native PDF handoff belongs to MOB-P3b.
 
