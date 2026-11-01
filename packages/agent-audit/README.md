@@ -138,6 +138,13 @@ and [decision record](https://github.com/jeswr/accountable-agent-runtime/blob/ma
 retargeted to DESIGN §5 and agent-mandate without copying its engagement-specific
 WAC mutation or send paths.
 
+Run the D-3 auditor walkthrough with `pnpm --filter @jeswr/agent-audit demo`.
+It boots local in-memory CSS, executes two synthetically delivered approved sends,
+grants anonymous read to the evidence and prints two passing audits plus the four
+named negative cases. `demo --base <prepared-pod-root/>` replays the same walkthrough
+with anonymous reads. See [the demo guide](demos/README.md) for preparation, layout,
+access grants and evidence limits.
+
 Run this package's `lint`, `build`, `typecheck` and `test` scripts. CSS and
 Components.js are development-only fixtures; production dependencies reuse
 existing workspace verification, canonical JSON and RDF libraries.
