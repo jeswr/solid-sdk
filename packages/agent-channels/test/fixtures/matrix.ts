@@ -1,5 +1,9 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { guardedFetch } from "@jeswr/guarded-fetch";
+
+export { createGuardedFetch } from "@jeswr/guarded-fetch";
+
 import { vi } from "vitest";
 import { createMatrixReader } from "../../src/matrix.js";
 import { RecordingTokenProvider } from "../../src/testing.js";
@@ -45,7 +49,12 @@ export function fixtureTransport(replies: unknown[]) {
     queue,
     transport,
     options: {
-      createTransport: () => transport,
+      createTransport:
+        ({ beforeDispatch }: { beforeDispatch?: () => void } = {}) =>
+        (input: Parameters<typeof guardedFetch>[0], init?: RequestInit) => {
+          beforeDispatch?.();
+          return transport(input, init);
+        },
       dnsLookup: async () => [{ address: "1.1.1.1", family: 4 as const }],
     },
   };

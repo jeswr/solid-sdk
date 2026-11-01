@@ -79,9 +79,8 @@ export function graphMailRest(options: OriginFetchOptions = {}) {
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await beforeRequest?.();
-    // Approval and credential waits must finish before the synchronous executor fence.
-    assertAuthority?.();
     return scoped(target, {
+      beforeDispatch: assertAuthority,
       method: body === undefined ? "GET" : "POST",
       redirect: "manual",
       headers: {

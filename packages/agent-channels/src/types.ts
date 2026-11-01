@@ -39,7 +39,8 @@ export type ProviderLookupResult =
 export interface TransmissionIo {
   readonly account: AccountRef;
   readonly tokens: Pick<TokenProvider, "send">;
-  /** Executor-owned synchronous fence; call after all awaits, immediately before each request. */
+  /** Executor-owned synchronous fence; thread through transport preflight and call
+   * after all awaits (including DNS), immediately before each underlying dispatch. */
   readonly assertAuthority: () => void;
   readonly dryRun?: boolean;
 }

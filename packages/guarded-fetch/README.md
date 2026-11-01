@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/guarded-fetch
 
@@ -31,6 +32,13 @@ const response = await guardedFetch("https://registry.example/catalog.json");
 
 The default entry is browser-safe and applies URL policy without importing `node:*`. The
 `@jeswr/guarded-fetch/node` entry additionally pins validated DNS results to the connection.
+
+`beforeDispatch?: () => void` is an optional synchronous authority fence on guard
+construction. It runs after each awaited destination/DNS check, immediately before
+calling the underlying fetch, without an intervening await. A thrown refusal is
+propagated unchanged and that hop is never dispatched. For request-specific authority,
+construct a separate guard for each request; never share mutable authority state across
+requests. The Node entry forwards this option to its inner destination guard.
 
 ## Key API
 

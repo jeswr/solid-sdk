@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { accountId, assertGrant } from "../direct/shared.js";
@@ -8,6 +9,7 @@ import { assertFooter, decodeEmailProposal } from "../email-mime.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, DISCORD_FOOTER } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
 import { readJson, snowflake } from "./shared.js";
 
@@ -128,43 +130,49 @@ export function createDiscordSend(
         return { ok: false, reason: "malformed" };
       }
     },
-    async transmit(wire, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      if (accountId(io.account) !== account.id)
-        throw new ProviderRejectedError("Discord account differs from configured bot");
-      const copy = snapshot(wire);
-      const expected = await prepare(await resolveProposal(copy));
-      if (expected.wire.bytes !== copy.bytes)
-        throw new ChannelParseError("Discord wire differs from signed proposal");
-      current(expected.message);
-      const grant = await io.tokens.send(account);
-      assertGrant(grant, "send");
-      current(expected.message);
-      if (typeof verifyApproval !== "function" || (await verifyApproval(copy, account)) !== true)
-        throw new ProviderRejectedError("owner approval required");
-      current(expected.message);
-      io.assertAuthority();
-      const response = await request(
-        `https://discord.com/api/v10/channels/${expected.channel}/messages`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bot ${grant.accessToken}`,
-            "content-type": "application/json",
+    transmit(wire, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        if (accountId(io.account) !== account.id)
+          throw new ProviderRejectedError("Discord account differs from configured bot");
+        const copy = snapshot(wire);
+        const expected = await prepare(await resolveProposal(copy));
+        if (expected.wire.bytes !== copy.bytes)
+          throw new ChannelParseError("Discord wire differs from signed proposal");
+        current(expected.message);
+        const grant = await io.tokens.send(account);
+        assertGrant(grant, "send");
+        current(expected.message);
+        if (typeof verifyApproval !== "function" || (await verifyApproval(copy, account)) !== true)
+          throw new ProviderRejectedError("owner approval required");
+        current(expected.message);
+        const response = await request(
+          `https://discord.com/api/v10/channels/${expected.channel}/messages`,
+          {
+            beforeDispatch: () => {
+              current(expected.message);
+              io.assertAuthority();
+              dispatched();
+            },
+            method: "POST",
+            headers: {
+              authorization: `Bot ${grant.accessToken}`,
+              "content-type": "application/json",
+            },
+            body: copy.bytes,
           },
-          body: copy.bytes,
-        },
-      );
-      if ([400, 401, 403, 404, 405, 413, 429].includes(response.status))
-        throw new ProviderRejectedError(`Discord send refused: HTTP ${response.status}`);
-      if (!response.ok) throw new Error(`Discord send uncertain: HTTP ${response.status}`);
-      try {
-        const { value } = readJson(await response.text());
-        if (value.channel_id !== expected.channel) throw new Error("channel mismatch");
-        return { outcome: "accepted", providerRef: snowflake(value.id) };
-      } catch {
-        throw new Error("Discord send uncertain: invalid acknowledgement");
-      }
+        );
+        if ([400, 401, 403, 404, 405, 413, 429].includes(response.status))
+          throw new ProviderRejectedError(`Discord send refused: HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`Discord send uncertain: HTTP ${response.status}`);
+        try {
+          const { value } = readJson(await response.text());
+          if (value.channel_id !== expected.channel) throw new Error("channel mismatch");
+          return { outcome: "accepted", providerRef: snowflake(value.id) };
+        } catch {
+          throw new Error("Discord send uncertain: invalid acknowledgement");
+        }
+      });
     },
     // No lookup or finalAbsence: absence from a Gateway stream cannot prove non-delivery.
   };

@@ -10,7 +10,11 @@ import { createServer } from "http";
 import { inspect } from "util";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ResponseSizeRefusedError } from "../src/errors.js";
-import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
+import {
+  createOriginScopedFetch,
+  type OriginFetchOptions,
+  type OriginRequestInit,
+} from "../src/origins.js";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -20,10 +24,122 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-it("exposes the supported fetch signature without per-request guard policies", () => {
+it("exposes the supported fetch signature with only an optional dispatch fence", () => {
   expectTypeOf<ReturnType<typeof createOriginScopedFetch>>().toEqualTypeOf<
+    (input: Parameters<typeof guardedFetch>[0], init?: OriginRequestInit) => Promise<Response>
+  >();
+  expectTypeOf<ReturnType<typeof createOriginScopedFetch>>().toMatchTypeOf<
     ReturnType<typeof createGuardedFetch>
   >();
+});
+
+it("isolates concurrent dispatch fences after inner DNS and preserves exact refusals", async () => {
+  const origin = "https://allowed.example";
+  const entered = deferred<void>();
+  const dns = deferred<Array<{ address: string; family: 4 }>>();
+  let blocked = true;
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("sent"));
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+    createTransport: (options) =>
+      createGuardedFetch({
+        ...options,
+        pinningFetch: transport,
+        requireDnsPinning: true,
+        dnsLookup: async () => {
+          if (blocked) {
+            entered.resolve();
+            return dns.promise;
+          }
+          return [{ address: "1.1.1.1", family: 4 }];
+        },
+      }),
+  });
+  let authority = true;
+  const fence = vi.fn(() => {
+    if (!authority) throw undefined;
+  });
+  const first = scoped(origin, { beforeDispatch: fence });
+  const refused = expect(first).rejects.toBeUndefined();
+  await entered.promise;
+  expect(fence).not.toHaveBeenCalled();
+  authority = false;
+  blocked = false;
+  const secondFence = vi.fn();
+  expect(await (await scoped(origin, { beforeDispatch: secondFence })).text()).toBe("sent");
+  expect(secondFence).toHaveBeenCalledOnce();
+  dns.resolve([{ address: "1.1.1.1", family: 4 }]);
+  await refused;
+  expect(fence).toHaveBeenCalledOnce();
+  expect(transport).toHaveBeenCalledOnce();
+});
+
+it("fences the real Node transport after its own asynchronous DNS check", async () => {
+  const refusal = new Error("HALT during Node destination preflight");
+  let authority = true;
+  const resolveAll = vi.fn(async () => {
+    await Promise.resolve();
+    authority = false;
+    return [{ address: "1.1.1.1", family: 4 as const }];
+  });
+  const scoped = createOriginScopedFetch(new Set(["https://allowed.example"]), {
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+    createTransport: (options) => createNodeGuardedFetch({ ...options, resolveAll }),
+  });
+  await expect(
+    scoped("https://allowed.example", {
+      beforeDispatch() {
+        if (!authority) throw refusal;
+      },
+    }),
+  ).rejects.toBe(refusal);
+  // A dispatched undici connection would resolve again through its pinning lookup.
+  expect(resolveAll).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "keepalive",
+  "no-cors",
+] as const)("runs its fence after %s body buffering", async (policy) => {
+  const origin = "https://allowed.example";
+  let valid = true;
+  const refusal = new Error("revoked while buffering");
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>(
+    {
+      pull(controller) {
+        valid = false;
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const blob = new Blob(["fixture"]);
+  vi.spyOn(blob, "stream").mockReturnValue(stream);
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+  const dnsLookup = async () => [{ address: "1.1.1.1", family: 4 as const }];
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    dnsLookup,
+    createTransport: (options) =>
+      createGuardedFetch({
+        ...options,
+        pinningFetch: transport,
+        dnsLookup,
+        requireDnsPinning: true,
+      }),
+  });
+  await expect(
+    scoped(origin, {
+      method: "POST",
+      body: blob,
+      keepalive: policy === "keepalive",
+      mode: policy === "no-cors" ? "no-cors" : "cors",
+      beforeDispatch: () => {
+        if (!valid) throw refusal;
+      },
+    }),
+  ).rejects.toBe(refusal);
+  expect(transport).not.toHaveBeenCalled();
 });
 
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {

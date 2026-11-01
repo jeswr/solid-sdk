@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { guardedFetch } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
@@ -26,7 +27,12 @@ export function fixtureTransport(replies: unknown[]) {
     requests,
     queue,
     options: {
-      createTransport: () => transport,
+      createTransport:
+        ({ beforeDispatch }: { beforeDispatch?: () => void } = {}) =>
+        (input: Parameters<typeof guardedFetch>[0], init?: RequestInit) => {
+          beforeDispatch?.();
+          return transport(input, init);
+        },
       dnsLookup: async () => [{ address: "1.1.1.1", family: 4 as const }],
     },
   };

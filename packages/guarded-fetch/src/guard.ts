@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * The SSRF / DNS-rebinding guard POLICY CORE — the small, reviewed custom code over the
@@ -105,6 +106,10 @@ export const DEFAULT_HOSTNAME_DENYLIST: readonly string[] = Object.freeze([
 
 /** Options for {@link createGuardedFetch} / {@link guardedFetch}. */
 export interface GuardOptions {
+  /** Synchronous authority fence after destination checks, immediately before fetch.
+   * Construct a separate guard for each request when the fence carries request authority.
+   * A refusal is propagated unchanged; no request has been issued for that hop. */
+  readonly beforeDispatch?: () => void;
   /**
    * The underlying `fetch` to issue the (guarded, `redirect:"manual"`) requests with.
    * Defaults to `globalThis.fetch`. Pass an authenticated fetch here — the guard threads it
@@ -298,6 +303,7 @@ export function normalizeHostForClassification(hostname: string): string {
 
 /** The guard implementation: URL validation, redirect re-validation, body cap, timeout. */
 class SsrfGuard {
+  private readonly beforeDispatch: (() => void) | undefined;
   private readonly fetcher: typeof globalThis.fetch;
   private readonly injectedLookup: DnsLookup | undefined;
   private readonly maxBytes: number;
@@ -315,6 +321,7 @@ class SsrfGuard {
   private defaultLookup: Promise<DnsLookup> | undefined;
 
   constructor(options: GuardOptions) {
+    this.beforeDispatch = options.beforeDispatch;
     this.havePinningFetch = options.pinningFetch !== undefined;
     this.isBrowser = isBrowserContext();
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
@@ -370,14 +377,16 @@ class SsrfGuard {
       seen.add(currentUrl);
       await this.assertAllowed(currentUrl, prevWasHttps);
 
+      const dispatchInit = {
+        ...currentInit,
+        // We re-validate every hop ourselves, so the underlying fetch must NOT auto-follow.
+        redirect: "manual" as const,
+        signal: controller.signal,
+      };
+      this.beforeDispatch?.();
       let res: Response;
       try {
-        res = await this.fetcher(currentUrl, {
-          ...currentInit,
-          // We re-validate every hop ourselves, so the underlying fetch must NOT auto-follow.
-          redirect: "manual",
-          signal: controller.signal,
-        });
+        res = await this.fetcher(currentUrl, dispatchInit);
       } catch (cause) {
         if (controller.signal.aborted) {
           throw new SsrfError(`Fetch timed out for ${currentUrl} (${this.timeoutMs}ms).`, {

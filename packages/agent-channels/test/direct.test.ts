@@ -13,6 +13,7 @@ import {
   DIRECT,
   ProviderRejectedError,
   type SendGrant,
+  SendNotDispatchedError,
   type TokenProvider,
 } from "../src/index.js";
 import { createInMemoryDirectBinding } from "../src/testing.js";
@@ -1134,7 +1135,10 @@ describe("direct loopback", () => {
           tokens: config.tokens,
           dryRun: false,
         }),
-      ).rejects.toBeInstanceOf(ChannelParseError);
+      ).rejects.toMatchObject({
+        constructor: SendNotDispatchedError,
+        cause: expect.any(ChannelParseError),
+      });
     expect(config.tokens.calls).toEqual([]);
   });
 

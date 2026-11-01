@@ -72,8 +72,9 @@ lookup and before handing over send credentials, closing asynchronous revocation
   wrong-scope/empty grants and grants resolved after revocation fail closed.
   It also supplies `io.assertAuthority()`, a required synchronous check of the shared
   invalidation revision and the latest credential-time authority deadlines. Every
-  binding must call it after all asynchronous checks, immediately before each
-  request or direct delivery, without an intervening await. Invalidated authority
+  binding must thread it through the request-local `beforeDispatch` hook, after all
+  asynchronous checks including both DNS/destination preflights and body buffering,
+  immediately before underlying fetch or direct delivery, without an intervening await. Invalidated authority
   throws a typed pre-delivery refusal and settles as `not-sent`; unresolved resends
   retain prior uncertainty. Invalidation after a request was issued cannot erase
   its acknowledgement or justify claiming non-delivery.
@@ -115,9 +116,14 @@ available. At the three-attempt bound, a definitive non-send emits final `not-se
 successful sends emit final `sent`, and unresolved sends remain non-final `uncertain`.
 This finality concerns delivery only: sending does not establish completed agreement performance.
 
-The executor recognizes the channel's actual `ProviderRejectedError` class through
-`@jeswr/agent-channels/provider/send`, including subclasses, as an explicit rejected
-outcome. Such a pre-delivery refusal releases a new attempt's commitment and permits
+The executor recognizes the channel's actual `ProviderRejectedError` and
+`SendNotDispatchedError` classes through `@jeswr/agent-channels/provider/send`, including
+subclasses, as explicit rejected outcomes. `SendNotDispatchedError` preserves the cause
+of a local failure before any effectful send dispatch, including expiry during approval
+or DNS, credential/approval errors and destination refusals. Matrix room-state reads
+are preflight; malformed provider responses after send dispatch remain uncertain.
+Names and message strings alone never prove non-delivery. Such a pre-delivery refusal
+releases a new attempt's commitment and permits
 an explicitly requested, freshly authorized retry within the attempt bound. Provider
 text is discarded. Other thrown errors remain uncertain; a refusal of an unresolved
 A2A resend cannot release the original commitment. Late typed refusals obey the same rules.

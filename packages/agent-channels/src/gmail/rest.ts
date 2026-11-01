@@ -77,9 +77,8 @@ export function gmailRest(options: OriginFetchOptions = {}, tenant?: GmailTenant
     }
     assertGrant(grant, access);
     await beforeRequest?.();
-    // Approval and credential waits must finish before the synchronous executor fence.
-    assertAuthority?.();
     const response = await scoped(`${BASE}${path}`, {
+      beforeDispatch: assertAuthority,
       method: body === undefined ? "GET" : "POST",
       redirect: "manual",
       headers: {

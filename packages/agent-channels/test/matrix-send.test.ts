@@ -270,7 +270,7 @@ it("checks expiry before I/O and again after credential and approval awaits", as
     return grant;
   };
   await expect(s.send.transmit(wire, live(s))).rejects.toThrow("expired");
-  expect(s.requests).toHaveLength(1);
+  expect(s.requests).toHaveLength(0);
   expect(s.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
   time = at;
   const t = sender([unencrypted()], {

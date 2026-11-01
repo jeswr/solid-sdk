@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
 import { type EmailRenderOptions, emailRenderer } from "../email/render.js";
@@ -12,6 +13,7 @@ import {
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, TokenProvider, Wire } from "../types.js";
 import type { GmailTenant } from "./errors.js";
 import { gmailRest, messageId, rawMessage, record, responseBody } from "./rest.js";
@@ -56,37 +58,44 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
   return {
     render: renderer.render,
     validate: renderer.validate,
-    async transmit(wire, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      if (accountId(io.account) !== account.id)
-        throw new ProviderRejectedError("Gmail account differs from configured sender");
-      const { snapshot, proposal } = await checked(wire);
-      const response = await rest(
-        "/messages/send",
-        account,
-        io.tokens,
-        "send",
-        JSON.stringify({ raw: Buffer.from(snapshot.bytes).toString("base64url") }),
-        async () => {
-          renderer.current(proposal.message);
-          if (
-            typeof verifyApproval !== "function" ||
-            (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
-          )
-            throw new ProviderRejectedError("owner approval required");
-          renderer.current(proposal.message);
-        },
-        () => io.assertAuthority(),
-      );
-      if (response.status === 400) throw new ProviderRejectedError("Gmail send refused: HTTP 400");
-      if (!response.ok) throw new Error(`Gmail send uncertain: HTTP ${response.status}`);
-      let id: string;
-      try {
-        id = messageId(record(await response.json()).id);
-      } catch {
-        throw new Error("Gmail send uncertain: invalid acknowledgement");
-      }
-      return { outcome: "accepted", providerRef: id };
+    transmit(wire, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        if (accountId(io.account) !== account.id)
+          throw new ProviderRejectedError("Gmail account differs from configured sender");
+        const { snapshot, proposal } = await checked(wire);
+        const response = await rest(
+          "/messages/send",
+          account,
+          io.tokens,
+          "send",
+          JSON.stringify({ raw: Buffer.from(snapshot.bytes).toString("base64url") }),
+          async () => {
+            renderer.current(proposal.message);
+            if (
+              typeof verifyApproval !== "function" ||
+              (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
+            )
+              throw new ProviderRejectedError("owner approval required");
+            renderer.current(proposal.message);
+          },
+          () => {
+            renderer.current(proposal.message);
+            io.assertAuthority();
+            dispatched();
+          },
+        );
+        if (response.status === 400)
+          throw new ProviderRejectedError("Gmail send refused: HTTP 400");
+        if (!response.ok) throw new Error(`Gmail send uncertain: HTTP ${response.status}`);
+        let id: string;
+        try {
+          id = messageId(record(await response.json()).id);
+        } catch {
+          throw new Error("Gmail send uncertain: invalid acknowledgement");
+        }
+        return { outcome: "accepted", providerRef: id };
+      });
     },
     async lookup(wire) {
       try {

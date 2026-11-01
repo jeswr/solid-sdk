@@ -92,10 +92,13 @@ export function mastodonRest(instance: string, options: OriginFetchOptions = {})
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await send?.beforeRequest();
-    // Keep the definitive authority refusal outside transport-uncertainty sanitization.
-    assertAuthority?.();
+    let dispatched = false;
     try {
       return await scoped(`${origin}${path}`, {
+        beforeDispatch: () => {
+          assertAuthority?.();
+          dispatched = true;
+        },
         method: send ? "POST" : "GET",
         redirect: "manual",
         headers: {
@@ -104,7 +107,8 @@ export function mastodonRest(instance: string, options: OriginFetchOptions = {})
         },
         ...(send ? { body: send.body } : {}),
       });
-    } catch {
+    } catch (error) {
+      if (!dispatched) throw error;
       // Transport errors can echo credentials or hostile response bodies.
       throw new Error("Mastodon request failed; delivery may be uncertain");
     }

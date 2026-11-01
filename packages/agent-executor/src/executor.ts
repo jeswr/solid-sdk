@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { ProviderRejectedError } from "@jeswr/agent-channels/provider/send";
+import { ProviderRejectedError, SendNotDispatchedError } from "@jeswr/agent-channels/provider/send";
 import { AGENT, evaluateIntent, type Mandate, type Policy } from "@jeswr/agent-mandate";
 import type { ControlStatement } from "@jeswr/agent-model";
 import {
@@ -599,7 +599,7 @@ export function createExecutor(options: ExecutorOptions) {
       });
     }
     const call = dispatch().catch((error: unknown) =>
-      error instanceof ProviderRejectedError
+      error instanceof ProviderRejectedError || error instanceof SendNotDispatchedError
         ? { outcome: "rejected", detail: "provider-refused" }
         : undefined,
     ); // Only a typed pre-delivery refusal establishes non-delivery; discard provider text.

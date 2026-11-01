@@ -69,9 +69,8 @@ export function matrixRest(homeserver: string, options?: OriginFetchOptions) {
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await beforeRequest?.();
-    // Approval and credential waits must finish before the synchronous executor fence.
-    assertAuthority?.();
     return scoped(`${homeserver}/_matrix/client/v3${path}`, {
+      beforeDispatch: assertAuthority,
       method: body === undefined ? "GET" : "PUT",
       redirect: "manual",
       headers: {

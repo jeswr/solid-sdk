@@ -31,6 +31,7 @@ export interface GuardOptions {
     readonly allowedContentTypes?: readonly string[];
     readonly allowLoopback?: boolean;
     readonly allowUnresolvedHosts?: boolean;
+    readonly beforeDispatch?: () => void;
     readonly dnsLookup?: DnsLookup | null;
     readonly enforcePortGate?: boolean;
     readonly fetch?: typeof globalThis.fetch;
@@ -83,10 +84,18 @@ export interface ResolvedAddress {
 // @public
 export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit, options?: {
     metadataOnly?: boolean;
-}): {
+    discardBody?: boolean;
+} & ({
+    forward: true;
+    initSemantics: "spread" | "direct";
+} | {
+    forward?: false;
+    initSemantics?: never;
+})): {
     input: string | Request;
     url: string;
     init: RequestInit | undefined;
+    hadBody?: boolean;
 };
 
 // @public

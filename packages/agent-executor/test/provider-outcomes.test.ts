@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { ProviderRejectedError } from "@jeswr/agent-channels/provider/send";
+import { ProviderRejectedError, SendNotDispatchedError } from "@jeswr/agent-channels/provider/send";
 import { AGENT } from "@jeswr/agent-mandate";
 import { expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
@@ -106,11 +106,14 @@ it.each([
   expect(h.records.get(entry.proposal.id)?.attempts).toBe(2);
 });
 
-it("does not recognize an error by its name alone or release an ambiguous commitment", async () => {
+it.each([
+  "ProviderRejectedError",
+  "SendNotDispatchedError",
+])("does not recognize %s by name or release an ambiguous commitment", async (name) => {
   const h = harness();
   const entry = await h.enqueue("urn:ambiguous", 10);
   vi.mocked(h.binding.send.transmit).mockRejectedValue(
-    Object.assign(new Error("HTTP 500 PRIVATE_PROVIDER_TEXT"), { name: "ProviderRejectedError" }),
+    Object.assign(new Error("HTTP 500 PRIVATE_PROVIDER_TEXT"), { name }),
   );
   expect(await h.executor.transmit(entry.proposal.id)).toMatchObject({ status: "uncertain" });
   expect(h.records.get(entry.proposal.id)).toMatchObject({
@@ -136,6 +139,27 @@ it("does not recognize an error by its name alone or release an ambiguous commit
     reason: "limit:spendPerDay",
   });
   expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+});
+
+it.each([
+  false,
+  true,
+])("local pre-dispatch refusal preserves prior uncertainty, resend=%s", async (resend) => {
+  const h = harness(resend ? "a2a" : "discord");
+  const entry = await h.enqueue("urn:local-refusal", 10);
+  if (resend) {
+    h.prior(entry);
+    Object.assign(h.binding.send, { idempotentResend: true });
+  }
+  vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+    await io.tokens.send(io.account);
+    throw new SendNotDispatchedError(new Error("PRIVATE_LOCAL_TEXT"));
+  });
+  expect(await h.executor.transmit(entry.proposal.id)).toMatchObject({
+    status: resend ? "uncertain" : "not-sent",
+  });
+  expect(h.records.get(entry.proposal.id)?.status).toBe(resend ? "uncertain" : "not-sent");
+  expect(JSON.stringify(h.auditRecords)).not.toContain("PRIVATE_LOCAL_TEXT");
 });
 
 it("recognizes typed refusal subclasses while retaining the three-attempt bound", async () => {

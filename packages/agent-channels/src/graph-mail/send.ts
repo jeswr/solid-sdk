@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import { canonicalJson } from "@jeswr/agent-model";
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
@@ -10,6 +11,7 @@ import { type EmailParser, emailMessageIdFor, inspectEmail } from "../email-mime
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, TokenProvider, Wire } from "../types.js";
 import { graphMailRest, messageId, mimeBody, record, responseBody } from "./rest.js";
 
@@ -102,58 +104,66 @@ export function createGraphMailSend(
   return {
     render: renderer.render,
     validate: renderer.validate,
-    async transmit(wire, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      if (accountId(io.account) !== account.id)
-        throw new ProviderRejectedError("Graph account differs from configured sender");
-      const { snapshot, proposal } = await checked(wire);
-      const { message, compactJws } = proposal;
-      // These are the same deterministic bodies checked against the reviewed MIME above.
-      // Graph JSON accepts one HTML body; Exchange generates the text/plain alternative.
-      const { html, carrier } = renderBodies(message, compactJws, footer);
-      const internetMessageId = emailMessageIdFor(message.id);
-      const body = JSON.stringify({
-        message: {
-          from: { emailAddress: { address: from } },
-          toRecipients: [
-            { emailAddress: { address: recipients.get(message.to?.actor as string) } },
-          ],
-          subject: `[Agent] ${message.kind}`,
-          internetMessageId,
-          body: { contentType: "HTML", content: html },
-          internetMessageHeaders: [{ name: "X-Agentic-Reply", value: "1" }],
-          attachments: [
-            {
-              "@odata.type": "#microsoft.graph.fileAttachment",
-              name: "agent-message.jsonld",
-              contentType: "application/ld+json",
-              contentBytes: Buffer.from(carrier).toString("base64"),
-            },
-          ],
-        },
-        saveToSentItems: true,
+    transmit(wire, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        if (accountId(io.account) !== account.id)
+          throw new ProviderRejectedError("Graph account differs from configured sender");
+        const { snapshot, proposal } = await checked(wire);
+        const { message, compactJws } = proposal;
+        // These are the same deterministic bodies checked against the reviewed MIME above.
+        // Graph JSON accepts one HTML body; Exchange generates the text/plain alternative.
+        const { html, carrier } = renderBodies(message, compactJws, footer);
+        const internetMessageId = emailMessageIdFor(message.id);
+        const body = JSON.stringify({
+          message: {
+            from: { emailAddress: { address: from } },
+            toRecipients: [
+              { emailAddress: { address: recipients.get(message.to?.actor as string) } },
+            ],
+            subject: `[Agent] ${message.kind}`,
+            internetMessageId,
+            body: { contentType: "HTML", content: html },
+            internetMessageHeaders: [{ name: "X-Agentic-Reply", value: "1" }],
+            attachments: [
+              {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                name: "agent-message.jsonld",
+                contentType: "application/ld+json",
+                contentBytes: Buffer.from(carrier).toString("base64"),
+              },
+            ],
+          },
+          saveToSentItems: true,
+        });
+        const response = await rest(
+          "/sendMail",
+          account,
+          io.tokens,
+          "send",
+          body,
+          async () => {
+            renderer.current(message);
+            if (
+              typeof verifyApproval !== "function" ||
+              (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
+            )
+              throw new ProviderRejectedError("owner approval required");
+            renderer.current(message);
+          },
+          () => {
+            renderer.current(message);
+            io.assertAuthority();
+            dispatched();
+          },
+        );
+        if (response.status === 400)
+          throw new ProviderRejectedError("Graph send refused: HTTP 400");
+        if (response.status !== 202)
+          throw new Error(`Graph send uncertain: HTTP ${response.status}`);
+        // sendMail has no response body or provider object ID. Acceptance is not delivery.
+        return { outcome: "accepted", providerRef: internetMessageId };
       });
-      const response = await rest(
-        "/sendMail",
-        account,
-        io.tokens,
-        "send",
-        body,
-        async () => {
-          renderer.current(message);
-          if (
-            typeof verifyApproval !== "function" ||
-            (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
-          )
-            throw new ProviderRejectedError("owner approval required");
-          renderer.current(message);
-        },
-        () => io.assertAuthority(),
-      );
-      if (response.status === 400) throw new ProviderRejectedError("Graph send refused: HTTP 400");
-      if (response.status !== 202) throw new Error(`Graph send uncertain: HTTP ${response.status}`);
-      // sendMail has no response body or provider object ID. Acceptance is not delivery.
-      return { outcome: "accepted", providerRef: internetMessageId };
     },
     async lookup(wire) {
       try {

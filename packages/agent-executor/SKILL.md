@@ -15,8 +15,9 @@ Preserve the nine-step order and fail closed. Halt precedes proposal/mandate rea
 proposal state never grants authority. Re-evaluate every queued item on control/mandate
 change, and recheck authority after asynchronous lookup/token waits. Supply the
 required synchronous io.assertAuthority fence to bindings: it checks the shared
-revision and latest authority deadlines after all binding awaits, immediately
-before each request/delivery with no intervening await. Pre-delivery gate refusals
+revision and latest authority deadlines through the request-local beforeDispatch hook,
+after all binding and transport awaits (including inner DNS and body buffering),
+immediately before underlying fetch/delivery with no intervening await. Pre-delivery gate refusals
 settle as not-sent; preserve prior resend uncertainty and acknowledgements for
 requests already issued. The host must call
 onApprovalChange for every detected approval-store change to invalidate in-flight snapshots
@@ -33,8 +34,11 @@ absence. Only positive exact-wire lookup reconciles delivery. Reattempt unresolv
 requests only with causal finalAbsence, or identical A2A receiver-deduplicated resend,
 max three attempts. A timeout does not cancel the original request. Preserve positive
 sent evidence against late failures. The host must hold a single-writer process lease.
-Recognize only the channel's actual ProviderRejectedError class (send-only provider/send
-export), never its name or message. Settle it as rejected without storing provider text;
+Recognize the channel's actual ProviderRejectedError and SendNotDispatchedError classes
+(send-only provider/send export), never their names or messages. The latter proves a
+local refusal before an effectful send dispatch and preserves the original cause;
+read-only preflight does not create send uncertainty. Provider response parse failures
+after send dispatch remain uncertain. Settle it as rejected without storing provider text;
 unresolved resends retain their earlier commitment. Bound and validate real binding
 reference shapes on both acknowledgement and positive lookup paths.
 

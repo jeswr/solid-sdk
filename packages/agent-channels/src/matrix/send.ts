@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import {
   assertJsonBounds,
   canonicalJson,
@@ -16,6 +17,7 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { MatrixCrypto } from "../matrix/crypto.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, MATRIX_CONTENT } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, TokenProvider, Wire } from "../types.js";
 import {
   bridgeChannel,
@@ -160,79 +162,88 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
         return { ok: false, reason: "malformed" };
       }
     },
-    async transmit(wire, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      if (accountId(io.account) !== account.id)
-        throw new ProviderRejectedError("Matrix sender account mismatch");
-      const { snapshot, proposal, roomId, content } = await checked(wire);
-      current(proposal.message);
-      // This task specifies m.room.message sends. Refuse encrypted rooms rather than downgrade them.
-      const responseState = await rest(
-        `/rooms/${encodeURIComponent(roomId)}/state`,
-        account,
-        io.tokens,
-        "send",
-        undefined,
-        undefined,
-        () => io.assertAuthority(),
-      );
-      if (!responseState.ok)
-        throw new ProviderRejectedError(
-          "Matrix plaintext send requires a confirmed unencrypted room",
+    transmit(wire, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        if (accountId(io.account) !== account.id)
+          throw new ProviderRejectedError("Matrix sender account mismatch");
+        const { snapshot, proposal, roomId, content } = await checked(wire);
+        current(proposal.message);
+        // This task specifies m.room.message sends. Refuse encrypted rooms rather than downgrade them.
+        const responseState = await rest(
+          `/rooms/${encodeURIComponent(roomId)}/state`,
+          account,
+          io.tokens,
+          "send",
+          undefined,
+          undefined,
+          () => {
+            current(proposal.message);
+            io.assertAuthority();
+          },
         );
-      let state: unknown;
-      try {
-        state = parseBoundedJson(await responseState.text(), MATRIX_LIMITS);
-      } catch {
-        throw new ProviderRejectedError("Matrix room state is unreadable");
-      }
-      if (!Array.isArray(state))
-        throw new ProviderRejectedError(
-          "Matrix plaintext send requires a confirmed unencrypted room",
-        );
-      for (const value of state) {
-        const event = record(value);
-        if (typeof event.type !== "string" || !event.type || typeof event.state_key !== "string")
-          throw new ProviderRejectedError("invalid Matrix room state");
-        record(event.content);
-        if (event.type === "m.room.encryption")
+        if (!responseState.ok)
           throw new ProviderRejectedError(
             "Matrix plaintext send requires a confirmed unencrypted room",
           );
-      }
-      // Re-check room state even for native Matrix wires: a newly bridged room must
-      // never receive a structured carrier approved for a different carriage.
-      const bridge = detectMatrixBridge(undefined, state);
-      if (bridge !== bridgeRooms.get(roomId))
-        throw new ProviderRejectedError("Matrix bridge room differs from reviewed carriage");
-      const response = await rest(
-        `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${encodeURIComponent(proposal.message.id)}`,
-        account,
-        io.tokens,
-        "send",
-        canonicalJson(content),
-        async () => {
-          current(proposal.message);
-          if (
-            typeof verifyApproval !== "function" ||
-            (await verifyApproval(snapshot, account)) !== true
-          )
-            throw new ProviderRejectedError("current mandate and owner approval required");
-          current(proposal.message);
-        },
-        () => io.assertAuthority(),
-      );
-      if ([400, 401, 403, 404].includes(response.status))
-        throw new ProviderRejectedError(`Matrix send refused: HTTP ${response.status}`);
-      if (!response.ok) throw new Error(`Matrix send uncertain: HTTP ${response.status}`);
-      try {
-        return {
-          outcome: "accepted",
-          providerRef: identifier((await responseBody(response)).event_id, "$"),
-        };
-      } catch {
-        throw new Error("Matrix send uncertain: invalid acknowledgement");
-      }
+        let state: unknown;
+        try {
+          state = parseBoundedJson(await responseState.text(), MATRIX_LIMITS);
+        } catch {
+          throw new ProviderRejectedError("Matrix room state is unreadable");
+        }
+        if (!Array.isArray(state))
+          throw new ProviderRejectedError(
+            "Matrix plaintext send requires a confirmed unencrypted room",
+          );
+        for (const value of state) {
+          const event = record(value);
+          if (typeof event.type !== "string" || !event.type || typeof event.state_key !== "string")
+            throw new ProviderRejectedError("invalid Matrix room state");
+          record(event.content);
+          if (event.type === "m.room.encryption")
+            throw new ProviderRejectedError(
+              "Matrix plaintext send requires a confirmed unencrypted room",
+            );
+        }
+        // Re-check room state even for native Matrix wires: a newly bridged room must
+        // never receive a structured carrier approved for a different carriage.
+        const bridge = detectMatrixBridge(undefined, state);
+        if (bridge !== bridgeRooms.get(roomId))
+          throw new ProviderRejectedError("Matrix bridge room differs from reviewed carriage");
+        const response = await rest(
+          `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${encodeURIComponent(proposal.message.id)}`,
+          account,
+          io.tokens,
+          "send",
+          canonicalJson(content),
+          async () => {
+            current(proposal.message);
+            if (
+              typeof verifyApproval !== "function" ||
+              (await verifyApproval(snapshot, account)) !== true
+            )
+              throw new ProviderRejectedError("current mandate and owner approval required");
+            current(proposal.message);
+          },
+          () => {
+            current(proposal.message);
+            io.assertAuthority();
+            dispatched();
+          },
+        );
+        if ([400, 401, 403, 404].includes(response.status))
+          throw new ProviderRejectedError(`Matrix send refused: HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`Matrix send uncertain: HTTP ${response.status}`);
+        try {
+          return {
+            outcome: "accepted",
+            providerRef: identifier((await responseBody(response)).event_id, "$"),
+          };
+        } catch {
+          throw new Error("Matrix send uncertain: invalid acknowledgement");
+        }
+      });
     },
     async lookup(wire) {
       try {

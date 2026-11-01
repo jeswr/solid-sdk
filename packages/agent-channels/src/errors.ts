@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 /**
  * `ChannelParseError` — the channel-neutral, typed, fail-closed parse refusal
  * (M2-DESIGN.md §M2.0). A {@link ChannelAdapter.parse} implementation throws (a
@@ -25,6 +26,14 @@ export class ProviderRejectedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProviderRejectedError";
+  }
+}
+
+/** Local refusal before any send dispatch. The cause retains its original error type. */
+export class SendNotDispatchedError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "send refused before dispatch", { cause });
+    this.name = "SendNotDispatchedError";
   }
 }
 

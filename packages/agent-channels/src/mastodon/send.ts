@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import {
   assertJsonBounds,
   canonicalJson,
@@ -13,6 +14,7 @@ import { accountId } from "../direct/shared.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, MASTODON_FOOTER } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
 import {
   DEFAULT_INSTANCE,
@@ -146,43 +148,49 @@ export function createMastodonSend(
         return { ok: false, reason: "malformed" };
       }
     },
-    async transmit(input, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      if (accountId(io.account) !== account.id)
-        throw new ProviderRejectedError("Mastodon account differs from configured sender");
-      const { wire, proposal, body } = await checked(input);
-      current(proposal);
-      const response = await rest(
-        "/api/v1/statuses",
-        account,
-        io.tokens,
-        "send",
-        {
-          body,
-          key: wire.digest,
-          async beforeRequest() {
-            current(proposal);
-            if (
-              typeof verifyApproval !== "function" ||
-              (await verifyApproval(wire, account)) !== true
-            )
-              throw new ProviderRejectedError("owner approval required");
-            current(proposal);
+    transmit(input, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        if (accountId(io.account) !== account.id)
+          throw new ProviderRejectedError("Mastodon account differs from configured sender");
+        const { wire, proposal, body } = await checked(input);
+        current(proposal);
+        const response = await rest(
+          "/api/v1/statuses",
+          account,
+          io.tokens,
+          "send",
+          {
+            body,
+            key: wire.digest,
+            async beforeRequest() {
+              current(proposal);
+              if (
+                typeof verifyApproval !== "function" ||
+                (await verifyApproval(wire, account)) !== true
+              )
+                throw new ProviderRejectedError("owner approval required");
+              current(proposal);
+            },
           },
-        },
-        () => io.assertAuthority(),
-      );
-      if ([400, 401, 403, 404, 422].includes(response.status))
-        throw new ProviderRejectedError(`Mastodon send refused: HTTP ${response.status}`);
-      if (!response.ok) throw new Error(`Mastodon send uncertain: HTTP ${response.status}`);
-      try {
-        const accepted = record(await responseJson(response));
-        const providerRef = id(accepted.id);
-        if (accepted.visibility !== "direct") throw new Error();
-        return { outcome: "accepted", providerRef };
-      } catch {
-        throw new Error("Mastodon send uncertain: invalid acknowledgement");
-      }
+          () => {
+            current(proposal);
+            io.assertAuthority();
+            dispatched();
+          },
+        );
+        if ([400, 401, 403, 404, 422].includes(response.status))
+          throw new ProviderRejectedError(`Mastodon send refused: HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`Mastodon send uncertain: HTTP ${response.status}`);
+        try {
+          const accepted = record(await responseJson(response));
+          const providerRef = id(accepted.id);
+          if (accepted.visibility !== "direct") throw new Error();
+          return { outcome: "accepted", providerRef };
+        } catch {
+          throw new Error("Mastodon send uncertain: invalid acknowledgement");
+        }
+      });
     },
     // No automatic retry, lookup or final absence claim for footer-only statuses.
   };

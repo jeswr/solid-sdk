@@ -5,7 +5,7 @@ import type { guardedFetch } from "@jeswr/guarded-fetch";
 import { expect, it, vi } from "vitest";
 import { createDiscordSend, type DiscordSendOptions } from "../src/discord/send.js";
 import { createDiscordReader, ORIGINS } from "../src/discord.js";
-import { ChannelParseError, ProviderRejectedError } from "../src/errors.js";
+import { ChannelParseError, ProviderRejectedError, SendNotDispatchedError } from "../src/errors.js";
 import { AGENT_FOOTER, DISCORD_FOOTER } from "../src/profiles.js";
 import { InMemoryDiscordGateway, RecordingTokenProvider } from "../src/testing.js";
 import type { TokenProvider, Wire } from "../src/types.js";
@@ -39,7 +39,12 @@ function sender(replies: unknown[] = [ack], extra: Partial<DiscordSendOptions> =
     verifyApproval,
     now: () => at,
     transport: {
-      createTransport: () => transport,
+      createTransport:
+        ({ beforeDispatch }: { beforeDispatch?: () => void } = {}) =>
+        (input: Parameters<typeof guardedFetch>[0], init?: RequestInit) => {
+          beforeDispatch?.();
+          return transport(input, init);
+        },
       dnsLookup: async () => [{ address: "1.1.1.1", family: 4 as const }],
     },
     ...extra,
@@ -255,7 +260,10 @@ it.each([
   expect(await s.send.validate(wire, s.proposal)).toEqual({ ok: false, reason: "malformed" });
   await expect(
     s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
-  ).rejects.toThrow(ChannelParseError);
+  ).rejects.toMatchObject({
+    constructor: SendNotDispatchedError,
+    cause: expect.any(ChannelParseError),
+  });
   expect(s.requests).toEqual([]);
 });
 

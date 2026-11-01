@@ -1,13 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createDiscordSend } from "@jeswr/agent-channels/discord/send";
 import { createGmailSend } from "@jeswr/agent-channels/gmail/send";
 import { createGraphMailSend } from "@jeswr/agent-channels/graph-mail/send";
+import { createMastodonSend } from "@jeswr/agent-channels/mastodon/send";
 import { createMatrixSend } from "@jeswr/agent-channels/matrix/send";
 import { canonicalJson } from "@jeswr/agent-model";
 import { expect, expectTypeOf, it, vi } from "vitest";
-import { EMAIL_MIME, MATRIX_CONTENT } from "../../agent-channels/src/profiles.js";
+import {
+  DISCORD_FOOTER,
+  EMAIL_MIME,
+  MASTODON_FOOTER,
+  MATRIX_CONTENT,
+} from "../../agent-channels/src/profiles.js";
 import { createInMemoryDirectBinding } from "../../agent-channels/src/testing.js";
 import {
+  createGuardedFetch,
   fixtureTransport,
   homeserver,
   roomId,
@@ -17,7 +25,7 @@ import { options, signed, verifyMessage } from "../../agent-channels/test/fixtur
 import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
 import { createExecutor } from "../src/index.js";
 import type { ExecutorOptions, OutboxEntry } from "../src/types.js";
-import { harness, NOW, seal } from "./helpers.js";
+import { deferred, harness, NOW, seal } from "./helpers.js";
 
 it("registers a channel send half with only the trusted validation adapter", async () => {
   const h = harness("direct");
@@ -75,7 +83,12 @@ it.each([
     const h = harness(bindingId);
     const original = await h.enqueue();
     const recipient = "urn:recipient:fixture";
-    const renderable = signed({ ...original.renderable.message, to: { actor: recipient } });
+    const renderable = signed({
+      ...original.renderable.message,
+      kind: "describe",
+      body: {},
+      to: { actor: recipient },
+    });
     const tokens = options().tokens;
     const read = vi.spyOn(tokens, "read").mockRejectedValue(new Error("no read capability"));
     const fake = fixtureTransport(
@@ -152,23 +165,39 @@ it.each([
   }
 });
 
-for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
+for (const bindingId of ["gmail", "graph-mail", "matrix", "mastodon", "discord"] as const) {
   for (const change of ["halt", "mandate", "approval"] as const) {
     it.each([
       "approval",
+      "dns",
+      "inner-dns",
       "issued",
     ])(`real ${bindingId}: ${change} invalidation during %s preserves delivery truth`, async (stage) => {
       const h = harness(bindingId);
       const original = await h.enqueue();
       const recipient = "urn:recipient:fixture";
-      const renderable = signed({ ...original.renderable.message, to: { actor: recipient } });
+      const renderable = signed({
+        ...original.renderable.message,
+        kind: "describe",
+        body: {},
+        to: { actor: recipient },
+      });
       const fake = fixtureTransport(
         bindingId === "matrix"
           ? [[], { event_id: "$sent" }]
           : [
               new Response(
-                bindingId === "gmail" ? JSON.stringify({ id: "18c9f2a0b1234567" }) : null,
-                { status: bindingId === "gmail" ? 200 : 202 },
+                bindingId === "gmail"
+                  ? JSON.stringify({ id: "18c9f2a0b1234567" })
+                  : bindingId === "mastodon"
+                    ? JSON.stringify({ id: "112345678901234567", visibility: "direct" })
+                    : bindingId === "discord"
+                      ? JSON.stringify({
+                          id: "100000000000000040",
+                          channel_id: "100000000000000020",
+                        })
+                      : null,
+                { status: bindingId === "graph-mail" ? 202 : 200 },
               ),
             ],
       );
@@ -191,7 +220,32 @@ for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
           return true;
         }),
         now: () => Date.parse(NOW),
-        transport: fake.options,
+        transport: {
+          dnsLookup: async () => {
+            if (stage === "dns") {
+              await Promise.resolve();
+              invalidate();
+            }
+            return [{ address: "1.1.1.1", family: 4 as const }];
+          },
+          createTransport: (options: {
+            beforeDispatch?: () => void;
+            maxRedirects: 0;
+            allowLoopback: boolean;
+          }) =>
+            createGuardedFetch({
+              ...options,
+              pinningFetch: fake.transport,
+              requireDnsPinning: true,
+              dnsLookup: async () => {
+                if (stage === "inner-dns") {
+                  await Promise.resolve();
+                  invalidate();
+                }
+                return [{ address: "1.1.1.1", family: 4 as const }];
+              },
+            }),
+        },
       };
       const send =
         bindingId === "matrix"
@@ -201,13 +255,31 @@ for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
               userId,
               recipients: new Map([[recipient, roomId]]),
             })
-          : (bindingId === "gmail" ? createGmailSend : createGraphMailSend)({
-              ...common,
-              from: "sender@example.test",
-              recipients: new Map([[recipient, "recipient@example.test"]]),
-              parseEmail,
-            });
-      const profile = bindingId === "matrix" ? MATRIX_CONTENT : EMAIL_MIME;
+          : bindingId === "mastodon"
+            ? createMastodonSend({
+                ...common,
+                recipients: new Map([[recipient, "receiver@remote.example"]]),
+              })
+            : bindingId === "discord"
+              ? createDiscordSend({
+                  ...common,
+                  recipients: new Map([[recipient, "100000000000000020"]]),
+                  resolveProposal: async () => renderable,
+                })
+              : (bindingId === "gmail" ? createGmailSend : createGraphMailSend)({
+                  ...common,
+                  from: "sender@example.test",
+                  recipients: new Map([[recipient, "recipient@example.test"]]),
+                  parseEmail,
+                });
+      const profile =
+        bindingId === "matrix"
+          ? MATRIX_CONTENT
+          : bindingId === "mastodon"
+            ? MASTODON_FOOTER
+            : bindingId === "discord"
+              ? DISCORD_FOOTER
+              : EMAIL_MIME;
       const wire = await send.render(renderable, profile);
       const entry = { ...original, renderable, wire, wireDigest: wire.digest };
       seal(entry);
@@ -234,13 +306,15 @@ for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
           },
         },
       });
-      const status = stage === "approval" ? "not-sent" : "sent";
+      const status = stage === "issued" ? "sent" : "not-sent";
       expect(await executor.transmit(entry.proposal.id)).toMatchObject({ status });
       await notification;
       await executor.drain();
-      expect(common.verifyApproval).toHaveBeenCalledOnce();
+      if (bindingId === "matrix" && (stage === "dns" || stage === "inner-dns"))
+        expect(common.verifyApproval).not.toHaveBeenCalled();
+      else expect(common.verifyApproval).toHaveBeenCalledOnce();
       expect(fake.requests.filter((request) => request.method !== "GET")).toHaveLength(
-        stage === "approval" ? 0 : 1,
+        stage === "issued" ? 1 : 0,
       );
       expect(h.records.get(entry.proposal.id)).toMatchObject({ status });
       expect(h.auditRecords).toContainEqual(
@@ -249,3 +323,116 @@ for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
     });
   }
 }
+
+it.each([
+  "gmail",
+  "graph-mail",
+  "matrix",
+  "mastodon",
+  "discord",
+] as const)("real %s expiry during approval is not-sent and releases the commitment", async (bindingId) => {
+  const h = harness(bindingId);
+  const original = await h.enqueue("urn:expiring", 10);
+  const recipient = "urn:recipient:fixture";
+  const renderable = signed({
+    ...original.renderable.message,
+    kind: "describe",
+    body: {},
+    to: { actor: recipient },
+  });
+  let clock = Date.parse(NOW);
+  const entered = deferred<void>();
+  const approval = deferred<boolean>();
+  const fake = fixtureTransport([[]]);
+  const common = {
+    account: original.account,
+    tokens: options().tokens,
+    verify: verifyMessage,
+    verifyApproval: async () => {
+      entered.resolve();
+      return approval.promise;
+    },
+    now: () => clock,
+    transport: fake.options,
+  };
+  const send =
+    bindingId === "matrix"
+      ? createMatrixSend({
+          ...common,
+          homeserver,
+          userId,
+          recipients: new Map([[recipient, roomId]]),
+        })
+      : bindingId === "mastodon"
+        ? createMastodonSend({
+            ...common,
+            recipients: new Map([[recipient, "receiver@remote.example"]]),
+          })
+        : bindingId === "discord"
+          ? createDiscordSend({
+              ...common,
+              recipients: new Map([[recipient, "100000000000000020"]]),
+              resolveProposal: async () => renderable,
+            })
+          : (bindingId === "gmail" ? createGmailSend : createGraphMailSend)({
+              ...common,
+              from: "sender@example.test",
+              recipients: new Map([[recipient, "recipient@example.test"]]),
+              parseEmail,
+            });
+  const profile =
+    bindingId === "matrix"
+      ? MATRIX_CONTENT
+      : bindingId === "mastodon"
+        ? MASTODON_FOOTER
+        : bindingId === "discord"
+          ? DISCORD_FOOTER
+          : EMAIL_MIME;
+  const wire = await send.render(renderable, profile);
+  const entry = { ...original, renderable, wire, wireDigest: wire.digest };
+  seal(entry);
+  h.entries.set(entry.proposal.id, entry);
+  h.needsApproval();
+  h.confirm(entry);
+  const executor = createExecutor({
+    ...h.options,
+    bindings: {
+      [bindingId]: {
+        id: bindingId,
+        carriage: profile,
+        send: {
+          ...send,
+          validate: (candidate, context) => send.validate(candidate, context.renderable),
+        },
+      },
+    },
+  });
+  const sending = executor.transmit(entry.proposal.id);
+  await entered.promise;
+  clock = Date.parse(renderable.message.expiresAt);
+  approval.resolve(true);
+  expect(await sending).toMatchObject({ status: "not-sent" });
+  expect(fake.requests.filter((request) => request.method !== "GET")).toEqual([]);
+  expect(h.records.get(entry.proposal.id)).toMatchObject({
+    status: "not-sent",
+    amount: { value: 10 },
+  });
+  expect([...h.settlements.values()][0]).toMatchObject({ status: "not-sent", final: false });
+  // At a hard limit equal to the refused commitment, a fresh action still fits.
+  const mandate = h.state.mandate;
+  if (!mandate) throw new Error("missing test mandate");
+  h.state.mandate = {
+    ...mandate,
+    limits: [
+      {
+        leftOperand: "https://jeswr.org/ns/agent#spendPerDay",
+        operator: "lteq",
+        rightOperand: 10,
+        enforcement: "hard",
+      },
+    ],
+  };
+  const next = await h.enqueue("urn:next-after-local-refusal", 10);
+  h.confirm(next);
+  expect(await h.executor.transmit(next.proposal.id)).toMatchObject({ status: "sent" });
+});

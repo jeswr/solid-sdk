@@ -58,7 +58,12 @@ function fixtureTransport(replies: unknown[]) {
     queue,
     transport,
     options: {
-      createTransport: () => transport,
+      createTransport:
+        ({ beforeDispatch }: { beforeDispatch?: () => void } = {}) =>
+        (input: Parameters<typeof guardedFetch>[0], init?: RequestInit) => {
+          beforeDispatch?.();
+          return transport(input, init);
+        },
       dnsLookup: async () => [{ address: "1.1.1.1", family: 4 as const }],
     },
   };

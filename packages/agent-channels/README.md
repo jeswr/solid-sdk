@@ -23,7 +23,12 @@ factory for a DNS-pinning transport or test fake. It receives frozen constructio
 options including `maxRedirects: 0`, which it must apply internally: passing a
 preconstructed redirect-following fetch is unsafe because an outer refusal runs
 after that fetch has already followed the redirect. `allowLoopback` is exclusively
-for local tests.
+for local tests. Send calls pass `beforeDispatch` in the request init. The scoped
+fetch gives that hook to a separate transport for the request; trusted factories
+must run it synchronously after their own DNS/destination preflight and immediately
+before the underlying fetch, with no intervening await. The default Node transport
+honors it after its inner DNS guard, including after outer body buffering. Read-only
+ingest calls omit the hook. Hooks and refusal identity remain isolated per request.
 
 `./direct` exports only `createDirectReader`. `./direct/send` owns the send half;
 only agent-executor and channel tests may import it. `./testing` exports
@@ -31,9 +36,12 @@ only agent-executor and channel tests may import it. `./testing` exports
 permits that single internal test-factory composition edge and refuses production
 imports of `./testing`.
 
-`./provider/send` exports the shared `ProviderRejectedError` class without loading
-reader or provider implementations. Executor adapters may use this send-only surface
-to distinguish definitive pre-delivery refusals from uncertain errors. Preserve the
+`./provider/send` exports `ProviderRejectedError` and `SendNotDispatchedError` without
+loading reader or provider implementations. The latter proves no effectful send request
+was dispatched and retains the original local validation/expiry/credential/preflight
+error as its cause. Matrix room-state reads do not count as send dispatch. Failures
+parsing provider responses after send dispatch keep their original uncertain outcome.
+Executor adapters may use this send-only surface to distinguish definitive pre-delivery refusals from uncertain errors. Preserve the
 class identity when adapting sends; a name or message string is not sufficient evidence.
 
 The test factory takes `{ tokens, verify, now? }`. `verify` must be a pure local
@@ -52,8 +60,10 @@ send paths request only `tokens.send(account)`. Grants carry distinct `access`
 discriminants and nonempty tokens. The recording provider uses distinct fake grants.
 The executor supplies a required synchronous `assertAuthority()` fence. Every send
 binding calls it after all credential, signature, approval and preflight awaits,
-immediately before issuing each guarded fetch (including Matrix room-state reads)
-or accepting a direct message. No await separates the fence from that request.
+through the request-local `beforeDispatch` hook after all DNS/destination checks,
+immediately before each underlying fetch (including Matrix room-state reads), or
+before accepting a direct message. Freshness is rechecked at that boundary too.
+No await separates the fence from dispatch.
 It checks the executor revision and authority deadlines; a grant alone never
 authorizes a later transmission. Invalidation fails definitively before delivery.
 Pagination is account-scoped, bounded by total bytes and item count, and fails when
@@ -191,14 +201,16 @@ bound to that exact digest and sender account. Capability descriptions and
 recipient pins grant no authority. A real transmit requires `dryRun: false`,
 verified signed content, an exact re-render, current validity, the configured
 account, a separate `TokenProvider.send` grant, and successful owner approval.
-Validity is rechecked after credentials and approval await, then the executor
-authority fence runs synchronously before the request. Dry-run requests no
+Validity is rechecked after credentials, approval and transport preflight awaits;
+the executor authority fence then runs synchronously immediately before dispatch. Dry-run requests no
 credentials and makes no network call.
 
 Transmit uses `users.messages.send` with the reviewed MIME as canonical base64url.
 HTTP 400 is a definitive `ProviderRejectedError`; explicit OAuth refusals described
 below also fail definitively. Other failures or a malformed acknowledgement remain
-uncertain. This binding performs no send retries. Lookup
+uncertain once a send request has been issued. All local refusals before send
+dispatch are definitive non-delivery, including expiry during approval or DNS.
+This binding performs no send retries. Lookup
 preserves the pilot Message-ID derivation and uses read credentials to search
 `rfc822msgid:` across all labels and inspects at
 most ten raw candidates with `verifyProviderCopy`. Added provider headers are
