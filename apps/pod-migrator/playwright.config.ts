@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({

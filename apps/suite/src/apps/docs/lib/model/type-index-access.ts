@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Lexer } from "marked";
 import { describe, expect, it, vi } from "vitest";

@@ -1,6 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /** Extension-owned ConsentSheet. Untrusted request copy is always rendered as text. */
 import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import { accessModeLabel, dataClassCopy } from '../shared/data-labels';

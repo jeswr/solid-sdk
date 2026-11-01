@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // Reuses pod-chat's AS2/wf:Task model through solid-chat-interop.
 import {
   as2ToCanonical,

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { type CanonicalUnit, canonicalUnit, convertUnit, type Measure } from "./conversion";
 import { UnitError } from "./errors";
 

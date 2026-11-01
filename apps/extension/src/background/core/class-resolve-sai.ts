@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /** Bounded SAI discovery and class matching only; no member sampling or grant enforcement. */
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';

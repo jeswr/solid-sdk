@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { domainToASCII as nativeASCII, domainToUnicode as nativeUnicode } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

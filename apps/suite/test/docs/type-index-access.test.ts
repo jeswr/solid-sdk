@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { PodScopeError } from "@jeswr/guarded-fetch";
 import { describe, expect, it } from "vitest";
 import { PrivateIndexAccessError } from "../../src/apps/docs/lib/model/errors.js";

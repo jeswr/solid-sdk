@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";

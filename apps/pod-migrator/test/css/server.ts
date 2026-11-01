@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { fork } from "node:child_process";
 import { once } from "node:events";
 import { realpathSync } from "node:fs";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 5.5
-// AUTHORED-BY Codex GPT-6
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";

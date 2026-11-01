@@ -2,31 +2,75 @@
 import type { Row } from "./client";
 
 export const MEMBER_LIMIT = 500;
-export type Collection<T> = Row<T>[] & { readonly truncated: boolean };
+export const TRUST_MEMBER_LIMIT = 5000;
+export interface CollectionMetadata {
+  readonly truncated: boolean;
+  readonly total: number;
+  readonly newest: boolean;
+  readonly complete: boolean;
+  readonly incompleteMessage?: string;
+}
+export type Collection<T> = Row<T>[] & CollectionMetadata;
 
 /** Preserve array callers while carrying collection metadata through queries. */
-export function collection<T>(rows: Row<T>[], truncated = false): Collection<T> {
-  return Object.defineProperty(rows, "truncated", { value: truncated }) as Collection<T>;
+export function collection<T>(
+  rows: Row<T>[],
+  {
+    truncated = false,
+    total = rows.length,
+    newest = false,
+    complete = true,
+    incompleteMessage,
+  }: Partial<CollectionMetadata> = {},
+): Collection<T> {
+  for (const [name, value] of Object.entries({
+    truncated,
+    total,
+    newest,
+    complete,
+    incompleteMessage,
+  }))
+    Object.defineProperty(rows, name, { value });
+  return rows as Collection<T>;
 }
 export function isTruncated(rows: readonly unknown[]): boolean {
   return (rows as { truncated?: boolean }).truncated === true;
 }
+export function isComplete(rows: readonly unknown[]): boolean {
+  return (rows as { complete?: boolean }).complete !== false;
+}
 
-/** Listings have no date metadata; select by resource name before any member GETs. */
+/** Display-only sample. Names imply recency only when a reader supplies an ordering. */
 export function selectMembers<T extends { url: string }>(
   members: T[],
   limit = MEMBER_LIMIT,
-  compare = (a: T, b: T) =>
+  compare?: (a: T, b: T) => number,
+): { members: T[] } & CollectionMetadata {
+  const count = Math.min(limit, MEMBER_LIMIT);
+  const byName = (a: T, b: T) =>
     (b.url.replace(/\/$/, "").split("/").pop() as string).localeCompare(
       a.url.replace(/\/$/, "").split("/").pop() as string,
       "en",
       { numeric: true },
-    ) || b.url.localeCompare(a.url),
-): { members: T[]; truncated: boolean } {
-  const count = Math.min(limit, MEMBER_LIMIT);
+    ) || b.url.localeCompare(a.url);
   return {
-    members: members.sort(compare).slice(0, count),
+    members: members.toSorted(compare ?? byName).slice(0, count),
     truncated: members.length > count,
+    total: members.length,
+    newest: compare !== undefined,
+    complete: true,
+  };
+}
+
+/** Trust decisions require the entire collection; never return a partial sample. */
+export function selectTrustMembers<T>(members: T[]): { members: T[] } & CollectionMetadata {
+  const complete = members.length <= TRUST_MEMBER_LIMIT;
+  return {
+    members: complete ? members : [],
+    complete,
+    total: members.length,
+    truncated: false,
+    newest: false,
   };
 }
 

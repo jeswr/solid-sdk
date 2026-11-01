@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import type { SolidAuth } from "@jeswr/solid-auth-core";
 import { type Mock, vi } from "vitest";
 import type { MigrationPlan } from "../../src/App.js";

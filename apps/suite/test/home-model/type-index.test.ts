@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it, vi } from "vitest";
 import { discoverDomainItems } from "../../src/apps/home/lib/model/discovery";

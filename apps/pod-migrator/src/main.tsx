@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import { createConnections } from "./auth/connections.js";

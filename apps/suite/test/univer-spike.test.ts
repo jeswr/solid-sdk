@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Synthetic fixtures define these sheets and cells explicitly.
 import { CellValueType, type IWorkbookData } from "@univerjs/core";
 import { describe, expect, it } from "vitest";

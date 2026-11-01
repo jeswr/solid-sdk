@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";

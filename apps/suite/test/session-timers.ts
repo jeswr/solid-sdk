@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { vi } from "vitest";
 
 /** Capture browser timers without replacing React's or IndexedDB's task scheduling. */

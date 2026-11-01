@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 export { applyDrag } from "./drag";
 export {
   CalendarDragError,

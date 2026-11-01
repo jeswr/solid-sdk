@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { PreviewError } from "./errors";
 import { decodeValue, readMetadataTags } from "./html";
 

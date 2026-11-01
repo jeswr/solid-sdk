@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { check, fields } from "./errors";
 import { matches, parseRule } from "./rule";
 import { DAY, instant, local, Zone } from "./time";

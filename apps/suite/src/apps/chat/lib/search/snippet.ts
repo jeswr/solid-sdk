@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { MatchRange, SearchSnippet } from "./types";
 import { MAX_SNIPPET_LENGTH } from "./validation";
 

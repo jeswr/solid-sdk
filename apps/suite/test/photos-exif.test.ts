@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { smartAlbum } from "../src/apps/photos/lib/albums";
 import { ExifError, type ExifErrorCode, parseExif } from "../src/apps/photos/lib/exif";

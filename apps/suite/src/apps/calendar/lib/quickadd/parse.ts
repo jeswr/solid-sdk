@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { instantToWallClock, wallClockToInstant } from "../tz/conversion";
 import { type CalendarTimeError, wallEpoch } from "../tz/validation";
 import { readClauses } from "./clauses";

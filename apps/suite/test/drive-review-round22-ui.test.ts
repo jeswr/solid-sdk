@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 
 import { LiteralFrom, RequiredAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";

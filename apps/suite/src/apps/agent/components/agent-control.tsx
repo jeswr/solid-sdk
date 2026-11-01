@@ -20,11 +20,13 @@ import { useApprovalDevice } from "./approval-key-setup-sheet";
 
 export function AgentControl({
   stopped,
+  unknown = false,
   link = false,
   trigger,
   triggerLabel,
 }: {
   stopped: boolean;
+  unknown?: boolean;
   link?: boolean;
   trigger?: ReactNode;
   triggerLabel?: string;
@@ -32,22 +34,24 @@ export function AgentControl({
   const { session, client } = useAgentWorkspace();
   const device = useApprovalDevice();
   const [open, setOpen] = useState(false);
+  const [resume, setResume] = useState(stopped);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const label = stopped ? "Resume" : "Stop the agent";
-  const begin = () =>
+  const begin = (resume: boolean) =>
     void device.requireKey(() => {
+      setResume(resume);
       setConfirmation("");
       setError(false);
       setOpen(true);
     });
   const confirm = async () => {
-    if (busy || (stopped && confirmation !== "RESUME")) return;
+    if (busy || (resume && confirmation !== "RESUME")) return;
     setBusy(true);
     setError(false);
     try {
-      await createAgentSigner(session, client).signControl(stopped ? "Resume" : "Halt");
+      await createAgentSigner(session, client).signControl(resume ? "Resume" : "Halt");
       setOpen(false);
     } catch {
       setError(true);
@@ -65,11 +69,12 @@ export function AgentControl({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
-            <DropdownMenuItem onSelect={begin}>{label}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => begin(stopped)}>{label}</DropdownMenuItem>
+            {unknown && <DropdownMenuItem onSelect={() => begin(true)}>Resume</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Button variant={link ? "link" : "outline"} onClick={begin}>
+        <Button variant={link ? "link" : "outline"} onClick={() => begin(stopped)}>
           {label}
         </Button>
       )}
@@ -80,13 +85,13 @@ export function AgentControl({
         }}
       >
         <AlertDialogContent className="agent-app">
-          <AlertDialogTitle>{stopped ? "Resume your agent" : "Stop the agent"}</AlertDialogTitle>
+          <AlertDialogTitle>{resume ? "Resume your agent" : "Stop the agent"}</AlertDialogTitle>
           <AlertDialogDescription>
-            {stopped
+            {resume
               ? "Your agent can send and act again after you resume it."
               : "Your agent will stop sending and acting until you resume it."}
           </AlertDialogDescription>
-          {stopped && (
+          {resume && (
             <>
               <p>
                 If you also stopped it on the agent's computer, run <code>awp resume</code> there.
@@ -104,10 +109,10 @@ export function AgentControl({
           <div className="agent-row">
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <Button
-              disabled={busy || (stopped && confirmation !== "RESUME")}
+              disabled={busy || (resume && confirmation !== "RESUME")}
               onClick={() => void confirm()}
             >
-              {busy ? "Saving…" : label}
+              {busy ? "Saving…" : resume ? "Resume" : "Stop the agent"}
             </Button>
           </div>
         </AlertDialogContent>

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 
 export { detectAccessSystem } from "./access.js";
 export { executeMigration } from "./executor.js";

@@ -129,7 +129,6 @@ describe("clientIdDocument — redirect_uris", () => {
   });
 });
 
-// AUTHORED-BY Codex GPT-6
 describe("GitHub Pages client identity", () => {
   it("includes the app base in every identity and redirect URL", () => {
     const doc = clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-photos/");

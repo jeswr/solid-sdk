@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { ExactArithmetic, formatScaled, TEN, ZERO } from "./exact";
 import {
   type ExactValue,

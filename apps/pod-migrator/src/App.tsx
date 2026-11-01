@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { ErrorBoundary, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";

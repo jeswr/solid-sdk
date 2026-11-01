@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 
 import { afterEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";

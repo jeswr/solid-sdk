@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // The demo root: the REAL app shell + the REAL four views (Dashboard /

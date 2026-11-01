@@ -12,6 +12,7 @@ import {
 import { Ban, Brain, Calendar, CreditCard, Mail, Plug } from "lucide-react";
 import Link from "next/link";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { isComplete } from "../lib/collections";
 import { formatRelativeTime } from "../lib/format";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { resourceSlug } from "../lib/paths";
@@ -235,6 +236,8 @@ export function ApprovalsScreen({ id }: { id?: string }) {
           const rows = records.map((row) => {
             const local = optimistic[row.proposal.id];
             return busy &&
+              query.status === "ready" &&
+              isComplete(query.data) &&
               local &&
               local.digest === row.proposal.intent.termsDigest &&
               row.state === "pending" &&

@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 5.5
-// AUTHORED-BY Codex GPT-6
 /**
  * An in-browser demo pod: a `fetch` implementation that behaves like a small
  * Solid (LDP) server over an in-memory resource map, so the suite's real data

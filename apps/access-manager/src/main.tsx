@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 // Entry point: register the web components, then EITHER mount the ?demo-gated
 // read-only demo (the real views over an inert in-browser fixture pod — no

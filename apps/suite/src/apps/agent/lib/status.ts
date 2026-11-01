@@ -3,6 +3,7 @@ import type { DisplayControl } from "./readers";
 export interface AgentStatus {
   state: "running" | "paused" | "stopped" | "offline" | "unknown";
   lastSeen?: string;
+  controlLimit?: boolean;
 }
 export function agentStatus({
   heartbeatAt,
@@ -10,14 +11,17 @@ export function agentStatus({
   now,
   loading = false,
   owner,
+  controlsComplete = true,
 }: {
   heartbeatAt?: string | undefined;
   controls: readonly DisplayControl[];
   now: number;
   loading?: boolean;
   owner?: string;
+  controlsComplete?: boolean;
 }): AgentStatus {
   if (loading) return { state: "unknown" };
+  if (!controlsComplete) return { state: "unknown", controlLimit: true };
   const latest = controls
     .filter(
       (c) =>

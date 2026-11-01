@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 

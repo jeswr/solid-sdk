@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { isRecord, type Listen, type ListenSource, type ScrobbleWarning } from "./types";
 
 const MIN_TIME = Date.UTC(2002, 0, 1);

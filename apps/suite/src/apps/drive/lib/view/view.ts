@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 5.5
-// AUTHORED-BY Codex GPT-6
 /**
  * Pure helpers the Drive screens use to present listings: adapting
  * {@link DriveItem}s to the list helpers, the "Modified" column text, friendly

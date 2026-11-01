@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { type FoldedText, findMatches, hasLink, hasMention, project } from "./match";
 import { parseQuery } from "./parse";
 import { makeSnippet, snippetWindow } from "./snippet";

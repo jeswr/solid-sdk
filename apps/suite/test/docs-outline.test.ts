@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSelectors } from "../src/apps/docs/lib/anchoring";

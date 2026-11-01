@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NS } from "@jeswr/suite-vocab";
 export const BASE = "https://pod.example/storage/health/";

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";

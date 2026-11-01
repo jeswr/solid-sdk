@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // Deterministic, inert screenshot engine; never included in production builds.
 export function createPodHttp({ root }: { root: string }) {
   return { root };

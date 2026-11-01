@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, h, mount } from "./drive-ui-dom";

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import {
   LiteralAs,
   LiteralFrom,

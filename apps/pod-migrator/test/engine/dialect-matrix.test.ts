@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createRequire, registerHooks } from "node:module";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";

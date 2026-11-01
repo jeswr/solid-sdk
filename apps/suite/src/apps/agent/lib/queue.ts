@@ -16,7 +16,11 @@ export function pendingApprovals(
   approvals: readonly DisplayApproval[],
   transmissions: readonly Transmission[],
   now: number,
+  complete = true,
 ): PendingApproval[] {
+  // No decision or transmission may settle a proposal from incomplete evidence.
+  approvals = complete ? approvals : [];
+  transmissions = complete ? transmissions : [];
   return proposals
     .flatMap((proposal): PendingApproval[] => {
       if (proposal.state !== "proposed" || Date.parse(proposal.validUntil) <= now) return [];

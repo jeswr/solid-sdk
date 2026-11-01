@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { toast } from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";

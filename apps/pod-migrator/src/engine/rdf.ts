@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { safeIri } from "@jeswr/pod-access";
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";

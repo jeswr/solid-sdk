@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { MimeParseError, parseMimeMessage, sanitizeMessageHtml } from "../src/apps/mail/lib/mime";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import { NS, node, parse, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 export const storage = "https://pod.test/alice/";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 
 import { afterEach, expect, it, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriveSidebar } from "../src/apps/drive/components/sidebar";
 import { getDemoPod } from "../src/lib/demo-pod/browser";

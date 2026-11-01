@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { check, RecurrenceError } from "./errors";
 
 export const DAY = 86_400_000;

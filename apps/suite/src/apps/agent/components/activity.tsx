@@ -2,7 +2,7 @@
 "use client";
 import Link from "next/link";
 import { isLoaded } from "../lib/client";
-import { collection, isTruncated } from "../lib/collections";
+import { collection } from "../lib/collections";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { readAudit, readControl } from "../lib/readers";
 import { createAgentVerifier } from "../lib/verify";
@@ -19,7 +19,7 @@ export function ActivityScreen({ seq }: { seq?: string }) {
           ...query,
           data: collection(
             query.data.filter((row) => !isLoaded(row) || String(row.record.seq) === seq),
-            isTruncated(query.data),
+            query.data,
           ),
         }
       : query;

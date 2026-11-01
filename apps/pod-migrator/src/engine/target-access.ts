@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
 import { Container } from "@solid/object";

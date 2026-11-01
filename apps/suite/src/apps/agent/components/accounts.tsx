@@ -3,7 +3,7 @@
 import { Badge } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { isLoaded } from "../lib/client";
-import { collection, isTruncated } from "../lib/collections";
+import { collection } from "../lib/collections";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { resourceSlug } from "../lib/paths";
 import { loadedRecords, readAccounts, readDescriptors } from "../lib/readers";
@@ -26,7 +26,7 @@ export function AccountsScreen({ id }: { id?: string }) {
           ...query,
           data: collection(
             query.data.filter((row) => !isLoaded(row) || resourceSlug(row.record.id) === id),
-            isTruncated(query.data),
+            query.data,
           ),
         }
       : query;

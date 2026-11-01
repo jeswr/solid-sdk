@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /** Bounded, standard base64 transport shared by the page, bridge and worker. */
 export const MAX_BODY_BYTES = 25 * 1024 * 1024;
 export const REQUEST_BODY_LIMIT_ERROR =

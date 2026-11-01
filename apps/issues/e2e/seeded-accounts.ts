@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { CSS_BASE } from "./helpers";
 
 export interface SeededAccount {

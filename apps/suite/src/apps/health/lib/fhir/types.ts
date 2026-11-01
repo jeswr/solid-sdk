@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 export const MAX_FHIR_RECORDS = 100_000;
 /** R4 string and markdown primitives: 1024 * 1024 Unicode characters. */

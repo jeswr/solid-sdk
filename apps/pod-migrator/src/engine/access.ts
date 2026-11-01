@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from 'vitest';
 import { type ResolveOptions, resolveClassTargets } from '../src/background/core/class-resolve';
 import { memoiseResolveFetch } from '../src/background/core/class-resolve-sai';

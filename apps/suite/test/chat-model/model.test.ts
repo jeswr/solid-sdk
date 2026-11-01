@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { longChatToCanonical } from "@jeswr/solid-chat-interop";
 import { AclResource } from "@solid/object";

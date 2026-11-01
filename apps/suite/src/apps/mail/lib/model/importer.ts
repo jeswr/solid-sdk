@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { mailtos as addresses, SYSTEM_FOLDERS } from "@jeswr/pod-connectors/mail";
 import { DataFactory, Store } from "n3";
 import PostalMime, { decodeWords } from "postal-mime";

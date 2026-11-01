@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { issueApproval } from "@jeswr/agent-mandate/approval";
+import { issueControlStatement } from "@jeswr/agent-mandate/control";
 import { recordToTurtle } from "@jeswr/agent-model";
 import { afterEach, expect, it, vi } from "vitest";
-import { collection } from "../src/apps/agent/lib/collections";
+import { collection, isComplete } from "../src/apps/agent/lib/collections";
 import { AgentWorkspaceProvider } from "../src/apps/agent/lib/hooks";
 import type { PendingApproval } from "../src/apps/agent/lib/queue";
 import { loadedRecords } from "../src/apps/agent/lib/readers";
@@ -63,8 +65,8 @@ async function fixture() {
       h(AgentWorkspaceProvider, { session, children, fallback: () => null }),
   };
 }
-async function until(condition: () => boolean) {
-  for (let i = 0; i < 200 && !condition(); i++)
+async function until(condition: () => boolean, attempts = 200) {
+  for (let i = 0; i < attempts && !condition(); i++)
     await act(async () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
@@ -151,10 +153,11 @@ it.each([
     h(QueryRows, {
       query: {
         status: "ready",
-        data: collection(
-          [{ url: "test", record: {}, etag: null, verified: "unchecked" }],
+        data: collection([{ url: "test", record: {}, etag: null, verified: "unchecked" }], {
           truncated,
-        ),
+          total: 1000,
+          newest: true,
+        }),
         reload: () => {},
       },
       empty: "Empty",
@@ -282,4 +285,218 @@ it("recomputes proposal and approval expiry and the sidebar waiting count withou
   expect(reads.mock.calls.length).toBe(count);
   await view.unmount();
   vi.useRealTimers();
+});
+
+it("keeps Stopped after 500 unsigned Resumes alongside a verified unexpired Halt", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  const { exampleRecords } = await import("@jeswr/agent-model/testing");
+  await f.pod.fetch(`${BASE}control/resume.ttl`, { method: "DELETE" });
+  const templateId = "urn:test:unsigned-resume";
+  const resume = await recordToTurtle({
+    ...exampleRecords["control-statement"],
+    id: templateId,
+    kind: "Resume",
+    attributedTo: DEMO_WEBID,
+    createdAt: new Date(NOW - 1000).toISOString(),
+    expires: new Date(NOW + 60000).toISOString(),
+  });
+  for (let i = 0; i < 500; i++) {
+    const url = `${BASE}control/z-${i}.ttl`;
+    await f.pod.fetch(url, {
+      method: "PUT",
+      body: resume.replaceAll(templateId, url),
+      headers: { "content-type": "text/turtle" },
+    });
+  }
+  const halt = `${BASE}control/0.trig`;
+  await f.pod.fetch(halt, {
+    method: "PUT",
+    headers: { "content-type": "application/trig" },
+    body: await issueControlStatement(
+      {
+        ...exampleRecords["control-statement"],
+        id: halt,
+        kind: "Halt",
+        attributedTo: DEMO_WEBID,
+        createdAt: new Date(NOW - 2000).toISOString(),
+        expires: new Date(NOW + 60000).toISOString(),
+      },
+      await demoApprovalKey(),
+      new Date(NOW - 2000),
+    ),
+  });
+  function Probe() {
+    return h(StatusPill, { status: useDaemonStatus() });
+  }
+  const view = await mount(f.tree(h(Probe)));
+  await until(() => Boolean(view.host.textContent?.includes("Stopped")));
+  expect(view.host.textContent).not.toContain("Agent running");
+  await view.unmount();
+});
+
+it("retains a new verified denial after 500 older approvals with larger random UUID names", async () => {
+  vi.stubGlobal("matchMedia", window.matchMedia);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  await f.pod.fetch(`${BASE}approvals/previous-reply.trig`, { method: "DELETE" });
+  const { recordFromTurtle } = await import("@jeswr/agent-model");
+  const proposalUrl = `${BASE}proposals/send-reply.ttl`;
+  const proposal = await recordFromTurtle(
+    await (await f.pod.fetch(proposalUrl)).text(),
+    proposalUrl,
+  );
+  if (proposal.type !== "action-proposal") throw new Error("Wrong fixture");
+  const key = await demoApprovalKey();
+  for (let i = 0; i < 500; i++) {
+    const url = `${BASE}approvals/ffffffff-ffff-4fff-8fff-${String(i).padStart(12, "0")}.trig`;
+    await f.pod.fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "application/trig" },
+      body: await issueApproval(
+        {
+          id: url,
+          approves: "urn:older:proposal",
+          decision: "approve",
+          termsDigest: proposal.intent.termsDigest,
+          expires: new Date(NOW + 60000).toISOString(),
+        },
+        key,
+        new Date(NOW - 60000),
+      ),
+    });
+  }
+  const denial = `${BASE}approvals/00000000-0000-4000-8000-000000000000.trig`;
+  await f.pod.fetch(denial, {
+    method: "PUT",
+    headers: { "content-type": "application/trig" },
+    body: await issueApproval(
+      {
+        id: denial,
+        approves: proposalUrl,
+        decision: "deny",
+        termsDigest: proposal.intent.termsDigest,
+        expires: new Date(NOW + 60000).toISOString(),
+      },
+      key,
+      new Date(NOW - 1000),
+    ),
+  });
+  const view = await mount(f.tree(h(ApprovalsScreen, { id: "send-reply" })));
+  await until(() => Boolean(view.host.textContent?.includes("Denied")), 3000);
+  expect(view.host.textContent).not.toContain("Too many approval records");
+  expect(
+    [...view.host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === "Approve",
+    )?.disabled,
+  ).toBe(true);
+  await view.unmount();
+});
+
+it.each([
+  "control",
+  "approvals",
+  "outbox",
+])("fails closed in the UI above 5,000 %s members", async (path) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  let rows: PendingApproval[] = [];
+  let complete = true;
+  function Probe() {
+    const status = useDaemonStatus();
+    const queue = useApprovalQueue();
+    if (queue.status === "ready") {
+      rows = loadedRecords(queue.data);
+      complete = isComplete(queue.data);
+    }
+    return h("div", {}, h(StatusPill, { status }), h(ApprovalsScreen));
+  }
+  // A complete approval collection must not settle anything if outbox is incomplete.
+  const { recordFromTurtle } = await import("@jeswr/agent-model");
+  const proposalUrl = `${BASE}proposals/send-reply.ttl`;
+  const proposal = await recordFromTurtle(
+    await (await f.pod.fetch(proposalUrl)).text(),
+    proposalUrl,
+  );
+  if (proposal.type !== "action-proposal") throw new Error("Wrong fixture");
+  const approvalUrl = `${BASE}approvals/current.trig`;
+  await f.pod.fetch(approvalUrl, {
+    method: "PUT",
+    headers: { "content-type": "application/trig" },
+    body: await issueApproval(
+      {
+        id: approvalUrl,
+        approves: proposalUrl,
+        decision: "approve",
+        termsDigest: proposal.intent.termsDigest,
+        expires: new Date(NOW + 60000).toISOString(),
+      },
+      await demoApprovalKey(),
+      new Date(NOW - 1000),
+    ),
+  });
+  const io = f.session.fetch;
+  vi.spyOn(f.session, "fetch").mockImplementation(async (input, init) => {
+    if (String(input) === `${BASE}${path}/`) {
+      const { serialize } = await import("@jeswr/rdf-serialize");
+      const { Store } = await import("n3");
+      const { metadataNode } = await import("../src/apps/agent/lib/paths");
+      const store = new Store();
+      const members = metadataNode(store, `${BASE}${path}/`).iris(
+        "http://www.w3.org/ns/ldp#contains",
+      );
+      for (let i = 0; i < 5001; i++) members.add(`${BASE}${path}/${i}.ttl`);
+      return new Response(await serialize([...store], { format: "text/turtle" }), {
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    return io(input, init);
+  });
+  const view = await mount(f.tree(h(Probe)));
+  if (path === "control") {
+    await until(() => Boolean(view.host.textContent?.includes("Status unknown")));
+    expect(view.host.textContent).toContain(
+      "Too many control records to check. Check the agent's computer.",
+    );
+    const trigger = view.host.querySelector<HTMLButtonElement>(
+      '[aria-label="Agent status: Status unknown"]',
+    );
+    if (!trigger) throw new Error("Missing status trigger");
+    await act(() =>
+      trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })),
+    );
+    await until(() => document.querySelectorAll('[role="menuitem"]').length === 2);
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+    ).toEqual(["Stop the agent", "Resume"]);
+  } else {
+    await until(() =>
+      Boolean(view.host.textContent?.includes("Too many approval records to check")),
+    );
+    expect(complete).toBe(false);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.state === "pending" && !row.approvedAwaitingSend)).toBe(true);
+    expect(view.host.textContent).not.toContain("Showing the newest");
+  }
+  await view.unmount();
+});
+
+it("labels unordered display samples honestly", async () => {
+  const view = await mount(
+    h(QueryRows, {
+      query: {
+        status: "ready",
+        data: collection([], { truncated: true, total: 731 }),
+        reload: () => {},
+      },
+      empty: "Empty",
+      children: () => null,
+    }),
+  );
+  expect(view.host.textContent).toContain("Showing 500 of 731");
+  expect(view.host.textContent).not.toContain("newest");
+  await view.unmount();
 });

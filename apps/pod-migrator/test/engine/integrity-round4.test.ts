@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { gzipSync } from "node:zlib";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";

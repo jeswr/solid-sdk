@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { domainToASCII } from "./domain";
 import { displayName, requireAddress, text } from "./errors";
 import type { Address, MailboxAddress } from "./types";

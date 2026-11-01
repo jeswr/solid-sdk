@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // Only loaded by Vite's explicit --mode screens development server.
 import type { SolidAuth } from "@jeswr/solid-auth-core";
 import { PodConnection } from "../src/auth/connections.js";

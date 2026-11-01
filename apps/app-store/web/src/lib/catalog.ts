@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-// AUTHORED-BY Codex GPT-6
 //
 // catalog.ts — the typed shape of the app-store catalog (the data the UI renders
 // and the DCAT serializer emits). The single source of truth for an app entry is

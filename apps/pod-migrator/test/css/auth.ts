@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createHash, generateKeyPairSync, type KeyObject, randomUUID, sign } from "node:crypto";
 
 export interface ProofKey {

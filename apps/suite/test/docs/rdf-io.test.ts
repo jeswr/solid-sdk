@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // Ported Pod Docs regression tests.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store } from "n3";

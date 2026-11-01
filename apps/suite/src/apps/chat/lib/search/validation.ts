@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { SearchField, SearchQuery, SearchTerm } from "./types";
 
 export const MAX_QUERY_LENGTH = 1_000;

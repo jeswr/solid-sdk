@@ -1,6 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * Detects the Solid browser extension (apps/extension) and reads its credential-free state.

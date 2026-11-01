@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import type { DriveClient } from "../src/apps/drive/lib/client/client";
 import type { PodSession } from "../src/lib/session/pod-session";

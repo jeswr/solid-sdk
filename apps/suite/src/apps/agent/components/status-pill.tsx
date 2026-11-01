@@ -29,6 +29,7 @@ export function useDaemonStatus() {
     now,
     loading: query.status === "loading",
     owner: session.webId,
+    controlsComplete: query.status !== "ready" || query.data.controls.complete,
   });
   return { ...status, query };
 }
@@ -38,13 +39,14 @@ export function StatusPill({ status }: { status: AgentStatus }) {
     paused: "Paused",
     stopped: "Stopped",
     offline: "Agent offline",
-    unknown: "Checking agent status",
+    unknown: status.controlLimit ? "Status unknown" : "Checking agent status",
   };
   const now = useAgentClock();
   return (
     <div className="agent-status">
       <AgentControl
         stopped={status.state === "stopped"}
+        unknown={status.controlLimit === true}
         triggerLabel={`Agent status: ${labels[status.state]}`}
         trigger={
           <StatusDot
@@ -59,6 +61,9 @@ export function StatusPill({ status }: { status: AgentStatus }) {
           />
         }
       />
+      {status.controlLimit && (
+        <p role="status">Too many control records to check. Check the agent's computer.</p>
+      )}
       {status.lastSeen && <small>last seen {formatRelativeTime(status.lastSeen, now)}</small>}
     </div>
   );

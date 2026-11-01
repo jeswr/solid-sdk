@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Assertions establish fixture entries before use.
 import { readFile } from "node:fs/promises";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";

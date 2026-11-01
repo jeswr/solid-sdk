@@ -4,7 +4,13 @@ import { type Approval, readApprovalClaims } from "@jeswr/agent-mandate/approval
 import { type ControlStatementClaims, readControlClaims } from "@jeswr/agent-mandate/control";
 import type { ConversationTurn, InboundMessage, PodRecord, RecordType } from "@jeswr/agent-model";
 import { type AgentClient, AgentReadError, isLoaded, type Loaded, type Row } from "./client";
-import { type Collection, collection, isTruncated, mapBounded, selectMembers } from "./collections";
+import {
+  type Collection,
+  collection,
+  mapBounded,
+  selectMembers,
+  selectTrustMembers,
+} from "./collections";
 import { AGENT, guardSlug, metadataNode, PROV, RDF, resourceSlug } from "./paths";
 import type { AgentVerifier, Verification } from "./verify";
 
@@ -41,14 +47,28 @@ async function records<T extends RecordType>(
   client: AgentClient,
   container: string,
   type: T,
+  category: "display" | "trust" | "turns" = "display",
   skip: string[] = [],
 ) {
-  const { members, truncated } = selectMembers(
-    (await client.list(container)).filter((m) => !m.container && !skip.includes(m.url)),
-  );
+  const all = (await client.list(container)).filter((m) => !m.container && !skip.includes(m.url));
+  const selected =
+    category === "trust"
+      ? selectTrustMembers(all)
+      : selectMembers(
+          all,
+          undefined,
+          category === "turns"
+            ? (a, b) => b.url.localeCompare(a.url, "en", { numeric: true })
+            : undefined,
+        );
   return collection(
-    newest(await mapBounded(members, (m) => attempt(m.url, () => client.read(m.url, type)))),
-    truncated,
+    newest(
+      await mapBounded(selected.members, (m) => attempt(m.url, () => client.read(m.url, type))),
+    ),
+    {
+      ...selected,
+      incompleteMessage: `Too many ${type === "transmission" ? "outbox" : "mandate"} records to check`,
+    },
   );
 }
 async function optional<T>(load: () => Promise<T>): Promise<T | undefined> {
@@ -71,12 +91,12 @@ export async function readApprovals(
   client: AgentClient,
   verifier?: AgentVerifier,
 ): Promise<Collection<DisplayApproval>> {
-  const { members, truncated } = selectMembers(
+  const selected = selectTrustMembers(
     (await client.list(client.paths.approvals)).filter((m) => !m.container),
   );
   return collection(
     newest(
-      await mapBounded(members, (m) =>
+      await mapBounded(selected.members, (m) =>
         attempt(m.url, async () => {
           const doc = await client.graph(m.url);
           const claims = await readApprovalClaims(doc.text, m.url);
@@ -111,11 +131,11 @@ export async function readApprovals(
         }),
       ),
     ),
-    truncated,
+    { ...selected, incompleteMessage: "Too many approval records to check" },
   );
 }
 export const readMandates = (client: AgentClient) =>
-  records(client, client.paths.mandates, "mandate-reference", [
+  records(client, client.paths.mandates, "mandate-reference", "trust", [
     client.paths.mandatesCurrent,
     client.paths.mandatesStatus,
   ]);
@@ -123,14 +143,14 @@ export async function readControl(
   client: AgentClient,
   verifier?: AgentVerifier,
 ): Promise<Collection<DisplayControl>> {
-  const { members, truncated } = selectMembers(
+  const selected = selectTrustMembers(
     (await client.list(client.paths.control)).filter(
       (m) => !m.container && m.url !== client.paths.heartbeat,
     ),
   );
   return collection(
     newest(
-      await mapBounded(members, (m) =>
+      await mapBounded(selected.members, (m) =>
         attempt(m.url, async () => {
           const doc = await client.graph(m.url);
           const claims = await readControlClaims(doc.text, m.url);
@@ -147,11 +167,11 @@ export async function readControl(
         }),
       ),
     ),
-    truncated,
+    { ...selected, incompleteMessage: "Too many control records to check" },
   );
 }
 export const readOutbox = (client: AgentClient) =>
-  records(client, client.paths.outbox, "transmission");
+  records(client, client.paths.outbox, "transmission", "trust");
 export async function readMandateCurrent(client: AgentClient) {
   const row = await optional(() => client.read(client.paths.mandatesCurrent, "mandate-reference"));
   return collection(row ? [row] : []);
@@ -187,19 +207,14 @@ export async function readInbox(
   binding: string,
 ): Promise<Collection<InboxMessage>> {
   const root = `${client.paths.inbox}${guardSlug(binding)}/`;
-  const accounts = selectMembers((await client.list(root)).filter((m) => m.container));
+  const accounts = (await client.list(root)).filter((m) => m.container);
   const errors: Row<InboxMessage>[] = [];
-  let truncated = accounts.truncated;
   // Finish the listing phase before reading messages: nested worker pools would multiply fanout.
-  const groups = await mapBounded(accounts.members, async (member) => {
+  const groups = await mapBounded(accounts, async (member) => {
     try {
-      const selected = selectMembers(
-        (await client.list(member.url)).filter(
-          (m) => !m.container && !m.url.endsWith(".triage.ttl"),
-        ),
+      return (await client.list(member.url)).filter(
+        (m) => !m.container && !m.url.endsWith(".triage.ttl"),
       );
-      truncated ||= selected.truncated;
-      return selected.members;
     } catch (error) {
       errors.push({ url: member.url, error });
       return [];
@@ -234,7 +249,7 @@ export async function readInbox(
       return { ...loaded, record: { ...loaded.record, triage, triageError } };
     }),
   );
-  return collection(newest([...errors, ...rows]), truncated || messages.truncated);
+  return collection(newest([...errors, ...rows]), messages);
 }
 export interface Conversation {
   id: string;
@@ -243,13 +258,17 @@ export interface Conversation {
   unread: boolean;
 }
 export const readTurns = (client: AgentClient, conversationId: string) =>
-  records(client, client.paths.resolveSlug("conversations", conversationId), "conversation-turn");
+  records(
+    client,
+    client.paths.resolveSlug("conversations", conversationId),
+    "conversation-turn",
+    "turns",
+  );
 export async function readConversations(client: AgentClient): Promise<Collection<Conversation>> {
   const containers = selectMembers(
     (await client.list(client.paths.conversations)).filter((m) => m.container),
   );
   const rows: Row<Conversation>[] = [];
-  let truncated = containers.truncated;
   // Each turn collection uses the same six-worker helper. Walk conversations in
   // sequence so their nested pools never multiply the number of in-flight GETs.
   for (const m of containers.members) {
@@ -258,7 +277,6 @@ export async function readConversations(client: AgentClient): Promise<Collection
         const id = resourceSlug(m.url);
         if (!id) throw new Error("Invalid conversation identifier");
         const turns = await readTurns(client, id);
-        truncated ||= isTruncated(turns);
         const error = turns.find((t) => !isLoaded(t));
         if (error && !isLoaded(error)) throw error.error;
         const loaded = turns.filter(isLoaded<ConversationTurn>);
@@ -278,7 +296,7 @@ export async function readConversations(client: AgentClient): Promise<Collection
       }),
     );
   }
-  return collection(newest(rows), truncated);
+  return collection(newest(rows), containers);
 }
 export async function readAudit(
   client: AgentClient,
@@ -306,7 +324,7 @@ export async function readAudit(
       return loaded;
     }),
   );
-  return collection(rows, selected.truncated);
+  return collection(rows, selected);
 }
 export const loadedRecords = <T>(rows: Row<T>[]) =>
   rows.filter(isLoaded<T>).map((row) => row.record);

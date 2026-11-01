@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { CATEGORY_SYSTEM, LOINC_SYSTEM, METRIC_CODES, UCUM_SYSTEM } from "./codes";
 import type {
   CodedConcept,

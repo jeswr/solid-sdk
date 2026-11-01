@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 

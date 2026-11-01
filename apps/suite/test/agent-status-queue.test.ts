@@ -199,6 +199,28 @@ describe("approval queue", () => {
       proposal.id,
     ]);
   });
+  it.each([
+    "approve",
+    "deny",
+  ] as const)("keeps proposals pending for incomplete evidence despite a verified %s and a sent record", (decision) => {
+    const current = approval(decision);
+    expect(
+      pendingApprovals(
+        [proposal],
+        [current],
+        [
+          {
+            ...exampleRecords.transmission,
+            proposal: proposal.id,
+            underApproval: current.id,
+            status: "sent",
+          },
+        ],
+        now,
+        false,
+      )[0],
+    ).toMatchObject({ state: "pending", approvedAwaitingSend: false, verification: "unchecked" });
+  });
   it("bulk requires pending identical kinds and recipients and no prohibition", () => {
     const row = pendingApprovals([proposal], [], [], now)[0];
     if (!row) throw new Error("Missing fixture");

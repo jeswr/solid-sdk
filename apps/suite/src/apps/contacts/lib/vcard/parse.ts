@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { decodeQuotedPrintable, split, unescapeText, unescapeUri } from "./text";
 import type { VCard, VCardField } from "./types";
 

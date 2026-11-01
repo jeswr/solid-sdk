@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createSolidAuth } from "@jeswr/solid-auth-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // Ported from Pod Manager's type-index(-write) typed registration/bootstrap pattern.
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import { DatasetWrapper } from "@rdfjs/wrapper";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 export const MAX_TIME_ZONE_LENGTH = 64;
 export const MAX_DELTA_MINUTES = 525_600;

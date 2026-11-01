@@ -10,6 +10,7 @@ import {
   isTruncated,
   mapBounded,
   selectMembers,
+  selectTrustMembers,
 } from "../src/apps/agent/lib/collections";
 import * as readers from "../src/apps/agent/lib/readers";
 import { demoApprovalKey } from "../src/apps/agent/lib/seed";
@@ -65,7 +66,7 @@ type ReadersClient = ReturnType<typeof createAgentClient>;
 
 it.each(
   families,
-)("caps %s at the newest 500 before GETs and bounds all reads", async (path, type, read) => {
+)("applies the collection policy for %s and bounds all reads", async (path, type, read) => {
   let active = 0;
   let peak = 0;
   const requested: string[] = [];
@@ -115,14 +116,17 @@ it.each(
     url === `${BASE}inbox/direct/` ? [{ url: `${BASE}${path}/`, container: true }] : members,
   );
   const rows: Row<unknown>[] = await read(client);
-  expect(rows).toHaveLength(500);
+  const trust = ["outbox", "mandates", "approvals", "control"].includes(path);
+  const count = trust ? 1000 : 500;
+  expect(rows).toHaveLength(count);
   expect(rows.every(isLoaded)).toBe(true);
-  expect(isTruncated(rows)).toBe(true);
+  expect(rows).toMatchObject({ complete: true, total: 1000 });
+  expect(isTruncated(rows)).toBe(!trust);
   expect(new Set(rows.map((row) => row.url))).toEqual(
-    new Set(members.slice(500).map((m) => m.url)),
+    new Set(members.slice(trust ? 0 : 500).map((m) => m.url)),
   );
   const records = requested.filter((url) => !url.endsWith(".triage.ttl"));
-  expect(records).toHaveLength(500);
+  expect(records).toHaveLength(count);
   expect(peak).toBe(6);
   expect(active).toBe(0);
   // The cap is also reported accurately when no truncation is necessary.
@@ -175,12 +179,12 @@ it("caps conversation containers and each turn collection without multiplying ne
       : Array.from({ length: 1000 }, (_, i) => ({ url: `${url}${i}.ttl`, container: false })),
   );
   reads.length = 0;
-  expect(isTruncated(await readers.readConversations(client))).toBe(true);
+  expect(isTruncated(await readers.readConversations(client))).toBe(false);
   expect(reads).toHaveLength(1000);
   expect(peak).toBe(6);
 });
 
-it("bounds inbox account listings and caps messages across accounts", async () => {
+it("bounds all inbox account listings and caps messages across accounts with an accurate total", async () => {
   let active = 0;
   let peak = 0;
   const client = createAgentClient({
@@ -200,8 +204,8 @@ it("bounds inbox account listings and caps messages across accounts", async () =
     return [];
   });
   const rows = await readers.readInbox(client, "direct");
-  expect(isTruncated(rows)).toBe(true);
-  expect(list).toHaveBeenCalledTimes(501);
+  expect(isTruncated(rows)).toBe(false);
+  expect(list).toHaveBeenCalledTimes(1001);
   expect(peak).toBe(6);
   list.mockImplementation(async (url) =>
     url === `${BASE}inbox/direct/`
@@ -209,6 +213,55 @@ it("bounds inbox account listings and caps messages across accounts", async () =
       : Array.from({ length: 300 }, (_, i) => ({ url: `${url}${i}.ttl`, container: false })),
   );
   const messages = await readers.readInbox(client, "direct");
+  expect(messages).toMatchObject({ total: 600, newest: false });
   expect(messages).toHaveLength(500);
   expect(isTruncated(messages)).toBe(true);
+});
+
+it("accepts exactly 5,000 trust members without sampling", () => {
+  const members = Array.from({ length: 5000 }, (_, i) => ({ url: String(i) }));
+  expect(selectTrustMembers(members)).toMatchObject({ complete: true, total: 5000 });
+  expect(selectTrustMembers(members).members).toBe(members);
+});
+
+it.each([
+  readers.readApprovals,
+  readers.readControl,
+  readers.readOutbox,
+  readers.readMandates,
+])("refuses an over-ceiling trust collection without any member reads (%s)", async (read) => {
+  const fetch = vi.fn();
+  const client = createAgentClient({ storage: DEMO_ROOT, workspace: BASE, fetch });
+  vi.spyOn(client, "list").mockResolvedValue(
+    Array.from({ length: 5001 }, (_, i) => ({ url: `${BASE}records/${i}.ttl`, container: false })),
+  );
+  const rows = await read(client);
+  expect(rows).toHaveLength(0);
+  expect(rows).toMatchObject({ complete: false, truncated: false, total: 5001 });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("sorts a displayed UUID-name sample by its records' timestamps without claiming newest", async () => {
+  const client = createAgentClient({ storage: DEMO_ROOT, workspace: BASE, fetch: vi.fn() });
+  const members = Array.from({ length: 501 }, (_, i) => ({
+    url: `${BASE}proposals/${i}.ttl`,
+    container: false,
+  }));
+  vi.spyOn(client, "list").mockResolvedValue(members);
+  vi.spyOn(client, "read").mockImplementation(async (url) => ({
+    url,
+    etag: null,
+    verified: "unchecked",
+    record: {
+      ...exampleRecords["action-proposal"],
+      id: url,
+      createdAt: new Date(
+        2000000 - Number(url.split("/").at(-1)?.replace(".ttl", "")) * 1000,
+      ).toISOString(),
+    },
+  }));
+  const rows = await readers.readProposals(client);
+  expect(rows).toMatchObject({ truncated: true, newest: false, total: 501 });
+  expect(rows[0]?.url).toBe(members[1]?.url);
+  expect(rows.at(-1)?.url).toBe(members[500]?.url);
 });

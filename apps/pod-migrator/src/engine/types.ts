@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { AccessSystem, ReportItem, Resolutions } from "@jeswr/pod-access";
 
 export type {

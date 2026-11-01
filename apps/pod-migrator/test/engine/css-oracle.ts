@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { Store } from "n3";
 import { ACL } from "../../src/engine/rdf.js";

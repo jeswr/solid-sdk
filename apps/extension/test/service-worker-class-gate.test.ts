@@ -2,7 +2,6 @@ import type { OriginGrant } from '../src/background/core/origin-grant';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import type AxeBuilder from "@axe-core/playwright";
 import { Fragment } from "react";

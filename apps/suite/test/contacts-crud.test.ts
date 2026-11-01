@@ -24,7 +24,6 @@ import {
 const newPerson = `${ROOT}contacts/people/new.ttl`;
 const newGroup = `${ROOT}contacts/groups/new.ttl`;
 
-// AUTHORED-BY Codex GPT-6
 test.each(
   [
     "https://new.example/#me",

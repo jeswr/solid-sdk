@@ -198,6 +198,9 @@ export function getDemoPod(): Promise<DemoPod> {
   })();
   // Fixture capability is compiled out of ordinary builds. It uses the same durable
   // facade and notifications as the app, including conditional writes.
+  // This exposes only the in-browser demo pod (same-origin IndexedDB, which any
+  // same-origin script can already read and write). It never exposes a real pod
+  // session's fetch or tokens.
   if (
     process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" &&
     typeof window !== "undefined" &&

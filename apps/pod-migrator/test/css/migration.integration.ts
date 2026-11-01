@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { Container } from "@solid/object";

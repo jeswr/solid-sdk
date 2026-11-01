@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { sanitizeText } from "@jeswr/solid-chat-interop";
 

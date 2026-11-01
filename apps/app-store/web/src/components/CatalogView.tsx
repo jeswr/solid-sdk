@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-// AUTHORED-BY Codex GPT-6
 //
 // CatalogView — the human (text/html) rendering of the SAME catalog data that the
 // generated catalog.ttl / catalog.jsonld serialise. Reached via the `#/catalog`

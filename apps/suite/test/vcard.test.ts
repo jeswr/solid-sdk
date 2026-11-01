@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { parseVCards, serializeVCards, type VCard } from "../src/apps/contacts/lib/vcard";
 import { apple, google, quotedPrintable, version4 } from "./fixtures/vcard/exports";

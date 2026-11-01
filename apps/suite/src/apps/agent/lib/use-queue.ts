@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import type { Row, Unreadable } from "./client";
-import { collection, isTruncated } from "./collections";
+import { collection } from "./collections";
 import { type Query, useAgentClock, useAgentQuery, useAgentWorkspace } from "./hooks";
 import { type PendingApproval, pendingApprovals } from "./queue";
 import { loadedRecords, readApprovals, readOutbox, readProposals } from "./readers";
@@ -20,6 +20,7 @@ export function useApprovalQueue(): Query<Row<PendingApproval>[]> {
   });
   if (query.status !== "ready") return query;
   const { proposals, approvals, outbox } = query.data;
+  const complete = approvals.complete && outbox.complete;
   const errors = [...proposals, ...approvals, ...outbox].filter(
     (row): row is Unreadable => "error" in row,
   );
@@ -33,6 +34,7 @@ export function useApprovalQueue(): Query<Row<PendingApproval>[]> {
           loadedRecords(approvals),
           loadedRecords(outbox),
           now,
+          complete,
         ).map((record) => ({
           record,
           url: record.proposal.id,
@@ -40,7 +42,13 @@ export function useApprovalQueue(): Query<Row<PendingApproval>[]> {
           verified: record.verification,
         })),
       ],
-      [proposals, approvals, outbox].some(isTruncated),
+      {
+        truncated: proposals.truncated,
+        total: proposals.total,
+        newest: proposals.newest,
+        complete,
+        incompleteMessage: "Too many approval records to check",
+      },
     ),
   };
 }

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { RdfIO } from "../../src/apps/tasks/lib/model/io";
 import { TaskStore } from "../../src/apps/tasks/lib/model/store";

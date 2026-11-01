@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {

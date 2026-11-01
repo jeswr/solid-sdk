@@ -1,6 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * DATA-CLASS → CONCRETE TARGET resolution — the compile step (design §2.3, resolution ladder).
  *

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { compare, matches } from "./recurrence";
 import type {
   DetectionOptions,

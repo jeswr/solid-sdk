@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { TimelineGroup } from "../library/timeline";
 import { isRecord, isText, requireAlbum } from "./error";
 

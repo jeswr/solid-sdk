@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { parseRdf } from "@jeswr/fetch-rdf";

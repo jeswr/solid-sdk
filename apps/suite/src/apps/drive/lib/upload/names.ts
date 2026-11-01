@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { UploadKind, UploadPath } from "./types";
 import { hasControls, kind, path, requireValue, segment } from "./validation";
 

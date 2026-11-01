@@ -88,6 +88,31 @@ it("preserves uploads from stale tabs and reloads both resources", async () => {
   expect(await (await reloaded.fetch(`${DEMO_ROOT}drive/from-b`)).text()).toBe("B");
 });
 
+it("exposes only the demo pod instance, with no reference to a real session fetch or tokens", async () => {
+  storage();
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", "1");
+  const session = { fetch: vi.fn(), token: "real-session-token" };
+  vi.stubGlobal("fetch", session.fetch);
+  vi.stubGlobal("window", { location: { hostname: "localhost" } });
+  const pod = await (await tab()).getDemoPod();
+  const hook = window.__suiteDemoPod;
+  expect(hook).toBe(pod);
+  expect(Object.keys(hook as object).sort()).toEqual([
+    "fetch",
+    "has",
+    "root",
+    "snapshot",
+    "subscribe",
+  ]);
+  expect(Object.values(hook as object)).not.toContain(session);
+  expect(Object.values(hook as object)).not.toContain(session.fetch);
+  expect(Object.values(hook as object)).not.toContain(session.token);
+  expect(hook?.fetch).not.toBe(session.fetch);
+  await hook?.fetch(`${DEMO_ROOT}fixture-only`, { method: "PUT", body: "demo" });
+  await hook?.fetch("https://real-pod.example/private");
+  expect(session.fetch).not.toHaveBeenCalled();
+});
+
 it("retries concurrent snapshot commits without dropping unrelated uploads", async () => {
   storage();
   const moduleA = await tab();

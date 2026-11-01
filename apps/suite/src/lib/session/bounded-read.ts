@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import type { ExtensionWindow } from "./extension-session";
 
 /** Stop waiting even when a bridge or fetch transport ignores cancellation. */

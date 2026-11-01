@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { record, requireTransform } from "./error";
 
 /** Largest supported source axis in pixels. A half pixel must remain wider than

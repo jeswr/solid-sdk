@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { createSolidAuth, type SolidAuth, type SolidAuthConfig } from "@jeswr/solid-auth-core";
 import { Agent } from "@solid/object";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // All bytes are generated here: fictional tags, no recordings or third-party fixtures.
 export const text = (value: string) => new TextEncoder().encode(value);
 export function join(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {

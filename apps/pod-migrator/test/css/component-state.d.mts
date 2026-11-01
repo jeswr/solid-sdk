@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 export function cssComponentState(cssDirectory: string): Promise<{
   mainModulePath: string;
   nodeModuleImportPaths: string[];
