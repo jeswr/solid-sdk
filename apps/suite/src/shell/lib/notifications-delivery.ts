@@ -18,6 +18,13 @@ const minutes = (time: string) => {
   return hours * 60 + mins;
 };
 
+/** 02-§7: only these kinds may pop up on the desktop (comment text never reaches a lock screen). */
+export const desktopKinds: ReadonlySet<NotificationKind> = new Set([
+  "shared",
+  "access-request",
+  "task",
+]);
+
 /** Quiet hours may cross midnight (22:00–08:00); equal times mean "never quiet". */
 export function inQuietHours(quiet: Preferences["quietHours"], now: Date): boolean {
   if (!quiet.enabled) return false;
@@ -39,6 +46,7 @@ export function shouldNotifyDesktop(
   now: Date,
 ): boolean {
   return (
+    desktopKinds.has(kind) &&
     preferences.desktop &&
     preferences.notifications[kindPreference[kind]] &&
     !inQuietHours(preferences.quietHours, now)

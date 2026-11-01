@@ -4,14 +4,11 @@ import { Button, Input } from "@jeswr/suite-ui";
 import { useEffect, useId, useState } from "react";
 import { usePreferences } from "./preferences";
 
+/** The kinds that may pop up on the desktop (02-§7); the tray always lists every kind. */
 const kinds = [
   ["shared", "Shared with you"],
   ["requests", "Access requests"],
-  ["comments", "Comments and mentions"],
   ["tasks", "Task reminders"],
-  ["conflicts", "Sync conflicts"],
-  ["storage", "Storage"],
-  ["system", "System"],
 ] as const;
 
 export function NotificationSettings() {

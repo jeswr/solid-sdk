@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
+  desktopKinds,
   inQuietHours,
   kindPreference,
   shouldNotifyDesktop,
@@ -36,9 +37,9 @@ describe("shouldNotifyDesktop", () => {
     expect(defaultPreferences.desktop).toBe(false);
     expect(shouldNotifyDesktop("shared", defaultPreferences, at("12:00"))).toBe(false);
   });
-  it("honours the opt-in and every kind's own toggle", () => {
+  it("pops up only the spec's kinds, each behind its own toggle", () => {
     for (const kind of Object.keys(kindPreference) as NotificationKind[]) {
-      expect(shouldNotifyDesktop(kind, optedIn, at("12:00"))).toBe(true);
+      expect(shouldNotifyDesktop(kind, optedIn, at("12:00"))).toBe(desktopKinds.has(kind));
       const off = mergePreferences(optedIn, { notifications: { [kindPreference[kind]]: false } });
       expect(shouldNotifyDesktop(kind, off, at("12:00"))).toBe(false);
     }
