@@ -318,34 +318,32 @@ describe("xsd:date write — expanded/negative-year Dates emit a VALID lexical",
     expect(Event_.parse(RES, store)?.day).toEqual(d);
   });
 
-  it("year -1 writes '-0001-01-01Z' (valid XSD); the strict read drops it fail-closed", () => {
+  it("year -1 writes '-0001-01-01Z' and round-trips exactly", () => {
     const store = Event_.build(RES, { when: WHEN, day: utcDate(-1, 1, 1) });
     expect(dayLexical(store)).toBe("-0001-01-01Z");
     expect(isXsdDate("-0001-01-01Z")).toBe(true);
-    // V8 re-parses "-0001-01-01Z" as 2001-01-01 (the two-digit-year rule) — the
-    // reader must DROP the unfaithful carry, never surface the wrong Date.
-    expect(Event_.parse(RES, store)?.day).toBeUndefined();
+    expect(Event_.parse(RES, store)?.day).toEqual(utcDate(-1, 1, 1));
   });
 
-  it("year 0 writes '0000-01-01Z' (valid XSD 1.1); the strict read drops it fail-closed", () => {
+  it("year 0 writes '0000-01-01Z' and round-trips exactly", () => {
     const store = Event_.build(RES, { when: WHEN, day: utcDate(0, 1, 1) });
     expect(dayLexical(store)).toBe("0000-01-01Z");
     expect(isXsdDate("0000-01-01Z")).toBe(true);
-    expect(Event_.parse(RES, store)?.day).toBeUndefined(); // V8 ⇒ 2000-01-01, dropped
+    expect(Event_.parse(RES, store)?.day).toEqual(utcDate(0, 1, 1));
   });
 });
 
-describe("xsd:date read — a V8-MISPARSED valid lexical drops fail-closed (never a wrong Date)", () => {
-  for (const [lexical, misparse] of [
-    ["0000-01-01Z", "2000-01-01"],
-    ["-0001-01-01Z", "2001-01-01"],
+describe("xsd:date read — valid years use explicit ECMAScript year conversion", () => {
+  for (const [lexical, year] of [
+    ["0000-01-01Z", 0],
+    ["-0001-01-01Z", -1],
   ] as const) {
-    it(`"${lexical}" (V8 silently misparses it to ${misparse}) drops`, () => {
+    it(`"${lexical}" reads year ${year} faithfully`, () => {
       const store = storeWith([
         { predicate: `${EX}when`, lexical: "2020-01-01T12:00:00Z" },
         { predicate: `${EX}day`, lexical, datatype: `${XSD}date` },
       ]);
-      expect(Event_.parse(RES, store)?.day).toBeUndefined();
+      expect(Event_.parse(RES, store)?.day).toEqual(utcDate(year, 1, 1));
     });
   }
 
@@ -391,10 +389,7 @@ describe("xsd:dateTime write — expanded/negative-year Dates emit a VALID lexic
     const store = Event_.build(RES, { when: WHEN, seen: far });
     expect(seenLexical(store)).toBe("100000-01-01T12:30:05.250Z");
     expect(isXsdDateTime("100000-01-01T12:30:05.250Z")).toBe(true);
-    // V8 REFUSES the XSD expanded-year dateTime form (`Invalid Date` — unlike the
-    // date-only form, which it parses faithfully) — the strict read drops it
-    // fail-closed rather than surfacing a wrong value.
-    expect(Event_.parse(RES, store)?.seen).toBeUndefined();
+    expect(Event_.parse(RES, store)?.seen).toEqual(far);
   });
 
   it("year 275760 (the Date range max) writes valid — never '+275760-09-13T00:00:00.000Z'", () => {
@@ -402,18 +397,17 @@ describe("xsd:dateTime write — expanded/negative-year Dates emit a VALID lexic
     const store = Event_.build(RES, { when: WHEN, seen: max });
     expect(seenLexical(store)).toBe("275760-09-13T00:00:00.000Z");
     expect(isXsdDateTime("275760-09-13T00:00:00.000Z")).toBe(true);
-    expect(Event_.parse(RES, store)?.seen).toBeUndefined(); // V8 refuses; fail-closed drop
+    expect(Event_.parse(RES, store)?.seen).toEqual(max);
   });
 
   it("year -1 writes '-0001-…' (XSD form) — never the '-000001-…' six-digit form XSD prohibits", () => {
     const store = Event_.build(RES, { when: WHEN, seen: utcDateTime(-1, 1, 1) });
     expect(seenLexical(store)).toBe("-0001-01-01T00:00:00.000Z");
     expect(isXsdDateTime("-0001-01-01T00:00:00.000Z")).toBe(true);
-    // V8 refuses "-0001-…T…Z" (Invalid Date) — dropped fail-closed, never a wrong Date.
-    expect(Event_.parse(RES, store)?.seen).toBeUndefined();
+    expect(Event_.parse(RES, store)?.seen).toEqual(utcDateTime(-1, 1, 1));
   });
 
-  it("year 0 writes '0000-01-01T00:00:00.000Z' and (unlike xsd:date) round-trips exactly", () => {
+  it("year 0 writes '0000-01-01T00:00:00.000Z' and round-trips exactly", () => {
     const d = utcDateTime(0, 1, 1);
     const store = Event_.build(RES, { when: WHEN, seen: d });
     expect(seenLexical(store)).toBe("0000-01-01T00:00:00.000Z");

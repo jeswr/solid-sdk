@@ -34,6 +34,10 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   object and graph positions, literal datatype IRIs, prefix namespaces, and prefix
   labels outside Turtle `PN_PREFIX` (the empty default prefix is allowed).
   Recheck mutable manifests; never escape or canonicalize an unsafe identity.
+  Reject unsupported term kinds (including Variable/Quad), invalid RDF positions,
+  invalid Turtle blank-node labels and malformed BCP 47 language tags. Re-parse
+  buffered output and check the same quad set, including literal identity and a
+  known blank-node bijection, before returning it; failure throws `TypeError`.
 - Resource URLs and every derived subject pass `isSafeAbsoluteIri` without rewriting
   their lexical identity. `subject`, `build`, `serialize`, and direct `Wrapper`
   construction throw `TypeError` on an unsafe or relative IRI; `parse` and
@@ -54,6 +58,11 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   the built store and require a defined result before publishing it if MUST validation is needed.
 - Closed `in` enums are enforced on reads, build, setters and live-set adds. Invalid enum
   values drop, consistently with other invalid writes; they do not throw.
+  Reads compare raw literal lexical forms and datatypes against canonical enum
+  terms before mapping to JS values. Decimal/integer readers reject precision loss
+  by comparing canonical decimal spellings before/after JS number conversion.
+  String-subtype lexical validators run on raw values on reads and writes; never
+  sanitize an invalid lexical form into a valid one.
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias

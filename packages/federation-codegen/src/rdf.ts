@@ -8,7 +8,12 @@
  * `n3.Writer`, reads go through `Store`.
  */
 
-import { isSafeAbsoluteIri, isTurtlePrefixName } from "@jeswr/model-runtime";
+import {
+  assertSerializedQuads,
+  assertWritableQuads,
+  isSafeAbsoluteIri,
+  isTurtlePrefixName,
+} from "@jeswr/model-runtime";
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 
@@ -113,22 +118,14 @@ export function serializeCanonicalTurtle(
   }
   // This is the ONLY generator writer boundary, after shape rewriting. Never
   // repair identity: N3 accepts unsafe lexical IRIs and would emit them verbatim.
-  for (const quad of output) {
-    for (const term of [quad.subject, quad.predicate, quad.object, quad.graph]) {
-      if (term.termType === "NamedNode" && !isSafeAbsoluteIri(term.value)) {
-        throw new TypeError("NamedNode must be a safe absolute IRI");
-      }
-      if (term.termType === "Literal" && !isSafeAbsoluteIri(term.datatype.value)) {
-        throw new TypeError("literal datatype must be a safe absolute IRI");
-      }
-    }
-  }
+  assertWritableQuads(output);
   const writer = new Writer({ prefixes: orderedPrefixes, format });
   writer.addQuads(output);
   let out = "";
   writer.end((error, result) => {
-    if (error) throw error;
+    if (error) throw new TypeError("RDF serialization failed", { cause: error });
     out = result;
   });
+  assertSerializedQuads(output, out);
   return out;
 }

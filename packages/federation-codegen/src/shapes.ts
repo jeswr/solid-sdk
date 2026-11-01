@@ -156,6 +156,10 @@ function termToScalar(term: Term, constraint: ShapeConstraint): ShapeScalar {
   let value: unknown;
   try {
     value = readLiteral(term);
+    // ManifestScalar retains values only. Reject an enum whose original RDF
+    // identity cannot be reproduced by the runtime's canonical literal writer.
+    const canonical = literalMapper(term.datatype.value).from(value as never, DataFactory);
+    if (!term.equals(canonical)) return reject();
   } catch {
     return reject();
   }

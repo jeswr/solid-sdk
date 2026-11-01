@@ -52,6 +52,10 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   are admission errors, including on node shapes. Flat Warning/Info class hints may be
   omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
   Inline or unprojected `sh:node` references are admission errors.
+  Decimal/integer bounds and enum members must round-trip through a JS number with
+  identical canonical decimal spelling; precision loss fails admission. Literal enum
+  members must also equal the runtime writer's canonical RDF term, because the manifest
+  stores values and cannot preserve noncanonical spellings such as `"01"^^xsd:integer`.
   `error` violations block; an unbounded-set `missing-cardinality`
   is an advisory `warning`.
 - **The fidelity assertion** re-derives an order-independent projection of the merged shapes and
@@ -115,7 +119,10 @@ predicate path and silently lose the constraints. Shape nodes and RDF-list cells
 Skolem IRIs hash full shape/class/path identities and retain readable suffixes; collisions
 with any existing named IRI or another minted identity fail closed. Config loading validates
 `shapesBase`, and the single Turtle/N-Triples writer boundary validates every emitted
-NamedNode, literal datatype, prefix label and namespace without rewriting identities.
+term's kind and position, NamedNode, literal datatype, Turtle blank-node label, BCP 47
+language tag, prefix label and namespace without rewriting identities. It re-parses the
+buffered output and checks the same quad set with a known blank-node bijection in linear
+time; a parse error or identity mismatch throws `TypeError` before returning any output.
 Hash artifacts intentionally retain hashes of the original input bytes.
 
 ## Composite (document-projection) entities

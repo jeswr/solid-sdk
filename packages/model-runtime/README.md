@@ -44,8 +44,11 @@ Every read/write goes through, in the load-bearing order:
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
 - **One serialization boundary**, after alias migration: `serializeTurtle` checks every
-  emitted NamedNode, literal datatype IRI, prefix label and namespace immediately before
-  `n3.Writer`. Unsafe IRIs throw `TypeError` without changing identity; invalid prefix
+  emitted term's kind and position, NamedNode and datatype IRI, Turtle blank-node label,
+  BCP 47 language tag, prefix label and namespace immediately before `n3.Writer`.
+  It then re-parses the buffered output with `n3.Parser` and verifies the same quad set,
+  including lexical literal identity and a known blank-node bijection, in linear time.
+  Invalid terms or a failed round trip throw `TypeError` and return no output; invalid prefix
   labels throw `ManifestError`. Public `types.add` also rejects unsafe IRIs before insertion.
 - **Fail-closed manifest validation** — unknown keys rejected, hard caps on bytes / field count /
   `sh:in` length / nesting depth, reserved field-name denylist (`__proto__`, prototype members …),
@@ -77,6 +80,20 @@ The manifest schema (`ModelManifest`) and `validateManifest` are exported for th
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
 consumers migrating off a hand-written package keep the exact filter behaviour. Schema tooling
 can use `readLiteral(term)` for strict RDF/JS datatype, lexical and value-space checks.
+
+Decimal and integer reads reject precision loss: the input's canonical decimal spelling
+must equal the plain decimal spelling produced after conversion to a JS number (ignoring
+redundant signs and zeros). Admission uses the same reader for numeric bounds and enum
+members, so `1.0000000000000001` cannot silently become `1`. Integer subtypes also retain
+the safe-integer cap. Enum reads compare exact lexical forms and datatypes against the
+runtime writer's canonical literals; admission rejects noncanonical enum members that a
+value-only manifest cannot preserve (`"01"^^xsd:integer`, for example).
+
+The XSD string family (`normalizedString`, `token`, `language`, `NMTOKEN`, `Name`, `NCName`,
+`ID`, `IDREF`, `ENTITY` and their list types) has closed lexical checks on reads and writes.
+Whitespace-normalizing types conservatively require normalized spelling; invalid lexical
+forms drop without sanitization. Dates translate validated XSD years to ECMAScript syntax
+on read, so expanded, negative and zero years round-trip within the JS Date range.
 
 ## Read-only IRI aliases
 

@@ -247,9 +247,9 @@ describe("M4: projected SHACL parameters retain term kinds, datatypes and lexica
     });
   }
   it.each([
-    ["integer", '"+01"^^xsd:integer', 1],
-    ["boolean", '"0"^^xsd:boolean', false],
-    ["decimal", '"+.5"^^xsd:decimal', 0.5],
+    ["integer", '"1"^^xsd:integer', 1],
+    ["boolean", '"false"^^xsd:boolean', false],
+    ["decimal", '"0.5"^^xsd:decimal', 0.5],
     ["duration", '"PT1M"^^xsd:duration', "PT1M"],
   ])("strictly decodes valid %s enum members", (datatype, member, expected) => {
     const result = generate(
