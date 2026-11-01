@@ -27,3 +27,11 @@ export class ProviderRejectedError extends Error {
     this.name = "ProviderRejectedError";
   }
 }
+
+/** Definitive response-size refusal, without transport details or an unsafe cause. */
+export class ResponseSizeRefusedError extends Error {
+  constructor() {
+    super("binding response body exceeds size cap");
+    this.name = "ResponseSizeRefusedError";
+  }
+}

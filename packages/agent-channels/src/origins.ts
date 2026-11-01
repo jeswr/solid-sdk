@@ -5,10 +5,17 @@ import {
   type GuardOptions,
   type guardedFetch,
   refuseRedirects,
+  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
+import { ResponseSizeRefusedError } from "./errors.js";
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
+/** guarded-fetch currently shares SsrfError between size caps and other refusals. */
+function isResponseSizeRefusal(error: unknown): boolean {
+  return error instanceof SsrfError && /^Response body for .+ exceeds cap \(/.test(error.message);
+}
 
 /** Buffer only under the guard's deadline, without waiting for source cancellation. */
 async function bufferRequestBody(
@@ -96,7 +103,8 @@ export function createOriginScopedFetch(
       };
       try {
         return await singleHop(input, transportInit);
-      } catch {
+      } catch (error) {
+        if (isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
         // An inner guard may parse Location before refusal and retain it in its cause.
         // Replace the whole error rather than passing untrusted transport details outward.
         throw new TypeError("binding transport failed or refused redirect");
@@ -134,15 +142,25 @@ export function createOriginScopedFetch(
     const url = new URL(request.url);
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
     // guarded-fetch normalizes only part of Request; retain the effective policies explicitly.
-    return guarded(request, {
-      body: request.body,
-      redirect: "manual",
-      integrity: request.integrity,
-      cache: request.cache,
-      mode: request.mode,
-      keepalive: request.keepalive,
-      referrer: request.referrer,
-      referrerPolicy: request.referrerPolicy,
-    });
+    try {
+      return await guarded(request, {
+        body: request.body,
+        redirect: "manual",
+        integrity: request.integrity,
+        cache: request.cache,
+        mode: request.mode,
+        keepalive: request.keepalive,
+        referrer: request.referrer,
+        referrerPolicy: request.referrerPolicy,
+      });
+    } catch (error) {
+      // The outer guard wraps transport refusals in SsrfError; preserve only the safe type.
+      if (
+        isResponseSizeRefusal(error) ||
+        (error instanceof SsrfError && error.cause instanceof ResponseSizeRefusedError)
+      )
+        throw new ResponseSizeRefusedError();
+      throw error;
+    }
   };
 }
