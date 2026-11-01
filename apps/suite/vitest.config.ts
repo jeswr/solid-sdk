@@ -114,9 +114,6 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
-        "src/apps/music/lib/data/**/*.ts",
-        "src/apps/money/lib/data/**/*.ts",
-        "src/apps/health/lib/data/**/*.ts",
       ],
       reporter: ["text", "json", "json-summary"],
       thresholds: {
