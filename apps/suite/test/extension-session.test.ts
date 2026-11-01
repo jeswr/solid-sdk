@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -192,19 +193,19 @@ describe("subscribeSolidExtension", () => {
     const stop = subscribeSolidExtension(onChange, fake.win);
     fake.emit(EXTENSION_READY_EVENT);
     fake.emit("focus");
-    for (const type of ["SOLID_STATE_UPDATE", "SOLID_ACCESS_RESPONSE"]) {
+    for (const type of ["SOLID_STATE_UPDATE"]) {
       fake.emit(
         "message",
         stateMessage(fake.win, { channel: EXTENSION_CHANNEL, dir: "to-page", type }),
       );
     }
-    expect(onChange).toHaveBeenCalledTimes(4);
+    expect(onChange).toHaveBeenCalledTimes(3);
     fake.runTimers();
-    expect(onChange).toHaveBeenCalledTimes(8);
+    expect(onChange).toHaveBeenCalledTimes(4);
     stop();
     fake.emit("focus");
     fake.runTimers();
-    expect(onChange).toHaveBeenCalledTimes(8);
+    expect(onChange).toHaveBeenCalledTimes(4);
     expect(fake.count("message")).toBe(0);
   });
 
@@ -248,7 +249,39 @@ describe("subscribeSolidExtension", () => {
     fake.emit("message", stateMessage(fake.win, { ...ok, channel: "other" }));
     fake.emit("message", stateMessage(fake.win, { ...ok, dir: "to-content" }));
     fake.emit("message", stateMessage(fake.win, { ...ok, type: "SOLID_FETCH_RESPONSE" }));
+    // Exact envelopes relayed by content-script.ts: correlated replies aren't broadcasts.
+    for (let i = 0; i < 100; i++) {
+      fake.emit(
+        "message",
+        stateMessage(fake.win, {
+          ...ok,
+          type: "SOLID_ACCESS_RESPONSE",
+          requestId: `list-${i}`,
+          grants: [],
+        }),
+      );
+      fake.emit(
+        "message",
+        stateMessage(fake.win, {
+          ...ok,
+          type: "SOLID_ACCESS_RESPONSE",
+          requestId: `consent-${i}`,
+          ok: true,
+          webId: "https://alice.example/#me",
+        }),
+      );
+      fake.emit(
+        "message",
+        stateMessage(fake.win, {
+          ...ok,
+          type: "SOLID_ACTION_RESPONSE",
+          actionId: `action-${i}`,
+          error: null,
+        }),
+      );
+    }
     fake.emit("message", undefined);
+    fake.runTimers();
     expect(onChange).not.toHaveBeenCalled();
   });
 

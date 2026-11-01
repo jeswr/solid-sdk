@@ -46,6 +46,7 @@ export {
   importDpopKeyPairJwk,
   toDpopKeyPair,
 } from "./dpop.js";
+export { readOidcJson } from "./http.js";
 export type { ClientCredentials, FetchLike, SolidSessionState } from "./session.js";
 export {
   acquireToken,
