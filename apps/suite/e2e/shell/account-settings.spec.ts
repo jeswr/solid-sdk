@@ -150,15 +150,15 @@ test("appearance autosaves and restores theme, density, font and motion after re
   await page.goto("/settings/appearance");
   await page.getByRole("radio", { name: "Dark", exact: true }).check();
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.getByLabel("Density", { exact: true }).selectOption("compact");
+  await page.getByRole("combobox", { name: "Density", exact: true }).selectOption("compact");
   await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
   expect(
     await page
       .locator("html")
       .evaluate((html) => getComputedStyle(html).getPropertyValue("--row-h").trim()),
   ).toBe("32px");
-  await page.getByLabel("UI font size", { exact: true }).selectOption("110");
-  await page.getByLabel("Reduce motion", { exact: true }).selectOption("reduce");
+  await page.getByRole("combobox", { name: "UI font size", exact: true }).selectOption("110");
+  await page.getByRole("combobox", { name: "Reduce motion", exact: true }).selectOption("reduce");
   await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
@@ -171,11 +171,11 @@ test("appearance autosaves and restores theme, density, font and motion after re
 
 test("preferences stay scoped to their account", async ({ page }) => {
   await page.goto("/settings/appearance");
-  await page.getByLabel("Density", { exact: true }).selectOption("compact");
+  await page.getByRole("combobox", { name: "Density", exact: true }).selectOption("compact");
   const dialog = await menu(page);
   await dialog.getByRole("button", { name: /Rowan Vale/ }).click();
   await expect(page).toHaveURL(/\/settings\/appearance$/);
-  await expect(page.getByLabel("Density", { exact: true })).toHaveValue("comfortable");
+  await expect(page.getByRole("combobox", { name: "Density", exact: true })).toHaveValue("comfortable");
   await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
 });
 

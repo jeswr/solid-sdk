@@ -10,7 +10,8 @@ async function accessible(page: Page) {
       (violation) => violation.impact === "serious" || violation.impact === "critical",
     ),
   ).toEqual([]);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  // A modal hides the page from the accessibility tree, so count the h1 in the DOM.
+  await expect(page.locator("h1")).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 async function capture(page: Page, name: string, project: string) {
@@ -85,16 +86,18 @@ test("fixture covers loading, errors, decision retry, durations and sync conflic
 }, info) => {
   await page.goto("/dev/components/notifications-tray");
   await page.getByRole("checkbox", { name: "Show list", exact: true }).check();
-  await page.getByLabel("Fixture state", { exact: true }).selectOption("loading");
+  await page.getByRole("combobox", { name: "Fixture state", exact: true }).selectOption("loading");
   await expect(
     page.getByRole("status", { name: "Loading notifications", exact: true }),
   ).toBeVisible();
   await capture(page, "loading", info.project.name);
-  await page.getByLabel("Fixture state", { exact: true }).selectOption("error");
+  await page.getByRole("combobox", { name: "Fixture state", exact: true }).selectOption("error");
   await expect(page.getByRole("alert").filter({ hasText: /Couldn't load/ })).toBeVisible();
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await capture(page, "error", info.project.name);
-  await page.getByLabel("Fixture state", { exact: true }).selectOption("decision-error");
+  await page
+    .getByRole("combobox", { name: "Fixture state", exact: true })
+    .selectOption("decision-error");
   const row = page.getByRole("listitem").filter({ hasText: "Rowan Vale requested access" });
   await row.getByRole("combobox", { name: "Role", exact: true }).click();
   await page.getByRole("option", { name: "Editor", exact: true }).click();
