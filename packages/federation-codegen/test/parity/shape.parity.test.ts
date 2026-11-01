@@ -2,8 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { afterAll, describe, expect, it } from "vitest";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   BOOK,
   bookmarkOntologyTtl,
