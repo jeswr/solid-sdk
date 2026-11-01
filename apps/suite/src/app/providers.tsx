@@ -2,6 +2,9 @@
 "use client";
 import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect } from "react";
+import { SuiteEnvironmentContext } from "@/shell/environment";
+import type { SuiteEnv } from "@/shell/lib/env";
+import { AccountsProvider } from "@/shell/session/accounts-provider";
 
 function ThemeAttribute() {
   const { theme } = useTheme();
@@ -10,11 +13,19 @@ function ThemeAttribute() {
   }, [theme]);
   return null;
 }
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  environment,
+}: {
+  children: React.ReactNode;
+  environment: SuiteEnv;
+}) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
-      {children}
+      <SuiteEnvironmentContext.Provider value={environment}>
+        <AccountsProvider>{children}</AccountsProvider>
+      </SuiteEnvironmentContext.Provider>
     </ThemeProvider>
   );
 }
