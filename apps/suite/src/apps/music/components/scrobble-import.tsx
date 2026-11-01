@@ -3,11 +3,12 @@
 import { Button } from "@jeswr/suite-ui";
 import { FileUp, History, LockKeyhole } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   planScrobbleImport,
   readScrobbleFiles,
   type ScrobblePlan,
+  saveErrorMessage,
   scrobbleErrorMessage,
 } from "../lib/data/scrobbles";
 import { useMusic } from "../state/music-context";
@@ -22,6 +23,8 @@ const day = (date: Date) =>
     year: "numeric",
     timeZone: "UTC",
   });
+/** Let the browser paint the busy state before synchronous parsing starts. */
+const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 type Phase =
   | { name: "idle" }
@@ -36,49 +39,63 @@ function Importer() {
   const errorId = useId();
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [error, setError] = useState<{ text: string; attempt: number }>();
+  const [announcement, setAnnouncement] = useState("");
+  // Each phase's first element takes focus, so keyboard users keep their place
+  // when the control they used is replaced.
+  const focusTarget = useRef<HTMLElement | null>(null);
+  const moved = useRef(false);
   const fail = (text: string) =>
     setError((current) => ({ text, attempt: (current?.attempt ?? 0) + 1 }));
   const library = music.snapshot?.library;
-  const busy = phase.name === "reading" || phase.name === "saving";
+  const go = (next: Phase, say = "") => {
+    moved.current = true;
+    setPhase(next);
+    if (say) setAnnouncement(say);
+  };
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    focusTarget.current?.focus();
+  });
+  const target = (element: HTMLElement | null) => {
+    focusTarget.current = element;
+  };
 
   async function choose(list: FileList | null) {
     const files = Array.from(list ?? []);
     if (!files.length || !library) return;
     setError(undefined);
-    setPhase({ name: "reading" });
+    go({ name: "reading" }, "Reading your export…");
     try {
       const texts = await Promise.all(
         files.map(async (file) => ({ name: file.name, text: await file.text() })),
       );
+      await nextFrame();
       const { listens, warnings } = readScrobbleFiles(texts, new Date());
       if (!listens.length) {
-        setPhase({ name: "idle" });
+        go({ name: "idle" });
         fail("No listens were found in that export.");
         return;
       }
-      setPhase({
-        name: "preview",
-        plan: planScrobbleImport(listens, warnings, library.tracks, music.storage),
-      });
+      const plan = planScrobbleImport(listens, warnings, library.tracks, music.storage);
+      go({ name: "preview", plan }, `Ready to import ${count(plan.plays.length, "listen")}.`);
     } catch (cause) {
-      setPhase({ name: "idle" });
+      go({ name: "idle" });
       fail(scrobbleErrorMessage(cause));
     }
   }
 
   async function save(plan: ScrobblePlan) {
     setError(undefined);
-    setPhase({ name: "saving", plan, done: 0, total: 0 });
+    go({ name: "saving", plan, done: 0, total: 0 }, "Saving your listens…");
     try {
       const result = await music.importListens(plan, (done, total) =>
         setPhase({ name: "saving", plan, done, total }),
       );
-      setPhase({ name: "done", ...result });
-    } catch {
-      setPhase({ name: "preview", plan });
-      fail(
-        "Some listens couldn't be saved. Months that finished are kept; import the same files again to finish.",
-      );
+      go({ name: "done", ...result }, `Import finished. Added ${count(result.added, "listen")}.`);
+    } catch (cause) {
+      go({ name: "preview", plan });
+      fail(saveErrorMessage(cause));
     }
   }
 
@@ -101,15 +118,19 @@ function Importer() {
           <strong>Last.fm:</strong> a .csv file with artist, album, track and timestamp columns.
         </li>
       </ul>
-      {(phase.name === "idle" || phase.name === "reading") && (
+      <p role="status" className="suite-sr-only">
+        {announcement}
+      </p>
+      {phase.name === "idle" && (
         <div className="mus-import-pick">
           <label htmlFor={inputId}>Choose export files</label>
           <input
+            ref={target}
             id={inputId}
             type="file"
             multiple
             accept=".csv,.json,.jsonl,text/csv,application/json"
-            disabled={busy || !library}
+            disabled={!library}
             aria-describedby={error ? errorId : undefined}
             onChange={(event) => {
               const files = event.target.files;
@@ -120,73 +141,81 @@ function Importer() {
           />
         </div>
       )}
-      <div role="status" aria-atomic="true" className="mus-import-status">
-        {phase.name === "reading" && <p>Reading your export…</p>}
-        {phase.name === "preview" && (
-          <div className="mus-import-preview">
-            <h3>Ready to import</h3>
-            <p>
-              {count(phase.plan.plays.length, "listen")}
-              {phase.plan.first && phase.plan.last
-                ? ` from ${day(phase.plan.first)} to ${day(phase.plan.last)}`
-                : ""}
-            </p>
-            <dl>
+      {phase.name === "reading" && (
+        <p ref={target} tabIndex={-1} className="mus-import-preview">
+          Reading your export…
+        </p>
+      )}
+      {phase.name === "preview" && (
+        <div className="mus-import-preview">
+          <h3 ref={target} tabIndex={-1}>
+            Ready to import
+          </h3>
+          <p>
+            {count(phase.plan.plays.length, "listen")}
+            {phase.plan.first && phase.plan.last
+              ? ` from ${day(phase.plan.first)} to ${day(phase.plan.last)}`
+              : ""}
+          </p>
+          <dl>
+            <div>
+              <dt>Songs in your library</dt>
+              <dd>{phase.plan.matched.toLocaleString("en")}</dd>
+            </div>
+            <div>
+              <dt>Kept by name</dt>
+              <dd>{phase.plan.unmatched.toLocaleString("en")}</dd>
+            </div>
+            {phase.plan.skipped.length > 0 && (
               <div>
-                <dt>Songs in your library</dt>
-                <dd>{phase.plan.matched.toLocaleString("en")}</dd>
+                <dt>Rows skipped</dt>
+                <dd>{phase.plan.skipped.length.toLocaleString("en")}</dd>
               </div>
-              <div>
-                <dt>Kept by name</dt>
-                <dd>{phase.plan.unmatched.toLocaleString("en")}</dd>
-              </div>
-              {phase.plan.warnings.length > 0 && (
-                <div>
-                  <dt>Rows skipped</dt>
-                  <dd>{phase.plan.warnings.length.toLocaleString("en")}</dd>
-                </div>
-              )}
-            </dl>
-            {phase.plan.warnings.length > 0 && (
-              <details>
-                <summary>Why rows were skipped</summary>
-                <ul className="mus-muted">
-                  {phase.plan.warnings.slice(0, 20).map((warning) => (
-                    <li key={`${warning.source}-${warning.line}-${warning.code}`}>
-                      {warning.source === "lastfm" ? "Last.fm" : "ListenBrainz"} line {warning.line}
-                      : {warning.message}
-                    </li>
-                  ))}
-                </ul>
-              </details>
             )}
-          </div>
-        )}
-        {phase.name === "saving" && (
-          <div className="mus-import-preview">
-            <p>
-              {phase.total
-                ? `Saving month ${phase.done} of ${phase.total}…`
-                : "Saving your listens…"}
-            </p>
-            <progress
-              aria-label="Import progress"
-              max={phase.total || 1}
-              value={phase.total ? phase.done : 0}
-            />
-          </div>
-        )}
-        {phase.name === "done" && (
-          <div className="mus-import-preview">
-            <h3>Import finished</h3>
-            <p>
-              Added {count(phase.added, "listen")}.
-              {phase.existing ? ` ${count(phase.existing, "listen")} were already in Music.` : ""}{" "}
-              History shows the last year; use Load older history for earlier listens.
-            </p>
-          </div>
-        )}
-      </div>
+          </dl>
+          {phase.plan.skipped.length > 0 && (
+            <details>
+              <summary>Why rows were skipped</summary>
+              <ul className="mus-muted">
+                {phase.plan.skipped.slice(0, 20).map((warning) => (
+                  <li key={`${warning.file}\u0000${warning.line}`}>
+                    {warning.file}, line {warning.line}: {warning.message}
+                  </li>
+                ))}
+              </ul>
+              {phase.plan.skipped.length > 20 && (
+                <p className="mus-muted">
+                  And {count(phase.plan.skipped.length - 20, "more row")}.
+                </p>
+              )}
+            </details>
+          )}
+        </div>
+      )}
+      {phase.name === "saving" && (
+        <div className="mus-import-preview">
+          <p ref={target} tabIndex={-1}>
+            {phase.total ? `Saving month ${phase.done} of ${phase.total}…` : "Saving your listens…"}
+          </p>
+          <progress
+            aria-label="Import progress"
+            max={phase.total || 1}
+            value={phase.total ? phase.done : 0}
+          />
+        </div>
+      )}
+      {phase.name === "done" && (
+        <div className="mus-import-preview">
+          <h3 ref={target} tabIndex={-1}>
+            Import finished
+          </h3>
+          <p>
+            Added {count(phase.added, "listen")}.
+            {phase.existing ? ` ${count(phase.existing, "listen")} were already in Music.` : ""}{" "}
+            History shows the last year; use Load older history for earlier listens.
+          </p>
+        </div>
+      )}
       {error && (
         <p key={error.attempt} id={errorId} role="alert" className="mus-import-error">
           {error.text}
@@ -198,7 +227,7 @@ function Importer() {
             <Button onClick={() => void save(phase.plan)}>
               Import {count(phase.plan.plays.length, "listen")}
             </Button>
-            <Button variant="outline" onClick={() => setPhase({ name: "idle" })}>
+            <Button variant="outline" onClick={() => go({ name: "idle" })}>
               Choose different files
             </Button>
           </>
@@ -211,7 +240,7 @@ function Importer() {
                 View history
               </Link>
             </Button>
-            <Button variant="outline" onClick={() => setPhase({ name: "idle" })}>
+            <Button variant="outline" onClick={() => go({ name: "idle" })}>
               Import more
             </Button>
           </>

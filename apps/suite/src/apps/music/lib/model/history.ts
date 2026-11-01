@@ -179,6 +179,11 @@ export interface TopArtist {
   plays: number;
 }
 
+/** Case, width and spacing-insensitive form of a song or artist name. */
+export function nameKey(text: string): string {
+  return text.normalize("NFKC").toLocaleLowerCase("en").trim().replace(/\s+/gu, " ");
+}
+
 export function computeTopArtists(
   history: readonly Playback[],
   tracks: readonly Track[],
@@ -192,7 +197,7 @@ export function computeTopArtists(
   for (const track of tracks)
     for (const artist of track.artists) {
       const key = artist.iri ?? artist.name;
-      const name = artist.name?.toLocaleLowerCase();
+      const name = artist.name && nameKey(artist.name);
       if (key && name && !byName.has(name)) byName.set(name, key);
     }
   const counts = new Map<string, TopArtist>();
@@ -210,7 +215,7 @@ export function computeTopArtists(
       // Uncredited (named-only) listens always carry a name.
       const named = artist.name as string;
       const key =
-        artist.iri ?? (credited ? artist.name : (byName.get(named.toLocaleLowerCase()) ?? named));
+        artist.iri ?? (credited ? artist.name : (byName.get(nameKey(named)) ?? nameKey(named)));
       if (!key) continue;
       const previous = counts.get(key);
       counts.set(key, {

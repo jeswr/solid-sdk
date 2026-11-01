@@ -13,6 +13,7 @@ import {
   planScrobbleImport,
   readScrobbleFiles,
   SCROBBLE_AGENTS,
+  saveErrorMessage,
   saveScrobbles,
   scrobbleErrorMessage,
 } from "../src/apps/music/lib/data/scrobbles";
@@ -74,7 +75,33 @@ describe("reading scrobble exports", () => {
     expect(result.listens.map((listen) => listen.track).sort()).toEqual(
       ["Apple", "Embers", "Lanterns", "apple "].sort(),
     );
-    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ file: "scrobbles.CSV", line: 6, code: "INVALID_LISTEN" }),
+    ]);
+  });
+  it("locates ListenBrainz warnings in their own file and only skips unreadable rows", () => {
+    const badMbid = JSON.stringify({
+      listened_at: 1793361600,
+      track_metadata: {
+        artist_name: "Nora Field",
+        track_name: "Embers",
+        additional_info: { recording_mbid: "not-an-mbid" },
+      },
+    });
+    const { listens, warnings } = readScrobbleFiles(
+      [
+        { name: "a.jsonl", text: `${listenBrainz("A", "B", 1793361600)}\r\n\n` },
+        { name: "b.jsonl", text: `${badMbid}\n{"listened_at":"soon"}` },
+      ],
+      now,
+    );
+    expect(warnings.map((warning) => [warning.file, warning.line, warning.code])).toEqual([
+      ["b.jsonl", 1, "INVALID_MBID"],
+      ["b.jsonl", 2, "INVALID_LISTEN"],
+    ]);
+    const plan = planScrobbleImport(listens, [...warnings, ...warnings], [], root);
+    expect(plan.plays).toHaveLength(2);
+    expect(plan.skipped).toEqual([expect.objectContaining({ file: "b.jsonl", line: 2 })]);
   });
   it("reads a Last.fm CSV on its own", () => {
     expect(readScrobbleFiles([{ name: "a.csv", text: lastFm }], now).listens).toHaveLength(3);
@@ -114,6 +141,11 @@ describe("reading scrobble exports", () => {
     expect(scrobbleErrorMessage(new ScrobbleError("EXPORT_TOO_LARGE"))).toMatch(/too large/);
     expect(scrobbleErrorMessage(new ScrobbleError("INVALID_EXPORT"))).toMatch(/can read/);
     expect(scrobbleErrorMessage(new Error("x"))).toMatch(/can read/);
+    expect(saveErrorMessage(new MusicWriteError(412, null))).toMatch(/another window/);
+    expect(saveErrorMessage(new MusicWriteError(403, null))).toMatch(/didn't allow/);
+    expect(saveErrorMessage(new MusicWriteError(401, null))).toMatch(/didn't allow/);
+    expect(saveErrorMessage(new MusicWriteError(500, null))).toMatch(/connection/);
+    expect(saveErrorMessage(new TypeError("Failed to fetch"))).toMatch(/connection/);
   });
 });
 
@@ -177,14 +209,15 @@ describe("importing listens into the pod", () => {
             artist: "the junipers",
           },
           { iri: "y", trackIri: "urn:gone", startTime: now },
+          { iri: "z", trackIri: "urn:gone", startTime: now, title: "Other", artist: "NORA  FIELD" },
         ],
         library.models.tracks,
         "1Y",
         now,
       ),
     ).toEqual([
+      { key: "nora field", name: "Nora Field", plays: 3 },
       { key: `${base}artists/j.ttl#it`, name: "The Junipers", plays: 3 },
-      { key: "Nora Field", name: "Nora Field", plays: 2 },
     ]);
   });
 
@@ -204,7 +237,12 @@ describe("importing listens into the pod", () => {
       recording,
     });
     expect(await appendPlaybacks(pod.fetch, base, [play("a")])).toEqual({ added: 1, existing: 0 });
-    expect(await appendPlaybacks(pod.fetch, base, [play("b")])).toEqual({ added: 1, existing: 0 });
+    // A minute later is a separate listen of the same song.
+    expect(
+      await appendPlaybacks(pod.fetch, base, [
+        { ...play("b"), startTime: new Date(now.getTime() - 60_000) },
+      ]),
+    ).toEqual({ added: 1, existing: 0 });
     // A song by an artist already described in the shard re-uses the artist node.
     expect(
       await appendPlaybacks(pod.fetch, base, [
@@ -224,11 +262,82 @@ describe("importing listens into the pod", () => {
       ]),
     ).rejects.toThrow(InvalidMusicError);
     await expect(
+      appendPlaybacks(pod.fetch, base, [
+        { ...play("g"), recording: { ...recording, artistIri: recording.iri } },
+      ]),
+    ).rejects.toThrow(InvalidMusicError);
+    await expect(
       appendPlaybacks(pod.fetch, base, [{ ...play("e"), trackIri: `${base}tracks/j.ttl#apple` }]),
     ).rejects.toThrow("An imported play must point at its recording");
     await expect(
       appendPlaybacks(pod.fetch, base, [{ ...play("f"), iri: `${base}elsewhere.ttl#x` }]),
     ).rejects.toThrow(InvalidMusicError);
+  });
+
+  it("treats the same song within 30 seconds as one listen across imports", async () => {
+    const { pod, library } = await fixture();
+    const first = readScrobbleFiles([{ name: "a.csv", text: lastFm }], now);
+    await saveScrobbles(
+      pod.fetch,
+      root,
+      planScrobbleImport(first.listens, [], library.tracks, root),
+    );
+    const again = readScrobbleFiles(
+      [
+        {
+          name: "b.jsonl",
+          text: [
+            listenBrainz("Nora Field", "Lanterns", 1790856010), // 10 s later: the same listen
+            listenBrainz("Nora Field", "Lanterns", 1790856045), // 45 s later: a new listen
+            listenBrainz("The Junipers", "Apple", 1793534400 - 30), // a library song, 30 s earlier
+          ].join("\n"),
+        },
+      ],
+      now,
+    );
+    expect(
+      await saveScrobbles(
+        pod.fetch,
+        root,
+        planScrobbleImport(again.listens, [], library.tracks, root),
+      ),
+    ).toEqual({ added: 1, existing: 2 });
+  });
+
+  it("re-reads and merges a shard that changed during the import", async () => {
+    const { pod } = await fixture();
+    const shard = historyShard(base, now);
+    let conflicts = 1;
+    const racing: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PUT" && conflicts > 0) {
+        conflicts -= 1;
+        // Another window saves a play first, so this write's ETag is stale.
+        await appendPlaybacks(pod.fetch, base, [
+          { iri: `${shard}#other`, trackIri: `${base}tracks/j.ttl#apple-live`, startTime: now },
+        ]);
+        return new Response(null, { status: 412 });
+      }
+      return pod.fetch(input, init);
+    };
+    expect(
+      await appendPlaybacks(racing, base, [
+        { iri: `${shard}#scrobble-y`, trackIri: `${base}tracks/j.ttl#apple`, startTime: now },
+      ]),
+    ).toEqual({ added: 1, existing: 0 });
+    expect((await loadHistory(pod.fetch, root, now, 1)).map((play) => play.iri).sort()).toEqual(
+      [`${shard}#other`, `${shard}#scrobble-y`].sort(),
+    );
+    const failing: typeof globalThis.fetch = async (input, init) =>
+      init?.method === "PUT" ? new Response(null, { status: 500 }) : pod.fetch(input, init);
+    await expect(
+      appendPlaybacks(failing, base, [
+        {
+          iri: `${shard}#scrobble-x`,
+          trackIri: `${base}tracks/j.ttl#apple`,
+          startTime: new Date(now.getTime() - 120_000),
+        },
+      ]),
+    ).rejects.toMatchObject({ status: 500 });
   });
 
   it("propagates a conflicting write without overwriting the shard", async () => {

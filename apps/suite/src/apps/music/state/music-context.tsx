@@ -426,9 +426,12 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     },
     storage: session.storageUrl,
     async importListens(plan, onProgress) {
-      const result = await saveScrobbles(session.fetch, session.storageUrl, plan, onProgress);
-      await refresh();
-      return result;
+      try {
+        return await saveScrobbles(session.fetch, session.storageUrl, plan, onProgress);
+      } finally {
+        // Months saved before a failure are kept, so show them either way.
+        await refresh();
+      }
     },
     olderLoading,
     olderError,

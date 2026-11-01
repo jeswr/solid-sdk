@@ -314,9 +314,10 @@ test("imports Last.fm and ListenBrainz history once, keeping unknown songs by na
   });
   await expect(page.locator(".mus-import-error")).toContainText("Choose Last.fm .csv files");
   await expect(input).toHaveAccessibleDescription(/Choose Last\.fm \.csv files/);
+  await expect(input).toBeFocused();
   await input.setInputFiles(files);
   const preview = page.locator(".mus-import-preview");
-  await expect(preview.getByRole("heading", { name: "Ready to import" })).toBeVisible();
+  await expect(preview.getByRole("heading", { name: "Ready to import" })).toBeFocused();
   await expect(preview).toContainText("3 listens from");
   await expect(
     preview.locator("div", { hasText: "Songs in your library" }).locator("dd"),
@@ -325,8 +326,12 @@ test("imports Last.fm and ListenBrainz history once, keeping unknown songs by na
   await expect(preview.locator("div", { hasText: "Rows skipped" }).locator("dd")).toHaveText("1");
   await accessible(page);
   await capture(page, info, "import-preview");
+  await page.getByRole("button", { name: "Choose different files", exact: true }).click();
+  await expect(input).toBeFocused();
+  await input.setInputFiles(files);
+  await expect(preview.getByRole("heading", { name: "Ready to import" })).toBeFocused();
   await page.getByRole("button", { name: "Import 3 listens", exact: true }).click();
-  await expect(preview.getByRole("heading", { name: "Import finished" })).toBeVisible();
+  await expect(preview.getByRole("heading", { name: "Import finished" })).toBeFocused();
   await expect(preview).toContainText("Added 3 listens.");
   await page.getByRole("link", { name: "View history", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "History", exact: true })).toBeVisible();

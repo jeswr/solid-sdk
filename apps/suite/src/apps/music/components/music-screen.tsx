@@ -286,12 +286,15 @@ const SOURCES: Record<string, string> = {
   [SCROBBLE_AGENTS.listenbrainz]: "ListenBrainz",
 };
 const playSource = (agent: string | undefined) => (agent && SOURCES[agent]) || "Music";
+const HISTORY_PAGE = 300;
 function HistoryView() {
   const music = useMusic();
   const snapshot = music.snapshot;
+  // Imported history can hold tens of thousands of plays; render them in pages.
+  const [shown, setShown] = useState(HISTORY_PAGE);
   if (!snapshot) return null;
   const groups = new Map<string, typeof snapshot.history>();
-  for (const play of snapshot.history) {
+  for (const play of snapshot.history.slice(0, shown)) {
     const key = play.startTime.toISOString().slice(0, 10);
     const group = groups.get(key) ?? [];
     group.push(play);
@@ -348,6 +351,17 @@ function HistoryView() {
           title="No listening history yet"
           body="Your listening history will appear here, grouped by day. You can also import it from Last.fm or ListenBrainz."
         />
+      )}
+      {snapshot.history.length > shown && (
+        <div className="mus-load-older">
+          <Button variant="outline" onClick={() => setShown((value) => value + HISTORY_PAGE)}>
+            Show more plays
+          </Button>
+          <p className="mus-muted">
+            Showing {shown.toLocaleString("en")} of {snapshot.history.length.toLocaleString("en")}{" "}
+            plays
+          </p>
+        </div>
       )}
       {music.olderError && <ErrorState error="unreachable" actions={{ retry: music.older }} />}
       <div className="mus-load-older">
