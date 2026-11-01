@@ -63,6 +63,12 @@ against the generated model (`test/parity/`): 18 model tests, 7 IRI-filter tests
 via `rdf-validate-shacl`). Every test is genuinely mechanical/accessor logic — nothing in
 solid-bookmark falls outside what generation covers, which is why it is the pilot.
 
+> **Snapshot caveat (Nov 2026).** The 42/42 result is against the July 2026 copy of solid-bookmark
+> (legacy `https://w3id.org/jeswr/bookmark#` namespace), vendored in `examples/bookmark/`. The
+> workspace package has since moved to `https://jeswr.org/ns/bookmark#` and gained dual-namespace
+> reads and more tests, so this result does not yet establish parity with the current package.
+> Re-establishing it is bead sst-ild.4.2 (legacy-IRI read aliases) and sst-ild.7.1 (the flip).
+
 `test/generator/sector-divergence.test.ts` documents (honestly) why the fed-vocab **sector** profile
 cannot yet drive this generation: it uses a different class IRI, models tags as `bookmark:hasTag`
 `skos:Concept` (not `schema:keywords` literals), and omits `dct:created`/`dct:modified` — the §4

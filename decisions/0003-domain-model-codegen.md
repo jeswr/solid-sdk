@@ -56,8 +56,8 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | B bookmarks reference migration | open, needs G5 | `packages/solid-bookmark` flips to generated core plus facade | sst-ild.7.1 |
 | Bookmarks sector ratchet: package profile (`book:`, `schema:keywords`, timestamps) versus `sectors/bookmarks` | needs Jesse (normative vocabulary) | `packages/solid-federation-vocab` | sst-ild.7.2 |
 | P1 workspace codegen task plus a second migration (`solid-health-diary`, the closest sector match) | open | turbo `codegen` check, `packages/solid-health-diary` | sst-ild.4.3 |
-| M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | open | `packages/solid-listening` | sst-ild.7.3 |
-| Media `hadParticipant` MUST relaxation | needs Jesse (normative) | media sector | sst-ild.7.4 |
+| M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | open (unblocked) | `packages/solid-listening` | sst-ild.7.3 |
+| Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | open | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | open | `AGENTS.md`, lane briefs | sst-ild.7.6 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
