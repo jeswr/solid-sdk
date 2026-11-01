@@ -15,6 +15,7 @@ import {
   CalendarDays,
   FileText,
   HardDrive,
+  HeartPulse,
   Images,
   Mail,
   Menu,
@@ -35,7 +36,8 @@ export type SuiteAppId =
   | "photos"
   | "mail"
   | "chat"
-  | "money";
+  | "money"
+  | "health";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
@@ -46,6 +48,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "mail", label: "Mail", href: "/mail", icon: Mail },
   { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
+  { id: "health", label: "Health", href: "/health", icon: HeartPulse },
 ];
 
 export interface SuiteFrameProps {
