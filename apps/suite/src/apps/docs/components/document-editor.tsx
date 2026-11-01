@@ -564,7 +564,18 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         <div className="docs-writing-area">
           {outline && (
             <aside className="docs-outline-pane" aria-label="Document outline pane">
-              <OutlinePane editor={editor} revision={revision} close={() => setOutline(false)} />
+              <OutlinePane
+                editor={editor}
+                revision={revision}
+                close={() => {
+                  setOutline(false);
+                  // The pane's own button goes away: land on the toolbar's outline toggle,
+                  // or the document when the toolbar is absent (view only).
+                  const toggle = document.querySelector<HTMLElement>("[data-docs-outline-toggle]");
+                  if (toggle) toggle.focus();
+                  else if (editor) focusDocument(editor);
+                }}
+              />
             </aside>
           )}
           <PageCanvas zoom={zoom} title={title}>

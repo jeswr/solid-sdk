@@ -473,6 +473,7 @@ export function EditorToolbar({
         size="icon-sm"
         aria-label={outline ? "Hide outline" : "Show outline"}
         aria-pressed={outline}
+        data-docs-outline-toggle=""
         onClick={toggleOutline}
       >
         <PanelLeft aria-hidden="true" size={18} />

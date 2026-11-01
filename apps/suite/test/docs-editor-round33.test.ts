@@ -476,6 +476,37 @@ it("round45 view-only document bodies are keyboard focusable for outline navigat
       ),
     );
     expect(document.querySelector('[aria-label="Link"]')).toBeNull();
+    // View only has no toolbar toggle: hiding the outline lands in the document.
+    const hide = view.host.querySelector<HTMLButtonElement>(
+      '.docs-outline [aria-label="Hide outline"]',
+    );
+    await act(async () => {
+      hide?.focus();
+      hide?.click();
+    });
+    expect(view.host.querySelector('[aria-label="Document outline"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+  } finally {
+    await view.close();
+  }
+});
+
+it("moves focus to the toolbar's outline toggle when the outline pane is hidden", async () => {
+  const view = await mountEditor({
+    type: "doc",
+    content: [{ type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Plan" }] }],
+  });
+  try {
+    const hide = view.host.querySelector<HTMLButtonElement>(
+      '.docs-outline [aria-label="Hide outline"]',
+    );
+    await act(async () => {
+      hide?.focus();
+      hide?.click();
+    });
+    expect(view.host.querySelector('[aria-label="Document outline"]')).toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Show outline");
+    expect(document.activeElement?.closest('[role="toolbar"]')).not.toBeNull();
   } finally {
     await view.close();
   }
