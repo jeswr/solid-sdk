@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Reactive authentication
 
@@ -208,6 +209,8 @@ StorageRoot using this package's storage discovery. The first listed AS accepted
 `/.well-known/lws-configuration` must identify that issuer and must not redirect. Only then is a credential
 obtained and exchanged with `resource=S`; the access token is presented as Bearer and cached per AS, S and
 credential context until 30 seconds before expiry, with session fencing, rejection renewal and logout.
+If the response omits `expires_in`, the token is used only for the current request and is never cached,
+including when the access token is a JWT. Older cache entries without an expiry are discarded.
 
 Legacy `Bearer as_uri="…", realm="…"` remains enabled by default: its AS and realm must share the resource's
 origin unless explicitly trusted through `trustAuthorizationServers` or `trustBindings`, and containment
