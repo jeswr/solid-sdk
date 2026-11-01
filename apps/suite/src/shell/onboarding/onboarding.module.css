@@ -1,0 +1,219 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at top, var(--primary-soft), transparent 70%);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+}
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+.card {
+  width: min(100%, 560px);
+  min-width: 0;
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.counter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.counter p {
+  margin: 0;
+}
+.dots {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+.dots span[data-current="true"] {
+  background: var(--primary);
+}
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+}
+.title:focus {
+  outline: none;
+}
+.title:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.diagram {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  margin: 0;
+}
+.hexagons {
+  width: min(100%, 240px);
+  height: auto;
+  overflow: visible;
+}
+.hexagons line {
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+.pod {
+  fill: var(--primary);
+}
+.satellite {
+  fill: var(--surface-3);
+  stroke: var(--border-strong);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pod {
+    transform-origin: 100px 60px;
+    animation: appear var(--duration-xslow) var(--ease-standard);
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+.diagram figcaption {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  text-align: center;
+}
+.host {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.concepts,
+.choices {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.concepts li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.concepts svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+.field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.field p {
+  margin: 0;
+}
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.name {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.hint:empty {
+  display: none;
+}
+.fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-3);
+  font-weight: 600;
+}
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  color: var(--foreground);
+  text-decoration: none;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.choice:hover {
+  border-color: var(--primary);
+}
+.choice:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.choice svg {
+  flex: none;
+  color: var(--primary);
+}
+.choiceTitle {
+  display: block;
+  font-weight: 600;
+}
+.choiceBody {
+  display: block;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+@media (max-width: 767px) {
+  .header {
+    padding: var(--space-3) var(--space-4);
+  }
+  .card {
+    padding: var(--space-4);
+  }
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+.fieldset :global(.settings-theme) {
+  display: grid;
+  gap: var(--space-2);
+}
