@@ -1,17 +1,33 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
+// Drive sharing through the SDK role layer (@jeswr/pod-access/roles) against the demo pod.
 import { parseRdf } from "@jeswr/fetch-rdf";
+import {
+  type AgentRef,
+  addGrant,
+  type Role,
+  type RoleGrant,
+  readGrants,
+  rolesToModes,
+  setGrants,
+} from "@jeswr/pod-access/roles";
 import { serialize } from "@jeswr/rdf-serialize";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
-import { readSharing } from "../src/apps/drive/lib/sharing";
 import {
   applySharing,
+  FOLDER_READ_ONLY,
+  loadError,
   loadSharing,
+  SharingConflictError,
+  SharingRefreshError,
   type SharingSession,
-} from "../src/apps/drive/lib/sharing/apply";
+  saveError,
+  toSharingState,
+} from "../src/apps/drive/lib/sharing/adapter";
+import { SharingError } from "../src/apps/drive/lib/sharing/rdf";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { aclBody, OWNER, PRIVATE, ROOT as WAC_ROOT, wacPod } from "./drive-wac-pod";
 import {
   ACL,
   ACP,
@@ -21,8 +37,6 @@ import {
   CAROL,
   document,
   FILE,
-  FixtureAcrs,
-  Properties,
   PUBLIC,
   policy,
   properties,
@@ -35,11 +49,9 @@ async function setup(model: "wac" | "acp" = "wac", inherited = false) {
   const pod = createDemoPod({ root: ROOT });
   await pod.fetch(FILE, { method: "PUT", body: "report" });
   const doc = document(model, inherited);
+  // CSS ACP managers hold resource Control (SDK dialect default), as WAC owners do.
   if (model === "wac") authorization(doc, ALICE, ["Read", "Write", "Control"]);
-  else {
-    policy(doc, ALICE, ["Read", "Write"]);
-    policy(doc, ALICE, ["Read", "Write"], doc.source);
-  }
+  else policy(doc, ALICE, ["Read", "Write", "Control"]);
   await pod.fetch(doc.source, {
     method: "PUT",
     body: await serialize([...doc.dataset]),
@@ -55,15 +67,21 @@ async function setup(model: "wac" | "acp" = "wac", inherited = false) {
   });
   const session: SharingSession = { fetch, webId: ALICE, storageUrl: ROOT };
   const load = () => loadSharing(session, FILE);
-  return { pod, session, doc, load, fetch };
+  const puts = () => fetch.mock.calls.filter(([, init]) => init?.method === "PUT");
+  return { pod, session, doc, load, fetch, puts };
 }
-async function writeDoc(env: Awaited<ReturnType<typeof setup>>, doc = env.doc) {
+type Env = Awaited<ReturnType<typeof setup>>;
+async function writeDoc(env: Env, doc = env.doc) {
   await env.pod.fetch(doc.source, {
     method: "PUT",
     headers: { "content-type": "text/turtle" },
     body: await serialize([...doc.dataset]),
   });
 }
+async function stored(env: Env, url: string) {
+  return parseRdf(await (await env.pod.fetch(url)).text(), "text/turtle", { baseIRI: url });
+}
+const viewLink = { link: "viewer", public: "viewer" } as const;
 
 it("copies inherited defaults and Control into a new own ACL, preserving every effective person", async () => {
   const env = await setup("wac", true);
@@ -73,55 +91,52 @@ it("copies inherited defaults and Control into a new own ACL, preserving every e
   const inheritedBody = await (await env.pod.fetch(env.doc.source)).text();
   const snapshot = await env.load();
   expect(snapshot.canManage).toBe(true);
-  expect(snapshot.state.people.every((p) => p.inherited)).toBe(true);
+  expect(snapshot.state.people).toEqual([
+    { webId: ALICE, role: "owner", inherited: true, explicit: false, sources: [env.doc.source] },
+    { webId: BOB, role: "viewer", inherited: true, explicit: false, sources: [env.doc.source] },
+  ]);
   const result = await applySharing(env.session, snapshot, {
     ...snapshot.state,
     people: [...snapshot.state.people, { webId: CAROL, role: "editor" }],
   });
-  expect(result.state.people.map((p) => [p.webId, p.role, p.inherited])).toEqual([
-    [ALICE, "owner", false],
-    [BOB, "viewer", false],
-    [CAROL, "editor", false],
+  expect(result.state.people.map((p) => [p.webId, p.role, p.inherited, p.sources])).toEqual([
+    [ALICE, "owner", false, [`${FILE}.acl`]],
+    [BOB, "viewer", false, [`${FILE}.acl`]],
+    [CAROL, "editor", false, [`${FILE}.acl`]],
   ]);
+  expect(result.canManage).toBe(true);
+  // Ancestors are never written; the own ACL is created conditionally.
   expect(await (await env.pod.fetch(env.doc.source)).text()).toBe(inheritedBody);
-  const put = env.fetch.mock.calls.find(
-    ([url, init]) => url === `${FILE}.acl` && init?.method === "PUT",
-  );
-  expect(new Headers(put?.[1]?.headers).get("if-none-match")).toBe("*");
-  const acl = new AclResource(result.own.dataset, DataFactory);
+  expect(env.puts()).toHaveLength(1);
+  expect(new Headers(env.puts()[0]?.[1]?.headers).get("if-none-match")).toBe("*");
+  const acl = new AclResource(await stored(env, `${FILE}.acl`), DataFactory);
   expect([...acl.authorizations].every((a) => a.default === undefined)).toBe(true);
 });
 
-it("splits shared WAC nodes while retaining other principals, scopes, defaults and metadata", async () => {
+it("splits shared WAC nodes while retaining other principals, targets and metadata", async () => {
   const env = await setup();
   const rule = authorization(env.doc, BOB, ["Read", "Write", "Append"]);
   rule.agent.add(CAROL);
   properties(rule).values(`${ACL}accessTo`).add(`${FOLDER}other`);
-  rule.default = FOLDER;
   properties(rule).values("https://example.org/metadata").add("https://example.org/label");
   await writeDoc(env);
   let snapshot = await env.load();
-  const etag = snapshot.etags.get(env.doc.source);
+  const etag = (await env.pod.fetch(env.doc.source)).headers.get("etag");
   snapshot = await applySharing(env.session, snapshot, {
     ...snapshot.state,
     people: snapshot.state.people.map((p) => (p.webId === BOB ? { ...p, role: "viewer" } : p)),
   });
-  expect(snapshot.state.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
-  expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe("viewer");
+  expect(snapshot.state.people.map((p) => [p.webId, p.role])).toEqual([
+    [ALICE, "owner"],
+    [BOB, "viewer"],
+    [CAROL, "editor"],
+  ]);
+  expect(new Headers(env.puts()[0]?.[1]?.headers).get("if-match")).toBe(etag);
+  const dataset = await stored(env, env.doc.source);
+  expect([...dataset].some((q) => q.predicate.value === "https://example.org/metadata")).toBe(true);
   expect(
-    readSharing({
-      access: {
-        resource: `${FOLDER}other`,
-        documents: [{ ...snapshot.own, governingResource: `${FOLDER}other` }],
-      },
-    }).people.map((p) => p.role),
-  ).toEqual(["editor", "editor"]);
-  expect(
-    [...snapshot.own.dataset].some((q) => q.predicate.value === "https://example.org/metadata"),
-  ).toBe(true);
-  expect(
-    env.fetch.mock.calls.some(
-      ([, init]) => init?.method === "PUT" && new Headers(init.headers).get("if-match") === etag,
+    [...new AclResource(dataset, DataFactory).authorizations].some(
+      (a) => a.agent.has(BOB) && properties(a).values(`${ACL}accessTo`).has(`${FOLDER}other`),
     ),
   ).toBe(true);
   snapshot = await applySharing(env.session, snapshot, {
@@ -137,732 +152,260 @@ it.each([
 ] as const)("adds/removes people and anonymous viewer/editor grants with %s", async (model) => {
   const env = await setup(model);
   let snapshot = await env.load();
-  expect(snapshot.own.model).toBe(model);
+  expect(snapshot.canManage).toBe(true);
   snapshot = await applySharing(env.session, snapshot, {
     ...snapshot.state,
     people: [...snapshot.state.people, { webId: BOB, role: "editor" }],
     link: "editor",
     public: "viewer",
   });
-  expect(snapshot.state.link).toBe("editor");
+  expect(snapshot.state).toMatchObject({ link: "editor", public: "viewer" });
+  expect(snapshot.state.general).toEqual({
+    inherited: false,
+    explicit: true,
+    sources: [env.doc.source],
+  });
   expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe("editor");
   snapshot = await applySharing(env.session, snapshot, {
     ...snapshot.state,
     people: snapshot.state.people.filter((p) => p.webId !== BOB),
-    link: "viewer",
-    public: "viewer",
+    ...viewLink,
   });
   expect(snapshot.state.link).toBe("viewer");
+  expect(snapshot.state.people.map((p) => p.webId)).toEqual([ALICE]);
+  // Public Viewer without link access is the same anonymous Read grant.
+  snapshot = await applySharing(env.session, snapshot, { ...snapshot.state, link: "none" });
+  expect(snapshot.state).toMatchObject({ link: "viewer", public: "viewer" });
   snapshot = await applySharing(env.session, snapshot, {
     ...snapshot.state,
     link: "none",
     public: "none",
   });
-  expect(snapshot.state.link).toBe("none");
-  expect(snapshot.state.public).toBe("none");
+  expect(snapshot.state).toMatchObject({ link: "none", public: "none" });
+  expect(snapshot.state.general).toEqual({ inherited: false, explicit: false, sources: [] });
 });
 
-it("retains ACP ancestors, shared policies, alternate targets and member controls", async () => {
+it("adds an owner as an SDK manager", async () => {
+  const env = await setup();
+  const snapshot = await env.load();
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: BOB, role: "owner" }],
+  });
+  expect(result.state.people.find((p) => p.webId === BOB)?.role).toBe("owner");
+});
+
+it("retains ACP ancestors and composes inherited and own management for the owner", async () => {
   const env = await setup("acp");
   const inherited = document("acp", true);
   policy(inherited, CAROL, ["Read"]);
-  const shared = policy(env.doc, BOB, ["Read", "Write"]);
-  for (const q of env.doc.dataset) {
-    if (q.predicate.value === `${ACP}resource` && q.object.value === FILE) {
-      const root = new Properties(q.subject, env.doc.dataset, DataFactory);
-      root.values(`${ACP}resource`).add(`${FOLDER}other`);
-      root.values("https://example.org/metadata").add("https://example.org/label");
-    }
-  }
-  shared.allOf.values().next().value?.agent.add(CAROL);
-  await writeDoc(env);
+  policy(inherited, ALICE, ["Read", "Write", "Control"]);
   await writeDoc(env, inherited);
+  const ancestorBody = await (await env.pod.fetch(inherited.source)).text();
   const snapshot = await env.load();
-  expect(snapshot.state.people.find((p) => p.webId === CAROL)?.inherited).toBe(true);
+  expect(snapshot.state.people).toEqual([
+    {
+      webId: ALICE,
+      role: "owner",
+      inherited: true,
+      explicit: true,
+      sources: [inherited.source, env.doc.source].sort(),
+    },
+    { webId: CAROL, role: "viewer", inherited: true, explicit: false, sources: [inherited.source] },
+  ]);
   const result = await applySharing(env.session, snapshot, {
     ...snapshot.state,
-    people: snapshot.state.people.map((p) => (p.webId === BOB ? { ...p, role: "viewer" } : p)),
+    people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
   });
-  expect(result.state.people.find((p) => p.webId === BOB)?.role).toBe("viewer");
-  expect(result.state.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
-  expect(
-    readSharing({
-      access: {
-        resource: `${FOLDER}other`,
-        documents: [{ ...result.own, governingResource: `${FOLDER}other` }],
-      },
-    }).people.find((p) => p.webId === BOB)?.role,
-  ).toBe("editor");
+  expect(result.state.people.map((p) => [p.webId, p.role])).toEqual([
+    [ALICE, "owner"],
+    [BOB, "viewer"],
+    [CAROL, "viewer"],
+  ]);
+  expect(await (await env.pod.fetch(inherited.source)).text()).toBe(ancestorBody);
 });
 
-it("refuses owner lockout, read-only edits, unsafe WebIDs and inherited changes without writes", async () => {
+it("creates a missing own ACR when inherited ACP management permits it", async () => {
+  const env = await setup("acp", true);
+  policy(env.doc, BOB, ["Read"]);
+  await writeDoc(env);
+  const snapshot = await env.load();
+  expect(snapshot.state.people).toEqual([
+    { webId: ALICE, role: "owner", inherited: true, explicit: false, sources: [env.doc.source] },
+    { webId: BOB, role: "viewer", inherited: true, explicit: false, sources: [env.doc.source] },
+  ]);
+  expect(snapshot.canManage).toBe(true);
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: CAROL, role: "editor" }],
+  });
+  expect(result.state.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
+  expect(new Headers(env.puts()[0]?.[1]?.headers).get("if-none-match")).toBe("*");
+  await expect(
+    applySharing(env.session, result, {
+      ...result.state,
+      people: result.state.people.filter((p) => p.webId !== BOB),
+    }),
+  ).rejects.toThrow("Inherited access must be changed at its source");
+});
+
+it("refuses read-only, unsafe, duplicate, inherited and other-owner edits without any request", async () => {
   const env = await setup("wac", true);
   authorization(env.doc, BOB, ["Read"]);
+  authorization(env.doc, CAROL, ["Read", "Write", "Control"]);
   authorization(env.doc, PUBLIC, ["Read"]);
   await writeDoc(env);
   const snapshot = await env.load();
-  const selections = [
-    { ...snapshot.state, people: snapshot.state.people.filter((p) => p.webId !== ALICE) },
-    {
-      ...snapshot.state,
-      people: snapshot.state.people.map((p) =>
-        p.webId === ALICE ? { ...p, role: "editor" as const } : p,
-      ),
-    },
-    {
-      ...snapshot.state,
-      people: [...snapshot.state.people, { webId: "javascript:alert(1)", role: "viewer" as const }],
-    },
-    { ...snapshot.state, people: snapshot.state.people.filter((p) => p.webId !== BOB) },
-    { ...snapshot.state, link: "none" as const, public: "none" as const },
-  ];
   env.fetch.mockClear();
-  for (const selection of selections)
-    await expect(applySharing(env.session, snapshot, selection)).rejects.toThrow();
+  const cases: [Parameters<typeof applySharing>[2], string][] = [
+    [
+      {
+        ...snapshot.state,
+        people: [...snapshot.state.people, { webId: "javascript:alert(1)", role: "viewer" }],
+      },
+      "Enter a valid WebID",
+    ],
+    [
+      { ...snapshot.state, people: [...snapshot.state.people, { webId: BOB, role: "editor" }] },
+      "Duplicate person identifier",
+    ],
+    [
+      { ...snapshot.state, people: snapshot.state.people.filter((p) => p.webId !== CAROL) },
+      "Owner rows are read-only",
+    ],
+    [
+      { ...snapshot.state, people: snapshot.state.people.filter((p) => p.webId !== BOB) },
+      "Inherited access must be changed at its source",
+    ],
+    [{ ...snapshot.state, link: "none", public: "none" }, "Inherited access"],
+  ];
+  for (const [selection, message] of cases)
+    await expect(applySharing(env.session, snapshot, selection)).rejects.toThrow(message);
   await expect(
     applySharing({ ...env.session, webId: BOB }, { ...snapshot, canManage: false }, snapshot.state),
   ).rejects.toThrow("Only an owner");
   expect(env.fetch).not.toHaveBeenCalled();
 });
 
-it("does not write unchanged selections", async () => {
-  const env = await setup();
-  const snapshot = await env.load();
-  env.fetch.mockClear();
-  expect(await applySharing(env.session, snapshot, snapshot.state)).toBe(snapshot);
-  expect(env.fetch).not.toHaveBeenCalled();
-});
-
 it.each([
-  "put",
-  "ancestor",
-  "missing",
-  "changed-etag",
-])("reloads a conflict after %s changes and never retries the write", async (failure) => {
-  const env = await setup("wac", failure === "ancestor");
+  "remove",
+  "downgrade",
+] as const)("leaves self-%s to the SDK owner-lockout guard and never writes", async (change) => {
+  const env = await setup();
   const snapshot = await env.load();
-  const transport = env.session.fetch;
-  let failed = false;
-  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
-    if (
-      !failed &&
-      ((failure === "put" && init?.method === "PUT") ||
-        (failure !== "put" && init?.method === "HEAD" && String(url).endsWith(".acl")))
-    ) {
-      failed = true;
-      return failure === "changed-etag"
-        ? new Response(null, { headers: { etag: '"different"' } })
-        : new Response(null, { status: failure === "missing" ? 404 : 412 });
-    }
-    return transport(url, init);
-  });
-  await expect(
-    applySharing({ ...env.session, fetch }, snapshot, {
-      ...snapshot.state,
-      link: "viewer",
-      public: "viewer",
-    }),
-  ).rejects.toMatchObject({
-    message: "Sharing changed elsewhere, review and try again",
-    snapshot: expect.objectContaining({ state: snapshot.state }),
-  });
-  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(
-    failure === "put" ? 1 : 0,
+  const people =
+    change === "remove"
+      ? []
+      : snapshot.state.people.map((p) => ({ webId: p.webId, role: "editor" as const }));
+  const error = await applySharing(env.session, snapshot, { ...snapshot.state, people }).catch(
+    (reason: unknown) => reason,
   );
+  expect(error).toBeInstanceOf(SharingError);
+  expect((error as Error).message).toBe("You cannot remove your own owner access or Control");
+  expect((error as Error).cause).toMatchObject({ code: "owner-lockout" });
+  expect(env.puts()).toHaveLength(0);
 });
 
-it.each([null, 'W/"weak"'])("blocks writes without a strong ETag (%s)", async (etag) => {
-  const env = await setup();
-  const snapshot = await env.load();
-  await expect(
-    applySharing(
-      env.session,
-      { ...snapshot, etags: new Map([[snapshot.own.source, etag]]) },
-      { ...snapshot.state, link: "viewer", public: "viewer" },
-    ),
-  ).rejects.toThrow("strong");
-});
-
-it.each(["HEAD", "PUT"])("reports %s failures without replacing the policy", async (method) => {
-  const env = await setup();
-  const snapshot = await env.load();
-  const fetch: typeof globalThis.fetch = (url, init) =>
-    init?.method === method
-      ? Promise.resolve(new Response(null, { status: 403 }))
-      : env.session.fetch(url, init);
-  await expect(
-    applySharing({ ...env.session, fetch }, snapshot, {
-      ...snapshot.state,
-      link: "viewer",
-      public: "viewer",
-    }),
-  ).rejects.toThrow("Couldn't");
-});
-
-it("fails closed on unsupported, missing, inaccessible, off-pod and mixed-model discovery", async () => {
-  const env = await setup();
-  for (const status of [403, 500])
-    await expect(
-      loadSharing({ ...env.session, fetch: async () => new Response(null, { status }) }, FILE),
-    ).rejects.toThrow("Couldn't load");
-  await expect(
-    loadSharing({ ...env.session, fetch: async () => new Response(null) }, FILE),
-  ).rejects.toThrow("advertise");
-  const transport = env.session.fetch;
-  await expect(
-    loadSharing(
-      {
-        ...env.session,
-        fetch: (url, init) =>
-          String(url).endsWith(".acl")
-            ? Promise.resolve(new Response(null, { status: 500 }))
-            : transport(url, init),
-      },
-      FILE,
-    ),
-  ).rejects.toThrow();
-  await expect(loadSharing(env.session, "https://foreign.example/file")).rejects.toThrow();
-  await env.pod.fetch(env.doc.source, { method: "DELETE" });
-  await expect(env.load()).rejects.toThrow("No governing");
-  const inherited = document("wac", true);
-  authorization(inherited, ALICE, ["Read", "Write", "Control"]);
-  await writeDoc(env, inherited);
-  const mixedFetch: typeof globalThis.fetch = async (url, init) => {
-    const response = await transport(url, init);
-    if (url !== FILE) return response;
-    const headers = new Headers(response.headers);
-    headers.set("link", `<${FILE}.acr>; rel="${ACP}accessControl"`);
-    return new Response(response.body, { status: response.status, headers });
-  };
-  await expect(loadSharing({ ...env.session, fetch: mixedFetch }, FILE)).rejects.toThrow(
-    "Mixed access models",
-  );
-});
-
-it("discovers ACP from a legacy ACL relation and returns read-only for a non-owner", async () => {
-  const env = await setup("acp");
-  const legacy = await env.pod.fetch(env.doc.source);
-  await env.pod.fetch(`${FILE}.acl`, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle" },
-    body: await legacy.text(),
-  });
-  const snapshot = await loadSharing({ ...env.session, fetch: env.pod.fetch, webId: BOB }, FILE);
-  expect(snapshot.own.model).toBe("acp");
-  expect(snapshot.canManage).toBe(false);
-});
-
-it("preserves inherited child defaults when creating a folder ACL", async () => {
-  const env = await setup("wac", true);
-  const folder = `${FOLDER}nested/`;
-  await env.pod.fetch(folder, { method: "PUT" });
-  const snapshot = await loadSharing(env.session, folder);
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
-  });
-  expect(
-    [...new AclResource(result.own.dataset, DataFactory).authorizations].some(
-      (a) => a.default === folder && a.agent.has(ALICE),
-    ),
-  ).toBe(true);
-  expect(
-    readSharing({
-      access: { resource: `${folder}child`, documents: [{ ...result.own, inherited: true }] },
-    }).people.find((p) => p.webId === ALICE)?.role,
-  ).toBe("owner");
-});
-
-it("walks past ancestors without discovery and stops at the nearest real ACL", async () => {
-  const env = await setup();
-  await env.pod.fetch(env.doc.source, { method: "DELETE" });
-  const root = document("wac", false, ROOT);
-  const rule = authorization(root, ALICE, ["Read", "Write", "Control"]);
-  rule.default = ROOT;
-  await writeDoc(env, root);
-  const fetch: typeof globalThis.fetch = async (url, init) => {
-    const response = await env.pod.fetch(url, init);
-    if (url !== FOLDER) return response;
-    const headers = new Headers(response.headers);
-    headers.delete("link");
-    return new Response(response.body, { status: response.status, headers });
-  };
-  const snapshot = await loadSharing({ ...env.session, fetch }, FILE);
-  expect(snapshot.state.people[0]?.sources).toEqual([`${ROOT}.acl`]);
-});
-
-it("loads a missing own ACR together with ancestor member policies", async () => {
-  const env = await setup("acp");
-  await env.pod.fetch(env.doc.source, { method: "DELETE" });
-  const ancestor = document("acp", true);
-  policy(ancestor, BOB, ["Read"]);
-  await writeDoc(env, ancestor);
-  const snapshot = await env.load();
-  expect(snapshot.own.dataset.size).toBe(0);
-  expect(snapshot.input.access.documents).toHaveLength(2);
-  expect(snapshot.state.people[0]).toMatchObject({ webId: BOB, inherited: true, role: "viewer" });
-  expect(snapshot.canManage).toBe(false);
-});
-
-it("treats unchanged inherited anonymous grants as a no-op and blocks a changed public field", async () => {
+it("does not write unchanged selections, including inherited public access", async () => {
   const env = await setup("wac", true);
   authorization(env.doc, PUBLIC, ["Read"]);
   await writeDoc(env);
   const snapshot = await env.load();
-  expect(await applySharing(env.session, snapshot, snapshot.state)).toBe(snapshot);
-  await expect(
-    applySharing(env.session, snapshot, { ...snapshot.state, public: "none" }),
-  ).rejects.toThrow("Inherited access");
-});
-
-it("reloads rather than creating an ACL from defaults changed at a nearer ancestor", async () => {
-  const env = await setup("wac", true);
-  const folder = `${FOLDER}nested/`;
-  await env.pod.fetch(`${folder}file`, { method: "PUT", body: "data" });
-  const snapshot = await loadSharing(env.session, `${folder}file`);
-  const nearer = document("wac", false, folder);
-  const rule = authorization(nearer, ALICE, ["Read", "Write", "Control"]);
-  rule.default = folder;
-  await writeDoc(env, nearer);
-  await expect(
-    applySharing(env.session, snapshot, { ...snapshot.state, link: "viewer", public: "viewer" }),
-  ).rejects.toThrow("Sharing changed elsewhere");
-  expect(env.pod.has(snapshot.own.source)).toBe(false);
-});
-
-it("rejects RDF IRIs that n3.Writer cannot safely serialize", async () => {
-  const env = await setup();
-  const snapshot = await env.load();
-  for (const owner of new AclResource(snapshot.own.dataset, DataFactory).authorizations)
-    properties(owner)
-      .values("https://example.org/metadata")
-      .add("https://example.org/unsafe>value");
-  await expect(
-    applySharing(env.session, snapshot, { ...snapshot.state, link: "viewer", public: "viewer" }),
-  ).rejects.toThrow("Unsafe IRI");
-});
-
-it("preserves Control and other people when inheriting legacy defaultForNew authorizations", async () => {
-  const env = await setup("wac", true);
-  authorization(env.doc, BOB, ["Read"]);
-  for (const auth of new AclResource(env.doc.dataset, DataFactory).authorizations) {
-    auth.default = undefined;
-    properties(auth).values(`${ACL}defaultForNew`).add(FOLDER);
-  }
-  await writeDoc(env);
-  const snapshot = await env.load();
-  expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe("viewer");
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    link: "viewer",
-    public: "viewer",
+  expect(snapshot.state.general).toEqual({
+    inherited: true,
+    explicit: false,
+    sources: [env.doc.source],
   });
-  expect(result.canManage).toBe(true);
-  expect(result.state.people.find((p) => p.webId === BOB)?.role).toBe("viewer");
-});
-
-it("keeps ACP child member policies when changing a folder's own sharing", async () => {
-  const env = await setup("acp");
-  const folder = `${FOLDER}nested/`;
-  await env.pod.fetch(folder, { method: "PUT" });
-  const doc = document("acp", false, folder);
-  policy(doc, ALICE, ["Read", "Write"]);
-  policy(doc, ALICE, ["Read", "Write"], doc.source);
-  policy({ ...doc, inherited: true }, BOB, ["Read", "Write"]);
-  await writeDoc(env, doc);
-  const snapshot = await loadSharing(env.session, folder);
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    link: "viewer",
-    public: "viewer",
-  });
-  expect(
-    readSharing({
-      access: { resource: `${folder}child`, documents: [{ ...result.own, inherited: true }] },
-    }).people.find((p) => p.webId === BOB)?.role,
-  ).toBe("editor");
-});
-
-it("blocks ACP self-removal and owner downgrades before any network mutation", async () => {
-  const env = await setup("acp");
-  const snapshot = await env.load();
   env.fetch.mockClear();
-  await expect(
-    applySharing(env.session, snapshot, { ...snapshot.state, people: [] }),
-  ).rejects.toThrow("own owner access");
-  await expect(
-    applySharing(env.session, snapshot, {
-      ...snapshot.state,
-      people: [{ webId: ALICE, role: "editor" }],
-    }),
-  ).rejects.toThrow("own owner access");
+  expect(await applySharing(env.session, snapshot, snapshot.state)).toBe(snapshot);
   expect(env.fetch).not.toHaveBeenCalled();
 });
 
-it.each([
-  "default",
-  "defaultForNew",
-])("revokes anonymous folder and descendant access together for acl:%s", async (predicate) => {
-  const pod = await wacPod();
-  const dataset = await parseRdf(await aclBody(PRIVATE, true), "text/turtle");
-  for (const auth of new AclResource(dataset, DataFactory).authorizations) {
-    auth.default = undefined;
-    properties(auth)
-      .values(ACL + predicate)
-      .add(PRIVATE);
-  }
-  pod.policies.set(`${PRIVATE}.policy`, await serialize([...dataset]));
-  const session = { fetch: pod.fetch, storageUrl: WAC_ROOT, webId: OWNER };
-  expect((await pod.anonymous(PRIVATE)).status).toBe(200);
-  expect((await pod.anonymous(`${PRIVATE}secret`)).status).toBe(200);
-  const snapshot = await loadSharing(session, PRIVATE);
-  const result = await applySharing(session, snapshot, {
-    ...snapshot.state,
-    link: "none",
-    public: "none",
-  });
-  expect(result.state.link).toBe("none");
-  expect((await pod.anonymous(PRIVATE)).status).toBe(403);
-  expect((await pod.anonymous(`${PRIVATE}secret`)).status).toBe(403);
-});
-
-it.each([
-  false,
-  true,
-])("gives new folder Editors access to inheriting children (inherited ACL: %s)", async (inherited) => {
-  const env = await setup("wac", inherited);
-  const folder = `${FOLDER}nested/`;
-  await env.pod.fetch(folder, { method: "PUT" });
-  if (!inherited) {
-    const doc = document("wac", false, folder);
-    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
-    await writeDoc(env, doc);
-  }
-  const snapshot = await loadSharing(env.session, folder);
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    people: [...snapshot.state.people, { webId: BOB, role: "editor" }],
-  });
-  const child = readSharing({
-    access: { resource: `${folder}child`, documents: [{ ...result.own, inherited: true }] },
-  });
-  expect(child.people.find((p) => p.webId === BOB)?.role).toBe("editor");
-  expect(child.people.find((p) => p.webId === ALICE)?.role).toBe("owner");
-});
-
-it.each([
-  "viewer",
-  "none",
-] as const)("sets all folder scopes to %s while preserving shared principals and unrelated targets", async (role) => {
+it("shows a reloaded conflict when the policy changed since the dialog opened, without writing", async () => {
   const env = await setup();
-  const doc = document("wac", false, FOLDER);
-  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
-  const shared = authorization(doc, BOB, ["Read", "Write"]);
-  shared.agent.add(CAROL);
-  shared.default = FOLDER;
-  properties(shared).values(`${ACL}accessTo`).add(`${FOLDER}other`);
-  properties(shared).values(`${ACL}defaultForNew`).add(FOLDER);
-  // A separate descendant-only Append must also be removed on a folder downgrade.
-  const children = authorization(doc, BOB, ["Append"]);
-  children.accessTo = undefined;
-  children.default = FOLDER;
-  await writeDoc(env, doc);
-  const snapshot = await loadSharing(env.session, FOLDER);
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    people: snapshot.state.people.flatMap((p) =>
-      p.webId === BOB ? (role === "none" ? [] : [{ ...p, role }]) : [p],
-    ),
-  });
-  const child = readSharing({
-    access: { resource: `${FOLDER}child`, documents: [{ ...result.own, inherited: true }] },
-  });
-  expect(child.people.find((p) => p.webId === BOB)?.role).toBe(
-    role === "none" ? undefined : "viewer",
-  );
-  expect(child.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
-  const unrelated = readSharing({
-    access: {
-      resource: `${FOLDER}other`,
-      documents: [{ ...result.own, governingResource: `${FOLDER}other` }],
-    },
-  });
-  expect(unrelated.people.find((p) => p.webId === BOB)?.role).toBe("editor");
-});
-
-it.each(
-  [`${FILE}?ext=acr`, `${FILE}.acl`].flatMap((endpoint) =>
-    ["rel=type", 'rel="type alternate"'].map((relation) => ({ endpoint, relation })),
-  ),
-)("uses the ACR type header at $endpoint ($relation) to discover inherited public access", async ({
-  endpoint,
-  relation,
-}) => {
-  const env = await setup("acp");
-  const ancestor = document("acp", true);
-  policy(ancestor, PUBLIC, ["Read"]);
-  await writeDoc(env, ancestor);
-  const fetch: typeof globalThis.fetch = async (url, init) => {
-    if (url === endpoint)
-      return new Response("", {
-        headers: {
-          "content-type": "text/turtle",
-          etag: '"empty-acr"',
-          link: `<${ACP}AccessControlResource>; ${relation}`,
-        },
-      });
-    const response = await env.session.fetch(url, init);
-    if (url !== FILE) return response;
-    const headers = new Headers(response.headers);
-    headers.set("link", `<${endpoint}>; rel="acl"`);
-    return new Response(response.body, { status: response.status, headers });
-  };
-  const snapshot = await loadSharing({ ...env.session, fetch }, FILE);
-  expect(snapshot.own.model).toBe("acp");
-  expect(snapshot.state).toMatchObject({
-    link: "viewer",
-    public: "viewer",
-    general: { inherited: true, sources: [ancestor.source] },
-  });
-});
-
-it.each([
-  false,
-  true,
-])("recognizes inherited ACP management and permits adding, changing and removing people (own ACR exists: %s)", async (ownExists) => {
-  const env = await setup("acp", true);
-  policy(env.doc, ALICE, ["Read", "Write"], `${FILE}.acr`);
-  await writeDoc(env);
-  if (ownExists)
-    await env.pod.fetch(`${FILE}.acr`, {
-      method: "PUT",
-      headers: { "content-type": "text/turtle" },
-      body: "",
-    });
-  const ancestorBody = await (await env.pod.fetch(env.doc.source)).text();
-  let snapshot = await env.load();
-  expect(snapshot.state.people.find((p) => p.webId === ALICE)).toMatchObject({
-    role: "owner",
-    inherited: true,
-    sources: [env.doc.source],
-  });
-  expect(snapshot.canManage).toBe(true);
-  for (const role of ["editor", "viewer", "none"] as const) {
-    snapshot = await applySharing(env.session, snapshot, {
-      ...snapshot.state,
-      people: [
-        ...snapshot.state.people.filter((p) => p.webId !== BOB),
-        ...(role === "none" ? [] : [{ webId: BOB, role }]),
-      ],
-    });
-    expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe(
-      role === "none" ? undefined : role,
-    );
-    expect(snapshot.canManage).toBe(true);
-  }
-  expect(await (await env.pod.fetch(env.doc.source)).text()).toBe(ancestorBody);
-});
-
-it.each(
-  (["wac", "acp"] as const).flatMap((model) =>
-    (["HEAD", "GET"] as const).map((method) => ({ model, method })),
-  ),
-)("reports a committed $model change when the refresh $method fails", async ({ model, method }) => {
-  const env = await setup(model);
   const snapshot = await env.load();
-  let committed = false;
-  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
-    if (committed && (init?.method ?? "GET") === method) return new Response(null, { status: 503 });
-    const response = await env.session.fetch(url, init);
-    if (init?.method === "PUT" && response.ok) committed = true;
-    return response;
-  });
+  authorization(env.doc, CAROL, ["Read"]);
+  await writeDoc(env);
+  const error = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingConflictError);
+  expect((error as SharingConflictError).message).toBe(
+    "Sharing changed since you opened it. The current access is shown; review it and try again.",
+  );
+  expect((error as SharingConflictError).snapshot?.state.people.map((p) => p.webId)).toEqual([
+    ALICE,
+    CAROL,
+  ]);
+  expect(env.puts()).toHaveLength(0);
+  // Bob was not silently added on top of Carol's change.
+  expect((await env.load()).state.people.some((p) => p.webId === BOB)).toBe(false);
+});
+
+it("treats a nearer ACL created after load as a conflict instead of copying stale defaults", async () => {
+  const env = await setup("wac", true);
+  const snapshot = await env.load();
+  const own = document("wac");
+  authorization(own, ALICE, ["Read", "Write", "Control"]);
+  await writeDoc(env, own);
   await expect(
-    applySharing({ ...env.session, fetch }, snapshot, {
-      ...snapshot.state,
-      link: "viewer",
-      public: "viewer",
-    }),
+    applySharing(env.session, snapshot, { ...snapshot.state, ...viewLink }),
+  ).rejects.toBeInstanceOf(SharingConflictError);
+  expect(env.puts()).toHaveLength(0);
+});
+
+it("maps a 412 to a conflict and never retries the PUT", async () => {
+  const env = await setup();
+  const snapshot = await env.load();
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) =>
+    init?.method === "PUT" ? new Response(null, { status: 412 }) : env.session.fetch(url, init),
+  );
+  await expect(
+    applySharing({ ...env.session, fetch }, snapshot, { ...snapshot.state, ...viewLink }),
   ).rejects.toMatchObject({
-    committed: true,
-    message: "Sharing was saved, but current access couldn't be reloaded. Retry to verify access.",
-    cause: expect.any(Error),
+    snapshot: expect.objectContaining({ state: snapshot.state }),
   });
   expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
-  expect((await env.load()).state.link).toBe("viewer");
-  expect(snapshot.state.link).toBe("none");
 });
 
-it.each([
-  `<${ACP}AccessControlResource>; rel="type"; anchor="https://example.org/other"`,
-  `<${ACP}AccessControlResource>`,
-])("ignores an ACR type link without an applicable relation: %s", async (link) => {
+it("asks for a reload when a conflict's fresh state cannot be read", async () => {
   const env = await setup();
+  const snapshot = await env.load();
+  let put = false;
   const fetch: typeof globalThis.fetch = async (url, init) => {
+    if (init?.method === "PUT") put = true;
+    if (put) return new Response(null, { status: init?.method === "PUT" ? 412 : 503 });
+    return env.session.fetch(url, init);
+  };
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    ...viewLink,
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingConflictError);
+  expect((error as SharingConflictError).snapshot).toBeUndefined();
+  expect((error as Error).message).toBe(
+    "Sharing changed since you opened it. Reload to see the current access before making changes.",
+  );
+});
+
+it.each([null, 'W/"weak"'])("refuses to write without a usable ETag (%s)", async (etag) => {
+  const env = await setup();
+  const strip: typeof globalThis.fetch = async (url, init) => {
     const response = await env.session.fetch(url, init);
     if (url !== env.doc.source) return response;
     const headers = new Headers(response.headers);
-    headers.set("link", link);
+    if (etag) headers.set("etag", etag);
+    else headers.delete("etag");
     return new Response(response.body, { status: response.status, headers });
   };
-  const snapshot = await loadSharing({ ...env.session, fetch }, FILE);
-  expect(snapshot.own.model).toBe("wac");
-  expect(snapshot.canManage).toBe(true);
-});
-
-it("recognizes a type-only ACP graph at a legacy ACL endpoint", async () => {
-  const env = await setup();
-  const own = document("acp");
-  new Properties(`${FILE}.acl`, own.dataset, DataFactory)
-    .values("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-    .add(`${ACP}AccessControlResource`);
-  await env.pod.fetch(`${FILE}.acl`, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle" },
-    body: await serialize([...own.dataset]),
-  });
-  const snapshot = await env.load();
-  expect(snapshot.own.model).toBe("acp");
-  expect(snapshot.canManage).toBe(false);
-});
-
-it.each([
-  "public",
-  "person",
-])("changes ACP folder and descendant %s grants together, preserving other scopes", async (principalKind) => {
-  const env = await setup("acp");
-  const doc = document("acp", false, FOLDER);
-  policy(doc, ALICE, ["Read", "Write"]);
-  policy(doc, ALICE, ["Read", "Write"], doc.source);
-  policy({ ...doc, inherited: true }, CAROL, ["Read"]);
-  const principal = principalKind === "public" ? PUBLIC : BOB;
-  const original = policy(doc, principal, ["Read", "Write"]);
-  // Shared controls, policies, principals and multi-target ACRs must retain unrelated access.
-  const acr = [...new FixtureAcrs(doc.dataset, DataFactory).resources].find((a) =>
-    [...a.accessControl].some((c) => c.apply.has(original)),
-  );
-  if (!acr) throw new Error("Missing fixture ACR");
-  for (const control of acr.accessControl) acr.memberAccessControl.add(control);
-  properties(acr).values(`${ACP}resource`).add(`${FOLDER}other/`);
-  properties(acr).values("https://example.org/metadata").add("https://example.org/value");
-  for (const matcher of original.allOf) matcher.agent.add(CAROL);
-  // A descendant-only extra mode must not survive a selected downgrade or removal.
-  policy({ ...doc, inherited: true }, principal, ["Append"]);
-  await writeDoc(env, doc);
-  let snapshot = await loadSharing(env.session, FOLDER);
-  for (const role of ["viewer", "none", "editor"] as const) {
-    snapshot = await applySharing(env.session, snapshot, {
-      ...snapshot.state,
-      ...(principalKind === "public"
-        ? { link: role, public: role === "none" ? "none" : "viewer" }
-        : {
-            people: [
-              ...snapshot.state.people.filter((p) => p.webId !== BOB),
-              ...(role === "none" ? [] : [{ webId: BOB, role }]),
-            ],
-          }),
-    });
-    const child = readSharing({
-      access: { resource: `${FOLDER}child`, documents: [{ ...snapshot.own, inherited: true }] },
-    });
-    expect(
-      principalKind === "public" ? child.link : child.people.find((p) => p.webId === BOB)?.role,
-    ).toBe(role === "none" && principalKind === "person" ? undefined : role);
-    expect(child.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
-    const unrelated = readSharing({
-      access: {
-        resource: `${FOLDER}other/child`,
-        documents: [{ ...snapshot.own, governingResource: `${FOLDER}other/`, inherited: true }],
-      },
-    });
-    expect(
-      principalKind === "public"
-        ? unrelated.link
-        : unrelated.people.find((p) => p.webId === BOB)?.role,
-    ).toBe("editor");
-    expect(
-      [...snapshot.own.dataset].some((q) => q.predicate.value === "https://example.org/metadata"),
-    ).toBe(true);
-  }
-});
-
-it("revokes ACP public Viewer from both the folder and inheriting descendants", async () => {
-  const env = await setup("acp");
-  const doc = document("acp", false, FOLDER);
-  policy(doc, ALICE, ["Read", "Write"]);
-  policy(doc, ALICE, ["Read", "Write"], doc.source);
-  policy(doc, PUBLIC, ["Read"]);
-  policy({ ...doc, inherited: true }, PUBLIC, ["Read"]);
-  await writeDoc(env, doc);
-  const snapshot = await loadSharing(env.session, FOLDER);
-  const result = await applySharing(env.session, snapshot, {
-    ...snapshot.state,
-    link: "none",
-    public: "none",
-  });
-  expect(result.state.link).toBe("none");
-  expect(
-    readSharing({
-      access: { resource: `${FOLDER}child`, documents: [{ ...result.own, inherited: true }] },
-    }).link,
-  ).toBe("none");
-});
-
-it.each([
-  "default",
-  "defaultForNew",
-])("flags differing WAC folder/descendant acl:%s permissions instead of displaying Restricted", async (predicate) => {
-  const env = await setup();
-  const doc = document("wac", false, FOLDER);
-  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
-  const children = authorization(doc, PUBLIC, ["Read"]);
-  children.accessTo = undefined;
-  properties(children)
-    .values(ACL + predicate)
-    .add(FOLDER);
-  await writeDoc(env, doc);
-  await env.pod.fetch(env.doc.source, { method: "DELETE" });
-  const child = await env.load();
-  expect(child.state.link).toBe("viewer");
-  env.fetch.mockClear();
-  await expect(loadSharing(env.session, FOLDER)).rejects.toThrow(
-    "Folder and descendant permissions differ",
-  );
-  expect(env.fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
-});
-
-it.each(
-  (["wac", "acp"] as const).flatMap((model) =>
-    [false, true].map((committed) => ({ model, committed })),
-  ),
-)("invalidates an unknown $model PUT outcome (committed: $committed) without retrying the write", async ({
-  model,
-  committed,
-}) => {
-  const env = await setup(model);
-  const snapshot = await env.load();
-  const cause = new TypeError("Failed to fetch");
-  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
-    if (init?.method === "PUT") {
-      if (committed) await env.session.fetch(url, init);
-      throw cause;
-    }
-    return env.session.fetch(url, init);
-  });
-  await expect(
-    applySharing({ ...env.session, fetch }, snapshot, {
-      ...snapshot.state,
-      link: "viewer",
-      public: "viewer",
-    }),
-  ).rejects.toMatchObject({
-    committed: false,
-    message:
-      "The sharing write outcome is unknown. Retry to verify current access before making more changes.",
-    cause,
-  });
-  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
-  expect((await env.load()).state.link).toBe(committed ? "viewer" : "none");
+  const session = { ...env.session, fetch: strip };
+  const snapshot = await loadSharing(session, FILE);
+  const attempt = applySharing(session, snapshot, { ...snapshot.state, ...viewLink });
+  // The SDK refuses a missing validator; a weak one can never match If-Match and 412s.
+  if (etag) await expect(attempt).rejects.toBeInstanceOf(SharingConflictError);
+  else await expect(attempt).rejects.toThrow("didn't provide a version (ETag)");
+  expect((await env.load()).state.link).toBe("none");
 });
 
 it.each([
@@ -883,6 +426,248 @@ it.each([
       link: "none",
       public: "none",
     }),
-  ).rejects.toThrow("Permissions were not saved");
+  ).rejects.toThrow("Couldn't save sharing. Permissions were not saved. Try again.");
   expect((await env.load()).state.link).toBe("viewer");
+});
+
+it("reports a transport failure before any PUT as not saved", async () => {
+  const env = await setup();
+  const snapshot = await env.load();
+  const cause = new TypeError("Failed to fetch");
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    if (init?.method === "HEAD") throw cause;
+    return env.session.fetch(url, init);
+  };
+  await expect(
+    applySharing({ ...env.session, fetch }, snapshot, { ...snapshot.state, ...viewLink }),
+  ).rejects.toMatchObject({
+    message: "Couldn't save sharing. Permissions were not saved. Try again.",
+    cause,
+  });
+});
+
+it.each(["HEAD", "GET"])("reports a committed change when the refresh %s fails", async (method) => {
+  const env = await setup();
+  const snapshot = await env.load();
+  let committed = false;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+    if (committed && (init?.method ?? "GET") === method) return new Response(null, { status: 503 });
+    const response = await env.session.fetch(url, init);
+    if (init?.method === "PUT" && response.ok) committed = true;
+    return response;
+  });
+  await expect(
+    applySharing({ ...env.session, fetch }, snapshot, { ...snapshot.state, ...viewLink }),
+  ).rejects.toMatchObject({
+    committed: true,
+    message: "Sharing was saved, but current access couldn't be reloaded. Retry to verify access.",
+    cause: expect.any(SharingError),
+  });
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  expect((await env.load()).state.link).toBe("viewer");
+  expect(snapshot.state.link).toBe("none");
+});
+
+it.each(
+  (["wac", "acp"] as const).flatMap((model) =>
+    [false, true].map((committed) => ({ model, committed })),
+  ),
+)("invalidates an unknown $model PUT outcome (committed: $committed) without retrying", async ({
+  model,
+  committed,
+}) => {
+  const env = await setup(model);
+  const snapshot = await env.load();
+  const cause = new TypeError("Failed to fetch");
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+    if (init?.method === "PUT") {
+      if (committed) await env.session.fetch(url, init);
+      throw cause;
+    }
+    return env.session.fetch(url, init);
+  });
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    ...viewLink,
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingRefreshError);
+  expect(error).toMatchObject({
+    committed: false,
+    message:
+      "The sharing write outcome is unknown. Retry to verify current access before making more changes.",
+    cause,
+  });
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  expect((await env.load()).state.link).toBe(committed ? "viewer" : "none");
+});
+
+it("fails closed with readable messages on unavailable, unsupported and off-pod discovery", async () => {
+  const env = await setup();
+  for (const status of [403, 500])
+    await expect(
+      loadSharing({ ...env.session, fetch: async () => new Response(null, { status }) }, FILE),
+    ).rejects.toThrow("Couldn't load sharing. Try again.");
+  await expect(
+    loadSharing({ ...env.session, fetch: async () => new Response(null) }, FILE),
+  ).rejects.toThrow("access rules that this dialog can't show");
+  await expect(
+    loadSharing(
+      {
+        ...env.session,
+        fetch: async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      FILE,
+    ),
+  ).rejects.toMatchObject({
+    message: "Couldn't load sharing. Try again.",
+    cause: expect.any(TypeError),
+  });
+  await expect(loadSharing(env.session, "https://foreign.example/file")).rejects.toThrow(
+    "outside your pod",
+  );
+  const mixed: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    if (url !== FILE) return response;
+    const headers = new Headers(response.headers);
+    headers.append("link", `<${FILE}.acr>; rel="${ACP}accessControl"`);
+    return new Response(response.body, { status: response.status, headers });
+  };
+  await expect(loadSharing({ ...env.session, fetch: mixed }, FILE)).rejects.toBeInstanceOf(
+    SharingError,
+  );
+});
+
+it("returns read-only access for a non-owner", async () => {
+  const env = await setup();
+  const snapshot = await loadSharing({ ...env.session, webId: BOB }, FILE);
+  expect(snapshot.canManage).toBe(false);
+  expect(snapshot.readOnly).toBeUndefined();
+});
+
+it("keeps folder sharing read-only because SDK writes would not reach descendants", async () => {
+  const env = await setup();
+  const folder = `${FOLDER}nested/`;
+  await env.pod.fetch(folder, { method: "PUT" });
+  const doc = document("wac", false, folder);
+  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+  await writeDoc(env, doc);
+  const snapshot = await loadSharing(env.session, folder);
+  expect(snapshot).toMatchObject({ canManage: false, readOnly: FOLDER_READ_ONLY });
+  expect(snapshot.state.people.map((p) => [p.webId, p.role])).toEqual([[ALICE, "owner"]]);
+  env.fetch.mockClear();
+  await expect(
+    applySharing(env.session, snapshot, {
+      ...snapshot.state,
+      people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
+    }),
+  ).rejects.toThrow(FOLDER_READ_ONLY);
+  expect(env.fetch).not.toHaveBeenCalled();
+  expect((await loadSharing({ ...env.session, webId: BOB }, folder)).readOnly).toBeUndefined();
+});
+
+it("projects SDK grants and fails closed for principals the dialog cannot show", () => {
+  const grant = (agent: AgentRef, role: Role = "viewer"): RoleGrant => ({
+    agent,
+    role,
+    inherited: false,
+    source: `${FILE}.acl`,
+  });
+  expect(
+    toSharingState([
+      grant({ type: "webid", id: CAROL }, "commenter"),
+      grant({ type: "webid", id: BOB }, "editor"),
+      grant({ type: "public" }, "editor"),
+    ]),
+  ).toMatchObject({
+    people: [
+      { webId: BOB, role: "editor" },
+      { webId: CAROL, role: "commenter" },
+    ],
+    link: "editor",
+    public: "viewer",
+  });
+  for (const agent of [
+    { type: "authenticated" },
+    { type: "group", id: `${ROOT}group#it` },
+    { type: "app", id: `${ROOT}app#id` },
+  ] as const)
+    expect(() => toSharingState([grant(agent)])).toThrow("can't be shown");
+  for (const role of ["commenter", "manager"] as const)
+    expect(() => toSharingState([grant({ type: "public" }, role)])).toThrow(
+      "Anonymous permissions exceed",
+    );
+});
+
+it("maps every SDK role error to the dialog's error copy", async () => {
+  const env = await setup();
+  const snapshot = await readGrants(FILE, { fetch: env.session.fetch, root: ROOT });
+  const options = { fetch: env.session.fetch, root: ROOT, webId: ALICE };
+  const errors = {
+    comments: (() => {
+      try {
+        rolesToModes("commenter", "document", {});
+      } catch (error) {
+        return error;
+      }
+    })(),
+    unsupported: await addGrant(
+      [FILE],
+      {
+        agent: { type: "webid", id: BOB },
+        role: "viewer",
+        inherited: false,
+        source: "",
+        purpose: "x",
+      },
+      options,
+    ).catch((error: unknown) => error),
+    inherited: (
+      await setGrants(
+        [FILE],
+        [
+          ...snapshot.grants,
+          { agent: { type: "webid", id: BOB }, role: "viewer", inherited: true, source: ROOT },
+        ],
+        options,
+      )
+    ).failed[0]?.error,
+    scope: await readGrants("https://foreign.example/x", {
+      fetch: env.session.fetch,
+      root: ROOT,
+    }).catch((error: unknown) => error),
+    invalid: await readGrants(FILE, {
+      fetch: async () => new Response(null, { status: 500 }),
+      root: ROOT,
+    }).catch((error: unknown) => error),
+  };
+  expect(saveError(errors.comments, false).message).toBe(
+    "Commenter is not available for this item yet. Permissions were not saved.",
+  );
+  expect(saveError(errors.unsupported, true).message).toBe(
+    "These permissions use access rules that this dialog can't change. Permissions were not saved.",
+  );
+  expect(saveError(errors.inherited, false).message).toBe(
+    "Inherited access must be changed at its source",
+  );
+  expect(saveError(errors.scope, false).message).toBe(
+    "This item's access document is outside your pod. Permissions were not saved.",
+  );
+  // A classified SDK refusal is never mistaken for an unknown write outcome.
+  expect(saveError(errors.invalid, true)).toBeInstanceOf(SharingError);
+  expect(saveError(errors.invalid, true).message).toBe(
+    "Couldn't save sharing. Permissions were not saved. Try again.",
+  );
+  expect(saveError(new Error("boom"), true)).toBeInstanceOf(SharingRefreshError);
+  expect(saveError(new Error("boom"), false).message).toBe(
+    "Couldn't save sharing. Permissions were not saved. Try again.",
+  );
+  expect(loadError(errors.unsupported).message).toBe(
+    "This item's sharing uses access rules that this dialog can't show.",
+  );
+  expect(loadError(errors.invalid).message).toBe("Couldn't load sharing. Try again.");
+  const own = new SharingError("own");
+  expect(loadError(own)).toBe(own);
+  expect(saveError(errors.scope, false).cause).toBe(errors.scope);
 });

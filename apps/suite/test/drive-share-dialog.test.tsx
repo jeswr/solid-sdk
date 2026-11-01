@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 
+import type { GrantSnapshot } from "@jeswr/pod-access/roles";
 import { serialize } from "@jeswr/rdf-serialize";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 // Reuse the workspace's installed UI test tooling; this app adds no dependencies.
@@ -16,12 +18,13 @@ import userEvent from "../../../packages/suite-ui/node_modules/@testing-library/
 import { ShareDialog } from "../src/apps/drive/components/share-dialog";
 import {
   applySharing,
+  FOLDER_READ_ONLY,
   loadSharing,
   SharingConflictError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
-} from "../src/apps/drive/lib/sharing/apply";
+} from "../src/apps/drive/lib/sharing/adapter";
 import type { SharingState } from "../src/apps/drive/lib/sharing/types";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import {
@@ -35,8 +38,8 @@ import {
   policy,
 } from "./sharing-fixtures";
 
-vi.mock("../src/apps/drive/lib/sharing/apply", async (original) => ({
-  ...(await original<typeof import("../src/apps/drive/lib/sharing/apply")>()),
+vi.mock("../src/apps/drive/lib/sharing/adapter", async (original) => ({
+  ...(await original<typeof import("../src/apps/drive/lib/sharing/adapter")>()),
   loadSharing: vi.fn(),
   applySharing: vi.fn(),
 }));
@@ -52,15 +55,9 @@ const state: SharingState = {
   general: { inherited: false, explicit: false, sources: [] },
 };
 function snapshot(next = state, canManage = true): SharingSnapshot {
-  const own = accessDocument();
-  return {
-    input: { access: { resource: FILE, documents: [own] } },
-    own,
-    ownExists: true,
-    state: next,
-    canManage,
-    etags: new Map(),
-  };
+  // The SDK token is opaque; the mocked adapter never inspects it.
+  const grants = { url: FILE, grants: [], version: "test" } as unknown as GrantSnapshot;
+  return { resource: FILE, grants, state: next, canManage };
 }
 const session: SharingSession = { fetch, webId: ALICE, storageUrl: "https://example.org/" };
 const onClose = vi.fn();
@@ -222,6 +219,15 @@ it("shows load failures, retries, and reports clipboard errors", async () => {
   await screen.findByText("Couldn't copy the link. Try again.");
 });
 
+it("shows an owner why folder sharing is read-only", async () => {
+  load.mockResolvedValue({ ...snapshot(state, false), readOnly: FOLDER_READ_ONLY });
+  show();
+  await ready();
+  expect(screen.getByText(FOLDER_READ_ONLY)).toBeTruthy();
+  expect(screen.queryByText(/Only an owner with Control/)).toBeNull();
+  expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).disabled).toBe(true);
+});
+
 it("reloads and displays the exact conflict message without retrying a save", async () => {
   apply.mockRejectedValueOnce(
     new SharingConflictError(
@@ -231,7 +237,27 @@ it("reloads and displays the exact conflict message without retrying a save", as
   show();
   await ready();
   fireEvent.click(screen.getByRole("button", { name: `Remove access for ${BOB}` }));
-  await screen.findByText("Sharing changed elsewhere, review and try again");
+  await screen.findByText(
+    "Sharing changed since you opened it. The current access is shown; review it and try again.",
+  );
+  expect(screen.queryByLabelText(`Role for ${BOB}`)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(apply).toHaveBeenCalledOnce();
+});
+
+it("clears stale controls on an unreadable conflict and reloads only on request", async () => {
+  apply.mockRejectedValueOnce(new SharingConflictError());
+  show();
+  await ready();
+  fireEvent.change(screen.getByLabelText(`Role for ${BOB}`), { target: { value: "editor" } });
+  await screen.findByText(/Sharing changed since you opened it. Reload to see the current access/);
+  expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
+  expect(onSaved).not.toHaveBeenCalled();
+  load.mockResolvedValueOnce(
+    snapshot({ ...state, people: state.people.filter((p) => p.webId !== BOB) }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await ready();
   expect(screen.queryByLabelText(`Role for ${BOB}`)).toBeNull();
   expect(apply).toHaveBeenCalledOnce();
 });
@@ -358,8 +384,8 @@ it.each(
   model,
   wasPublic,
 }) => {
-  const actual = await vi.importActual<typeof import("../src/apps/drive/lib/sharing/apply")>(
-    "../src/apps/drive/lib/sharing/apply",
+  const actual = await vi.importActual<typeof import("../src/apps/drive/lib/sharing/adapter")>(
+    "../src/apps/drive/lib/sharing/adapter",
   );
   const pod = createDemoPod({ root: session.storageUrl });
   await pod.fetch(FILE, { method: "PUT", body: "report" });
@@ -368,8 +394,8 @@ it.each(
     authorization(doc, ALICE, ["Read", "Write", "Control"]);
     if (wasPublic) authorization(doc, PUBLIC, ["Read"]);
   } else {
-    policy(doc, ALICE, ["Read", "Write"]);
-    policy(doc, ALICE, ["Read", "Write"], doc.source);
+    // CSS ACP managers hold resource Control (the SDK's default dialect).
+    policy(doc, ALICE, ["Read", "Write", "Control"]);
     if (wasPublic) policy(doc, PUBLIC, ["Read"]);
   }
   await pod.fetch(doc.source, {
