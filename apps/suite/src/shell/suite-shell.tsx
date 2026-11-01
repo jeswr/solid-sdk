@@ -6,8 +6,6 @@ import {
   Avatar,
   AvatarFallback,
   BottomTabBar,
-  Button,
-  Input,
   type RailPreferences,
   RailPreferencesProvider,
 } from "@jeswr/suite-ui";
@@ -18,13 +16,18 @@ import {
   type ShellFrameProps,
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
-import { usePathname } from "next/navigation";
-import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
+import type { SearchSource } from "./lib/search-results";
 import { appRegistry, visibleApps } from "./registry";
+import { GlobalSearch } from "./search/global-search";
+import { createLocalSearchSource } from "./search/local-source";
 import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
+import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
+import { ShortcutsProvider } from "./shortcuts/provider";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -33,6 +36,11 @@ export interface SuiteShellProps {
   context?: ReactNode;
   actions?: ReactNode;
   details?: ShellFrameProps["details"];
+  /**
+   * Where the TopBar search looks. Defaults to an empty local index (results then
+   * come only from items an app registers); SDK-APP-09 `useSearch` replaces it.
+   */
+  searchSource?: SearchSource;
   children: ReactNode;
 }
 
@@ -43,9 +51,12 @@ function Frame({
   context,
   actions,
   details,
+  searchSource,
   children,
 }: SuiteShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const emptySource = useMemo(() => createLocalSearchSource([]), []);
   const { active } = useAccounts();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
@@ -84,20 +95,20 @@ function Frame({
     }
   };
   const account = active && (
-    <a
-      className="suite-shell-icon-button"
-      href="/settings/account"
-      aria-label={`Account: ${active.name}`}
-    >
-      <Avatar>
-        <AvatarFallback>
-          {active.name
-            .split(/\s+/u)
-            .map((part) => part[0])
-            .slice(0, 2)
-            .join("")}
-        </AvatarFallback>
-      </Avatar>
+    <a className="suite-shell-icon-button" href="/settings/account">
+      <span className="suite-sr-only">Account: {active.name}</span>
+      {/* Initials are decoration; the link's name is the sentence above (WCAG 2.5.3). */}
+      <span aria-hidden="true">
+        <Avatar>
+          <AvatarFallback>
+            {active.name
+              .split(/\s+/u)
+              .map((part) => part[0])
+              .slice(0, 2)
+              .join("")}
+          </AvatarFallback>
+        </Avatar>
+      </span>
     </a>
   );
   const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
@@ -122,22 +133,16 @@ function Frame({
           actions,
           account: <div className="shell-mobile-account">{account}</div>,
           search: (
-            // biome-ignore lint/a11y/useSemanticElements: The lane contract requires a search form with native GET submission.
-            <form role="search" action="/search" className="shell-search">
-              <label className="suite-sr-only" htmlFor="shell-search">
-                Search in {app.name}
-              </label>
-              <Input
-                id="shell-search"
-                name="q"
-                type="search"
-                placeholder={`Search in ${app.name}`}
-              />
-              <input type="hidden" name="scope" value={slug} />
-              <Button type="submit" variant="ghost">
-                Search
-              </Button>
-            </form>
+            <GlobalSearch
+              source={searchSource ?? emptySource}
+              scope={{ app: slug, label: app.name }}
+              onOpen={(result) => router.push(result.href)}
+              onSeeAll={(query, scope) =>
+                router.push(
+                  `/search?q=${encodeURIComponent(query)}${scope ? `&scope=${scope}` : ""}`,
+                )
+              }
+            />
           ),
         }}
       >
@@ -151,7 +156,10 @@ export function SuiteShell(props: SuiteShellProps) {
   return (
     <Suspense>
       <SessionGuard>
-        <Frame {...props} />
+        <ShortcutsProvider>
+          <GlobalShortcuts />
+          <Frame {...props} />
+        </ShortcutsProvider>
       </SessionGuard>
     </Suspense>
   );

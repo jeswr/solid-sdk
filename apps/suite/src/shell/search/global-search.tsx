@@ -181,7 +181,10 @@ function SearchBox({
             variant="outline"
             size="sm"
             aria-label={
-              scopeEnabled ? `Remove scope: in ${scope.label}` : `Search in ${scope.label}`
+              // Visible text leads the name (WCAG 2.5.3 label in name).
+              scopeEnabled
+                ? `in ${scope.label}, remove scope`
+                : `Everywhere, search only in ${scope.label}`
             }
             onClick={() => {
               setScopeEnabled(!scopeEnabled);

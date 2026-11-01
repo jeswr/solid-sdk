@@ -45,14 +45,14 @@ test("different-account validation and the provider preview seam", async ({ page
   await screenshot(page, "signin", info.project.name);
   await address.fill("notaurl");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveText(
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "We couldn't find a sign-in service at that address",
   );
   await expect(address).toHaveAttribute("aria-describedby", "signin-error");
   await accessible(page);
   await address.fill("https://example.org/");
   await address.press("Enter");
-  await expect(page.getByRole("alert")).toHaveText(
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "Signing in with a Solid provider isn't switched on in this preview yet.",
   );
   expect(
@@ -73,36 +73,39 @@ test("pod explainer opens with the keyboard and returns focus", async ({ page })
     "A pod is a place to keep your data online.",
   );
   await accessible(page);
+  // Focus starts on Close, whose tooltip takes the first Escape (WCAG 1.4.13 dismissible).
   await page.keyboard.press("Escape");
+  if (await page.getByRole("dialog").isVisible()) await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
   await expect(trigger).toBeFocused();
 });
 
-test("demo reaches home and survives a reload", async ({ page }, info) => {
+test("demo lands on the start page and the shell keeps the session", async ({ page }, info) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/home$/);
-  await expect(page.getByRole("heading", { name: "Home", exact: true, level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await page.goto("/search");
+  await expect(page.getByRole("heading", { name: "Search", exact: true, level: 1 })).toBeVisible();
   await expect(
     page.getByRole("link", { name: /^Account: / }).filter({ visible: true }),
   ).toBeVisible();
-  await expect(page.getByText("Your data will show up here")).toBeVisible();
   await accessible(page);
-  await screenshot(page, "home", info.project.name);
+  await screenshot(page, "search", info.project.name);
   await page.reload();
   await expect(
     page.getByRole("link", { name: /^Account: / }).filter({ visible: true }),
   ).toBeVisible();
   await accessible(page);
   await page.goto("/");
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/drive(\/my)?$/);
 });
 
 test("session guard keeps a safe return route", async ({ page }) => {
-  await page.goto("/home");
-  await expect(page).toHaveURL(/\/signin\?next=%2Fhome$/);
+  await page.goto("/search");
+  await expect(page).toHaveURL(/\/signin\?next=%2Fsearch$/);
   await accessible(page);
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/search$/);
   await accessible(page);
 });
 
@@ -110,7 +113,7 @@ test("unsafe next cannot redirect the demo outside the suite", async ({ page }) 
   await page.goto("/signin?next=//evil.example");
   await accessible(page);
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/drive(\/my)?$/);
   await accessible(page);
 });
 
@@ -118,7 +121,7 @@ test("expired sessions keep content inert until reauthentication or signout", as
   await page.goto("/signin");
   await page.getByLabel("Your account ID or provider").fill("https://example.org/");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
   await page.evaluate(() =>
     localStorage.setItem(
       "suite.accounts.v1",
@@ -137,10 +140,10 @@ test("expired sessions keep content inert until reauthentication or signout", as
       }),
     ),
   );
-  await page.goto("/home");
+  await page.goto("/search");
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("Your session ended — sign in again to continue");
-  await expect(page.locator("[inert] #suite-page-title")).toHaveText("Home");
+  await expect(page.locator("[inert] #suite-page-title")).toHaveText("Search");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();
   await page.mouse.click(1, 1);
@@ -152,7 +155,7 @@ test("expired sessions keep content inert until reauthentication or signout", as
     "Signing in with a Solid provider isn't switched on in this preview yet.",
   );
   await dialog.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page).toHaveURL(/\/signin\?next=%2Fhome$/);
+  await expect(page).toHaveURL(/\/signin\?next=%2Fsearch$/);
   await accessible(page);
 });
 

@@ -39,7 +39,7 @@ test.afterEach(async ({ page }) => {
 test("groups, caps and labels local results; keyboard opens a result", async ({ page }, info) => {
   await ready(page);
   const input = await searchInput(page);
-  await page.getByRole("button", { name: "Remove scope: in Drive" }).click();
+  await page.getByRole("button", { name: "in Drive, remove scope" }).click();
   await input.fill("project");
   for (const name of ["Files", "Documents", "Tasks", "People", "Data"])
     await expect(page.getByRole("group", { name, exact: true })).toBeVisible();
@@ -67,9 +67,11 @@ test("scope chip and primary-modifier shortcut work while typing", async ({ page
   await expect(page.getByRole("group", { name: "Files", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "Documents", exact: true })).toHaveCount(0);
   await input.press("Control+Shift+F");
-  await expect(page.getByRole("button", { name: "Search in Drive" })).toHaveText("Everywhere");
+  await expect(page.getByRole("button", { name: "Everywhere, search only in Drive" })).toHaveText(
+    "Everywhere",
+  );
   await expect(page.getByRole("group", { name: "Documents", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Search in Drive" }).click();
+  await page.getByRole("button", { name: "Everywhere, search only in Drive" }).click();
   await expect(page.getByRole("group", { name: "Documents", exact: true })).toHaveCount(0);
   await capture(page, info, "search-scoped");
 });
@@ -240,7 +242,7 @@ test("results body filters and error recovery", async ({ page }, info) => {
   await expect(page.getByText("8 results", { exact: true })).toBeVisible();
   await capture(page, info, "search-results");
   await page.getByLabel("Fixture state").selectOption("results-error");
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeVisible();
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
 });
