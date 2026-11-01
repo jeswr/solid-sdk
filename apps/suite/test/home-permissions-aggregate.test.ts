@@ -273,12 +273,12 @@ describe("Home permission holdings", () => {
       expect(planRevoke(result.rows[0]!, "all").changes).toHaveLength(1);
     }
   });
-  it("preserves conjunctive conditions and counts only complete unrestricted public Read clauses", () => {
+  it("preserves condition metadata and counts the widest public Read exposure", () => {
     const publicSubject: Subject = { kind: "public" };
     const origin: Subject = { kind: "origin", origin: "https://app.test" };
     const restricted = grant(publicSubject, { who: [[publicSubject, origin]] });
     const result = aggregateHoldings([node([restricted])], { webId: owner, classify });
-    expect(result.summary).toEqual({ apps: 1, people: 0, publicItems: 0 });
+    expect(result.summary).toEqual({ apps: 1, people: 0, publicItems: 1 });
     expect(result.rows.find((row) => row.kind === "public")!.lines[0]).toMatchObject({
       conditions: [origin],
       resources: [expect.objectContaining({ clause: [publicSubject, origin] })],

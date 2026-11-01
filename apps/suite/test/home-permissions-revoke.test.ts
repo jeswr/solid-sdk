@@ -223,6 +223,88 @@ describe("WAC revocation and inverse plans", () => {
     });
     await same(await pod.graph(), body(""));
   });
+  it.each([
+    "named",
+    "blank",
+  ])("revokes one principal/origin conjunction on a %s rule, preserving other combinations and scopes", async (kind) => {
+    const other = `${ROOT}elsewhere`;
+    const a = "https://a.test";
+    const b = "https://b.test";
+    const rule = `${kind === "named" ? "<#bob>" : "[]"} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:origin <${a}>, <${b}>; acl:accessTo <${ROOT}>, <${other}>; acl:default <${ROOT}>; acl:mode acl:Read; <urn:purpose> "retain".`;
+    const data = body(rule);
+    const state = await snapshot(data);
+    const combinations = async (
+      pod: ReturnType<typeof fixture>,
+      resource: string,
+      members = false,
+    ) =>
+      readWacPolicy(await pod.graph(), resource, DOC)
+        .grants.filter((grant) =>
+          members ? grant.appliesTo !== "resource" : grant.appliesTo !== "members",
+        )
+        .flatMap((grant) => grant.who)
+        .filter((clause) => clause.some((subject) => subject.kind === "origin"))
+        .map((clause) => JSON.stringify(clause))
+        .sort();
+    const full = [BOB, CAROL]
+      .flatMap((webId) =>
+        [a, b].map((origin) =>
+          JSON.stringify([
+            { kind: "agent", webId },
+            { kind: "origin", origin },
+          ]),
+        ),
+      )
+      .sort();
+    const remaining = full.filter(
+      (clause) =>
+        clause !==
+        JSON.stringify([
+          { kind: "agent", webId: BOB },
+          { kind: "origin", origin: a },
+        ]),
+    );
+    for (const id of [BOB, a]) {
+      const pod = fixture(data);
+      const condition: Subject =
+        id === BOB ? { kind: "origin", origin: a } : { kind: "agent", webId: BOB };
+      const line = state.rows
+        .find((row) => row.id === id)!
+        .lines.find(
+          (line) =>
+            !line.inherited && JSON.stringify(line.conditions) === JSON.stringify([condition]),
+        )!;
+      const plan = planRevoke(line, "line");
+      expect(plan.changes).toHaveLength(1);
+      expect(plan.changes[0]!.clause).toEqual([
+        { kind: "agent", webId: BOB },
+        { kind: "origin", origin: a },
+      ]);
+      const { undo } = await pod.apply(plan);
+      expect(await combinations(pod, ROOT)).toEqual(remaining);
+      expect(await combinations(pod, ROOT, true)).toEqual(full);
+      expect(await combinations(pod, other)).toEqual(full);
+      const graph = await pod.graph();
+      expect([...graph.match(null, DataFactory.namedNode("urn:purpose"))]).toHaveLength(3);
+      expect(
+        [...graph.match(null, DataFactory.namedNode("urn:purpose"))].every(
+          (quad) => quad.object.value === "retain",
+        ),
+      ).toBe(true);
+      await pod.apply(undo);
+      await same(await pod.graph(), data);
+    }
+    for (const id of [BOB, a]) {
+      const pod = fixture(data);
+      const plan = planRevoke(state.rows.find((row) => row.id === id)!, "all");
+      expect(plan.changes).toHaveLength(4);
+      await pod.apply(plan);
+      const retained = full.filter((clause) => !clause.includes(id));
+      expect(await combinations(pod, ROOT)).toEqual(retained);
+      expect(await combinations(pod, ROOT, true)).toEqual(retained);
+      expect(await combinations(pod, other)).toEqual(full);
+    }
+  });
   it("resolves an unambiguous blank authorization across parser-local node labels", async () => {
     const shared = `[] a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
     const pod = fixture(body(shared));
@@ -369,7 +451,7 @@ describe("WAC revocation and inverse plans", () => {
       `[] a acl:Authorization; acl:agentClass foaf:Agent; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
     );
     const state = await snapshot(data);
-    expect(state.summary.publicItems).toBe(0);
+    expect(state.summary.publicItems).toBe(1);
     const pod = fixture(data);
     const { undo } = await pod.apply(planRevoke(state, "all"));
     await same(await pod.graph(), body(""));
@@ -515,6 +597,20 @@ describe("WAC revocation and inverse plans", () => {
     ).rejects.toThrow();
     expect((await pod.apply({ changes: [] })).undo).toEqual({ changes: [], restore: [] });
   });
+  it("refuses a conditional plan missing its subject or naming a stale condition", async () => {
+    const pod = fixture();
+    for (const clause of [
+      [{ kind: "origin", origin: "https://absent.test" }],
+      [
+        { kind: "agent", webId: BOB },
+        { kind: "origin", origin: "https://absent.test" },
+      ],
+    ] as Subject[][])
+      await expect(pod.apply({ changes: [change({ clause })] })).rejects.toBeInstanceOf(
+        AclConflictError,
+      );
+    expect(pod.puts()).toHaveLength(0);
+  });
   it("refuses undo over a concurrent graph change instead of overwriting unrelated work", async () => {
     const pod = fixture();
     const { undo } = await pod.apply({ changes: [change()] });
@@ -540,6 +636,7 @@ describe("WAC revocation and inverse plans", () => {
     const row = state.rows[0]!;
     for (const resource of row.lines[0]!.resources) {
       delete resource.subject;
+      delete resource.clause;
       delete resource.scope;
       delete resource.system;
     }

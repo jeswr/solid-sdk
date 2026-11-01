@@ -14,7 +14,7 @@ import type {
   RoleId,
   WalkedAccess,
 } from "./types";
-import { authorizationTurtle, clauseSignature, grantSignature } from "./vocab";
+import { authorizationTurtle, clauseSignature, grantSignature, isExposureCondition } from "./vocab";
 
 export function classifyAgent(subject: Subject): Pick<AgentRow, "kind" | "key" | "id"> | undefined {
   switch (subject.kind) {
@@ -69,7 +69,7 @@ export function aggregateHoldings(
     classify(url: string): Classification | undefined;
     records?: GrantRecordIndex;
   },
-): Omit<PermissionsSnapshot, "failures" | "truncated"> {
+): Omit<PermissionsSnapshot, "failures" | "truncated" | "warnings"> {
   nodes = nodes.map((node) => ({
     ...node,
     policy: {
@@ -95,13 +95,14 @@ export function aggregateHoldings(
         ? grant.appliesTo !== "resource"
         : grant.appliesTo !== "members";
       for (const clause of grant.who) {
-        if (clause.some((subject) => !classifyAgent(subject))) continue;
+        if (clause.some((subject) => !classifyAgent(subject) && !isExposureCondition(subject)))
+          continue;
         for (const subject of clause) {
-          const agent = classifyAgent(subject) as NonNullable<ReturnType<typeof classifyAgent>>;
-          if (agent.id === ctx.webId) continue;
+          const agent = classifyAgent(subject);
+          if (!agent || agent.id === ctx.webId) continue;
           if (
             agent.kind === "public" &&
-            clause.every((atom) => atom.kind === "public") &&
+            clause.every((atom) => atom.kind === "public" || isExposureCondition(atom)) &&
             applies &&
             grant.modes.has("read")
           )
@@ -140,6 +141,14 @@ export function aggregateHoldings(
             ),
           );
           const conditions = clause.filter((atom) => atom !== subject);
+          const restrictions = conditions.filter(isExposureCondition);
+          const conditionEnforcement = restrictions.length
+            ? node.system === "wac" &&
+              node.implementation === "css" &&
+              restrictions.every((atom) => atom.kind === "origin")
+              ? ("ignored" as const)
+              : ("unknown" as const)
+            : undefined;
           let row = rows.get(agent.key);
           if (!row) {
             row = { ...agent, lines: [] };
@@ -158,6 +167,7 @@ export function aggregateHoldings(
             record.purpose?.label,
             record.expiresAt,
             clauseSignature(conditions),
+            conditionEnforcement,
           ]);
           let line = row.lines.find((line) => line.key === key);
           if (!line) {
@@ -172,6 +182,7 @@ export function aggregateHoldings(
               modes: [],
               inherited,
               ...(conditions.length ? { conditions } : {}),
+              ...(conditionEnforcement ? { conditionEnforcement } : {}),
               ...(record.purpose ? { purpose: record.purpose } : {}),
               ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
             };

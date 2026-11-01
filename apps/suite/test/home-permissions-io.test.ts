@@ -213,6 +213,115 @@ describe("bounded Home permission discovery", () => {
     expect(snapshot.rows.map((r) => r.kind)).toEqual(["public", "authenticated", "app"]);
     expect(snapshot.summary).toEqual({ apps: 1, people: 0, publicItems: 1 });
   });
+  it("counts CSS public Read with acl:origin as public exposure and warns for unknown enforcement", async () => {
+    const pod = fixture({
+      [`${ROOT}.acl`]: {
+        body: acl(
+          ROOT,
+          `<#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const css = await pod.load({ implementation: "css" });
+    expect(css.summary.publicItems).toBe(1);
+    expect(css.failures).toEqual([]);
+    expect(css.warnings).toEqual([]);
+    expect(css.rows.find((row) => row.kind === "public")!.lines[0]).toMatchObject({
+      conditions: [{ kind: "origin", origin: "https://app.test" }],
+      conditionEnforcement: "ignored",
+    });
+    const unknown = await pod.load();
+    expect(unknown.summary.publicItems).toBe(1);
+    expect(unknown.rows[0]!.lines[0]!.conditionEnforcement).toBe("unknown");
+    expect(unknown.warnings).toEqual([
+      {
+        url: ROOT,
+        reason: "condition-enforcement-unknown",
+        conditions: [{ kind: "origin", origin: "https://app.test" }],
+      },
+    ]);
+  });
+  it("retains public exposure and metadata for ACP client and issuer conditions", async () => {
+    const endpoint = `${ROOT}policy.acr`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT), headers: { link: `<${endpoint}>; rel="acl"` } },
+      [endpoint]: {
+        body: `${PREFIX} <> a acp:AccessControlResource; acp:resource <${ROOT}>; acp:accessControl <#access>. <#access> acp:apply <#policy>. <#policy> acp:allow acl:Read; acp:anyOf <#match>. <#match> acp:agent acp:PublicAgent; acp:client <https://app.test/client.json>; acp:issuer <https://issuer.test/>.`,
+      },
+    });
+    const state = await pod.load();
+    expect(state.failures).toEqual([]);
+    expect(state.summary.publicItems).toBe(1);
+    const conditions = [
+      { kind: "client", clientId: "https://app.test/client.json" },
+      { kind: "issuer", issuer: "https://issuer.test/" },
+    ];
+    expect(state.rows[0]).toMatchObject({
+      kind: "public",
+      lines: [{ conditions, conditionEnforcement: "unknown" }],
+    });
+    expect(state.warnings).toEqual([
+      { url: ROOT, reason: "condition-enforcement-unknown", conditions },
+    ]);
+  });
+  it.each([
+    "linked",
+    "fallback",
+    "network",
+  ])("discovers and revokes Control-only ACLs after a failed resource HEAD (%s)", async (discovery) => {
+    const file = `${ROOT}private`;
+    const endpoint = discovery === "linked" ? `${ROOT}private-policy` : `${file}.acl`;
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, [file]) },
+      [file]: {
+        status: 403,
+        headers: { link: discovery === "linked" ? `<${endpoint}>; rel="acl"` : "" },
+      },
+      [endpoint]: {
+        body: `${PREFIX} <#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${file}>; acl:mode acl:Control. <#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+      },
+    });
+    const transport = pod.fetch.getMockImplementation()!;
+    pod.fetch.mockImplementation(async (input, init) => {
+      if (String(input) === file && discovery === "network") throw new Error("offline");
+      if (init?.method === "PUT") {
+        expect(String(input)).toBe(endpoint);
+        pod.docs.set(endpoint, { body: String(init.body) });
+        return new Response(null, { status: 205 });
+      }
+      return transport(input, init);
+    });
+    const state = await pod.load();
+    expect(state.failures).toEqual([
+      { url: file, reason: discovery === "network" ? "unreadable" : "forbidden" },
+    ]);
+    expect(state.summary.people).toBe(1);
+    expect(pod.fetch.mock.calls.filter(([url]) => String(url) === file)).toHaveLength(1);
+    const plan = planRevoke(state.rows[0]!.lines[0]!, "line");
+    expect(plan.changes[0]).toMatchObject({ source: endpoint, resource: file });
+    await applyRevoke(plan, { fetch: pod.fetch, storage: ROOT, webId: OWNER });
+    expect((await pod.load()).rows).toEqual([]);
+  });
+  it("skips malformed listing members independently before discovering valid children", async () => {
+    const file = `${ROOT}shared`;
+    const pod = fixture({
+      [ROOT]: {
+        body: `${listing(ROOT)} <${ROOT}> ldp:contains "bad", _:bad, <urn:bad>, <https://evil.test/item>, <${ROOT}%2Fescape>, <${file}>.`,
+      },
+      [file]: { type: "application/octet-stream" },
+      [`${file}.acl`]: {
+        body: acl(
+          file,
+          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+        ),
+      },
+    });
+    const state = await pod.load();
+    expect(state.summary.people).toBe(1);
+    expect(state.rows[0]!.lines[0]!.resources[0]!.url).toBe(file);
+    expect(state.failures).toContainEqual({ url: "bad", reason: "unreadable" });
+    expect(pod.fetch.mock.calls.every(([url]) => String(url).startsWith(ROOT))).toBe(true);
+  });
   it.each([
     401, 403, 404, 500,
   ])("reports an ACL %i without treating forbidden ACLs as missing", async (status) => {
@@ -387,7 +496,10 @@ describe("bounded Home permission discovery", () => {
     const file = `${ROOT}unlisted/leaf`;
     pod.docs.set(ROOT, { body: listing(ROOT, [file]) });
     pod.docs.set(file, { type: "application/octet-stream" });
-    expect((await pod.load()).failures).toContainEqual({ url: `${file}.acl`, reason: "not-found" });
+    expect((await pod.load()).failures).toContainEqual({
+      url: `${ROOT}unlisted/`,
+      reason: "not-found",
+    });
   });
 });
 // An empty graph is deliberately not presumed to use WAC.

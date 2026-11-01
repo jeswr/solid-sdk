@@ -16,6 +16,10 @@ export const PUBLIC = "http://xmlns.com/foaf/0.1/Agent";
 export const AUTHENTICATED = `${ACL}AuthenticatedAgent`;
 export const SCOPES = ["accessTo", "default", "defaultForNew"] as const;
 export const SELECTORS = ["agent", "agentClass", "agentGroup", "origin"] as const;
+/** These atoms describe possible restrictions, never proof of narrower exposure. */
+export function isExposureCondition(subject: Subject): boolean {
+  return ["origin", "client", "issuer"].includes(subject.kind);
+}
 /** Order-independent conjunction identity, without parser-local source labels. */
 export function clauseSignature(clause: readonly Subject[]): string {
   return JSON.stringify(
