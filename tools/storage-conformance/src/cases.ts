@@ -1,44 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import {
-  type Entry,
-  type StorageClient,
-  StorageError,
-  type WriteResult,
-} from "@jeswr/storage-client";
+import { StorageError, type WriteResult } from "@jeswr/storage-client";
+import { container, entries, etag, text } from "./case-helpers.js";
+import { extendedCases } from "./extended-cases.js";
 import { assertIsomorphic, expectStorageError } from "./testing.js";
-import type { ConformanceCase, RunningTarget, SupportProbe } from "./types.js";
-
-async function container(target: RunningTarget, name: string): Promise<string> {
-  return (await target.storage.create(target.root, null, { name, kind: "container" })).url;
-}
-
-async function text(
-  storage: StorageClient,
-  parent: string,
-  name = "note.txt",
-  body = "first draft",
-) {
-  return storage.create(parent, body, { name, contentType: "text/plain" });
-}
-
-async function etag(storage: StorageClient, url: string): Promise<string> {
-  const tag = (await storage.head(url)).etag;
-  assert(tag, "Target must supply a validator");
-  return tag;
-}
-
-async function entries(storage: StorageClient, parent: string): Promise<Entry[]> {
-  const items: Entry[] = [];
-  for await (const item of storage.listAll(parent)) items.push(item);
-  return items;
-}
+import type { ConformanceCase, SupportProbe } from "./types.js";
 
 /** An absent LWS move must reject the real operation, rather than silently succeeding. */
 export const moveProbe: SupportProbe = async (target) => {
-  const parent = await container(target, "gate-move");
-  const destination = await container(target, "gate-move-destination");
+  const parent = (await target.storage.create(target.root, null, { kind: "container" })).url;
+  const destination = (await target.storage.create(target.root, null, { kind: "container" })).url;
   const item = await text(target.storage, parent);
   if (
     target.storage.protocol === "lws" &&
@@ -93,8 +65,15 @@ function listCase(count: number): ConformanceCase {
     async run(target) {
       const parent = await container(target, `list-${count}`);
       const expected = new Set<string>();
-      for (let i = 0; i < count; i++)
-        expected.add((await text(target.storage, parent, `item-${i}.txt`)).url);
+      // Independent fixture writes can overlap; cap load on the in-process HTTP targets.
+      for (let start = 0; start < count; start += 16) {
+        const created = await Promise.all(
+          Array.from({ length: Math.min(16, count - start) }, (_, offset) =>
+            text(target.storage, parent, `item-${start + offset}.txt`),
+          ),
+        );
+        for (const item of created) expected.add(item.url);
+      }
       let page = await target.storage.list(parent);
       if (target.paginationWitnessSize !== undefined && count >= target.paginationWitnessSize)
         assert(page.next, "Configured pagination witness must have a next page");
@@ -404,14 +383,14 @@ const errors: ConformanceCase[] = [
       const item = await text(target.storage, parent);
       await expectStorageError(target.storage.read(`${parent}absent`), "not-found", 404);
       await expectStorageError(target.storage.read("https://foreign.example/secret"), "scope");
-      await expectStorageError(
+      const refused = await expectStorageError(
         target.storage.write(parent, "invalid", {
           ifMatch: await etag(target.storage, parent),
           contentType: "text/plain",
         }),
         "method-not-allowed",
-        405,
       );
+      assert(refused.status === null || refused.status === 405);
       await expectStorageError(
         target.storage.delete(item.url, { ifMatch: '"outdated"' }),
         "precondition-failed",
@@ -441,7 +420,7 @@ const errors: ConformanceCase[] = [
   },
 ];
 
-/** T-080 groups only. Later lanes add PATCH/MOVE/META/CAP/NOTIFY/AUTH/ACCESS/SYNC. */
+/** Shared T-080/T-081 storage scenarios. */
 export const storageCases: readonly ConformanceCase[] = [
   ...[0, 1, 25, 1500].map(listCase),
   listKinds,
@@ -449,4 +428,5 @@ export const storageCases: readonly ConformanceCase[] = [
   ...rdf,
   ...deletion,
   ...errors,
+  ...extendedCases(moveProbe),
 ];

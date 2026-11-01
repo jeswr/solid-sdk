@@ -7,6 +7,7 @@ description: Work on @jeswr/storage-conformance, the shared storage conformance 
 # @jeswr/storage-conformance
 
 T-080 implements the shared conformance runner, report generators, and SC-LIST/RW/RDF/DEL/ERR.
+T-081 adds CSS, SC-PATCH/MOVE/META/CAP and opt-in storage fixture recording/replay.
 The root entry exports scenarios, targets, `runTarget`, `evaluateCase`, `compareClaims`,
 `generateMatrix`, and `writeReports`; `./testing` exports structured error and RDF isomorphism assertions.
 
@@ -25,6 +26,19 @@ Do not interpret arbitrary network/server errors as evidence of absence. An unad
 working operation fails with `advertisement-missing:<feature>`. Available features cannot skip.
 Compare target claims independently of the derive function; ignore evidence strings only.
 Network absence probes must try the real protocol operation, not the SDK's capability guard.
+
+`--target css` starts pinned CSS 7.2.0 in process with disposable file storage and one account
+per test file, authenticated through pod-auth client credentials. Its root is seeded private;
+anonymous reads must fail. Never record account/token exchanges. `RECORD=1` captures storage
+traffic per run and scenario under `packages/storage-client/testing/fixtures/<target>/`.
+Use the existing recorder's redaction, inspect decoded bodies, and refresh curated baseline
+captures with both packages' offline tests. Preserve setup/runner-discovery separation.
+
+SC-CAP must count OPTIONS with a fresh cache when declarations are incomplete, and zero
+probes for complete advertisements. Do not claim CSS's OPTIONS reveals WAC: it omits those
+headers. CSS metadata lacks ETags; assert conditional edit refusal and keep memory add/remove
+coverage. Local SDK refusals have null HTTP status. Do not accept CSS's RDF negotiation 500
+as `not-rdf` or skip the existing baseline case to obtain a green report.
 
 Use only public storage-client APIs. Memory uses `createMemoryStorage`; sparq uses
 `createSolidPod` with fixed-owner auth, then public `createPodClient` over a dispatcher fetch

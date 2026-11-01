@@ -6,12 +6,17 @@ import { selectTargets } from "./targets/index.js";
 
 // sparq 0.1.6 cannot complete discovery. Explicit TARGET runs still fail closed.
 for (const target of selectTargets(process.env.TARGET ?? "memory")) {
-  test(`storage conformance: ${target.name}`, async () => {
-    const report = await runTarget(target, storageCases);
-    expect(report.results.filter((row) => row.status === "fail")).toEqual([]);
-    expect(
-      report.results.filter((row) => row.test.startsWith("SC-") && !row.test.includes(":absence:"))
-        .length,
-    ).toBe(storageCases.length);
-  }, 120_000);
+  test(
+    `storage conformance: ${target.name}`,
+    async () => {
+      const report = await runTarget(target, storageCases);
+      expect(report.results.filter((row) => row.status === "fail")).toEqual([]);
+      expect(
+        report.results.filter(
+          (row) => row.test.startsWith("SC-") && !row.test.includes(":absence:"),
+        ).length,
+      ).toBe(storageCases.length);
+    },
+    target.name === "css" ? 600_000 : 120_000,
+  );
 }

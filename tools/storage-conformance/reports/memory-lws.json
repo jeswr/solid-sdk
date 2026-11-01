@@ -130,5 +130,59 @@
     "status": "skip",
     "feature": "move",
     "reason": "target-lacks:move"
+  },
+  {
+    "test": "SC-PATCH-rdf",
+    "status": "pass",
+    "feature": "patch",
+    "reason": null
+  },
+  {
+    "test": "SC-PATCH-json",
+    "status": "pass",
+    "feature": "patch",
+    "reason": null
+  },
+  {
+    "test": "SC-PATCH-where",
+    "status": "pass",
+    "feature": "patch",
+    "reason": null
+  },
+  {
+    "test": "SC-MOVE-resource:absence:move",
+    "status": "pass",
+    "feature": "move",
+    "reason": null
+  },
+  {
+    "test": "SC-MOVE-resource",
+    "status": "skip",
+    "feature": "move",
+    "reason": "target-lacks:move"
+  },
+  {
+    "test": "SC-MOVE-container-cycle:absence:move",
+    "status": "pass",
+    "feature": "move",
+    "reason": null
+  },
+  {
+    "test": "SC-MOVE-container-cycle",
+    "status": "skip",
+    "feature": "move",
+    "reason": "target-lacks:move"
+  },
+  {
+    "test": "SC-META-links",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-CAP-discovery-cache",
+    "status": "pass",
+    "feature": null,
+    "reason": null
   }
 ]

@@ -20,7 +20,7 @@ export function memoryTarget(
         protocol,
         id: root,
         root,
-        descriptionUrl: null,
+        descriptionUrl: `${root}description`,
         services: [],
         capabilities: [
           {
