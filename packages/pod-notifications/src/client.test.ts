@@ -261,6 +261,8 @@ test("opaque LWS containers establish a baseline, observe changes and reconcile 
   sub.on("resync", resync);
   await timers.advanceBy(0);
   expect(changes).toEqual([]);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   revision = 1;
   await timers.advanceBy(10);
   expect(changes).toMatchObject([
@@ -310,6 +312,8 @@ test.each([
   sub.on("change", changes);
   sub.on("resync", resync);
   await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   net.set(false);
   await storage.delete(hot.url, { ifMatch: hot.etag as string });
   const realHead = storage.head.bind(storage);
@@ -379,6 +383,8 @@ test("an absent hot resource cannot hide transient failures or missing listing p
   sub.on("resync", resync);
   sub.on("change", changes);
   await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   net.set(false);
   const created = await storage.create(root, "new", { contentType: "text/plain", name: "new" });
   vi.spyOn(storage, "listAll").mockImplementationOnce(async function* () {

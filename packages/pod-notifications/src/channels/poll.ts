@@ -38,7 +38,8 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
   let active: AbortController | undefined;
   let stopped = false;
   let resume = false;
-  let offlineSince: Date | undefined;
+  // Reconcile once after setup, including changes absorbed by the quiet baseline.
+  let resyncSince: Date | undefined = new Date(0);
   let sequence = 0;
 
   const clear = () => {
@@ -139,9 +140,9 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
     } finally {
       active = undefined;
       if (!stopped && isOnline()) {
-        if (offlineSince && !request.signal.aborted && reconciled) {
-          subscription.resync(offlineSince);
-          offlineSince = undefined;
+        if (resyncSince && !request.signal.aborted && reconciled) {
+          subscription.resync(resyncSince);
+          resyncSince = undefined;
         }
         schedule(resume ? 0 : options.intervalMs);
         resume = false;
@@ -149,7 +150,7 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
     }
   };
   const offline = () => {
-    offlineSince = new Date(options.now());
+    resyncSince ??= new Date(options.now());
     clear();
     active?.abort();
     subscription.transition("degraded", "offline");

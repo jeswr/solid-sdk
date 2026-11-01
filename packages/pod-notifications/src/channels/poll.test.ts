@@ -2,7 +2,7 @@
 import type { AuthFetch } from "@jeswr/storage-client";
 import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { FakeTimers } from "../testing.js";
 import type { ChangeEvent } from "../types.js";
 import { createPollChannel } from "./poll.js";
@@ -77,5 +77,50 @@ test("direct polling channel handles an already-aborted signal without schedulin
     signal: abort.signal,
   });
   expect(sub.state).toBe("closed");
+  expect(timers.pending).toBe(0);
+});
+
+test("setup resync waits for a complete baseline and emits only once after a failed page", async () => {
+  const storage = createMemoryStorage({ pageSize: 1 });
+  const child = await storage.create(storage.root, "new", {
+    contentType: "text/plain",
+    name: "new",
+  });
+  const listAll = storage.listAll.bind(storage);
+  vi.spyOn(storage, "listAll").mockImplementationOnce(async function* (...args) {
+    yield* listAll(...args);
+    throw new Error("Final listing page failed");
+  });
+  const timers = new FakeTimers(100);
+  const sub = createPollChannel({
+    storage,
+    topics: [storage.root, child.url],
+    intervalMs: 10,
+    timers,
+    now: timers.now,
+  });
+  const resync = vi.fn();
+  const changes = vi.fn();
+  sub.on("resync", resync);
+  sub.on("change", changes);
+  await timers.advanceBy(0);
+  expect(resync).not.toHaveBeenCalled();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  vi.spyOn(storage, "listAll").mockImplementationOnce(async function* (...args) {
+    yield* listAll(...args);
+    started.resolve();
+    await release.promise;
+  });
+  const tick = timers.advanceBy(10);
+  await started.promise;
+  expect(resync).not.toHaveBeenCalled();
+  release.resolve();
+  await tick;
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  await timers.advanceBy(20);
+  expect(resync).toHaveBeenCalledOnce();
+  expect(changes).not.toHaveBeenCalled();
+  await sub.close();
   expect(timers.pending).toBe(0);
 });

@@ -8,6 +8,9 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as guardedFetch from "../packages/guarded-fetch/src/index.ts";
+import { createNotifications } from "../packages/pod-notifications/src/index.ts";
+import { FakeTimers } from "../packages/pod-notifications/src/testing.ts";
+import { createMemoryStorage } from "../packages/storage-client/dist/memory.js";
 
 // Reuse existing package dependencies; the workspace root needs no new dependency.
 const packageRequire = createRequire(
@@ -412,6 +415,53 @@ describe("reviewed recipe failure boundaries", () => {
     expect(subscription.close).toHaveBeenCalledOnce();
     expect(handlers.size).toBe(0);
     expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("reconciles a change absorbed by the real polling baseline without another mutation", async () => {
+    const code = blocks("pod-notifications", "ts")[0];
+    const timers = new FakeTimers(100);
+    const storage = createMemoryStorage();
+    const { watchCollection } = await execute(
+      code,
+      {},
+      {
+        "@jeswr/pod-notifications": {
+          createNotifications: (deps) => createNotifications({ ...deps, timers, now: timers.now }),
+        },
+      },
+      "({ watchCollection })",
+    );
+    let cached;
+    const reconcile = vi.fn(async () => {
+      const members = [];
+      for await (const entry of storage.listAll(storage.root)) members.push(entry.url);
+      cached = members;
+    });
+    const invalidate = vi.fn();
+    const reportError = vi.fn();
+    const cleanup = await watchCollection(
+      vi.fn(),
+      storage,
+      `${storage.root}missing`,
+      invalidate,
+      reconcile,
+      reportError,
+    );
+    expect(cached).toEqual([]);
+    const child = await storage.create(storage.root, "new", {
+      contentType: "text/plain",
+      name: "new",
+    });
+    // The first poll absorbs this mutation into its quiet baseline.
+    await timers.advanceBy(0);
+    await vi.waitFor(() => expect(cached).toEqual([child.url]));
+    expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
+    await timers.advanceBy(30_000);
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+    expect(timers.pending).toBe(0);
   });
 
   it("reconciles changes during push setup on first live without waiting for resync", async () => {

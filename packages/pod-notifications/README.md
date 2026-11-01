@@ -88,7 +88,9 @@ protocol banners, malformed frames and unsolicited/foreign resources are ignored
 the WebSocket heartbeat, reconnect, offline and resync lifecycle.
 
 Polling starts on the next timer turn with a quiet HEAD/listAll baseline, then repeats every
-30 seconds by default. Changed non-null ETags produce `Update`; complete membership diffs
+30 seconds by default. Its first successful cycle emits `resync(new Date(0))` after all topics
+finish so consumers can refresh changes absorbed during setup. Changed non-null ETags produce
+`Update`; complete membership diffs
 produce `Create` with `target` and `Delete` with `origin`. Missing ETags do not imply updates;
 listings still detect membership changes. A failed page never commits a partial snapshot.
 Every polling HEAD and listing page requests HTTP cache revalidation through the storage API.

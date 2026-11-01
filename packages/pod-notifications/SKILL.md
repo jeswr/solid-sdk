@@ -61,7 +61,7 @@ export async function watchCollection(
     await subscription.close();
   };
   try {
-    // Seed polling/already-live subscriptions; first live covers the push setup gap.
+    // Seed immediately; polling resync and first live cover their setup gaps.
     await reconcileSerially(new Date(0));
   } catch (error) {
     await close();
@@ -76,8 +76,10 @@ also accepts an abort signal. Alternatively iterate the subscription with `for a
 an iterator detaches that iterator, so still close the subscription itself.
 
 `subscribe()` can return while push is still connecting. The first `live` transition does
-not emit `resync`, so refresh again then to cover changes during setup. Initial reconciliation
-is awaited and failures close the subscription before rejecting `watchCollection`. Later
+not emit `resync`, so refresh again then to cover changes during setup. Polling emits a full
+`resync(new Date(0))` after its first successful baseline to cover the polling setup gap.
+Initial reconciliation is awaited and failures close the subscription before rejecting
+`watchCollection`. Later
 reconciliation failures also close it and call the application's non-throwing `reportError`
 handler; use that handler to show an error or arrange a retry. Initial, first-live and resync
 reconciliations share a serial queue so an older read cannot overwrite a newer snapshot.
