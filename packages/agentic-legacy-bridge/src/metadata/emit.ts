@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The OUTBOUND standardized-metadata emitter (metadata-protocol Rule 2 —
  * `NOW-PERSONAL-AGENT.md` §5.2): when the agent performs an action — the flagship
@@ -133,7 +134,7 @@ export async function buildActionMetadata(
   const json = JSON.stringify(credential, null, 2);
   const headers: Record<string, string> = {};
   const podCopy = safeHttpIri(options.podCopyUrl);
-  if (podCopy !== undefined) headers["X-Agentic-Reply"] = podCopy;
+  if (podCopy !== undefined) headers["X-Agentic-Reply"] = new URL(podCopy).href;
 
   return {
     credential,

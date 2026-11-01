@@ -25,6 +25,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(SuiteAuthSessionPlugin.class);
+        registerPlugin(SuitePushPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
         registerPlugin(SuiteSecureStorePlugin.class);

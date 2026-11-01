@@ -48,6 +48,9 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     implementation "androidx.browser:browser:$androidxBrowserVersion"
+    // AUTHORED-BY Codex GPT-6.1-Sol: pinned FCM; no Firebase configuration required to build.
+    implementation "com.google.firebase:firebase-messaging:24.1.2"
+    implementation "com.google.firebase:firebase-messaging-directboot:24.1.2"
     implementation project(':capacitor-android')
     // SuiteMessageHandler extends Capacitor's MessageHandler, whose constructor names Cordova's
     // PluginManager; Capacitor already ships Cordova at runtime, so this adds compile-time types only.

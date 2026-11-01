@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { safeIri } from "@jeswr/pod-access";
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
-import type { Store } from "n3";
+import type { Term } from "@rdfjs/types";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, type Store } from "n3";
 import { ResourceReadError, readBody } from "./resource-body.js";
 import type { PodHttp } from "./types.js";
 
@@ -14,11 +17,30 @@ export {
   modes,
   parent,
   RDF,
-  RdfNode,
   readModes,
   safeIri,
   serialize,
 } from "@jeswr/pod-access";
+/** Local typed graph helper for the migrator's RDF fixtures. */
+export class RdfNode extends TermWrapper {
+  iris(predicate: string): string[] {
+    return [...SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string)];
+  }
+  add(predicate: string, value: string): void {
+    SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string).add(
+      safeIri(value),
+    );
+  }
+  nodes(predicate: string): RdfNode[] {
+    return [...this.dataset.match(this as unknown as Term, DataFactory.namedNode(predicate))].map(
+      (q) => {
+        if (q.object.termType !== "NamedNode" && q.object.termType !== "BlankNode")
+          throw new TypeError("RDF node required");
+        return new RdfNode(q.object, this.dataset, DataFactory);
+      },
+    );
+  }
+}
 export async function parse(
   response: Response,
   url: string,

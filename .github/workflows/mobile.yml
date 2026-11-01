@@ -269,7 +269,7 @@ jobs:
         working-directory: apps/mobile/ios/App
         env:
           TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}
-        # The secure store's tests use the real simulator Keychain, which refuses an unsigned
+        # The secure store and push signing-key tests use the real simulator Keychain, which refuses an unsigned
         # host app with errSecMissingEntitlement (-34018); ad-hoc signing needs no team.
         run: |
           for configuration in Debug Release; do

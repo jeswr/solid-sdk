@@ -20,6 +20,7 @@ class MainViewController: CAPBridgeViewController {
         }
         bridge.registerPluginInstance(SuiteNavigationPlugin())
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
+        bridge.registerPluginInstance(SuitePushPlugin())
         bridge.registerPluginInstance(SuiteShareIntakePlugin())
         bridge.registerPluginInstance(SuiteShareStagingPlugin())
         let secureStore = SuiteSecureStorePlugin()
