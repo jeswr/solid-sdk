@@ -626,3 +626,206 @@ describe("runImport enforces cancellation for adapters that ignore ctx.signal", 
     expect(calls.filter((call) => call.startsWith("write ")).length).toBeGreaterThan(1);
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("runImport checks cancellation at the Pod writer boundary", () => {
+  const reason = new Error("cancelled by user");
+  const doc = () => {
+    const dataset = new Store();
+    const song = new MusicRecording(
+      `${TEST_POD_ROOT}integrations/toy/music/songs.ttl#song-1`,
+      dataset,
+      DataFactory,
+    ).mark();
+    song.name = "Demo Song";
+    return {
+      slug: "music/songs.ttl",
+      category: "media",
+      forClass: CLASSES.MusicRecording,
+      dataset,
+    };
+  };
+  /** Resolves `reached` when the paused call starts; it continues only after `release()`. */
+  function pause() {
+    let reached!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { started, reached: () => reached(), released, release: () => release() };
+  }
+  const writes = new Set(["PUT", "PATCH", "POST", "DELETE"]);
+
+  it.each([
+    ["session.write's implicit read", "music/songs.ttl", ["read music/songs.ttl"]],
+    [
+      "finish()'s provenance read",
+      "_provenance.ttl",
+      ["read music/songs.ttl", "write music/songs.ttl", "register", "read _provenance.ttl"],
+    ],
+  ] as const)("sends no write when cancelled during %s (custom PodWriter) and reports cancelled", async (_name, pausedSlug, expected) => {
+    const controller = new AbortController();
+    const gate = pause();
+    const calls: string[] = [];
+    const podWriter: import("./types.js").PodWriter = {
+      resolve: (slug) => `https://memory.test/${slug}`,
+      read: async (slug) => {
+        calls.push(`read ${slug}`);
+        if (slug === pausedSlug) {
+          gate.reached();
+          await gate.released;
+        }
+        return undefined;
+      },
+      write: async (written) => {
+        calls.push(`write ${written.slug}`);
+        return {
+          url: `https://memory.test/${written.slug}`,
+          category: written.category,
+          forClass: written.forClass,
+        };
+      },
+      registerType: async () => {
+        calls.push("register");
+        return { indexUrl: "https://memory.test/index" };
+      },
+    };
+    const states: import("./types.js").ConnectorState[] = [];
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        return { cursor: "next" };
+      },
+    };
+    const run = runImport({
+      adapter,
+      mode: "demo",
+      podWriter,
+      signal: controller.signal,
+      onState: (state) => states.push(state),
+    });
+    await gate.started;
+    controller.abort(reason);
+    gate.release();
+    await expect(run).rejects.toBe(reason);
+    expect(calls).toEqual(expected);
+    // Reported as a failed run: no success state and no advanced checkpoint.
+    expect(states).toEqual([expect.objectContaining({ lastOutcome: "error" })]);
+    expect(states[0]?.cursor).toBeUndefined();
+    // The connector is free for the next run.
+    await expect(runImport({ adapter, mode: "demo", podWriter })).resolves.toMatchObject({
+      cursor: "next",
+    });
+  });
+
+  it.each([
+    [
+      "session.write's implicit read",
+      (url: string, method: string) =>
+        method === "GET" && url === `${TEST_POD_ROOT}integrations/toy/music/songs.ttl`,
+    ],
+    [
+      "finish()'s provenance read",
+      (url: string, method: string) =>
+        method === "GET" && url === `${TEST_POD_ROOT}integrations/toy/_provenance.ttl`,
+    ],
+    [
+      "Type Index registration's profile read",
+      (url: string, method: string) => method === "GET" && url === TEST_PROFILE_DOC,
+    ],
+    [
+      "writeBinary's replace-mode ETag read",
+      (url: string, method: string) =>
+        method === "HEAD" && url === `${TEST_POD_ROOT}integrations/toy/files/a.bin`,
+    ],
+  ] as const)("sends no Pod write request when cancelled during %s (fetch-backed writer)", async (_name, paused) => {
+    const pod = createMemoryPod();
+    const controller = new AbortController();
+    const gate = pause();
+    const sent: { method: string; url: string; signal?: AbortSignal | null }[] = [];
+    let pausedSignal: AbortSignal | null | undefined;
+    const transport: typeof fetch = async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
+      sent.push({ method, url, signal: init?.signal });
+      if (paused(url, method)) {
+        pausedSignal = init?.signal;
+        gate.reached();
+        await gate.released;
+      }
+      return pod.fetch(input, init);
+    };
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        await ctx.writeBinary({
+          slug: "files/a.bin",
+          body: new Uint8Array([1]),
+          contentType: "application/octet-stream",
+          mode: "replace",
+        });
+        return {};
+      },
+    };
+    const run = runImport({
+      adapter,
+      mode: "demo",
+      podWriter: createFetchPodWriter({
+        adapterId: "toy",
+        webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
+        podRoot: TEST_POD_ROOT,
+        fetch: transport,
+        signal: controller.signal,
+      }),
+      signal: controller.signal,
+    });
+    await gate.started;
+    const before = sent.length;
+    controller.abort(reason);
+    // The signal reaches the request itself, so a transport honouring it aborts in flight.
+    expect(pausedSignal?.aborted).toBe(true);
+    gate.release();
+    await expect(run).rejects.toBe(reason);
+    expect(sent.slice(before).filter((request) => writes.has(request.method))).toEqual([]);
+    expect(sent.every((request) => request.signal instanceof AbortSignal)).toBe(true);
+    expect(pod.get(`${TEST_POD_ROOT}integrations/toy/_provenance.ttl`)).toBeUndefined();
+  });
+
+  it("checks every Pod request inside a port, not only the port entry", async () => {
+    const pod = createMemoryPod();
+    const controller = new AbortController();
+    const sent: string[] = [];
+    const transport: typeof fetch = async (input, init) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      sent.push(`${method} ${input instanceof Request ? input.url : String(input)}`);
+      const response = await pod.fetch(input, init);
+      // Cancel after Type Index registration's first read completes, inside registerType.
+      if (method === "GET" && String(input) === TEST_PROFILE_DOC) controller.abort(reason);
+      return response;
+    };
+    const writer = createFetchPodWriter({
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
+      podRoot: TEST_POD_ROOT,
+      fetch: transport,
+      signal: controller.signal,
+    });
+    await expect(
+      writer.registerType([
+        { forClass: CLASSES.MusicRecording, container: `${TEST_POD_ROOT}integrations/toy/music/` },
+      ]),
+    ).rejects.toBe(reason);
+    const profileRead = sent.indexOf(`GET ${TEST_PROFILE_DOC}`);
+    expect(profileRead).toBeGreaterThanOrEqual(0);
+    expect(sent.slice(profileRead + 1)).toEqual([]);
+  });
+});

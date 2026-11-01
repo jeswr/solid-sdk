@@ -295,7 +295,8 @@ retaining the last successful checkpoint. Before accessing JSON, it discovers th
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
-Conditional JSON PUTs reject stale ETags and concurrent creates. State persistence failures
+Conditional JSON PUTs reject stale ETags and concurrent creates. Once the CLI is cancelled it
+sends no further Pod or source request, so a cancelled run leaves the checkpoint unchanged. State persistence failures
 fail the command even if import documents were already written; deterministic slugs allow retry.
 
 Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,
@@ -397,7 +398,12 @@ counts and Type Index registration. Failed runs attempt provenance recording and
 A cancelled run makes no further Pod request, so it records no activity: documents and items it
 already wrote keep `prov:wasGeneratedBy` naming an activity absent from `_provenance.ttl`. Read
 such an unrecorded activity as a cancelled, incomplete run; the next run that rewrites those
-documents or items links them to its own recorded activity.
+documents or items links them to its own recorded activity. `runImport` checks its signal at the
+PodWriter boundary, immediately before every port call, so a cancel while a session's implicit
+read or the provenance read is pending still stops the write that follows and the run rejects
+with the abort reason. Pass the same signal as `createFetchPodWriter({ signal })` to check it
+before every HTTP request inside a port (binary ETag reads, Type Index and profile updates) and
+to abort requests in flight.
 
 Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutating adapter
 input. Existing music, calendar and social class alignments add sector types alongside legacy

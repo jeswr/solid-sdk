@@ -158,23 +158,32 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const file = command.file
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
+    // Every Pod and source request, including checkpoint reads/writes and the import's own
+    // Pod writes, refuses to send once the command is cancelled.
     const withSignal =
       (transport: typeof fetch): typeof fetch =>
-      (input, init) =>
-        transport(input, {
+      async (input, init) => {
+        options.signal?.throwIfAborted();
+        return transport(input, {
           ...init,
           signal:
             options.signal && init?.signal
               ? AbortSignal.any([options.signal, init.signal])
               : (options.signal ?? init?.signal),
         });
+      };
     const podFetch = await createClientCredentialsFetch(
       config,
       withSignal(options.podTransport ?? globalThis.fetch),
     );
     const stateStore = createStateStore({ ...config, adapterId: command.id, fetch: podFetch });
     const previous = await stateStore.read();
-    const podWriter = createFetchPodWriter({ ...config, adapterId: command.id, fetch: podFetch });
+    const podWriter = createFetchPodWriter({
+      ...config,
+      adapterId: command.id,
+      fetch: podFetch,
+      ...(options.signal && { signal: options.signal }),
+    });
     let sourceAuth = options.sourceAuth;
     if (!file && !sourceAuth) {
       if (!adapter?.oauth)
@@ -208,6 +217,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           adapter: adapter as NonNullable<typeof adapter>,
           mode: "live",
           sourceAuth,
+          ...(options.signal && { signal: options.signal }),
         });
     } catch {
       if (next) {
