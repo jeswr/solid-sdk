@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -15,6 +23,7 @@ import { encodeRef } from "@/lib/refs";
 import { formatDue, isOverdue } from "../lib/format/due";
 import type { Row } from "../lib/views/project-groups";
 import { completeTask, deleteTask } from "../state/actions";
+import { useNow } from "../state/clock";
 import { useTasks } from "../state/tasks-context";
 export interface TaskRowProps {
   row: Row;
@@ -35,6 +44,7 @@ export function TaskRow({
   const params = useSearchParams();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [slow, setSlow] = useState(false);
   const saving = tasks.saving.includes(task.url);
   useEffect(() => {
@@ -52,7 +62,7 @@ export function TaskRow({
       .find((project) => project.url === task.projectUrl)
       ?.tracker.labels.filter((label) => task.labelIds.includes(label.id)) ?? [];
   const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
-  const now = new Date();
+  const now = useNow();
   const hasMeta = Boolean(
     task.due ||
       task.allDay ||
@@ -186,6 +196,7 @@ export function TaskRow({
           <DropdownMenuContent
             onCloseAutoFocus={(event) => {
               event.preventDefault();
+              if (confirmDelete) return;
               document
                 .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
                 ?.focus();
@@ -198,13 +209,38 @@ export function TaskRow({
             <DropdownMenuItem
               disabled={pending}
               onSelect={() => {
-                void deleteTask(task, tasks);
+                setConfirmDelete(true);
               }}
             >
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              document
+                .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+                ?.focus();
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete '{task.title}'?</AlertDialogTitle>
+              <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  void deleteTask(task, tasks);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
       {saving && slow && <span className="tsk-saving" role="status" aria-label="Saving task" />}
     </li>

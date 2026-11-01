@@ -37,6 +37,7 @@ import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
 import { focusAddTask } from "../state/add-focus";
+import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 
@@ -173,7 +174,7 @@ export function TasksSidebar() {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
   const open = tasks.views.filter((task) => task.state === "open");
-  const now = new Date();
+  const now = useNow();
   const dueToday = open.filter((task) => {
     const due = dueDate(task);
     return due && localDay(due) <= localDay(now);

@@ -10,7 +10,7 @@ import {
   Input,
 } from "@jeswr/suite-ui";
 import { ChevronDown, ChevronRight, Ellipsis, Plus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { StoredProject } from "../lib/model/store";
 import type { Category } from "../lib/model/tracker";
 import type { ProjectGroups, Row } from "../lib/views/project-groups";
@@ -129,6 +129,7 @@ export function TaskList({
   const [name, setName] = useState("");
   const sectionInput = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  const focused = useRef<{ url: string; order: string[] } | undefined>(undefined);
   const visible = [
     ...(rows ?? groups?.unsectioned ?? []),
     ...(groups?.sections ?? [])
@@ -136,6 +137,35 @@ export function TaskList({
       .flatMap(({ rows }) => rows),
   ];
   const activeUrl = visible.some((row) => row.task.url === active) ? active : visible[0]?.task.url;
+  useLayoutEffect(() => {
+    const previous = focused.current;
+    if (!previous) return;
+    const urls = visible.map((row) => row.task.url);
+    if (urls.includes(previous.url)) {
+      previous.order = urls;
+      return;
+    }
+    focused.current = undefined;
+    const current = document.activeElement;
+    if (current instanceof HTMLElement && current !== document.body && current.isConnected) return;
+    const index = previous.order.indexOf(previous.url);
+    const next =
+      [...previous.order.slice(index + 1), ...previous.order.slice(0, index).reverse()].find(
+        (url) => urls.includes(url),
+      ) ?? urls[0];
+    if (next) {
+      setActive(next);
+      root.current?.querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(next)}"]`)?.focus();
+    } else {
+      const add =
+        root.current?.querySelector<HTMLElement>(
+          "[data-tsk-add]:not([hidden]) button, [data-tsk-add] input",
+        ) ??
+        root.current?.closest(".tsk-content")?.querySelector<HTMLElement>(".tsk-empty-add") ??
+        document.querySelector<HTMLElement>(".tsk-primary-add");
+      add?.focus();
+    }
+  });
   const renderRows = (rows: Row[], label: string) => (
     // biome-ignore lint/a11y/noRedundantRoles: explicit list role preserves Safari semantics when list markers are removed
     <ul role="list" aria-label={label} className="tsk-list">
@@ -161,7 +191,28 @@ export function TaskList({
     </ul>
   );
   return (
-    <div ref={root} className="tsk-task-list">
+    <div
+      ref={root}
+      className="tsk-task-list"
+      onFocusCapture={(event) => {
+        const element = event.target as HTMLElement;
+        const row = element.closest<HTMLElement>("[data-tsk-row]");
+        if (row?.dataset.tskRow)
+          focused.current = {
+            url: row.dataset.tskRow,
+            order: visible.map((row) => row.task.url),
+          };
+      }}
+      onBlurCapture={(event) => {
+        const next = event.relatedTarget;
+        if (
+          next instanceof HTMLElement &&
+          !event.currentTarget.contains(next) &&
+          !next.closest('[role="menu"], [role="alertdialog"]')
+        )
+          focused.current = undefined;
+      }}
+    >
       {renderRows(rows ?? groups?.unsectioned ?? [], "Tasks")}
       {project && <AddTaskRow project={project} hideTrigger={hideAddTaskTrigger} />}
       {project &&

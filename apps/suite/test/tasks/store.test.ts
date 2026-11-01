@@ -986,11 +986,12 @@ describe.each(["project", "task"] as const)("%s listing errors", (kind) => {
   });
   it("propagates unexpected resource read errors", async () => {
     const error = new Error("Unexpected read failure");
-    vi.spyOn(RdfIO.prototype, "list").mockResolvedValue([`${projects}broken.ttl`]);
+    const container = kind === "project" ? projects : `${projects}home/`;
+    vi.spyOn(RdfIO.prototype, "list").mockResolvedValue([`${container}broken.ttl`]);
     vi.spyOn(RdfIO.prototype, "read").mockRejectedValue(error);
     const tasks = store(new Pod(), { typeIndex: false });
     await expect(
-      kind === "project" ? tasks.listProjects() : tasks.listTasks(`${projects}home/`),
+      kind === "project" ? tasks.listProjects() : tasks.listTasks(container),
     ).rejects.toBe(error);
   });
 });

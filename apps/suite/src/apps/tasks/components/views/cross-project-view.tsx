@@ -54,20 +54,23 @@ export function CrossProjectView({
       {renderAsync({
         loading:
           loading && rows.length === 0 ? <LoadingSkeleton preset="list" count={8} /> : undefined,
-        empty:
-          !loading && !rows.length && !failures.length ? (
-            <EmptyState
-              icon={emptyIcon}
-              title={emptyTitle}
-              body={emptyBody}
-              primaryAction={
-                title === "Today" ? (
-                  <Button onClick={() => router.push("/tasks/inbox?add=1")}>Add task</Button>
-                ) : undefined
-              }
-            />
-          ) : undefined,
-        children: <TaskList rows={flatRows(rows, tasks.views)} showProject />,
+        children: (
+          <>
+            {!loading && !rows.length && !failures.length ? (
+              <EmptyState
+                icon={emptyIcon}
+                title={emptyTitle}
+                body={emptyBody}
+                primaryAction={
+                  title === "Today" ? (
+                    <Button onClick={() => router.push("/tasks/inbox?add=1")}>Add task</Button>
+                  ) : undefined
+                }
+              />
+            ) : null}
+            <TaskList rows={flatRows(rows, tasks.views)} showProject />
+          </>
+        ),
       })}
     </div>
   );

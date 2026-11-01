@@ -24,6 +24,32 @@ function view(id: string, data: Partial<TaskView> = {}): TaskView {
 }
 const names = (rows: { task: TaskView }[]) => rows.map((row) => row.task.id);
 describe("project list projection", () => {
+  it("sorts all-day tasks by their marker across time zones and keeps manual ties", () => {
+    const tasks = [
+      view("late-marker", { allDay: "2026-11-02", due: new Date("2026-11-01T10:00:00Z") }),
+      view("timed", { due: new Date("2026-11-01T17:00:00Z") }),
+      view("same-day-b", {
+        allDay: "2026-11-01",
+        due: new Date("2026-11-01T12:00:00Z"),
+        position: 2,
+        created: new Date(20),
+      }),
+      view("same-day-a", {
+        allDay: "2026-11-01",
+        due: new Date("2026-10-31T10:00:00Z"),
+        position: 2,
+        created: new Date(10),
+      }),
+      view("undated"),
+    ];
+    expect(names(projectGroups(tasks, [], "due").unsectioned)).toEqual([
+      "same-day-a",
+      "same-day-b",
+      "timed",
+      "late-marker",
+      "undated",
+    ]);
+  });
   it("sorts sections, nests children beneath their visible parent and leaves closed/absent parents as breadcrumbs", () => {
     const tasks = [
       view("child", { parentId: "parent", position: 0, sectionId: "other" }),
