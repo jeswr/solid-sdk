@@ -408,7 +408,9 @@ describe("error URL sanitisation", () => {
     "https:/alice:password@ho st/callback?code=oauth-secret#access-token",
     "https:\\\\alice:password@ho st/callback?code=oauth-secret#access-token",
     "https:\\alice:password@host/callback?code=oauth-secret#access-token",
-  ])("does not expose a single-slash or backslash malformed referrer %s", async (referrer) => {
+    "https:alice:password@ho st/callback?code=oauth-secret#access-token",
+    "alice:password@ho st/callback?code=oauth-secret#access-token",
+  ])("does not expose a malformed referrer spelling %s", async (referrer) => {
     const f = createGuardedFetch({ dnsLookup });
     expectSafe(await f(BASE, { referrer }).catch((e: unknown) => e));
   });
