@@ -40,10 +40,16 @@ export async function bulkWrite(
   tasks: BulkTasks,
   write: (view: TaskView, item: StoredTask) => Promise<unknown>,
   undo?: () => void,
+  /** Tasks already in the intended state (e.g. moved by their own Retry) count as done. */
+  settled: (view: TaskView) => boolean = () => false,
 ): Promise<BulkResult<TaskView>> {
-  const result = await runBulk(views, (view) => write(view, stored(view, tasks)), {
-    concurrency: 4,
-  });
+  const result = await runBulk(
+    views,
+    async (view) => {
+      if (!settled(view)) await write(view, stored(view, tasks));
+    },
+    { concurrency: 4 },
+  );
   const message = bulkSummary(action, result.done.length, result.failed.length);
   if (result.failed.length)
     toast.error(message, {
@@ -56,6 +62,8 @@ export async function bulkWrite(
             result.failed.map(({ item }) => item),
             tasks,
             write,
+            undefined,
+            settled,
           );
         },
       },
@@ -116,7 +124,8 @@ export function rescheduleMany(views: readonly TaskView[], dayKey: string, tasks
 /**
  * Retry (the summary toast's or a task's own) is safe: the cache keeps one
  * move operation per task until it succeeds, so a retried move reuses its
- * destination copy instead of writing a second one.
+ * destination copy instead of writing a second one; a task its own Retry has
+ * already moved counts as done.
  */
 export function moveTasksToProject(
   views: readonly TaskView[],
@@ -129,6 +138,14 @@ export function moveTasksToProject(
     tasks,
     async (_view, item) => {
       saved(await tasks.moveTaskToProject(item, target));
+    },
+    undefined,
+    (view) => {
+      const copy = tasks.cache.movedTo(view.url);
+      return Boolean(
+        copy &&
+          tasks.cache.getSnapshot().tasks[target.url]?.items.some((item) => item.url === copy),
+      );
     },
   );
 }

@@ -23,7 +23,7 @@ import {
 } from "../lib/dnd/plan";
 import type { DropPlan, PlanOptions } from "../lib/dnd/types";
 import type { TaskView } from "../lib/views/types";
-import { applyDropPlan, replanner } from "../state/drop-actions";
+import { announceRetries, applyDropPlan, replanner } from "../state/drop-actions";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
@@ -61,7 +61,15 @@ export function useTaskMoves(task: TaskView) {
     const replan = replanner(tasks.cache, task.url, (fresh, project) =>
       make(fresh, visibleTasks(project, showCompleted), { all: project, manual }),
     );
-    return applyDropPlan(first, tasks, replan).then((written) => {
+    const announce = (text: string) => focus?.announce(text);
+    const retried = announceRetries(
+      tasks.cache,
+      task,
+      message,
+      (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+      announce,
+    );
+    return applyDropPlan(first, tasks, replan, retried).then((written) => {
       focus?.announce(written ? message : failedMessage(task));
       const moved = written && sectionToast(first, names);
       if (moved) toast.success(moved);

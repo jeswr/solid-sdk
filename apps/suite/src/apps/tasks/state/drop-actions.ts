@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+import { failedMessage } from "../lib/dnd/announce";
 import { renumberWriteOrder } from "../lib/dnd/plan";
 import type { DropPlan } from "../lib/dnd/types";
 import type { StoredTask } from "../lib/model/store";
@@ -36,18 +37,43 @@ export function replanner(
 }
 
 /**
+ * The `onRetried` announcer for a drop: a written retry describes its own
+ * plan; a retry with nothing left to do (the task already sits where it was
+ * meant to go) repeats the original message; anything else is a failure.
+ */
+export function announceRetries(
+  cache: TasksCache,
+  task: TaskView,
+  original: string,
+  describe: (plan: DropPlan) => string,
+  announce: (message: string) => void,
+): (written: boolean, plan: DropPlan) => void {
+  return (written, plan) => {
+    if (written) announce(describe(plan));
+    else if (
+      plan.kind === "none" &&
+      cache.getSnapshot().views.some((view) => view.url === task.url)
+    )
+      announce(original);
+    else announce(failedMessage(task));
+  };
+}
+
+/**
  * Write one planned drop through the undo-aware cache (optimistic patch,
  * conditional If-Match writes, read-back reconcile). A position drop is ONE
  * cache mutation: renumber patches and the moved row patch together, write
  * siblings first (in an order that never scrambles them), and revert
  * confirmed writes if any write fails. Retry runs
- * `replan` so the whole drop is planned again from what the pod now holds.
+ * `replan` so the whole drop is planned again from what the pod now holds,
+ * and reports each retry's outcome (and the plan it wrote) to `onRetried`.
  * Resolves false when nothing was written or a write rolled back.
  */
 export async function applyDropPlan(
   plan: DropPlan,
   tasks: DropWriter,
   replan: () => DropPlan = () => plan,
+  onRetried: (written: boolean, plan: DropPlan) => void = () => {},
 ): Promise<boolean> {
   if (plan.kind === "none") return false;
   const snapshot = () => tasks.cache.getSnapshot();
@@ -63,15 +89,23 @@ export async function applyDropPlan(
     const target = snapshot().projects.find((project) => project.url === plan.projectUrl);
     return Boolean(target && (await tasks.moveTaskToProject(stored, target)));
   }
+  const retry = () => {
+    const next = replan();
+    void applyDropPlan(next, tasks, replan, onRetried).then((written) => onRetried(written, next));
+  };
   if (plan.kind === "reschedule") {
     const view = snapshot().views.find((task) => task.url === plan.url);
     if (!view) return false;
     const due = rescheduleToDay(view, plan.dayKey);
     return Boolean(
-      await tasks.updateTask(stored, (task) => {
-        task.dueDate = due.due;
-        task.allDay = due.allDay;
-      }),
+      await tasks.updateTask(
+        stored,
+        (task) => {
+          task.dueDate = due.due;
+          task.allDay = due.allDay;
+        },
+        retry,
+      ),
     );
   }
   const edits: { item: StoredTask; change: (task: TaskItem) => void }[] = [];
@@ -99,9 +133,5 @@ export async function applyDropPlan(
       task.rank = plan.position;
     },
   });
-  return Boolean(
-    await tasks.cache.updateTasks(edits, () => {
-      void applyDropPlan(replan(), tasks, replan);
-    }),
-  );
+  return Boolean(await tasks.cache.updateTasks(edits, retry));
 }

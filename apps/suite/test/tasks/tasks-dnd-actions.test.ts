@@ -7,8 +7,8 @@ import {
   planPromote,
   planToSection,
 } from "../../src/apps/tasks/lib/dnd/plan";
-import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
-import { applyDropPlan, replanner } from "../../src/apps/tasks/state/drop-actions";
+import type { StoredProject, StoredTask } from "../../src/apps/tasks/lib/model/store";
+import { announceRetries, applyDropPlan, replanner } from "../../src/apps/tasks/state/drop-actions";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { frameCache } from "./tasks-frame-fixtures";
 
@@ -213,6 +213,126 @@ describe("applyDropPlan", () => {
     retry();
     await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
     expect(order(cache)).toEqual(["a", "c", "b"]);
+  });
+
+  it("stops reverting at the first failed revert, so the pod keeps a prefix", async () => {
+    const result = await frameCache();
+    const { cache, pod, store, inbox } = result;
+    for (const [title, rank] of [
+      ["t0", 5],
+      ["t1", 5 + 1e-9],
+      ["t2", 6],
+    ] as const)
+      await store.createTask(inbox, { title, state: "open", rank });
+    await cache.loadTasks(inbox, true);
+    const items = ["t0", "t1", "t2"].map(
+      (title) =>
+        cache
+          .getSnapshot()
+          .tasks[inbox.url]?.items.find((item) => item.task.title === title) as StoredTask,
+    );
+    const urls = items.map((item) => item.url);
+    let reverting = false;
+    pod.intercept = (request) => {
+      if (request.method !== "PUT") return undefined;
+      if (request.url === urls[2]) {
+        reverting = true;
+        return new Response(null, { status: 412 });
+      }
+      if (reverting && request.url === urls[1]) return new Response(null, { status: 503 });
+    };
+    pod.requests.length = 0;
+    // Falling ranks, written ascending (renumberWriteOrder): t0 → 1, t1 → 2, t2 → 3.
+    const edits = items.map((item, at) => ({
+      item,
+      change: (task: { rank: number | undefined }) => {
+        task.rank = at + 1;
+      },
+    }));
+    expect(await cache.updateTasks(edits, () => {})).toBeUndefined();
+    // t1's revert failed, so t0's is never attempted: t0=1, t1=2, t2=6 keeps the order.
+    expect(pod.mutations().map((request) => request.url)).toEqual([
+      urls[0],
+      urls[1],
+      urls[2],
+      urls[1],
+    ]);
+    expect(await storedOrder(store, urls)).toEqual(["t0", "t1", "t2"]);
+    expect((await store.readTask(urls[0] as string)).task.rank).toBe(1);
+  });
+
+  it("leaves the forward prefix when the moved row's outcome cannot be read back", async () => {
+    for (const landed of [false, true]) {
+      const { cache, pod, store, failures, replan } = await cramped();
+      const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+      let offline = false;
+      pod.intercept = (request) => {
+        if (offline) throw new TypeError("Offline");
+        if (request.method === "PUT" && request.url === urls[2]) {
+          if (landed) pod.seed(request.url, request.body);
+          offline = true;
+          throw new TypeError("Response lost");
+        }
+      };
+      pod.requests.length = 0;
+      expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(false);
+      pod.intercept = undefined;
+      expect(failures).toHaveBeenCalledOnce();
+      // No revert: b and a keep their new ranks, whichever way the moved row went.
+      expect(pod.mutations().map((request) => request.url)).toEqual([urls[1], urls[0], urls[2]]);
+      expect(await storedOrder(store, urls)).toEqual(landed ? ["a", "c", "b"] : ["a", "b", "c"]);
+      // The failure refresh ran offline; back online the listing revalidates, then Retry.
+      await cache.loadTasks(projectOf(cache, viewOf(cache, "a").projectUrl), true);
+      const [, retry] = failures.mock.calls[0] as [unknown, () => void];
+      retry();
+      await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+      expect(await storedOrder(store, urls)).toEqual(["a", "c", "b"]);
+    }
+  });
+
+  it("never claims, or reverts over, another writer's revision found after a lost response", async () => {
+    const { cache, pod, store, failures, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    pod.intercept = (request) => {
+      if (request.method !== "PUT") return undefined;
+      if (request.url === urls[0]) {
+        // Another client saves a revision that also holds rank 1, then our response is lost.
+        pod.seed(request.url, request.body.replace('"a"', '"a (edited)"'));
+        throw new TypeError("Response lost");
+      }
+      if (request.url === urls[2]) return new Response(null, { status: 412 });
+    };
+    pod.requests.length = 0;
+    expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(false);
+    pod.intercept = undefined;
+    expect(failures).toHaveBeenCalledOnce();
+    // Not ours, so the outcome is unknown: no further writes and no revert.
+    expect(pod.mutations().map((request) => request.url)).toEqual([urls[1], urls[0]]);
+    expect((await store.readTask(urls[0] as string)).task.title).toBe("a (edited)");
+    expect((await store.readTask(urls[1] as string)).task.rank).toBe(2);
+  });
+
+  it("announces a retry's own outcome", async () => {
+    const { cache } = await cramped();
+    const task = viewOf(cache, "c");
+    const announce = vi.fn();
+    const retried = announceRetries(cache, task, "Original", () => "Retried", announce);
+    retried(true, { kind: "none" });
+    retried(false, { kind: "none" });
+    retried(false, { kind: "reschedule", url: task.url, dayKey: "2026-11-04" });
+    announceRetries(
+      cache,
+      { ...task, url: "https://pod.test/gone.ttl" },
+      "Original",
+      () => "",
+      announce,
+    )(false, { kind: "none" });
+    expect(announce.mock.calls.map(([message]) => message)).toEqual([
+      "Retried",
+      "Original",
+      "Couldn't move 'c'.",
+      "Couldn't move 'c'.",
+    ]);
   });
 
   it("re-plans nothing for a vanished task, and skips drops of tasks outside the cache", async () => {

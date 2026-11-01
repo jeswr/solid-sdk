@@ -46,7 +46,7 @@ import { dropPriority, placementFor, sameContainer } from "../../lib/dnd/placeme
 import { planDrop, sortedTarget, visibleTasks } from "../../lib/dnd/plan";
 import type { DropContainer, DropPlan, DropTarget, Placement } from "../../lib/dnd/types";
 import type { TaskView } from "../../lib/views/types";
-import { applyDropPlan, replanner } from "../../state/drop-actions";
+import { announceRetries, applyDropPlan, replanner } from "../../state/drop-actions";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import "./dnd.css";
@@ -299,7 +299,14 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           const replan = replanner(tasks.cache, task.url, (fresh, project) =>
             planFor(fresh, project, drop),
           );
-          void applyDropPlan(next, tasks, replan).then((written) => {
+          const retried = announceRetries(
+            tasks.cache,
+            task,
+            message,
+            (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+            setStatus,
+          );
+          void applyDropPlan(next, tasks, replan, retried).then((written) => {
             setStatus(written ? message : failedMessage(task));
             const moved = written && sectionToast(next, names);
             if (moved) toast.success(moved);

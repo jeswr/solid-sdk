@@ -129,6 +129,8 @@ export class TasksCache {
     string,
     { target: string; run: () => Promise<StoredTask | undefined> }
   >();
+  /** Where each task moved by this session went (original URL → its copy's URL). */
+  private movedTasks = new Map<string, string>();
   private hiddenTasks = new Set<string>();
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
@@ -618,10 +620,12 @@ export class TasksCache {
   /**
    * Several task edits as ONE optimistic patch and one serialized write, so a
    * renumbering drop never shows, or persists, a half-applied order. Writes go
-   * in order, each conditional; a lost response counts once the read-back holds
-   * the change. On failure the confirmed writes are reverted newest first (each
-   * conditional on our own revision) before the error surfaces, and `onRetry`
-   * replays the whole intent.
+   * in order (callers order them so every prefix is safe), each conditional; a
+   * lost response counts once the read-back holds exactly our revision. When a
+   * write definitely did not land, the confirmed writes are reverted newest
+   * first, stopping at the first failed revert so the pod always holds a
+   * prefix of the writes. When its outcome is unknown, the forward prefix
+   * stays. Either way `onRetry` replays the whole intent.
    */
   updateTasks(
     edits: readonly { item: StoredTask; change: (task: TaskItem) => void }[],
@@ -647,15 +651,15 @@ export class TasksCache {
       apply,
       async () => {
         const written: { before: StoredTask; after: StoredTask; projectUrl: string }[] = [];
-        try {
-          for (const { item, change, project } of owned) {
-            const projectUrl = (project as StoredProject).url;
-            const before = this.task(projectUrl, item.url);
-            written.push({ before, after: await this.writeChange(before, change), projectUrl });
+        for (const { item, change, project } of owned) {
+          const projectUrl = (project as StoredProject).url;
+          const before = this.task(projectUrl, item.url);
+          const outcome = await this.writeChange(before, change);
+          if ("error" in outcome) {
+            if (!outcome.unknown) await this.revertWrites(written);
+            throw outcome.error;
           }
-        } catch (error) {
-          await this.revertWrites(written);
-          throw error;
+          written.push({ before, after: outcome.after, projectUrl });
         }
         for (const { after } of written) this.undoRepairs.get(after.url)?.supersede(after);
         return {
@@ -671,35 +675,58 @@ export class TasksCache {
       owned.map((edit) => edit.item.url),
     );
   }
-  /** One conditional write; without a response, the read-back decides whether it landed. */
+  /**
+   * One conditional write. Without a response the read-back decides: our exact
+   * revision (apart from dct:modified) landed; the original ETag did not land;
+   * anything else (no read, or another writer's revision) is unknown.
+   */
   private async writeChange(
     before: StoredTask,
     change: (task: TaskItem) => void,
-  ): Promise<StoredTask> {
+  ): Promise<{ after: StoredTask } | { error: unknown; unknown: boolean }> {
     try {
-      return await this.store.updateTask(before, change);
+      return { after: await this.store.updateTask(before, change) };
     } catch (error) {
       // A 4xx is a definite rejection; only a lost or failed response may have landed.
-      if (error instanceof ModelError && error.status >= 400 && error.status < 500) throw error;
-      const current = await this.optionalTask(before.url).catch(() => undefined);
-      if (
-        !current ||
-        current.etag === before.etag ||
-        !isomorphic([...current.dataset], [...changeTask(current, change).dataset])
-      )
-        throw error;
-      return current;
+      if (error instanceof ModelError && error.status >= 400 && error.status < 500)
+        return { error, unknown: false };
+      let current: StoredTask | undefined;
+      try {
+        current = await this.optionalTask(before.url);
+      } catch {
+        return { error, unknown: true };
+      }
+      if (current?.etag === before.etag) return { error, unknown: false };
+      const stamp = new Date(0);
+      const ours = changeTask(before, (task) => {
+        change(task);
+        task.modified = stamp;
+      });
+      if (!current) return { error, unknown: true };
+      const read = changeTask(current, (task) => {
+        task.modified = stamp;
+      });
+      return isomorphic([...read.dataset], [...ours.dataset])
+        ? { after: current }
+        : { error, unknown: true };
     }
   }
-  /** Restore each confirmed write over our own revision only; a failure leaves it to Retry. */
+  /**
+   * Restore confirmed writes newest first, each over our own revision only.
+   * The first failure stops: older writes stay, so the pod keeps a prefix.
+   */
   private async revertWrites(written: readonly { before: StoredTask; after: StoredTask }[]) {
     for (const { before, after } of written.toReversed()) {
       try {
         await this.store.updateTask({ ...before, etag: after.etag }, () => {});
       } catch {
-        /* The failure refresh shows what remains; Retry re-plans from it. */
+        return; // The failure refresh shows what remains; Retry re-plans from it.
       }
     }
+  }
+  /** The URL a task moved to in this session, or undefined if it has not moved. */
+  movedTo(url: string): string | undefined {
+    return this.movedTasks.get(url);
   }
   moveTaskToProject(item: StoredTask, target: StoredProject): Promise<StoredTask | undefined> {
     // A retained move (destination possibly written) must not become a second copy.
@@ -751,6 +778,7 @@ export class TasksCache {
         },
         async () => {
           if (settled) return { result: settled, commit: (state) => state };
+          // Once compensated, plan afresh: new references, source revision and data.
           if (operation?.canReplan) operation = undefined;
           operation ??= this.store.prepareTaskMove(
             this.task(source.url, item.url),
@@ -769,6 +797,7 @@ export class TasksCache {
       ).then((moved) => {
         if (moved && !notified) {
           notified = true;
+          this.movedTasks.set(item.url, moved.url);
           for (const listener of this.moveListeners) listener({ from: item.url, to: moved.url });
         }
         return moved;

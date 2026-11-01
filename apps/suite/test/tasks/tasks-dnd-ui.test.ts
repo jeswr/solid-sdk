@@ -151,6 +151,14 @@ describe("keyboard drag and drop", () => {
     expect(dropStatus()).toBe("Couldn't move 'First'.");
     expect(liveRegion()).not.toContain("Moved 'First'");
     expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["First", "Second"]);
+    // A successful Retry replaces the failure with the outcome.
+    result.pod.intercept = undefined;
+    const [, retry] = result.failures.mock.calls[0] as [unknown, () => void];
+    await act(async () => retry());
+    await settle();
+    await act(async () => {
+      await vi.waitFor(() => expect(dropStatus()).toBe("Moved 'First' to No section, position 2."));
+    });
   });
 
   it("in a sorted list, rows stand for their section: no reordering, no position", async () => {

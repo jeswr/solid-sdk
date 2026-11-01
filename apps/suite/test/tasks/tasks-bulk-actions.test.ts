@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { toast } from "@jeswr/suite-ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
+import type { StoredProject, StoredTask } from "../../src/apps/tasks/lib/model/store";
 import type { TaskView } from "../../src/apps/tasks/lib/views/types";
 import {
   bulkWrite,
@@ -33,6 +33,8 @@ const context = (cache: TasksCache) => ({
 type Options = { action?: { onClick: () => void }; onAutoClose?: () => void };
 const lastOptions = (spy: typeof success | typeof error) =>
   spy.mock.calls.at(-1)?.[1] as unknown as Options;
+const projectOf = (cache: TasksCache, url: string) =>
+  cache.getSnapshot().projects.find((project) => project.url === url) as StoredProject;
 async function seeded(titles: string[]) {
   const result = await frameCache();
   for (const title of titles) await result.cache.createTask(result.inbox, { title });
@@ -149,6 +151,52 @@ describe("bulk writes", () => {
     expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(1);
     expect((await store.readTask(soil.url)).task.parent).toBe(copies[0]?.task.id);
     expect(cache.getSnapshot().views.filter((task) => task.title === "Garden")).toHaveLength(1);
+  });
+
+  it("counts a task its own Retry already moved as done on the summary Retry", async () => {
+    const { cache, pod, store, inbox, failures, views } = await seeded(["Garden"]);
+    const home = (await cache.createProject("Home")) as StoredProject;
+    await cache.loadTasks(home);
+    const [garden] = views() as [TaskView];
+    pod.intercept = (request) =>
+      request.method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    await moveTasksToProject([garden], home, context(cache));
+    pod.intercept = undefined;
+    const summaryRetry = lastOptions(error).action;
+    const [, cacheRetry] = failures.mock.calls[0] as [unknown, () => void];
+    cacheRetry();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(cache.movedTo(garden.url)).toBeDefined();
+    summaryRetry?.onClick();
+    await vi.waitFor(() => expect(success).toHaveBeenLastCalledWith("Moved 1 task", undefined));
+    expect(await store.listTasks(home.tracker.stateStore as string)).toHaveLength(1);
+    expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(0);
+  });
+
+  it("plans a fresh move after a clean rollback, so a sub-task added since is remapped", async () => {
+    const { cache, pod, store, inbox, views } = await seeded(["Garden"]);
+    const home = (await cache.createProject("Home")) as StoredProject;
+    await cache.loadTasks(home);
+    const [garden] = views() as [TaskView];
+    const stored = () =>
+      cache
+        .getSnapshot()
+        .tasks[inbox.url]?.items.find((item) => item.url === garden.url) as StoredTask;
+    // The source DELETE fails: the destination copy is removed again (a clean rollback).
+    pod.intercept = (request) =>
+      request.method === "DELETE" && request.url === garden.url
+        ? new Response(null, { status: 503 })
+        : undefined;
+    expect(await cache.moveTaskToProject(stored(), home)).toBeUndefined();
+    pod.intercept = undefined;
+    expect(await store.listTasks(home.tracker.stateStore as string)).toHaveLength(0);
+    // A sub-task added now does not change the parent's ETag.
+    await cache.createTask(projectOf(cache, inbox.url), { title: "Buy soil", parent: garden.id });
+    const moved = await cache.moveTaskToProject(stored(), home);
+    if (!moved) throw new Error("Expected the move to succeed");
+    const soil = cache.getSnapshot().views.find((task) => task.title === "Buy soil");
+    expect((await store.readTask(soil?.url as string)).task.parent).toBe(moved.task.id);
+    expect(await store.listTasks(home.tracker.stateStore as string)).toHaveLength(1);
   });
 
   it("adds a union label, materialising the class once per tracker, and removes it", async () => {
