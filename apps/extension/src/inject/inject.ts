@@ -273,6 +273,9 @@ function installSolidInjection(): void {
     const snapInit = init
       ? { ...init, ...(init.headers !== undefined ? { headers: new Headers(init.headers) } : {}) }
       : undefined;
+    // An explicit null signal clears the Request signal; undefined inherits it.
+    const signal = snapInit?.signal === undefined ? request?.signal : snapInit.signal;
+    signal?.throwIfAborted();
     const source = snapInit?.body;
     // Reject structured/one-shot init bodies before constructing a Request can lock them.
     if (source instanceof FormData || source instanceof ReadableStream) {
@@ -317,7 +320,9 @@ function installSolidInjection(): void {
         } else if (source instanceof Blob) {
           assertBodySize(source.size);
           if (!headers.has('content-type') && source.type) headers.set('content-type', source.type);
-          bodyBase64 = bytesToBase64(new Uint8Array(await source.arrayBuffer()));
+          const bytes = new Uint8Array(await source.arrayBuffer());
+          signal?.throwIfAborted();
+          bodyBase64 = bytesToBase64(bytes);
         } else {
           throw new Error(
             'window.solid.fetch does not support FormData or ReadableStream request bodies',
@@ -328,21 +333,24 @@ function installSolidInjection(): void {
         !['GET', 'HEAD'].includes(method.toUpperCase()) &&
         request.body !== null
       ) {
-        bodyBase64 = bytesToBase64(
-          await readBodyBounded(
-            (snapInput as Request).clone().body,
-            MAX_BODY_BYTES,
-            REQUEST_BODY_LIMIT_ERROR,
-            snapInit?.signal ?? request.signal,
-          ),
+        const bytes = await readBodyBounded(
+          (snapInput as Request).clone().body,
+          MAX_BODY_BYTES,
+          REQUEST_BODY_LIMIT_ERROR,
+          signal ?? undefined,
         );
+        signal?.throwIfAborted();
+        bodyBase64 = bytesToBase64(bytes);
       }
     } catch (error) {
+      // Cancellation must reject with the caller's reason, including on the native fallback path.
+      signal?.throwIfAborted();
       // Serialization is best-effort for the global patch: native fetch retains the
       // unread snapshot even if the bounded bridge read overflows or fails.
       if (autoDivert) return PRISTINE_FETCH(snapInput, snapInit);
       throw error;
     }
+    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID();
       // Deferred native fallback keeps Request metadata and a separate, unread body.

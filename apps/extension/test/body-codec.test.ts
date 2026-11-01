@@ -178,3 +178,16 @@ it('preserves binary MIME types and invalid UTF-8 as base64', () => {
   expect(encodeResponseBody(new Uint8Array([65]), 'image/png')).toEqual({ bodyBase64: 'QQ==' });
   expect(encodeResponseBody(new Uint8Array([255]), 'text/plain')).toEqual({ bodyBase64: '/w==' });
 });
+
+it.each([
+  null,
+  'text/plain',
+  'application/json',
+])('preserves a UTF-8 BOM on the text wire path for %s', async (contentType) => {
+  const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x41]);
+  const encoded = encodeResponseBody(bytes, contentType);
+  expect(encoded).toEqual({ body: '\uFEFFA' });
+  expect(
+    new Uint8Array(await new Response('body' in encoded ? encoded.body : null).arrayBuffer()),
+  ).toEqual(bytes);
+});

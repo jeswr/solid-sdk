@@ -621,6 +621,32 @@ describe('binary extension fetch transport', () => {
   });
 
   it.each([
+    undefined,
+    'text/plain',
+    'application/json',
+  ])('preserves a UTF-8 BOM in cold and cached responses with Content-Type=%s', async (contentType) => {
+    await start();
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x41]);
+    const headers = new Headers({ etag: '"bom-v1"' });
+    if (contentType) headers.set('content-type', contentType);
+    let reads = 0;
+    fetchImpl = async () =>
+      ++reads === 1 ? new Response(bytes, { headers }) : new Response(null, { status: 304 });
+    for (let i = 0; i < 2; i++) {
+      const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+      expect(result.status).toBe(200);
+      expect(result.body).toBe('\uFEFFA');
+      expect(result.bodyBase64).toBeUndefined();
+      expect(new Uint8Array(await new Response(result.body as string).arrayBuffer())).toEqual(
+        bytes,
+      );
+    }
+    expect(reads).toBe(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('"bom-v1"');
+    expect([...cacheStore.values()][0]?.body).toEqual(bytes.buffer);
+  });
+
+  it.each([
     ['text/turtle', new TextEncoder().encode('<#s> <#p> "café" .'), { body: '<#s> <#p> "café" .' }],
     ['text/plain', new Uint8Array([0xc3, 0x28, 0xff]), { bodyBase64: 'wyj/' }],
     [

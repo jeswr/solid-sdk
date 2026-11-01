@@ -136,7 +136,7 @@ export function encodeResponseBody(
     ].includes(mime);
   if (textual) {
     try {
-      return { body: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+      return { body: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes) };
     } catch {
       // Invalid UTF-8 must never be replaced with lossy U+FFFD characters.
     }

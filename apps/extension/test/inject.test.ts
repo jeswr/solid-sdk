@@ -669,6 +669,176 @@ describe('inject — binary bodies and Request inputs', () => {
     await promise;
   });
 
+  it.each([
+    [false, 'GET'],
+    [false, 'PUT'],
+    [true, 'GET'],
+    [true, 'PUT'],
+  ] as const)('rejects pre-aborted %s %s Requests before posting, including body overrides', async (patched, method) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    controller.abort();
+    const request = new Request('https://pod.example/data', {
+      method,
+      signal: controller.signal,
+      ...(method === 'PUT' ? { body: 'original' } : {}),
+    });
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)(
+      request,
+      method === 'PUT' ? { body: new Uint8Array([0, 128, 255]) } : undefined,
+    );
+    const rejected = expect(promise).rejects.toBe(controller.signal.reason);
+    expect(posted).toHaveLength(0);
+    await rejected;
+    expect(controller.signal.reason).toBeInstanceOf(DOMException);
+    expect(controller.signal.reason.name).toBe('AbortError');
+    expect(request.bodyUsed).toBe(false);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('rejects an aborted init.signal overriding a live Request signal (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    const reason = new DOMException('Upload cancelled', 'AbortError');
+    controller.abort(reason);
+    const request = new Request('https://pod.example/data', { method: 'PUT', body: 'original' });
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)(request, {
+      body: new Uint8Array([0, 128, 255]),
+      signal: controller.signal,
+    });
+    const rejected = expect(promise).rejects.toBe(reason);
+    expect(posted).toHaveLength(0);
+    await rejected;
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('rejects an aborted init.signal for a URL with its exact custom reason (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    const reason = new Error('Caller cancelled');
+    controller.abort(reason);
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)('https://pod.example/data', {
+      signal: controller.signal,
+    });
+    const rejected = expect(promise).rejects.toBe(reason);
+    expect(posted).toHaveLength(0);
+    await rejected;
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'live',
+    'null',
+    'undefined',
+  ] as const)('resolves init.signal=%s over an aborted Request signal like native fetch', async (override) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    controller.abort();
+    const request = new Request('https://pod.example/data', {
+      method: 'PUT',
+      body: new Uint8Array([0, 128, 255]),
+      signal: controller.signal,
+    });
+    const signal =
+      override === 'live' ? new AbortController().signal : override === 'null' ? null : undefined;
+    const promise = solidApi().fetch(request, { signal });
+    if (override === 'undefined') {
+      await expect(promise).rejects.toBe(controller.signal.reason);
+      expect(posted).toHaveLength(0);
+    } else {
+      const message = await fetchMessage();
+      expect(message.bodyBase64).toBe('AID/');
+      finishFetch(message);
+      expect((await promise).status).toBe(204);
+    }
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('rejects an abort during Blob serialization before posting or native fallback (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    const reason = new Error('Cancelled while reading Blob');
+    const body = new Blob([new Uint8Array([0, 128, 255])]);
+    let finish!: (bytes: ArrayBuffer) => void;
+    vi.spyOn(body, 'arrayBuffer').mockImplementation(
+      () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)('https://pod.example/data', {
+      method: 'PUT',
+      body,
+      signal: controller.signal,
+    });
+    const rejected = expect(promise).rejects.toBe(reason);
+    controller.abort(reason);
+    finish(new Uint8Array([0, 128, 255]).buffer);
+    await rejected;
+    expect(posted).toHaveLength(0);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('rejects an abort during an open Request body read without waiting for EOF (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    const reason = new DOMException('Cancelled while reading Request', 'AbortError');
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    const request = new Request('https://pod.example/data', {
+      method: 'PUT',
+      body: new ReadableStream<Uint8Array>({
+        start(c) {
+          stream = c;
+        },
+      }),
+      signal: controller.signal,
+      duplex: 'half',
+    } as RequestInit);
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)(request);
+    const rejected = expect(promise).rejects.toBe(reason);
+    controller.abort(reason);
+    await rejected;
+    expect(posted).toHaveLength(0);
+    expect(nativeFetch).not.toHaveBeenCalled();
+    expect(request.bodyUsed).toBe(false);
+    stream.close();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('keeps the existing response delivery when aborted after posting (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const controller = new AbortController();
+    const request = new Request('https://pod.example/data', { signal: controller.signal });
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)(request);
+    const message = await fetchMessage();
+    controller.abort();
+    finishFetch(message);
+    expect((await promise).status).toBe(204);
+    expect(posted).toHaveLength(1);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
   it.each(['navigate', 'data:'])('keeps %s Request input on native fetch', async (kind) => {
     await importInject();
     posted.length = 0;
