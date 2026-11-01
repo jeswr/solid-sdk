@@ -663,7 +663,36 @@ function temporalOperand(value: unknown, c: OdrlConstraint): boolean {
   if (zonedDateTime(value)) return true;
   if (c.datatype !== XSD_DATE || typeof value !== "string") return false;
   const m = XSD_DATE_LEXICAL.exec(value);
-  return m !== null && zonedDateTime(`${m[1]}-${m[2]}-${m[3]}T00:00:00${m[4] ?? "Z"}`);
+  // `Date.parse` reads a bare or `Z` date but not one with an offset, which the
+  // evaluator would then compare as text.
+  return (
+    m !== null &&
+    (m[4] === undefined || m[4] === "Z") &&
+    zonedDateTime(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+/** solid-odrl's own number test: a finite number, or a non-blank string that reads as one. */
+function numeric(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
+}
+
+/** Operators the evaluator applies as an ordering (numeric, temporal or else lexical). */
+const ORDERING_OPERATORS: ReadonlySet<string> = new Set(["gt", "gteq", "lt", "lteq"]);
+
+/** The right operands of a constraint, as a list. */
+function rightOperands(c: OdrlConstraint): readonly unknown[] {
+  return Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+}
+
+/**
+ * A constraint the evaluator compares as numbers: any right operand reads as a
+ * number. A request value that does not would be compared as text.
+ */
+function numericConstraint(c: OdrlConstraint): boolean {
+  return !temporal(c) && rightOperands(c).some(numeric);
 }
 
 /**
@@ -680,12 +709,34 @@ function temporalOperands(chain: readonly OdrlPolicy[]): ReadonlySet<string> {
   return operands;
 }
 
-/** The first temporal constraint in the chain whose right operand is not an instant. */
-function lexicalTemporalConstraint(chain: readonly OdrlPolicy[]): OdrlConstraint | undefined {
+/**
+ * The left operands the chain compares as numbers. A request value for one must
+ * read as a number: `""`, `" "` or `"1,000"` would compare as text and could slip
+ * past a `count gt 100` prohibition.
+ */
+function numericOperands(chain: readonly OdrlPolicy[]): ReadonlySet<string> {
+  const operands = new Set<string>();
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) if (numericConstraint(c)) operands.add(c.leftOperand);
+  }
+  return operands;
+}
+
+/**
+ * The first constraint in the chain the evaluator would compare as text where an
+ * order or instant is meant: a temporal constraint with a right operand that is
+ * not an instant, or an ordering operator whose operands are neither instants nor
+ * numbers (an `xsd:duration` such as `PT1H` sorts after `P1D`).
+ */
+function lexicalConstraint(chain: readonly OdrlPolicy[]): OdrlConstraint | undefined {
   for (const policy of chain) {
     for (const c of allConstraints(policy)) {
-      const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
-      if (temporal(c) && !rights.every((r) => temporalOperand(r, c))) return c;
+      const rights = rightOperands(c);
+      if (temporal(c)) {
+        if (!rights.every((r) => temporalOperand(r, c))) return c;
+      } else if (ORDERING_OPERATORS.has(c.operator) && !rights.every(numeric)) {
+        return c;
+      }
     }
   }
   return undefined;
@@ -711,6 +762,9 @@ function unresolvedProhibition(
   request: RequestContext,
   now: Date,
 ): OdrlPolicy | undefined {
+  // A single policy keeps its own conflict strategy: under `perm` a matching
+  // permission overrides any prohibition, supplied operand or not.
+  if (chain.length === 1 && chain[0]?.conflict === "perm") return undefined;
   const { delegationDepth: _ignored, ...attributes } = request.attributes ?? {};
   const reads: Array<[OdrlPolicy, RequestContext]> = [];
   for (const [i, policy] of chain.entries()) {
@@ -741,7 +795,8 @@ function unresolvedProhibition(
           ? now.toISOString()
           : undefined;
       if (value === undefined || typeof value === "boolean") return false;
-      return !temporal(c) || Number.isFinite(Date.parse(String(value)));
+      if (temporal(c)) return Number.isFinite(Date.parse(String(value)));
+      return !numericConstraint(c) || numeric(value);
     };
     const suspects = (policy.prohibitions ?? [])
       .filter((r) => (r.constraints ?? []).some((c) => !resolved(c)))
@@ -1252,16 +1307,23 @@ export async function verifyAgentAuthority(
   // throw inside the evaluator; refuse it here as a denial.
   // A value for an operand the chain compares as an instant must be a zoned
   // dateTime, whatever its JavaScript type.
+  // A value for an operand the chain compares as numbers must read as one, and an
+  // operand compared both ways cannot be supplied consistently.
   const instants = temporalOperands(ordered);
+  const numbers = numericOperands(ordered);
   const malformed = Object.entries(request.attributes ?? {}).find(([key, v]) =>
-    instants.has(key) && key !== "delegationDepth"
-      ? !zonedDateTime(v)
-      : Array.isArray(v) ||
-        !(
-          typeof v === "boolean" ||
-          (typeof v === "number" && Number.isFinite(v)) ||
-          typeof v === "string"
-        ),
+    key === "delegationDepth"
+      ? false
+      : instants.has(key)
+        ? !zonedDateTime(v) || numbers.has(key)
+        : numbers.has(key)
+          ? !numeric(v)
+          : Array.isArray(v) ||
+            !(
+              typeof v === "boolean" ||
+              (typeof v === "number" && Number.isFinite(v)) ||
+              typeof v === "string"
+            ),
   );
   if (malformed !== undefined) {
     return deny(
@@ -1271,14 +1333,14 @@ export async function verifyAgentAuthority(
       chainIds,
     );
   }
-  // A signed temporal bound the evaluator would compare as text (an unzoned or
-  // unparseable instant) cannot be applied as written.
-  const lexical = lexicalTemporalConstraint(ordered);
+  // A signed bound the evaluator would compare as text (an unzoned or unparseable
+  // instant, or an ordering over durations or names) cannot be applied as written.
+  const lexical = lexicalConstraint(ordered);
   if (lexical !== undefined) {
     return deny(
       "D",
       "POLICY_DENIED",
-      `Phase D denied: a ${JSON.stringify(lexical.leftOperand)} constraint compares against a value that is not a zoned dateTime.`,
+      `Phase D denied: a ${JSON.stringify(lexical.leftOperand)} constraint would compare its operands as text (not as instants or numbers).`,
       chainIds,
     );
   }

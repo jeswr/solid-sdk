@@ -850,4 +850,177 @@ describe("prohibition probes match the evaluator's reads (Codex round 2)", () =>
     expect(applicable.authorized).toBe(false);
     expect(applicable.code).toBe("POLICY_DENIED");
   });
+
+  const XsdDate = "http://www.w3.org/2001/XMLSchema#date";
+  const XsdDuration = "http://www.w3.org/2001/XMLSchema#duration";
+  const today = () => ({ dateTime: base.now.toISOString() });
+  const prohibit = (
+    constraints: NonNullable<NonNullable<OdrlPolicy["prohibitions"]>[number]["constraints"]>,
+    extra: Partial<NonNullable<OdrlPolicy["prohibitions"]>[number]> = {},
+  ) => [
+    {
+      type: "prohibition" as const,
+      action: "read" as const,
+      target: CAST.records,
+      constraints,
+      ...extra,
+    },
+  ];
+  const spatialEu = {
+    leftOperand: "spatial" as const,
+    operator: "eq" as const,
+    rightOperand: "https://example.org/region/eu",
+  };
+
+  it("an ancestor prohibition on its delegate with an omitted operand denies", async () => {
+    const r = await verifyPrimaryWith(prohibit([spatialEu], { assignee: CAST.agentA }));
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("an ancestor grantUse prohibition on the delegator with an omitted operand denies", async () => {
+    const r = await verifyPrimaryWith([
+      {
+        type: "prohibition",
+        action: "grantUse",
+        target: CAST.records,
+        assignee: CAST.agentA,
+        constraints: [spatialEu],
+      },
+    ]);
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("the injected depth is exact: `> 1` cannot apply to the one edge below the mandate", async () => {
+    const r = await verifyPrimaryWith([
+      {
+        type: "prohibition",
+        action: "grantUse",
+        target: CAST.records,
+        constraints: [
+          { leftOperand: "delegationDepth", operator: "gt", rightOperand: 1 },
+          spatialEu,
+        ],
+      },
+    ]);
+    expect(r.code).toBeUndefined();
+    expect(r.authorized).toBe(true);
+  });
+
+  it("a boolean operand value is unsupplied, so the prohibition still denies", async () => {
+    const r = await verifyInternalWith(
+      prohibit([{ leftOperand: "purpose", operator: "eq", rightOperand: CAST.misusePurpose }]),
+      { ...today(), purpose: true },
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("an omitted dateTime is read as now, as the evaluator reads it", async () => {
+    const r = await verifyInternalWith(
+      prohibit([{ leftOperand: "dateTime", operator: "lt", rightOperand: "2026-01-01T00:00:00Z" }]),
+      {},
+    );
+    expect(r.code).toBeUndefined();
+    expect(r.authorized).toBe(true);
+  });
+
+  it("a temporal set whose operands are only partly instants denies", async () => {
+    const r = await verifyInternalWith(
+      prohibit([
+        {
+          leftOperand: "dateTime",
+          operator: "isNoneOf",
+          rightOperand: [VALID_FROM, "garbage"],
+        },
+      ]),
+      today(),
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("an xsd:date bound applies as an instant, but one with an offset (compared as text) denies", async () => {
+    const until = (bound: string) =>
+      prohibit([
+        { leftOperand: "dateTime", operator: "lt", rightOperand: bound, datatype: XsdDate },
+      ]);
+    expect((await verifyInternalWith(until("2026-09-01"), today())).authorized).toBe(false);
+    const past = await verifyInternalWith(until("2026-07-01"), today());
+    expect(past.code).toBeUndefined();
+    expect(past.authorized).toBe(true);
+    expect((await verifyInternalWith(until("2026-07-01Z"), today())).authorized).toBe(true);
+    const offset = await verifyInternalWith(until("2026-08-01-12:00"), today());
+    expect(offset.authorized).toBe(false);
+    expect(offset.code).toBe("POLICY_DENIED");
+  });
+
+  it("a value for a numeric operand must read as a number", async () => {
+    const over = prohibit([{ leftOperand: "count", operator: "gt", rightOperand: 100 }]);
+    for (const count of ["", " ", "1,000", "-", true]) {
+      const r = await verifyInternalWith(over, {
+        ...today(),
+        count,
+      } as RequestContext["attributes"]);
+      expect(r.authorized).toBe(false);
+      expect(r.code).toBe("POLICY_DENIED");
+    }
+    expect((await verifyInternalWith(over, { ...today(), count: 50 })).authorized).toBe(true);
+    expect((await verifyInternalWith(over, { ...today(), count: "50" })).authorized).toBe(true);
+    expect((await verifyInternalWith(over, { ...today(), count: 500 })).authorized).toBe(false);
+  });
+
+  it("an ordering over durations (compared as text) denies", async () => {
+    const r = await verifyInternalWith(
+      prohibit([
+        { leftOperand: "elapsedTime", operator: "gt", rightOperand: "PT1H", datatype: XsdDuration },
+      ]),
+      { ...today(), elapsedTime: "P1D" },
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("a single policy under the perm conflict strategy keeps its permission over an unsupplied prohibition", async () => {
+    const policy: OdrlPolicy = {
+      ...base.instituteInternal,
+      conflict: "perm",
+      permissions: [
+        { type: "permission", action: "read", target: CAST.records, assignee: CAST.agentR },
+      ],
+      prohibitions: prohibit([spatialEu]),
+    };
+    const content = await policyToTurtle(policy);
+    const vc = await issueAgentAuthorization(
+      {
+        principal: CAST.inst,
+        agent: CAST.agentR,
+        action: "read",
+        target: CAST.records,
+        policy: CAST.instituteInternalId,
+        policyContent: content,
+        validFrom: VALID_FROM,
+        validUntil: VALID_UNTIL,
+      },
+      base.keys.inst,
+    );
+    const presented = internalChain({
+      credentials: [vc],
+      policies: [policy],
+      policyContents: { [CAST.instituteInternalId]: { content } },
+    });
+    const omitted = await verifyInternal(presented, {
+      request: { action: "read", target: CAST.records, attributes: today() },
+    });
+    const supplied = await verifyInternal(presented, {
+      request: {
+        action: "read",
+        target: CAST.records,
+        attributes: { ...today(), spatial: "https://example.org/region/eu" },
+      },
+    });
+    expect(supplied.authorized).toBe(true);
+    expect(omitted.authorized).toBe(true);
+  });
 });

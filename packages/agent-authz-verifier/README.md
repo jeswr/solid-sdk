@@ -19,12 +19,15 @@ denies unless `allowProvisionalPolicy: true` is set, which marks the permit
 `INVALID_OPTIONS`. The chain-length cap (default 8) applies before any key is resolved. An unknown
 request action, a multi-valued or malformed request attribute, a value for an operand the chain
 compares as an instant (`dateTime`, or any constraint typed `xsd:dateTime`/`xsd:date`) that is not a
-dateTime string with a timezone, a signed temporal bound that is not an instant (it would compare as
-text), or a chain prohibition that may apply but constrains an operand the request leaves out,
+dateTime string with a timezone, a value for an operand the chain compares as numbers that does not
+read as a number, a signed bound the evaluator would compare as text (a temporal bound that is not an
+instant, such as an `xsd:date` with an offset, or an ordering over durations or names), or a chain
+prohibition that may apply but constrains an operand the request leaves out,
 denies in Phase D, as does any evaluator failure. The prohibition check probes each policy exactly
 as the delegation walk reads it (the same agent, action and injected `delegationDepth`), dropping
 only the constraints whose operand is missing, so a prohibition assigned to someone else or out of
-depth range does not deny. A credential validity bound that is not a dateTime with a
+depth range does not deny. A single policy under the `perm` conflict strategy keeps its own
+semantics: a matching permission overrides its prohibitions. A credential validity bound that is not a dateTime with a
 timezone denies in Phase A. Signed policy content is parsed with its relative IRIs resolved against
 the policy document (the policy IRI without its fragment). The credential's `svc:action` and `svc:target` claims are read
 but not enforced; the bound policy decides scope.
