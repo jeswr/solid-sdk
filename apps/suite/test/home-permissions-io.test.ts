@@ -243,13 +243,14 @@ describe("bounded Home permission discovery", () => {
       [endpoint]: {
         body: acl(
           file,
-          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+          `<#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:accessTo <${file}>; acl:mode acl:Read.`,
         ),
       },
     });
     const snapshot = await pod.load();
     expect(snapshot.failures).toEqual([{ url: file, reason: "unreadable" }]);
-    expect(snapshot.summary.people).toBe(1);
+    expect(snapshot.summary.publicItems).toBe(1);
+    expect(snapshot.rows[0]!.kind).toBe("public");
     const line = snapshot.rows[0]!.lines[0]!;
     expect(line.dataType).toBeUndefined();
     expect(line.domainId).toBe("other");

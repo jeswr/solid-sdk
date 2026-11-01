@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
-import { click, h, mount } from "./drive-ui-dom";
+import { click, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -125,4 +125,47 @@ it("keeps inherited toggles behind the parent-name confirmation and restores key
   if (!confirm) throw new Error("Missing inherited confirmation");
   await click(confirm);
   expect(state.revoke).toHaveBeenCalledWith(inherited.lines[0]);
+});
+
+it.each([
+  "public",
+  "authenticated",
+] as const)("makes both pseudo agents private from the %s row's button and shortcut", async (kind) => {
+  const state = binding();
+  state.rows = (["public", "authenticated"] as const).map((kind) => ({
+    ...row,
+    key: kind,
+    id: kind,
+    kind,
+    lines: row.lines.map((line) => ({ ...line, key: kind })),
+  }));
+  const pseudo = state.rows.find((item) => item.kind === kind) as AgentRow;
+  const view = await mount(
+    h(PermissionAccessRow, {
+      row: pseudo,
+      binding: state,
+      storage: "https://pod.test/",
+      view: "overview",
+      technical: false,
+      alwaysExpanded: true,
+    }),
+  );
+  const trigger = [...view.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Make private",
+  );
+  if (!trigger) throw new Error("Missing Make private button");
+  for (const shortcut of [false, true]) {
+    if (shortcut) await key(trigger, "r");
+    else await click(trigger);
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain("Make private?");
+    expect(dialog?.textContent).toContain("Remove all public and signed-in access");
+    const confirm = [...(dialog?.querySelectorAll("button") || [])].find(
+      (button) => button.textContent === "Remove access",
+    );
+    if (!confirm) throw new Error("Missing Make private confirmation");
+    await click(confirm);
+    expect(state.revoke).toHaveBeenLastCalledWith("makePrivate");
+  }
+  expect(state.revoke).toHaveBeenCalledTimes(2);
 });

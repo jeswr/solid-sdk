@@ -85,6 +85,12 @@ describe("permission copy and navigation", () => {
         "Bob will no longer be able to see or change Files, Contacts. You can share again later.",
     });
     expect(revokeCopy(row({ lines: [] })).description).toContain("your data");
+    for (const kind of ["public", "authenticated"] as const) {
+      expect(revokeCopy(row({ kind })).title).toBe("Make private?");
+      expect(revokeCopy(row({ kind })).description).toContain(
+        "Remove all public and signed-in access",
+      );
+    }
   });
   it("builds reversible detail references, including both pseudo agents and bad refs", () => {
     expect(agentId(agentHref(bob).split("/").at(-1) as string)).toBe(bob.id);

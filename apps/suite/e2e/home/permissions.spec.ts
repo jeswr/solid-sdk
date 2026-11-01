@@ -132,12 +132,14 @@ test("People: keyboard toggle, inherited confirmation, saved policy and Undo; Ma
   await publicCard.getByRole("button", { name: "Make private", exact: true }).focus();
   await page.keyboard.press("Enter");
   const removePublic = page.getByRole("alertdialog", {
-    name: "Remove all access for Anyone with the link?",
+    name: "Make private?",
     exact: true,
   });
+  await expect(removePublic).toContainText("Remove all public and signed-in access");
   await removePublic.getByRole("button", { name: "Remove access", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(publicCard).toHaveCount(0);
+  await expect(card(page, "Anyone signed in")).toHaveCount(0);
   await expect
     .poll(() => podDocument(page, `${ROOT}drive/Photos/sunset.png.acl`))
     .not.toContain("http://xmlns.com/foaf/0.1/Agent");

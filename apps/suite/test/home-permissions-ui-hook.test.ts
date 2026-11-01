@@ -159,6 +159,111 @@ it("optimistically revokes a line, retains it through refresh, and invokes its e
   expect(binding.busy).toBe(false);
 });
 
+it("clears completed removal markers after an external regrant so Revoke all includes it", async () => {
+  await mount(h(Probe));
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(bob.lines[0] as NonNullable<(typeof bob.lines)[0]>));
+  expect(binding.removed.files?.token).toBeTruthy();
+  mocks.load.mockResolvedValue(snapshot);
+  await act(() => binding.refresh());
+  expect(binding.removed).toEqual({});
+  expect(binding.rows[0]?.lines).toEqual(bob.lines);
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(binding.rows[0] as AgentRow));
+  expect(mocks.apply.mock.calls[1]?.[0].changes).toEqual([
+    expect.objectContaining({ subject: { kind: "agent", webId: bob.id } }),
+  ]);
+  expect(binding.rows).toEqual([]);
+});
+
+it("makePrivate revokes both pseudo-agent grants and preserves named people", async () => {
+  const pseudoRows = (["public", "authenticated"] as const).map((kind) => ({
+    ...bob,
+    key: kind,
+    id: kind,
+    kind,
+    lines: bob.lines.map((line) => ({
+      ...line,
+      key: kind,
+      resources: line.resources.map((resource) => ({ ...resource, subject: { kind } })),
+    })),
+  }));
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [...pseudoRows, bob] });
+  await mount(h(Probe));
+  mocks.load.mockResolvedValue(snapshot);
+  await act(() => binding.revoke("makePrivate"));
+  expect(
+    mocks.apply.mock.calls[0]?.[0].changes.map((change: { subject: unknown }) => change.subject),
+  ).toEqual([{ kind: "public" }, { kind: "authenticated" }]);
+  expect(binding.rows).toEqual([bob]);
+});
+
+it.each([
+  "https://id.test/alice#me",
+  "https://pod.test/outside/card#me",
+])("uses credential-free profile discovery outside storage: %s", async (webId) => {
+  const storage = `${ROOT}alice/`;
+  const profile = webId.split("#")[0] as string;
+  mocks.session = { ...mocks.session, webId, storageUrl: storage };
+  const plain = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        `<${webId}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${storage}index>.`,
+        { headers: { "content-type": "text/turtle" } },
+      ),
+  );
+  vi.stubGlobal("fetch", plain);
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  const sessionFetch = vi.mocked(mocks.session.fetch);
+  sessionFetch.mockResolvedValue(
+    new Response(
+      `<#registration> a <http://www.w3.org/ns/solid/terms#TypeRegistration>; <http://www.w3.org/ns/solid/terms#forClass> <https://schema.org/Book>; <http://www.w3.org/ns/solid/terms#instance> <${storage}book>.`,
+      { headers: { "content-type": "text/turtle" } },
+    ),
+  );
+  await mount(h(Probe));
+  expect(plain).toHaveBeenCalledExactlyOnceWith(
+    profile,
+    expect.objectContaining({ credentials: "omit", redirect: "error" }),
+  );
+  expect(sessionFetch).toHaveBeenCalledExactlyOnceWith(
+    `${storage}index`,
+    expect.objectContaining({ redirect: "error" }),
+  );
+  expect(mocks.load).toHaveBeenCalledWith(
+    expect.objectContaining({
+      typeIndex: [{ forClass: "https://schema.org/Book", instance: `${storage}book` }],
+    }),
+  );
+});
+
+it.each([
+  false,
+  true,
+])("refuses profile redirects without following them (in storage=%s)", async (withinStorage) => {
+  const webId = withinStorage ? mocks.session.webId : "https://id.test/alice#me";
+  mocks.session = { ...mocks.session, webId };
+  const redirect = new Response(null, {
+    status: 302,
+    headers: { location: "https://evil.test/card" },
+  });
+  const plain = vi.fn<typeof fetch>(async () => redirect);
+  vi.stubGlobal("fetch", plain);
+  vi.mocked(mocks.session.fetch).mockResolvedValue(redirect);
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await mount(h(Probe));
+  const transport = withinStorage ? vi.mocked(mocks.session.fetch) : plain;
+  expect(transport).toHaveBeenCalledExactlyOnceWith(
+    webId.split("#")[0],
+    expect.objectContaining({ redirect: "error" }),
+  );
+  if (!withinStorage) {
+    expect(plain.mock.calls[0]?.[1]?.credentials).toBe("omit");
+    expect(mocks.session.fetch).not.toHaveBeenCalled();
+  } else expect(plain).not.toHaveBeenCalled();
+  expect(binding.status).toBe("ready");
+});
+
 it("rolls failed writes back and offers a persistent Undo when only part of a write succeeded", async () => {
   await mount(h(Probe));
   mocks.apply.mockRejectedValueOnce(new Error("write failed"));

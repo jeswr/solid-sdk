@@ -57,6 +57,7 @@ describe("permissions state reducer", () => {
     expect(state.rows[0]?.lines).toEqual([line]);
     const ownRow = permissionsReducer(state, { type: "loaded", snapshot });
     expect(ownRow.rows[0]?.lines).toEqual([line]);
+    expect(ownRow.removed).toEqual({});
     const secondLine = { ...line, key: "contacts" };
     const fresh = { ...snapshot, rows: [{ ...bob, lines: [secondLine] }] };
     expect(permissionsReducer(state, { type: "loaded", snapshot: fresh }).rows[0]?.lines).toEqual([
@@ -66,6 +67,12 @@ describe("permissions state reducer", () => {
     state = permissionsReducer(state, { type: "collapse", key: bob.key });
     expect(state.rows).toEqual([]);
     expect(state.removed).toEqual({});
+  });
+  it("preserves an in-flight removal when a snapshot still contains the grant", () => {
+    const pending = permissionsReducer(loaded(), { type: "start", row: bob, line });
+    const refreshed = permissionsReducer(pending, { type: "loaded", snapshot });
+    expect(refreshed.busy).toBe(true);
+    expect(refreshed.removed.files).toEqual({ row: bob, line });
   });
   it("restores only the failed line, preserves other revoked lines, and ignores stale completions", () => {
     const other = { ...line, key: "contacts" };

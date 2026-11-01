@@ -213,6 +213,7 @@ export function PermissionAccessRow({
         : "";
   const active = row.lines.filter((line) => !binding.removed[line.key]);
   const allCopy = revokeCopy({ ...row, lines: active });
+  const revokeAll = () => binding.revoke(pseudo ? "makePrivate" : { ...row, lines: active });
   const expand = (next: boolean) => {
     if (alwaysExpanded) return;
     setExpanded(next);
@@ -287,8 +288,9 @@ export function PermissionAccessRow({
               const line = row.lines.find((item) => item.key === key);
               if (line) changeLine(line, checked);
             }}
-            onRevoke={() => void binding.revoke({ ...row, lines: active })}
+            onRevoke={() => void revokeAll()}
             revokeLabel={pseudo ? "Make private" : "Revoke all"}
+            revokeConfirmation={allCopy}
           />
         </DisabledHint>
         {slots &&
@@ -335,8 +337,8 @@ export function PermissionAccessRow({
                 variant="destructive"
                 disabled={!!reason}
                 onClick={() => {
-                  if (confirm)
-                    void binding.revoke(confirm === "all" ? { ...row, lines: active } : confirm);
+                  if (confirm === "all") void revokeAll();
+                  else if (confirm) void binding.revoke(confirm);
                 }}
               >
                 Remove access

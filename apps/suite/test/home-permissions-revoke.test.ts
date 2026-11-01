@@ -335,6 +335,40 @@ describe("WAC revocation and inverse plans", () => {
     await pod.apply(undo);
     await same(await pod.graph(), body(rules));
   });
+  it.each([
+    ["agent set", `acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read`],
+    ["mode set", `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Write`],
+    [
+      "accessTo targets",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>, <${ROOT}other>; acl:mode acl:Read`,
+    ],
+    [
+      "default targets",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`,
+    ],
+    [
+      "conditions",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:origin <https://app.test>; acl:mode acl:Read`,
+    ],
+  ])("matches a selected blank rule structurally by %s after labels and order change", async (_name, properties) => {
+    const selected = `[] a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const other = `[] a acl:Authorization; ${properties}.`;
+    const state = await snapshot(body(`${selected} ${other}`));
+    const expected = await parseRdf(`${PREFIX} ${selected}`, "text/turtle", { baseIRI: DOC });
+    const candidates = planRevoke(state.rows.find((row) => row.id === BOB)!, "all").changes;
+    const changes: RevokeChange[] = [];
+    for (const candidate of candidates) {
+      const original = await parseRdf(candidate.authorization!, "text/turtle", { baseIRI: DOC });
+      if (isomorphic([...original], [...expected])) changes.push(candidate);
+    }
+    expect(changes).toHaveLength(1);
+    const fresh = body(`${other} ${selected}`);
+    const pod = fixture(fresh);
+    const { undo } = await pod.apply({ changes });
+    await same(await pod.graph(), body(other));
+    await pod.apply(undo);
+    await same(await pod.graph(), fresh);
+  });
   it("matches complete principal and origin conditions before mutating shared blank rules", async () => {
     const shared = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`;
     const other = `[] a acl:Authorization; acl:agent <${BOB}>; acl:origin <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;

@@ -53,6 +53,12 @@ export function dataTypeLabels(row: AgentRow): string[] {
 }
 
 export function revokeCopy(row: AgentRow): { title: string; description: string } {
+  if (row.kind === "public" || row.kind === "authenticated")
+    return {
+      title: "Make private?",
+      description:
+        "Remove all public and signed-in access. People and apps you've shared with individually will keep their access. You can share again later.",
+    };
   const name = agentName(row);
   return {
     title: `Remove all access for ${name}?`,

@@ -2,10 +2,11 @@
 "use client";
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { toast } from "@jeswr/suite-ui";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHomeSession } from "../components/home-app";
-import { httpUrl, subjectOf } from "../lib/model/rdf";
+import { httpUrl, inStorage, subjectOf } from "../lib/model/rdf";
 import { readTypeIndexes } from "../lib/model/type-index";
 import {
   type AgentRow,
@@ -67,15 +68,22 @@ export function permissionsReducer(
       return initialPermissionsState;
     case "loaded": {
       const rows = action.snapshot.rows.map((row) => ({ ...row, lines: [...row.lines] }));
-      for (const entry of Object.values(state.removed)) {
+      const removed = { ...state.removed };
+      for (const [key, entry] of Object.entries(removed)) {
         let row = rows.find((r) => r.key === entry.row.key);
+        // A fresh active grant supersedes a completed removal, including regrants
+        // by another client. Pending writes keep their optimistic switch state.
+        if (entry.token && row?.lines.some((line) => line.key === key)) {
+          delete removed[key];
+          continue;
+        }
         if (!row) {
           row = { ...entry.row, lines: [] };
           rows.push(row);
         }
         if (!row.lines.some((l) => l.key === entry.line.key)) row.lines.push(entry.line);
       }
-      return { ...state, ...action.snapshot, rows, status: "ready" };
+      return { ...state, ...action.snapshot, rows, removed, status: "ready" };
     }
     case "error":
       return { ...state, status: "error" };
@@ -243,12 +251,20 @@ export function usePermissions() {
       // Existing discovery supplies registrations; the permissions model owns all aggregation.
       let locations: Awaited<ReturnType<typeof readTypeIndexes>>["locations"] = [];
       try {
-        const { dataset } = await fetchRdf(session.webId.split("#")[0] as string, {
-          fetch: session.fetch,
+        const profile = session.webId.split("#")[0] as string;
+        if (!httpUrl(profile)) throw new TypeError("Expected an HTTP(S) profile URL");
+        const scoped: typeof globalThis.fetch = (input, init) =>
+          session.fetch(assertWithinPodScope(session.storageUrl, String(input)), {
+            ...init,
+            redirect: "error",
+          });
+        const plain: typeof globalThis.fetch = (input, init) =>
+          globalThis.fetch(input, { ...init, credentials: "omit", redirect: "error" });
+        const { dataset } = await fetchRdf(profile, {
+          fetch: inStorage(profile, session.storageUrl) ? scoped : plain,
         });
-        locations = (
-          await readTypeIndexes(session.fetch, session.webId, dataset, session.storageUrl)
-        ).locations;
+        locations = (await readTypeIndexes(scoped, session.webId, dataset, session.storageUrl))
+          .locations;
       } catch {
         /* The permissions walk reports inaccessible storage separately. */
       }
@@ -402,10 +418,17 @@ export function usePermissions() {
         undos.current.set(token, result.undo);
         if (line) dispatch({ type: "line-done", key: line.key, token });
         else dispatch({ type: "row-done", keys: rows.map((r) => r.key) });
-        toast.success(line ? consequenceText(line, name) : `${name} no longer has access`, {
-          duration: 8000,
-          action: { label: "Undo", onClick: () => void undo(token) },
-        });
+        toast.success(
+          line
+            ? consequenceText(line, name)
+            : target === "makePrivate"
+              ? "Public and signed-in access removed"
+              : `${name} no longer has access`,
+          {
+            duration: 8000,
+            action: { label: "Undo", onClick: () => void undo(token) },
+          },
+        );
       } catch (error) {
         if (!mounted.current || seq !== generation.current) return;
         dispatch({ type: "write-error", ...(line ? { key: line.key } : {}) });

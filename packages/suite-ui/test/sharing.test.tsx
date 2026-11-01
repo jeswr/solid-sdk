@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
@@ -791,6 +792,27 @@ describe("permission rows", () => {
     expect(screen.getByRole("alertdialog").textContent).toContain(
       "Remove all access for MaraCoach?",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Remove access" }));
+    expect(onRevoke).toHaveBeenCalledOnce();
+  });
+  it("uses caller-supplied revoke confirmation copy", () => {
+    const onRevoke = vi.fn();
+    render(
+      <PermissionRow
+        {...permission}
+        onRevoke={onRevoke}
+        revokeLabel="Make private"
+        revokeConfirmation={{
+          title: "Make private?",
+          description: "Remove all public and signed-in access.",
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Make private" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog.textContent).toContain("Make private?");
+    expect(dialog.textContent).toContain("Remove all public and signed-in access.");
+    expect(dialog.textContent).not.toContain("Remove all access for MaraCoach?");
     fireEvent.click(screen.getByRole("button", { name: "Remove access" }));
     expect(onRevoke).toHaveBeenCalledOnce();
   });
