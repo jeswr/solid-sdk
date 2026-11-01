@@ -411,6 +411,8 @@ it("keeps only the unrestored documents after a partial Undo, offers Undo remain
   const remainingAction = () => {
     const options = mocks.error.mock.lastCall?.[1];
     expect(options?.action.label).toBe("Undo remaining");
+    // It outlasts the stale line, so it stays until dismissed.
+    expect(options?.duration).toBe(Number.POSITIVE_INFINITY);
     return options?.action.onClick as () => void;
   };
   // A failed write keeps the rest available, from the line and from the toast.
@@ -449,6 +451,47 @@ it("keeps only the unrestored documents after a partial Undo, offers Undo remain
   const calls = mocks.apply.mock.calls.length;
   await act(async () => toastUndo());
   expect(mocks.apply).toHaveBeenCalledTimes(calls);
+});
+
+it("keeps the later documents when the first one is refused before anything is restored", async () => {
+  const line = bob.lines[0] as NonNullable<(typeof bob.lines)[0]>;
+  const resource = line.resources[0] as NonNullable<(typeof line.resources)[0]>;
+  const names = ["a", "b", "c"];
+  const spread: AgentRow = {
+    ...bob,
+    lines: [
+      {
+        ...line,
+        resources: names.map((name) => ({
+          ...resource,
+          url: `${ROOT}${name}/`,
+          source: `${ROOT}${name}/.acl`,
+          node: `${ROOT}${name}/.acl#bob`,
+        })),
+      },
+    ],
+  };
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [spread] });
+  await mount(h(Probe));
+  const restore = names.map((name) => ({ source: `${ROOT}${name}/.acl`, remove: [], add: [] }));
+  mocks.apply.mockResolvedValueOnce({ undo: { changes: [], restore } });
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(spread.lines[0] as NonNullable<(typeof spread.lines)[0]>));
+  const token = binding.removed.files?.token as string;
+  const conflict = new RestoreConflictError();
+  conflict.source = `${ROOT}a/.acl`;
+  mocks.apply.mockRejectedValueOnce(conflict);
+  await act(() => binding.undo(token));
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "Access to a/ was changed elsewhere, so it can't be restored here",
+    expect.objectContaining({ duration: Number.POSITIVE_INFINITY }),
+  );
+  expect(binding.removed.files?.stale).toBe(true);
+  mocks.apply.mockResolvedValueOnce({ undo: { changes: [], restore: [] } });
+  const remaining = mocks.error.mock.lastCall?.[1]?.action.onClick as () => void;
+  await act(async () => remaining());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: restore.slice(1) });
+  expect(mocks.success).toHaveBeenLastCalledWith("Access restored");
 });
 
 it("shows the mounted page as saving while an earlier page's Undo holds the lock, and keeps a busy toast Undo open", async () => {
