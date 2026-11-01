@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from '../fixtures';
-import { performLogin } from './helpers';
+import { clickClosingControl, performLogin } from './helpers';
 
 const site = 'http://localhost:8080/address-form.html';
 
@@ -53,7 +53,7 @@ test('fills approved categories after preview and remembers consent separately f
   await expect(again.getByLabel('Contact details', { exact: true })).toBeChecked();
   await expect(again.getByLabel('Address', { exact: true })).toBeChecked();
   await expect(page.getByLabel('Full name', { exact: true })).toHaveValue('');
-  await again.getByRole('button', { name: 'Cancel' }).click();
+  await clickClosingControl(again, again.getByRole('button', { name: 'Cancel' }));
 });
 
 test('cancel leaves every field untouched', async ({ context, extensionId }) => {
@@ -64,7 +64,7 @@ test('cancel leaves every field untouched', async ({ context, extensionId }) => 
   await page.locator('[data-solid-formfill]').click();
   const preview = await previewPromise;
   await preview.waitForURL('**/formfill/preview.html?*');
-  await preview.getByRole('button', { name: 'Cancel' }).click();
+  await clickClosingControl(preview, preview.getByRole('button', { name: 'Cancel' }));
   for (const input of await page.locator('input').all()) await expect(input).toHaveValue('');
 });
 
@@ -95,10 +95,7 @@ for (const navigation of ['history', 'hash'] as const) {
     );
     await page.waitForURL(destination);
     await expect(page.locator('form[data-original-document]')).toHaveCount(1);
-    await Promise.all([
-      preview.waitForEvent('close'),
-      preview.getByRole('button', { name: 'Fill', exact: true }).click(),
-    ]);
+    await clickClosingControl(preview, preview.getByRole('button', { name: 'Fill', exact: true }));
     await expect(page.getByLabel('Full name', { exact: true })).toHaveValue('Alex Wilder');
     await expect(page.getByLabel('Street address')).toHaveValue('42 Sample Street');
     expect(page.url()).toBe(destination);
@@ -141,10 +138,7 @@ for (const navigation of ['navigation', 'reload'] as const) {
     const observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/formfill/preview.html`);
     await expect(observer.locator('#error')).toHaveText('This fill request is unavailable.');
-    await Promise.all([
-      preview.waitForEvent('close'),
-      preview.getByRole('button', { name: 'Fill', exact: true }).click(),
-    ]);
+    await clickClosingControl(preview, preview.getByRole('button', { name: 'Fill', exact: true }));
     await expect
       .poll(() =>
         observer.evaluate(
@@ -163,7 +157,7 @@ for (const navigation of ['navigation', 'reload'] as const) {
     const fresh = await freshPromise;
     await expect(fresh.getByLabel('Contact details', { exact: true })).not.toBeChecked();
     expect(new URL(fresh.url()).searchParams.get('requestId')).not.toBe(requestId);
-    await fresh.getByRole('button', { name: 'Cancel' }).click();
+    await clickClosingControl(fresh, fresh.getByRole('button', { name: 'Cancel' }));
   });
 }
 
