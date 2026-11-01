@@ -14,7 +14,8 @@
  * coverage — it cannot be exercised without a real SW lifecycle.
  */
 
-import { createPodClient } from '@jeswr/storage-client';
+import { createPodClient, type StorageClient } from '@jeswr/storage-client';
+import { createSolidBackend } from '@jeswr/storage-client/solid';
 import {
   assetConfigCandidates,
   cleanupOldShellCaches,
@@ -347,7 +348,7 @@ async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
   };
 }
 
-/** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
+/** Discover only for network operations; local invalidation needs just the storage boundary. */
 async function invalidateDeps(): Promise<InvalidateDeps> {
   const root = storageRoot;
   const generation = invalidationGeneration;
@@ -358,18 +359,27 @@ async function invalidateDeps(): Promise<InvalidateDeps> {
   if (!root) throw new Error('Offline invalidation requires a storage root');
   const { fetch: transport, ...deps } = await baseDeps();
   checkScope();
-  const storage = await createPolicyStorage(
-    async (fetch) => (await createPodClient({ storage: root, fetch })).storage,
-    transport,
-  );
-  checkScope();
+  const local = createSolidBackend({ root, fetch: transport });
+  let discovered: Promise<StorageClient> | undefined;
+  const networkStorage = (): Promise<StorageClient> => {
+    checkScope();
+    discovered ??= createPolicyStorage(
+      async (fetch) => (await createPodClient({ storage: root, fetch })).storage,
+      transport,
+    );
+    return discovered;
+  };
   return {
     ...deps,
     storage: {
-      ...storage,
+      ...local,
       read: async (url, opts) => {
+        const storage = await networkStorage();
         checkScope();
-        const result = await storage.read(url, opts);
+        const result = await storage.read(url, {
+          ...opts,
+          accept: storage.protocol === 'lws' ? '*/*' : opts?.accept,
+        });
         if (generation !== invalidationGeneration) {
           await result.body?.cancel();
           checkScope();
@@ -377,6 +387,7 @@ async function invalidateDeps(): Promise<InvalidateDeps> {
         return result;
       },
       head: async (url, opts) => {
+        const storage = await networkStorage();
         checkScope();
         const result = await storage.head(url, opts);
         checkScope();

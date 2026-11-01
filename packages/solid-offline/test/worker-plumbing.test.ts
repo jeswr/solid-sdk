@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Worker event adapter coverage; real-browser lifecycle smoke remains a separate check. */
 import { createPodClient, type PodClient } from '@jeswr/storage-client';
+import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, expect, it, vi } from 'vitest';
 import { keyRequest } from '../src/cache-policy.js';
@@ -138,6 +139,45 @@ it('routes notification/resync messages through credential-free storage and the 
   expect(await (await a.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe('alice');
   expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe('fresh');
   expect(messages).toHaveLength(1);
+
+  // Local eviction must succeed even when no unauthenticated request can succeed.
+  vi.mocked(createPodClient)
+    .mockReset()
+    .mockRejectedValue(new Error('Discovery requires authentication'));
+  self.fetch.mockRejectedValue(new Error('Offline'));
+  const requestCount = self.fetch.mock.calls.length;
+  await send({ type: 'notification', frame: { type: 'Delete', object: url } });
+  expect(a.cache.size).toBe(0);
+  expect(await a.meta.getByUrl(url)).toEqual([]);
+  expect(b.cache.size).toBe(1);
+  expect(self.fetch).toHaveBeenCalledTimes(requestCount);
+  expect(createPodClient).not.toHaveBeenCalled();
+
+  // A forged notification cannot evict another storage's cached entry.
+  await send({ type: 'config', config: { webId: bob, storageRoot: 'https://other.example/' } });
+  await send({ type: 'notification', frame: { type: 'Delete', object: url } });
+  expect(b.cache.size).toBe(1);
+
+  // Network reads retain discovery's LWS identity, which need not equal the root.
+  const storageId = `${root}description`;
+  vi.mocked(createPodClient).mockImplementation(
+    async (opts) =>
+      ({
+        storage: createLwsBackend({ fetch: opts.fetch, root: opts.storage, storage: storageId }),
+      }) as PodClient,
+  );
+  self.fetch.mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.headers.get('accept')).toBe('*/*');
+    const response = turtleResponse('lws fresh', { etag: 'v4' });
+    response.headers.set('link', `<${storageId}>; rel="https://www.w3.org/ns/lws#storage"`);
+    return response;
+  });
+  await send({ type: 'config', config: { webId: bob, storageRoot: root } });
+  await send({ type: 'notification', frame: { type: 'Update', object: url } });
+  expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe(
+    'lws fresh',
+  );
 
   // Close the worker's own scoped DB handle before restoring globals.
   await send({ type: 'config', config: {} });
