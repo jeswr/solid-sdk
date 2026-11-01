@@ -17,9 +17,10 @@ import { withConnectorLock } from "../../lib/connect/import-lock";
 
 /** Read the current checkpoint only after acquiring the reservation, and persist
  * every outcome before releasing it. update must read durable state, not React state.
- * authorize (source sign-in) runs inside the reservation but before the run is
- * recorded, so an abandoned sign-in never marks a service as incompletely synced. */
-export function runSavedImport<Auth = undefined>(
+ * authorize (source sign-in) runs first, outside the reservation: it has no deadline,
+ * so an unfinished sign-in never blocks another tab's import of this connector, and an
+ * abandoned sign-in never marks a service as incompletely synced. */
+export async function runSavedImport<Auth = undefined>(
   storage: string,
   id: string,
   mode: ConnectionMode,
@@ -32,9 +33,11 @@ export function runSavedImport<Auth = undefined>(
   ) => Promise<ImportReport>,
   authorize?: () => Promise<Auth>,
 ): Promise<ImportReport> {
+  signal.throwIfAborted();
+  const auth = authorize ? await authorize() : (undefined as Auth);
+  signal.throwIfAborted();
+  // Only checkpoint -> run -> persist holds the reservation.
   return withConnectorLock(storage, id, signal, async () => {
-    const auth = authorize ? await authorize() : (undefined as Auth);
-    signal.throwIfAborted();
     const connection = update({ type: "start", at: new Date().toISOString(), mode });
     try {
       const result = await run(mode === "live" ? connection.cursor : undefined, connection, auth);

@@ -543,6 +543,8 @@ describe("Spotify production import", () => {
 describe("Spotify playlist permissions", () => {
   const All = spotifyAdapter.metadata.scopes;
   const withoutPrivate = All.filter((scope) => scope !== "playlist-read-private");
+  const withoutCollaborative = All.filter((scope) => scope !== "playlist-read-collaborative");
+  const withoutBoth = withoutPrivate.filter((scope) => scope !== "playlist-read-collaborative");
   const Playlists = `${ROOT}music/playlists.ttl`;
   const Name = nn(`${SCHEMA}name`);
   const track = (id: string, name: string) => ({ item: { id, name, type: "track" } });
@@ -595,11 +597,63 @@ describe("Spotify playlist permissions", () => {
     expect(names(ds, `${Playlists}#track-b`)).toEqual(["B"]);
     expect(ds.match(nn(`${Playlists}#playlist-shared-item-2`)).size).toBeGreaterThan(0);
 
-    // A playlist no longer listed by the source is not carried forward.
-    await run(playlists(["shared"], [track("b", "B")]), pod, withoutPrivate);
+    // Only a full grant proves an unlisted playlist was deleted at the source.
+    await run(playlists(["shared"], [track("b", "B")]), pod);
     const latest = pod.dataset(Playlists);
     expect(latest.match(nn(`${Playlists}#playlist-mine`)).size).toBe(0);
     expect(latest.match(nn(`${Playlists}#track-a`)).size).toBe(0);
+  });
+
+  // Spotify leaves playlists of a withheld kind out of /me/playlists entirely.
+  it.each([
+    ["private ones", withoutPrivate, ["shared"], "mine", "shared"],
+    ["private ones, with no public playlists listed", withoutPrivate, [], "mine", "shared"],
+    ["collaborative ones", withoutCollaborative, ["mine"], "shared", "mine"],
+    ["collaborative ones, with nothing listed", withoutCollaborative, [], "shared", "mine"],
+    ["both kinds", withoutBoth, [], "mine", "shared"],
+  ] as const)("keeps playlists the source omits while withholding %s", async (_kind, scopes, listed, kept, other) => {
+    const pod = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S")]), pod);
+    const before = pod.dataset(Playlists);
+    const stored = (subject: string) =>
+      [...before].filter(
+        (quad) => quad.subject.value === subject && !quad.predicate.value.startsWith(PROV),
+      );
+    const keptQuads = [
+      `${Playlists}#playlist-${kept}`,
+      ...[1, 2, 3].map((n) => `${Playlists}#playlist-${kept}-item-${n}`),
+    ].flatMap(stored);
+    expect(keptQuads.length).toBeGreaterThan(0);
+    const api = playlists(listed, [track("s", "S")]);
+    const report = await run(api, pod, [...scopes]);
+    const ds = pod.dataset(Playlists);
+    for (const quad of keptQuads) expect(ds.has(quad)).toBe(true);
+    expect(ds.match(nn(`${Playlists}#playlist-${kept}`), TYPE).size).toBeGreaterThan(0);
+    // A listed playlist of a granted kind is re-described; an unlisted one is kept too while
+    // any playlist scope is withheld, because the listing cannot prove it was deleted.
+    expect(ds.match(nn(`${Playlists}#playlist-${other}`), TYPE).size).toBeGreaterThan(0);
+    expect(api.mock.calls.some(([input]) => String(input).includes(`/playlists/${kept}/`))).toBe(
+      false,
+    );
+    expect(report.skipped).toBeUndefined();
+  });
+
+  it("does not carry forward the item or track nodes of a playlist this run re-describes", async () => {
+    const pod = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S"), track("old", "Old")]), pod);
+    await run(playlists(["shared"], [track("b", "B")]), pod, withoutPrivate);
+    const ds = pod.dataset(Playlists);
+    expect(ds.match(nn(`${Playlists}#playlist-shared-item-2`)).size).toBe(0);
+    expect(ds.match(nn(`${Playlists}#track-old`)).size).toBe(0);
+    expect(names(ds, `${Playlists}#track-b`)).toEqual(["B"]);
+    expect(new MusicPlaylist(`${Playlists}#playlist-mine`, ds, DataFactory).name).toBe("Mine");
+  });
+
+  it("keeps no earlier playlists when a partial grant re-syncs an empty pod", async () => {
+    const pod = createMemoryPod();
+    const report = await run(playlists([], []), pod, withoutPrivate);
+    expect(report.written.some(({ url }) => url === Playlists)).toBe(true);
+    expect(pod.dataset(Playlists).match(null, TYPE, nn(`${SCHEMA}MusicPlaylist`)).size).toBe(0);
   });
 
   it("omits a withheld kind without requesting its contents when nothing was imported before", async () => {

@@ -13,6 +13,7 @@ import {
   relativeSync,
   scopeLabel,
   skippedCopy,
+  stepCopy,
 } from "../src/apps/home/lib/connect/copy";
 
 describe("connector catalogue", () => {
@@ -109,6 +110,13 @@ describe("plain connect copy", () => {
     expect(skippedCopy(2)).toBe("2 items couldn't be read and were skipped");
     expect(progressCopy(2)).toBe("Imported 2 items");
     expect(progressCopy(1, 3, "tracks")).toBe("Imported 1 of 3 tracks");
+    // Adapter totals count steps: name the current one, never a number of collections.
+    expect(stepCopy(0, 4)).toBe("Step 1 of 4");
+    expect(stepCopy(1, 4)).toBe("Step 2 of 4");
+    expect(stepCopy(3, 4)).toBe("Step 4 of 4");
+    expect(stepCopy(4, 4)).toBe("Step 4 of 4");
+    expect(stepCopy(9, 4)).toBe("Step 4 of 4");
+    expect(stepCopy(-1, 1)).toBe("Step 1 of 1");
     expect(scopeLabel("user-follow-read")).toBe("Artists you follow");
     expect(scopeLabel("new-scope")).toBe("Service data");
     expect(

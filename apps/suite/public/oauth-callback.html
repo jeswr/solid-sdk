@@ -17,6 +17,13 @@
       channel.postMessage(message);
       channel.close();
       history.replaceState(null, "", location.pathname);
+      // The opener also closes this popup, but a provider's Cross-Origin-Opener-Policy can
+      // sever that handle; a script-opened window may still close itself.
+      try {
+        window.close();
+      } catch {
+        // The browser keeps the page open; the copy above tells the user to close it.
+      }
     </script>
   </body>
 </html>

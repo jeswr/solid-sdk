@@ -417,3 +417,179 @@ it("forwards explicit file-import write conditions to the Pod port", async () =>
   await runFileImport(options);
   await expect(runFileImport(options)).rejects.toMatchObject({ status: 412 });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("runImport enforces cancellation for adapters that ignore ctx.signal", () => {
+  const doc = () => ({
+    slug: "music/songs.ttl",
+    category: "media",
+    forClass: CLASSES.MusicRecording,
+    dataset: new Store(),
+  });
+  function ports(onRegister: () => void = () => {}) {
+    const calls: string[] = [];
+    const podWriter: import("./types.js").PodWriter = {
+      resolve: (slug) => `https://memory.test/${slug}`,
+      read: async (slug) => {
+        calls.push(`read ${slug}`);
+        return undefined;
+      },
+      write: async (written) => {
+        calls.push(`write ${written.slug}`);
+        return {
+          url: `https://memory.test/${written.slug}`,
+          category: written.category,
+          forClass: written.forClass,
+        };
+      },
+      writeBinary: async (binary) => {
+        calls.push(`binary ${binary.slug}`);
+        return { url: `https://memory.test/${binary.slug}` } as never;
+      },
+      remove: async (slug) => {
+        calls.push(`remove ${slug}`);
+      },
+      registerType: async () => {
+        calls.push("register");
+        onRegister();
+        return { indexUrl: "https://memory.test/index" };
+      },
+    };
+    const sourceAuth = {
+      fetch: async () => {
+        calls.push("source");
+        return Response.json({ songs: [] });
+      },
+    };
+    return { calls, podWriter, sourceAuth };
+  }
+  const reason = new Error("cancelled by user");
+
+  it("never calls the adapter for an already-cancelled run", async () => {
+    const controller = new AbortController();
+    controller.abort(reason);
+    const { calls, podWriter, sourceAuth } = ports();
+    let called = false;
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import() {
+        called = true;
+        return {};
+      },
+    };
+    await expect(
+      runImport({ adapter, mode: "live", podWriter, sourceAuth, signal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(called).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["api", (ctx: ImportContext) => ctx.api("https://api.toy.test/songs")],
+    ["read", (ctx: ImportContext) => ctx.read("music/songs.ttl")],
+    ["write", (ctx: ImportContext) => ctx.write(doc())],
+    [
+      "writeBinary",
+      (ctx: ImportContext) =>
+        ctx.writeBinary({ slug: "files/a.bin", body: new Uint8Array(), contentType: "x/y" }),
+    ],
+    ["remove", (ctx: ImportContext) => ctx.remove("music/old.ttl")],
+    [
+      "progress",
+      async (ctx: ImportContext) => ctx.progress({ label: "Saving", done: 1, total: 2 }),
+    ],
+  ] as const)("refuses ctx.%s once the run is cancelled, then skips registration and provenance", async (_name, step) => {
+    const controller = new AbortController();
+    const { calls, podWriter, sourceAuth } = ports();
+    const progress: string[] = [];
+    let refused: unknown;
+    let before: string[] = [];
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.api("https://api.toy.test/songs");
+        await ctx.write(doc());
+        // This adapter never looks at ctx.signal.
+        controller.abort(reason);
+        before = [...calls];
+        try {
+          await step(ctx);
+        } catch (error) {
+          refused = error;
+        }
+        return {};
+      },
+    };
+    await expect(
+      runImport({
+        adapter,
+        mode: "live",
+        podWriter,
+        sourceAuth,
+        signal: controller.signal,
+        onProgress: (p) => progress.push(p.label),
+      }),
+    ).rejects.toBe(reason);
+    expect(refused).toBe(reason);
+    // Only the steps before cancellation ran: no registration and no provenance document.
+    expect(before).toContain("write music/songs.ttl");
+    expect(calls).toEqual(before);
+    expect(progress).toEqual([]);
+    // The connector is free for the next run.
+    await expect(
+      runImport({ adapter: { ...toyAdapter }, mode: "live", podWriter, sourceAuth }),
+    ).resolves.toMatchObject({ indexUrl: "https://memory.test/index" });
+  });
+
+  it("does not write provenance when cancellation arrives during Type Index registration", async () => {
+    const controller = new AbortController();
+    const { calls, podWriter, sourceAuth } = ports(() => controller.abort(reason));
+    const states: unknown[] = [];
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        return { cursor: "next" };
+      },
+    };
+    await expect(
+      runImport({
+        adapter,
+        mode: "live",
+        podWriter,
+        sourceAuth,
+        signal: controller.signal,
+        onState: (state) => states.push(state),
+      }),
+    ).rejects.toBe(reason);
+    expect(calls.filter((call) => !call.startsWith("read "))).toEqual([
+      "write music/songs.ttl",
+      "register",
+    ]);
+    // The failure state never advances the checkpoint.
+    expect(states).toHaveLength(1);
+    expect((states[0] as { cursor?: string }).cursor).toBeUndefined();
+  });
+
+  it("completes a run whose signal is still live through registration and provenance", async () => {
+    const controller = new AbortController();
+    const { calls, podWriter, sourceAuth } = ports();
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        return {};
+      },
+    };
+    const report = await runImport({
+      adapter,
+      mode: "live",
+      podWriter,
+      sourceAuth,
+      signal: controller.signal,
+    });
+    expect(report.indexUrl).toBe("https://memory.test/index");
+    expect(calls).toContain("register");
+    expect(calls.filter((call) => call.startsWith("write ")).length).toBeGreaterThan(1);
+  });
+});

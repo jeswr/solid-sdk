@@ -38,7 +38,12 @@ export interface RunImportOptions extends ConnectorStateOptions {
   /** Cursor from the previous import (incremental, where supported). */
   cursor?: string;
   onProgress?: (p: ImportProgress) => void;
-  /** Cancels the run, including waits between source requests. */
+  /**
+   * Cancels the run. Once it aborts, the runner starts no further source request, Pod read or
+   * write, progress report, Type Index registration or provenance write, and rejects with its
+   * reason; adapters that read `ctx.signal` also end waits (rate-limit backoff). A run whose
+   * provenance write already finished is reported as complete.
+   */
   signal?: AbortSignal;
   /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
   scopes?: readonly string[];
@@ -75,6 +80,20 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   if (!api)
     throw new IntegrationSyncError(id, "Live import requires SourceAuth — authorize first.");
 
+  // Cancellation is enforced here for every adapter, whether or not it reads ctx.signal:
+  // no source request, Pod read/write, registration or provenance step starts once aborted.
+  const signal = opts.signal;
+  const checked =
+    <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
+    (...args: A): Promise<R> => {
+      try {
+        signal?.throwIfAborted();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return step(...args);
+    };
+  signal?.throwIfAborted();
   const source = adapter.fixtures()[0]?.url;
   const session = createImportSession(
     opts.podWriter,
@@ -85,18 +104,23 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   );
   try {
     const outcome = await adapter.import({
-      api,
+      api: checked(api) as typeof fetch,
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
-      read: session.read,
-      progress: (p) => opts.onProgress?.(p),
-      write: session.write,
-      writeBinary: session.writeBinary,
-      remove: session.remove,
-      signal: opts.signal,
+      read: checked(session.read),
+      progress: (p) => {
+        signal?.throwIfAborted();
+        opts.onProgress?.(p);
+      },
+      write: checked(session.write),
+      writeBinary: checked(session.writeBinary),
+      remove: checked(session.remove),
+      signal,
       scopes: opts.scopes,
     });
+    signal?.throwIfAborted();
     const { indexUrl } = await opts.podWriter.registerType(session.registrations());
+    signal?.throwIfAborted();
     await session.finish();
     const state = session.state(outcome);
     opts.onState?.(state);
@@ -111,13 +135,15 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       state,
     };
   } catch (error) {
-    // Partial writes already link to this run. Record it when storage is available,
-    // preserving the original failure if the provenance write also fails.
-    try {
-      await session.finish();
-    } catch {
-      /* Original failure takes priority. */
-    }
+    // Partial writes already link to this run. Record it when storage is available and the
+    // run was not cancelled, preserving the original failure if the provenance write fails.
+    if (signal?.aborted) session.release();
+    else
+      try {
+        await session.finish();
+      } catch {
+        /* Original failure takes priority. */
+      }
     opts.onState?.(session.state());
     throw error;
   }

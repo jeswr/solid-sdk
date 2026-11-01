@@ -172,6 +172,11 @@ export function createImportSession(
       active.delete(claim);
     }
   }
+  /** End a cancelled run without further Pod I/O, freeing the connector for the next run. */
+  function release() {
+    finalized = true;
+    active.delete(claim);
+  }
   async function recordRun() {
     const previous = await writer.read(RUNS);
     const dataset = canonicalizeJeswrDataset(previous?.dataset);
@@ -220,6 +225,7 @@ export function createImportSession(
     used: used as ReadonlySet<string>,
     registrations: () => [...registrations.values()],
     finish,
+    release,
     state,
   };
 }

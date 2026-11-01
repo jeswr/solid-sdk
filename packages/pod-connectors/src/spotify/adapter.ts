@@ -27,6 +27,8 @@ const SCOPES = [
   "user-follow-read",
   "user-read-recently-played",
 ] as const;
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const PLAYLIST_SCOPES = ["playlist-read-private", "playlist-read-collaborative"] as const;
 interface Artist {
   id: string;
   name?: string;
@@ -178,13 +180,16 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       const slug = "music/playlists.ttl";
       const ds = new Store();
       // A partial grant omits playlists of the withheld kind before creating subjects or
-      // requesting contents, and carries their earlier import forward into the snapshot.
+      // requesting contents. Spotify itself leaves withheld kinds out of /me/playlists, so a
+      // missing playlist is not evidence of deletion: while any playlist scope is withheld,
+      // every earlier playlist this run does not describe is carried forward.
       const granted = (value: SpotifyPlaylist) =>
         ctx.scopes === undefined ||
         ctx.scopes.includes(
           value.collaborative === true ? "playlist-read-collaborative" : "playlist-read-private",
         );
-      const withheld = new Set<string>();
+      const partialPlaylists =
+        ctx.scopes !== undefined && PLAYLIST_SCOPES.some((scope) => !ctx.scopes?.includes(scope));
       for await (const page of pages<SpotifyPlaylist>(
         ctx,
         `${API}/me/playlists?limit=50`,
@@ -197,10 +202,7 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
             continue;
           }
           const playlistIri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`;
-          if (!granted(value)) {
-            withheld.add(playlistIri);
-            continue;
-          }
+          if (!granted(value)) continue;
           const playlist = new MusicPlaylist(playlistIri, ds, DataFactory).mark();
           playlist.name = optionalText(value.name);
           playlist.identifier = id;
@@ -253,9 +255,12 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
           ds.addQuads([...contents]);
         }
       }
-      if (withheld.size > 0) {
+      if (partialPlaylists) {
         const previous = await ctx.read(slug);
-        if (previous) carryForward(previous, ds, withheld, `${ctx.resolve(slug)}#`);
+        if (previous) {
+          const local = `${ctx.resolve(slug)}#`;
+          carryForward(previous, ds, storedPlaylists(previous, `${local}playlist-`), local);
+        }
       }
       stage(slug, ds, CLASSES.MusicPlaylist);
 
@@ -310,6 +315,20 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
 }
 
 export const spotifyAdapter = createSpotifyAdapter();
+
+/** Every playlist root the previous snapshot stored (not its list items or tracks). */
+function storedPlaylists(previous: DatasetCore, prefix: string): Set<string> {
+  const roots = new Set<string>();
+  for (const quad of previous.match(
+    null,
+    DataFactory.namedNode(RDF_TYPE),
+    DataFactory.namedNode(CLASSES.MusicPlaylist),
+    null,
+  ))
+    if (quad.subject.termType === "NamedNode" && quad.subject.value.startsWith(prefix))
+      roots.add(quad.subject.value);
+  return roots;
+}
 
 /**
  * Copy the stored descriptions of `roots` and of the document-local nodes they link to (list

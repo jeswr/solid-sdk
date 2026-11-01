@@ -272,3 +272,75 @@ describe("OAuth cancellation boundaries", () => {
     expect(sourceFetch).toHaveBeenCalledTimes(1);
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("OAuth callback page", () => {
+  async function callbackScript() {
+    const { readFile } = await import("node:fs/promises");
+    const html = await readFile(new URL("../public/oauth-callback.html", import.meta.url), "utf8");
+    const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+    if (!script) throw new Error("Missing callback script");
+    return script;
+  }
+  function page(opener: { postMessage: (...args: unknown[]) => void } | null, close: () => void) {
+    const steps: string[] = [];
+    const location = new URL(`${origin}/oauth-callback.html?code=c&state=s`);
+    class Channel {
+      constructor(readonly name: string) {}
+      postMessage(message: { url: string }) {
+        steps.push(`channel ${this.name} ${message.url}`);
+      }
+      close() {}
+    }
+    const window = {
+      opener: opener && {
+        postMessage: (...args: unknown[]) => {
+          steps.push("opener");
+          opener.postMessage(...args);
+        },
+      },
+      close: () => {
+        steps.push("close");
+        close();
+      },
+    };
+    const history = { replaceState: () => steps.push("replace") };
+    return { steps, window, location, history, Channel };
+  }
+  it("posts the callback to the opener and the channel, then tries to close itself", async () => {
+    const script = await callbackScript();
+    const opener = { postMessage: vi.fn() };
+    const { steps, window, location, history, Channel } = page(opener, () => {});
+    new Function("window", "location", "history", "BroadcastChannel", script)(
+      window,
+      location,
+      history,
+      Channel,
+    );
+    expect(opener.postMessage).toHaveBeenCalledWith(
+      { type: "pod-manager-oauth", url: location.href },
+      origin,
+    );
+    expect(steps).toEqual([
+      "opener",
+      `channel suite-connector-oauth ${location.href}`,
+      "replace",
+      "close",
+    ]);
+  });
+  it("still posts through the channel and survives a refused close when COOP severed the opener", async () => {
+    const script = await callbackScript();
+    const { steps, window, location, history, Channel } = page(null, () => {
+      throw new Error("Scripts may not close windows they did not open.");
+    });
+    expect(() =>
+      new Function("window", "location", "history", "BroadcastChannel", script)(
+        window,
+        location,
+        history,
+        Channel,
+      ),
+    ).not.toThrow();
+    expect(steps).toEqual([`channel suite-connector-oauth ${location.href}`, "replace", "close"]);
+  });
+});

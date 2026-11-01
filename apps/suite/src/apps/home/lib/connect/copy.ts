@@ -22,6 +22,12 @@ export function progressCopy(count: number, total?: number, collection = "items"
     ? `Imported ${count} ${collection}`
     : `Imported ${count} of ${total} ${collection}`;
 }
+/** Adapters report steps (`done` completed of `total`), not collections or items: name the
+ * step in progress, never a count of data. */
+export function stepCopy(done: number, total: number): string {
+  const step = Math.max(1, Math.min(total, Math.floor(done) + 1));
+  return `Step ${step} of ${total}`;
+}
 export function relativeSync(value: string | undefined, now: number): string {
   const elapsed = value ? now - Date.parse(value) : Number.NaN;
   if (!Number.isFinite(elapsed)) return "Not synced yet";

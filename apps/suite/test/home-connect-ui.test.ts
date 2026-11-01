@@ -132,7 +132,7 @@ it("honours the shell shortcut setting at each keypress and tolerates blocked st
 });
 
 function liveRegion(host: HTMLElement) {
-  const regions = host.querySelectorAll(".hm-connect-flow [role='status']");
+  const regions = host.querySelectorAll(".hm-connect-page > [role='status']");
   expect(regions).toHaveLength(1);
   return regions[0] as HTMLElement;
 }
@@ -203,8 +203,8 @@ it("focuses the cancelled result heading and announces the incomplete sync", asy
   await click(button(host, "Continue"));
   await click(button(host, "Continue with Strava"));
   await act(() => entered.promise);
-  // The adapter reported a step total, so the live region counts against it.
-  expect(region.textContent).toBe("Imported 1 of 4 collections");
+  // The adapter reports steps, not collections: the live region names the current step.
+  expect(region.textContent).toBe("Step 2 of 4");
   expect(document.activeElement).toBe(heading(host, "Importing"));
   await click(button(host, "Cancel"));
   await vi.waitFor(() =>
@@ -225,4 +225,47 @@ it("shows a visible offline note on the catalogue in an always-mounted status re
   await act(() => window.dispatchEvent(new Event("online")));
   expect(host.querySelector("[role='status']")).toBe(region);
   expect(region?.textContent).toBe("");
+});
+
+it("keeps the live region and a focus target mounted offline and restores focus on reconnecting", async () => {
+  const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  const { host } = await mount(h(ConnectFlow, { service: "strava" }));
+  const region = liveRegion(host);
+  await click(button(host, "Continue"));
+  expect(document.activeElement).toBe(heading(host, "Sign in to Strava"));
+  onLine.mockReturnValue(false);
+  await act(() => window.dispatchEvent(new Event("offline")));
+  expect(liveRegion(host)).toBe(region);
+  expect(region.textContent).toBe(
+    "Connecting services needs a connection. Reconnect to connect services.",
+  );
+  const offline = host.querySelector("h1");
+  expect(offline?.textContent).toBe("Connect Strava");
+  expect(offline?.getAttribute("tabindex")).toBe("-1");
+  expect(document.activeElement).toBe(offline);
+  expect(host.querySelector("button")).toBeNull();
+  onLine.mockReturnValue(true);
+  await act(() => window.dispatchEvent(new Event("online")));
+  expect(liveRegion(host)).toBe(region);
+  expect(region.textContent).toBe("");
+  expect(document.activeElement).toBe(heading(host, "Sign in to Strava"));
+});
+
+it("never pulls focus from outside the flow when the connection changes", async () => {
+  const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  try {
+    const { host } = await mount(h(ConnectFlow, { service: "strava" }));
+    outside.focus();
+    onLine.mockReturnValue(false);
+    await act(() => window.dispatchEvent(new Event("offline")));
+    expect(document.activeElement).toBe(outside);
+    onLine.mockReturnValue(true);
+    await act(() => window.dispatchEvent(new Event("online")));
+    expect(document.activeElement).toBe(outside);
+    expect(host.querySelector("h1")?.hasAttribute("tabindex")).toBe(false);
+  } finally {
+    outside.remove();
+  }
 });

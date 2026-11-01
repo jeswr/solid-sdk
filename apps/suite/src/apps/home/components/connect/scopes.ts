@@ -68,6 +68,13 @@ const rules: Readonly<Record<string, readonly ScopeRule[]>> = {
   dropbox: [{ scopes: ["files.metadata.read"], document: /files/, request: /\/files\// }],
 };
 
+/** Scopes known to gate no imported data: withholding one of these alone leaves nothing
+ * behind. Every other withheld scope, including one without a rule above, makes a run partial. */
+const gatesNothing: Readonly<Record<string, readonly string[]>> = {
+  // Strava's profile `read`: the adapter only reads /athlete/activities (activity:read).
+  strava: ["read"],
+};
+
 /** Omit deselected collection reads and writes, and don't call source endpoints for
  * permissions the user withheld. Identity lookups needed to resolve selected collections
  * remain available. Adapters split mixed collections themselves from ctx.scopes. */
@@ -119,10 +126,11 @@ export function withSelectedScopes(
                 skipRegistration: true,
               }),
       });
-      // Only a withheld scope that gates imported data makes the run partial; one the
-      // adapter never reads (Strava's profile `read`) cannot leave data behind.
+      // Fail closed: any withheld scope makes the run partial unless it is listed as gating
+      // nothing, so a scope added without a rule can never advance a shared checkpoint.
+      const ungated = gatesNothing[adapter.metadata.id] ?? [];
       const partial = adapter.metadata.scopes.some(
-        (scope) => !selected.includes(scope) && policy.some((rule) => rule.scopes.includes(scope)),
+        (scope) => !selected.includes(scope) && !ungated.includes(scope),
       );
       if (!partial) return outcome;
       // A partial selection cannot advance a checkpoint shared with omitted data.

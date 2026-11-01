@@ -184,12 +184,18 @@ export interface ImportContext {
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */
   readonly cursor?: string;
-  /** Cancels the run; adapters stop waiting (for example on a rate-limit delay) when it aborts. */
+  /**
+   * Cancels the run. The runner already refuses further `api`, `read`, `write`, `writeBinary`,
+   * `remove` and `progress` calls once it aborts; adapters pass it on to stop in-flight waits
+   * (for example on a rate-limit delay).
+   */
   readonly signal?: AbortSignal;
   /**
    * Source permissions the user granted for this run; undefined means every `metadata.scopes`
-   * entry. Adapters omit data that needs a withheld scope and keep what earlier runs imported
-   * under it.
+   * entry. Advisory: only adapters that opt in read it (currently Spotify, which omits
+   * playlists of a withheld kind and keeps what earlier runs imported under it). Other adapters
+   * ignore it, so hosts that let users withhold scopes must also gate those adapters' requests
+   * and documents themselves.
    */
   readonly scopes?: readonly string[];
 }

@@ -83,6 +83,55 @@ describe("Connect uses the real package writer against the suite demo pod", () =
       source.fetch.mock.calls.some(([input]) => String(input).includes("37i9dQZF1DXcBWIGoYBM5M")),
     ).toBe(false);
   });
+  // Spotify leaves playlists of a withheld kind out of /me/playlists altogether.
+  it.each([
+    ["private playlists", ["playlist-read-collaborative"], "keep-listed", "Focus Flow"],
+    [
+      "private playlists, with nothing listed",
+      ["playlist-read-collaborative"],
+      "none",
+      "Focus Flow",
+    ],
+    ["shared playlists", ["playlist-read-private"], "keep-listed", "Sunday Morning"],
+    ["shared playlists, with nothing listed", ["playlist-read-private"], "none", "Sunday Morning"],
+  ] as const)("keeps earlier %s when a partial grant omits them from the source listing", async (_kind, scopes, listing, kept) => {
+    const { session } = await setup();
+    const source = fixtureTransport("spotify");
+    const sync = (selected: readonly string[], transport: typeof fetch) =>
+      runImport({
+        adapter: withSelectedScopes(source.adapter, selected),
+        mode: "live",
+        sourceAuth: { fetch: transport },
+        podWriter: createImportWriter(session, "spotify", new AbortController().signal),
+      });
+    await sync(source.adapter.metadata.scopes, source.fetch);
+    const like = vi.fn<typeof fetch>(async (input, init) => {
+      const response = await source.fetch(input, init);
+      if (new URL(String(input)).pathname !== "/v1/me/playlists") return response;
+      const page = (await response.json()) as { items: { collaborative?: boolean }[] };
+      const visible = page.items.filter(
+        (item) =>
+          listing === "keep-listed" &&
+          (scopes as readonly string[]).includes(
+            item.collaborative === true ? "playlist-read-collaborative" : "playlist-read-private",
+          ),
+      );
+      return Response.json({ ...page, items: visible });
+    });
+    const report = await sync(scopes, like);
+    const playlists = report.written.find(({ url }) => url.endsWith("playlists.ttl"));
+    if (!playlists) throw new Error("Missing playlist document");
+    const body = await (await session.fetch(playlists.url)).text();
+    expect(body).toContain(kept);
+    // Nothing of the omitted kind is requested again.
+    expect(
+      like.mock.calls.some(([input]) =>
+        String(input).includes(
+          kept === "Focus Flow" ? "37i9dQZF1DXcBWIGoYBM5M" : "5ABHKGoOzxkaa28ttQV9sE",
+        ),
+      ),
+    ).toBe(false);
+  });
   it("charges the original Spotify playlist list to the run's data budget before omitting withheld kinds", async () => {
     const { session } = await setup();
     const adapter = createSpotifyAdapter({ maxRequests: 100, maxItems: 10_000, maxBytes: 1024 });
@@ -645,6 +694,58 @@ describe("saved import transactions", () => {
 });
 
 describe("sign-in before recording a run", () => {
+  it("signs in outside the connector reservation, so an unfinished sign-in blocks no other import", async () => {
+    const [store] = preferencesPair();
+    const update = updater(store, "spotify");
+    const signingIn = deferred<{ fetch: typeof fetch }>();
+    const entered = deferred<void>();
+    const report = (cursor: string): ImportReport => ({
+      adapterId: "spotify",
+      mode: "live",
+      written: [],
+      categories: [],
+      indexUrl: `${DEMO_ROOT}index`,
+      cursor,
+    });
+    const order: string[] = [];
+    const first = runSavedImport(
+      DEMO_ROOT,
+      "spotify",
+      "live",
+      new AbortController().signal,
+      update,
+      async (cursor) => {
+        order.push(`first run from ${cursor}`);
+        return report("after-first");
+      },
+      async () => {
+        entered.resolve();
+        return signingIn.promise;
+      },
+    );
+    await entered.promise;
+    // The sign-in has no deadline; another sync of the same connector still completes.
+    await runSavedImport(
+      DEMO_ROOT,
+      "spotify",
+      "live",
+      new AbortController().signal,
+      update,
+      async (cursor) => {
+        order.push(`second run from ${cursor}`);
+        return report("after-second");
+      },
+    );
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({ cursor: "after-second" });
+    signingIn.resolve({ fetch: vi.fn<typeof fetch>() });
+    await first;
+    // The checkpoint is read inside the reservation, after sign-in, so it is never stale.
+    expect(order).toEqual(["second run from undefined", "first run from after-second"]);
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({
+      cursor: "after-first",
+      lastOutcome: "ok",
+    });
+  });
   it("records nothing when sign-in is abandoned and records the start only after it succeeds", async () => {
     const [store] = preferencesPair();
     const update = updater(store, "spotify");
@@ -724,6 +825,30 @@ describe("permissions without a matching collection", () => {
     const profileOnly = await sync("strava", ["read"]);
     expect(profileOnly.paths.some((path) => path.endsWith("/athlete/activities"))).toBe(false);
     expect(profileOnly.report.cursor).toBeUndefined();
+  });
+  it("treats a withheld scope without a rule as partial and keeps the previous checkpoint", async () => {
+    const { session } = await setup();
+    const base = createRegistry().adapterById("strava");
+    if (!base) throw new Error("Missing adapter");
+    // A new permission the host has no rule for yet: it may gate data this run omits.
+    const adapter = {
+      ...base,
+      metadata: { ...base.metadata, scopes: [...base.metadata.scopes, "profile:read_all"] },
+    };
+    const run = (selection: readonly string[], cursor?: string) =>
+      runImport({
+        adapter: withSelectedScopes(adapter, selection),
+        mode: "live",
+        sourceAuth: { fetch: vi.fn(fixtureFetch("strava", adapter.fixtures())) },
+        podWriter: createImportWriter(session, "strava", new AbortController().signal),
+        ...(cursor ? { cursor } : {}),
+      });
+    const full = await run(adapter.metadata.scopes);
+    expect(full.cursor).toBeDefined();
+    expect((await run(["read", "activity:read"])).cursor).toBeUndefined();
+    expect((await run(["read", "activity:read"], "kept")).cursor).toBe("kept");
+    // Only the listed no-data scope can be withheld without making the run partial.
+    expect((await run(["activity:read", "profile:read_all"])).cursor).toBe(full.cursor);
   });
   it("requires Dropbox's account permission and advances only with file details", async () => {
     expect(withRequiredScopes("dropbox", [])).toEqual(["account_info.read"]);
