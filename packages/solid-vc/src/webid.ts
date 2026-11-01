@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // WebID-based verification-method key PUBLISH + RESOLVE (runtime Phase-1 G4/G5).
@@ -58,8 +59,9 @@
 //     the browser (with an injected fetch) pulls in no `node:` builtins.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad } from "@rdfjs/types";
-import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { TermWrapper } from "@rdfjs/wrapper";
 import { base64url, exportJWK } from "jose";
 import { DataFactory } from "n3";
 import { safeHttpIri } from "./iri.js";
@@ -213,11 +215,6 @@ function hasPrefix(bytes: Uint8Array, prefix: Uint8Array): boolean {
 }
 
 // --- typed accessors over a controller / verification-method document -------
-
-/** Read a property as the set of its OBJECT TERMS (term type preserved). */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
 
 /** A typed view of a controller (WebID) node in ITS OWN profile document. */
 class ControllerNode extends TermWrapper {
