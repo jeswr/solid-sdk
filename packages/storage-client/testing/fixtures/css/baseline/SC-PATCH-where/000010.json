@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "request": {
+    "method": "PATCH",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl",
+    "headers": [["content-type", "text/n3"], ["if-match", "\"1793491203961-text/turtle\""]],
+    "body": "QHByZWZpeCBzb2xpZDogPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL3Rlcm1zIz4uCl86cGF0Y2ggYSBzb2xpZDpJbnNlcnREZWxldGVQYXRjaDsKICBzb2xpZDp3aGVyZSB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYmVmb3JlIiAuCn07CiAgc29saWQ6ZGVsZXRlcyB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYmVmb3JlIiAuCn07CiAgc29saWQ6aW5zZXJ0cyB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYWZ0ZXIiIC4KfTsKLgo="
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl",
+    "status": 409,
+    "statusText": "Conflict",
+    "headers": [
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["content-type", "application/json"],
+      ["date", "Sun, 01 Nov 2026 00:00:04 GMT"],
+      ["keep-alive", "timeout=5"],
+      [
+        "link",
+        "<http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl.meta>; rel=\"describedby\", <http://localhost:46617/.notifications/StreamingHTTPChannel2023/b0>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl.acl>; rel=\"acl\""
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "eyJuYW1lIjoiQ29uZmxpY3RIdHRwRXJyb3IiLCJtZXNzYWdlIjoiVGhlIGRvY3VtZW50IGRvZXMgbm90IGNvbnRhaW4gYW55IG1hdGNoZXMgZm9yIHRoZSBOMyBQYXRjaCBzb2xpZDp3aGVyZSBjb25kaXRpb24uIiwic3RhdHVzQ29kZSI6NDA5LCJlcnJvckNvZGUiOiJINDA5IiwiZGV0YWlscyI6e319",
+    "redirected": false
+  }
+}
