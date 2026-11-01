@@ -109,12 +109,16 @@ function inlineCode(text: string): string {
 }
 
 // Attribute inventories are checked against the live editor schema in tests.
-// A new schema type/attribute needs an explicit export decision here.
-export const MARKDOWN_NODE_RULES: Record<string, { tag: string; attributes: string[] }> = {
+// A new schema type/attribute needs an explicit export decision here: either
+// exported (`attributes`) or deliberately dropped (`omitted`, see MARKDOWN_NOTES).
+// A mark whose every attribute is omitted carries nothing to export and is dropped.
+type MarkdownRule = { tag: string; attributes: string[]; omitted?: string[] };
+const OMITTED_BLOCK_STYLES = ["indent", "lineHeight", "spaceBefore", "spaceAfter"];
+export const MARKDOWN_NODE_RULES: Record<string, MarkdownRule> = {
   doc: { tag: "", attributes: [] },
   text: { tag: "", attributes: [] },
-  paragraph: { tag: "p", attributes: ["textAlign"] },
-  heading: { tag: "h", attributes: ["textAlign", "level"] },
+  paragraph: { tag: "p", attributes: ["textAlign"], omitted: OMITTED_BLOCK_STYLES },
+  heading: { tag: "h", attributes: ["textAlign", "level"], omitted: OMITTED_BLOCK_STYLES },
   blockquote: { tag: "blockquote", attributes: [] },
   bulletList: { tag: "ul", attributes: [] },
   orderedList: { tag: "ol", attributes: ["start", "type"] },
@@ -130,10 +134,7 @@ export const MARKDOWN_NODE_RULES: Record<string, { tag: string; attributes: stri
   tableCell: { tag: "td", attributes: ["colspan", "rowspan", "colwidth", "align"] },
   tableHeader: { tag: "th", attributes: ["colspan", "rowspan", "colwidth", "align"] },
 };
-export const MARKDOWN_MARK_RULES: Record<
-  string,
-  { delimiter?: string; tag: string; attributes: string[] }
-> = {
+export const MARKDOWN_MARK_RULES: Record<string, MarkdownRule & { delimiter?: string }> = {
   link: { tag: "a", attributes: ["href", "target", "rel", "class", "title"] },
   bold: { delimiter: "**", tag: "strong", attributes: [] },
   italic: { delimiter: "*", tag: "em", attributes: [] },
@@ -143,7 +144,30 @@ export const MARKDOWN_MARK_RULES: Record<
   subscript: { tag: "sub", attributes: [] },
   superscript: { tag: "sup", attributes: [] },
   code: { tag: "code", attributes: [] },
+  textStyle: {
+    tag: "span",
+    attributes: [],
+    omitted: ["backgroundColor", "color", "fontFamily", "fontSize"],
+  },
 };
+
+/** A declared omission: the rule exports none of the mark's attributes. */
+export function markdownOmitsMark(type: string): boolean {
+  const rule = MARKDOWN_MARK_RULES[type];
+  return !!rule?.omitted?.length && !rule.attributes.length;
+}
+
+/** Drop declared attribute omissions before export (clean() drops omitted marks). */
+function omitDeclared(node: JSONContent): JSONContent {
+  const result = { ...node };
+  const omitted = MARKDOWN_NODE_RULES[node.type as string]?.omitted;
+  if (node.attrs && omitted)
+    result.attrs = Object.fromEntries(
+      Object.entries(node.attrs).filter(([key]) => !omitted.includes(key)),
+    );
+  if (node.content) result.content = node.content.map(omitDeclared);
+  return result;
+}
 
 type InlineMark = NonNullable<JSONContent["marks"]>[number];
 type InlineTree = { text: string } | { mark: InlineMark; children: InlineTree[] };
@@ -1332,11 +1356,11 @@ function clean(
       .filter((mark) => {
         const keep =
           mark.type !== "comment" &&
-          mark.type !== "textStyle" &&
           !(dropHighlights && mark.type === "highlight") &&
           (mark.type !== "link" || safeDestination(String(mark.attrs?.href)));
-        if (!keep && mark.type !== "textStyle") reportSkipped(skipped, "Unsupported marks");
-        return keep;
+        if (!keep) reportSkipped(skipped, "Unsupported marks");
+        // Declared omissions are documented in MARKDOWN_NOTES, not reported per file.
+        return keep && !markdownOmitsMark(mark.type);
       })
       .map((mark) =>
         mark.type === "link"
@@ -1431,20 +1455,7 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     }
     return result;
   };
-  const stripStyles = (node: JSONContent): JSONContent => ({
-    ...node,
-    ...(node.attrs
-      ? {
-          attrs: Object.fromEntries(
-            Object.entries(node.attrs).filter(
-              ([key]) => !["lineHeight", "spaceBefore", "spaceAfter", "indent"].includes(key),
-            ),
-          ),
-        }
-      : {}),
-    ...(node.content ? { content: node.content.map(stripStyles) } : {}),
-  });
-  const cleaned = stripStyles(clean(json, dropHighlights));
+  const cleaned = omitDeclared(clean(json, dropHighlights));
   checkRules(cleaned);
   const blocks = (content: JSONContent[]): string =>
     content

@@ -12,6 +12,8 @@ import {
   MARKDOWN_MARK_RULES,
   MARKDOWN_NODE_RULES,
 } from "../src/apps/docs/lib/convert/markdown";
+import { BLOCK_STYLE_DEFAULTS } from "./helpers/docs-block-defaults";
+import { exportedMarks } from "./helpers/docs-markdown-omissions";
 import { markdownText } from "./helpers/docs-markdown-text";
 
 const schema = getSchema(baseExtensions(vi.fn()));
@@ -94,7 +96,8 @@ it("has an export rule for every live editor node, mark and attribute", () => {
   ] as const) {
     expect(Object.keys(rules).sort()).toEqual(Object.keys(types).sort());
     for (const [name, type] of Object.entries(types)) {
-      expect(rules[name]?.attributes.toSorted(), name).toEqual(
+      const rule = rules[name];
+      expect([...(rule?.attributes ?? []), ...(rule?.omitted ?? [])].sort(), name).toEqual(
         Object.keys(type.spec.attrs ?? {}).sort(),
       );
     }
@@ -155,7 +158,11 @@ it("accepts ordinary HTML for all fallback marks and block attributes", () => {
     '<h2 style="text-align: right">Title</h2><p><u>u</u><sub>sub</sub><sup>sup</sup><mark>mark</mark></p><ol start="7" type="a"><li><p>Item</p></li></ol><img src="https://example.org/image.png" width="120" height="60"><table><tr><td colspan="2" rowspan="2" colwidth="80,90" align="center"><p>A</p><p>B</p></td></tr></table>',
     "html.md",
   ).json;
-  expect(parsed.content?.[0]?.attrs).toEqual({ level: 2, textAlign: "right" });
+  expect(parsed.content?.[0]?.attrs).toEqual({
+    level: 2,
+    textAlign: "right",
+    ...BLOCK_STYLE_DEFAULTS,
+  });
   expect(
     parsed.content?.[1]?.content?.flatMap((node) => node.marks?.map((mark) => mark.type)),
   ).toEqual(["underline", "subscript", "superscript", "highlight"]);
@@ -289,7 +296,10 @@ it.each([
     "metadata.md",
   ).json;
   const paragraph = parsed.content?.[0];
-  expect(paragraph?.attrs).toEqual({ textAlign: metadata.includes("center") ? "center" : null });
+  expect(paragraph?.attrs).toEqual({
+    textAlign: metadata.includes("center") ? "center" : null,
+    ...BLOCK_STYLE_DEFAULTS,
+  });
   expect(JSON.stringify(parsed)).not.toContain("onclick");
 });
 
@@ -382,7 +392,9 @@ it("round trips generated nested lists, tasks and blockquotes with indented code
     fc.property(generated, nestedCode, (value, code) => {
       const stripAlignment = (node: JSONContent): JSONContent => ({
         ...node,
-        ...(node.type === "paragraph" ? { attrs: { textAlign: null, indent: 0, lineHeight: null, spaceBefore: null, spaceAfter: null } } : {}),
+        ...(node.type === "paragraph"
+          ? { attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS } }
+          : {}),
         ...(node.content ? { content: node.content.map(stripAlignment) } : {}),
       });
       roundTrip(
@@ -417,7 +429,7 @@ it("round trips generated documents with every schema node and mark including ne
         const original = doc(
           {
             type: "paragraph",
-            content: Object.keys(schema.marks).flatMap((type): JSONContent[] => [
+            content: exportedMarks(schema).flatMap((type): JSONContent[] => [
               {
                 ...text(value),
                 marks: [
@@ -519,5 +531,5 @@ it("round trips generated documents with every schema node and mark including ne
     { seed: 1807, numRuns: 100 },
   );
   expect([...visitedNodes].sort()).toEqual(Object.keys(schema.nodes).sort());
-  expect([...visitedMarks].sort()).toEqual(Object.keys(schema.marks).sort());
+  expect([...visitedMarks].sort()).toEqual(exportedMarks(schema).sort());
 });
