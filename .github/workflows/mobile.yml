@@ -126,7 +126,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          test -r /dev/kvm && test -w /dev/kvm
+          sudo udevadm settle --timeout=30 || true
+          # udev applies the rule asynchronously; wait briefly before declaring KVM missing.
+          for _ in $(seq 1 15); do
+            if test -r /dev/kvm && test -w /dev/kvm; then exit 0; fi
+            sleep 2
+          done
+          ls -l /dev/kvm || echo "/dev/kvm is missing on this runner"
+          exit 1
       - name: Install Android SDK and API 35 emulator image
         run: |
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
