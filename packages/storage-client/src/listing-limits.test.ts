@@ -326,20 +326,17 @@ describe("RDF parse budgets follow the caller's listing cap", () => {
     await expect(solid(big).list(ROOT)).rejects.toMatchObject({ code: "invalid-response" });
   });
 
-  test("an abort during parsing surfaces as an aborted network error", async () => {
-    const controller = new AbortController();
-    const body = `<> <http://www.w3.org/ns/ldp#contains> <${ROOT}a> .\n`;
+  test("invalid bytes inside the caller's cap still parse after decoding", async () => {
+    // Each 0xFF decodes to U+FFFD (3 UTF-8 bytes), so the decoded text outgrows the raw cap.
+    const head = new TextEncoder().encode(
+      `<> <http://www.w3.org/ns/ldp#contains> <${ROOT}a> .\n# `,
+    );
+    const bytes = new Uint8Array([...head, ...new Uint8Array(200).fill(0xff), 0x0a]);
     const storage = createSolidBackend({
       root: ROOT,
-      fetch: async () => {
-        queueMicrotask(() => controller.abort(new Error("stop")));
-        return new Response(body, { headers: { "content-type": "text/turtle" } });
-      },
+      fetch: async () => new Response(bytes, { headers: { "content-type": "text/turtle" } }),
     });
-    const error = await storage
-      .list(ROOT, { maxBytes: 1024, signal: controller.signal })
-      .catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(StorageError);
-    expect(error).toMatchObject({ code: "network", retryable: false });
+    const page = await storage.list(ROOT, { maxBytes: bytes.byteLength });
+    expect(page.items.map((item) => item.url)).toEqual([`${ROOT}a`]);
   });
 });

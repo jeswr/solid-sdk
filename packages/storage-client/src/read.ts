@@ -91,10 +91,14 @@ export async function rdfBody(
       ? await result.text()
       : await boundedText(result, maxBytes, listingTooLarge(result.url, maxBytes), signal);
   try {
-    // fetch-rdf caps parsing at its own default budget; a caller's larger byte cap must reach it.
+    // fetch-rdf caps parsing at its own default budget, so a caller's larger byte cap must reach
+    // it. boundedText already enforced the cap on raw bytes; decoding can turn each invalid byte
+    // into U+FFFD (3 UTF-8 bytes), so fetch-rdf, which re-measures the decoded text, gets 3x room.
+    const parseBytes =
+      maxBytes === undefined ? undefined : Math.min(maxBytes * 3, Number.MAX_SAFE_INTEGER);
     const options = {
       baseIRI: result.url,
-      ...(maxBytes === undefined ? {} : { maxBytes }),
+      ...(parseBytes === undefined ? {} : { maxBytes: parseBytes }),
       ...(signal === undefined ? {} : { signal }),
     };
     return { type, dataset: await parseRdf(text, result.contentType, options) };
