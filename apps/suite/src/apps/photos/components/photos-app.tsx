@@ -14,7 +14,7 @@ import {
   Toaster,
   UploadDock,
 } from "@jeswr/suite-ui";
-import { Album, HardDrive, Heart, Images, Trash2, Upload } from "lucide-react";
+import { Album, FolderInput, HardDrive, Heart, Images, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -54,6 +54,9 @@ function Chrome({ children }: { children: ReactNode }) {
           <DropdownMenuItem onSelect={() => folderPicker.current?.click()}>
             Upload folder
           </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/photos/import">Import from Google Takeout</Link>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuCheckboxItem
             checked={strip}
@@ -83,6 +86,7 @@ function Chrome({ children }: { children: ReactNode }) {
     },
     { href: "/photos/trash", name: "Trash", icon: Trash2, count: photos.trash.length },
     { href: "/photos/storage", name: "Storage", icon: HardDrive, count: undefined },
+    { href: "/photos/import", name: "Import", icon: FolderInput, count: undefined },
   ];
   return (
     <UploadContext value={request}>

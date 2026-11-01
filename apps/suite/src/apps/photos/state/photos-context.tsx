@@ -14,11 +14,18 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
 import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
-import { createAlbum, createAlbumWriter, listAlbums, type StoredAlbum } from "../lib/data/albums";
+import {
+  changeMembers,
+  createAlbum,
+  createAlbumWriter,
+  listAlbums,
+  type StoredAlbum,
+} from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
 import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
 import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
+import type { TakeoutItem, TakeoutPlan } from "../lib/data/takeout";
 import {
   emptyTrash,
   listTrash,
@@ -29,6 +36,7 @@ import {
   trashPhoto,
 } from "../lib/data/trash";
 import { uploadFiles } from "../lib/data/upload";
+import type { CaptureMetadata } from "../lib/model";
 
 interface Snapshot {
   photos: LibraryPhoto[];
@@ -66,7 +74,12 @@ function usePhotosState(session: PodSession) {
   const alive = useRef(true);
   const queue = useRef(Promise.resolve());
   const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const uploadInputs = useRef(new Map<string, { file: File; stripLocation: boolean }>());
+  const uploadInputs = useRef(
+    new Map<
+      string,
+      { file: Blob; name: string; stripLocation: boolean; metadata?: CaptureMetadata | undefined }
+    >(),
+  );
   const cancelled = useRef(new Set<string>());
   const redraw = useCallback(() => {
     if (alive.current)
@@ -379,15 +392,17 @@ function usePhotosState(session: PodSession) {
     },
     [writeKeywords, run],
   );
+  /** Resolves with the saved photo's document URL, or undefined when it didn't save. */
   const startUpload = useCallback(
-    (id: string) => {
+    (id: string): Promise<string | undefined> => {
       const input = uploadInputs.current.get(id);
-      if (!input) return;
+      if (!input) return Promise.resolve(undefined);
+      let saved: string | undefined;
       cancelled.current.delete(id);
       setUploads((items) =>
         items.map((item) => (item.id === id ? { ...item, status: "queued", sent: 0 } : item)),
       );
-      void run(
+      return run(
         (s) => s,
         async () => {
           if (cancelled.current.has(id)) return (s) => s;
@@ -397,18 +412,22 @@ function usePhotosState(session: PodSession) {
             ),
           );
           const result = (
-            await uploadFiles(io, [{ name: input.file.name, original: input.file }], {
-              encoder: browserEncoder,
-              stripLocation: input.stripLocation,
-              now: new Date().toISOString(),
-              id: () => id,
-              onProgress: (_index, percent) =>
-                setUploads((items) =>
-                  items.map((item) =>
-                    item.id === id ? { ...item, sent: (input.file.size * percent) / 100 } : item,
+            await uploadFiles(
+              io,
+              [{ name: input.name, original: input.file, metadata: input.metadata }],
+              {
+                encoder: browserEncoder,
+                stripLocation: input.stripLocation,
+                now: new Date().toISOString(),
+                id: () => id,
+                onProgress: (_index, percent) =>
+                  setUploads((items) =>
+                    items.map((item) =>
+                      item.id === id ? { ...item, sent: (input.file.size * percent) / 100 } : item,
+                    ),
                   ),
-                ),
-            })
+              },
+            )
           )[0];
           setUploads((items) =>
             items.map((item) =>
@@ -427,12 +446,15 @@ function usePhotosState(session: PodSession) {
                 ? "This upload already exists or changed elsewhere. Your library has been refreshed. Check Photos before retrying."
                 : result && !result.ok && result.error instanceof LocationStripError
                   ? result.error.message
-                  : `Couldn't upload ${input.file.name}. Retry in the upload panel.`,
+                  : `Couldn't upload ${input.name}. Retry in the upload panel.`,
             );
-          else announce(`${input.file.name} uploaded`);
+          else {
+            saved = result.url;
+            announce(`${input.name} uploaded`);
+          }
           return (s) => s;
         },
-      );
+      ).then(() => saved);
     },
     [io, run],
   );
@@ -440,7 +462,7 @@ function usePhotosState(session: PodSession) {
     (files: File[], stripLocation: boolean) => {
       const added = files.map((file) => {
         const id = crypto.randomUUID();
-        uploadInputs.current.set(id, { file, stripLocation });
+        uploadInputs.current.set(id, { file, name: file.name, stripLocation });
         return {
           id,
           name: file.name,
@@ -451,9 +473,59 @@ function usePhotosState(session: PodSession) {
         };
       });
       setUploads((items) => [...items, ...added]);
-      for (const item of added) startUpload(item.id);
+      for (const item of added) void startUpload(item.id);
     },
     [startUpload],
+  );
+  /**
+   * Uploads a Takeout plan through the upload panel, then files the saved photos
+   * into albums (adding to an album of the same name when one exists).
+   */
+  const importTakeout = useCallback(
+    async (plan: TakeoutPlan, stripLocation: boolean) => {
+      const added = plan.items.map((item) => {
+        const id = crypto.randomUUID();
+        uploadInputs.current.set(id, {
+          file: item.file,
+          name: item.name,
+          stripLocation,
+          metadata: item.metadata,
+        });
+        return {
+          id,
+          name: item.name,
+          total: item.file.size,
+          sent: 0,
+          status: "queued" as const,
+          attempt: 0,
+        };
+      });
+      setUploads((items) => [...items, ...added]);
+      const saved = new Map<string, string>();
+      await Promise.all(
+        added.map(async (entry, index) => {
+          const url = await startUpload(entry.id);
+          const item = plan.items[index] as TakeoutItem;
+          if (url) saved.set(item.key, `${url}#it`);
+        }),
+      );
+      let albums = 0;
+      for (const album of plan.albums) {
+        const refs = album.keys.flatMap((key) => saved.get(key) ?? []);
+        if (!refs.length) continue;
+        const existing = baseline.current.albums.find((entry) => entry.name === album.title);
+        const ok = existing
+          ? await editAlbum(
+              existing.url,
+              (current) => changeMembers(current, refs, true),
+              `Added photos to ${album.title}`,
+            )
+          : await newAlbum(album.title, refs);
+        if (ok) albums += 1;
+      }
+      return { saved: saved.size, failed: plan.items.length - saved.size, albums };
+    },
+    [startUpload, editAlbum, newAlbum],
   );
   const cancelUpload = (id: string) => {
     // The model's atomic file pipeline cannot be interrupted safely. Queued files
@@ -497,6 +569,7 @@ function usePhotosState(session: PodSession) {
     keywords,
     uploads,
     upload,
+    importTakeout,
     dismissUploads,
     retryUpload: startUpload,
     cancelUpload,
