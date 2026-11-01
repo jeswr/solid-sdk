@@ -15,6 +15,42 @@
 
 import { hasBodyOverride, snapshotFetchInput } from "./request-snapshot.js";
 
+/** Safe diagnostic target: never retain userinfo, query, or fragment. */
+export function sanitizeUrl(value: string, base?: string): string {
+  try {
+    const url = new URL(value, base);
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return "(non-http(s) URL)";
+    }
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    // Malformed authorities cannot be reliably separated from credentials.
+    return "(invalid URL)";
+  }
+}
+
+/** Discard without waiting: a retained clone can keep cancellation pending forever. */
+export function cancelBody(res: Response): void {
+  try {
+    void res.body?.cancel().catch(() => {});
+  } catch {
+    // A locked or already-consumed body is also terminated by the transport abort.
+  }
+}
+
+/** Validate resource limits before a fetcher can be used. */
+export function validateLimit(name: string, value: number, integer: boolean): void {
+  if (
+    !Number.isFinite(value) ||
+    (integer && !Number.isInteger(value)) ||
+    (name === "timeoutMs" ? value <= 0 : value < 0)
+  ) {
+    throw new TypeError(
+      `${name} must be a finite ${integer ? "non-negative integer" : "positive number"}.`,
+    );
+  }
+}
+
 /** Whether a status code is a redirect we re-validate + follow manually. */
 export function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;

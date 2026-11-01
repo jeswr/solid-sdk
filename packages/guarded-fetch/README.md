@@ -29,8 +29,12 @@ const guardedFetch = createNodeGuardedFetch({
 const response = await guardedFetch("https://registry.example/catalog.json");
 ```
 
-The default entry is browser-safe and applies URL policy without importing `node:*`. The
-`@jeswr/guarded-fetch/node` entry additionally pins validated DNS results to the connection.
+The default entry is browser-safe with no top-level `node:*` imports. On Node it lazily
+imports `node:dns/promises` to validate every resolved address. This validation and the
+transport's connection use separate DNS lookups, leaving a DNS-rebinding window between
+validation and connect. Set `requireDnsPinning: true` with an explicitly DNS-pinning
+`pinningFetch`, or use `@jeswr/guarded-fetch/node`, which pins validated DNS results to
+the connection. `requireDnsPinning` defaults to `false` in the root entry.
 
 ## Key API
 
@@ -45,8 +49,27 @@ The default entry is browser-safe and applies URL policy without importing `node
   available for native Request snapshots.
 - Errors: `SsrfError`, `GuardError`, `PodScopeError`, `RedirectRefusedError`.
 
-Private, loopback, link-local, metadata, malformed, and disallowed redirect targets are rejected.
-Loopback HTTP access is an explicit development-only option.
+Private, loopback, link-local, metadata, malformed, and disallowed redirect targets are
+rejected when they can be classified. Without a DNS resolver, public-looking hostnames
+are allowed in positively identified browsers, or with `allowUnresolvedHosts: true` in
+other runtimes; their resolved addresses cannot be checked there. Private IP literals
+and denied hostnames remain blocked. Loopback HTTP access is an explicit development-only
+option.
+
+The SSRF and pod-scope fetches honour the captured `Request`/init `redirect` mode:
+`follow` (the default) re-validates each hop, `manual` returns the first redirect, and
+`error` rejects it with `SsrfError`/`PodScopeError`. Manual SSRF responses still have
+their body size and total deadline enforced. Compositions such as
+`createPodScopedFetch(base, { fetch: createGuardedFetch(opts) })` let the outer scope
+guard check every hop; `refuseRedirects(nodeGuardedFetch)` sees and refuses the first
+redirect. Underlying transports must honour `redirect: "manual"`.
+
+`maxBytes` and `maxRedirects` must be finite non-negative integers; `timeoutMs` must be
+finite and positive. Invalid limits throw `TypeError` at construction.
+The bare `createPinningDispatcher` accepts `PinningDispatcherOptions`: only
+`allowLoopback`, `resolveAll`, and `ca`. Existing `NodePinningOptions` values remain
+assignable, but any defined unsupported option throws `TypeError`. Use
+`createNodeGuardedFetch` for guard limits and a whole-operation deadline.
 
 Fetch wrappers share `snapshotFetchInput` to capture Request inputs before inspecting their
 URLs. The SSRF, pod-scope, and Node guards forward a URL string plus init: they inherit
@@ -72,7 +95,10 @@ the same as on main.
 `RedirectRefusedError` accepts both
 `(message, { url, status, location?, cause? })` and the legacy `(url, status)` constructor
 used by unstorage-solid's identical `SolidRedirectError` alias. The legacy form retains
-the `SolidRedirectError` name and message; shared refusals retain `RedirectRefusedError`.
+the `SolidRedirectError` name; shared refusals retain `RedirectRefusedError`.
+Diagnostic URLs, including `.url` and `.location` on redirect refusals, omit userinfo,
+query strings and fragments. Relative redirect locations are resolved against the
+request URL for diagnostics; unparseable values use a constant placeholder.
 
 ## Links
 

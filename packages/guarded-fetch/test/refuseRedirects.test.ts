@@ -168,7 +168,7 @@ describe("refuseRedirects — credential/userinfo redaction", () => {
     const err = (await f(URL_A).catch((e: unknown) => e)) as RedirectRefusedError;
     expect(err.message).not.toContain("s3cr3t");
     expect(err.location).not.toContain("s3cr3t");
-    expect(err.location).toContain("<redacted>");
+    expect(err.location).toBe("https://evil.example/steal");
   });
 
   it("redacts userinfo in the REQUEST url (message + .url field)", async () => {
