@@ -10,6 +10,7 @@
 @import "@jeswr/suite-ui/styles/components.css";
 @import "@jeswr/suite-ui/styles/collections.css";
 @import "@jeswr/suite-ui/styles/sharing.css";
+@import "../components/interim-shell/shell.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
