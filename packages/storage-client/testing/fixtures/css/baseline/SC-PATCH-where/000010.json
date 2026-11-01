@@ -4,7 +4,7 @@
     "method": "PATCH",
     "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl",
     "headers": [["content-type", "text/n3"], ["if-match", "\"1793491203961-text/turtle\""]],
-    "body": "QHByZWZpeCBzb2xpZDogPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL3Rlcm1zIz4uCl86cGF0Y2ggYSBzb2xpZDpJbnNlcnREZWxldGVQYXRjaDsKICBzb2xpZDp3aGVyZSB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYmVmb3JlIiAuCn07CiAgc29saWQ6ZGVsZXRlcyB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYmVmb3JlIiAuCn07CiAgc29saWQ6aW5zZXJ0cyB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYWZ0ZXIiIC4KfTsKLgo="
+    "body": "QHByZWZpeCBzb2xpZDogPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL3Rlcm1zIz4uCl86cGF0Y2ggYSBzb2xpZDpJbnNlcnREZWxldGVQYXRjaDsKICBzb2xpZDp3aGVyZSB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYmVmb3JlIiAuCn07CiAgc29saWQ6ZGVsZXRlcyB7CjxodHRwczovL2V4YW1wbGUub3JnL2l0ZW0+IDxodHRwczovL2V4YW1wbGUub3JnL2xhYmVsPiAiYWZ0ZXIiIC4KfTsKICBzb2xpZDppbnNlcnRzIHsKPGh0dHBzOi8vZXhhbXBsZS5vcmcvaXRlbT4gPGh0dHBzOi8vZXhhbXBsZS5vcmcvbGFiZWw+ICJiZWZvcmUiIC4KfTsKLgo="
   },
   "response": {
     "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-where/graph.ttl",

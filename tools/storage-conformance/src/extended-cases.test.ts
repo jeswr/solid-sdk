@@ -144,3 +144,31 @@ test("RDF patch assertions detect a backend that acknowledges without changing t
   }));
   await expect(scenario("SC-PATCH-rdf").run(target)).rejects.toThrow();
 });
+
+test.each([
+  "honors WHERE",
+  "ignores WHERE",
+  "mutates before rejecting WHERE",
+])("WHERE conformance checks a backend that %s", async (behavior) => {
+  const target = await memoryTarget("solid").start();
+  target.resolveFeatures = undefined;
+  const patch = target.storage.patch.bind(target.storage);
+  vi.spyOn(target.storage, "patch").mockImplementation(async (url, change, options) => {
+    if (change.kind !== "rdf") return patch(url, change, options);
+    const { where, ...unconditional } = change;
+    const { dataset } = await target.storage.readRdf(url);
+    if (behavior !== "ignores WHERE" && where?.some((quad) => !dataset.has(quad))) {
+      if (behavior === "mutates before rejecting WHERE") await patch(url, unconditional, options);
+      throw new StorageError("conflict", { method: "PATCH", url, status: 409 });
+    }
+    return patch(url, unconditional, options);
+  });
+  const run = scenario("SC-PATCH-where").run(target);
+  if (behavior === "honors WHERE") await run;
+  else
+    await expect(run).rejects.toThrow(
+      behavior === "ignores WHERE"
+        ? "Expected the operation to fail"
+        : "RDF datasets are not isomorphic",
+    );
+});

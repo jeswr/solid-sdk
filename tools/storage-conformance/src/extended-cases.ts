@@ -146,9 +146,13 @@ const patch: ConformanceCase[] = [
           (await target.storage.readRdf(item.url)).dataset,
           await parseRdf(AFTER, "text/turtle"),
         );
-        // A where formula with no matching solution must fail without changing content.
+        // All deletions exist, but WHERE has no match: conflict must leave the graph unchanged.
         await expectStorageError(
-          target.storage.patch(item.url, patch, { ifMatch: await etag(target.storage, item.url) }),
+          target.storage.patch(
+            item.url,
+            { ...patch, deletes: change.inserts, inserts: change.deletes },
+            { ifMatch: await etag(target.storage, item.url) },
+          ),
           "conflict",
           target.resolveFeatures ? 409 : undefined,
         );
