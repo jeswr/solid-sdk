@@ -15,6 +15,11 @@ same-origin form POST and single-use CSRF-protected consent. Never expose the co
 trusted authorize seam as an unauthenticated route. OAuth records and the signing key
 share the vault; Vercel requires shared KV. Single-user mode requires a separate MCP
 bearer and keeps CSS DPoP credentials server-side. Preserve read-only defaults.
+Fragment WebID login resolves the profile issuer and binds the callback to that exact
+verified WebID. Native continuation links preserve form-action 'self' without scripts.
+Keep the app's CSS adapter fail-closed: verify actual LDP types before translating
+create-only container conflicts, and byte-verify strong binary validators with unique
+memory-mutex ownership markers. Never adopt a replaced lock or a weak validator.
 
 Internal dependencies must use workspace:*. Use fixtures and injected services in tests.
 Run lint, build, typecheck and test through pnpm. Do not deploy or publish from this task.

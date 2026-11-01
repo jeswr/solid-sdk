@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
+    "test:e2e": "vitest run test/css.e2e.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

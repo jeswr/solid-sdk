@@ -22,6 +22,8 @@ upstream Solid-OIDC login precedes explicit approval of the MCP client. Forms re
 browser's HttpOnly SameSite cookie, same-origin POST and CSRF secret. Callback state and
 consent are consumed atomically. HTML escapes metadata, has no script or inline styles,
 and carries CSP, frame denial, nosniff, no-referrer and no-store headers.
+After login and approval POSTs, follow the native continuation link. This avoids
+cross-origin form redirects being blocked by `form-action 'self'`.
 
 Run locally from the repository root (Node 24):
 
@@ -29,14 +31,16 @@ Run locally from the repository root (Node 24):
 export PATH=/opt/node24/bin:$PATH # where installed
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm --filter @jeswr/app-mcp-server... run build
-export MCP_PUBLIC_ORIGIN=http://localhost:3200
+export MCP_PUBLIC_ORIGIN=https://localhost:3443
 export MCP_VAULT_STORE=file
 export MCP_VAULT_DIRECTORY=/tmp/solid-mcp-private-vault
 # Set MCP_VAULT_KEY from your secret store: canonical base64 of 32 random bytes.
 PORT=3200 pnpm --filter @jeswr/app-mcp-server start
 ```
 
-Use the public HTTPS origin behind a proxy that preserves Host. URL generation uses only
+OAuth mode requires HTTPS even on loopback. Put a trusted local TLS proxy on `:3443`
+forwarding to the Node listener on `:3200`, or use the disposable TLS integration harness
+below. Use the public HTTPS origin behind a proxy that preserves Host. URL generation uses only
 `MCP_PUBLIC_ORIGIN`, never forwarded headers. `MCP_ALLOWED_ORIGINS` is a comma-separated
 list of exact browser origins; the default permits no cross-origin browser MCP calls.
 Writes default off; set `MCP_READ_ONLY=false` explicitly to enable them. Personal tools
@@ -52,6 +56,12 @@ limits and expiry cleanup; retain replay/revocation tombstones through grant exp
 never reuse retired session IDs. Abandoned browser sessions expire after ten minutes;
 upstream sessions have the broker's absolute thirty-day lifetime.
 
+The app adapts two CSS PUT differences: a verified existing-container 409 becomes a
+create-only 412, and missing binary write ETags are recovered through exact byte readback
+with a strong validator. Memory mutexes carry unique opaque ownership bytes, so a replaced
+lock cannot be adopted during that readback. ACL failures, changed bytes and weak validators
+still fail closed. Package code and its permission checks remain unchanged.
+
 For a local CSS only, `MCP_ALLOW_LOOPBACK=true` enables the existing DNS-pinned loopback
 development transport. Production leaves it unset. A remote provider must be able to
 dereference the HTTPS Client ID Document.
@@ -66,4 +76,14 @@ to MCP, and the MCP bearer is never forwarded. Supply secrets through the enviro
 neither the server nor the tests print them.
 
 Validation: `pnpm --filter @jeswr/app-mcp-server test` runs unit and local CSS integration
-tests. `pnpm run gate` runs the affected workspace gate. No publish or deploy is needed.
+tests. The integration suite requires `openssl` and free ports 3390 (CSS) and 3391 (MCP).
+It boots pinned CSS 8.0.0-alpha.3 once, generates a temporary TLS certificate, trusts it
+only in the test worker and CSS child, and seeds unique accounts/profiles/private data.
+The MCP TS SDK drives discovery, DCR, PKCE and token exchange; scripted native forms and
+CSS account controls complete consent. Every exposed tool and alias is called, with
+health policy denial expected. A separate owner-isolation/revocation scenario runs on the
+same CSS. Setup/login failures fail the suite, and servers/certificates are removed at exit.
+No external service or real account is used. `pnpm run gate` runs the affected workspace
+gate. No publish or deploy is needed.
+
+Run only the local CSS scenario with `pnpm --filter @jeswr/app-mcp-server test:e2e`.
