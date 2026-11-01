@@ -6,6 +6,8 @@ import { expect, type Page, type TestInfo, test } from "@playwright/test";
 
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
+  // Keep Date deterministic while timers continue to run for autosync and UI waits.
+  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
   await page.route("**/__health-test-reset", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -77,20 +79,30 @@ test("weight entry, chart and bucket table match, with keyboard and private dash
   await expect(sheet.getByText("Enter a positive number", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
-  await addWeight(page, "83.4");
-  await expect(page.getByTestId("health-card-weight")).toContainText("83.4");
+  await addWeight(page, "76.3");
+  await expect(page.getByTestId("health-card-weight")).toContainText("76.3");
+  await page.clock.setFixedTime(new Date("2026-11-01T12:01:00Z"));
   await addWeight(page, "84.1");
   await expect(page.getByTestId("health-card-weight")).toContainText("84.1");
   await page.getByTestId("health-card-weight").getByRole("link", { name: "Weight" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Weight", exact: true })).toBeVisible();
-  const chart = page.getByRole("img", { name: /^Weight over/ });
+  const chart = page.getByRole("group", { name: /^Weight over/ });
   await expect(chart).toBeVisible();
   await expect(page.getByText("Latest reading:")).toContainText("84.1 kg");
   const point = chart.locator("circle").last();
   const label = await point.getAttribute("aria-label");
+  await expect(point).toHaveAttribute("aria-label", /average of 3 readings: 77.9 kg/);
+  await expect(chart).toHaveAttribute(
+    "aria-label",
+    /Latest plotted Weight, 2026-11-01: average of 3 readings: 77.9 kg/,
+  );
   const expectedValue = label?.split(": ").at(-1)?.replace(" kg", "");
   await point.focus();
   await expect(page.locator(".hlt-chart-tooltip")).toContainText(expectedValue as string);
+  await page.keyboard.press("ArrowLeft");
+  await expect(point).not.toBeFocused();
+  await page.keyboard.press("End");
+  await expect(point).toBeFocused();
   await accessible(page);
   await capture(page, info, "metric-chart");
   await page.getByRole("button", { name: "Show as table", exact: true }).click();

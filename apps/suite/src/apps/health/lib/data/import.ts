@@ -23,7 +23,7 @@ export class PartialImportError extends Error {
     readonly cause: unknown,
   ) {
     super(
-      `Import stopped. ${progress.samplesWritten} measurements saved in ${progress.shardsWritten} shard writes. Saved measurements are kept. When choosing a different file, include only the remaining records.`,
+      `Import stopped. ${progress.samplesWritten} measurements saved in ${progress.shardsWritten} shard writes. Saved measurements are kept. You can safely retry a complete export; matching source records replace the same measurements.`,
     );
   }
 }
@@ -64,7 +64,11 @@ export async function importHealth(
   store: HealthStore,
   owner: string,
   chunks: AsyncIterable<string>,
-  options: { preview: boolean; id: string; onProgress?: (progress: ImportProgress) => void },
+  options: {
+    preview: boolean;
+    fingerprint: (sourceRecord: string) => Promise<string>;
+    onProgress?: (progress: ImportProgress) => void;
+  },
 ) {
   const progress: ImportProgress = {
     samplesRead: 0,
@@ -87,7 +91,11 @@ export async function importHealth(
   try {
     for await (const sample of importAppleHealth(
       chunks,
-      (index) => `${store.base}observations/import#${options.id}-${index}`,
+      // Attribute order and export order are not source identity. Include all source
+      // attributes (including end/creation time and device) to distinguish readings
+      // with equal values. The temporary identity is never persisted as RDF.
+      (_index, attributes) =>
+        `${store.base}observations/import#${encodeURIComponent(JSON.stringify(Object.entries(attributes).sort(([a], [b]) => a.localeCompare(b))))}`,
     )) {
       progress.samplesRead++;
       progress.counts[sample.kind] = (progress.counts[sample.kind] ?? 0) + 1;
@@ -95,7 +103,11 @@ export async function importHealth(
       if (progress.start === null || date < progress.start) progress.start = date;
       if (progress.end === null || date > progress.end) progress.end = date;
       if (!options.preview) {
-        batch.push(sample);
+        const identity = sample.iri.slice(sample.iri.indexOf("#") + 1);
+        batch.push({
+          ...sample,
+          iri: `${store.base}observations/import#apple-${await options.fingerprint(identity)}`,
+        });
         if (batch.length === 250) await flush();
       }
       report();

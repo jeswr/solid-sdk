@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import { addMeasurement } from "../src/apps/health/lib/data/metrics";
+import { loadRecords, saveRecord } from "../src/apps/health/lib/data/records";
 import { createHealthDataStore } from "../src/apps/health/lib/data/store";
+import { addRecord, emptyHealthDocument } from "../src/apps/health/lib/model";
 import {
   HealthProvider,
   useHealth,
@@ -169,4 +171,82 @@ it("keeps privacy initialization failures in the blocking error state", async ()
   await mount(h(HealthProvider, { session: sessionFor(pod, fetch), children: h(Probe) }));
   await eventually(() => expect(context.boot.status).toBe("error"));
   expect(pod.has(`${ROOT}health/observations/`)).toBe(false);
+});
+
+it.each([
+  "edit",
+  "delete",
+])("retires a completed optimistic record after a delayed refresh sees an external %s", async (change) => {
+  const pod = createDemoPod({ root: ROOT });
+  const gate = deferred<void>();
+  const started = deferred<void>();
+  let delay = false;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (delay && !init?.method && String(input) === `${ROOT}health/medications/`) {
+      started.resolve();
+      await gate.promise;
+    }
+    return pod.fetch(input, init);
+  };
+  const store = createHealthDataStore(pod.fetch, ROOT, OWNER);
+  await store.initialize();
+  const iri = `${store.base}medications/legacy.record.ttl#medication`;
+  const document = emptyHealthDocument();
+  addRecord(document, {
+    iri,
+    kind: "medications",
+    patient: OWNER,
+    name: "Legacy medication",
+    reference: `${iri}-concept`,
+    reminders: [],
+  });
+  await store.write("medications/legacy.record.ttl", document, { create: true });
+  await mount(h(HealthProvider, { session: sessionFor(pod, fetch), children: h(Probe) }));
+  await eventually(() => {
+    expect(context.boot.status).toBe("ready");
+    if (records.status !== "ready") throw new Error("Records not ready");
+    expect(records.data[0]?.name).toBe("Legacy medication");
+  });
+  if (records.status !== "ready" || !records.data[0]) throw new Error("Missing record");
+  const original = records.data[0];
+  const draft = { ...original, name: "Local edit", date: new Date().toISOString().slice(0, 10) };
+  delay = true;
+  await act(async () => {
+    await context.save("medications", draft, original);
+  });
+  await started.promise;
+  expect(context.recordEdits).toHaveLength(1);
+  if (records.status !== "ready") throw new Error("Records not ready");
+  expect(records.data.map((record) => record.iri)).toEqual([iri]);
+  expect(records.data[0]?.name).toBe("Local edit");
+  const saved = (await loadRecords(store, "medications"))[0];
+  if (!saved?.etag) throw new Error("Missing saved record");
+  if (change === "edit")
+    await saveRecord(
+      store,
+      OWNER,
+      "medications",
+      saved.id,
+      { ...draft, name: "External edit" },
+      { etag: saved.etag },
+      new Date(),
+      saved.iri,
+    );
+  else
+    await pod.fetch(saved.iri.split("#")[0] as string, {
+      method: "DELETE",
+      headers: { "if-match": saved.etag },
+    });
+  delay = false;
+  await act(async () => {
+    gate.resolve();
+  });
+  await eventually(() => {
+    expect(context.recordEdits).toHaveLength(0);
+    if (records.status !== "ready" && records.status !== "empty")
+      throw new Error("Records not refreshed");
+    expect(records.data.map((record) => record.name)).toEqual(
+      change === "edit" ? ["External edit"] : [],
+    );
+  });
 });

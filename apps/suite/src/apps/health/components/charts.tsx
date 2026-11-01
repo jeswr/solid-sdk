@@ -41,7 +41,11 @@ export function Sparkline({ values }: { values: number[] }) {
 }
 export interface ChartSeries {
   label: string;
+  aggregation: "sum" | "mean";
   buckets: readonly AggregatedBucket[];
+}
+function bucketText(series: ChartSeries, bucket: AggregatedBucket, unit: string) {
+  return `${series.label}, ${bucket.key}: ${series.aggregation === "sum" ? "total" : "average"} of ${bucket.count} ${bucket.count === 1 ? "reading" : "readings"}: ${bucket.value.toLocaleString("en", { maximumFractionDigits: 1 })} ${unit}`;
 }
 export function TrendChart({
   series,
@@ -54,7 +58,23 @@ export function TrendChart({
 }) {
   const id = useId();
   const { ref, width } = useSvgWidth();
-  const [tooltip, setTooltip] = useState("");
+  const [tooltipPoint, setTooltip] = useState("");
+  const [activePoint, setActivePoint] = useState("");
+  const pointLabels = new Map<string, string>(
+    series.flatMap((item, index) =>
+      item.buckets.map(
+        (bucket) => [`${index}:${bucket.key}`, bucketText(item, bucket, unit)] as const,
+      ),
+    ),
+  );
+  const selected = pointLabels.has(activePoint) ? activePoint : pointLabels.keys().next().value;
+  const tooltip = pointLabels.get(tooltipPoint) ?? "";
+  const latest = series
+    .flatMap((item) => {
+      const bucket = item.buckets.at(-1);
+      return bucket ? [`Latest plotted ${bucketText(item, bucket, unit)}.`] : [];
+    })
+    .join(" ");
   const keys = [
     ...new Set(series.flatMap((item) => item.buckets.map((bucket) => bucket.key))),
   ].sort();
@@ -76,11 +96,12 @@ export function TrendChart({
   ];
   return (
     <div className="hlt-chart-wrap">
+      {/* biome-ignore lint/a11y/useSemanticElements: SVG group exposes keyboard points; a fieldset cannot replace this SVG. */}
       <svg
         ref={ref}
         viewBox={`0 0 ${width} 268`}
-        role="img"
-        aria-label={label}
+        role="group"
+        aria-label={`${label} ${latest}`}
         className="hlt-chart"
         aria-describedby={id}
       >
@@ -123,7 +144,8 @@ export function TrendChart({
               points={item.buckets.map((bucket) => `${x(bucket.key)},${y(bucket.value)}`).join(" ")}
             />
             {item.buckets.map((bucket) => {
-              const text = `${item.label}, ${bucket.key}: ${bucket.value.toLocaleString("en", { maximumFractionDigits: 1 })} ${unit}`;
+              const text = bucketText(item, bucket, unit);
+              const pointId = `${seriesIndex}:${bucket.key}`;
               return (
                 // biome-ignore lint/a11y/useSemanticElements: SVG points expose keyboard tooltips through button semantics.
                 <circle
@@ -132,19 +154,41 @@ export function TrendChart({
                   cy={y(bucket.value)}
                   r="4"
                   fill={seriesIndex ? "var(--info)" : "var(--primary)"}
-                  tabIndex={0}
+                  tabIndex={selected === pointId ? 0 : -1}
                   role="button"
                   aria-label={text}
-                  onClick={() => setTooltip(text)}
+                  onClick={() => setTooltip(pointId)}
                   onKeyDown={(event) => {
+                    const points = Array.from(
+                      ref.current?.querySelectorAll<SVGCircleElement>('circle[role="button"]') ??
+                        [],
+                    );
+                    const index = points.indexOf(event.currentTarget);
+                    const next =
+                      event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? points.length - 1
+                          : event.key === "ArrowRight" || event.key === "ArrowDown"
+                            ? (index + 1) % points.length
+                            : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                              ? (index - 1 + points.length) % points.length
+                              : null;
+                    if (next !== null) {
+                      event.preventDefault();
+                      points[next]?.focus();
+                    }
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setTooltip(text);
+                      setTooltip(pointId);
                     }
                   }}
-                  onFocus={() => setTooltip(text)}
+                  onFocus={() => {
+                    setActivePoint(pointId);
+                    setTooltip(pointId);
+                  }}
                   onBlur={() => setTooltip("")}
-                  onMouseEnter={() => setTooltip(text)}
+                  onMouseEnter={() => setTooltip(pointId)}
                   onMouseLeave={() => setTooltip("")}
                 >
                   <title>{text}</title>
@@ -155,7 +199,8 @@ export function TrendChart({
         ))}
       </svg>
       <p id={id} className="hlt-chart-tooltip" role="status">
-        {tooltip || "Focus or hover on a point to see its value. Dates use UTC."}
+        {tooltip ||
+          "Focus or hover on a point to see its value. Use arrow keys to move between points. Dates use UTC."}
       </p>
       {series.length > 1 && (
         <div className="hlt-legend">

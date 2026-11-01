@@ -45,8 +45,9 @@ interface HealthContextValue {
   pending: Measurement[];
   clock: Date;
   acknowledge(iris: readonly string[]): void;
-  acknowledgeRecords(records: readonly ClinicalRecord[]): void;
-  recordEdits: ClinicalRecord[];
+  recordReadGeneration(): number;
+  acknowledgeRecords(kind: ClinicalKind, generation: number): void;
+  recordEdits: (ClinicalRecord & { generation: number })[];
   saving: number;
   invalidate(): void;
   mutate<T>(write: () => Promise<T>, message: string): Promise<T>;
@@ -81,7 +82,10 @@ export function HealthProvider({
   const [boot, setBoot] = useState<AsyncState<null>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState<Measurement[]>([]);
-  const [recordEdits, setRecordEdits] = useState<ClinicalRecord[]>([]);
+  const [recordEdits, setRecordEdits] = useState<(ClinicalRecord & { generation: number })[]>([]);
+  const recordGeneration = useRef(0);
+  const completedRecordGeneration = useRef(0);
+  const recordReadGeneration = useCallback(() => completedRecordGeneration.current, []);
   const [saving, setSaving] = useState(0);
   const acknowledge = useCallback((iris: readonly string[]) => {
     const known = new Set(iris);
@@ -91,22 +95,13 @@ export function HealthProvider({
         : current,
     );
   }, []);
-  const acknowledgeRecords = useCallback((records: readonly ClinicalRecord[]) => {
-    const confirmed = new Map(records.map((record) => [record.iri, record]));
+  const acknowledgeRecords = useCallback((kind: ClinicalKind, generation: number) => {
     setRecordEdits((current) => {
-      const remaining = current.filter((edit) => {
-        const record = confirmed.get(edit.iri);
-        return (
-          !record ||
-          record.etag === edit.etag ||
-          record.name !== edit.name ||
-          record.dose !== edit.dose ||
-          record.note !== edit.note ||
-          record.frequency !== edit.frequency ||
-          record.time !== edit.time ||
-          record.date !== edit.date
-        );
-      });
+      // A read begun after a completed write is authoritative, including when an
+      // external writer changed or deleted the record before that read returned.
+      const remaining = current.filter(
+        (edit) => edit.kind !== kind || edit.generation > generation,
+      );
       return remaining.length === current.length ? current : remaining;
     });
   }, []);
@@ -222,26 +217,37 @@ export function HealthProvider({
   const save = useCallback(
     async (kind: ClinicalKind, draft: RecordDraft, existing?: ClinicalRecord) => {
       const id = existing?.id ?? crypto.randomUUID();
-      const iri = `${store.base}${kind}/${id}.ttl#it`;
+      const iri = existing?.iri ?? `${store.base}${kind}/${id}.ttl#it`;
       if (existing && !existing.etag)
         throw new Error("This record cannot be safely edited without a version");
       const condition: Precondition = existing
         ? { etag: existing.etag as string }
         : { create: true };
-      const optimistic: ClinicalRecord = {
+      const generation = ++recordGeneration.current;
+      const optimistic = {
         ...draft,
         id,
         iri,
         kind,
         etag: existing?.etag ?? null,
         reminders: [],
+        generation,
       };
       setRecordEdits((current) => [...current.filter((record) => record.iri !== iri), optimistic]);
       try {
-        await mutate(
-          () => saveRecord(store, session.webId, kind, id, draft, condition, new Date()),
-          "Record saved",
-        );
+        await mutate(async () => {
+          await saveRecord(
+            store,
+            session.webId,
+            kind,
+            id,
+            draft,
+            condition,
+            new Date(),
+            existing?.iri,
+          );
+          completedRecordGeneration.current = generation;
+        }, "Record saved");
       } catch (error) {
         setRecordEdits((current) => current.filter((record) => record !== optimistic));
         throw error;
@@ -261,6 +267,7 @@ export function HealthProvider({
         clock,
         acknowledge,
         acknowledgeRecords,
+        recordReadGeneration,
         recordEdits,
         saving,
         invalidate,
@@ -304,7 +311,6 @@ export function useHealthResource<T>(
   return state;
 }
 const EMPTY_MEASUREMENTS: Measurement[] = [];
-const EMPTY_RECORDS: ClinicalRecord[] = [];
 const noEntries = (data: { entries: Measurement[] }) => data.entries.length === 0;
 export function useMetric(kind: MetricKind | null, range: "7d" | "30d" | "1y") {
   const { store, pending, clock, acknowledge } = useHealth();
@@ -337,16 +343,24 @@ export function useMetric(kind: MetricKind | null, range: "7d" | "30d" | "1y") {
   );
   return { status: data.entries.length ? ("ready" as const) : ("empty" as const), data };
 }
-const noRecords = (data: ClinicalRecord[]) => data.length === 0;
+const noRecords = (data: { records: ClinicalRecord[] }) => data.records.length === 0;
 export function useRecords(kind: ClinicalKind) {
-  const { store, recordEdits, acknowledgeRecords } = useHealth();
-  const loader = useCallback(() => loadRecords(store, kind), [store, kind]);
+  const { store, recordEdits, acknowledgeRecords, recordReadGeneration } = useHealth();
+  const loader = useCallback(async () => {
+    const generation = recordReadGeneration();
+    return { records: await loadRecords(store, kind), generation, kind };
+  }, [store, kind, recordReadGeneration]);
   const state = useHealthResource(loader, noRecords);
-  const loaded = state.status === "ready" || state.status === "empty" ? state.data : EMPTY_RECORDS;
-  useEffect(() => acknowledgeRecords(loaded), [loaded, acknowledgeRecords]);
+  const loaded = state.status === "ready" || state.status === "empty" ? state.data : null;
+  useEffect(() => {
+    if (loaded) acknowledgeRecords(loaded.kind, loaded.generation);
+  }, [loaded, acknowledgeRecords]);
   if (state.status === "loading" || state.status === "error") return state;
-  const records = new Map(state.data.map((record) => [record.iri, record]));
-  for (const record of recordEdits) if (record.kind === kind) records.set(record.iri, record);
+  if (state.data.kind !== kind) return { status: "loading" as const };
+  const records = new Map(state.data.records.map((record) => [record.iri, record]));
+  for (const record of recordEdits)
+    if (record.kind === kind && record.generation > state.data.generation)
+      records.set(record.iri, record);
   return {
     status: records.size ? ("ready" as const) : ("empty" as const),
     data: [...records.values()],

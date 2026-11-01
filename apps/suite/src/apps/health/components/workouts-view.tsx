@@ -134,7 +134,17 @@ export function WorkoutView({ reference }: { reference: string }) {
             <div>
               <p className="hlt-eyebrow">WORKOUT DETAILS</p>
               <h1>{workoutName(state.data.workout)}</h1>
-              <p className="hlt-muted">{state.data.workout.activity ?? "Activity"}</p>
+              {state.data.workout.start && (
+                <p className="hlt-muted">
+                  Started at{" "}
+                  {state.data.workout.start.toLocaleTimeString("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "UTC",
+                  })}{" "}
+                  UTC
+                </p>
+              )}
             </div>
             <ProvenanceBadge source={state.data.workout.source ?? "Unknown source"} />
           </header>
@@ -223,20 +233,34 @@ export function WorkoutView({ reference }: { reference: string }) {
     </div>
   );
 }
-function RouteDrawing({ segments }: { segments: { lat: number; long: number }[][] }) {
-  const points = segments.flat();
-  const lat = points.map((point) => point.lat),
-    long = points.map((point) => point.long);
-  const mid = (((Math.min(...lat) + Math.max(...lat)) / 2) * Math.PI) / 180;
-  const width = (Math.max(...long) - Math.min(...long)) * Math.cos(mid),
-    height = Math.max(...lat) - Math.min(...lat);
-  const scale = Math.min(560 / (width || 0.001), 190 / (height || 0.001));
+export function RouteDrawing({ segments }: { segments: { lat: number; long: number }[][] }) {
+  let minLat = Infinity,
+    maxLat = -Infinity,
+    minLong = Infinity,
+    maxLong = -Infinity,
+    count = 0;
+  for (const segment of segments)
+    for (const point of segment) {
+      minLat = Math.min(minLat, point.lat);
+      maxLat = Math.max(maxLat, point.lat);
+      minLong = Math.min(minLong, point.long);
+      maxLong = Math.max(maxLong, point.long);
+      count++;
+    }
+  if (!count) return <p className="hlt-muted">No route points recorded.</p>;
+  const longitudeScale = Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
+  const width = (maxLong - minLong) * longitudeScale,
+    height = maxLat - minLat;
+  // Zero spans impose no constraint. Tiny nonzero tracks still fill the available
+  // space, centered with padding, without stretching their geographic proportions.
+  const fit = Math.min(width > 0 ? 560 / width : Infinity, height > 0 ? 190 / height : Infinity);
+  const scale = Number.isFinite(fit) ? fit : 1;
   return (
     <svg
       className="hlt-route"
       viewBox="0 0 640 240"
       role="img"
-      aria-label={`Workout route with ${points.length} points in ${segments.length} segments. North is up.`}
+      aria-label={`Workout route with ${count} points in ${segments.length} segments. North is up.`}
     >
       <text x="600" y="25">
         N ↑
@@ -247,27 +271,35 @@ function RouteDrawing({ segments }: { segments: { lat: number; long: number }[][
           points={segment
             .map(
               (point) =>
-                `${(640 - width * scale) / 2 + (point.long - Math.min(...long)) * Math.cos(mid) * scale},${(240 - height * scale) / 2 + (Math.max(...lat) - point.lat) * scale}`,
+                `${(640 - width * scale) / 2 + (point.long - minLong) * longitudeScale * scale},${(240 - height * scale) / 2 + (maxLat - point.lat) * scale}`,
             )
             .join(" ")}
           fill="none"
           stroke="var(--primary)"
           strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
         />
       ))}
+      {count === 1 && <circle cx="320" cy="120" r="4" fill="var(--primary)" />}
     </svg>
   );
 }
-function ElevationDrawing({
+export function ElevationDrawing({
   profile,
 }: {
   profile: { distance: number; elevation: number | null }[];
 }) {
   const { ref, width } = useSvgWidth();
-  const values = profile.flatMap((point) => (point.elevation === null ? [] : [point.elevation]));
-  if (!values.length) return <p className="hlt-muted">No elevation data recorded.</p>;
-  const min = Math.floor(Math.min(...values)),
-    max = Math.ceil(Math.max(...values));
+  let lowest = Infinity,
+    highest = -Infinity;
+  for (const point of profile)
+    if (point.elevation !== null) {
+      lowest = Math.min(lowest, point.elevation);
+      highest = Math.max(highest, point.elevation);
+    }
+  if (lowest === Infinity) return <p className="hlt-muted">No elevation data recorded.</p>;
+  const min = Math.floor(lowest),
+    max = Math.ceil(highest);
   const distance = profile.at(-1)?.distance || 1;
   const coords = profile
     .filter((point) => point.elevation !== null)

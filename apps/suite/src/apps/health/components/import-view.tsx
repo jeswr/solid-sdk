@@ -5,7 +5,7 @@ import { FileCode2, Footprints, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
-import { fileChunks } from "../lib/browser/chunks";
+import { fileChunks, fingerprintAppleRecord } from "../lib/browser/chunks";
 import { type ImportProgress, importHealth, PartialImportError } from "../lib/data/import";
 import { importGpx, previewGpx } from "../lib/data/workouts";
 import { useHealth } from "../state/health-context";
@@ -49,7 +49,6 @@ function AppleImport() {
     "idle" | "previewing" | "preview" | "importing" | "done" | "error"
   >("idle");
   const [error, setError] = useState("");
-  const [id, setId] = useState("");
   const generation = useRef(0);
   const busy = phase === "previewing" || phase === "importing";
   const choose = async (next: File | undefined) => {
@@ -59,7 +58,6 @@ function AppleImport() {
     setPreview(null);
     setProgress(null);
     setError("");
-    if (next !== file) setId(crypto.randomUUID());
     if (/\.zip$/i.test(next.name)) {
       setError(
         "Unzip your Apple Health export and choose export.xml. ZIP files aren't supported here.",
@@ -76,7 +74,7 @@ function AppleImport() {
     try {
       const result = await importHealth(store, session.webId, fileChunks(next), {
         preview: true,
-        id: "preview",
+        fingerprint: fingerprintAppleRecord,
       });
       if (generation.current === request) {
         setPreview(result);
@@ -167,7 +165,7 @@ function AppleImport() {
                 () =>
                   importHealth(store, session.webId, fileChunks(file), {
                     preview: false,
-                    id,
+                    fingerprint: fingerprintAppleRecord,
                     onProgress: setProgress,
                   }),
                 "Health import complete",

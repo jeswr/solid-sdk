@@ -41,6 +41,12 @@ export type RecordDraft = Pick<
   ClinicalRecord,
   "name" | "note" | "dose" | "date" | "frequency" | "time" | "timeZone"
 >;
+/** Gregorian record dates are independent of the medication scheduler's horizon. */
+export function isRecordDate(date: string): boolean {
+  if (!/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
 export function scheduleFor(id: string, input: RecordDraft): MedicationSchedule {
   const base = { id, startDate: input.date };
   if (input.frequency === "none") return { ...base, kind: "as-needed" };
@@ -85,19 +91,24 @@ export async function saveRecord(
   input: RecordDraft,
   condition: Precondition,
   now: Date,
+  subject?: string,
 ) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id)) throw new TypeError("Invalid record ID");
+  if (subject === undefined && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id))
+    throw new TypeError("Invalid record ID");
   if (!input.name.trim()) throw new TypeError("Enter a name");
-  const path = `${kind}/${id}.ttl`;
-  const iri = `${store.base}${path}#it`;
-  const schedule = scheduleFor(iri, input);
+  if (!isRecordDate(input.date)) throw new TypeError("Choose a valid date");
+  const iri = subject ?? `${store.base}${kind}/${id}.ttl#it`;
+  const path = iri.split("#")[0] as string;
   const start = new Date(now);
   start.setUTCHours(0, 0, 0, 0);
-  const due = generateDueDoses(
-    schedule,
-    { start: start.getTime(), end: start.getTime() + 90 * 86400000 },
-    input.timeZone,
-  );
+  const due =
+    kind === "medications"
+      ? generateDueDoses(
+          scheduleFor(iri, input),
+          { start: start.getTime(), end: start.getTime() + 90 * 86400000 },
+          input.timeZone,
+        )
+      : [];
   const document =
     "create" in condition ? emptyHealthDocument() : (await store.read(path)).document;
   addRecord(document, {
@@ -107,13 +118,10 @@ export async function saveRecord(
     name: input.name.trim(),
     reference: `${iri}-concept`,
     note: input.note,
-    reminders:
-      kind === "medications"
-        ? due.map((dose, index) => ({
-            iri: `${iri}-reminder-${index}`,
-            at: new Date(dose.scheduledAt),
-          }))
-        : [],
+    reminders: due.map((dose, index) => ({
+      iri: `${iri}-reminder-${index}`,
+      at: new Date(dose.scheduledAt),
+    })),
   });
   const fields = new RecordFields(iri, document, DataFactory);
   for (const [key, value] of Object.entries({

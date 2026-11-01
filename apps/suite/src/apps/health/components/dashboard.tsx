@@ -12,11 +12,21 @@ import { Sparkline } from "./charts";
 import { useMeasurement } from "./health-app";
 
 const neverEmpty = () => false;
-export function relativeTime(at: Date, now = new Date()): string {
-  const days = Math.floor((now.getTime() - at.getTime()) / 86400000);
+export function relativeTime(at: Date, now = new Date(), daily = false): string {
+  const days =
+    Math.floor(Date.parse(now.toISOString().slice(0, 10)) / 86400000) -
+    Math.floor(Date.parse(at.toISOString().slice(0, 10)) / 86400000);
   if (days === 0)
-    return `Today at ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+    return daily
+      ? "Today"
+      : `Today at ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}`;
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-days, "day");
+}
+export function trendText(change: number | null) {
+  if (change === null) return "More readings will reveal a trend";
+  const rounded = Math.abs(change).toFixed(0);
+  if (rounded === "0") return "Same as previous week";
+  return `${change > 0 ? "Up" : "Down"} ${rounded}% vs previous week`;
 }
 function DueNow() {
   const meds = useRecords("medications");
@@ -143,7 +153,9 @@ export function Dashboard() {
                     <p className="hlt-big-number">
                       {display} <span>{card.unit}</span>
                     </p>
-                    <p className="hlt-muted hlt-small">{relativeTime(latest.at)}</p>
+                    <p className="hlt-muted hlt-small">
+                      {relativeTime(latest.at, viewNow, card.aggregation === "sum")}
+                    </p>
                     <Sparkline
                       values={
                         buckets.length
@@ -151,11 +163,7 @@ export function Dashboard() {
                           : [displayValue(kind, latest.value)]
                       }
                     />
-                    <p className="hlt-trend-copy">
-                      {card.change === null
-                        ? "More readings will reveal a trend"
-                        : `${card.change >= 0 ? "Up" : "Down"} ${Math.abs(card.change).toFixed(0)}% vs previous week`}
-                    </p>
+                    <p className="hlt-trend-copy">{trendText(card.change)}</p>
                     <div className="hlt-source">
                       <ProvenanceBadge source={latest.source} />
                     </div>

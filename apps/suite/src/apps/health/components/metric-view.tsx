@@ -37,11 +37,12 @@ function MetricContent({ card }: { card: (typeof CATALOGUE)[number] }) {
     ? [
         {
           label: card.id === "blood-pressure" ? "Systolic" : card.label,
+          aggregation: card.aggregation,
           buckets: primary.data.buckets,
         },
         ...(card.id === "blood-pressure" &&
         (secondary.status === "ready" || secondary.status === "empty")
-          ? [{ label: "Diastolic", buckets: secondary.data.buckets }]
+          ? [{ label: "Diastolic", aggregation: card.aggregation, buckets: secondary.data.buckets }]
           : []),
       ]
     : [];
@@ -132,7 +133,7 @@ function MetricContent({ card }: { card: (typeof CATALOGUE)[number] }) {
               <TrendChart
                 series={series}
                 unit={card.unit}
-                label={`${card.label} over ${range}. Latest ${card.id === "blood-pressure" ? "systolic" : "reading"} ${primary.data.latest ? formatMetric(card.kinds[0], primary.data.latest.value) : "unavailable"} ${card.unit}.${card.id === "blood-pressure" ? ` Latest diastolic ${secondary.data.latest ? formatMetric("diastolic", secondary.data.latest.value) : "unavailable"} mmHg.` : ""}`}
+                label={`${card.label} over ${range}. ${range === "1y" ? "Weekly" : "Daily"} ${card.aggregation === "sum" ? "totals" : "averages"} in ${card.unit}.`}
               />
             )}
           </section>

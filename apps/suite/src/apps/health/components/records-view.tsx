@@ -20,6 +20,7 @@ import { z } from "zod";
 import {
   type ClinicalKind,
   type ClinicalRecord,
+  isRecordDate,
   nextDose,
   type RecordDraft,
 } from "../lib/data/records";
@@ -36,21 +37,22 @@ const SINGULAR = {
   conditions: "condition",
   immunisations: "immunisation",
 };
-const recordSchema = z.object({
-  name: z.string().trim().min(1, "Enter a name").max(200),
-  note: z.string().max(2000),
-  dose: z.string().max(200),
-  date: z
-    .string()
-    .regex(/^20\d{2}-\d{2}-\d{2}$/, "Choose a date between 2000 and 2099")
-    .refine((date) => {
-      const parsed = new Date(`${date}T00:00:00Z`);
-      return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-    }, "Choose a valid date"),
-  frequency: z.enum(["daily", "weekly", "none"]),
-  time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Enter a valid time"),
-  timeZone: z.string().min(1),
-});
+export const recordSchema = (kind: ClinicalKind) =>
+  z.object({
+    name: z.string().trim().min(1, "Enter a name").max(200),
+    note: z.string().max(2000),
+    dose: z.string().max(200),
+    date: z
+      .string()
+      .refine(isRecordDate, "Choose a valid date")
+      .refine(
+        (date) => kind !== "medications" || /^20\d{2}-/.test(date),
+        "Choose a schedule date between 2000 and 2099",
+      ),
+    frequency: z.enum(["daily", "weekly", "none"]),
+    time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Enter a valid time"),
+    timeZone: z.string().min(1),
+  });
 function scheduleText(record: ClinicalRecord) {
   return record.frequency === "none"
     ? "As needed / no schedule"
@@ -227,7 +229,7 @@ function RecordSheet({
   const trigger = useRef<HTMLElement | null>(null);
   const generation = useRef(0);
   const [error, setError] = useState("");
-  const form = useForm<RecordDraft>({ resolver: zodResolver(recordSchema) });
+  const form = useForm<RecordDraft>({ resolver: zodResolver(recordSchema(kind)) });
   const { reset } = form;
   useEffect(() => {
     generation.current++;

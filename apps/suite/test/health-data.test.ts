@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { DataFactory } from "n3";
@@ -20,6 +21,7 @@ import {
 import {
   type ClinicalRecord,
   dueMedications,
+  isRecordDate,
   loadRecords,
   nextDose,
   type RecordDraft,
@@ -34,6 +36,7 @@ import {
   previewGpx,
 } from "../src/apps/health/lib/data/workouts";
 import {
+  addRecord,
   emptyHealthDocument,
   type Measurement,
   RecordDetails,
@@ -73,6 +76,7 @@ function sample(id: string, kind: Measurement["kind"], at: string, value: number
 async function* chunks(...parts: string[]) {
   yield* parts;
 }
+const fingerprint = async (text: string) => createHash("sha256").update(text).digest("hex");
 function apple(value = "70", kind = "BodyMass", date = "2026-11-01 08:00:00 +0000", unit = "kg") {
   return `<Record type="HKQuantityTypeIdentifier${kind}" unit="${unit}" value="${value}" startDate="${date}" sourceName="Apple Health"/>`;
 }
@@ -212,12 +216,46 @@ describe("Health metric data over an in-memory pod", () => {
 });
 
 describe("Apple Health preview and streaming writes", () => {
+  it("deduplicates reselected, reordered and overlapping exports by source record, not filename or index", async () => {
+    const { store } = fixture();
+    const step = apple("1200", "StepCount", "2026-11-01 08:00:00 +0000", "count");
+    const weight = apple("76.3");
+    const importText = (text: string) =>
+      importHealth(store, OWNER, chunks(text), { preview: false, fingerprint });
+    await importText(`<HealthData>${step}${weight}</HealthData>`);
+    const original = (await loadMetric(store, "steps", RANGE)).entries[0]?.iri;
+    // A new File object / export name has no role in the identity.
+    await importText(`<HealthData>${step}${weight}</HealthData>`);
+    expect((await loadMetric(store, "steps", RANGE)).buckets[0]?.value).toBe(1200);
+    // Reordered attributes, records and a newly supported record don't shift IDs.
+    const reordered =
+      '<Record sourceName="Apple Health" startDate="2026-11-01 08:00:00 +0000" value="1200" unit="count" type="HKQuantityTypeIdentifierStepCount"/>';
+    await importText(
+      `<HealthData>${apple("65", "HeartRate", undefined, "count/min")}${weight}${reordered}${apple("84.1", "BodyMass", "2026-11-02 08:00:00 +0000")}</HealthData>`,
+    );
+    expect((await loadMetric(store, "steps", RANGE)).entries.map((entry) => entry.iri)).toEqual([
+      original,
+    ]);
+    expect((await loadMetric(store, "weight", RANGE)).entries).toHaveLength(2);
+    // Equal values/times with distinct source metadata remain distinct readings.
+    await importText(
+      `<HealthData>${step.replace("Apple Health", "Watch")}${step.replace("/>", ' endDate="2026-11-01 08:05:00 +0000"/>')}${step.replace("/>", ' creationDate="2026-11-01 08:06:00 +0000"/>')}</HealthData>`,
+    );
+    expect((await loadMetric(store, "steps", RANGE)).buckets[0]).toMatchObject({
+      value: 4800,
+      count: 4,
+    });
+    const shard = await store.read("observations/2026-11.ttl");
+    expect(
+      [...shard.document.observations].every((entry) => /#apple-[a-f0-9]{64}$/.test(entry.value)),
+    ).toBe(true);
+  });
   it("previews counts and date bounds without writing, then batches and merges conditionally", async () => {
     const { pod, store } = fixture();
     const text = `<HealthData>${apple()}${apple("1200", "StepCount", "2026-10-30 08:00:00 +0000", "count")}${apple("71", "BodyMass", "2026-11-02 08:00:00 +0000")}</HealthData>`;
     const preview = await importHealth(store, OWNER, chunks(text.slice(0, 200), text.slice(200)), {
       preview: true,
-      id: "preview",
+      fingerprint,
     });
     expect(preview).toMatchObject({
       samplesRead: 3,
@@ -230,33 +268,35 @@ describe("Apple Health preview and streaming writes", () => {
     const events: number[] = [];
     const imported = await importHealth(store, OWNER, chunks(text), {
       preview: false,
-      id: "import1",
+      fingerprint,
       onProgress: (value) => events.push(value.samplesWritten),
     });
     expect(imported).toMatchObject({ samplesRead: 3, samplesWritten: 3, shardsWritten: 2 });
     expect(events).toContain(3);
-    await importHealth(store, OWNER, chunks(text), { preview: false, id: "import1" });
+    await importHealth(store, OWNER, chunks(text), { preview: false, fingerprint });
     expect((await loadMetric(store, "weight", RANGE)).entries).toHaveLength(2);
+    const latestWeight = (await loadMetric(store, "weight", RANGE)).entries[0];
+    if (!latestWeight) throw new Error("Missing imported weight");
     expect(
-      (await store.read("observations/2026-11.ttl")).document.observation(
-        `${ROOT}health/observations/2026-11.ttl#import1-0`,
-      ).patient,
+      (await store.read("observations/2026-11.ttl")).document.observation(latestWeight.iri).patient,
     ).toBe(OWNER);
     const empty = await importHealth(store, OWNER, chunks("<HealthData/>"), {
       preview: true,
-      id: "empty",
+      fingerprint,
     });
     expect(empty.start).toBeNull();
     expect(empty.end).toBeNull();
   });
   it("reports exactly the committed samples after malformed late XML, a failed shard and a network failure", async () => {
     const { store } = fixture();
-    const first = Array.from({ length: 250 }, () => apple()).join("");
+    const first = Array.from({ length: 250 }, (_, index) => apple(String(70 + index / 100))).join(
+      "",
+    );
     const error = await importHealth(
       store,
       OWNER,
       chunks(`<HealthData>${first}`, apple(), "<broken></HealthData>"),
-      { preview: false, id: "partial" },
+      { preview: false, fingerprint },
     ).catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(PartialImportError);
     expect((error as PartialImportError).progress).toMatchObject({
@@ -276,7 +316,7 @@ describe("Apple Health preview and streaming writes", () => {
       chunks(
         `<HealthData>${apple("70", "BodyMass", "2026-10-31 08:00:00 +0000")}${apple()}</HealthData>`,
       ),
-      { preview: false, id: "failed" },
+      { preview: false, fingerprint },
     ).catch((cause: unknown) => cause as PartialImportError);
     expect((failure as PartialImportError).progress).toMatchObject({
       samplesWritten: 1,
@@ -288,11 +328,11 @@ describe("Apple Health preview and streaming writes", () => {
     await expect(
       importHealth(network.store, OWNER, chunks(`<HealthData>${apple()}</HealthData>`), {
         preview: false,
-        id: "offline",
+        fingerprint,
       }),
     ).rejects.toBeInstanceOf(PartialImportError);
     await expect(
-      importHealth(store, OWNER, chunks("<wrong/>"), { preview: true, id: "invalid" }),
+      importHealth(store, OWNER, chunks("<wrong/>"), { preview: true, fingerprint }),
     ).rejects.toMatchObject({ progress: { samplesWritten: 0 } });
   });
   it("rejects a shard with no ETag and preserves existing metadata", async () => {
@@ -321,6 +361,101 @@ describe("Apple Health preview and streaming writes", () => {
 });
 
 describe("clinical records and reminders", () => {
+  it("validates historical record dates separately from medication schedules", async () => {
+    const { store } = fixture();
+    for (const [kind, date] of [
+      ["conditions", "1987-04-11"],
+      ["immunisations", "1964-02-29"],
+    ] as const) {
+      await saveRecord(store, OWNER, kind, "history", { ...DRAFT, date }, { create: true }, NOW);
+      expect((await loadRecords(store, kind))[0]).toMatchObject({ date, reminders: [] });
+    }
+    for (const date of ["0001-01-01", "1600-02-29", "9999-12-31"])
+      expect(isRecordDate(date)).toBe(true);
+    for (const date of [
+      "",
+      "0000-01-01",
+      "1900-02-29",
+      "1987-04-31",
+      "1964-13-01",
+      "1964-00-00",
+      "64-01-01",
+    ]) {
+      expect(isRecordDate(date)).toBe(false);
+      await expect(
+        saveRecord(
+          store,
+          OWNER,
+          "conditions",
+          "invalid",
+          { ...DRAFT, date },
+          { create: true },
+          NOW,
+        ),
+      ).rejects.toThrow("Choose a valid date");
+    }
+    await expect(
+      saveRecord(
+        store,
+        OWNER,
+        "medications",
+        "old",
+        { ...DRAFT, date: "1987-04-11" },
+        { create: true },
+        NOW,
+      ),
+    ).rejects.toThrow();
+  });
+  it("edits the loaded document and subject, preserving other subjects and preconditions", async () => {
+    const { store } = fixture();
+    await store.initialize();
+    const path = "conditions/legacy.record.ttl";
+    const iri = `${store.base}${path}#condition`;
+    const document = emptyHealthDocument();
+    for (const subject of [iri, `${store.base}${path}#other`])
+      addRecord(document, {
+        iri: subject,
+        kind: "conditions",
+        patient: OWNER,
+        name: "Original",
+        reference: `${subject}-concept`,
+        note: "Keep history",
+        reminders: [],
+      });
+    await store.write(path, document, { create: true });
+    const loaded = await store.read(path);
+    await saveRecord(
+      store,
+      OWNER,
+      "conditions",
+      "legacy.record",
+      { ...DRAFT, name: "Updated", date: "1987-04-11" },
+      { etag: loaded.etag as string },
+      NOW,
+      iri,
+    );
+    const changed = await store.read(path);
+    expect(new RecordDetails(iri, changed.document, DataFactory).name).toBe("Updated");
+    expect(
+      new RecordDetails(`${store.base}${path}#other`, changed.document, DataFactory).name,
+    ).toBe("Original");
+    expect([...changed.document.conditions].map((entry) => entry.value).sort()).toEqual(
+      [iri, `${store.base}${path}#other`].sort(),
+    );
+    expect(await readShard(store, "conditions/legacy.ttl")).toBeNull();
+    await expect(
+      saveRecord(
+        store,
+        OWNER,
+        "conditions",
+        "legacy.record",
+        DRAFT,
+        { etag: loaded.etag as string },
+        NOW,
+        iri,
+      ),
+    ).rejects.toMatchObject({ status: 412 });
+  });
   it("round trips editable records and schedules using strong preconditions", async () => {
     const { store } = fixture();
     expect(await loadRecords(store, "conditions")).toEqual([]);
