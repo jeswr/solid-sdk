@@ -54,6 +54,7 @@ import {
   type PinnedTarget,
   pruneExpiredGrants,
 } from './core/class-grant';
+import { safePathUrl } from './core/class-path';
 import { normaliseAccessRequest } from './core/class-request';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
@@ -1276,6 +1277,8 @@ function makeResolveFetch(
       const authenticated = useCredentials && url !== webId;
       const fetchImpl: typeof fetch = (input, init) =>
         cancellable(signal, async () => {
+          // Validate every direct send, including the destination exposed by a redirect probe.
+          if (!safePathUrl(input.toString())) throw new Error('Ambiguous discovery path denied');
           await beforeRequest(input.toString(), authenticated);
           signal.throwIfAborted();
           if (isTokenEndpoint(input.toString(), session.tokenEndpoint))
@@ -1399,7 +1402,7 @@ async function handleRequestAccess(
           const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
           const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: null }>();
           for (const cls of spec.classes) {
-            const targets = await resolveClassTargets(cls, {
+            const { targets } = await resolveClassTargets(cls, {
               webId: ctx.session.webId,
               fetch: makeResolveFetch(
                 { ...session, allowedOrigins },
@@ -1696,7 +1699,7 @@ async function handleResolveClass(
         const allowedOrigins = new Set(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
-        const targets = await resolveClassTargets(message.classIRI, {
+        const { targets } = await resolveClassTargets(message.classIRI, {
           webId: ctx.session.webId,
           fetch: makeResolveFetch(
             { ...fetchSession, allowedOrigins },

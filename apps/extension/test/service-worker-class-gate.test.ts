@@ -1349,6 +1349,86 @@ describe('pim:Storage through the existing worker gate', () => {
 });
 
 describe('Phase-2 requestAccess → consent → grant (wired)', () => {
+  it('pins SAI-only targets without resolver metadata in storage or page replies, and never widens them', async () => {
+    await seedSession();
+    await loadWorker();
+    const pod = 'https://alice.pod.example';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const registration = `${pod}/data/contacts/`;
+    const docs: Record<string, string> = {
+      [`${pod}/profile/card`]: `<${WEBID}> <${interop}hasRegistrySet> <${pod}/registries> .`,
+      [`${pod}/registries`]: `<> <${interop}hasDataRegistry> <${pod}/data/> .`,
+      [`${pod}/data/`]: `<> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url.split('#')[0]] ?? '', {
+        status: docs[url.split('#')[0]] === undefined ? 404 : 200,
+      });
+    const requested = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'sai-consent',
+        classes: [dataClass],
+        modes: ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId,
+        approvedClasses: [dataClass],
+      },
+      EXT_SENDER,
+    );
+    const granted = await requested;
+    expect(granted.ok).toBe(true);
+    const pinned = [{ url: registration, kind: 'container' }];
+    const grants = granted.grants as ClassGrant[];
+    expect(grants[0].targets).toEqual(pinned);
+    const stored = storage.get('solid:origin-grants') as OriginGrant[];
+    expect(stored[0].scope.classes?.[0].targets).toEqual(pinned);
+    for (const call of fetchCalls) {
+      expect(call.init?.credentials).toBe('omit');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        !call.url.includes('/profile/card'),
+      );
+    }
+
+    // A new registration can be discovered later, but the original grant stays pinned.
+    const later = `${pod}/data/later/`;
+    docs[`${pod}/data/`] += `<> <${interop}hasDataRegistration> <${later}> .`;
+    docs[later] = docs[registration];
+    const resolved = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'sai-resolve',
+        classIRI: dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(resolved).toEqual({
+      requestId: 'sai-resolve',
+      shape: null,
+      targets: [...pinned, { url: later, kind: 'container' }],
+    });
+    expect(
+      (storage.get('solid:origin-grants') as OriginGrant[])[0].scope.classes?.[0].targets,
+    ).toEqual(pinned);
+    expect(
+      (await sendFetch({ url: `${later}private.ttl`, stampedOrigin: APPX.origin }, APPX)).status,
+    ).toBe(403);
+  });
+
   const PROFILE = `
     @prefix solid: <http://www.w3.org/ns/solid/terms#> .
     <${WEBID}> solid:publicTypeIndex <https://alice.pod.example/settings/pub.ttl> .`;
@@ -2250,7 +2330,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
 
   it.each([
     'https://alice.pod.example/finance/x.ttl?view=1#me',
-    'https://ALICE.POD.EXAMPLE:443/finance/./x.ttl?view=1#me',
+    'https://ALICE.POD.EXAMPLE:443/finance/x.ttl?view=1#me',
     'https://alice.pod.example/finance/x.ttl?view=1#',
   ])('reports a canonical document URL without a fragment for direct responses (%s)', async (url) => {
     await boot();
@@ -2262,6 +2342,25 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       body: 'document bytes',
     });
     expect(fetchCalls.map((call) => call.url)).toEqual([url]);
+  });
+
+  it.each([
+    '..%2foutside/x.ttl',
+    '%2Foutside/x.ttl',
+    '%252foutside/x.ttl',
+    '%2E%2e/x.ttl',
+    '%5Coutside/x.ttl',
+    '\\x.ttl',
+    './x.ttl',
+    'contacts/../x.ttl',
+  ])('denies ambiguous descendant requests before egress (%s)', async (path) => {
+    await boot();
+    expect(await fetchFinance({ url: `https://alice.pod.example/finance/${path}` })).toMatchObject({
+      status: 403,
+      error: 'Out of grant scope',
+    });
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
   });
 
   it('does not count a DPoP nonce retry as a redirect', async () => {
@@ -2439,6 +2538,59 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     expect(denied.error).toBe('Out of grant scope');
     expect(denied.body).toBeUndefined();
     expect(cacheStore.size).toBe(0);
+  });
+
+  it.each([
+    '/data/..%2foutside/',
+    '/data/%2Foutside/',
+    '/data/%252foutside/',
+    '/data/%2E%2e/contacts/',
+    '/data/%5Coutside/',
+    '/data/\\contacts/',
+    '/data/contacts/../other/',
+  ])('refuses an unsafe SAI redirect before a credentialed resend (%s)', async (path) => {
+    const pod = 'https://alice.pod.example';
+    const set = `${pod}/registries`;
+    const registry = `${pod}/data/`;
+    const registration = `${registry}contacts/`;
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const unsafe = `${pod}${path}`;
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <${interop}hasRegistrySet> <${set}> .`,
+      [set]: `<${set}> <${interop}hasDataRegistry> <${registry}> .`,
+      [registry]: `<${registry}> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<${registration}> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    for (const redirected of [set, registry, registration]) {
+      await boot([parent({ scope: { pods: [pod] } })]);
+      fetchCalls.length = 0;
+      fetchImpl = async (url, init) =>
+        init?.redirect === 'follow'
+          ? redirectProbe(unsafe)
+          : url === redirected
+            ? opaqueRedirect()
+            : new Response(docs[url === unsafe ? redirected : url] ?? '');
+      const result = await send(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: 'unsafe-sai-redirect',
+          classIRI: dataClass,
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      );
+      expect(result.targets).toEqual([]);
+      expect(fetchCalls.map(({ url }) => url)).not.toContain(unsafe);
+      const probe = fetchCalls.at(-1);
+      expect(probe?.url).toBe(redirected);
+      expect(probe?.init).toMatchObject({
+        method: 'HEAD',
+        redirect: 'follow',
+        credentials: 'omit',
+      });
+      expect(new Headers(probe?.init?.headers).has('Authorization')).toBe(false);
+    }
   });
 
   it.each([
