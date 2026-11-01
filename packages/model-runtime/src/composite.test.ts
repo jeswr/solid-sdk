@@ -281,10 +281,10 @@ describe("composite parse — FAIL-CLOSED cross-node MUSTs (untrusted document)"
     expect(Scrobble.parse(RES, store)).toBeUndefined();
   });
 
-  it("rejects when the linked Track subject is not typed media:Track (fail-closed type)", () => {
+  it("accepts a linked Track satisfying its properties without a target type", () => {
     const store = Scrobble.build(RES, FULL);
     store.removeQuads(store.getQuads(TRACK, RDF_TYPE, `${MEDIA}Track`, null));
-    expect(Scrobble.parse(RES, store)).toBeUndefined();
+    expect(Scrobble.parse(RES, store)).toEqual(FULL);
   });
 
   it("rejects when the required playedWork link is absent entirely", () => {
@@ -662,10 +662,10 @@ describe("composite parse — OPTIONAL link failure DEGRADES (drop the field, ad
     expect(S.parse(RES, store)).toEqual(fullSansArtist);
   });
 
-  it("drops the field + ADMITS when an OPTIONAL link's target is not typed (fail-closed type)", () => {
+  it("retains an OPTIONAL link's conforming fields without a child target type", () => {
     const store = Scrobble.build(RES, FULL);
     store.removeQuads(store.getQuads(ARTIST, RDF_TYPE, `${MEDIA}Artist`, null));
-    expect(Scrobble.parse(RES, store)).toEqual(fullSansArtist);
+    expect(Scrobble.parse(RES, store)).toEqual(FULL);
   });
 
   it("still REJECTS the whole composite on an ambiguous REQUIRED link", () => {

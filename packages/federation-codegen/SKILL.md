@@ -76,11 +76,15 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   through the linked subject's actual `rdf:type` and `rdfs:subClassOf*` in the data graph.
   Aliases may supply that ancestry in the data alone. Builds assert the explicit link class
   on materialised children; runtime traversal is cycle-safe, bounded and fails closed.
-  Compilation and fidelity must independently reject `sh:class` naming an alias target class
-  of the linked node's shape, including optional links: type migration deletes that assertion.
-  Keep type migration unchanged. Runtime node recognition also accepts canonical/alias
+  Compilation, fidelity and runtime manifest validation must independently reject `sh:class`
+  naming a type alias owned by ANY entity or node in the manifest, including optional links:
+  type migration can delete that assertion. Runtime root recognition also accepts canonical/alias
   target classes through data-graph `rdfs:subClassOf*`, using the same 10,000 raw-read budget
   across accepted classes; writes preserve the subject's subclass type assertions.
+  A composite child's `sh:node` validation checks property constraints without requiring
+  its shape's target type. `sh:targetClass` selects focus nodes; it does not constrain a value
+  reached through `sh:node`. Explicit link `sh:class` is still enforced; builds may assert
+  canonical child types.
   Decimal/integer bounds and enums must preserve canonical decimal spelling through
   JS number conversion. Reject noncanonical literal enum members that the runtime
   writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.
@@ -98,8 +102,13 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   type or an alias owned by another entity/node.
   Both keys are optional, read-only, and capped at four distinct absolute http(s) aliases
   by the runtime. Fidelity covers both keys exactly in both directions, including order.
-  Runtime migration keeps retained raw term identities and cardinality for singleton fields,
-  sets and live-set mutations; normalization/deduplication belongs to the JS read projection,
+  Runtime migration applies only at the owning shape's focus nodes: recognised entity roots
+  (including data-graph subclasses) and children reached through bounded, unambiguous composite
+  links satisfying explicit link classes. Establish ownership from the original data before
+  changing predicates/types. Unrelated subjects and unreached composite nodes retain their
+  predicates/types, including aliases. Runtime migration keeps retained raw term identities
+  and cardinality for singleton fields, sets and live-set mutations;
+  normalization/deduplication belongs to the JS read projection,
   not migration. Singleton migration retains canonical-first selection. Only explicit API
   values pass through JS write normalization and text sanitization.
 - Composite nodes and derived views support aliases on types/flat fields. Structural
