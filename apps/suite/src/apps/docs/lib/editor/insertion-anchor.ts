@@ -1,18 +1,18 @@
 // AUTHORED-BY Codex
 import type { Editor, EditorEvents } from "@tiptap/react";
 
-/** Track a point, including its nearest surviving position after deletion. */
+/** Retain the whole selection, mapping edits and falling back after deletion. */
 export function insertionAnchor(editor: Editor) {
-  let position = editor.state.selection.from;
+  let bookmark = editor.state.selection.getBookmark();
   const map = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
     for (const applied of [transaction, ...appendedTransactions]) {
-      position = applied.mapping.map(position, 1);
+      bookmark = bookmark.map(applied.mapping);
     }
   };
   editor.on("transaction", map);
   return {
-    get position() {
-      return position;
+    get selection() {
+      return bookmark.resolve(editor.state.doc);
     },
     release: () => {
       editor.off("transaction", map);

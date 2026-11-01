@@ -16,19 +16,33 @@ export function normaliseHtmlLists(root: ParentNode) {
       ),
     );
     if (!checks.some(Boolean)) continue;
-    if (list.tagName === "OL") {
-      const replacement = list.ownerDocument.createElement("ul");
-      replacement.append(...list.childNodes);
-      list.replaceWith(replacement);
-      replacement.setAttribute("data-type", "taskList");
-    } else list.setAttribute("data-type", "taskList");
+    // The schema has homogeneous lists. Split on item kind, as the Markdown
+    // importer does, and count task items when resuming ordinary numbering.
+    const groups: Element[] = [];
     items.forEach((item, index) => {
-      item.setAttribute("data-type", "taskItem");
-      item.setAttribute("data-checked", String(checks[index]?.checked ?? false));
-      const label = checks[index]?.closest("label");
-      checks[index]?.remove();
-      if (label) label.replaceWith(...label.childNodes);
+      const check = checks[index];
+      const task = Boolean(check);
+      let group = groups.at(-1);
+      if (!group || (group.getAttribute("data-type") === "taskList") !== task) {
+        group = task ? list.ownerDocument.createElement("ul") : (list.cloneNode(false) as Element);
+        if (task) group.setAttribute("data-type", "taskList");
+        else {
+          group.removeAttribute("data-type");
+          if (list.tagName === "OL")
+            group.setAttribute("start", String((list as HTMLOListElement).start + index));
+        }
+        groups.push(group);
+      }
+      if (check) {
+        item.setAttribute("data-type", "taskItem");
+        item.setAttribute("data-checked", String(check.checked));
+        const label = check.closest("label");
+        check.remove();
+        if (label) label.replaceWith(...label.childNodes);
+      }
+      group.append(item);
     });
+    list.replaceWith(...groups);
   }
   const blocks = "p,h1,h2,h3,h4,h5,h6,blockquote,pre,ul,ol,table,hr,img";
   // A div may hold prose, blocks, or both. Wrap each inline run before lifting

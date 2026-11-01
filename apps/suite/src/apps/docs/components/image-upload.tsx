@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 "use client";
 import { Button, Input, Popover, PopoverAnchor } from "@jeswr/suite-ui";
-import type { Editor, EditorEvents } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { RichImageTransfer } from "../editor/image-transfer";
 import type { DocumentPersistence } from "../editor/persistence";
@@ -29,23 +29,22 @@ export function ImageUpload({
   );
   const [decorative, setDecorative] = useState(false);
   const [state, setState] = useState<"idle" | "uploading" | "error">("idle");
+  const selectionAnchor = useRef<ReturnType<typeof insertionAnchor> | undefined>(undefined);
   const insertFragment = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
-    if (!transfer) return;
-    let bookmark = editor.state.selection.getBookmark();
-    const map = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
-      for (const applied of [transaction, ...appendedTransactions])
-        bookmark = bookmark.map(applied.mapping);
-    };
-    editor.on("transaction", map);
+    // Plain and rich pastes retain the same selection through alt entry,
+    // asynchronous saves/uploads, and retries, until the dialog is dismissed.
+    const anchor = insertionAnchor(editor);
+    selectionAnchor.current = anchor;
     insertFragment.current = () => {
-      if (editor.isDestroyed) return;
-      editor.view.dispatch(editor.state.tr.setSelection(bookmark.resolve(editor.state.doc)));
+      if (!transfer || editor.isDestroyed) return;
+      editor.view.dispatch(editor.state.tr.setSelection(anchor.selection));
       // Run the usual paste normalization and URL filters on the retained fragment.
       editor.view.pasteHTML(transfer.fragment.innerHTML);
     };
     return () => {
-      editor.off("transaction", map);
+      anchor.release();
+      selectionAnchor.current = undefined;
       insertFragment.current = undefined;
     };
   }, [editor, transfer]);
@@ -67,8 +66,9 @@ export function ImageUpload({
       close();
       return;
     }
+    const anchor = selectionAnchor.current;
+    if (!anchor) return;
     setState("uploading");
-    const anchor = insertionAnchor(editor);
     try {
       if (!runtime.stored) {
         runtime.change(editor.getHTML(), editor.getJSON());
@@ -110,10 +110,11 @@ export function ImageUpload({
         }
         return;
       }
+      editor.view.dispatch(editor.state.tr.setSelection(anchor.selection));
       editor
         .chain()
         .focus()
-        .insertContentAt(anchor.position, {
+        .insertContent({
           type: "image",
           attrs: { src, alt: decorative ? "" : alt.trim() },
         })
@@ -121,8 +122,6 @@ export function ImageUpload({
       close();
     } catch {
       setState("error");
-    } finally {
-      anchor.release();
     }
   };
   return (
