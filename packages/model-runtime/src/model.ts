@@ -113,7 +113,11 @@ export interface Model {
 export interface DefineModelOptions {
   /** The RDF/JS DataFactory (defaults to n3's). */
   factory?: DataFactory;
-  /** Full owning model for generated per-node lenses; validated independently. */
+  /**
+   * Full owning model for generated per-node lenses, validated independently. It adds
+   * owning-model context to write-time migration; the primary manifest's preservation
+   * checks still run, so it can never weaken a write.
+   */
   migrationManifest?: unknown;
 }
 
@@ -624,11 +628,11 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
 function makeWrapperClass(
   owner: ShapeOwner,
   plans: FieldPlan[],
-  manifest: ModelManifest,
+  context: MigrationContext,
 ): EntityWrapperConstructor {
   const { typeIris, aliasTypeIris = [] } = owner;
   const beforeWrite = (doc: TermWrapper, field?: ManifestField) =>
-    migrateBeforeWrite(doc, manifest, { owner, iri: doc.value, field });
+    migrateBeforeWrite(doc, context, { owner, iri: doc.value, field });
   class Wrapper extends TermWrapper {
     constructor(term: string | Term, dataset: DatasetCore, factory: DataFactory) {
       // A model Wrapper represents a named subject, never a literal or blank node.
@@ -851,13 +855,24 @@ interface MigrationRequest {
   field?: ManifestField;
 }
 
+/**
+ * The manifests a write's migration is checked against. `manifest` owns the migration
+ * (the full owning model for generated node views); `checkAlso` adds the preservation
+ * checks of every other manifest the wrappers were defined from, so an override can only
+ * ADD owning context and can never drop a check the primary manifest would run.
+ */
+interface MigrationContext {
+  manifest: ModelManifest;
+  checkAlso: readonly ModelManifest[];
+}
+
 /** Commit only a checked migration; a failed check cannot change the live dataset. */
 function migrateBeforeWrite(
   doc: TermWrapper,
-  manifest: ModelManifest,
+  context: MigrationContext,
   request: MigrationRequest,
 ): void {
-  const output = canonicalizeAliases(doc.dataset, manifest, doc.factory, request);
+  const output = canonicalizeAliases(doc.dataset, context, doc.factory, request);
   // Snapshot both sides before mutating: a DatasetCore's match() may be live.
   const current = [...doc.dataset.match()];
   for (const quad of current) if (!output.has(quad)) doc.dataset.delete(quad);
@@ -1015,10 +1030,11 @@ function sameProjection(a: EntityData | undefined, b: EntityData | undefined): b
 /** Canonicalise aliases only at their owning shapes' focus nodes, in a COPY. */
 function canonicalizeAliases(
   dataset: DatasetCore,
-  manifest: ModelManifest,
+  context: MigrationContext,
   factory: DataFactory,
   request?: MigrationRequest,
 ): Store {
+  const { manifest } = context;
   const store = new Store([...dataset.match()]);
   const budget: MigrationBudget = { reads: 0 };
   const { scopes, checks, linkClasses } = aliasFocusNodes(
@@ -1028,6 +1044,9 @@ function canonicalizeAliases(
     budget,
     request,
   );
+  // Every other defining manifest's checks run too, under the same shared budget.
+  for (const other of context.checkAlso)
+    checks.push(...aliasFocusNodes(store, other, factory, budget).checks);
   const selectedScopes = request ? new Map([[request.owner, new Set([request.iri])]]) : scopes;
   const output = new Store([...store]);
   const migratingTypes = new Set<string>();
@@ -1127,9 +1146,10 @@ function assembleEntity(
     build: (resourceUrl: string, data: EntityData) => Store;
     parse: (resourceUrl: string, dataset: DatasetCore) => EntityData | undefined;
   },
-  manifest: ModelManifest,
+  context: MigrationContext,
   factory: DataFactory,
 ): ModelEntity {
+  const { manifest } = context;
   const storeToTurtle = (store: Store): Promise<string> => {
     const aliases = manifest.entities
       .flatMap<ManifestEntity | ManifestNode>((entity) =>
@@ -1140,7 +1160,7 @@ function assembleEntity(
         ...node.fields.flatMap((field) => field.aliasPredicates ?? []),
       ]);
     return serializeTurtle(
-      canonicalizeAliases(store, manifest, factory),
+      canonicalizeAliases(store, context, factory),
       manifest.prefixes,
       aliases,
     );
@@ -1164,7 +1184,7 @@ function assembleEntity(
 function makeEntity(
   entity: ManifestEntity,
   factory: DataFactory,
-  migrationManifest: ModelManifest,
+  migrationManifest: MigrationContext,
 ): ModelEntity {
   const plans = entity.fields.map(planField);
   const Wrapper = makeWrapperClass(entity, plans, migrationManifest);
@@ -1367,7 +1387,7 @@ function parseShapeAt(
 function makeCompositeEntity(
   entity: CompositeManifestEntity,
   factory: DataFactory,
-  migrationManifest: ModelManifest,
+  migrationManifest: MigrationContext,
 ): ModelEntity {
   const runtimes = new Map<string, NodeRuntime>();
   for (const node of entity.nodes) {
@@ -1482,10 +1502,12 @@ function makeCompositeEntity(
 export function defineModel(input: unknown, options: DefineModelOptions = {}): Model {
   const manifest = validateManifest(input);
   const factory = options.factory ?? (N3DataFactory as unknown as DataFactory);
-  const migrationManifest =
+  // An override supplies the owning model's migration context; the primary manifest's
+  // own preservation checks always still run, so the option can never weaken a write.
+  const migrationManifest: MigrationContext =
     options.migrationManifest === undefined
-      ? manifest
-      : validateManifest(options.migrationManifest);
+      ? { manifest, checkAlso: [] }
+      : { manifest: validateManifest(options.migrationManifest), checkAlso: [manifest] };
   const entities: Record<string, ModelEntity> = {};
   for (const entity of manifest.entities) {
     entities[entity.name] = isCompositeEntity(entity)
