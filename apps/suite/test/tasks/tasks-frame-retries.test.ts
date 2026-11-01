@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { planComplete } from "../../src/apps/tasks/lib/views/completion";
+import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
+import { webId } from "./pod";
 import { frameCache, frameStore } from "./tasks-frame-fixtures";
 
 afterEach(() => vi.restoreAllMocks());
@@ -76,6 +78,66 @@ describe("task creation retry identity", () => {
 });
 
 describe("recurring completion retry recovery", () => {
+  it("retains earlier completion evidence through a second tab's real advance", async () => {
+    const result = await recurring(3);
+    const { cache, store, pod, inbox, original, plan } = result;
+    let committed = false;
+    pod.intercept = (request) => {
+      if (request.url !== original.url) return undefined;
+      if (committed && request.method === "GET") return new Response(null, { status: 503 });
+      if (request.method === "PUT") {
+        committed = true;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Original response lost after commit");
+      }
+      return undefined;
+    };
+    expect(await cache.advanceTask(original, plan)).toBeUndefined();
+    expect(result.failures).toHaveBeenCalledOnce();
+    pod.intercept = undefined;
+
+    const otherStore = frameStore(pod);
+    const otherFailures = vi.fn();
+    const other = new TasksCache(otherStore, otherFailures, webId);
+    await other.start();
+    const project = other.getSnapshot().projects.find((project) => project.url === inbox.url);
+    if (!project) throw new Error("Missing other tab's project");
+    await other.loadTasks(project);
+    const current = await otherStore.readTask(original.url);
+    const nextPlan = planComplete(
+      current,
+      other.getSnapshot().views,
+      new Date("2026-11-02T12:00:00Z"),
+    );
+    if (nextPlan.kind !== "advance") throw new Error("Expected second advance");
+    expect(await other.advanceTask(current, nextPlan)).toBe(nextPlan);
+    expect(otherFailures).not.toHaveBeenCalled();
+    expect((await store.readTask(original.url)).task.dueDate).toEqual(
+      new Date("2026-11-03T12:00:00Z"),
+    );
+
+    pod.requests.length = 0;
+    await retry(result);
+    expect(pod.mutations()).toEqual([]);
+    const updated = await store.readTask(original.url);
+    expect(updated.task.dueDate).toEqual(new Date("2026-11-03T12:00:00Z"));
+    expect(updated.task.reminders[0]?.time).toEqual(new Date("2026-11-03T11:00:00Z"));
+    expect([...updated.task.completionOperations].sort()).toEqual(
+      [plan.copyUrl, nextPlan.copyUrl].sort(),
+    );
+    const copies = (await store.listTasks(inbox.tracker.stateStore as string)).filter(
+      (task) => task.task.clonedFrom === original.task.id,
+    );
+    expect(copies.map((copy) => copy.task.dueDate?.toISOString()).sort()).toEqual([
+      "2026-11-01T12:00:00.000Z",
+      "2026-11-02T12:00:00.000Z",
+    ]);
+    expect(copies.every((copy) => copy.task.state === "closed")).toBe(true);
+    expect(cache.getSnapshot().views.find((task) => task.url === original.url)?.due).toEqual(
+      updated.task.dueDate,
+    );
+  });
+
   it.each([
     false,
     true,
@@ -94,8 +156,6 @@ describe("recurring completion retry recovery", () => {
         await store.updateTask(await store.readTask(original.url), (task) => {
           task.dueDate = due;
           task.title = "Edited elsewhere";
-          // Later completions retain the earlier operation's durable evidence too.
-          task.completionOperations.add(`${inbox.tracker.stateStore}another-completion.ttl`);
         });
         blockRead = deferred;
         throw new TypeError("Response lost after commit and remote reschedule");

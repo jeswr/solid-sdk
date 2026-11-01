@@ -20,8 +20,8 @@ export interface TasksSnapshot {
   status: "loading" | "ready" | "error";
   error?: unknown;
   projects: StoredProject[];
-  /** Includes failed tracker reads even before a project has loaded successfully.
-   * Entries are keyed by tracker document URL. Resources retain their URL and ETag. */
+  /** Includes failed tracker reads and registered-container listings.
+   * Entries are keyed by tracker or container URL. Resources retain their URL and ETag. */
   tasks: Record<string, TaskLoad>;
   saving: string[];
   views: TaskView[];
@@ -100,6 +100,8 @@ export class TasksCache {
   private projectRead = 0;
   private taskReadGenerations = new Map<string, number>();
   private projectFailures = new Map<string, unknown>();
+  /** Keep the original URL reserved across failures and repeated completion actions. */
+  private unresolvedCompletions = new Map<string, () => Promise<CompletionPlan | undefined>>();
   readonly inboxUrl: string;
   constructor(
     readonly store: TaskStore,
@@ -470,8 +472,23 @@ export class TasksCache {
       },
     );
   }
+  completeTask(item: StoredTask, now = new Date()): Promise<CompletionPlan | undefined> {
+    const unresolved = this.unresolvedCompletions.get(item.url);
+    if (unresolved) return unresolved();
+    const plan = planComplete(item, this.snapshot.views, now);
+    if (plan.kind === "advance") return this.advanceTask(item, plan);
+    return this.updateTask(item, (task) => {
+      task.state = "closed";
+      task.endedAt = now;
+    }).then((task) => (task ? plan : undefined));
+  }
   /** Retain the copy reservation until both writes or its compensation are confirmed. */
-  advanceTask(item: StoredTask, initial: Extract<CompletionPlan, { kind: "advance" }>) {
+  advanceTask(
+    item: StoredTask,
+    initial: Extract<CompletionPlan, { kind: "advance" }>,
+  ): Promise<CompletionPlan | undefined> {
+    const unresolved = this.unresolvedCompletions.get(item.url);
+    if (unresolved) return unresolved();
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -507,8 +524,7 @@ export class TasksCache {
       task.dueDate = completion.original.dueDate;
       task.allDay = completion.original.allDay;
       task.reminders = completion.original.reminders ?? [];
-      // Only the latest completion can be in flight; keep one marker, not one per occurrence.
-      task.completionOperations.clear();
+      // Earlier clients may still need their marker to reconcile a lost response.
       task.completionOperations.add(url);
     };
     const attempt = (retry = false): Promise<CompletionPlan | undefined> =>
@@ -604,11 +620,23 @@ export class TasksCache {
           }
         },
         () => {
-          void attempt(true);
+          void resume();
         },
         [item.url, url],
       );
-    return attempt();
+    let running: Promise<CompletionPlan | undefined> | undefined;
+    const run = (retry: boolean): Promise<CompletionPlan | undefined> => {
+      running ??= attempt(retry).then((result) => {
+        running = undefined;
+        if (result && this.unresolvedCompletions.get(item.url) === resume)
+          this.unresolvedCompletions.delete(item.url);
+        return result;
+      });
+      return running;
+    };
+    const resume = () => run(true);
+    this.unresolvedCompletions.set(item.url, resume);
+    return run(false);
   }
   createProject(title: string): Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
