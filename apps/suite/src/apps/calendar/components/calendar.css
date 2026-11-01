@@ -631,3 +631,87 @@
     padding: 12px;
   }
 }
+/* AUTHORED-BY Claude Opus 5.5 */
+/* Pointer drag-and-drop: drags start only on event chips, so the grid keeps native panning. */
+.cal-event[data-draggable] {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.cal-event[data-dragging] {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.cal-event[data-dragging="resize-end"] {
+  cursor: ns-resize;
+}
+.cal-resize-handle {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.cal-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 16px;
+  height: 2px;
+  margin-left: -8px;
+  border-radius: 1px;
+  background: var(--foreground-muted);
+  opacity: 0;
+}
+.cal-timed-event:hover:not([data-dragging="move"]) .cal-resize-handle::after,
+.cal-event[data-dragging="resize-end"] .cal-resize-handle::after {
+  opacity: 0.8;
+}
+.cal-drag-ghost {
+  position: absolute;
+  left: 0;
+  width: calc(100% - 3px);
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 2px 5px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--cal-ghost, var(--app-calendar)) 18%, var(--background));
+  border: 2px dashed var(--cal-ghost, var(--app-calendar));
+  border-inline-start: 4px solid var(--cal-ghost, var(--app-calendar));
+  border-radius: 4px;
+  box-shadow: 0 6px 16px color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+.cal-all-day-events > .cal-drag-ghost {
+  justify-content: center;
+}
+.cal-month-day[data-drop-target] {
+  background: color-mix(in oklch, var(--app-calendar) 10%, var(--background));
+}
+.cal-month-day > .cal-drag-ghost {
+  top: 32px;
+  left: 4px;
+  right: 4px;
+  width: auto;
+  height: 24px;
+  justify-content: center;
+}
+.cal-month-day > .cal-drag-ghost .cal-event-time,
+.cal-all-day-events > .cal-drag-ghost .cal-event-time {
+  display: none;
+}
+@media (max-width: 639px) {
+  .cal-month-day > .cal-drag-ghost {
+    top: 30px;
+    left: 2px;
+    right: 2px;
+    font-size: 10px;
+    padding: 2px;
+    border-inline-start-width: 3px;
+  }
+}

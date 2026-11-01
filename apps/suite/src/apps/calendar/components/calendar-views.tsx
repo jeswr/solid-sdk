@@ -16,6 +16,7 @@ import { useSearchParams } from "next/navigation";
 import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { layoutAllDayEvents, layoutTimeGrid, monthGrid } from "../lib/layout";
 import { useCalendarState, useCalendars, useEventsInRange } from "../state/calendar-context";
+import { columnAt, dayDistance, PX_PER_MINUTE, pointerMinutes } from "../state/drag";
 import {
   addDays,
   addMonths,
@@ -32,6 +33,13 @@ import {
   visibleRange,
 } from "../state/view";
 import { CreateCalendar, useCalendarNavigation } from "./calendar-app";
+import {
+  type ActiveDrag,
+  CalendarDragProvider,
+  type DragOrigin,
+  type DragSourceProps,
+  useEventDrag,
+} from "./event-drag";
 import { useCalendarEditing } from "./event-editor";
 
 export function EventButton({
@@ -41,6 +49,8 @@ export function EventButton({
   tabIndex,
   compact = false,
   day,
+  drag,
+  resizable = false,
 }: {
   event: Occurrence;
   style?: CSSProperties;
@@ -48,10 +58,15 @@ export function EventButton({
   tabIndex?: number;
   compact?: boolean;
   day?: () => HTMLElement | undefined;
+  /** Pointer drag handlers; the keyboard alternative is the Edit dialog. */
+  drag?: DragSourceProps | undefined;
+  /** Show the bottom-edge resize grip (the final segment of a timed event). */
+  resizable?: boolean;
 }) {
   const { openEvent } = useCalendarState();
   return (
     <button
+      {...drag}
       type="button"
       className={`cal-event ${className}`}
       data-occurrence={event.id}
@@ -70,7 +85,33 @@ export function EventButton({
           {eventTime(event.data)} · {event.calendar.title}
         </span>
       )}
+      {resizable && <span className="cal-resize-handle" aria-hidden="true" />}
     </button>
+  );
+}
+/** The live preview of a drag's target; hidden from assistive technology (announced on drop). */
+function DragGhost({
+  drag,
+  style,
+  compact = false,
+}: {
+  drag: ActiveDrag;
+  style?: CSSProperties;
+  compact?: boolean;
+}) {
+  const time = eventTime(drag.preview);
+  return (
+    <div
+      className={`cal-drag-ghost${compact ? " cal-compact-event" : ""}`}
+      aria-hidden="true"
+      style={{ ...style, "--cal-ghost": drag.occurrence.calendar.colour } as CSSProperties}
+    >
+      <span className="cal-event-title">
+        {drag.occurrence.data.name}
+        {compact && `, ${time.split("–")[0]}`}
+      </span>
+      {!compact && <span className="cal-event-time">{time}</span>}
+    </div>
   );
 }
 function MonthView({ events }: { events: Occurrence[] }) {
@@ -82,6 +123,17 @@ function MonthView({ events }: { events: Occurrence[] }) {
   const root = useRef<HTMLTableElement>(null);
   const [limit, setLimit] = useState(2);
   const { focusRequest, selected, closeEvent } = useCalendarState();
+  const drag = useEventDrag();
+  const ghost = drag?.active?.surface === "month" ? drag.active : undefined;
+  // The month cell under the pointer; dragging keeps the time of day and the event's span.
+  const monthOrigin =
+    (from: string): DragOrigin =>
+    () =>
+    (x, y) => {
+      const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]");
+      const day = cell && root.current?.contains(cell) ? cell.dataset.day : undefined;
+      return day ? { days: dayDistance(from, day), minutes: 0 } : undefined;
+    };
   useEffect(() => {
     const element = root.current;
     if (!element) return;
@@ -151,6 +203,7 @@ function MonthView({ events }: { events: Occurrence[] }) {
           <tr className="cal-month-week" key={week.map((cell) => cell.date).join()}>
             {week.map((cell) => {
               const dayEvents = events.filter((e) => occursOn(e.data, cell.date));
+              const target = ghost && occursOn(ghost.preview, cell.date);
               const label = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(
                 localDate(cell.date),
               );
@@ -163,6 +216,7 @@ function MonthView({ events }: { events: Occurrence[] }) {
                   data-outside={!cell.inMonth || undefined}
                   data-today={cell.date === dateKey(new Date()) || undefined}
                   data-day={cell.date}
+                  data-drop-target={target || undefined}
                   tabIndex={cell.date === focused ? 0 : -1}
                   aria-label={label}
                   onFocus={() => setFocused(cell.date)}
@@ -186,8 +240,10 @@ function MonthView({ events }: { events: Occurrence[] }) {
                       event={event}
                       className="cal-month-chip"
                       tabIndex={focused === cell.date ? 0 : -1}
+                      drag={drag?.source(event, "month", monthOrigin(cell.date))}
                     />
                   ))}
+                  {target && <DragGhost drag={ghost} />}
                   {dayEvents.length > limit && (
                     <Popover>
                       <PopoverTrigger asChild>
@@ -275,6 +331,46 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
   const scrolled = useRef(false);
   const grid = useRef<HTMLDivElement>(null);
   const { focusRequest } = useCalendarState();
+  const drag = useEventDrag();
+  const ghost = drag?.active && drag.active.surface !== "month" ? drag.active : undefined;
+  const ghostSegments =
+    ghost?.surface === "time"
+      ? projectTimed([{ ...ghost.occurrence, data: ghost.preview }], range.from, count)
+      : [];
+  const ghostBar =
+    ghost?.surface === "all-day"
+      ? layoutAllDayEvents(
+          [
+            {
+              id: ghost.occurrence.id,
+              startDate: ghost.preview.start as string,
+              endDate:
+                typeof ghost.preview.end === "string"
+                  ? ghost.preview.end
+                  : addDays(ghost.preview.start as string, 1),
+            },
+          ],
+          range.from,
+          count,
+        ).bars[0]
+      : undefined;
+  const columns = () =>
+    Array.from(grid.current?.querySelectorAll<HTMLElement>("[data-event-day]") ?? [], (column) =>
+      column.getBoundingClientRect(),
+    );
+  // Columns follow the pointer (scrolling included); minutes follow its vertical travel.
+  const timeOrigin: DragOrigin = (x0, y0) => {
+    const from = columnAt(x0, columns());
+    const top = scroll.current?.scrollTop ?? 0;
+    return (x, y) => ({
+      days: columnAt(x, columns()) - from,
+      minutes: pointerMinutes(y - y0 + (scroll.current?.scrollTop ?? 0) - top),
+    });
+  };
+  const allDayOrigin: DragOrigin = (x0) => {
+    const from = columnAt(x0, columns());
+    return (x) => ({ days: columnAt(x, columns()) - from, minutes: 0 });
+  };
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -396,9 +492,21 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                     width: `${bar.width * 100}%`,
                     top: bar.lane * 30,
                   }}
+                  drag={drag?.source(event, "all-day", allDayOrigin)}
                 />
               );
             })}
+            {ghost && ghostBar && (
+              <DragGhost
+                drag={ghost}
+                style={{
+                  left: `${ghostBar.left * 100}%`,
+                  width: `${ghostBar.width * 100}%`,
+                  top: 0,
+                  height: 26,
+                }}
+              />
+            )}
           </div>
         </div>
         <div className="cal-time-body" ref={grid}>
@@ -450,6 +558,8 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                   .filter((p) => p.day === index)
                   .map((placement) => {
                     const event = projected.find((p) => p.id === placement.id)?.event as Occurrence;
+                    const start = event.data.start as Date;
+                    const end = event.data.end instanceof Date ? event.data.end : start;
                     return (
                       <EventButton
                         key={placement.id}
@@ -463,9 +573,28 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                           top: placement.top * 1152,
                           height: Math.max(24, placement.height * 1152),
                         }}
+                        drag={drag?.source(event, "time", timeOrigin)}
+                        resizable={dateKey(new Date(Math.max(+start, +end - 1))) === day}
                       />
                     );
                   })}
+                {ghost &&
+                  ghostSegments
+                    .filter((segment) => segment.day === index)
+                    .map((segment) => (
+                      <DragGhost
+                        key={segment.id}
+                        drag={ghost}
+                        compact={(segment.endMinute - segment.startMinute) * PX_PER_MINUTE < 40}
+                        style={{
+                          top: segment.startMinute * PX_PER_MINUTE,
+                          height: Math.max(
+                            24,
+                            (segment.endMinute - segment.startMinute) * PX_PER_MINUTE,
+                          ),
+                        }}
+                      />
+                    ))}
                 {day === dateKey(now) && (
                   <div
                     className="cal-now"
@@ -524,58 +653,60 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
   const calendars = useCalendars();
   const state = useEventsInRange(range.from, range.to);
   return (
-    <div className="cal-screen">
-      <CalendarWarnings state={state} />
-      {renderAsync({
-        loading: (calendars.status === "loading" ||
-          (calendars.status === "ready" && state.status === "loading")) && (
-          <LoadingSkeleton preset="grid" label="Loading events" />
-        ),
-        error:
-          calendars.status === "error" || state.status === "error" ? (
-            <ErrorState error="unreachable" actions={{ retry: calendars.reload }} />
-          ) : undefined,
-        empty:
-          calendars.status === "ready" &&
-          calendars.calendars.length === 0 &&
-          !calendars.warnings.length ? (
-            <EmptyState
-              title="Your calendar starts here"
-              body="Create a calendar to keep your events together."
-              primaryAction={<CreateCalendar />}
-            />
-          ) : undefined,
-        children: () =>
-          state.status === "ready" && (
-            <>
-              <div aria-live="polite" className="sr-only">
-                {state.events.length} events loaded
-              </div>
-              {view === "month" ? (
-                <MonthView events={state.events} />
-              ) : view === "agenda" ? (
-                <>
-                  <Agenda
-                    events={state.events}
-                    from={range.from}
-                    to={range.to}
-                    incomplete={Boolean(state.warnings.length)}
-                  />
-                  <Button
-                    className="cal-load-more"
-                    variant="outline"
-                    onClick={() => setAgendaDays((n) => n + 30)}
-                  >
-                    Load more
-                  </Button>
-                </>
-              ) : (
-                <TimeView key={`${view}:${range.from}`} events={state.events} view={view} />
-              )}
-            </>
+    <CalendarDragProvider>
+      <div className="cal-screen">
+        <CalendarWarnings state={state} />
+        {renderAsync({
+          loading: (calendars.status === "loading" ||
+            (calendars.status === "ready" && state.status === "loading")) && (
+            <LoadingSkeleton preset="grid" label="Loading events" />
           ),
-      })}
-    </div>
+          error:
+            calendars.status === "error" || state.status === "error" ? (
+              <ErrorState error="unreachable" actions={{ retry: calendars.reload }} />
+            ) : undefined,
+          empty:
+            calendars.status === "ready" &&
+            calendars.calendars.length === 0 &&
+            !calendars.warnings.length ? (
+              <EmptyState
+                title="Your calendar starts here"
+                body="Create a calendar to keep your events together."
+                primaryAction={<CreateCalendar />}
+              />
+            ) : undefined,
+          children: () =>
+            state.status === "ready" && (
+              <>
+                <div aria-live="polite" className="sr-only">
+                  {state.events.length} events loaded
+                </div>
+                {view === "month" ? (
+                  <MonthView events={state.events} />
+                ) : view === "agenda" ? (
+                  <>
+                    <Agenda
+                      events={state.events}
+                      from={range.from}
+                      to={range.to}
+                      incomplete={Boolean(state.warnings.length)}
+                    />
+                    <Button
+                      className="cal-load-more"
+                      variant="outline"
+                      onClick={() => setAgendaDays((n) => n + 30)}
+                    >
+                      Load more
+                    </Button>
+                  </>
+                ) : (
+                  <TimeView key={`${view}:${range.from}`} events={state.events} view={view} />
+                )}
+              </>
+            ),
+        })}
+      </div>
+    </CalendarDragProvider>
   );
 }
 function CalendarWarnings({ state }: { state: ReturnType<typeof useEventsInRange> }) {
