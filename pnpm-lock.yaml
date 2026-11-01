@@ -268,6 +268,9 @@ importers:
       '@jeswr/solid-health-diary':
         specifier: workspace:*
         version: link:../../packages/solid-health-diary
+      '@jeswr/solid-offline':
+        specifier: workspace:*
+        version: link:../../packages/solid-offline
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../packages/solid-session-restore
@@ -304,9 +307,6 @@ importers:
       react-dom:
         specifier: 19.1.0
         version: 19.1.0(react@19.1.0)
-      solid-offline:
-        specifier: workspace:*
-        version: link:../../packages/solid-offline
       ulid:
         specifier: ^3.0.0
         version: 3.0.2
@@ -4569,6 +4569,12 @@ importers:
 
   packages/solid-offline:
     dependencies:
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../pod-notifications
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       n3:
         specifier: ^1.21.0
         version: 1.26.0

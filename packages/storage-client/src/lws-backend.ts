@@ -256,6 +256,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       opts.signal,
       false,
       opts.revalidate,
+      opts.headers,
     );
     const raw = await jsonBody(
       result,

@@ -173,6 +173,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       opts.signal,
       false,
       opts.revalidate,
+      opts.headers,
     );
     if (result.kind !== "container") {
       discard(result.body);
