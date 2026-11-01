@@ -227,6 +227,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   );
   useEffect(() => {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform));
+    // On a phone the outline would take half the screen; it starts hidden there.
+    if (window.matchMedia?.("(max-width: 767px)").matches) setOutline(false);
   }, []);
   useEffect(() => {
     setTitle(runtime.title);

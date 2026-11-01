@@ -887,11 +887,25 @@
     left: 0;
     right: 0;
   }
+  /* Phones fit the page to the screen width and reflow, like Google Docs on mobile;
+     zoom then scales the text instead of the Letter-sized sheet. */
   .docs-page-wrap {
-    padding: 12px 12px 64px;
+    padding: 8px 8px 64px;
+  }
+  .docs-page-scale {
+    width: auto;
+    height: auto;
   }
   .docs-page {
-    padding: 96px;
+    position: static;
+    width: 100%;
+    min-height: 0;
+    padding: 24px 20px;
+    transform: none;
+    zoom: var(--docs-zoom);
+  }
+  .docs-page .tiptap {
+    min-height: 50dvh;
   }
   .docs-page .tiptap:focus-visible {
     outline-offset: 6px;
@@ -967,6 +981,7 @@
   .docs-page {
     position: static;
     transform: none;
+    zoom: normal;
     box-shadow: none;
     max-width: none;
     width: 100%;
