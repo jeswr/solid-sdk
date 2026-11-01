@@ -1,0 +1,121 @@
+// AUTHORED-BY Codex GPT-6
+import { describe, expect, it } from "vitest";
+import {
+  compareTasks,
+  flatRows,
+  projectGroups,
+} from "../../src/apps/tasks/lib/views/project-groups";
+import type { TaskView } from "../../src/apps/tasks/lib/views/types";
+
+function view(id: string, data: Partial<TaskView> = {}): TaskView {
+  return {
+    url: `https://pod.test/${id}`,
+    id,
+    title: id,
+    state: "open",
+    projectUrl: "https://pod.test/home.ttl",
+    projectTitle: "Home",
+    priority: 4,
+    labelIds: [],
+    recurring: false,
+    hasReminders: false,
+    ...data,
+  };
+}
+const names = (rows: { task: TaskView }[]) => rows.map((row) => row.task.id);
+describe("project list projection", () => {
+  it("sorts sections, nests children beneath their visible parent and leaves closed/absent parents as breadcrumbs", () => {
+    const tasks = [
+      view("child", { parentId: "parent", position: 0, sectionId: "other" }),
+      view("parent", { sectionId: "doing", position: 5 }),
+      view("closed", { state: "closed" }),
+      view("orphan", { parentId: "closed" }),
+      view("missing", { parentId: "absent" }),
+      view("unknown-section", { sectionId: "deleted" }),
+    ];
+    const groups = projectGroups(
+      tasks,
+      [
+        { id: "other", name: "Other", position: 2 },
+        { id: "doing", name: "Doing", position: 1 },
+      ],
+      "manual",
+    );
+    expect(names(groups.unsectioned)).toEqual(["missing", "orphan", "unknown-section"]);
+    expect(groups.unsectioned[0]?.orphanParentTitle).toBe("Parent task");
+    expect(groups.unsectioned[1]?.orphanParentTitle).toBe("closed");
+    expect(groups.sections.map(({ section }) => section.id)).toEqual(["doing", "other"]);
+    expect(groups.sections[0]?.rows.map(({ task, depth }) => [task.id, depth])).toEqual([
+      ["parent", 0],
+      ["child", 1],
+    ]);
+    expect(groups.sections[0]?.openCount).toBe(2);
+    expect(names(projectGroups(tasks, [], "manual", true).unsectioned)).toContain("closed");
+  });
+  it("applies manual, due, priority and locale name order including absent values and ties", () => {
+    const tasks = [
+      view("z", { position: 1, priority: 2, due: new Date(200), created: new Date(20) }),
+      view("b", { position: 1, priority: 1, due: new Date(100), created: new Date(10) }),
+      view("a", { position: 1, priority: 1, due: new Date(100), created: new Date(10) }),
+      view("undated"),
+      view("first", { position: 0 }),
+    ];
+    expect(names(projectGroups(tasks, [], "manual").unsectioned)).toEqual([
+      "first",
+      "a",
+      "b",
+      "z",
+      "undated",
+    ]);
+    expect(names(projectGroups(tasks, [], "due").unsectioned)).toEqual([
+      "a",
+      "b",
+      "z",
+      "first",
+      "undated",
+    ]);
+    expect(names(projectGroups(tasks, [], "priority").unsectioned)).toEqual([
+      "a",
+      "b",
+      "z",
+      "first",
+      "undated",
+    ]);
+    expect(names(projectGroups(tasks, [], "name").unsectioned)).toEqual([
+      "a",
+      "b",
+      "first",
+      "undated",
+      "z",
+    ]);
+    expect(compareTasks("manual")(view("a"), view("a"))).toBe(0);
+  });
+  it("does not nest under a closed parent even with completed visible, or under another child", () => {
+    const closed = view("closed", { state: "closed" });
+    const child = view("child", { parentId: closed.id });
+    expect(flatRows([closed, child]).map((row) => row.depth)).toEqual([0, 0]);
+    expect(flatRows([view("self", { parentId: "self" })])[0]?.depth).toBe(0);
+    expect(
+      flatRows([
+        view("parent"),
+        view("child", { parentId: "parent" }),
+        view("deep", { parentId: "child" }),
+      ]).map((row) => row.depth),
+    ).toEqual([0, 1, 0]);
+  });
+  it("handles empty projects and section ordering without positions", () => {
+    expect(projectGroups([], [], "manual")).toEqual({ unsectioned: [], sections: [] });
+    const result = projectGroups(
+      [view("done", { sectionId: "a", state: "closed" })],
+      [
+        { id: "b", name: "B" },
+        { id: "a", name: "A" },
+      ],
+      "manual",
+      true,
+    );
+    expect(result.sections.map(({ section }) => section.id)).toEqual(["a", "b"]);
+    expect(result.sections[0]?.openCount).toBe(0);
+    expect(result.sections[0]?.rows).toHaveLength(1);
+  });
+});

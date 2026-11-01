@@ -1829,3 +1829,89 @@ describe("transport failures and typed classification", () => {
     expect(node(storage, dataset).text(`${NS.DCT}title`)).toBeUndefined();
   });
 });
+
+describe("FRAME project and section operations", () => {
+  it("renames and reorders section classes without changing their identity", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let project = await tasks.createProject("Home");
+    project = await tasks.updateProject(project, (tracker) =>
+      tracker.defineCategory("Section", "Doing", 1),
+    );
+    const id = project.tracker.sections[0]?.id as string;
+    project = await tasks.updateProject(project, (tracker) =>
+      tracker.updateSection(id, { name: "In progress", position: 2 }),
+    );
+    expect(project.tracker.sections[0]).toMatchObject({ id, name: "In progress", position: 2 });
+    expect(() => project.tracker.updateSection("missing", {})).toThrow("Unknown section");
+    expect(() => project.tracker.removeSection("missing")).toThrow("Unknown section");
+    expect(() => project.tracker.updateSection(id, { name: " " })).toThrow("title");
+    expect(() => project.tracker.updateSection(id, { position: Infinity })).toThrow("position");
+    project.tracker.updateSection(id, {});
+    project.tracker.updateSection(id, { position: 3 });
+    project.tracker.updateSection(id, { name: "Doing again" });
+    await expect(
+      tasks.updateProject({ ...project, etag: '"stale"' }, (tracker) =>
+        tracker.updateSection(id, { name: "Stale" }),
+      ),
+    ).rejects.toMatchObject({ status: 412 });
+  });
+  it("removes a section and its task references while retaining labels and tasks", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let project = await tasks.createProject("Home");
+    project = await tasks.updateProject(project, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+      tracker.defineCategory("Label", "Bills");
+    });
+    const id = project.tracker.sections[0]?.id as string;
+    const label = project.tracker.labels[0]?.id as string;
+    const task = await tasks.createTask(project, {
+      title: "Pay rent",
+      state: "open",
+      categoryTypes: [id, label],
+    });
+    const another = store(pod, { uuid: () => "unsectioned" });
+    await another.createTask(project, { title: "Unsectioned", state: "open" });
+    await expect(tasks.deleteSection(project, "unknown")).rejects.toThrow("Unknown section");
+    project = await tasks.deleteSection(project, id);
+    expect(project.tracker.sections).toEqual([]);
+    const current = await tasks.readTask(task.url);
+    expect(current.task.types.has(id)).toBe(false);
+    expect(current.task.types.has(label)).toBe(true);
+    expect(current.task.title).toBe("Pay rent");
+    const writes = pod
+      .mutations()
+      .filter((request) => request.method === "PUT" && request.headers.has("If-Match"));
+    expect(writes.every((request) => request.headers.get("If-Match") !== "*")).toBe(true);
+  });
+  it("deletes a project and its stateStore with conditional deletes", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const project = await tasks.createProject("Home");
+    const task = await tasks.createTask(project, { title: "Pay rent", state: "open" });
+    await tasks.deleteProject(project);
+    expect(pod.files.has(project.url)).toBe(false);
+    expect(pod.files.has(project.tracker.stateStore as string)).toBe(false);
+    expect(pod.files.has(task.url)).toBe(false);
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.method === "DELETE")
+        .every((request) => request.headers.has("If-Match")),
+    ).toBe(true);
+    expect(await tasks.listProjects()).toEqual([]);
+  });
+  it("stops a project delete on a child conflict", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const project = await tasks.createProject("Home");
+    const task = await tasks.createTask(project, { title: "Pay rent", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "DELETE" && request.url === task.url
+        ? new Response(null, { status: 412 })
+        : undefined;
+    await expect(tasks.deleteProject(project)).rejects.toMatchObject({ status: 412 });
+    expect(pod.files.has(project.url)).toBe(true);
+  });
+});
