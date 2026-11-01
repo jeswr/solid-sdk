@@ -8,6 +8,37 @@ import { now } from "./pod";
 import { project, storedTask, view } from "./tasks-views-fixtures";
 
 describe("completion and undo plans", () => {
+  it("advances all-day dates through Santiago's missing midnight without skipping an occurrence", () => {
+    const previousZone = process.env.TZ;
+    try {
+      process.env.TZ = "America/Santiago";
+      for (const [allDay, nextKey, hour] of [
+        ["2026-09-05", "2026-09-06", 1],
+        ["2026-09-06", "2026-09-07", 0],
+      ] as const) {
+        const due = new Date(`${allDay}T00:00:00`);
+        const stored = storedTask("All day", {
+          dueDate: due,
+          allDay,
+          recurrence: { frequency: "DAILY", count: 2 },
+          reminders: [{ time: new Date(due.getTime() - 3_600_000) }],
+        });
+        const plan = planComplete(stored, [], now);
+        if (plan.kind !== "advance") throw new Error("Expected advance");
+        expect(plan.original.allDay).toBe(nextKey);
+        expect(plan.next).toEqual(new Date(`${nextKey}T00:00:00`));
+        expect(plan.next.getHours()).toBe(hour);
+        expect(plan.original.reminders?.[0]?.time).toEqual(
+          new Date(plan.next.getTime() - 3_600_000),
+        );
+        expect(plan.copy.allDay).toBe(allDay);
+        expect(planUndo(plan)).toMatchObject({ original: { allDay, dueDate: due } });
+      }
+    } finally {
+      process.env.TZ = previousZone;
+    }
+  });
+
   it("closes ordinary tasks, reopens without endedAt, and uses exact title toast copy", () => {
     const stored = storedTask("Buy milk");
     const before = [...stored.dataset];

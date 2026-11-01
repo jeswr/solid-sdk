@@ -189,7 +189,7 @@ export function planCompletion(
   const storedDue = data.dueDate ?? now;
   const due = data.allDay === undefined ? storedDue : allDayDate(data.allDay);
   // Count is measured through closed copies, rather than restarting count at each advanced due date.
-  const next = nextOccurrence({ ...rule, count: undefined }, due, due);
+  const next = nextOccurrence({ ...rule, count: undefined }, due, due, data.allDay !== undefined);
   if (!next) return close();
   const allDay =
     data.allDay === undefined

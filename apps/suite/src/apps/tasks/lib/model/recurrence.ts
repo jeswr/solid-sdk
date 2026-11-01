@@ -107,7 +107,7 @@ export function writeRecurrence(task: Node, rule: RecurrenceRule | undefined): v
   task.nodes(`${SCHED}recurrence`).add(value);
 }
 function dayNumber(date: Date): number {
-  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
+  return Math.floor(date.getTime() / 86400000);
 }
 function untilTime(until: Date | string | undefined): number {
   if (until === undefined) return Infinity;
@@ -115,54 +115,77 @@ function untilTime(until: Date | string | undefined): number {
   const [year, month, day] = until.split("-").map(Number) as [number, number, number];
   return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
 }
-/** Calendar arithmetic skips invalid month days and nonexistent local wall times. */
-function* occurrences(rule: RecurrenceRule, due: Date): Generator<Date> {
+/** Step calendar fields independently of local DST, then resolve each occurrence locally.
+ * Timed rules skip missing wall times; all-day rules use the first valid instant of the date. */
+function* occurrences(rule: RecurrenceRule, due: Date, allDay = false): Generator<Date> {
   validateRule(rule);
   requireDate(due);
+  const anchor = new Date(0);
+  anchor.setUTCFullYear(due.getFullYear(), due.getMonth(), due.getDate());
+  anchor.setUTCHours(due.getHours(), due.getMinutes(), due.getSeconds(), due.getMilliseconds());
   const interval = rule.interval ?? 1;
   const limit = untilTime(rule.until);
   let emitted = 0;
   for (let period = 0; ; period++) {
-    const candidate = new Date(due);
+    const candidate = new Date(anchor);
     let candidates: Date[];
     if (rule.frequency === "DAILY") {
-      candidate.setDate(due.getDate() + period * interval);
+      candidate.setUTCDate(anchor.getUTCDate() + period * interval);
       candidates = [candidate];
     } else if (rule.frequency === "WEEKLY") {
-      const monday = dayNumber(due) - ((due.getDay() + 6) % 7);
-      const days = [...new Set(rule.byDay ?? [weekdays[(due.getDay() + 6) % 7] as Weekday])].sort(
-        (a, b) => weekdays.indexOf(a) - weekdays.indexOf(b),
-      );
+      const monday = dayNumber(anchor) - ((anchor.getUTCDay() + 6) % 7);
+      const days = [
+        ...new Set(rule.byDay ?? [weekdays[(anchor.getUTCDay() + 6) % 7] as Weekday]),
+      ].sort((a, b) => weekdays.indexOf(a) - weekdays.indexOf(b));
       candidates = days.map((day) => {
-        const date = new Date(due);
-        date.setDate(
-          due.getDate() + monday - dayNumber(due) + period * interval * 7 + weekdays.indexOf(day),
+        const date = new Date(anchor);
+        date.setUTCDate(
+          anchor.getUTCDate() +
+            monday -
+            dayNumber(anchor) +
+            period * interval * 7 +
+            weekdays.indexOf(day),
         );
         return date;
       });
     } else if (rule.frequency === "MONTHLY") {
-      const month = due.getMonth() + period * interval;
-      // Set the final calendar date in one operation: an intermediate first of
-      // the month can itself fall in a DST gap and normalize the intended hour.
-      candidate.setFullYear(due.getFullYear(), month, rule.byMonthDay ?? due.getDate());
-      candidates = candidate.getMonth() === month % 12 ? [candidate] : [];
+      const month = anchor.getUTCMonth() + period * interval;
+      // Set the final date in one operation without carrying invalid month days
+      // or normalized wall times into later periods.
+      candidate.setUTCFullYear(
+        anchor.getUTCFullYear(),
+        month,
+        rule.byMonthDay ?? anchor.getUTCDate(),
+      );
+      candidates = candidate.getUTCMonth() === month % 12 ? [candidate] : [];
     } else {
-      candidate.setFullYear(due.getFullYear() + period * interval);
-      candidates = candidate.getMonth() === due.getMonth() ? [candidate] : [];
+      candidate.setUTCFullYear(anchor.getUTCFullYear() + period * interval);
+      candidates = candidate.getUTCMonth() === anchor.getUTCMonth() ? [candidate] : [];
     }
     if (
       !candidates.length &&
       (!Number.isFinite(candidate.getTime()) ||
-        candidate.getFullYear() > 9999 ||
+        candidate.getUTCFullYear() > 9999 ||
         candidate.getTime() > limit)
     )
       return;
-    for (const date of candidates) {
+    for (const calendar of candidates) {
+      const date = new Date(0);
+      date.setFullYear(calendar.getUTCFullYear(), calendar.getUTCMonth(), calendar.getUTCDate());
+      date.setHours(
+        allDay ? 0 : calendar.getUTCHours(),
+        allDay ? 0 : calendar.getUTCMinutes(),
+        allDay ? 0 : calendar.getUTCSeconds(),
+        allDay ? 0 : calendar.getUTCMilliseconds(),
+      );
       if (!Number.isFinite(date.getTime()) || date.getFullYear() > 9999 || date.getTime() > limit)
         return;
       if (date < due) continue;
       // Date setters normalize DST gaps forward; do not let that change later anchors.
-      if (date.getHours() * 60 + date.getMinutes() !== due.getHours() * 60 + due.getMinutes())
+      if (
+        !allDay &&
+        date.getHours() * 60 + date.getMinutes() !== due.getHours() * 60 + due.getMinutes()
+      )
         continue;
       if (emitted >= (rule.count ?? Infinity)) return;
       emitted++;
@@ -170,14 +193,16 @@ function* occurrences(rule: RecurrenceRule, due: Date): Generator<Date> {
     }
   }
 }
-/** Strictly after `after`; `due` is the original recurrence anchor for count/interval. */
+/** Strictly after `after`; `due` anchors count/interval. All-day dates resolve to
+ * their first valid local instant, even when midnight falls in a DST gap. */
 export function nextOccurrence(
   rule: RecurrenceRule,
   after: Date,
   due: Date = after,
+  allDay = false,
 ): Date | undefined {
   requireDate(after);
-  for (const date of occurrences(rule, due)) if (date > after) return date;
+  for (const date of occurrences(rule, due, allDay)) if (date > after) return date;
   return undefined;
 }
 /** Expand at most `limit` occurrences (including the anchor when it matches). */

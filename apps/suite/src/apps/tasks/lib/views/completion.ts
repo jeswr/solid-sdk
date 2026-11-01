@@ -10,6 +10,8 @@ export type CompletionPlan =
       kind: "advance";
       next: Date;
       copy: TaskDetails;
+      /** Resource reserved by the cache; retries and Undo keep the same identity. */
+      copyUrl?: string;
       original: TaskDetails;
       /** Detached pre-write snapshot retained across optimistic writes for Undo. */
       previous: TaskDetails;

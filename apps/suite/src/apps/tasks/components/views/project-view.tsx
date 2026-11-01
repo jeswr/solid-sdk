@@ -17,6 +17,7 @@ import { focusAddTask } from "../../state/add-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { TaskList } from "../task-list";
+import { ProjectError } from "./project-error";
 
 export function ProjectView({
   projectUrl,
@@ -114,21 +115,19 @@ export function ProjectView({
             <LoadingSkeleton preset="list" count={8} />
           ) : undefined,
         error:
-          !project && tasks.status === "ready" ? (
-            <ErrorState error="not-found" />
-          ) : load?.status === "error" ? (
-            <ErrorState
-              error={classifyError(load.error)}
-              actions={{
-                retry: () => {
-                  if (project) void tasks.cache.loadTasks(project, true);
-                },
+          load?.status === "error" ? (
+            <ProjectError
+              error={load.error}
+              retry={() => {
+                if (url) void tasks.cache.retryProject(url);
               }}
             >
               {classifyError(load.error) === "forbidden" && (
                 <p>You no longer have access to {title}</p>
               )}
-            </ErrorState>
+            </ProjectError>
+          ) : !project && tasks.status === "ready" ? (
+            <ErrorState error="not-found" />
           ) : undefined,
         empty: project && empty ? content : undefined,
         children: content,

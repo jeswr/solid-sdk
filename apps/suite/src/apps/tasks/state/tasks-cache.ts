@@ -4,7 +4,7 @@ import { DataFactory } from "../lib/model/rdf";
 import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
-import type { CompletionPlan } from "../lib/views/completion";
+import { type CompletionPlan, planComplete } from "../lib/views/completion";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -19,7 +19,8 @@ export interface TasksSnapshot {
   status: "loading" | "ready" | "error";
   error?: unknown;
   projects: StoredProject[];
-  /** Entries are keyed by tracker document URL. Stored resources retain their URL and ETag. */
+  /** Includes failed tracker reads even before a project has loaded successfully.
+   * Entries are keyed by tracker document URL. Resources retain their URL and ETag. */
   tasks: Record<string, TaskLoad>;
   saving: string[];
   views: TaskView[];
@@ -96,6 +97,7 @@ export class TasksCache {
   private reads = new Map<string, Promise<void>>();
   private dirtyReads = new Set<string>();
   private projectRead = 0;
+  private taskReadGenerations = new Map<string, number>();
   private projectFailures = new Map<string, unknown>();
   readonly inboxUrl: string;
   constructor(
@@ -174,9 +176,20 @@ export class TasksCache {
     const projects = await this.store.listProjects((url, error) => failures.set(url, error));
     if (epoch !== this.epoch || generation !== this.projectRead) return;
     const tasks = { ...this.baseline.tasks };
-    for (const project of projects)
-      if (this.projectFailures.has(project.url))
+    for (const project of projects) {
+      const previous = this.baseline.projects.find((item) => item.url === project.url);
+      if (
+        this.projectFailures.has(project.url) ||
+        (previous && previous.tracker.stateStore !== project.tracker.stateStore)
+      ) {
         tasks[project.url] = { status: "loading", items: [] };
+        this.dirtyReads.add(project.url);
+        this.taskReadGenerations.set(
+          project.url,
+          (this.taskReadGenerations.get(project.url) ?? 0) + 1,
+        );
+      }
+    }
     this.projectFailures = failures;
     for (const [url, error] of failures) {
       tasks[url] = { status: "error", items: [], error };
@@ -188,13 +201,19 @@ export class TasksCache {
     this.baseline = { ...this.baseline, projects, tasks, status: "ready", error: undefined };
     this.emit();
   }
+  async retryProject(url: string): Promise<void> {
+    await this.refreshProjects();
+    const project = this.baseline.projects.find((item) => item.url === url);
+    if (project && !this.projectFailures.has(url)) await this.loadTasks(project, true);
+  }
   loadTasks(project: StoredProject, force = false): Promise<void> {
+    const current = this.baseline.projects.find((item) => item.url === project.url);
+    if (current) project = current;
     if (this.projectFailures.has(project.url)) {
       if (!force) return Promise.resolve();
-      return this.refreshProjects().then(() => {
-        if (!this.projectFailures.has(project.url)) return this.loadTasks(project, true);
-      });
+      return this.retryProject(project.url);
     }
+    if (!current) return Promise.resolve();
     const existing = this.reads.get(project.url);
     if (existing) {
       if (force) this.dirtyReads.add(project.url);
@@ -218,6 +237,14 @@ export class TasksCache {
   }
   private async readTasks(project: StoredProject) {
     const epoch = this.epoch;
+    const generation = this.taskReadGenerations.get(project.url);
+    const stateStore = project.tracker.stateStore as string;
+    const isCurrent = () =>
+      !this.projectFailures.has(project.url) &&
+      generation === this.taskReadGenerations.get(project.url) &&
+      this.baseline.projects.some(
+        (item) => item.url === project.url && item.tracker.stateStore === stateStore,
+      );
     const previous = this.baseline.tasks[project.url];
     this.baseline = {
       ...this.baseline,
@@ -231,8 +258,8 @@ export class TasksCache {
     };
     this.emit();
     try {
-      const items = await this.store.listTasks(project.tracker.stateStore as string);
-      if (this.projectFailures.has(project.url)) return;
+      const items = await this.store.listTasks(stateStore);
+      if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
         return;
@@ -245,6 +272,7 @@ export class TasksCache {
         },
       };
     } catch (error) {
+      if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
         return;
@@ -263,21 +291,24 @@ export class TasksCache {
     }
     try {
       const projects = this.baseline.projects;
-      const affected = projects.filter(
-        (project) =>
-          url.startsWith(project.tracker.stateStore as string) ||
-          (project.tracker.stateStore as string).startsWith(url) ||
-          url === project.url,
-      );
+      const matches = (project: StoredProject) =>
+        url.startsWith(project.tracker.stateStore as string) ||
+        (project.tracker.stateStore as string).startsWith(url) ||
+        url === project.url;
+      const affected = new Set(projects.filter(matches).map((project) => project.url));
       if (
         url.startsWith(this.store.projects) ||
         this.store.projects.startsWith(url) ||
-        affected.some((project) => project.url === url)
+        affected.has(url)
       )
         await this.refreshProjects();
       await Promise.all(
-        affected
-          .filter((project) => !this.projectFailures.has(project.url))
+        this.baseline.projects
+          .filter(
+            (project) =>
+              (affected.has(project.url) || matches(project) || this.dirtyReads.has(project.url)) &&
+              !this.projectFailures.has(project.url),
+          )
           .map((project) => this.loadTasks(project, true)),
       );
     } catch (error) {
@@ -367,17 +398,34 @@ export class TasksCache {
       task: new TaskItem(`${url}#it`, dataset, DataFactory),
       etag: null,
     };
-    return this.mutate(
-      (state) => replaceTask(state, project.url, url, optimistic),
-      async () => {
-        const task = await this.store.createTask(this.project(project.url), details, id);
-        return { result: task, commit: (state) => replaceTask(state, project.url, task.url, task) };
-      },
-      () => {
-        void this.createTask(project, data);
-      },
-      [url],
-    );
+    const attempt = (reconcile = false): Promise<StoredTask | undefined> =>
+      this.mutate(
+        (state) => replaceTask(state, project.url, url, optimistic),
+        async () => {
+          const current = this.project(project.url);
+          if (`${current.tracker.stateStore}${id}.ttl` !== url) throw new ModelError(409, url);
+          const task =
+            (reconcile ? await this.optionalTask(url) : undefined) ??
+            (await this.store.createTask(current, details, id));
+          return {
+            result: task,
+            commit: (state) => replaceTask(state, project.url, task.url, task),
+          };
+        },
+        () => {
+          void attempt(true);
+        },
+        [url],
+      );
+    return attempt();
+  }
+  private async optionalTask(url: string): Promise<StoredTask | undefined> {
+    try {
+      return await this.store.readTask(url);
+    } catch (error) {
+      if (error instanceof ModelError && [404, 410].includes(error.status)) return undefined;
+      throw error;
+    }
   }
   updateTask(item: StoredTask, change: (task: TaskItem) => void): Promise<StoredTask | undefined> {
     const project = this.snapshot.projects.find((project) =>
@@ -421,63 +469,128 @@ export class TasksCache {
       },
     );
   }
-  /** Both recurring writes form one retry unit; compensate the conditional create on update failure. */
-  advanceTask(item: StoredTask, plan: Extract<CompletionPlan, { kind: "advance" }>) {
+  /** Retain the copy reservation until both writes or its compensation are confirmed. */
+  advanceTask(item: StoredTask, initial: Extract<CompletionPlan, { kind: "advance" }>) {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
     if (!project) return Promise.resolve(undefined);
     const id = crypto.randomUUID();
     const url = `${project.tracker.stateStore}${id}.ttl`;
-    const dataset = createTask(url, plan.copy);
+    initial.copyUrl = url;
+    let plan: CompletionPlan = initial;
+    const now = initial.copy.endedAt as Date;
+    let copyPending = false;
+    let updateAttempted = false;
+    let settled: { result: CompletionPlan; commit: Patch } | undefined;
+    const finish = (original: StoredTask, copy?: StoredTask) => {
+      settled = {
+        result: plan,
+        commit: (state) =>
+          replaceTask(replaceTask(state, project.url, url, copy), project.url, item.url, original),
+      };
+      return settled;
+    };
+    const wasAdvanced = (original: StoredTask) =>
+      updateAttempted &&
+      plan.kind === "advance" &&
+      original.task.state === "open" &&
+      original.task.dueDate?.getTime() === plan.next.getTime() &&
+      original.task.allDay === plan.original.allDay;
+    const dataset = createTask(url, initial.copy);
     const copy = {
       url,
       dataset,
       etag: null,
       task: new TaskItem(`${url}#it`, dataset, DataFactory),
     };
-    const advance = (task: TaskItem) => {
-      task.dueDate = plan.original.dueDate;
-      task.allDay = plan.original.allDay;
-      task.reminders = plan.original.reminders ?? [];
+    const advance = (task: TaskItem, completion: Extract<CompletionPlan, { kind: "advance" }>) => {
+      task.dueDate = completion.original.dueDate;
+      task.allDay = completion.original.allDay;
+      task.reminders = completion.original.reminders ?? [];
     };
-    return this.mutate(
-      (state) => {
-        const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
-        return current
-          ? replaceTask(
-              replaceTask(state, project.url, url, copy),
-              project.url,
-              item.url,
-              changeTask(current, advance),
-            )
-          : state;
-      },
-      async () => {
-        const copy = await this.store.createTask(this.project(project.url), plan.copy, id);
-        let original: StoredTask;
-        try {
-          original = await this.store.updateTask(this.task(project.url, item.url), advance);
-        } catch (error) {
-          await this.store.deleteTask(copy);
-          throw error;
-        }
-        return {
-          result: plan,
-          commit: (state) =>
-            replaceTask(
-              replaceTask(state, project.url, copy.url, copy),
-              project.url,
-              original.url,
-              original,
-            ),
-        };
-      },
-      () => {
-        void this.advanceTask(item, plan);
-      },
-      [item.url, url],
-    );
+    const attempt = (retry = false): Promise<CompletionPlan | undefined> =>
+      this.mutate(
+        (state) => {
+          if (retry) return state;
+          const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+          return current
+            ? replaceTask(
+                replaceTask(state, project.url, url, copy),
+                project.url,
+                item.url,
+                changeTask(current, (task) => advance(task, initial)),
+              )
+            : state;
+        },
+        async () => {
+          if (settled) return { result: settled.result, commit: (state) => state };
+          const currentProject = this.project(project.url);
+          let current = retry
+            ? await this.store.readTask(item.url)
+            : this.task(project.url, item.url);
+          if (copyPending) {
+            const existing = await this.optionalTask(url);
+            if (existing) {
+              if (wasAdvanced(current)) return finish(current, existing);
+              // Never create another occurrence until the old reservation is gone.
+              await this.store.deleteTask(existing);
+            }
+            copyPending = false;
+            updateAttempted = false;
+          }
+          if (`${currentProject.tracker.stateStore}${id}.ttl` !== url)
+            throw new ModelError(409, url);
+          if (retry) {
+            const siblings = await this.store.listTasks(
+              currentProject.tracker.stateStore as string,
+            );
+            plan = planComplete(current, projectTasks(currentProject, siblings).views, now);
+          } else if (current.etag !== item.etag) {
+            // A queued edit changed the scheduling inputs before this write started.
+            plan = planComplete(
+              current,
+              this.snapshot.views.filter((view) => view.url !== url),
+              now,
+            );
+          }
+          if (plan.kind === "close") {
+            if (current.task.state !== "closed")
+              current = await this.store.updateTask(current, (task) => {
+                task.state = "closed";
+                task.endedAt = now;
+              });
+            return finish(current);
+          }
+          plan.copyUrl = url;
+          copyPending = true; // The PUT can commit even when its response is lost.
+          const copy = await this.store.createTask(currentProject, plan.copy, id);
+          const completion = plan;
+          try {
+            updateAttempted = true;
+            const original = await this.store.updateTask(current, (task) =>
+              advance(task, completion),
+            );
+            return finish(original, copy);
+          } catch (error) {
+            // A rejected precondition proves this update did not commit.
+            if (error instanceof ModelError && error.status >= 400 && error.status < 500)
+              updateAttempted = false;
+            // Reconcile an ambiguous update before deleting its occurrence.
+            const original = await this.store.readTask(item.url);
+            if (wasAdvanced(original)) return finish(original, copy);
+            await this.store.deleteTask(copy);
+            copyPending = false;
+            updateAttempted = false;
+            throw error;
+          }
+        },
+        () => {
+          void attempt(true);
+        },
+        [item.url, url],
+      );
+    return attempt();
   }
   createProject(title: string): Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
