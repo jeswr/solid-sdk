@@ -1,14 +1,25 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { MemoryLedger } from "@jeswr/agent-audit";
+import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
 import { type BridgeMessage, ChannelParseError } from "@jeswr/agent-channels";
-import { digestBytes, digestOf } from "@jeswr/agent-model";
+import { defaultMandate, issueApproval, issueMandate, mandateToTurtle } from "@jeswr/agent-mandate";
+import { canonicalJson, digestBytes, digestOf, newUrn } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError } from "@jeswr/agent-model-gateway";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
+import {
+  buildBitstringStatusListCredential,
+  generateKeyPairForSuite,
+  issue,
+  publishVerificationMethod,
+} from "@jeswr/solid-vc";
+import { mkdtemp, rm } from "fs/promises";
 import { Server } from "net";
+import { tmpdir } from "os";
+import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDaemon, pollInterval } from "../src/daemon.js";
+import { createLocalState } from "../src/local.js";
 import { createMemoryPod, createMemoryState } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
@@ -95,12 +106,25 @@ function harness() {
     executor,
     lease: state.lease,
     checkpoints: state.checkpoints,
+    proposalResults: state.proposalResults,
     accounts: [
       { id: "fixture", binding: { id: "direct", ingest }, category: "chat", enabled: true },
     ],
     ownerWebId: OWNER,
     agentWebId: AGENT_ID,
-    audit: { append: async (r, at) => ledger.append(r, at) },
+    audit: {
+      append: async (r, at) => ledger.append(r, at),
+      entries: () => ledger.entries(),
+      sync: async () => undefined,
+    },
+    proposalWritten: async () => ({
+      action: "https://jeswr.org/ns/agent#SendMessage",
+      target: "urn:target:fixture",
+      binding: "direct",
+      accountId: "fixture",
+      recipientHashes: [`sha256:${"a".repeat(64)}`],
+      messageDigest: digestBytes("trusted outbound wire"),
+    }),
     gateway: {
       reader,
       proposer: {
@@ -171,6 +195,296 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(h.ledger.entries().map((e) => e.record.type)).toEqual(["ingest", "proposal"]);
   expect(h.state.held()).toBe(false);
   expect([...h.pod.resources.keys()].some((url) => url.includes("agent/proposals/"))).toBe(true);
+});
+it.each([
+  "proposal-write",
+  "projection",
+  "model-audit",
+  "proposal-audit",
+  "cursor",
+])("reuses durable proposals and model-call identities after a %s failure and restart", async (stage) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "awp-replay-"));
+  try {
+    const local = createLocalState(directory);
+    const propose = vi.mocked(h.options.gateway.proposer.propose);
+    propose.mockImplementation(async () => {
+      const call = {
+        id: newUrn(),
+        context: "proposer" as const,
+        provider: "openai" as const,
+        model: "fixture",
+        tokens: { input: 1, output: 2 },
+        inputTokens: 1,
+        outputTokens: 2,
+        toolCalls: 2,
+        latencyMs: 1,
+        retries: 0,
+      };
+      return {
+        calls: [call],
+        proposals: ["first", "second"].map((id) => ({
+          ...exampleRecords["action-proposal"],
+          id: `urn:proposal:${id}`,
+          wasGeneratedBy: call.id,
+        })),
+      };
+    });
+    const project = vi.fn(h.options.proposalWritten);
+    const write = h.workspace.proposal.bind(h.workspace);
+    if (stage === "proposal-write")
+      vi.spyOn(h.workspace, "proposal")
+        .mockImplementationOnce(write)
+        .mockRejectedValueOnce(new Error("unavailable"));
+    if (stage === "projection") project.mockRejectedValueOnce(new Error("unavailable"));
+    if (stage === "cursor")
+      vi.spyOn(local.checkpoints, "put").mockRejectedValueOnce(new Error("unavailable"));
+    if (stage === "model-audit" || stage === "proposal-audit") {
+      const append = h.options.audit.append;
+      let failed = false;
+      h.options.audit.append = async (record, at) => {
+        const entry = await append(record, at);
+        if (!failed && record.type === (stage === "model-audit" ? "model-call" : "proposal")) {
+          failed = true;
+          throw new Error("Mirror unavailable after durable append");
+        }
+        return entry;
+      };
+    }
+    await expect(
+      createDaemon({ ...h.options, ...local, proposalWritten: project }).once(),
+    ).rejects.toThrow();
+    expect(await local.checkpoints.get("fixture")).toBeUndefined();
+    expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+    const before = [...h.pod.resources].filter(
+      ([url]) => url.includes("/proposals/") && url.endsWith(".ttl"),
+    );
+    // Reopen filesystem state and create a new daemon, as a restarted process would.
+    await createDaemon({
+      ...h.options,
+      ...createLocalState(directory),
+      proposalWritten: project,
+    }).once();
+    expect(propose).toHaveBeenCalledOnce();
+    expect(await local.checkpoints.get("fixture")).toBe("one");
+    for (const [url, resource] of before) expect(h.pod.resources.get(url)).toEqual(resource);
+    const records = h.ledger.entries().map((entry) => entry.record);
+    expect(records.filter((record) => record.type === "model-call")).toHaveLength(1);
+    expect(records.filter((record) => record.type === "proposal")).toHaveLength(2);
+    expect(new Set(records.map((record) => canonicalJson(record))).size).toBe(records.length);
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+it("reuses empty results and resumes a later message after a partial batch", async () => {
+  const h = harness();
+  h.ingest.list.mockResolvedValue({
+    items: [
+      { id: "seed", raw: "first" },
+      { id: "later", raw: "second" },
+    ],
+    next: "two",
+  });
+  const propose = vi.mocked(h.options.gateway.proposer.propose);
+  propose
+    .mockResolvedValueOnce({ proposals: [], calls: [] })
+    .mockRejectedValueOnce(new GatewayError());
+  await expect(createDaemon(h.options).once()).rejects.toThrow("Proposer failed");
+  await createDaemon(h.options).once();
+  expect(propose).toHaveBeenCalledTimes(3);
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toHaveLength(1);
+  expect(h.state.cursors.get("fixture")).toBe("two");
+});
+it("fails closed before any proposal effects when result persistence fails", async () => {
+  const h = harness();
+  vi.spyOn(h.state.proposalResults, "put").mockRejectedValueOnce(new Error("unavailable"));
+  await expect(createDaemon(h.options).once()).rejects.toThrow("unavailable");
+  expect(
+    h.pod.requests.filter(
+      (request) =>
+        request.method === "PUT" &&
+        request.url.includes("/proposals/") &&
+        request.url.endsWith(".ttl"),
+    ),
+  ).toEqual([]);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+});
+it("retries a failed audit mirror without duplicating local proposal evidence", async () => {
+  const h = harness();
+  const mirror = new PodMirror(h.pod.io, ROOT);
+  const sync = vi.fn(async () => mirror.sync(h.ledger.entries()));
+  const audit = {
+    entries: () => h.ledger.entries(),
+    sync,
+    async append(record: Parameters<typeof h.options.audit.append>[0], at: string) {
+      h.ledger.append(record, at);
+      if (record.type === "proposal") throw new Error("Mirror unavailable");
+      await sync();
+    },
+  };
+  await expect(createDaemon({ ...h.options, audit }).once()).rejects.toThrow("Mirror unavailable");
+  await createDaemon({ ...h.options, audit }).once();
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toHaveLength(1);
+  expect(h.pod.resources.get(`${ROOT}agent/audit/chain.ttl`)?.body).toContain(
+    h.ledger.entries().at(-1)?.hash,
+  );
+});
+it("refuses changed trusted terms when replaying existing proposal evidence", async () => {
+  const h = harness();
+  vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
+  await expect(createDaemon(h.options).once()).rejects.toThrow("cursor unavailable");
+  const terms = await h.options.proposalWritten(exampleRecords["action-proposal"]);
+  await expect(
+    createDaemon({
+      ...h.options,
+      proposalWritten: async () => ({ ...terms, messageDigest: digestBytes("different wire") }),
+    }).once(),
+  ).rejects.toThrow("Audit replay conflict");
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+});
+it("verifies daemon proposal evidence with canonical trusted outbox terms and signed authority", async () => {
+  const h = harness();
+  const at = new Date(AT).toISOString();
+  const until = "2026-11-02T12:00:00.000Z";
+  const mandateId = `${ROOT}agent/mandates/default.ttl`;
+  const approvalId = `${ROOT}agent/approvals/fixture.trig`;
+  const statusId = `${ROOT}agent/mandates/status.ttl`;
+  const terms = {
+    action: "https://jeswr.org/ns/agent#SendMessage",
+    target: "urn:target:trusted-outbox",
+    binding: "gmail",
+    accountId: "own-account",
+    recipientHashes: [`sha256:${"a".repeat(64)}`],
+    messageDigest: digestBytes("exact trusted outgoing wire"),
+  };
+  const mirror = new PodMirror(h.pod.io, ROOT);
+  const writer = new AuditWriter(h.ledger, mirror);
+  const project = vi.fn(async () => terms);
+  const options = {
+    ...h.options,
+    proposalWritten: project,
+    audit: {
+      append: (record: Parameters<typeof h.options.audit.append>[0], time: string) =>
+        writer.append(record, time),
+      entries: () => h.ledger.entries(),
+      sync: () => mirror.sync(h.ledger.entries()),
+    },
+  };
+  await createDaemon(options).once();
+  // Replaying the batch must still leave exactly one proposal for the verifier.
+  await createDaemon(options).once();
+  const record = h.ledger.entries().find((entry) => entry.record.type === "proposal")?.record;
+  if (record?.type !== "proposal") throw new Error("Missing proposal evidence");
+  expect(record.terms).toEqual(terms);
+  expect(record.termsDigest).toBe(digestOf(terms));
+  expect(project).toHaveBeenCalledBefore(h.executor.runOutboxOnce);
+  const ed = await generateKeyPairForSuite(`${OWNER}/ed`);
+  const p256 = await generateKeyPairForSuite(`${OWNER}/approval`, "P-256");
+  const profiles = await Promise.all(
+    [ed, p256].map((key) =>
+      publishVerificationMethod({
+        controller: OWNER,
+        verificationMethod: key.verificationMethod,
+        key,
+      }),
+    ),
+  );
+  const put = async (url: string, body: string, type = "text/turtle") => {
+    await h.pod.io(url, { method: "PUT", headers: { "content-type": type }, body });
+  };
+  await put(`${ROOT}profile/card`, profiles.map((profile) => profile.turtle).join("\n"));
+  const mandate = defaultMandate({
+    id: mandateId,
+    ownerWebId: OWNER,
+    agentWebId: AGENT_ID,
+    recipientHashes: terms.recipientHashes,
+    now: new Date(AT),
+  });
+  const vc = await issueMandate(mandate, ed, {
+    statusListCredential: statusId,
+    statusListIndex: "1",
+  });
+  await put(mandateId, await mandateToTurtle(vc), "application/trig");
+  const status = await issue({
+    credential: buildBitstringStatusListCredential({
+      id: statusId,
+      issuer: OWNER,
+      statusPurpose: "revocation",
+      validFrom: at,
+      validUntil: until,
+    }),
+    key: ed,
+    options: { created: new Date(AT) },
+  });
+  await put(statusId, JSON.stringify(status), "application/ld+json");
+  await put(
+    approvalId,
+    await issueApproval(
+      {
+        id: approvalId,
+        approves: record.id,
+        termsDigest: digestOf(terms),
+        expires: until,
+        decision: "approve",
+      },
+      p256,
+      new Date(AT),
+    ),
+    "application/trig",
+  );
+  const common = {
+    agent: AGENT_ID,
+    owner: OWNER,
+    proposal: record.id,
+    mandate: mandateId,
+    terms,
+    termsDigest: digestOf(terms),
+  };
+  await writer.append(
+    { ...common, type: "decision", id: "urn:decision:fixture", decision: "confirm-required" },
+    at,
+  );
+  await writer.append(
+    {
+      type: "approval-seen",
+      id: "urn:approval-seen:fixture",
+      agent: AGENT_ID,
+      owner: OWNER,
+      proposal: record.id,
+      approval: approvalId,
+    },
+    at,
+  );
+  await writer.append(
+    {
+      ...common,
+      type: "transmission",
+      id: "urn:transmission:fixture",
+      decisionRecord: "urn:decision:fixture",
+      approval: approvalId,
+      status: "sent",
+    },
+    at,
+  );
+  await writer.append(
+    {
+      type: "receipt",
+      id: "urn:receipt:fixture",
+      agent: AGENT_ID,
+      owner: OWNER,
+      proposal: record.id,
+      transmission: "urn:transmission:fixture",
+    },
+    at,
+  );
+  expect(await auditArtifact({ fetch: h.pod.io, root: ROOT, proposal: record.id })).toMatchObject({
+    ok: true,
+    breaches: [],
+  });
 });
 it("proposes only for structured or independently owner-flagged messages", async () => {
   for (const flagged of [false, true]) {

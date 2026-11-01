@@ -32,8 +32,10 @@ Each enabled account is processed serially, including accounts sharing a binding
    JSON-LD envelopes. Neither condition establishes identity or authority. Its
    context supplies the gateway's read-only pod and memory tools.
 5. Stamp and create proposals only inside `agent/proposals/`; an identical replay
-   is safe, but a conflicting rewrite fails. Persist system audit records and model
-   counters. Commit the ingest cursor only after the entire batch succeeds.
+   is safe, but a conflicting rewrite fails. Save each stamped Proposer result in
+   durable local `proposalResults` before writing proposals or model counters, and
+   reuse it when a batch retries, including empty results. Commit the ingest cursor
+   only after the entire batch succeeds.
 6. Run the executor's outbox pass. It alone owns send capabilities and credentials.
 
 Email polls every 120 seconds, chat every 30, social every 300. The control watcher
@@ -48,16 +50,23 @@ The host must construct the executor with fresh, cryptographically verified owne
 controls, approvals and mandates: parsing RDF is insufficient. Its local HALT check
 must read `createLocalState(...).halted` on every gate pass. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
-executor obligations. `proposalWritten` may project new proposals into its trusted
-outbox adapter; it must never send or grant approval. The daemon never imports a
-channel send subpath or a model SDK.
+executor obligations. `proposalWritten` must idempotently project proposals into
+the trusted outbox and return its canonical `AuditTerms` (including account-bound
+recipient hashes and the exact wire digest). It must never send or grant approval.
+The daemon writes these terms and their digest into proposal evidence. Its audit
+adapter supplies `append`, `entries` from that same durable ledger, and `sync` to
+retry mirroring existing evidence without appending duplicate records. For an
+`AuditWriter`, use `entries: () => ledger.entries()` and
+`sync: () => mirror.sync(ledger.entries())`. The daemon never imports a channel
+send subpath or a model SDK.
 
 `createProcessLease(directory)` creates a private exclusive process lease and
 holds it through executor drain, including timed-out provider requests. Crash
 leases are intentionally not stolen: establish that all previous writers and
 provider calls have stopped before operator recovery. `createLocalState(directory)`
-provides atomic fsynced cursors, local HALT and safe status. Use a dedicated private
-credential-store directory whose parent already exists.
+provides atomic fsynced cursors and proposal results, local HALT and safe status.
+Retain proposal results across cursor retries and process restarts. Use a dedicated
+private credential-store directory whose parent already exists.
 
 The `awp` executable dispatches `run`, `once`, `halt`, `status`, `accounts`,
 `login <profile>`, `stats [--task <proposal-id>]`, `audit <artifact> [--at <instant>]`

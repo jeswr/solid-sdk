@@ -68,7 +68,8 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
           },
         },
         isFlagged: async () => false,
-        audit: { append: vi.fn() },
+        proposalWritten: vi.fn(),
+        audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
       }) satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">,
   });
   expect(mocks.notifications).toHaveBeenCalledWith({

@@ -1,11 +1,13 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CredentialStore } from "@jeswr/agent-credentials";
+import { canonicalJson } from "@jeswr/agent-model";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
 import { lstat, open, rename, unlink } from "fs/promises";
 import { join } from "path";
-import type { Checkpoints, ProcessLease } from "./types.js";
+import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
+import type { Checkpoints, ProcessLease, ProposalResults } from "./types.js";
 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === "ENOENT";
 async function syncDirectory(directory: string) {
@@ -95,6 +97,19 @@ export function createProcessLease(directory: string): ProcessLease {
 }
 export function createLocalState(directory: string) {
   new CredentialStore({ dir: directory });
+  const proposalResults: ProposalResults = {
+    async get(key) {
+      const text = await readPrivate(join(directory, `proposal-${proposalResultKey(key)}.json`));
+      return text === undefined ? undefined : checkedProposalResult(JSON.parse(text));
+    },
+    async put(key, result) {
+      await writePrivate(
+        directory,
+        `proposal-${proposalResultKey(key)}.json`,
+        canonicalJson(checkedProposalResult(result)),
+      );
+    },
+  };
   const checkpoints: Checkpoints = {
     async get(account) {
       const text = await readPrivate(join(directory, `cursor-${key(account)}.json`));
@@ -120,6 +135,7 @@ export function createLocalState(directory: string) {
   };
   return {
     checkpoints,
+    proposalResults,
     halted,
     async halt() {
       await writePrivate(directory, "HALT", "halted\n");

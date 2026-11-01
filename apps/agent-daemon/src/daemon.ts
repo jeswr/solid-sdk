@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { ChannelParseError } from "@jeswr/agent-channels";
-import { AGENT, digestOf, newUrn, parseBoundedJson, podRecordSchema } from "@jeswr/agent-model";
+import {
+  AGENT,
+  canonicalJson,
+  digestOf,
+  parseBoundedJson,
+  podRecordSchema,
+} from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
@@ -8,6 +14,7 @@ import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
 import { scrubLog } from "./logging.js";
+import { checkedProposalResult } from "./proposal-results.js";
 import type { AuthenticatedComposition, Daemon, DaemonAccount, DaemonOptions } from "./types.js";
 import { PodWorkspace } from "./workspace.js";
 
@@ -98,15 +105,21 @@ export function createDaemon(o: DaemonOptions): Daemon {
     limits.maxBytes <= 0
   )
     throw new Error("Invalid ingest bounds");
-  const append = (record: Parameters<typeof o.audit.append>[0]) =>
-    o.audit.append(
-      {
-        ...record,
-        owner: o.ownerWebId,
-        agent: o.agentWebId,
-      },
-      new Date(now()).toISOString(),
-    );
+  const append = async (record: Parameters<typeof o.audit.append>[0]) => {
+    const evidence = { ...record, owner: o.ownerWebId, agent: o.agentWebId };
+    const existing = o.audit
+      .entries()
+      .filter(
+        (entry) => entry.record.type !== "ledger-checkpoint" && entry.record.id === evidence.id,
+      );
+    if (existing.length > 0) {
+      if (existing.length !== 1 || canonicalJson(existing[0]?.record) !== canonicalJson(evidence))
+        throw new Error("Audit replay conflict");
+      await o.audit.sync();
+      return;
+    }
+    await o.audit.append(evidence, new Date(now()).toISOString());
+  };
   async function calls(records: readonly ModelCall[], proposal?: string) {
     for (const call of records)
       await append({
@@ -164,7 +177,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const source = o.workspace.messageUrl(inbox, id);
       await append({
         type: "ingest",
-        id: newUrn(),
+        id: `urn:sha256:${digestOf({ source, digest: message.rawSha256 }).slice(8)}`,
         owner: o.ownerWebId,
         agent: o.agentWebId,
         messageDigest: `sha-256:${message.rawSha256}`,
@@ -183,42 +196,57 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await o.workspace.triage(source, triage);
       const thread =
         account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
-      const flagged = await o.isFlagged(account.id, thread);
-      // A structured part is a processing hint; it never authenticates a sender.
-      if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
-      let result: Awaited<ReturnType<DaemonOptions["gateway"]["proposer"]["propose"]>>;
-      try {
-        result = await o.gateway.proposer.propose([{ source, message, triage }], o.proposerContext);
-      } catch (error) {
-        if (error instanceof GatewayError) await calls(error.calls);
-        throw new Error("Proposer failed");
+      const key = digestOf({ account: account.id, source, digest: message.rawSha256 });
+      let result = await o.proposalResults.get(key);
+      if (result) result = checkedProposalResult(result);
+      else {
+        const flagged = await o.isFlagged(account.id, thread);
+        // A structured part is a processing hint; it never authenticates a sender.
+        if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
+        let generated: Awaited<ReturnType<DaemonOptions["gateway"]["proposer"]["propose"]>>;
+        try {
+          generated = await o.gateway.proposer.propose(
+            [{ source, message, triage }],
+            o.proposerContext,
+          );
+        } catch (error) {
+          if (error instanceof GatewayError) await calls(error.calls);
+          throw new Error("Proposer failed");
+        }
+        result = checkedProposalResult({
+          calls: generated.calls,
+          proposals: generated.proposals.map((untrusted) =>
+            podRecordSchema.parse({
+              ...untrusted,
+              type: "action-proposal",
+              id: o.workspace.proposalLocation(untrusted.id),
+              state: "proposed",
+              wasGeneratedBy:
+                generated.calls.find((call) => call.id === untrusted.wasGeneratedBy)?.id ??
+                `urn:sha256:${digestOf({ source, id: untrusted.id }).slice(8)}`,
+            }),
+          ),
+        });
+        // No proposal or model-call evidence may escape before its replay data is durable.
+        await o.proposalResults.put(key, result);
       }
       const task =
         result.proposals.length === 1 && result.proposals[0]
           ? o.workspace.proposalLocation(result.proposals[0].id)
           : undefined;
       await calls(result.calls, task);
-      for (const untrusted of result.proposals) {
-        const proposal = podRecordSchema.parse({
-          ...untrusted,
-          type: "action-proposal",
-          id: o.workspace.proposalLocation(untrusted.id),
-          state: "proposed",
-          wasGeneratedBy:
-            result.calls.find((call) => call.id === untrusted.wasGeneratedBy)?.id ??
-            `urn:sha256:${digestOf({ source, id: untrusted.id }).slice(8)}`,
-        });
-        if (proposal.type !== "action-proposal") throw new Error("Invalid proposal");
+      for (const proposal of result.proposals) {
         await o.workspace.proposal(proposal);
+        const terms = await o.proposalWritten(proposal);
         await append({
           type: "proposal",
           id: proposal.id,
           proposal: proposal.id,
           owner: o.ownerWebId,
           agent: o.agentWebId,
-          termsDigest: digestOf(proposal.intent),
+          terms,
+          termsDigest: digestOf(terms),
         });
-        await o.proposalWritten?.(proposal);
       }
     }
     if (next === undefined) throw new Error("Missing ingest cursor");

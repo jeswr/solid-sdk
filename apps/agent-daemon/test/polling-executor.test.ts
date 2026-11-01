@@ -143,6 +143,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
     accounts: [],
     lease: state.lease,
     checkpoints: state.checkpoints,
+    proposalResults: state.proposalResults,
     executor,
     notifications: {
       subscribe: async () => {
@@ -152,7 +153,12 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
     },
     ownerWebId: owner,
     agentWebId: agent,
-    audit: { append: async (record, time) => ledger.append(record, time) },
+    audit: {
+      append: async (record, time) => ledger.append(record, time),
+      entries: () => ledger.entries(),
+      sync: async () => undefined,
+    },
+    proposalWritten: vi.fn(),
     gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
     proposerContext: {
       instructions: "fixture",

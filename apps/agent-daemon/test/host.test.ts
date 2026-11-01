@@ -3,6 +3,8 @@
 
 import { MemoryLedger } from "@jeswr/agent-audit";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
+import { digestOf } from "@jeswr/agent-model";
+import { exampleRecords } from "@jeswr/agent-model/testing";
 import { execFileSync } from "child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -41,6 +43,35 @@ it("persists cursors and local HALT with private modes and refuses a competing p
   expect((await local.status()).leasePresent).toBe(false);
   await chmod(join(dir, "cursor-fixture.json"), 0o644);
   await expect(local.checkpoints.get("fixture")).rejects.toThrow("Unsafe");
+});
+it("persists detached proposal results across restarts and refuses unsafe or corrupt state", async () => {
+  const dir = await temporary();
+  const local = createLocalState(dir);
+  const key = digestOf({ account: "fixture", source: "urn:message:fixture" });
+  const path = join(dir, `proposal-${key.slice(8)}.json`);
+  expect(await local.proposalResults.get(key)).toBeUndefined();
+  const result = { proposals: [structuredClone(exampleRecords["action-proposal"])], calls: [] };
+  await local.proposalResults.put(key, result);
+  expect(await createLocalState(dir).proposalResults.get(key)).toEqual(result);
+  result.proposals.splice(0);
+  expect((await local.proposalResults.get(key))?.proposals).toHaveLength(1);
+  await expect(local.proposalResults.get("../escape")).rejects.toThrow("key");
+  await expect(local.proposalResults.put("../escape", result)).rejects.toThrow("key");
+  await chmod(path, 0o644);
+  await expect(local.proposalResults.get(key)).rejects.toThrow("Unsafe");
+  await chmod(path, 0o600);
+  await writeFile(path, '{"proposals":[{}],"calls":[]}');
+  await expect(local.proposalResults.get(key)).rejects.toThrow();
+  await rm(path);
+  await symlink(join(dir, "absent"), path);
+  await expect(local.proposalResults.get(key)).rejects.toThrow();
+  await expect(
+    local.proposalResults.put(key, {
+      proposals: [],
+      calls: [],
+      extra: "not allowed",
+    } as unknown as Parameters<typeof local.proposalResults.put>[1]),
+  ).rejects.toThrow();
 });
 it("refuses symlink cursor reads, bad account paths and replaced leases; HALT symlinks halt", async () => {
   const dir = await temporary();

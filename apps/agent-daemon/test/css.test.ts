@@ -164,7 +164,8 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
     };
     (proposal.intent as { termsDigest: string }).termsDigest = proposalTermsDigest(entry);
     const ledger = new MemoryLedger();
-    const writer = new AuditWriter(ledger, new PodMirror(io, root));
+    const mirror = new PodMirror(io, root);
+    const writer = new AuditWriter(ledger, mirror);
     const controlUrl = `${root}agent/control/halt.ttl`;
     const approvalUrl = `${root}agent/approvals/fixture.ttl`;
     const transmit = vi.fn(async () => ({
@@ -295,6 +296,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       executor,
       lease: state.lease,
       checkpoints: state.checkpoints,
+      proposalResults: state.proposalResults,
       gateway: {
         reader: gateway.reader,
         proposer: {
@@ -307,11 +309,24 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       },
       ownerWebId: owner,
       agentWebId: actor,
-      audit: writer,
+      audit: {
+        append: (record, time) => writer.append(record, time),
+        entries: () => ledger.entries(),
+        sync: () => mirror.sync(ledger.entries()),
+      },
       now: () => Date.parse(at),
       isFlagged: async () => false,
       proposalWritten: async () => {
         stores.entries.set(proposal.id, entry);
+        return {
+          action: proposal.intent.action,
+          target: proposal.intent.target,
+          binding: proposal.intent.binding,
+          accountId: entry.account.id,
+          recipientHashes: [proposal.intent.recipientHash],
+          messageDigest: entry.wireDigest,
+          purpose: proposal.intent.purpose,
+        };
       },
       proposerContext: {
         instructions: "Synthetic test",

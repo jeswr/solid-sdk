@@ -1,10 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { PodAuth } from "@jeswr/pod-auth";
-import type { Checkpoints, ProcessLease } from "./types.js";
+import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
+import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
 
 /** Ephemeral test state; never substitutes for a durable deployment lease. */
 export function createMemoryState() {
   const cursors = new Map<string, string>();
+  const results = new Map<string, ProposalResult>();
+  const proposalResults: ProposalResults = {
+    async get(key) {
+      proposalResultKey(key);
+      const result = results.get(key);
+      return result && checkedProposalResult(result);
+    },
+    async put(key, result) {
+      proposalResultKey(key);
+      results.set(key, checkedProposalResult(result));
+    },
+  };
   let held = false;
   const lease: ProcessLease = {
     async acquire() {
@@ -21,7 +34,7 @@ export function createMemoryState() {
       cursors.set(account, cursor);
     },
   };
-  return { lease, checkpoints, cursors, held: () => held };
+  return { lease, checkpoints, proposalResults, cursors, held: () => held };
 }
 /** Conditional in-memory pod transport. No authentication or server is simulated. */
 export function createMemoryPod() {
