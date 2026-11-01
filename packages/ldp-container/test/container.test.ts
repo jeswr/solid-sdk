@@ -42,8 +42,6 @@ describe("parseContainerMembers", () => {
     ).toEqual([
       { url: `${LISTED}a`, container: false },
       { url: `${LISTED}sub/?view=1#part`, container: true },
-      { url: `${SCOPE}sibling`, container: false },
-      { url: `${SCOPE}root-file`, container: false },
     ]);
   });
 
@@ -76,16 +74,58 @@ describe("parseContainerMembers", () => {
     }
   });
 
-  it("can refuse the scope root when listing a different container", () => {
+  it("skips ancestors and scope-root aliases regardless of allowRoot", () => {
     const dataset = listing([SCOPE, `${SCOPE}?q#f`, SCOPE.slice(0, -1), "ok"]);
-    expect(parseContainerMembers(dataset, LISTED, { scope: SCOPE }).map((m) => m.url)).toEqual([
-      SCOPE,
-      `${SCOPE}?q#f`,
-      SCOPE.slice(0, -1),
-      `${LISTED}ok`,
+    for (const allowRoot of [undefined, true, false]) {
+      expect(parseContainerMembers(dataset, LISTED, { scope: SCOPE, allowRoot })).toEqual([
+        { url: `${LISTED}ok`, container: false },
+      ]);
+    }
+  });
+
+  it("skips ../valuable siblings inside the broader pod scope", async () => {
+    const dataset = await parseRdf(
+      `@prefix ldp: <http://www.w3.org/ns/ldp#> . <> ldp:contains <before>, <../valuable>, <after> .`,
+      "text/turtle",
+      { baseIRI: LISTED },
+    );
+    expect(
+      parseContainerMembers(dataset, LISTED, {
+        scope: SCOPE,
+      }),
+    ).toEqual([
+      { url: `${LISTED}before`, container: false },
+      { url: `${LISTED}after`, container: false },
     ]);
-    expect(parseContainerMembers(dataset, LISTED, { scope: SCOPE, allowRoot: false })).toEqual([
-      { url: `${LISTED}ok`, container: false },
+  });
+
+  it("breaks sibling-container cycles in both directions", () => {
+    const sibling = `${SCOPE}sibling/`;
+    expect(parseContainerMembers(listing([sibling]), LISTED, { scope: SCOPE })).toEqual([]);
+    expect(parseContainerMembers(listing([LISTED], sibling), sibling, { scope: SCOPE })).toEqual(
+      [],
+    );
+  });
+
+  it("skips literal and blank-node members while keeping neighboring NamedNodes", async () => {
+    const dataset = await parseRdf(
+      `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+       <> ldp:contains <before>, "literal", _:blank, <after> .`,
+      "text/turtle",
+      { baseIRI: LISTED },
+    );
+    expect(parseContainerMembers(dataset, LISTED, { scope: SCOPE })).toEqual([
+      { url: `${LISTED}before`, container: false },
+      { url: `${LISTED}after`, container: false },
+    ]);
+  });
+
+  it("uses the dataset's first container subject, even when it differs from containerUrl", () => {
+    const dataset = listing([`${LISTED}first`], `${SCOPE}other/`);
+    const container = new Container(LISTED, dataset, DataFactory);
+    container.contains.add(new Resource(`${LISTED}second`, dataset, DataFactory));
+    expect(parseContainerMembers(dataset, LISTED, { scope: SCOPE })).toEqual([
+      { url: `${LISTED}first`, container: false },
     ]);
   });
 
@@ -142,13 +182,85 @@ describe("parseContainerMembers", () => {
 });
 
 describe("readContainerMembers", () => {
+  it("rejects a listing over the default 16 MiB byte limit with PARSE_LIMIT", async () => {
+    const fetch = responseFetch(`#${"x".repeat(16 * 1024 * 1024)}`);
+    await expect(readContainerMembers(fetch, LISTED, { scope: SCOPE })).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+  });
+
+  it("enforces maxBytes on the body stream and cancels on overflow", async () => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulls++ < 5) controller.enqueue(new TextEncoder().encode("# oversized comment\n"));
+        else controller.close();
+      },
+      cancel,
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(body));
+    const options = { scope: SCOPE, maxBytes: 16 };
+    await expect(readContainerMembers(fetch, LISTED, options)).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(pulls).toBeLessThan(5);
+  });
+
+  it("passes maxQuads to the streaming parser", async () => {
+    const fetch = responseFetch(
+      `@prefix ldp: <http://www.w3.org/ns/ldp#> . <> ldp:contains <a>, <b> .`,
+    );
+    const options = { scope: SCOPE, maxQuads: 1 };
+    await expect(readContainerMembers(fetch, LISTED, options)).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+  });
+
+  it("forwards signal to fetch and aborts a stalled body even if cancellation stalls", async () => {
+    const controller = new AbortController();
+    let source: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const body = new ReadableStream<Uint8Array>({
+      start(stream) {
+        source = stream;
+      },
+      cancel,
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(body));
+    const options = { scope: SCOPE, signal: controller.signal };
+    const result = readContainerMembers(fetch, LISTED, options);
+    // Observe the rejection before aborting; a timeout explicitly detects the old stalled read.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const outcome = Promise.race([
+      result.then(
+        () => "resolved",
+        (error: Error) => error.name,
+      ),
+      new Promise<string>((resolve) => {
+        timeout = setTimeout(() => resolve("stalled"), 300);
+      }),
+    ]);
+    try {
+      await vi.waitFor(() => expect(body.locked).toBe(true));
+      controller.abort();
+      expect(await outcome).toBe("AbortError");
+      expect(fetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+      expect(cancel).toHaveBeenCalledTimes(1);
+    } finally {
+      clearTimeout(timeout);
+      // Release the pre-fix res.text() read if this regression fails.
+      source?.error(new Error("test cleanup"));
+    }
+  });
+
   it("GETs and parses Turtle with relative IRIs and the exact Accept header", async () => {
     const fetch = responseFetch(`@prefix ldp: <http://www.w3.org/ns/ldp#> .
 <> ldp:contains <b>, <sub/>, <../neighbor>, <../../escape>, <b> .`);
     expect(await readContainerMembers(fetch, LISTED, { scope: SCOPE })).toEqual([
       { url: `${LISTED}b`, container: false },
       { url: `${LISTED}sub/`, container: true },
-      { url: `${SCOPE}neighbor`, container: false },
     ]);
     expect(fetch).toHaveBeenCalledExactlyOnceWith(LISTED, {
       method: "GET",
@@ -186,6 +298,18 @@ describe("readContainerMembers", () => {
     expect(
       await readContainerMembers(responseFetch("invalid RDF", status), LISTED, { scope: SCOPE }),
     ).toBeNull();
+  });
+
+  it.each([
+    404, 410, 500,
+  ])("cancels an unread %s body without awaiting cancellation", async (status) => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(body, { status }));
+    const result = readContainerMembers(fetch, LISTED, { scope: SCOPE });
+    if (status === 500) await expect(result).rejects.toThrow("500");
+    else await expect(result).resolves.toBeNull();
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it.each([201, 204, 205])("treats an empty successful %s listing as empty", async (status) => {

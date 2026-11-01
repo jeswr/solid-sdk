@@ -188,7 +188,7 @@ jobs:
         run: |
           mkdir -p apps/mobile/e2e/artifacts
           timeout 30 adb logcat -d -v threadtime > apps/mobile/e2e/artifacts/logcat.txt 2>&1 || true
-      - if: failure()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-e2e-diagnostics
@@ -269,7 +269,7 @@ jobs:
         working-directory: apps/mobile/ios/App
         env:
           TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}
-        # The push signing-key tests use the real simulator Keychain, which refuses an unsigned
+        # The secure store and push signing-key tests use the real simulator Keychain, which refuses an unsigned
         # host app with errSecMissingEntitlement (-34018); ad-hoc signing needs no team.
         run: |
           for configuration in Debug Release; do

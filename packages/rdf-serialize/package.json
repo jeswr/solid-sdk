@@ -29,7 +29,7 @@
     "lint:fix": "biome check --write src test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "api:check": "api-extractor run --local",
+    "api:check": "api-extractor run --local && api-extractor run --local --config api-extractor.wrapper.json",
     "publint": "publint --strict",
     "attw": "attw --pack"
   },
