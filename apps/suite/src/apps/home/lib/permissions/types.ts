@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { AccessSystem, EffectivePolicy, Mode, Subject } from "@jeswr/pod-access";
+import type {
+  AccessSystem,
+  EffectivePolicy,
+  Mode,
+  PodImplementation,
+  Subject,
+} from "@jeswr/pod-access";
 import type { DatasetCore } from "@rdfjs/types";
 import type { Classification } from "../model/domains";
 
@@ -17,13 +23,15 @@ export interface PermissionResource {
   node: string;
   /** Retained for safe writes, including origin-constrained WAC clauses. */
   subject?: Subject;
-  /** Complete conjunction containing this subject; every atom is required. */
+  /** Original policy conjunction retained for display and precise revocation. */
   clause?: Subject[];
   /** Canonical principal expression and modes for matching parser-local WAC nodes. */
   signature?: string;
   /** Original authorization graph, including metadata, for exact WAC matching. */
   authorization?: string;
   system?: AccessSystem;
+  /** Trusted discovery dialect retained for WAC revoke revalidation. */
+  implementation?: PodImplementation;
   scope?: "resource" | "members";
 }
 export interface PermissionLine {
@@ -35,8 +43,9 @@ export interface PermissionLine {
   modes: ModeId[];
   expiresAt?: string;
   purpose?: { iri?: string; label: string };
-  /** Other atoms required alongside the row's principal (conjunctive, not alternatives). */
+  /** Conjunctive policy metadata; unknown condition enforcement never hides exposure. */
   conditions?: Subject[];
+  conditionEnforcement?: "ignored" | "unknown";
   inherited: boolean;
 }
 export interface AgentRow {
@@ -51,6 +60,7 @@ export interface AgentRow {
 export interface PermissionsSnapshot {
   rows: AgentRow[];
   failures: { url: string; reason: "forbidden" | "not-found" | "unreadable" | "unsupported" }[];
+  warnings?: { url: string; reason: "condition-enforcement-unknown"; conditions: Subject[] }[];
   truncated: boolean;
   summary: { apps: number; people: number; publicItems: number };
 }
@@ -73,6 +83,8 @@ export interface WalkedAccess {
   isContainer: boolean;
   policy: EffectivePolicy;
   system: AccessSystem;
+  /** Trusted caller assertion, never inferred from editable access-control RDF. */
+  implementation?: PodImplementation;
   inherited: boolean;
   inheritedFrom?: string;
   classification?: Classification;
