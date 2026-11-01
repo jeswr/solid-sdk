@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The file-browser's data hook — the SINGLE place the view touches the data
@@ -22,16 +23,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type ContainerListing, DriveAccessError, listContainer } from "../drive.js";
 import { errorMessage } from "./format.js";
 
-/**
- * Ensure a single trailing slash. LDP containers are slash-terminated, so the
- * root and every navigated container URL are normalised here before they reach
- * state — keeping `currentUrl` (and therefore the breadcrumb derivation in
- * {@link breadcrumbFor}) consistent with the URL the data layer actually GETs.
- */
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith("/") ? url : `${url}/`;
-}
-
 /** What the view needs to render a folder + its breadcrumb + states. */
 export interface DriveListingState {
   /** The container currently being viewed; `null` until the first load resolves. */
@@ -46,7 +37,7 @@ export interface DriveListingState {
   error: string | null;
   /** True when the current error is an authentication/authorization failure (401/403). */
   isAccessError: boolean;
-  /** The URL currently being viewed (normalised, trailing slash). */
+  /** The requested container identifier, preserved as supplied by the caller. */
   currentUrl: string;
   /** Navigate into a sub-container (or any container URL). */
   navigate: (url: string) => void;
@@ -65,26 +56,21 @@ export interface UseDriveListingOptions {
 }
 
 /**
- * React state for browsing a Solid container tree. `rootUrl` is normalised to a
- * single trailing slash; the hook loads it on mount, whenever the caller
- * navigates, and again whenever the (normalised) `rootUrl` prop changes — a new
+ * React state for browsing a container tree. Container identifiers are preserved
+ * verbatim; the hook loads the root on mount, whenever the caller navigates,
+ * and again whenever the `rootUrl` prop changes — a new
  * root prop resets navigation to that container rather than stranding the view
  * on the previous one. It cancels an in-flight load on navigation/unmount so a
  * slow earlier request can never overwrite a newer one (the classic stale race).
- * All reads go through `listContainer`, so WAC handling, slash normalisation,
- * and the typed model come for free.
+ * All reads go through `listContainer`, which owns protocol-specific access
+ * handling and Solid trailing-slash normalisation.
  */
 export function useDriveListing(
   rootUrl: string,
   options: UseDriveListingOptions = {},
 ): DriveListingState {
   const { fetch: authedFetch } = options;
-  // Normalise the root to a single trailing slash BEFORE it seeds any state, so
-  // a slashless `rootUrl` (e.g. ".../drive") still drives a slash-terminated
-  // container GET and a correct ("Drive" → …) breadcrumb. The raw prop is never
-  // used directly.
-  const normalizedRoot = ensureTrailingSlash(rootUrl);
-  const [currentUrl, setCurrentUrl] = useState(normalizedRoot);
+  const [currentUrl, setCurrentUrl] = useState(rootUrl);
   const [listing, setListing] = useState<ContainerListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,25 +79,25 @@ export function useDriveListing(
   const [reloadToken, setReloadToken] = useState(0);
   // Guards against a resolved-but-stale response overwriting newer state.
   const requestIdRef = useRef(0);
-  // Tracks the normalised root the navigation state currently belongs to, kept
+  // Tracks the root identifier the navigation state currently belongs to, kept
   // in STATE (not a ref) so the prop-change reset is concurrent-rendering safe:
   // a ref written during render can leak from an ABANDONED render, which would
   // make a later committed render with the same root skip the reset and strand
   // `currentUrl` on the previous container. State set during render is instead
   // applied by React only when the render commits (an abandoned render is
   // discarded), so the comparison below is always against the committed value.
-  const [prevRoot, setPrevRoot] = useState(normalizedRoot);
+  const [prevRoot, setPrevRoot] = useState(rootUrl);
 
-  // Reset navigation + listing state DURING render when the normalised root
+  // Reset navigation + listing state DURING render when the root identifier
   // prop changes (React's documented "adjusting state when a prop changes"
   // pattern — applies in the same commit, so the view never flashes the previous
   // container or its stale breadcrumb). The load effect below then GETs the new
   // root. The mount case is excluded because `prevRoot` is seeded with the
   // initial root. This is driven by the `prevRoot` STATE, not a render-time ref
   // write, so it is correct under React's concurrent rendering.
-  if (prevRoot !== normalizedRoot) {
-    setPrevRoot(normalizedRoot);
-    setCurrentUrl(normalizedRoot);
+  if (prevRoot !== rootUrl) {
+    setPrevRoot(rootUrl);
+    setCurrentUrl(rootUrl);
     setListing(null);
     setError(null);
     setIsAccessError(false);
@@ -168,7 +154,7 @@ export function useDriveListing(
   }, [currentUrl, authedFetch, reloadToken]);
 
   const navigate = useCallback((url: string) => {
-    setCurrentUrl(ensureTrailingSlash(url));
+    setCurrentUrl(url);
   }, []);
 
   const refresh = useCallback(() => {
