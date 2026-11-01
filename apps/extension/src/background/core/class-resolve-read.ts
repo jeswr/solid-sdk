@@ -2,15 +2,15 @@
 // AUTHORED-BY Codex GPT-6
 /** Worker-owned, document-confined reads. No replica, page gate, or persistent cache. */
 import type { PinnedTarget } from './class-grant';
-import { safePathUrl } from './class-path';
+import { safePathUrl, safeTargetUrl } from './class-path';
 import { RESOLUTION_LIMITS, type ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch } from './class-resolve';
 
 export interface InternalRead {
   readonly fetch: ResolveFetch;
   readonly budget: ResolutionBudget;
-  /** Only the resolver may add documents discovered through the prescribed RDF links. */
-  allowDocument(url: string, authenticated: boolean): void;
+  /** Only resolver-discovered RDF links. pathOnly confines every hop to delimiter-free URLs. */
+  allowDocument(url: string, authenticated: boolean, pathOnly?: boolean): void;
   /** For the sampling rung: one candidate and its explicitly listed direct members. */
   allowTarget(target: PinnedTarget): void;
   allowMember(target: PinnedTarget, url: string): void;
@@ -42,23 +42,32 @@ export function createInternalRead(options: {
   const documents = new Map<string, Set<boolean>>();
   const cache = new Map<string, ReturnType<ResolveFetch>>();
   const targets = new Set<string>();
-  const allowDocument = (url: string, authenticated: boolean) => {
+  const pathDocuments = new Set<string>();
+  const allowDocument = (url: string, authenticated: boolean, pathOnly = false) => {
+    if (pathOnly && !safeTargetUrl(url)) return;
     const key = documentUrl(url);
     if (!key || (authenticated && !options.authenticatedOrigins.has(new URL(key).origin))) return;
+    if (pathOnly) pathDocuments.add(`${authenticated} ${key}`);
     const modes = documents.get(key) ?? new Set<boolean>();
     modes.add(authenticated);
     documents.set(key, modes);
   };
   allowDocument(options.webId, false);
-  const confined = (url: string, authenticated: boolean): boolean => {
+  const confined = (url: string, authenticated: boolean, pathOnly: boolean): boolean => {
     const key = documentUrl(url);
+    if ((pathOnly || pathDocuments.has(`${authenticated} ${key}`)) && !safeTargetUrl(url))
+      return false;
     return key !== null && documents.get(key)?.has(authenticated) === true;
   };
   const read: ResolveFetch = async (url, authenticated, method = 'GET') => {
     const failed = { ok: false, text: '', url };
     if (method !== 'GET' && method !== 'HEAD') return failed;
-    if (!confined(url, authenticated) || !budget.active() || options.signal?.aborted) return failed;
-    const key = `${authenticated} ${method} ${documentUrl(url)}`;
+    const pathOnly = pathDocuments.has(`${authenticated} ${documentUrl(url)}`);
+    if (!confined(url, authenticated, pathOnly) || !budget.active() || options.signal?.aborted)
+      return failed;
+    // Discovery permits fragment IRIs; a cached discovery redirect must not relax a
+    // target/member read's stricter per-hop policy.
+    const key = `${authenticated} ${pathOnly} ${method} ${documentUrl(url)}`;
     const cached = cache.get(key);
     if (cached) return cached;
     const aliases = new Set([key]);
@@ -77,8 +86,8 @@ export function createInternalRead(options: {
       try {
         let current = url;
         for (let hops = 0; ; hops++) {
-          if (!confined(current, authenticated)) return failed;
-          const hopKey = `${authenticated} ${method} ${documentUrl(current)}`;
+          if (!confined(current, authenticated, pathOnly)) return failed;
+          const hopKey = `${authenticated} ${pathOnly} ${method} ${documentUrl(current)}`;
           const known = cache.get(hopKey);
           if (hops > 0 && known && !aliases.has(hopKey))
             return await budget.run(() => known, controller.signal);
@@ -151,7 +160,8 @@ export function createInternalRead(options: {
             text += decoder.decode();
           }
           if (!budget.active() || controller.signal.aborted) return failed;
-          return { ok: true, text, url: current };
+          const contentType = response.headers.get('content-type');
+          return { ok: true, text, url: current, ...(contentType ? { contentType } : {}) };
         }
       } catch {
         return failed;
@@ -173,20 +183,20 @@ export function createInternalRead(options: {
     budget,
     allowDocument,
     allowTarget(target) {
-      const url = safePathUrl(target.url);
-      if (!url || !options.allowedOrigins.has(url.origin) || url.search || url.hash) return;
+      const url = safeTargetUrl(target.url);
+      if (!url || !options.allowedOrigins.has(url.origin)) return;
       if (target.kind === 'container' && !url.pathname.endsWith('/')) return;
       targets.add(`${target.kind} ${url.href}`);
-      allowDocument(url.href, true);
+      allowDocument(url.href, true, true);
     },
     allowMember(target, value) {
-      const parent = safePathUrl(target.url);
-      const member = safePathUrl(value);
-      if (!parent || !member || target.kind !== 'container' || member.search || member.hash) return;
+      const parent = safeTargetUrl(target.url);
+      const member = safeTargetUrl(value);
+      if (!parent || !member || target.kind !== 'container') return;
       if (!targets.has(`${target.kind} ${parent.href}`) || member.origin !== parent.origin) return;
       const suffix = member.pathname.slice(parent.pathname.length).replace(/\/$/, '');
       if (!member.pathname.startsWith(parent.pathname) || !suffix || suffix.includes('/')) return;
-      allowDocument(value, true);
+      allowDocument(value, true, true);
     },
   };
 }

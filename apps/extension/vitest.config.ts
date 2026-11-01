@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { defineConfig } from 'vitest/config';
 
 // The security-critical, browser-shaped core modules (DPoP proof generation, the
@@ -17,6 +18,8 @@ export default defineConfig({
       enabled: true,
       provider: 'v8',
       include: [
+        'src/background/core/shacl-lite.ts',
+        'src/background/core/class-resolve-check.ts',
         'src/background/core/authenticated-fetch.ts',
         'src/background/core/manual-redirect.ts',
         'src/background/core/profile-store.ts',
