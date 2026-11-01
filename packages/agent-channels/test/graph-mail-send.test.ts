@@ -3,7 +3,7 @@ import { digestBytes } from "@jeswr/agent-model";
 import { expect, it, vi } from "vitest";
 import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
 import { leaves, parseMime } from "../src/email/mime.js";
-import { emailMessageIdFor } from "../src/email-mime.js";
+import { emailMessageIdFor, inspectEmail } from "../src/email-mime.js";
 import { createGraphMailSend } from "../src/graph-mail/send.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../src/profiles.js";
 import { RecordingTokenProvider } from "../src/testing.js";
@@ -269,6 +269,51 @@ it("reconciles transport-generated MIME boundaries and dates without relaxing hu
     .replace("Auto-Submitted: auto-generated\r\n", "");
   s.queue.push(search(["provider-copy"]), mime(provider));
   expect(await s.send.lookup?.(wire)).toEqual({ outcome: "found", providerRef: "provider-copy" });
+});
+
+it.each([
+  "agent-message.jsonld",
+  "",
+  "=?utf-8?B?YWdlbnQtbWVzc2FnZS5qc29ubGQ=?=",
+])("reconciles Exchange attachment descriptions (%s) with STRICT body and carrier checks", async (description) => {
+  const s = sender([]);
+  const proposal = signed();
+  const wire = await s.send.render(proposal, EMAIL_MIME);
+  const provider = wire.bytes.replace(
+    "Content-Type: application/ld+json;",
+    `Content-Description: ${description}\r\nContent-Type: application/ld+json;`,
+  );
+  expect(
+    inspectEmail(provider, { parseEmail, recipient, ownAccounts: new Set([recipient]) }),
+  ).toMatchObject({ parity: "match", proposal });
+  s.queue.push(search(["exchange-copy"]), mime(provider));
+  expect(await s.send.lookup?.(wire)).toEqual({ outcome: "found", providerRef: "exchange-copy" });
+
+  const tree = parseMime(provider);
+  if (!tree.ok) throw new Error(tree.detail);
+  for (const part of leaves(tree.root)) {
+    const encoded = Buffer.from(part.text as string).toString("base64");
+    const wrapped = encoded.match(/.{1,76}/g)?.join("\r\n") as string;
+    const changed = provider.replace(wrapped, Buffer.from("Changed content").toString("base64"));
+    expect(changed).not.toBe(provider);
+    s.queue.push(search(["changed-copy"]), mime(changed));
+    expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+  }
+  for (const [type, header] of [
+    ["text/plain", "Content-Description"],
+    ["text/html", "Content-Description"],
+    ["application/ld+json", "X-Unreviewed-Metadata"],
+  ]) {
+    const changed = provider.replace(
+      `Content-Type: ${type};`,
+      `${header}: extra\r\nContent-Type: ${type};`,
+    );
+    expect(() =>
+      inspectEmail(changed, { parseEmail, recipient, ownAccounts: new Set([recipient]) }),
+    ).toThrow("human-parity-mismatch");
+    s.queue.push(search(["changed-copy"]), mime(changed));
+    expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+  }
 });
 
 it.each([

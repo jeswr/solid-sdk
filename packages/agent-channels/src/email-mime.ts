@@ -87,8 +87,11 @@ function parityMatches(root: MimeNode, proposal: RenderableProposal, footer: str
       (text, i) => normalized((parts[i] as MimeNode).text as string) === normalized(text),
     ) &&
     parts.every((part) =>
-      part.headers.every(([name]) =>
-        ["content-type", "content-transfer-encoding", "content-disposition"].includes(name),
+      part.headers.every(
+        ([name]) =>
+          ["content-type", "content-transfer-encoding", "content-disposition"].includes(name) ||
+          // Exchange adds attachment display metadata when projecting Graph JSON to MIME.
+          (part.type === "application/ld+json" && name === "content-description"),
       ),
     )
   );
