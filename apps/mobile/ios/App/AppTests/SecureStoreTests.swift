@@ -20,6 +20,7 @@ private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
     var started: (() -> Void)?
     var committed: (() -> Void)?
     var finished: (() -> Void)?
+    var allowsHTMLLoads = false
     var policyCalls = 0
     var finishes = 0
     var terminations = 0
@@ -29,13 +30,21 @@ private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
         started?()
     }
 
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    // The superclass does not implement this optional selector. The production guard calls it
+    // through WKNavigationDelegate, so expose the subclass hook to Objective-C explicitly.
+    @objc func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         committed?()
     }
 
     override func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                           decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         policyCalls += 1
+        // HTML supplied by the admission fixture can arrive as an about:blank navigation even
+        // with an HTTPS base URL. Capacitor otherwise rejects that non-application URL.
+        if allowsHTMLLoads, navigationAction.request.url?.absoluteString == "about:blank" {
+            decisionHandler(.allow)
+            return
+        }
         super.webView(webView, decidePolicyFor: navigationAction, decisionHandler: decisionHandler)
     }
 
@@ -113,7 +122,7 @@ final class SecureStoreNavigationObserverTests: XCTestCase {
 
         // Same-document URL changes do not start loading, but also invalidate outstanding reads.
         ticket = cancellation.ticket(key: "a")
-        webView.evaluateJavaScript("history.pushState(null, '', '#next')") { _, error in
+        webView.evaluateJavaScript("history.pushState(null, '', '#next'); 0;") { _, error in
             XCTAssertNil(error)
         }
         let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -391,12 +400,15 @@ private final class SecureStoreAdmissionTestPlugin: SuiteSecureStorePlugin {
 
 /// A real Capacitor bridge and WKScriptMessage channel, without network, Keychain or LA prompts.
 @MainActor
-private final class SecureStoreAdmissionBridge: NSObject, CAPBridgeDelegate, WKScriptMessageHandler {
+private final class SecureStoreAdmissionBridge: NSObject, @preconcurrency CAPBridgeDelegate, WKScriptMessageHandler {
     let plugin = SecureStoreAdmissionTestPlugin()
     let handler: SecureStoreTestNavigationHandler
     let webView: WKWebView
+    private let window: UIWindow
+    private let viewController = UIViewController()
+    private weak var previousKeyWindow: UIWindow?
     var bridgedWebView: WKWebView? { return webView }
-    var bridgedViewController: UIViewController? { return nil }
+    var bridgedViewController: UIViewController? { return viewController }
     private(set) var bridge: CapacitorBridge!
     private var originGuard: BridgeOriginGuard!
     private var navigationGuard: SecureStoreNavigationGuard!
@@ -404,11 +416,17 @@ private final class SecureStoreAdmissionBridge: NSObject, CAPBridgeDelegate, WKS
     var received: (([String: Any]) -> Void)?
 
     init(ready: @escaping () -> Void) throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        previousKeyWindow = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        self.window = window
         let webConfiguration = WKWebViewConfiguration()
         let handler = SecureStoreTestNavigationHandler()
+        handler.allowsHTMLLoads = true
         self.handler = handler
         webConfiguration.userContentController = handler.contentController
-        webView = WKWebView(frame: .zero, configuration: webConfiguration)
+        webView = WKWebView(frame: window.bounds, configuration: webConfiguration)
         super.init()
         let descriptor = InstanceDescriptor()
         descriptor.serverURL = "https://suite.example"
@@ -431,12 +449,26 @@ private final class SecureStoreAdmissionBridge: NSObject, CAPBridgeDelegate, WKS
         handler.contentController.add(self, name: "secureStoreResult")
         // Observe Capacitor's actual JavaScript delivery, including unknown callback ids.
         handler.contentController.addUserScript(WKUserScript(source: """
-            window.Capacitor.fromNative = result => window.webkit.messageHandlers.secureStoreResult.postMessage(result);
+            window.Capacitor.fromNative = result => {
+                window.webkit.messageHandlers.secureStoreResult.postMessage(result);
+                return 0;
+            };
             """, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         navigationGuard = SecureStoreNavigationGuard(inner: handler) { [weak self] in
             self?.plugin.navigationCommitted()
         }
         webView.navigationDelegate = navigationGuard
+        let commit = #selector(WKNavigationDelegate.webView(_:didCommit:))
+        let finish = #selector(WKNavigationDelegate.webView(_:didFinish:))
+        XCTAssertTrue(handler.responds(to: commit))
+        XCTAssertTrue(navigationGuard.forwardingTarget(for: finish) as? SecureStoreTestNavigationHandler === handler)
+        // A visible host gives WebKit a real view lifecycle in the simulator's unit-test app.
+        viewController.view = webView
+        window.rootViewController = viewController
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        XCTAssertTrue(webView.window === window)
+        XCTAssertFalse(webView.bounds.isEmpty)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -445,10 +477,17 @@ private final class SecureStoreAdmissionBridge: NSObject, CAPBridgeDelegate, WKS
     }
 
     func teardown() {
+        admitted = nil
+        received = nil
         webView.stopLoading()
+        webView.navigationDelegate = nil
         handler.contentController.removeScriptMessageHandler(forName: "secureStoreResult")
         if let queue = plugin.storageQueue { queue.sync { plugin.testStore?.teardown() } }
         handler.cleanUp()
+        webView.removeFromSuperview()
+        window.isHidden = true
+        window.rootViewController = nil
+        previousKeyWindow?.makeKeyAndVisible()
     }
 }
 
@@ -459,12 +498,14 @@ final class SecureStoreAdmissionTests: XCTestCase {
         let finished = expectation(description: "Document loaded")
         fixture.handler.committed = { committed.fulfill() }
         fixture.handler.finished = { finished.fulfill() }
+        defer {
+            fixture.handler.committed = nil
+            fixture.handler.finished = nil
+        }
         let url = try XCTUnwrap(URL(string: "https://suite.example/\(path)"))
-        // WebKit supplies a real HTTPS document origin without issuing a network request.
-        fixture.webView.loadSimulatedRequest(URLRequest(url: url), responseHTML: "<!doctype html><p>fixture</p>")
-        wait(for: [committed, finished], timeout: 10)
-        fixture.handler.committed = nil
-        fixture.handler.finished = nil
+        // The HTTPS base URL supplies the real frame origin without a network request.
+        try XCTUnwrap(fixture.webView.loadHTMLString("<!doctype html><p>fixture</p>", baseURL: url))
+        wait(for: [committed, finished], timeout: 10, enforceOrder: true)
     }
 
     private func submit(_ fixture: SecureStoreAdmissionBridge, key: String = "a", callbackId: String = "read") {
@@ -477,8 +518,10 @@ final class SecureStoreAdmissionTests: XCTestCase {
         fixture.webView.evaluateJavaScript("""
             window.webkit.messageHandlers.bridge.postMessage({type: 'message', pluginId: 'SuiteSecureStore',
                 methodName: 'get', callbackId: '\(callbackId)', options: {key: '\(key)'}});
-            """) { _, error in
+            0;
+            """) { result, error in
             XCTAssertNil(error)
+            XCTAssertEqual(result as? Int, 0)
             submitted.fulfill()
         }
         wait(for: [admitted, submitted], timeout: 10)
