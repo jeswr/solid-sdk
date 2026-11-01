@@ -106,12 +106,15 @@ describe("iOS secure store guardrails", () => {
     expect(plugin).toContain('"available": false');
   });
 
-  test("cancels on lifecycle, URL changes and reloads without replacing Capacitor's delegate", () => {
+  test("cancels on lifecycle, KVO signals and commits while forwarding Capacitor's delegate", () => {
     expect(plugin).toContain("UIScene.didEnterBackgroundNotification");
     expect(plugin).toContain("UIApplication.didEnterBackgroundNotification");
     expect(plugin).toContain("UIScene.didDisconnectNotification");
     expect(plugin).toContain("@objc private func backgrounded() { cancelReads() }");
-    expect(plugin).toContain("func navigationChanged() { cancelReads() }");
+    expect(plugin).toMatch(
+      /func navigationChanged\(\) \{\s+cancellation\.documentChanged\(\)\s+queue\.async/,
+    );
+    expect(plugin).toContain("func navigationCommitted() { navigationChanged() }");
     expect(plugin).toMatch(
       /private func cancelReads\(key: String\? = nil\) \{\s+cancellation\.cancel\(key: key\)\s+queue\.async/,
     );
@@ -122,16 +125,56 @@ describe("iOS secure store guardrails", () => {
     expect(plugin).toContain("webView.observe(\\.url, options: [.new])");
     expect(plugin).toContain("webView.observe(\\.isLoading, options: [.new])");
     expect(plugin).toContain("if change.newValue == true { navigated() }");
-    expect(plugin).not.toMatch(/WKNavigationDelegate|forwardingTarget|\.navigationDelegate\s*=/);
+    const proxy = plugin.slice(plugin.indexOf("final class SecureStoreNavigationGuard:"));
+    expect(proxy).toContain("NSObject, WKNavigationDelegate");
+    expect(proxy).toContain("private weak var inner: (NSObject & WKNavigationDelegate)?");
+    expect(proxy).toContain(
+      "return super.responds(to: selector) || (inner?.responds(to: selector) ?? false)",
+    );
+    expect(proxy).toContain("override func forwardingTarget(for selector: Selector!) -> Any?");
+    expect(proxy).toContain("return inner?.responds(to: selector) == true ? inner : nil");
+    expect(proxy).toMatch(
+      /func webView\(_ webView: WKWebView, didCommit navigation: WKNavigation!\) \{\s+committed\(\)\s+inner\?\.webView\?\(webView, didCommit: navigation\)/,
+    );
     const main = read("App/MainViewController.swift");
+    expect(main).toContain("private var navigationGuard: SecureStoreNavigationGuard?");
+    expect(main).toContain("SecureStoreNavigationGuard(inner: handler)");
+    expect(main).toContain("secureStore?.navigationCommitted()");
+    expect(main).toContain("webView.navigationDelegate = navigation");
+    expect(main).toContain("navigationGuard = navigation");
     expect(main).toContain("private var navigationObserver: SecureStoreNavigationObserver?");
     expect(main).toContain("SecureStoreNavigationObserver(webView: webView)");
     expect(main).toContain("secureStore?.navigationChanged()");
-    expect(main).not.toMatch(/\.navigationDelegate\s*=/);
+    expect(main).toContain("UIDelegateOriginGuard(inner: handler, allowed: allowed)");
+    expect(main).toContain("bridge.webView?.uiDelegate = ui");
     const store = read("App/SecureStore.swift");
     expect(store).toContain("guard self.operations.contains(id) else { return }");
     expect(store).toContain("operations.cancel(key: key)");
     expect(store).toContain("operation.authentication.invalidate()");
+  });
+
+  test("binds read tickets to the document generation and rechecks before bridge delivery", () => {
+    const store = read("App/SecureStore.swift");
+    expect(store).toContain("let documentGeneration: UInt64");
+    expect(store).toContain("private var documentGeneration: UInt64 = 0");
+    expect(store).toContain("documentGeneration: documentGeneration)");
+    expect(store).toMatch(
+      /func documentChanged\(\) \{\s+lock\.lock\(\)\s+defer \{ lock\.unlock\(\) \}[\s\S]*?documentGeneration &\+= 1/,
+    );
+    expect(store).toContain("ticket.documentGeneration == documentGeneration");
+    expect(store).toContain(
+      "completion(isCurrent(ticket) ? result : .failure(SecureStoreFailure.cancelled))",
+    );
+    const get = plugin.slice(plugin.indexOf("@objc func get("), plugin.indexOf("@objc func set("));
+    expect(get).toContain("let ticket = cancellation.ticket(key: key)");
+    expect(get.indexOf("let ticket =")).toBeLessThan(get.indexOf("queue.async"));
+    expect(get).toContain("self.store().get(key: key, ticket: ticket)");
+    expect(get).toMatch(
+      /DispatchQueue\.main\.async \{\s+(?:\/\/[^\n]*\s+)*cancellation\.deliver\(ticket, result\)/,
+    );
+    expect(get.indexOf("cancellation.deliver(ticket, result)")).toBeLessThan(
+      get.indexOf("call.resolve("),
+    );
   });
 
   test("localises the Face ID usage description and includes both strings resources", () => {

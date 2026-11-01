@@ -53,7 +53,12 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc private func backgrounded() { cancelReads() }
 
-    func navigationChanged() { cancelReads() }
+    func navigationChanged() {
+        cancellation.documentChanged()
+        queue.async { (try? self.loaded?.get())?.cancelInvalidated() }
+    }
+
+    func navigationCommitted() { navigationChanged() }
 
     private func cancelReads(key: String? = nil) {
         cancellation.cancel(key: key)
@@ -90,8 +95,10 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 try self.store().get(key: key, ticket: ticket) { result in
                     DispatchQueue.main.async {
-                        // The last check the shell can make. Capacitor's call.resolve queues one more
-                        // main-thread hop before evaluateJavaScript, which this plugin cannot reach. A
+                        // Recheck the ticket's document generation on the main thread, including
+                        // commits after provisional loading or after decryption completed.
+                        // Capacitor's call.resolve queues one more main-thread hop before
+                        // evaluateJavaScript, which this plugin cannot reach. A
                         // commit landing in that hop can only be a same-origin document (the navigation
                         // policy blocks every other origin), and Capacitor's bridge drops a result whose
                         // callback id that document never issued. S9 cancels prompts; it does not promise
@@ -150,8 +157,33 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-/// Observes the main page without replacing Capacitor's navigation delegate. URL changes cover
-/// navigation, redirects and history changes; loading covers reloads whose URL stays identical.
+/// Cancels reads at every main-frame commit before forwarding to Capacitor. All other optional
+/// callbacks keep Capacitor's selector availability and Objective-C message forwarding intact.
+final class SecureStoreNavigationGuard: NSObject, WKNavigationDelegate {
+    private weak var inner: (NSObject & WKNavigationDelegate)?
+    private let committed: () -> Void
+
+    init(inner: NSObject & WKNavigationDelegate, committed: @escaping () -> Void) {
+        self.inner = inner
+        self.committed = committed
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        return super.responds(to: selector) || (inner?.responds(to: selector) ?? false)
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        return inner?.responds(to: selector) == true ? inner : nil
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        committed()
+        inner?.webView?(webView, didCommit: navigation)
+    }
+}
+
+/// Adds early cancellation alongside the definitive commit hook. URL changes cover navigation,
+/// redirects and history changes; loading covers reloads whose URL stays identical.
 /// Cancellation is deliberately conservative and starts before commit. The callback invalidates
 /// tickets synchronously, then enqueues prompt cleanup without waiting for the storage queue.
 final class SecureStoreNavigationObserver {

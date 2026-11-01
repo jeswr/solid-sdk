@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import Foundation
 import Security
 
@@ -13,15 +14,18 @@ final class SecureStoreCancellation {
         let key: String
         let generation: UInt64
         let keyGeneration: UInt64
+        let documentGeneration: UInt64
     }
     private let lock = NSRecursiveLock()
     private var generation: UInt64 = 0
     private var keyGenerations = [String: UInt64]()
+    private var documentGeneration: UInt64 = 0
 
     func ticket(key: String) -> Ticket {
         lock.lock()
         defer { lock.unlock() }
-        return Ticket(key: key, generation: generation, keyGeneration: keyGenerations[key, default: 0])
+        return Ticket(key: key, generation: generation, keyGeneration: keyGenerations[key, default: 0],
+                      documentGeneration: documentGeneration)
     }
 
     func cancel(key: String? = nil) {
@@ -31,10 +35,19 @@ final class SecureStoreCancellation {
         else { generation &+= 1 }
     }
 
+    func documentChanged() {
+        lock.lock()
+        defer { lock.unlock() }
+        // Every KVO navigation signal and every main-frame commit invalidates the old document.
+        // A read begun during provisional loading belongs to that generation until commit.
+        documentGeneration &+= 1
+    }
+
     func isCurrent(_ ticket: Ticket) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return ticket.generation == generation && ticket.keyGeneration == keyGenerations[ticket.key, default: 0]
+        return ticket.documentGeneration == documentGeneration && ticket.generation == generation &&
+            ticket.keyGeneration == keyGenerations[ticket.key, default: 0]
     }
 
     func check(_ ticket: Ticket) throws {
@@ -242,6 +255,6 @@ final class SecureStore {
     func cancelInvalidated() { operations.cancelInvalidated(using: cancellation) }
     func cancel() { cancellation.cancel(); operations.cancel() }
     func background() { cancel() }
-    func navigationCommitted() { cancel() }
+    func navigationCommitted() { cancellation.documentChanged(); cancelInvalidated() }
     func teardown() { cancel() }
 }

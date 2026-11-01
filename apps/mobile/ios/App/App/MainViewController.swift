@@ -9,6 +9,8 @@ class MainViewController: CAPBridgeViewController {
     private var bridgeGuard: BridgeOriginGuard?
     // WKWebView.uiDelegate is weak, so the controller keeps the guard alive.
     private var uiGuard: UIDelegateOriginGuard?
+    // WKWebView.navigationDelegate is weak too; retain the forwarding proxy alongside KVO.
+    private var navigationGuard: SecureStoreNavigationGuard?
     private var navigationObserver: SecureStoreNavigationObserver?
 
     override open func capacitorDidLoad() {
@@ -39,6 +41,11 @@ class MainViewController: CAPBridgeViewController {
         bridge.webView?.uiDelegate = ui
         uiGuard = ui
         if let webView = bridge.webView {
+            let navigation = SecureStoreNavigationGuard(inner: handler) { [weak secureStore] in
+                secureStore?.navigationCommitted()
+            }
+            webView.navigationDelegate = navigation
+            navigationGuard = navigation
             navigationObserver = SecureStoreNavigationObserver(webView: webView) { [weak secureStore] in
                 secureStore?.navigationChanged()
             }

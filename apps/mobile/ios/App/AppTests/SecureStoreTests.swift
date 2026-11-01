@@ -16,11 +16,37 @@ struct FakeSecureStoreInstallation: SecureStoreInstallChecking {
 
 /// Exercise real WKWebView KVO and delegate delivery, without a server, Keychain or LA prompt.
 private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
+    var started: (() -> Void)?
+    var committed: (() -> Void)?
     var finished: (() -> Void)?
+    var policyCalls = 0
+    var finishes = 0
+    var terminations = 0
+
+    override func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        super.webView(webView, didStartProvisionalNavigation: navigation)
+        started?()
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        committed?()
+    }
+
+    override func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                          decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        policyCalls += 1
+        super.webView(webView, decidePolicyFor: navigationAction, decisionHandler: decisionHandler)
+    }
 
     override func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         super.webView(webView, didFinish: navigation)
+        finishes += 1
         finished?()
+    }
+
+    override func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        terminations += 1
+        super.webViewWebContentProcessDidTerminate(webView)
     }
 }
 
@@ -43,6 +69,7 @@ final class SecureStoreNavigationObserverTests: XCTestCase {
         for url in [first, second] { try Data("<!doctype html><p>fixture</p>".utf8).write(to: url) }
         let webView = WKWebView(frame: .zero)
         let handler = SecureStoreTestNavigationHandler()
+        defer { handler.cleanUp() }
         let allowed = try XCTUnwrap(SuiteOrigin(url: URL(string: "https://suite.example")))
         let uiGuard = UIDelegateOriginGuard(inner: handler, allowed: allowed)
         webView.navigationDelegate = handler
@@ -53,7 +80,7 @@ final class SecureStoreNavigationObserverTests: XCTestCase {
         var ticket = cancellation.ticket(key: "a")
         var observer: SecureStoreNavigationObserver? = SecureStoreNavigationObserver(webView: webView) {
             XCTAssertTrue(Thread.isMainThread)
-            cancellation.cancel()
+            cancellation.documentChanged()
         }
         XCTAssertTrue(cancellation.isCurrent(ticket), "Installing observations must not cancel reads")
         load(webView, handler: handler) { webView.loadFileURL(second, allowingReadAccessTo: directory) }
@@ -98,6 +125,244 @@ final class SecureStoreNavigationObserverTests: XCTestCase {
         ticket = cancellation.ticket(key: "a")
         load(webView, handler: handler) { webView.loadFileURL(first, allowingReadAccessTo: directory) }
         XCTAssertTrue(cancellation.isCurrent(ticket), "Releasing the owner must remove its observations")
+    }
+}
+
+/// Holds the response before document commit, including for reloads, without a server or sleeps.
+@MainActor
+private final class SecureStoreDelayedNavigation: NSObject, WKURLSchemeHandler {
+    var requested: (() -> Void)?
+    private var pending: WKURLSchemeTask?
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        XCTAssertNil(pending)
+        pending = urlSchemeTask
+        requested?()
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        pending = nil
+    }
+
+    func finish() throws {
+        let task = try XCTUnwrap(pending)
+        let url = try XCTUnwrap(task.request.url)
+        let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+                                                    headerFields: ["Content-Type": "text/html", "Cache-Control": "no-store"]))
+        pending = nil
+        task.didReceive(response)
+        task.didReceive(Data("<!doctype html><p>fixture</p>".utf8))
+        task.didFinish()
+    }
+}
+
+@MainActor
+private final class SecureStoreNavigationFixture {
+    let queue: DispatchQueue
+    let cancellation: SecureStoreCancellation
+    let keys: FakeSecureStoreKeys
+    let authenticator: FakeSecureStoreAuthenticator
+    let store: SecureStore
+    let webView: WKWebView
+    let handler: SecureStoreTestNavigationHandler
+    // Retain both owners: WebKit's navigation delegate is weak and observations end at deinit.
+    let navigation: SecureStoreNavigationGuard
+    let observer: SecureStoreNavigationObserver
+
+    init(scheme: SecureStoreDelayedNavigation) throws {
+        let queue = DispatchQueue(label: "securestore-navigation-tests")
+        let cancellation = SecureStoreCancellation()
+        let keys = FakeSecureStoreKeys()
+        let authenticator = FakeSecureStoreAuthenticator()
+        let writer = FakeSecureStoreWriter()
+        let store = try SecureStore(namespace: String(repeating: "a", count: 64), queue: queue,
+                                    installation: FakeSecureStoreInstallation(), writer: { writer },
+                                    keys: keys, authenticator: authenticator, cancellation: cancellation)
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(scheme, forURLScheme: "secure-store-test")
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let handler = SecureStoreTestNavigationHandler()
+        let changed: () -> Void = {
+            XCTAssertTrue(Thread.isMainThread)
+            cancellation.documentChanged()
+            queue.async { store.cancelInvalidated() }
+        }
+        let navigation = SecureStoreNavigationGuard(inner: handler, committed: changed)
+        webView.navigationDelegate = navigation
+        self.queue = queue
+        self.cancellation = cancellation
+        self.keys = keys
+        self.authenticator = authenticator
+        self.store = store
+        self.webView = webView
+        self.handler = handler
+        self.navigation = navigation
+        self.observer = SecureStoreNavigationObserver(webView: webView, navigated: changed)
+    }
+
+    func teardown() {
+        webView.stopLoading()
+        queue.sync { store.teardown() }
+        handler.cleanUp()
+    }
+}
+
+@MainActor
+final class SecureStoreNavigationGuardTests: XCTestCase {
+    private func begin(_ fixture: SecureStoreNavigationFixture, scheme: SecureStoreDelayedNavigation,
+                       action: () -> Void) {
+        let started = expectation(description: "Provisional navigation started")
+        let requested = expectation(description: "Response held before commit")
+        fixture.handler.started = { started.fulfill() }
+        scheme.requested = { requested.fulfill() }
+        action()
+        wait(for: [started, requested], timeout: 10)
+        fixture.handler.started = nil
+        scheme.requested = nil
+        XCTAssertTrue(fixture.webView.isLoading)
+    }
+
+    private func finish(_ fixture: SecureStoreNavigationFixture, scheme: SecureStoreDelayedNavigation) throws {
+        let finished = expectation(description: "Capacitor didFinish forwarded")
+        fixture.handler.finished = { finished.fulfill() }
+        try scheme.finish()
+        wait(for: [finished], timeout: 10)
+        fixture.handler.finished = nil
+    }
+
+    private func checkReadDuringProvisionalLoad(reload: Bool) throws {
+        let scheme = SecureStoreDelayedNavigation()
+        let fixture = try SecureStoreNavigationFixture(scheme: scheme)
+        defer { fixture.teardown() }
+        let first = try XCTUnwrap(URL(string: "secure-store-test://suite/first.html"))
+        let second = try XCTUnwrap(URL(string: "secure-store-test://suite/second.html"))
+        begin(fixture, scheme: scheme) { fixture.webView.load(URLRequest(url: first)) }
+        try finish(fixture, scheme: scheme)
+        _ = try fixture.queue.sync { try fixture.store.set(key: "a", value: "token", userPresence: true, version: 0) }
+        let previous = fixture.cancellation.ticket(key: "a")
+        begin(fixture, scheme: scheme) {
+            if reload { fixture.webView.reload() }
+            else { fixture.webView.load(URLRequest(url: second)) }
+        }
+        let provisionalURL = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            fixture.webView.url == (reload ? first : second) && fixture.webView.isLoading
+        }, object: nil)
+        wait(for: [provisionalURL], timeout: 10)
+        // No response has been released, so the outgoing document still exists. KVO has already
+        // signalled loading; a new read now must also be cancelled at the later commit.
+        let ticket = fixture.cancellation.ticket(key: "a")
+        XCTAssertGreaterThan(ticket.documentGeneration, previous.documentGeneration)
+        XCTAssertTrue(fixture.cancellation.isCurrent(ticket))
+        let done = expectation(description: "Read rejected without resolving")
+        done.assertForOverFulfill = true
+        var rejections = 0
+        var resolutions = 0
+        fixture.queue.sync {
+            fixture.store.get(key: "a", ticket: ticket) { result in
+                DispatchQueue.main.async {
+                    fixture.cancellation.deliver(ticket, result) { delivered in
+                        switch delivered {
+                        case .success: resolutions += 1; XCTFail("Read escaped into replacement document")
+                        case .failure: rejections += 1; assertFailure(delivered, .cancelled)
+                        }
+                        done.fulfill()
+                    }
+                }
+            }
+        }
+        let authentication = try XCTUnwrap(fixture.authenticator.sessions.last)
+        XCTAssertFalse(authentication.invalidated)
+        let committed = expectation(description: "Commit forwarded after synchronous cancellation")
+        fixture.handler.committed = {
+            XCTAssertFalse(fixture.cancellation.isCurrent(ticket), "Cancel before Capacitor sees commit")
+            committed.fulfill()
+        }
+        try finish(fixture, scheme: scheme)
+        wait(for: [committed], timeout: 10)
+        fixture.handler.committed = nil
+        XCTAssertEqual(fixture.webView.url, reload ? first : second)
+        // Complete authentication only after the replacement document has committed.
+        fixture.queue.sync { authentication.completion?(.success(())) }
+        let drained = expectation(description: "Late authentication and bridge deliveries drained")
+        fixture.queue.async { DispatchQueue.main.async { drained.fulfill() } }
+        wait(for: [done, drained], timeout: 2)
+        fixture.queue.sync {
+            XCTAssertTrue(authentication.invalidated)
+            XCTAssertEqual(fixture.keys.unwraps, 0)
+        }
+        XCTAssertEqual(rejections, 1)
+        XCTAssertEqual(resolutions, 0)
+    }
+
+    func testReadStartedAfterProvisionalNavigationIsRejectedAtCommitBeforeAuthenticationCompletes() throws {
+        try checkReadDuringProvisionalLoad(reload: false)
+    }
+
+    func testReadStartedAfterSameURLReloadBeginsIsRejectedAtCommitBeforeAuthenticationCompletes() throws {
+        try checkReadDuringProvisionalLoad(reload: true)
+    }
+
+    func testProxyForwardsCapacitorPolicyFinishAndProcessTerminationCallbacks() throws {
+        let scheme = SecureStoreDelayedNavigation()
+        let fixture = try SecureStoreNavigationFixture(scheme: scheme)
+        defer { fixture.teardown() }
+        for name in ["webView:decidePolicyForNavigationAction:decisionHandler:",
+                     "webView:didFinishNavigation:", "webViewWebContentProcessDidTerminate:"] {
+            let selector = NSSelectorFromString(name)
+            XCTAssertTrue(fixture.navigation.responds(to: selector), name)
+            XCTAssertTrue((fixture.navigation.forwardingTarget(for: selector) as? WebViewDelegationHandler) === fixture.handler)
+        }
+        let absent = NSSelectorFromString("notAWebKitCallback:")
+        XCTAssertFalse(fixture.navigation.responds(to: absent))
+        XCTAssertNil(fixture.navigation.forwardingTarget(for: absent))
+        let url = try XCTUnwrap(URL(string: "secure-store-test://suite/first.html"))
+        begin(fixture, scheme: scheme) { fixture.webView.load(URLRequest(url: url)) }
+        try finish(fixture, scheme: scheme)
+        XCTAssertGreaterThan(fixture.handler.policyCalls, 0)
+        XCTAssertEqual(fixture.handler.finishes, 1)
+        let delegate: WKNavigationDelegate = fixture.navigation
+        // Capacitor's real termination handler reloads the page; this must reach it through
+        // Objective-C optional-selector forwarding just like WebKit's policy/finish callbacks.
+        begin(fixture, scheme: scheme) { delegate.webViewWebContentProcessDidTerminate?(fixture.webView) }
+        try finish(fixture, scheme: scheme)
+        XCTAssertEqual(fixture.handler.terminations, 1)
+        XCTAssertEqual(fixture.handler.finishes, 2)
+    }
+
+    func testReadWithinOneDocumentStillResolves() throws {
+        let scheme = SecureStoreDelayedNavigation()
+        let fixture = try SecureStoreNavigationFixture(scheme: scheme)
+        defer { fixture.teardown() }
+        let url = try XCTUnwrap(URL(string: "secure-store-test://suite/first.html"))
+        begin(fixture, scheme: scheme) { fixture.webView.load(URLRequest(url: url)) }
+        try finish(fixture, scheme: scheme)
+        _ = try fixture.queue.sync { try fixture.store.set(key: "a", value: "token", userPresence: true, version: 0) }
+        let ticket = fixture.cancellation.ticket(key: "a")
+        let done = expectation(description: "Same-document read resolves")
+        var resolutions = 0
+        fixture.queue.sync {
+            fixture.store.get(key: "a", ticket: ticket) { result in
+                DispatchQueue.main.async {
+                    fixture.cancellation.deliver(ticket, result) { delivered in
+                        do {
+                            let read = try delivered.get()
+                            XCTAssertEqual(read.value, "token")
+                            XCTAssertEqual(read.version, 1)
+                            resolutions += 1
+                        } catch { XCTFail("Same-document read rejected: \(error)") }
+                        done.fulfill()
+                    }
+                }
+            }
+            fixture.authenticator.sessions.last?.completion?(.success(()))
+        }
+        wait(for: [done], timeout: 2)
+        XCTAssertEqual(resolutions, 1)
+        XCTAssertTrue(fixture.cancellation.isCurrent(ticket))
+        fixture.queue.sync {
+            XCTAssertEqual(fixture.keys.unwraps, 1)
+            XCTAssertTrue(fixture.authenticator.sessions[0].invalidated)
+        }
     }
 }
 
@@ -641,7 +906,8 @@ final class SecureStoreTests: XCTestCase {
             }
             wait(for: [decrypting], timeout: 2)
             // The bridge records this on the calling thread before enqueuing prompt cleanup.
-            cancellation.cancel(key: trigger == "remove" ? "a" : nil)
+            if trigger == "navigation" { cancellation.documentChanged() }
+            else { cancellation.cancel(key: trigger == "remove" ? "a" : nil) }
             queue.async { self.store.cancelInvalidated() }
             resume.signal()
             wait(for: [done], timeout: 2)
@@ -664,6 +930,23 @@ final class SecureStoreTests: XCTestCase {
         }
         let current = cancellation.ticket(key: "a")
         cancellation.cancel(key: "b")
+        cancellation.deliver(current, .success(read)) { result in
+            XCTAssertEqual(try? result.get().value, "token")
+        }
+    }
+
+    func testDocumentGenerationRejectsAnUnlockedResultWaitingForBridgeDelivery() throws {
+        _ = try set(gated: true)
+        let ticket = cancellation.ticket(key: "a")
+        let read = try get(authenticated: true)
+        // A commit can arrive after authentication/decryption, before the final main-thread check.
+        cancellation.documentChanged()
+        let current = cancellation.ticket(key: "a")
+        XCTAssertEqual(current.generation, ticket.generation)
+        XCTAssertNotEqual(current.documentGeneration, ticket.documentGeneration)
+        cancellation.deliver(ticket, .success(read)) { result in
+            assertFailure(result, .cancelled)
+        }
         cancellation.deliver(current, .success(read)) { result in
             XCTAssertEqual(try? result.get().value, "token")
         }
