@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
@@ -381,7 +380,7 @@ export class TaskStore {
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
   }
-  /** Prepare once so Retry uses the same data, destination and child revisions. */
+  /** Prepare once so Retry uses the same data, destination and reference revisions. */
   prepareTaskMove(
     item: StoredTask,
     source: StoredProject,
@@ -403,20 +402,24 @@ export class TaskStore {
       item,
       { url, dataset },
       async () => {
-        // Children can remain in a different project after being moved individually.
+        // Children and completed occurrences may remain in other projects.
         const projects = new Map(
           [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
         );
-        const children = new Map<string, StoredTask>();
+        const references = new Map<string, StoredTask>();
         for (const project of projects.values())
           for (const child of await this.listTasks(project.tracker.stateStore as string))
-            if (child.task.parent === item.task.id) children.set(child.url, child);
-        return [...children.values()];
+            if (
+              child.task.parent === item.task.id ||
+              (child.task.state === "closed" && child.task.clonedFrom === item.task.id)
+            )
+              references.set(child.url, child);
+        return [...references.values()];
       },
       now,
     );
   }
-  /** Create, remap child links, then delete, reconciling before any compensation. */
+  /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
   async moveTaskToProject(
     item: StoredTask,
     source: StoredProject,

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { isomorphic } from "rdf-isomorphic";
 import { missingLabels } from "../lib/compose/planning";
@@ -561,7 +560,12 @@ export class TasksCache {
     };
     return this.updateProject(project, define);
   }
-  updateTask(item: StoredTask, change: (task: TaskItem) => void): Promise<StoredTask | undefined> {
+  updateTask(
+    item: StoredTask,
+    change: (task: TaskItem) => void,
+    /** Composite operations retry their complete intent rather than this write alone. */
+    onRetry?: () => void,
+  ): Promise<StoredTask | undefined> {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -580,9 +584,10 @@ export class TasksCache {
         const task = await this.store.updateTask(this.task(project.url, item.url), change);
         return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
       },
-      () => {
-        void this.updateTask(item, change);
-      },
+      onRetry ??
+        (() => {
+          void this.updateTask(item, change);
+        }),
       [item.url],
     );
   }
@@ -601,15 +606,21 @@ export class TasksCache {
       let next = replaceTask(replaceTask(state, source.url, item.url), target.url, url, moved);
       for (const project of state.projects)
         for (const child of state.tasks[project.url]?.items ?? []) {
-          const saved = confirmed ? operation?.children.get(child.url) : undefined;
-          if (saved || child.task.parent === item.task.id)
+          const saved = confirmed ? operation?.references.get(child.url) : undefined;
+          if (
+            saved ||
+            child.task.parent === item.task.id ||
+            (child.task.state === "closed" && child.task.clonedFrom === item.task.id)
+          )
             next = replaceTask(
               next,
               project.url,
               child.url,
               saved ??
                 changeTask(child, (task) => {
-                  task.parent = moved.task.id;
+                  if (task.parent === item.task.id) task.parent = moved.task.id;
+                  if (task.state === "closed" && task.clonedFrom === item.task.id)
+                    task.clonedFrom = moved.task.id;
                 }),
             );
         }
@@ -870,6 +881,8 @@ export class TasksCache {
   updateProject(
     project: StoredProject,
     change: (tracker: TaskTracker) => void,
+    /** Composite operations retry their complete intent rather than this write alone. */
+    onRetry?: () => void,
   ): Promise<StoredProject | undefined> {
     const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
@@ -887,9 +900,10 @@ export class TasksCache {
             : await this.store.updateProject(current, change);
           return { result, commit: (state) => replaceProject(state, result) };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ??
+          (() => {
+            void attempt(true);
+          }),
         [project.url],
       );
     return attempt();

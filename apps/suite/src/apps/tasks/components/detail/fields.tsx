@@ -45,17 +45,23 @@ function CommitDateField({
   const [draft, setDraft] = useState(value);
   const [referenceDate, setReferenceDate] = useState(() => new Date());
   const editing = useRef(false);
+  const dirty = useRef(false);
   const signature = JSON.stringify(value);
   useEffect(() => {
-    if (!editing.current) setDraft(JSON.parse(signature));
+    if (!dirty.current) setDraft(JSON.parse(signature));
   }, [signature]);
   const commit = (form: HTMLFormElement) => {
     editing.current = false;
-    if (form.checkValidity() && JSON.stringify(draft) !== signature) onCommit(draft);
+    if (!dirty.current || !form.checkValidity()) return;
+    dirty.current = false;
+    if (JSON.stringify(draft) !== signature) onCommit(draft);
   };
   return (
     <form
       className="tsk-detail-date"
+      onInput={() => {
+        dirty.current = true;
+      }}
       onFocus={() => {
         if (!editing.current) setReferenceDate(new Date());
         editing.current = true;
@@ -73,7 +79,10 @@ function CommitDateField({
         locale="en-GB"
         value={draft}
         referenceDate={referenceDate}
-        onChange={setDraft}
+        onChange={(value) => {
+          dirty.current = true;
+          setDraft(value);
+        }}
         disabled={disabled}
       />
     </form>
@@ -172,32 +181,51 @@ function LabelsField({
   const selected = project.tracker.labels
     .filter((label) => view.labelIds.includes(label.id))
     .map((label) => label.name.toLowerCase());
-  const setLabels = async (keys: string[]) => {
+  const setLabels = async (keys: string[], submittedName?: string) => {
+    // Either failed write must retry the entire user intent, including assignment.
+    const retry = () => {
+      void setLabels(keys, submittedName);
+    };
     setBusy(true);
     try {
       const missing = keys.filter(
         (key) => !project.tracker.labels.some((label) => label.name.toLowerCase() === key),
       );
       const updated = missing.length
-        ? await tasks.updateProject(project, (tracker) => {
-            for (const key of missing) {
-              if (!tracker.labels.some((label) => label.name.toLowerCase() === key)) {
-                const original = tasks.projects
-                  .flatMap((item) => item.tracker.labels)
-                  .find((label) => label.name.toLowerCase() === key);
-                tracker.defineCategory("Label", names.get(key) ?? key, undefined, original?.color);
+        ? await tasks.updateProject(
+            project,
+            (tracker) => {
+              for (const key of missing) {
+                if (!tracker.labels.some((label) => label.name.toLowerCase() === key)) {
+                  const original = tasks.projects
+                    .flatMap((item) => item.tracker.labels)
+                    .find((label) => label.name.toLowerCase() === key);
+                  tracker.defineCategory(
+                    "Label",
+                    names.get(key) ?? key,
+                    undefined,
+                    original?.color,
+                  );
+                }
               }
-            }
-          })
+            },
+            retry,
+          )
         : project;
       if (!updated) return;
       const ids = updated.tracker.labels
         .filter((label) => keys.includes(label.name.toLowerCase()))
         .map((label) => label.id);
-      await tasks.updateTask(stored, (task) => {
-        for (const label of updated.tracker.labels) task.types.delete(label.id);
-        for (const id of ids) task.types.add(id);
-      });
+      const saved = await tasks.updateTask(
+        stored,
+        (task) => {
+          for (const label of updated.tracker.labels) task.types.delete(label.id);
+          for (const id of ids) task.types.add(id);
+        },
+        retry,
+      );
+      if (saved && submittedName !== undefined)
+        setName((current) => (current === submittedName ? "" : current));
     } finally {
       setBusy(false);
     }
@@ -220,7 +248,7 @@ function LabelsField({
           const label = name.trim();
           if (!label || busy) return;
           names.set(label.toLowerCase(), label);
-          void setLabels([...new Set([...selected, label.toLowerCase()])]).then(() => setName(""));
+          void setLabels([...new Set([...selected, label.toLowerCase()])], name);
         }}
       >
         <input

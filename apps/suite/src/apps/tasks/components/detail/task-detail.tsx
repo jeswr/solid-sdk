@@ -56,21 +56,16 @@ function descriptionNodes(text: string) {
 function useDetailDraft(saved: string) {
   const [value, setValue] = useState(saved);
   const dirty = useRef(false);
-  const editing = useRef(false);
   useEffect(() => {
-    if (!dirty.current && !editing.current) setValue(saved);
+    if (!dirty.current) setValue(saved);
   }, [saved]);
   return {
     value,
-    focus: () => {
-      editing.current = true;
-    },
     change: (text: string) => {
       dirty.current = true;
       setValue(text);
     },
     blur: (normalise: (text: string) => string = (text) => text) => {
-      editing.current = false;
       const next = dirty.current ? normalise(value) : saved;
       dirty.current = false;
       setValue(next);
@@ -254,7 +249,6 @@ export function TaskDetail({
           aria-label="Task title"
           rows={1}
           value={title}
-          onFocus={titleDraft.focus}
           onChange={(event) => titleDraft.change(event.target.value)}
           onBlur={commitTitle}
           onKeyDown={(event) => {
@@ -272,7 +266,6 @@ export function TaskDetail({
           placeholder="Description"
           value={description}
           onFocus={() => {
-            descriptionDraft.focus();
             setEditingDescription(true);
           }}
           onChange={(event) => descriptionDraft.change(event.target.value)}
