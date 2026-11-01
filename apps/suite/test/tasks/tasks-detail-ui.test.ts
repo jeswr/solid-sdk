@@ -56,6 +56,13 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   Toaster: () => null,
   toast: { success: vi.fn(), error: vi.fn() },
 }));
+const { offerNotificationPermission } = vi.hoisted(() => ({
+  offerNotificationPermission: vi.fn(),
+}));
+vi.mock("../../src/apps/tasks/state/reminders", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  offerNotificationPermission,
+}));
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
   TasksProvider: ({ children }: { children: ReactNode }) => children,
   useTasks: () => ({
@@ -444,6 +451,38 @@ describe("detail edits", () => {
     const task = (await store.readTask(parent.url)).task;
     if (label === "Due date") expect(task.allDay).toBe("2026-11-03");
     else expect(task.reminders[0]?.time).toEqual(new Date(2026, 10, 3, 9));
+  });
+  it("offers notification permission after a reminder is saved", async () => {
+    const { parent, store } = await setup();
+    offerNotificationPermission.mockClear();
+    await mount(h(Detail, { url: parent.url }));
+    const addButton = () =>
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Add reminder",
+      );
+    // Without a due date there is nothing to save, so nothing is offered.
+    expect(addButton()?.disabled).toBe(true);
+    await act(() =>
+      cache.updateTask(parent, (task) => {
+        task.dueDate = new Date("2026-11-10T17:00:00Z");
+      }),
+    );
+    const add = addButton();
+    if (!add) throw new Error("Missing Add reminder");
+    await click(add);
+    const hourBefore = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "1 hour before",
+    );
+    if (!hourBefore) throw new Error("Missing 1 hour before");
+    let savingAtOffer: string[] | undefined;
+    offerNotificationPermission.mockImplementationOnce(() => {
+      savingAtOffer = [...cache.getSnapshot().saving];
+    });
+    await click(hourBefore);
+    await act(() => vi.waitFor(() => expect(offerNotificationPermission).toHaveBeenCalledOnce()));
+    // Offered only once the write settled.
+    expect(savingAtOffer).toEqual([]);
+    expect((await store.readTask(parent.url)).task.reminders).toMatchObject([{ offset: "-PT1H" }]);
   });
   it("interprets a relative due-date draft at commit time after midnight", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
