@@ -180,6 +180,14 @@ for (const model of ["wac", "acp"] as const) {
       const inherited = document(model, true);
       grant(inherited, ALICE, ["Read"]);
       inherited.inherited = false;
+      if (model === "wac") {
+        expect(() =>
+          readSharing({
+            access: { resource: inherited.governingResource, documents: [inherited] },
+          }),
+        ).toThrow("Folder and descendant permissions differ");
+        return;
+      }
       expect(
         readSharing({ access: { resource: inherited.governingResource, documents: [inherited] } })
           .people,
@@ -797,4 +805,56 @@ it("does not confuse management of an ancestor ACR with management of the own AC
   expect(
     readSharing({ access: { resource: FILE, documents: [own, parent] } }).people[0]?.role,
   ).toBe("editor");
+});
+
+it.each(
+  [PUBLIC, BOB].flatMap((principal) =>
+    ["default", "defaultForNew"].flatMap((predicate) =>
+      ["children-only", "folder-only", "children-editor", "folder-editor"].map((difference) => ({
+        principal,
+        predicate,
+        difference,
+      })),
+    ),
+  ),
+)("rejects hidden or differing WAC folder scopes in projection and planning ($principal / $predicate / $difference)", ({
+  principal,
+  predicate,
+  difference,
+}) => {
+  const folder = "https://example.org/drive/";
+  const doc = document("wac", false, folder);
+  if (difference !== "children-only")
+    authorization(doc, principal, difference === "folder-editor" ? ["Read", "Write"] : ["Read"]);
+  if (difference !== "folder-only") {
+    const auth = authorization(
+      doc,
+      principal,
+      difference === "children-editor" ? ["Read", "Write"] : ["Read"],
+    );
+    auth.accessTo = undefined;
+    properties(auth)
+      .values(ACL + predicate)
+      .add(folder);
+  }
+  expect(() => readSharing(input(doc))).toThrow("Folder and descendant permissions differ");
+  expect(() => diffSharing(input(doc), restricted)).toThrow(
+    "Folder and descendant permissions differ",
+  );
+});
+
+it("compares effective WAC folder modes across split defaults and ignores redundant Append under Write", () => {
+  const folder = "https://example.org/drive/";
+  const doc = document("wac", false, folder);
+  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+  authorization(doc, BOB, ["Read", "Write"]);
+  for (const mode of ["Read", "Write", "Append"]) {
+    const auth = authorization(doc, BOB, [mode]);
+    auth.accessTo = undefined;
+    properties(auth).values(`${ACL}defaultForNew`).add(folder);
+  }
+  const state = readSharing(input(doc));
+  expect(state.people.find((p) => p.webId === BOB)?.role).toBe("editor");
+  expect(diffSharing(input(doc), state)).toEqual([]);
+  expect(readSharing(input(document("wac", false, folder))).people).toEqual([]);
 });

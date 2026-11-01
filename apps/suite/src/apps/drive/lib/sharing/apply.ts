@@ -14,7 +14,7 @@ import {
   Policy,
 } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { accessControl, DriveAccessError } from "../client/access";
+import { accessControl } from "../client/access";
 import { PUBLIC, readGrants, SharingError } from "./rdf";
 import { diffSharing, readSharing } from "./sharing";
 import type {
@@ -80,13 +80,18 @@ export class SharingConflictError extends Error {
     super("Sharing changed elsewhere, review and try again");
   }
 }
-/** The PUT committed. Callers must discard stale controls and retry only the read. */
+/** The PUT committed or its response was lost. Discard stale controls; retry only the read. */
 export class SharingRefreshError extends Error {
-  readonly committed = true;
-  constructor(cause: unknown) {
-    super("Sharing was saved, but current access couldn't be reloaded. Retry to verify access.", {
-      cause,
-    });
+  constructor(
+    cause: unknown,
+    readonly committed = true,
+  ) {
+    super(
+      committed
+        ? "Sharing was saved, but current access couldn't be reloaded. Retry to verify access."
+        : "The sharing write outcome is unknown. Retry to verify current access before making more changes.",
+      { cause },
+    );
   }
 }
 
@@ -129,7 +134,7 @@ export async function loadSharing(
       cache: "no-store",
       redirect: "error",
     });
-    if (!response.ok) throw new DriveAccessError(response.status, "Couldn't load sharing");
+    if (!response.ok) throw new SharingError(`Couldn't load sharing (HTTP ${response.status})`);
     const headers = new Headers(response.headers);
     // Demo ACLs are real stored documents even though the fixture enforces no authorization.
     headers.delete("x-solid-demo-access-control");
@@ -290,21 +295,36 @@ function rewriteWac(document: AccessDocument, change: AuthorizationChange) {
 
 function rewriteAcp(document: AccessDocument, resource: string, changes: AuthorizationChange[]) {
   const dataset = document.dataset;
-  const grants = readGrants({ resource: document.governingResource, documents: [document] }).filter(
-    (g) => g.resource === resource,
-  );
-  const modes = new Map<string, Set<string>>();
-  for (const grant of grants) {
-    const values = modes.get(grant.principal) ?? new Set<string>();
-    for (const mode of grant.modes) values.add(mode);
-    modes.set(grant.principal, values);
-  }
+  const modesFor = (scope: "resource" | "members") => {
+    const modes = new Map<string, Set<string>>();
+    for (const grant of readGrants(
+      { resource: document.governingResource, documents: [document] },
+      scope,
+    ).filter((g) => g.resource === resource)) {
+      const values = modes.get(grant.principal) ?? new Set<string>();
+      for (const mode of grant.modes) values.add(mode);
+      modes.set(grant.principal, values);
+    }
+    return modes;
+  };
+  const modes = modesFor("resource");
   for (const change of changes) {
     const principal = change.principal.kind === "public" ? PUBLIC : change.principal.webId;
     const values = modes.get(principal) ?? new Set<string>();
     for (const mode of change.remove) values.delete(mode);
     for (const mode of change.add) values.add(mode);
     modes.set(principal, values);
+  }
+  const scopes = new Map([[`${ACP}accessControl`, modes]]);
+  if (resource.endsWith("/")) {
+    const members = modesFor("members");
+    // The selected final role governs both scopes. Applying only the direct delta
+    // would leave descendant-only modes active after downgrading or removing a row.
+    for (const change of changes) {
+      const principal = change.principal.kind === "public" ? PUBLIC : change.principal.webId;
+      members.set(principal, modes.get(principal) as Set<string>);
+    }
+    scopes.set(`${ACP}memberAccessControl`, members);
   }
   const target = new AccessControlResource(DataFactory.blankNode(), dataset, DataFactory);
   target.resource = resource;
@@ -315,24 +335,27 @@ function rewriteAcp(document: AccessDocument, resource: string, changes: Authori
     // Detach only this target. Shared policies, matchers, other scopes and metadata survive.
     original.values(`${ACP}resource`).delete(resource);
     for (const q of dataset.match(acr as Term)) {
-      if (q.predicate.value === `${ACP}resource` || q.predicate.value === `${ACP}accessControl`)
-        continue;
+      if (q.predicate.value === `${ACP}resource` || scopes.has(q.predicate.value)) continue;
       for (const term of original.terms(q.predicate.value))
         properties(target as Term, dataset)
           .terms(q.predicate.value)
           .add(term);
     }
   }
-  const control = new AccessControl(DataFactory.blankNode(), dataset, DataFactory);
-  target.accessControl.add(control);
-  for (const [principal, allowed] of modes) {
-    if (!allowed.size) continue;
-    const policy = new Policy(DataFactory.blankNode(), dataset, DataFactory);
-    const matcher = new Matcher(DataFactory.blankNode(), dataset, DataFactory);
-    control.apply.add(policy);
-    policy.allOf.add(matcher);
-    matcher.agent.add(principal === PUBLIC ? `${ACP}PublicAgent` : principal);
-    for (const mode of allowed) policy.allow.add(ACL + mode);
+  for (const [predicate, principals] of scopes) {
+    const control = new AccessControl(DataFactory.blankNode(), dataset, DataFactory);
+    properties(target as Term, dataset)
+      .terms(predicate)
+      .add(control as Term);
+    for (const [principal, allowed] of principals) {
+      if (!allowed.size) continue;
+      const policy = new Policy(DataFactory.blankNode(), dataset, DataFactory);
+      const matcher = new Matcher(DataFactory.blankNode(), dataset, DataFactory);
+      control.apply.add(policy);
+      policy.allOf.add(matcher);
+      matcher.agent.add(principal === PUBLIC ? `${ACP}PublicAgent` : principal);
+      for (const mode of allowed) policy.allow.add(ACL + mode);
+    }
   }
 }
 
@@ -391,7 +414,10 @@ export async function applySharing(
       (check.ok && check.headers.get("etag") !== etag)
     )
       throw new SharingConflictError(await loadSharing(session, snapshot.input.access.resource));
-    if (!check.ok) throw new DriveAccessError(check.status, "Couldn't verify sharing");
+    if (!check.ok)
+      throw new SharingError(
+        `Couldn't verify sharing (HTTP ${check.status}). Permissions were not saved. Try again.`,
+      );
   }
   // An intervening nearer ACL or a changed endpoint must not be overwritten by a stale copy.
   const latest = await loadSharing(session, snapshot.input.access.resource);
@@ -406,18 +432,29 @@ export async function applySharing(
       if (term.termType === "NamedNode" && escapeIri(term.value) !== term.value)
         throw new SharingError("Unsafe IRI in the access document");
   const etag = snapshot.etags.get(document.source);
-  const response = await session.fetch(assertWithinPodScope(session.storageUrl, document.source), {
-    method: "PUT",
-    redirect: "error",
-    headers: {
-      "content-type": "text/turtle",
-      ...(etag ? { "if-match": etag } : { "if-none-match": "*" }),
-    },
-    body: await serialize([...document.dataset]),
-  });
+  const url = assertWithinPodScope(session.storageUrl, document.source);
+  const body = await serialize([...document.dataset]);
+  let response: Response;
+  try {
+    response = await session.fetch(url, {
+      method: "PUT",
+      redirect: "error",
+      headers: {
+        "content-type": "text/turtle",
+        ...(etag ? { "if-match": etag } : { "if-none-match": "*" }),
+      },
+      body,
+    });
+  } catch (cause) {
+    // A rejected fetch does not prove the server rejected the conditional write.
+    throw new SharingRefreshError(cause, false);
+  }
   if (response.status === 412)
     throw new SharingConflictError(await loadSharing(session, snapshot.input.access.resource));
-  if (!response.ok) throw new DriveAccessError(response.status, "Couldn't save sharing");
+  if (!response.ok)
+    throw new SharingError(
+      `Couldn't save sharing (HTTP ${response.status}). Permissions were not saved. Try again.`,
+    );
   try {
     return await loadSharing(session, snapshot.input.access.resource);
   } catch (cause) {

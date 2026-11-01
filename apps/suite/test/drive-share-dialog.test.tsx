@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex
 // @vitest-environment jsdom
 
+import { serialize } from "@jeswr/rdf-serialize";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 // Reuse the workspace's installed UI test tooling; this app adds no dependencies.
 import {
@@ -22,7 +23,17 @@ import {
   type SharingSnapshot,
 } from "../src/apps/drive/lib/sharing/apply";
 import type { SharingState } from "../src/apps/drive/lib/sharing/types";
-import { ALICE, document as accessDocument, BOB, FILE } from "./sharing-fixtures";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
+import {
+  ACP,
+  ALICE,
+  document as accessDocument,
+  authorization,
+  BOB,
+  FILE,
+  PUBLIC,
+  policy,
+} from "./sharing-fixtures";
 
 vi.mock("../src/apps/drive/lib/sharing/apply", async (original) => ({
   ...(await original<typeof import("../src/apps/drive/lib/sharing/apply")>()),
@@ -319,6 +330,78 @@ it("invalidates stale permissions after a committed save and retries only the re
   expect((screen.getByLabelText("Who can access") as HTMLSelectElement).value).toBe("anyone");
   expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(false);
   expect(apply).toHaveBeenCalledOnce();
+});
+
+it("clears stale controls for a lost PUT response and retries access without claiming the save succeeded", async () => {
+  apply.mockRejectedValueOnce(new SharingRefreshError(new TypeError("Failed to fetch"), false));
+  show();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
+  await screen.findByText(/sharing write outcome is unknown/);
+  expect(screen.queryByLabelText("Who can access")).toBeNull();
+  expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  expect(screen.getByText("Sharing outcome unknown")).toBeTruthy();
+  expect(onSaved).toHaveBeenCalledOnce();
+  load.mockResolvedValueOnce(snapshot({ ...state, link: "viewer", public: "viewer" }));
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await ready();
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).value).toBe("anyone");
+  expect(apply).toHaveBeenCalledOnce();
+});
+
+it.each(
+  (["wac", "acp"] as const).flatMap((model) =>
+    [false, true].map((wasPublic) => ({ model, wasPublic })),
+  ),
+)("rechecks the real $model policy after a committed PUT loses its response (was public: $wasPublic)", async ({
+  model,
+  wasPublic,
+}) => {
+  const actual = await vi.importActual<typeof import("../src/apps/drive/lib/sharing/apply")>(
+    "../src/apps/drive/lib/sharing/apply",
+  );
+  const pod = createDemoPod({ root: session.storageUrl });
+  await pod.fetch(FILE, { method: "PUT", body: "report" });
+  const doc = accessDocument(model);
+  if (model === "wac") {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]);
+    if (wasPublic) authorization(doc, PUBLIC, ["Read"]);
+  } else {
+    policy(doc, ALICE, ["Read", "Write"]);
+    policy(doc, ALICE, ["Read", "Write"], doc.source);
+    if (wasPublic) policy(doc, PUBLIC, ["Read"]);
+  }
+  await pod.fetch(doc.source, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serialize([...doc.dataset]),
+  });
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+    const response = await pod.fetch(url, init);
+    if (init?.method === "PUT") throw new TypeError("Failed to fetch");
+    if (model === "wac" || String(url).endsWith(".acr")) return response;
+    const headers = new Headers(response.headers);
+    headers.set("link", `<${String(url)}.acr>; rel="${ACP}accessControl"`);
+    return new Response(response.body, { status: response.status, headers });
+  });
+  load.mockImplementation(actual.loadSharing);
+  apply.mockImplementation(actual.applySharing);
+  show({ session: { ...session, fetch } });
+  await ready();
+  fireEvent.change(screen.getByLabelText("Who can access"), {
+    target: { value: wasPublic ? "restricted" : "anyone" },
+  });
+  await screen.findByText(/sharing write outcome is unknown/);
+  expect(screen.queryByLabelText("Who can access")).toBeNull();
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await ready();
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).value).toBe(
+    wasPublic ? "restricted" : "anyone",
+  );
+  expect(screen.queryByText("Sharing outcome unknown")).toBeNull();
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
 });
 
 it.each([

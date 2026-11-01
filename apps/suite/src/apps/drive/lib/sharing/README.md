@@ -77,7 +77,12 @@ owners and inherited rows remain immutable; a non-owner cannot save changes.
 
 A changed WAC folder grant applies to both the folder and inheriting descendants:
 `accessTo`, `default`, and legacy `defaultForNew` scopes for that folder are edited
-together. Unrelated targets retain their grants. ACP discovery also checks the
+together. If a folder's own permissions differ from its effective defaults, projection
+and diff planning reject the configuration explicitly; the dialog cannot summarize two
+different scopes with one control. Write and redundant Append compare as equivalent.
+ACP folder changes likewise set the selected principal's final permissions in both
+`accessControl` and `memberAccessControl`, including new grants and descendant-only
+modes. Unchanged principals and unrelated targets retain their grants. ACP discovery also checks the
 access document's type Link header and RDF type, including empty ACRs advertised
 through `rel="acl"` at arbitrary URLs. A missing own ACR remains a conditional-create
 destination when inherited policies permit management.
@@ -85,6 +90,9 @@ destination when inherited policies permit management.
 If PUT succeeds but reloading fails, `SharingRefreshError` carries `committed: true`
 and the read failure as its cause. The dialog reports that sharing was saved, clears
 its stale controls, and offers Retry to reload access without repeating the write.
+If the PUT transport fails, the same error carries `committed: false`: the write outcome
+is unknown. The dialog clears stale controls and offers the same read-only Retry, without
+claiming the save succeeded. HTTP failures use sharing-specific instructions.
 All dismissal routes remain guarded while a save is pending so failures stay visible.
 
 The Drive dialog uses Viewer and Editor. Commenter stays disabled until Drive has a

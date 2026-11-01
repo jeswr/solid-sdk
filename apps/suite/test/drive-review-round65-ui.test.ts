@@ -196,3 +196,35 @@ it.each(
   await key(dialog, "Escape");
   expect(ui.dialog).toBeUndefined();
 });
+
+it("returns Share menu focus to its originating row on Done and continues ArrowDown from that row", async () => {
+  const f = await rdfPod();
+  await f.pod.fetch(`${PRIVATE}a.txt`, { method: "PUT", body: "first" });
+  await f.pod.fetch(`${PRIVATE}z.txt`, { method: "PUT", body: "last" });
+  drive.client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
+  drive.session.fetch = f.fetch;
+  const items = await drive.client.list(PRIVATE);
+  const secret = items.find((item) => item.url === `${PRIVATE}secret`);
+  if (!secret) throw new Error("Missing sharing target");
+  const view = await mount(tree([secret, ...items.filter((item) => item !== secret)]));
+  // A menu item disappears after activation, so the stored URL must supply the fallback.
+  const trigger = document.createElement("button");
+  document.body.append(trigger);
+  await act(async () => trigger.focus());
+  await act(async () => share?.());
+  trigger.remove();
+  await vi.waitFor(() =>
+    expect(document.querySelector(".drv-share-dialog")?.textContent).toContain(
+      "People with access",
+    ),
+  );
+  const done = [...document.querySelectorAll<HTMLButtonElement>(".drv-share-dialog button")].find(
+    (button) => button.textContent === "Done",
+  );
+  if (!done) throw new Error("Missing Done button");
+  await click(done);
+  const row = view.host.querySelector<HTMLElement>(`[data-url="${PRIVATE}secret"]`);
+  await vi.waitFor(() => expect(document.activeElement).toBe(row));
+  await key(row as HTMLElement, "ArrowDown");
+  expect(document.activeElement).toBe(view.host.querySelector(`[data-url="${PRIVATE}z.txt"]`));
+});

@@ -26,7 +26,33 @@ function origin(grants: Grant[]): AccessOrigin {
     sources: [...new Set(contributing.map((grant) => grant.document.source))].sort(),
   };
 }
+
+/** One folder control cannot faithfully describe independent WAC defaults. Fail closed
+ * in both projection and diff planning, including descendant-only people/public grants.
+ */
+function assertFolderDefaults(input: SharingInput, grants: Grant[]): void {
+  if (
+    !input.access.resource.endsWith("/") ||
+    !input.access.documents.some((d) => d.model === "wac" && !d.inherited)
+  )
+    return;
+  const defaults = readGrants(input.access, "members");
+  const effective = (grants: Grant[], principal: string) => {
+    const values = allowed(forPrincipal(grants, principal, input.access.resource));
+    if (values.has("Write")) values.add("Append");
+    return values;
+  };
+  for (const principal of new Set([...grants, ...defaults].map((g) => g.principal))) {
+    const folder = effective(grants, principal);
+    const children = effective(defaults, principal);
+    if (MODES.some((mode) => folder.has(mode) !== children.has(mode)))
+      throw new SharingError(
+        "Folder and descendant permissions differ. This configuration is not supported by the sharing dialog.",
+      );
+  }
+}
 function project(input: SharingInput, grants: Grant[], comments: Grant[]): SharingState {
+  assertFolderDefaults(input, grants);
   if (comments.some((grant) => grant.principal === PUBLIC && grant.modes.size > 0)) {
     throw new SharingError(
       "Anonymous comments permissions cannot be expressed by the sharing model",

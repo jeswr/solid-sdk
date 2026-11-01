@@ -224,8 +224,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   const dialogOpen = useRef<number | undefined>(undefined);
   const nextDialog = useRef(0);
   const openDialog = useCallback((next: DriveDialog) => {
-    const item =
-      next.kind === "rename" ? next.item : next.kind === "move" ? next.items[0] : undefined;
+    const item = "item" in next ? next.item : "items" in next ? next.items[0] : undefined;
     const url = item?.url ?? ("entries" in next ? next.entries[0]?.url : undefined);
     dialogFocus.current = {
       element:

@@ -102,6 +102,7 @@ export function ShareDialog({
         if (live) {
           setSnapshot(value);
           setLoading(false);
+          setAnnouncement("");
         }
       },
       (reason: unknown) => {
@@ -132,7 +133,7 @@ export function ShareDialog({
         setSnapshot(undefined);
         setPeople([]);
         setQuery("");
-        setAnnouncement("Sharing saved");
+        setAnnouncement(reason.committed ? "Sharing saved" : "Sharing outcome unknown");
         onSaved();
       }
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
