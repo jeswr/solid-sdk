@@ -517,13 +517,19 @@ it("still retries from the toast when browser storage cannot be read", async () 
   await act(() => writing.reject(new Error("Offline")));
   const retry = mocks.toast.error.mock.lastCall?.[1].action.onClick;
   create.mockResolvedValue({} as StoredNote);
-  const read = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-    throw new Error("blocked");
-  });
+  // A blocked store throws on every access (the jsdom Storage methods live on
+  // its prototype; spying on the instance would only store an item).
+  const store = Object.getPrototypeOf(localStorage) as Storage;
+  const blocked = (["getItem", "setItem", "removeItem"] as const).map((method) =>
+    vi.spyOn(store, method).mockImplementation(() => {
+      throw new Error("blocked");
+    }),
+  );
   try {
     await act(() => retry());
+    expect(blocked[0]).toHaveBeenCalled();
   } finally {
-    read.mockRestore();
+    for (const spy of blocked) spy.mockRestore();
   }
   expect(create).toHaveBeenCalledTimes(2);
   expect(create).toHaveBeenLastCalledWith(
