@@ -7,10 +7,7 @@
     "clientIdDocument": false,
     "originEnv": "APP_ORIGIN",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-suite",
-    "gitDeploymentEnabled": {
-      "**": false,
-      "main": true
-    }
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-drive",

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # App hosting
 
@@ -18,7 +19,7 @@ manual runs; only `main` can publish. Each app has its own base path and client 
 | Pod Health | `apps/pod-health/web` | https://jeswr.github.io/solid-sdk/pod-health/ |
 | App Store | `apps/app-store/web` | https://jeswr.github.io/solid-sdk/app-store/ |
 | Access Manager | `apps/access-manager` | https://jeswr.github.io/solid-sdk/access-manager/ |
-| Solid Suite | `apps/suite` | Vercel project `solid-suite`, `main` only |
+| Solid Suite | `apps/suite` | Vercel project `solid-suite`, deployed from `main` by the vercel-production workflow |
 | Pod Manager | `apps/pod-manager` | Next.js; Vercel git deployments disabled |
 | Issues | `apps/issues` | Next.js; Vercel git deployments disabled |
 | Coeliac | `apps/coeliac` | Next.js; Vercel git deployments disabled |
@@ -34,10 +35,37 @@ The workflow uses the `github-pages` environment and the Pages artifact/deployme
 see [GitHub's custom-workflow setup](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 GitHub Actions must be enabled and able to run for the site to publish.
 
-All non-suite Vercel configs set `git.deploymentEnabled: false`. Suite uses
-`{ "**": false, "main": true }` and retains its dependency-aware ignored-build step.
-The globstar covers branch names containing `/`; unspecified branches default to enabled in
-[Vercel's git configuration](https://vercel.com/docs/project-configuration/git-configuration#git.deploymentenabled).
+## Vercel deploys
+
+The team is on Vercel's Hobby plan, which allows 100 deployments a day. A Git-linked
+project records a deployment for every push, even when the build is skipped, and those
+records count. So every Vercel config, the suite's included, sets
+`git.deploymentEnabled: false`, the projects are disconnected from Git, and the
+[vercel-production workflow](../.github/workflows/vercel-production.yml) is the only thing
+that deploys. It deploys the suite only, using `scripts/vercel-production.mjs`:
+
+- It runs on every push to `main` and every 30 minutes, always on the newest `main`.
+- Each run first disconnects from Git any project in `scripts/vercel-apps.json` that is
+  still linked. This is idempotent; a project can be reconnected in its Vercel settings, but
+  the next run will unlink it again.
+- It deploys when the deployment production actually serves (the project's production
+  target, not merely the newest ready one) is for an older commit, the suite's build inputs
+  changed since that commit (the same check as `scripts/vercel-ignore-build.mjs`), and the
+  last deployment this workflow made is at least two hours old. That is at most 12
+  deployments a day.
+- A burst of merges therefore produces one deployment. The schedule deploys whatever `main`
+  has gathered once the two-hour window reopens, so the newest commit always reaches
+  production, even after a quiet day or week.
+- It skips while a deployment is building. A commit whose deployment failed, on Vercel or on
+  the runner (recorded as a failed `vercel-production` commit status), is retried once the
+  two-hour window has passed.
+- The build runs on the GitHub runner (`vercel build`) and uploads the output with
+  `vercel deploy --prebuilt --prod`, so Vercel build minutes are not used.
+
+Setup needs a Vercel access token for the team in the repository secret `VERCEL_TOKEN`.
+Without it the workflow logs a warning and deploys nothing. A manual run with **force**
+deploys at once, even when production already serves `main`, ignoring the window; it still
+waits for a deployment that is already building.
 
 ## Building locally
 

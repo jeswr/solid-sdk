@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
 // AUTHORED-BY Codex GPT-6.1 (Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,7 +62,7 @@ function fixtures(apps = [viteApp]) {
   const files = {
     "scripts/vercel-apps.json": apps.map((app) => ({
       ...app,
-      gitDeploymentEnabled: app.project === "solid-suite" ? { "**": false, main: true } : false,
+      gitDeploymentEnabled: false,
       vercelIgnore: `node ${relative(app.rootDirectory, "scripts/vercel-ignore-build.mjs")} ${app.package}`,
     })),
     "scripts/vercel-ignore-build.mjs": "// fixture ignored-build script",
@@ -168,44 +169,21 @@ describe("Vercel config guard", () => {
     clientIdDocument: false,
   };
 
-  function suiteFixture() {
+  it("disables git deployments for the suite too, which deploys from a workflow", () => {
     const files = fixtures([suiteApp]);
-    files["apps/suite/vercel.json"] = {
-      git: { deploymentEnabled: { "**": false, main: true } },
-      ignoreCommand: files["scripts/vercel-apps.json"][0].vercelIgnore,
-    };
-    return files;
-  }
-
-  it("allows only main for suite and preserves its ignored-build step", () => {
-    expect(scan(suiteFixture()).status).toBe(0);
+    expect(scan(files).status).toBe(0);
+    for (const deploymentEnabled of [
+      undefined,
+      true,
+      { "**": false, main: true },
+      { main: true },
+    ]) {
+      files["apps/suite/vercel.json"].git.deploymentEnabled = deploymentEnabled;
+      expectFailure(files, "apps/suite/vercel.json: git.deploymentEnabled must be false");
+    }
   });
 
-  it.each([
-    undefined,
-    true,
-    false,
-    { main: true },
-    { "*": false },
-    { "*": false, main: true },
-    { "*": true, main: true },
-    { "**": false, main: true, preview: true },
-  ])("rejects a suite git deployment policy that is not main only: %j", (deploymentEnabled) => {
-    const files = suiteFixture();
-    files["apps/suite/vercel.json"].git.deploymentEnabled = deploymentEnabled;
-    expectFailure(files, "apps/suite/vercel.json: git.deploymentEnabled must be");
-  });
-
-  it("requires suite's ignoreCommand in vercel.json", () => {
-    const files = suiteFixture();
-    delete files["apps/suite/vercel.json"].ignoreCommand;
-    expectFailure(files, "ignoreCommand must match vercelIgnore");
-  });
-
-  it.each([
-    viteApp,
-    nextApp,
-  ])("disables git deployments for every non-suite $framework app", (app) => {
+  it.each([viteApp, nextApp])("disables git deployments for every $framework app", (app) => {
     for (const deploymentEnabled of [undefined, true, { main: true }, { "*": false }]) {
       const files = fixtures([app]);
       files[`${app.rootDirectory}/vercel.json`].git.deploymentEnabled = deploymentEnabled;
@@ -289,18 +267,15 @@ describe("Vercel config guard", () => {
     );
   });
 
-  it("keeps the suite's main-only exception when discovered outside the inventory", () => {
+  it("gives an unlisted suite config no main-only exception", () => {
     const files = {
       ...fixtures(),
       "apps/suite/package.json": { dependencies: { next: "*" } },
-      "apps/suite/vercel.json": { git: { deploymentEnabled: { "**": false, main: true } } },
+      "apps/suite/vercel.json": { git: { deploymentEnabled: false } },
     };
     expect(scan(files).status).toBe(0);
-    files["apps/suite/vercel.json"].git.deploymentEnabled = true;
-    expectFailure(
-      files,
-      'apps/suite/vercel.json: git.deploymentEnabled must be { "**": false, "main": true }',
-    );
+    files["apps/suite/vercel.json"].git.deploymentEnabled = { "**": false, main: true };
+    expectFailure(files, "apps/suite/vercel.json: git.deploymentEnabled must be false");
   });
 
   it("checks every deployment and accepts Next.js framework-inferred public env", () => {
