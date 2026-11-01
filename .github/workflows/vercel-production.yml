@@ -1,0 +1,102 @@
+# AUTHORED-BY Claude Opus 5.5
+name: vercel-production
+
+# The Vercel Hobby plan allows 100 deployments a day, and every Git-linked project recorded a
+# deployment (even a skipped one) for every push to main. The suite is now the only Vercel
+# deployment, and only this workflow creates it: at most once every two hours. A push deploys
+# at once when the window is open; the half-hourly schedule deploys whatever main has
+# accumulated once it reopens, so the newest main always reaches production, even after a
+# quiet day or week. The decision lives in scripts/vercel-production.mjs.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '13,43 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy main now, even if production already serves it or the window is shut
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # Records each deployment's outcome on its commit; a failure makes the next run wait a window.
+  statuses: write
+
+# Runs queue rather than cancel, so a deployment in progress is never interrupted.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_gEDQJDOVUapnHCzWwvyxaIB2
+  VERCEL_PROJECT_ID: prj_EPNKXvRgSaKGm1HOPLy9jX3YV9pW
+  VERCEL_CLI: vercel@65.4.0
+
+jobs:
+  deploy:
+    # Only main deploys, including manual runs.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # Always the newest main, not the commit that queued this run.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      # Also unlinks any Vercel project still connected to Git, so pushes create no records.
+      - name: Decide whether to deploy
+        id: plan
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force && 'true' || 'false' }}
+        run: node scripts/vercel-production.mjs plan
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        if: steps.plan.outputs.deploy == 'true'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.plan.outputs.deploy == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Pull production settings and environment
+        if: steps.plan.outputs.deploy == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN"
+      # Builds on the runner, so the token is not in the environment of repository build code.
+      - name: Build
+        if: steps.plan.outputs.deploy == 'true'
+        run: npx --yes "$VERCEL_CLI" build --prod
+      - name: Deploy the prebuilt output
+        if: steps.plan.outputs.deploy == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz \
+            --meta "suiteCommitSha=$SHA" --token "$VERCEL_TOKEN")
+          echo "Deployed $SHA: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Record the successful deployment
+        if: success() && steps.plan.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success \
+            -f context=vercel-production -f description="Deployed to Vercel production" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Record the failed deployment
+        if: failure() && steps.plan.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=failure \
+            -f context=vercel-production -f description="Vercel production deployment failed" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

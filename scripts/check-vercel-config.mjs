@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
 // AUTHORED-BY Codex GPT-6.1 (Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -97,37 +98,18 @@ function isDirectory(path) {
   }
 }
 
-function matchesGitDeployment(value, suite) {
-  return suite
-    ? value !== null &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        Object.keys(value).length === 2 &&
-        value["**"] === false &&
-        value.main === true
-    : value === false;
-}
-
-function gitDeploymentPolicy(suite) {
-  return suite ? '{ "**": false, "main": true } (main only)' : "false";
-}
-
+// Every Git-linked deployment counts against the Hobby plan's daily cap, so no app deploys from
+// Git; the suite is deployed by .github/workflows/vercel-production.yml instead.
 function checkGitDeployment(root, app, failures) {
   const path = `${app.rootDirectory}/vercel.json`;
   const config = readJson(root, path, failures);
   if (!config) return;
   checkTopLevelProperties(config, path, failures);
-  // Vercel enables unspecified branches. ** also covers branch names containing /.
-  const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
-  const policy = gitDeploymentPolicy(suite);
-  if (!matchesGitDeployment(app.gitDeploymentEnabled, suite)) {
-    failures.push(`${app.project}: gitDeploymentEnabled must be ${policy}`);
+  if (app.gitDeploymentEnabled !== false) {
+    failures.push(`${app.project}: gitDeploymentEnabled must be false`);
   }
-  if (!matchesGitDeployment(config.git?.deploymentEnabled, suite)) {
-    failures.push(`${path}: git.deploymentEnabled must be ${policy}`);
-  }
-  if (suite && config.ignoreCommand !== app.vercelIgnore) {
-    failures.push(`${path}: ignoreCommand must match vercelIgnore`);
+  if (config.git?.deploymentEnabled !== false) {
+    failures.push(`${path}: git.deploymentEnabled must be false`);
   }
 }
 
@@ -373,9 +355,8 @@ function checkVercelConfig(root) {
       if (!directories.has(config.slice(0, -"/vercel.json".length))) {
         const value = readJson(root, config, failures);
         if (value) checkTopLevelProperties(value, config, failures);
-        const suite = config === "apps/suite/vercel.json";
-        if (value && !matchesGitDeployment(value.git?.deploymentEnabled, suite)) {
-          failures.push(`${config}: git.deploymentEnabled must be ${gitDeploymentPolicy(suite)}`);
+        if (value && value.git?.deploymentEnabled !== false) {
+          failures.push(`${config}: git.deploymentEnabled must be false`);
         }
       }
     }

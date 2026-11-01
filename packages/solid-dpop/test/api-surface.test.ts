@@ -154,6 +154,7 @@ const ROOT_VALUE_EXPORTS = [
   "loadSession",
   "pkceChallengeS256",
   "rdfFetchFor",
+  "readOidcJson",
   "refreshSession",
   "registerClient",
   "saveSession",
