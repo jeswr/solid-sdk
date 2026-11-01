@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
 import type { SuiteEnv } from "@/shell/lib/env";
+import { NotificationsProvider } from "@/shell/notifications/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
@@ -30,7 +31,9 @@ export function Providers({
         <AccountsProvider {...accountFixtureProps()}>
           <PreferencesProvider>
             <AppearanceEffect />
-            <ShellSearchProvider>{children}</ShellSearchProvider>
+            <ShellSearchProvider>
+              <NotificationsProvider>{children}</NotificationsProvider>
+            </ShellSearchProvider>
           </PreferencesProvider>
         </AccountsProvider>
       </SuiteEnvironmentContext.Provider>

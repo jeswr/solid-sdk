@@ -16,6 +16,8 @@ export const sharingDurations = [
 export type DurationChipsProps = {
   value: SharingDuration;
   onChange: (value: SharingDuration) => void;
+  /** Restrict to durations the consuming API can represent; defaults to all options. */
+  durations?: readonly SharingDuration[];
   customDate?: string;
   onCustomDateChange?: (date: string) => void;
 } & DisabledReason;
@@ -23,6 +25,7 @@ export type DurationChipsProps = {
 export function DurationChips({
   value,
   onChange,
+  durations,
   customDate = "",
   onCustomDateChange,
   disabled = false,
@@ -45,11 +48,13 @@ export function DurationChips({
         aria-describedby={disabled ? `${id}-reason` : undefined}
         onValueChange={(next) => onChange(next as SharingDuration)}
       >
-        {sharingDurations.map(([key, label]) => (
-          <RadioGroup.Item className="su-chip" value={key} key={key}>
-            {label}
-          </RadioGroup.Item>
-        ))}
+        {sharingDurations
+          .filter(([key]) => !durations || durations.includes(key))
+          .map(([key, label]) => (
+            <RadioGroup.Item className="su-chip" value={key} key={key}>
+              {label}
+            </RadioGroup.Item>
+          ))}
       </RadioGroup.Root>
       {value === "custom" && (
         <label className="su-stack" htmlFor={`${id}-date`}>

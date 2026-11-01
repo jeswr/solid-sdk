@@ -1,0 +1,121 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { expect, it, vi } from "vitest";
+import type { NotificationSource, SuiteNotification } from "../src/shell/lib/notifications-model";
+import { createNotificationsController } from "../src/shell/notifications/controller";
+import { demoNotifications } from "../src/shell/notifications/demo-source";
+
+it("merges partial results, preserves local reads and dismissal across stale source listings and retries failures", async () => {
+  const items = demoNotifications();
+  const markRead = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined);
+  let fail = true;
+  const controller = createNotificationsController([
+    { id: "inbox", list: async () => items, markRead },
+    {
+      id: "requests",
+      list: async () => {
+        if (fail) throw new Error("offline");
+        return [items[0]!];
+      },
+    },
+  ]);
+  const onChange = vi.fn();
+  const stop = controller.subscribe(onChange);
+  await controller.refresh();
+  expect(controller.getSnapshot().items).toHaveLength(6);
+  expect(controller.getSnapshot().error).toContain("Couldn't load");
+  await controller.markRead(items[0]!.id);
+  expect(controller.getSnapshot().unread).toBe(3);
+  expect(controller.getSnapshot().error).toContain("Couldn't save");
+  controller.dismiss(items[1]!.id);
+  fail = false;
+  await controller.refresh();
+  expect(controller.getSnapshot().items).toHaveLength(5);
+  expect(controller.getSnapshot().items.find((item) => item.id === items[0]!.id)?.read).toBe(true);
+  expect(controller.getSnapshot().error).toBeNull();
+  await controller.markAllRead();
+  expect(controller.getSnapshot().unread).toBe(0);
+  expect(markRead).toHaveBeenCalledTimes(3);
+  expect(onChange).toHaveBeenCalled();
+  stop();
+  controller.stop();
+});
+it("fences overlapping refreshes and account teardown even when sources ignore AbortSignal", async () => {
+  const waiting: ((items: SuiteNotification[]) => void)[] = [];
+  const source: NotificationSource = {
+    id: "slow",
+    list: () => new Promise((resolve) => waiting.push(resolve)),
+  };
+  const old = createNotificationsController([source]);
+  const first = old.refresh(),
+    second = old.refresh();
+  waiting[1]!(demoNotifications());
+  await second;
+  waiting[0]!([]);
+  await first;
+  expect(old.getSnapshot().items).toHaveLength(6);
+  const third = old.refresh();
+  old.stop();
+  waiting[2]!([]);
+  await third;
+  const next = createNotificationsController([]);
+  await next.refresh();
+  expect(next.getSnapshot().items).toEqual([]);
+  expect(old.getSnapshot().items).toHaveLength(6);
+});
+it("decides with the offered role, leaves failures retryable and marks success read", async () => {
+  const items = demoNotifications();
+  const request = items.find((item) => item.request)!;
+  const decide = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined);
+  const controller = createNotificationsController([{ id: "test", list: async () => items }], {
+    decide,
+  });
+  await controller.refresh();
+  await expect(controller.decide(request.id, { approve: true, role: "manager" })).rejects.toThrow(
+    "requested roles",
+  );
+  await expect(
+    controller.decide(request.id, { approve: true, role: "editor", duration: "month" }),
+  ).rejects.toThrow("offline");
+  expect(
+    controller.getSnapshot().items.find((item) => item.id === request.id)?.outcome,
+  ).toBeUndefined();
+  await controller.decide(request.id, { approve: true, role: "editor", duration: "month" });
+  expect(decide).toHaveBeenLastCalledWith(request.request, {
+    approve: true,
+    role: "editor",
+    duration: "month",
+  });
+  await controller.refresh();
+  expect(controller.getSnapshot().items.find((item) => item.id === request.id)).toMatchObject({
+    read: true,
+    outcome: "Approved for Editor",
+  });
+  await controller.decide(request.id, { approve: false });
+  expect(controller.getSnapshot().items.find((item) => item.id === request.id)?.outcome).toBe(
+    "Denied",
+  );
+  await expect(controller.decide("missing", { approve: false })).rejects.toThrow(
+    "aren't available",
+  );
+  const unavailable = createNotificationsController([{ id: "test", list: async () => items }]);
+  await unavailable.refresh();
+  await expect(unavailable.decide(request.id, { approve: false })).rejects.toThrow(
+    "aren't available",
+  );
+});
+it("announces only new unread events after the initial listing", async () => {
+  let items = demoNotifications().slice(0, 1);
+  const onNew = vi.fn();
+  const controller = createNotificationsController(
+    [{ id: "test", list: async () => items }],
+    undefined,
+    onNew,
+  );
+  await controller.refresh();
+  expect(onNew).not.toHaveBeenCalled();
+  items = demoNotifications();
+  await controller.refresh();
+  expect(onNew).toHaveBeenCalledTimes(3);
+  await controller.refresh();
+  expect(onNew).toHaveBeenCalledTimes(3);
+});

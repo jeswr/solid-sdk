@@ -21,6 +21,7 @@ import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
 import type { SearchSource } from "./lib/search-results";
+import { NotificationsBell } from "./notifications/notifications-bell";
 import { appRegistry, visibleApps } from "./registry";
 import { GlobalSearch } from "./search/global-search";
 import { useShellSearchSource } from "./search/search-context";
@@ -107,7 +108,14 @@ function Frame({
         pageTitle={pageTitle}
         preferences={preferences}
         onPreferencesChange={updateShell}
-        rail={<AppRail currentApp={slug} apps={apps} account={account} />}
+        rail={
+          <AppRail
+            currentApp={slug}
+            apps={apps}
+            account={account}
+            notifications={<NotificationsBell onOpenSync={() => setSyncOpen(true)} />}
+          />
+        }
         tabBar={<BottomTabBar currentApp={slug} apps={apps} />}
         sidebar={
           sidebar ?? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
@@ -118,6 +126,7 @@ function Frame({
           context,
           actions,
           account: <div className="shell-mobile-account">{account}</div>,
+          bell: <NotificationsBell mobile />,
           offlinePill: <OfflinePill snapshot={sync} onOpen={() => setSyncOpen(true)} />,
           search: (
             <GlobalSearch
