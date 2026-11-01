@@ -22,6 +22,7 @@ import { boundedRead } from "./bounded-read";
 import {
   chooseSession,
   ExtensionSessionError,
+  isLiveStorageGrant,
   openExtensionSession,
   requestStorageAccess,
 } from "./extension-pod-session";
@@ -279,7 +280,13 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
         void select(
           next.webId,
           next.webId && api.fetch ? grant : undefined,
-          grant ? undefined : new ExtensionSessionError("not-granted"),
+          grant
+            ? undefined
+            : new ExtensionSessionError(
+                grants.some((candidate) => isLiveStorageGrant(candidate, Date.now()))
+                  ? "no-storage"
+                  : "not-granted",
+              ),
           retry,
         );
       } catch (error) {

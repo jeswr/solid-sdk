@@ -37,7 +37,7 @@ export interface ExtensionPodSessionDeps {
   readonly signal?: AbortSignal;
 }
 
-function isLiveStorageGrant(grant: SolidExtensionGrant, now: number): boolean {
+export function isLiveStorageGrant(grant: SolidExtensionGrant, now: number): boolean {
   return (
     grant.dataClass === STORAGE_CLASS &&
     grant.expiresAt > now &&
@@ -87,15 +87,13 @@ export async function openExtensionSession(
   const isCurrent = deps.isCurrent ?? (() => true);
   const win = deps.window ?? (window as ExtensionPodSessionDeps["window"] & Window);
   let expiresAt = Number.POSITIVE_INFINITY;
+  const isSessionCurrent = () =>
+    win.solid === api &&
+    win.solid.webId === webId &&
+    isCurrent(generation) &&
+    Date.now() < expiresAt;
   const assertCurrent = () => {
-    if (
-      win.solid !== api ||
-      win.solid.webId !== webId ||
-      !isCurrent(generation) ||
-      Date.now() >= expiresAt
-    ) {
-      throw new ExtensionSessionError("stale");
-    }
+    if (!isSessionCurrent()) throw new ExtensionSessionError("stale");
   };
   // Check rejected awaits too: an account switch always wins over a transport error.
   const checked = async <T>(dispatch: () => Promise<T>): Promise<T> => {
@@ -182,9 +180,7 @@ export async function openExtensionSession(
     subscribe(listener) {
       assertCurrent();
       const onFocus = () => {
-        assertCurrent();
-        listener(root);
-        assertCurrent();
+        if (isSessionCurrent()) listener(root);
       };
       win.addEventListener("focus", onFocus);
       return () => win.removeEventListener("focus", onFocus);
@@ -193,8 +189,9 @@ export async function openExtensionSession(
       assertCurrent();
       const { disconnect, listGrants, revokeGrant } = api;
       if (disconnect) {
-        await checked(() => disconnect.call(api));
         assertCurrent();
+        // Successful self-revocation may broadcast and invalidate us before its reply.
+        await disconnect.call(api);
         return;
       }
       if (!listGrants || !revokeGrant) throw new ExtensionSessionError("unavailable");
@@ -205,8 +202,8 @@ export async function openExtensionSession(
       // Sequential dispatch lets a switch during any revocation stop all later ones.
       for (const grant of grants) {
         if (grant.dataClass !== STORAGE_CLASS) continue;
-        await checked(() => revokeGrant.call(api, grant.grantId));
         assertCurrent();
+        await revokeGrant.call(api, grant.grantId);
       }
     },
   };
