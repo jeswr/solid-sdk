@@ -1,16 +1,21 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { expect, it } from "vitest";
 
 it.each([
-  ["../src/app/(suite)/calendar/[view]/page.tsx", "view"],
   ["../src/app/(suite)/contacts/c/[ref]/page.tsx", "ref"],
   ["../src/app/(suite)/contacts/c/[ref]/edit/page.tsx", "ref"],
   ["../src/app/(suite)/contacts/label/[group]/page.tsx", "group"],
   ["../src/app/(suite)/drive/f/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/docs/d/[ref]/page.tsx", "ref"],
   ["../src/app/(suite)/drive/p/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/money/a/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/photos/a/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/photos/p/[ref]/page.tsx", "ref"],
   ["../src/app/dev/components/[component]/page.tsx", "component"],
 ])("keeps %s on demand on web and exports one native placeholder", (path, key) => {
   const text = readFileSync(new URL(path, import.meta.url), "utf8");
@@ -39,4 +44,14 @@ it.each([
     });
     expect(params).toEqual(target === "native" ? [{ [key]: "__" }] : []);
   }
+});
+
+it("keeps the web calendar view on demand (native staging replaces the file)", () => {
+  const web = readFileSync(
+    new URL("../src/app/(suite)/calendar/[view]/page.tsx", import.meta.url),
+    "utf8",
+  );
+  // native-calendar-staging.test.mjs covers the staged placeholder page.
+  expect(web).toMatch(/export const dynamicParams = true;/);
+  expect(web).toMatch(/generateStaticParams\(\) \{\s*return \[\];/);
 });

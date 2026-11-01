@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -191,6 +192,14 @@ function SessionGate({ children }: { children: ReactNode }) {
   const session = usePodSessionState();
   if (session.status === "loading")
     return <LoadingSkeleton preset="grid" label="Opening Photos…" />;
+  // Native builds start signed out until native sign-in lands.
+  if (session.status === "signed-out")
+    return (
+      <div className="pho-page">
+        <h1>Photos</h1>
+        <p role="status">Sign in to open your Photos</p>
+      </div>
+    );
   if (session.status === "error")
     return (
       <div className="pho-page">

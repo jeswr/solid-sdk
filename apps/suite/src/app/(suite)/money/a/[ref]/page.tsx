@@ -1,14 +1,18 @@
 // AUTHORED-BY Codex GPT-6
-import { notFound } from "next/navigation";
-import { LedgerScreen } from "@/apps/money/components/ledger";
-import { decodeRef } from "@/lib/refs";
-export default async function Page({ params }: { params: Promise<{ ref: string }> }) {
-  const { ref } = await params;
-  let id: string;
-  try {
-    id = decodeRef(ref);
-  } catch {
-    notFound();
-  }
-  return <LedgerScreen accountId={id} />;
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
+import { LedgerRoute } from "@/apps/money/components/ledger-route";
+
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ ref: "__" }] : [];
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <LedgerRoute />
+    </Suspense>
+  );
 }

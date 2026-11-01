@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import { ArrowDownToLine, LayoutDashboard, ListTree, Plus, Wallet } from "lucide-react";
@@ -97,6 +98,14 @@ function Gate({ children }: { children: ReactNode }) {
       <div className="mon-page">
         <h1>Opening Money</h1>
         <LoadingSkeleton preset="table" />
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="mon-page">
+        <h1>Money</h1>
+        <p role="status">Sign in to open your Money</p>
       </div>
     );
   if (state.status === "error")

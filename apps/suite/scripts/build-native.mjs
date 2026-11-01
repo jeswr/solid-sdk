@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkNative } from "./check-native.mjs";
 import { writeCsp } from "./csp-hashes.mjs";
@@ -65,6 +66,15 @@ if (browserTest) {
 }
 for (const file of ["next.config.ts", "postcss.config.mjs", "tsconfig.json", "package.json"])
   await cp(join(root, file), join(stage, file));
+// tsconfig paths into the app's node_modules (the Yjs singleton) are relative to the config.
+const tsconfig = join(stage, "tsconfig.json");
+await writeFile(
+  tsconfig,
+  (await readFile(tsconfig, "utf8")).replaceAll(
+    '"./node_modules/',
+    `"${relative(stage, root).split(sep).join("/")}/node_modules/`,
+  ),
+);
 await cp(join(root, "public"), join(stage, "public"), {
   recursive: true,
   filter: (path) => path !== join(root, "public/fixtures"),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Toaster, TooltipProvider } from "@jeswr/suite-ui";
 import Link from "next/link";
@@ -10,11 +11,19 @@ import { DocumentEditor } from "./document-editor";
 import { DocumentList } from "./document-list";
 export function DocsWorkspace() {
   const state = usePodSessionState();
-  const pathname = usePathname();
+  // The native export uses trailing-slash URLs.
+  const pathname = usePathname().replace(/(.)\/$/, "$1");
   if (state.status === "loading")
     return (
       <main id="main-content">
         <DocumentSkeleton />
+      </main>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <main id="main-content">
+        <p role="status">Sign in to open your Docs</p>
       </main>
     );
   if (state.status === "error")

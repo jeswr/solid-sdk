@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Badge,
@@ -74,7 +75,9 @@ export function CollectionScreen({
   let album: StoredAlbum | undefined;
   if (kind === "album") {
     try {
-      album = state.albums.find((item) => item.url === decodeRef(pathname.split("/").at(-1) ?? ""));
+      album = state.albums.find(
+        (item) => item.url === decodeRef(pathname.split("/").filter(Boolean).at(-1) ?? ""),
+      );
     } catch {
       /* Invalid route has the same unavailable state. */
     }
