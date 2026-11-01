@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 import { createNotifications } from "../../../packages/pod-notifications/src/client.js";
 import type { EventSourceLike } from "../../../packages/pod-notifications/src/types.js";
 import { createMemoryStorage } from "../../../packages/storage-client/src/memory.js";
-import { epoch, vector } from "../test/fixtures.js";
+import { covered, epoch, vector } from "../test/fixtures.js";
 import { nodeHandler } from "./node.js";
 import { createRelay } from "./relay.js";
 
@@ -57,6 +57,7 @@ test("memory LWS change -> signed webhook -> HTTP relay -> native EventSource ->
     stages.push(`pod:${init?.method ?? "GET"}`);
     if (init?.method === "POST") {
       const body = JSON.parse(init.body as string);
+      expect(body.type).toBe("WebhookSubscription");
       inbox = body.inbox;
       expect(body.topic).toEqual([root]);
       return Response.json({ subscription: `${root}subscription` });
@@ -109,6 +110,11 @@ test("memory LWS change -> signed webhook -> HTTP relay -> native EventSource ->
     const signed = v.signed(json, {
       url: inbox,
       params: `;created=${epoch / 1000};keyid="${keyid}";alg="ed25519"`,
+      components: [...covered, "@target-uri", "date", "content-length"],
+      headers: {
+        date: new Date(epoch).toUTCString(),
+        "content-length": String(Buffer.byteLength(JSON.stringify(json))),
+      },
     });
     const delivered = await fetch(inbox, {
       method: "POST",

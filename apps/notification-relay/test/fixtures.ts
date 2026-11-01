@@ -48,6 +48,7 @@ export async function vector(alg = "ed25519") {
       contentType?: string;
       body?: string;
       privateKey?: Parameters<typeof sign>[2];
+      headers?: Record<string, string>;
     } = {},
   ) {
     const body = Buffer.from(options.body ?? JSON.stringify(json));
@@ -56,7 +57,8 @@ export async function vector(alg = "ed25519") {
     const params =
       options.params ?? `;created=${options.created ?? epoch / 1000};keyid="${keyid}";alg="${alg}"`;
     const input = `(${components.map((c) => `"${c}"`).join(" ")})${params}`;
-    const headers = {
+    const headers: Record<string, string> = {
+      ...options.headers,
       "content-type": options.contentType ?? "application/lws+json",
       "content-digest": `sha-256=:${createHash("sha256").update(body).digest("base64")}:`,
       "signature-input": `sig1=${input}`,
@@ -67,8 +69,9 @@ export async function vector(alg = "ed25519") {
       "@scheme": url.protocol.slice(0, -1),
       "@authority": url.host,
       "@path": url.pathname,
-      "content-type": headers["content-type"],
-      "content-digest": headers["content-digest"],
+      "@target-uri": url.href,
+      "@query": url.search || "?",
+      ...headers,
     };
     const base = [
       ...components.map((c) => `"${c}": ${values[c]}`),

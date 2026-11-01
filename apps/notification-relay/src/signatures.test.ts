@@ -61,6 +61,66 @@ test("enforces freshness inclusive at both 300-second boundaries and one-hour ca
   );
 });
 
+test.each([
+  "",
+  "?encoded=a%2Fb&empty=",
+])("verifies additional derived components and HTTP fields for query %s", async (query) => {
+  const f = await vector();
+  const verify = createWebhookVerifier({
+    fetch: async () => Response.json(f.document),
+    now: () => epoch,
+  });
+  const signed = f.signed(event, {
+    url: `https://relay.example/inbox/test${query}`,
+    components: ["date", "@query", ...covered.slice().reverse(), "@target-uri", "content-length"],
+    headers: {
+      date: new Date(epoch).toUTCString(),
+      "content-length": String(Buffer.byteLength(JSON.stringify(event))),
+    },
+  });
+  await expect(verify(signed)).resolves.toMatchObject({ fingerprint: expect.any(String) });
+  for (const name of ["date", "content-length"]) {
+    const tampered = { ...signed, headers: { ...signed.headers, [name]: "tampered" } };
+    await expect(verify(tampered)).rejects.toThrow("Invalid signature");
+    const missing = { ...signed, headers: { ...signed.headers } };
+    delete missing.headers[name];
+    await expect(verify(missing)).rejects.toThrow("missing signature component");
+  }
+  const tampered = { ...signed, url: new URL(signed.url) };
+  tampered.url.search = "?tampered";
+  await expect(verify(tampered)).rejects.toThrow("Invalid signature");
+});
+
+test("extra components never replace required components or bypass component validation", async () => {
+  const f = await vector();
+  const verify = createWebhookVerifier({
+    fetch: async () => Response.json(f.document),
+    now: () => epoch,
+  });
+  for (const missing of covered) {
+    await expect(
+      verify(
+        f.signed(event, { components: [...covered.filter((c) => c !== missing), "@target-uri"] }),
+      ),
+    ).rejects.toThrow("Missing components");
+  }
+  for (const extra of ["@unsupported", "@status", "@query-param", "Content-Type", "bad:field"]) {
+    await expect(
+      verify(f.signed(event, { components: [...covered, extra], headers: { [extra]: "value" } })),
+    ).rejects.toThrow("Unsupported or missing signature component");
+  }
+  for (const extra of ["missing-header", "toString", "__proto__"]) {
+    await expect(verify(f.signed(event, { components: [...covered, extra] }))).rejects.toThrow(
+      "Unsupported or missing signature component",
+    );
+  }
+  await expect(
+    verify(
+      f.signed(event, { components: [...covered, "date", "date"], headers: { date: "value" } }),
+    ),
+  ).rejects.toThrow("Missing components");
+});
+
 test("rejects tampering of every required component, signature, digest and body", async () => {
   const f = await vector();
   const verify = createWebhookVerifier({

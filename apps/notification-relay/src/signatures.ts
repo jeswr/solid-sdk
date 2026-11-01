@@ -59,7 +59,6 @@ export function signatureInput(input: string) {
       return part.slice(1, -1);
     });
   if (
-    covered.length !== components.length ||
     new Set(covered).size !== covered.length ||
     components.some((component) => !covered.includes(component))
   )
@@ -199,11 +198,20 @@ export function createWebhookVerifier(options: {
       "@scheme": url.protocol.slice(0, -1),
       "@authority": url.host,
       "@path": url.pathname,
-      "content-type": headers["content-type"] as string,
-      "content-digest": headers["content-digest"] as string,
+      "@target-uri": url.href,
+      "@query": url.search || "?",
     };
     const base = [
-      ...input.covered.map((name) => `${quote(name)}: ${values[name]}`),
+      ...input.covered.map((name) => {
+        const derived = name.startsWith("@");
+        const source = derived ? values : headers;
+        if (
+          !Object.hasOwn(source, name) ||
+          (!derived && !/^[a-z0-9!#$%&'*+.^_\x60|~-]+$/u.test(name))
+        )
+          throw new Error("Unsupported or missing signature component");
+        return `${quote(name)}: ${source[name]}`;
+      }),
       `"@signature-params": ${input.canonical}`,
     ].join("\n");
     const signature = new RegExp(
