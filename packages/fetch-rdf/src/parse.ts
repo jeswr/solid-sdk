@@ -27,7 +27,9 @@ import {
   budgetFactory,
   bufferBody,
   DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_JSON_DEPTH,
   DEFAULT_MAX_QUADS,
+  jsonDepthScanner,
   limit,
   parseLimit,
   utf8Length,
@@ -191,6 +193,9 @@ function parseDefault(
   const baseIRI = options.baseIRI;
   const budget = budgetFactory(options, signal);
   const factory = budget.factory;
+  const checkChunk = JSON_LD_FAMILY.has(mediaType)
+    ? jsonDepthScanner(limit(options.maxJsonDepth, DEFAULT_MAX_JSON_DEPTH, "maxJsonDepth"))
+    : undefined;
   if (N3_FAMILY.has(mediaType) && typeof body === "string") {
     // Keep buffered N3 settlement within a consumer's microtask flush. The
     // factory enforces budgets before the synchronous parser retains each quad.
@@ -223,7 +228,7 @@ function parseDefault(
   const onAbort = () => fail(abortError(signal));
   signal.addEventListener("abort", onAbort, { once: true });
   const storePromise = collectIntoStore(parser);
-  const pumpPromise = pumpBody(parser, body, maxBytes, signal, (cancel) => {
+  const pumpPromise = pumpBody(parser, body, maxBytes, signal, checkChunk, (cancel) => {
     cancelPump = cancel;
   }).catch((cause: unknown) => {
     parser.destroy(cause instanceof Error ? cause : new Error(String(cause)));
@@ -297,9 +302,11 @@ async function pumpBody(
   body: RdfBody,
   maxBytes: number,
   signal: AbortSignal,
+  checkChunk: ((text: string) => void) | undefined,
   registerCancel: (cancel: (error: Error) => void) => void,
 ): Promise<void> {
   if (typeof body === "string") {
+    checkChunk?.(body);
     parser.end(body);
     return;
   }
@@ -327,10 +334,12 @@ async function pumpBody(
       if (bytes > maxBytes) throw parseLimit("maxBytes");
       const text = decoder.decode(value, { stream: true });
       if (text.length === 0) continue;
+      checkChunk?.(text);
       if (!parser.write(text)) await waitForDrain(parser);
     }
     if (parserError) throw parserError;
     const tail = decoder.decode();
+    checkChunk?.(tail);
     if (tail.length > 0) parser.write(tail);
     parser.end();
   } catch (err) {

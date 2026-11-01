@@ -30,6 +30,15 @@ import type { FetchedRdf, FetchRdfOptions } from "./types.js";
  */
 const ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
+const NATIVE_REDIRECT_HEADERS = new Set([
+  "accept",
+  "accept-language",
+  "cache-control",
+  "pragma",
+  "if-none-match",
+  "if-modified-since",
+]);
+
 /**
  * Fetch an RDF resource and parse it.
  *
@@ -63,7 +72,7 @@ export async function fetchRdf(
   let finalUrl = url;
   try {
     checkAbort(options.signal);
-    const manual = [...headers.keys()].some((name) => name !== "accept");
+    const manual = [...headers.keys()].some((name) => !NATIVE_REDIRECT_HEADERS.has(name));
     let hopHeaders = headers;
     for (let hop = 0; ; hop++) {
       response = await abortable(

@@ -7,6 +7,7 @@ import type { ParseRdfOptions } from "./types.js";
 
 export const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_MAX_QUADS = 1_000_000;
+export const DEFAULT_MAX_JSON_DEPTH = 128;
 
 export function parseLimit(name: string): RdfFetchError {
   return new RdfFetchError(`Parse budget exceeded: ${name}.`, { code: "PARSE_LIMIT" });
@@ -23,6 +24,49 @@ export function limit(
     throw new RdfFetchError(`Invalid parse budget: ${name}.`, { code: "PARSE_LIMIT" });
   }
   return result;
+}
+
+/** Scan raw JSON before parser allocation, retaining lexical state across chunks. */
+export function jsonDepthScanner(maxDepth: number): (text: string) => void {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  return (text) => {
+    for (const char of text) {
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+      } else if (char === '"') inString = true;
+      else if (char === "[" || char === "{") {
+        if (++depth > maxDepth) throw parseLimit("maxJsonDepth");
+      } else if (char === "]" || char === "}") depth = Math.max(0, depth - 1);
+    }
+  };
+}
+
+/** Custom loaders already return objects; inspect without recursive serialization. */
+export function checkJsonDepth(document: unknown, maxDepth: number): void {
+  const parents: Iterator<unknown>[] = [[document].values()];
+  for (;;) {
+    const parent = parents.at(-1);
+    if (!parent) return;
+    const { value, done } = parent.next();
+    if (done) {
+      parents.pop();
+      continue;
+    }
+    if (value === null || typeof value !== "object") continue;
+    if (parents.length > maxDepth) throw parseLimit("maxJsonDepth");
+    parents.push(values(value));
+  }
+
+  // Keep traversal memory proportional to depth, even for very wide documents.
+  function* values(object: object): Generator<unknown> {
+    for (const key in object) {
+      if (Object.hasOwn(object, key)) yield (object as Record<string, unknown>)[key];
+    }
+  }
 }
 
 /** Check expanded terms before a quad can enter any parser output buffer. */
@@ -127,6 +171,7 @@ export async function bufferBody(
   body: ReadableStream<Uint8Array>,
   maxBytes: number,
   signal?: AbortSignal,
+  checkChunk?: (text: string) => void,
 ): Promise<string> {
   checkAbort(signal);
   const reader = body.getReader();
@@ -145,10 +190,14 @@ export async function bufferBody(
       if (value !== undefined) {
         bytes += value.byteLength;
         if (bytes > maxBytes) throw parseLimit("maxBytes");
-        chunks.push(decoder.decode(value, { stream: true }));
+        const text = decoder.decode(value, { stream: true });
+        checkChunk?.(text);
+        chunks.push(text);
       }
     }
-    chunks.push(decoder.decode());
+    const tail = decoder.decode();
+    checkChunk?.(tail);
+    chunks.push(tail);
     return chunks.join("");
   } catch (cause) {
     cancel();

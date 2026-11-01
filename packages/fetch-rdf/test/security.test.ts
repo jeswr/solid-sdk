@@ -42,6 +42,102 @@ describe("parse budgets", () => {
   it.each([
     "buffered",
     "stream",
+    "fetch",
+  ])("rejects 10 KB deeply nested JSON-LD through %s input", async (backend) => {
+    const text = "[".repeat(5000) + "]".repeat(5000);
+    const { body, cancel } = heldBody(text);
+    const options = { maxQuads: 0, maxTotalTermLength: 0 };
+    const result =
+      backend === "fetch"
+        ? fetchRdf("https://ex/doc", {
+            ...options,
+            fetch: async () =>
+              new Response(body, { headers: { "content-type": "application/ld+json" } }),
+          })
+        : parseRdf(backend === "stream" ? body : text, "application/ld+json", options);
+    await expect(result).rejects.toMatchObject({ name: "RdfFetchError", code: "PARSE_LIMIT" });
+    if (backend !== "buffered") {
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+    }
+  });
+
+  it("enforces maxJsonDepth across chunks before the input closes", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const text of ["[", "{", '"@graph":', "[", "["]) controller.enqueue(encode(text));
+      },
+      cancel,
+    });
+    await expect(parseRdf(body, "application/ld+json", { maxJsonDepth: 3 })).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+  });
+
+  it.each([
+    "buffered",
+    "stream",
+  ])("counts JSON containers rather than escaped string contents in %s input", async (backend) => {
+    const value = `café \\"${"[{]}".repeat(150)}\\`;
+    const text = JSON.stringify({ "@id": "urn:s", "urn:p": value });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const byte of encode(text)) controller.enqueue(new Uint8Array([byte]));
+        controller.close();
+      },
+    });
+    const dataset = await parseRdf(backend === "stream" ? body : text, "application/ld+json", {
+      maxJsonDepth: 1,
+    });
+    expect([...dataset][0]?.object.value).toBe(value);
+    await expect(parseRdf(text, "application/ld+json", { maxJsonDepth: 0 })).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+  });
+
+  it("accepts the default JSON depth boundary and lets callers raise it", async () => {
+    const text = "[".repeat(128) + "]".repeat(128);
+    expect((await parseRdf(text, "application/ld+json")).size).toBe(0);
+    await expect(parseRdf(`[${text}]`, "application/ld+json")).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+    expect((await parseRdf(`[${text}]`, "application/ld+json", { maxJsonDepth: 129 })).size).toBe(
+      0,
+    );
+  });
+
+  it.each([
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("rejects invalid maxJsonDepth %s", async (maxJsonDepth) => {
+    await expect(parseRdf("{}", "application/ld+json", { maxJsonDepth })).rejects.toMatchObject({
+      code: "PARSE_LIMIT",
+    });
+  });
+
+  it("passes byte-capped input to the engine without default-parser validation", async () => {
+    const dataset = await parseRdf("", "text/turtle");
+    const parse = vi.fn(async () => dataset);
+    const text = "engine-specific input";
+    expect(
+      await parseRdf(text, "text/turtle", {
+        engine: { parse },
+        maxBytes: encode(text).length,
+        maxTermLength: 0,
+        maxQuads: 0,
+      }),
+    ).toBe(dataset);
+    expect(parse).toHaveBeenCalledExactlyOnceWith(text, "text/turtle", {});
+  });
+
+  it.each([
+    "buffered",
+    "stream",
   ])("bounds quads during %s parsing, including duplicates", async (backend) => {
     const held = heldBody(triple.repeat(3));
     await expect(
@@ -183,6 +279,47 @@ describe("parse budgets", () => {
 });
 
 describe("caller-header redirects", () => {
+  it.each([
+    "Accept-Language",
+    "Cache-Control",
+    "Pragma",
+    "If-None-Match",
+    "If-Modified-Since",
+  ])("retains native follow with the vetted %s header", async (header) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      const response = new Response(null, { status: init?.redirect === "manual" ? 200 : 204 });
+      if (init?.redirect === "manual")
+        Object.defineProperty(response, "type", { value: "opaqueredirect" });
+      else Object.defineProperty(response, "url", { value: "https://ex/profile/card" });
+      return response;
+    });
+    const result = await fetchRdf("https://ex/profile", { fetch, headers: { [header]: "value" } });
+    expect(result.url).toBe("https://ex/profile/card");
+    expect(fetch.mock.calls[0]?.[1]?.redirect).toBeUndefined();
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get(header)).toBe("value");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "X-API-Key",
+    "DPoP",
+    "X-Unknown",
+  ])("uses manual redirects and strips %s across origins even alongside cache headers", async (header) => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 303, headers: { location: "https://other.example/final" } }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await fetchRdf("https://ex/start", {
+      fetch,
+      headers: { "Cache-Control": "no-cache", [header]: "secret" },
+    });
+    expect(fetch.mock.calls.map(([, init]) => init?.redirect)).toEqual(["manual", "manual"]);
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get(header)).toBe("secret");
+    expect([...new Headers(fetch.mock.calls[1]?.[1]?.headers).keys()]).toEqual(["accept"]);
+  });
+
   it("keeps same-origin headers and permanently drops all but Accept across origins", async () => {
     const calls: { url: string; headers: Headers; redirect?: RequestRedirect }[] = [];
     const locations = ["/second", "https://other.example/third", "https://pod.example/final"];
@@ -272,6 +409,58 @@ describe("caller-header redirects", () => {
 });
 
 describe("context budgets and cancellation", () => {
+  it("rejects a deeply nested context response before parsing and cancels its body", async () => {
+    const { body, cancel } = heldBody(
+      `{"@context":{},"ignored":${"[".repeat(5000)}${"]".repeat(5000)}}`,
+    );
+    const documentLoader = createFetchDocumentLoader(async () => new Response(body), {
+      allow: () => true,
+    });
+    const input = heldBody(jsonld(contextUrl));
+    await expect(
+      parseRdf(input.body, "application/ld+json", { documentLoader }),
+    ).rejects.toMatchObject({ name: "RdfFetchError", code: "PARSE_LIMIT" });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(input.cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+    expect(input.body.locked).toBe(false);
+  });
+
+  it.each([
+    "helper",
+    "custom",
+  ])("applies maxJsonDepth to %s context documents before parser handoff", async (mode) => {
+    const document = { ...context, ignored: [[[]]] };
+    const documentLoader =
+      mode === "helper"
+        ? createFetchDocumentLoader(async () => Response.json(document), { allow: () => true })
+        : { load: async () => document };
+    await expect(
+      parseRdf(jsonld(contextUrl), "application/ld+json", {
+        documentLoader,
+        maxJsonDepth: 3,
+      }),
+    ).rejects.toMatchObject({ code: "PARSE_LIMIT" });
+    expect(
+      (
+        await parseRdf(jsonld(contextUrl), "application/ld+json", {
+          documentLoader,
+          maxJsonDepth: 4,
+        })
+      ).size,
+    ).toBe(1);
+  });
+
+  it("bounds deep custom context objects without recursive serialization", async () => {
+    let ignored: unknown = [];
+    for (let i = 0; i < 5000; i++) ignored = [ignored];
+    await expect(
+      parseRdf(jsonld(contextUrl), "application/ld+json", {
+        documentLoader: { load: async () => ({ ...context, ignored }) },
+      }),
+    ).rejects.toMatchObject({ code: "PARSE_LIMIT" });
+  });
+
   it("preserves a custom loader's refusal in the direct parse cause", async () => {
     const failure = new Error(`Remote JSON-LD context refused: ${contextUrl}.`);
     await expect(

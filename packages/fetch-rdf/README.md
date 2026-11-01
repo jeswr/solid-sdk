@@ -63,8 +63,10 @@ policy and DNS pinning. This library does not prevent SSRF. Inject an authentica
 fetch explicitly for protected resources; selecting the global does not provide
 authentication by itself. An injected transport remains responsible for credentials
 it adds itself and for generating any URL-bound DPoP proofs.
+The guarded transport must honour `redirect: "manual"` (`@jeswr/guarded-fetch` does since PR #238).
 
-With no caller headers beyond `Accept`, native redirect following is unchanged.
+Native redirect following is unchanged when caller headers are limited to `Accept`,
+`Accept-Language`, `Cache-Control`, `Pragma`, `If-None-Match` and `If-Modified-Since`.
 Supplying any other request header enables manual redirect handling: at most ten
 HTTP(S) hops, retaining headers on same-origin hops and dropping every caller
 header except `Accept` on a cross-origin hop (also on subsequent hops back).
@@ -75,7 +77,7 @@ more strictly. Response metadata and relative-IRI resolution use the final URL.
 
 Both functions accept `signal`. Aborting rejects promptly with the signal's reason (an `AbortError` by default, as native fetch does),
 cancels body reads and signals context loads; no dataset is returned. A custom
-loader receives an optional second argument `{ signal, maxBytes }` and should pass
+loader receives an optional second argument `{ signal, maxBytes, maxJsonDepth }` and should pass
 the signal to its I/O. Opaque engine/custom-loader work that ignores cancellation
 may continue internally, but its late result cannot complete the operation.
 
@@ -89,6 +91,7 @@ larger trusted resources. Exceeding a budget rejects with `RdfFetchError`
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `maxBytes` | 16 MiB (16,777,216) | UTF-8 input bytes, checked during body reads and before parsing strings; also bounds the engine buffer and each helper-loaded context response. |
+| `maxJsonDepth` | 128 | Nested JSON objects and arrays in default-parser JSON-LD documents and loaded contexts; the root container counts as depth 1. |
 | `maxQuads` | 1,000,000 | Constructed quads, counting duplicates before dataset deduplication. |
 | `maxTermLength` | 1 MiB (1,048,576 characters) | Each expanded term value, including IRI, literal, graph and datatype values. |
 | `maxTotalTermLength` | 64 MiB (67,108,864 characters) | Aggregate constructed term characters and aggregate term values across quads (each bounded independently), including repeats, datatype IRIs and language tags. |
@@ -97,8 +100,11 @@ larger trusted resources. Exceeding a budget rejects with `RdfFetchError`
 
 Character budgets count JavaScript UTF-16 code units, rather than UTF-8 bytes.
 Term construction and quad budgets run inside the parser's data factory before
-terms enter expansion buffers or quads enter the dataset. They bound retained RDF expansion, rather
-than providing a general CPU or JSON nesting limit.
+terms enter expansion buffers or quads enter the dataset. JSON depth is checked on
+raw text before each chunk reaches the JSON-LD parser, preserving string and escape
+state across chunks. The context helper checks raw text while reading, before
+`JSON.parse`; custom-loader objects are checked iteratively before parser handoff.
+These limits do not provide a general CPU budget.
 
 ### JSON-LD remote contexts
 
@@ -160,7 +166,7 @@ stream bodies are bounded by `maxBytes` and buffered, then passed to `engine.par
 against `maxQuads` and returned directly,
 typed as `DatasetCore` (`FetchedRdf<DatasetCore>` for fetch results). Engine failures
 are wrapped in `RdfFetchError`, preserving their cause, media type and resource URL.
-Term-length budgets apply only to the default parser. The caller owns the engine lifecycle. The `engine` option accepts the exported
+Term-length and JSON-depth budgets apply only to the default parser. The caller owns the engine lifecycle. The `engine` option accepts the exported
 structural `RdfParser` interface: only `parse(string, mediaType, { baseIri? })`
 returning `Promise<DatasetCore>` is required. fetch-rdf has no production or type
 dependency on rdf-engine; callers provide it separately. The default path does

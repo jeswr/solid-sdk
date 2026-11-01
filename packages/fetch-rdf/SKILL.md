@@ -106,6 +106,7 @@ There is no `accept` option or exported `DEFAULT_ACCEPT`.
 | Option | Default | Scope |
 | --- | --- | --- |
 | `maxBytes` | 16,777,216 | UTF-8 bytes, checked during reads and before parsing strings; includes engine buffers and each helper-loaded context response. |
+| `maxJsonDepth` | 128 | Nested JSON objects and arrays in default-parser JSON-LD documents and loaded contexts; the root container counts as depth 1. |
 | `maxQuads` | 1,000,000 | Constructed quads, including duplicates, before dataset deduplication. |
 | `maxTermLength` | 1,048,576 | Characters per expanded term value, including graph and datatype IRIs. |
 | `maxTotalTermLength` | 67,108,864 | Aggregate constructed term characters and aggregate term values across quads (each bounded independently), including repeats, datatype IRIs and language tags. |
@@ -116,9 +117,13 @@ Limits are finite nonnegative integers; concurrency must be positive. Character
 counts use UTF-16 code units. Budget violations throw `RdfFetchError` with
 `code: "PARSE_LIMIT"` and cancel the input. The data factory checks term construction and
 quad budgets before expansion/output buffering. Fixed parser vocabulary constants
-created during initialization are excluded from the construction count. The engine path performs bounded
-default-parser validation before calling the engine, adding a parsing pass.
-These are RDF allocation budgets, not a general CPU or JSON nesting limit.
+created during initialization are excluded from the construction count. JSON depth
+is scanned on raw text before each chunk reaches the JSON-LD parser, retaining string
+and escape state across chunks. The context helper scans while reading before
+`JSON.parse`; custom-loader objects are checked iteratively before parser handoff.
+The engine path gets byte-capped input, applies its own parse limits, and its result
+is checked against `maxQuads`. Term-length and JSON-depth budgets apply only to the
+default parser. These limits do not provide a general CPU budget.
 
 ## Security and transport
 
@@ -129,7 +134,8 @@ and DNS pinning. Inject authenticated fetch explicitly for protected resources;
 this package does not initialize authentication. The transport remains responsible
 for any credentials it adds and for URL-bound DPoP proof regeneration.
 
-With no caller headers beyond Accept, native redirect following is unchanged.
+Native redirect following is unchanged when caller headers are limited to Accept,
+Accept-Language, Cache-Control, Pragma, If-None-Match and If-Modified-Since.
 Any other caller header enables manual redirects, at most ten HTTP(S) hops.
 Same-origin hops keep caller headers; cross-origin hops drop every caller header
 except Accept, permanently for the rest of the chain. All requests remain GETs,
@@ -139,7 +145,7 @@ refuse redirects more strictly. The context helper refuses redirects entirely.
 
 Both functions accept `signal` and reject promptly with the signal's reason (`AbortError` by default) on abort,
 including during parsing and context loading. No dataset is returned after abort.
-Custom loaders receive an optional second argument `{ signal, maxBytes }`; honor
+Custom loaders receive an optional second argument `{ signal, maxBytes, maxJsonDepth }`; honor
 it in I/O. Opaque engines or custom loaders that ignore signals may keep running
 internally, but late results cannot complete the operation. Error messages, `.url`
 and nested causes redact URL userinfo, query and fragment; successful metadata

@@ -1,5 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { bufferBody, DEFAULT_MAX_BYTES, limit, parseLimit } from "./budgets.js";
+import {
+  bufferBody,
+  checkJsonDepth,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_JSON_DEPTH,
+  jsonDepthScanner,
+  limit,
+  parseLimit,
+} from "./budgets.js";
 import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
 import { abortable, abortError, checkAbort, isAbortError } from "./operation.js";
@@ -51,7 +59,7 @@ export function createFetchDocumentLoader(
     },
   };
 
-  async function load(url: string, request?: { signal?: AbortSignal; maxBytes?: number }) {
+  async function load(url: string, request?: Parameters<DocumentLoader["load"]>[1]) {
     const controller = new AbortController();
     const signals = [options.signal, request?.signal].filter((signal) => signal !== undefined);
     const onAbort = () => controller.abort();
@@ -71,6 +79,7 @@ export function createFetchDocumentLoader(
         loaderMaxBytes,
         limit(request?.maxBytes, loaderMaxBytes, "maxBytes"),
       );
+      const maxJsonDepth = limit(request?.maxJsonDepth, DEFAULT_MAX_JSON_DEPTH, "maxJsonDepth");
       const fetched = await abortable<Response>(
         fetchImpl(url, {
           headers: new Headers({ accept: "application/ld+json" }),
@@ -96,7 +105,9 @@ export function createFetchDocumentLoader(
           },
         );
       }
-      const text = fetched.body ? await bufferBody(fetched.body, maxBytes, signal) : "";
+      const text = fetched.body
+        ? await bufferBody(fetched.body, maxBytes, signal, jsonDepthScanner(maxJsonDepth))
+        : "";
       checkAbort(signal);
       return JSON.parse(text);
     } catch (cause) {
@@ -120,6 +131,7 @@ export function parseDocumentLoader(
   const loader = options.documentLoader ?? refusingDocumentLoader;
   const maxRequests = limit(options.maxContextRequests, 32, "maxContextRequests");
   const concurrency = limit(options.maxContextConcurrency, 4, "maxContextConcurrency", 1);
+  const maxJsonDepth = limit(options.maxJsonDepth, DEFAULT_MAX_JSON_DEPTH, "maxJsonDepth");
   const pending = new Map<string, ReturnType<DocumentLoader["load"]>>();
   const waiting: (() => void)[] = [];
   let requests = 0;
@@ -155,10 +167,12 @@ export function parseDocumentLoader(
     else await abortable(new Promise<void>((resolve) => waiting.push(resolve)), signal);
     try {
       checkAbort(signal);
-      return await abortable(
-        loader.load(url, { signal, maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES }),
+      const document = await abortable(
+        loader.load(url, { signal, maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES, maxJsonDepth }),
         signal,
       );
+      checkJsonDepth(document, maxJsonDepth);
+      return document;
     } finally {
       const next = waiting.shift();
       if (next) next();

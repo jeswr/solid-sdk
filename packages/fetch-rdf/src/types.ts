@@ -15,7 +15,7 @@ import type { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
 export interface DocumentLoader {
   load(
     url: string,
-    options?: { signal?: AbortSignal; maxBytes?: number },
+    options?: { signal?: AbortSignal; maxBytes?: number; maxJsonDepth?: number },
   ): ReturnType<NonNullable<IJsonLdParserOptions["documentLoader"]>["load"]>;
 }
 
@@ -35,6 +35,8 @@ export interface RdfParser {
 export interface ParseRdfOptions {
   /** Maximum input UTF-8 bytes, including an engine buffer. Default: 16 MiB. */
   maxBytes?: number;
+  /** Maximum JSON object/array nesting in default-parser documents and contexts. Default: 128. */
+  maxJsonDepth?: number;
   /** Maximum constructed quads (duplicates count). Default: 1,000,000. */
   maxQuads?: number;
   /** Maximum characters per expanded term value, including datatype IRIs. Default: 1 MiB. */
@@ -47,7 +49,7 @@ export interface ParseRdfOptions {
   maxContextConcurrency?: number;
   /** Cancel parsing, body reads and context loads together. Rejects with AbortError. */
   signal?: AbortSignal;
-  /** Opt-in parser. Buffered input is budget-validated before engine parsing. */
+  /** Opt-in parser. Input is byte-capped; the engine applies its own parse limits and its result is checked against maxQuads. */
   engine?: RdfParser;
   /**
    * Base IRI for resolving relative references in the body. In practice
@@ -70,8 +72,10 @@ export interface FetchRdfOptions extends Omit<ParseRdfOptions, "baseIRI"> {
   /**
    * Additional request headers to merge in. The `Accept` header is
    * always overridden with the Solid-default
-   * `"text/turtle, application/ld+json;q=0.9"`. Other caller headers enable manual
-   * redirects: same-origin hops retain them; cross-origin hops retain only Accept.
+   * `"text/turtle, application/ld+json;q=0.9"`. Headers outside the vetted
+   * Accept-Language, Cache-Control, Pragma, If-None-Match and If-Modified-Since
+   * allowlist enable manual redirects: same-origin hops retain them;
+   * cross-origin hops retain only Accept.
    */
   headers?: HeadersInit;
   /**
