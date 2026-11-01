@@ -10,7 +10,7 @@
  * CSS does not seed these files, so reads tolerate their absence and the app
  * bootstraps a private index when missing.
  */
-import { fetchRdf } from "@jeswr/fetch-rdf";
+import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { type StorageClient, StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
@@ -303,15 +303,20 @@ export async function discoverRegistrations(
   if (urls.length === 0) return out;
   for (const url of urls) {
     try {
-      const client = await storageFor(
-        url,
-        fetchImpl,
-        storage?.isWithinStorage(url) ? storage : undefined,
-      );
-      const { dataset } = await readRdf(url, fetchImpl, client);
+      // Indexes are RDF documents; cold reads need no storage-discovery headers.
+      const { dataset } = storage?.isWithinStorage(url)
+        ? await readRdf(url, fetchImpl, storage)
+        : await fetchRdf(documentUrl(url), {
+            fetch: fetchImpl ?? globalThis.fetch,
+            headers: REVALIDATE_HEADERS,
+          });
       out.push(...new TypeIndexDataset(dataset, DataFactory).all());
     } catch (e) {
-      if (e instanceof StorageError && (e.status === 404 || e.status === 403)) continue;
+      if (
+        (e instanceof StorageError || e instanceof RdfFetchError) &&
+        (e.status === 404 || e.status === 403)
+      )
+        continue;
       throw e;
     }
   }

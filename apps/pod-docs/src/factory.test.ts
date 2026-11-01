@@ -92,6 +92,93 @@ describe.each(["solid", "lws"] as const)("real PodClient discovery for %s", (pro
   });
 });
 
+describe("cold type-index discovery", () => {
+  it.each([
+    "solid",
+    "lws",
+  ] as const)("reuses a supplied %s client for its indexes", async (protocol) => {
+    const root = `https://docs-index-memory-${protocol}.example/`;
+    const webId = `${root}card#me`;
+    const storage = createMemoryStorage({ root, protocol });
+    const index = await storage.create(
+      root,
+      `<#r> a <http://www.w3.org/ns/solid/terms#TypeRegistration>;
+        <http://www.w3.org/ns/solid/terms#forClass> <${DOCUMENT_CLASS}>;
+        <http://www.w3.org/ns/solid/terms#instanceContainer> <${root}docs/>.`,
+      { name: "public.ttl", contentType: "text/turtle" },
+    );
+    const profile = turtleToStore(
+      `<${webId}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index.url}>;
+        <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${root}missing.ttl>.`,
+      webId,
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      throw new Error("Unexpected HTTP request with a supplied client");
+    });
+    await expect(discoverRegistrations(webId, profile, fetch, storage)).resolves.toEqual([
+      { forClass: DOCUMENT_CLASS, container: `${root}docs/`, instance: undefined },
+    ]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 403, unreadable: "public" },
+    { status: 404, unreadable: "public" },
+    { status: 403, unreadable: "private" },
+    { status: 404, unreadable: "private" },
+  ])("keeps the other index's registrations when $unreadable returns $status", async ({
+    status,
+    unreadable,
+  }) => {
+    const root = `https://docs-cold-${unreadable}-${status}.example/`;
+    const webId = `${root}card#me`;
+    const publicIndex = `${root}public.ttl`;
+    const privateIndex = `${root}private.ttl`;
+    const unavailableIndex = unreadable === "public" ? publicIndex : privateIndex;
+    const profile = turtleToStore(
+      `<${webId}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${publicIndex}>;
+        <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${privateIndex}>.`,
+      webId,
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === unavailableIndex) return new Response(null, { status });
+      if (url === publicIndex || url === privateIndex) {
+        if (init?.method === "HEAD") return new Response(null);
+        return new Response(
+          `<#r> a <http://www.w3.org/ns/solid/terms#TypeRegistration>;
+            <http://www.w3.org/ns/solid/terms#forClass> <${DOCUMENT_CLASS}>;
+            <http://www.w3.org/ns/solid/terms#instanceContainer> <${root}docs/>.`,
+          { headers: { "content-type": "text/turtle" } },
+        );
+      }
+      throw new Error("Unexpected type-index request");
+    });
+    await expect(discoverRegistrations(webId, profile, fetch)).resolves.toEqual([
+      { forClass: DOCUMENT_CLASS, container: `${root}docs/`, instance: undefined },
+    ]);
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([publicIndex, privateIndex]);
+    expect(fetch.mock.calls.every(([, init]) => (init?.method ?? "GET") === "GET")).toBe(true);
+    expect(
+      fetch.mock.calls.every(
+        ([, init]) => new Headers(init?.headers).get("cache-control") === "no-cache",
+      ),
+    ).toBe(true);
+  });
+
+  it.each([401, 500])("propagates an index failure with status %i", async (status) => {
+    const root = `https://docs-cold-error-${status}.example/`;
+    const webId = `${root}card#me`;
+    const indexUrl = `${root}index.ttl`;
+    const profile = turtleToStore(
+      `<${webId}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}>.`,
+      webId,
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status }));
+    await expect(discoverRegistrations(webId, profile, fetch)).rejects.toMatchObject({ status });
+  });
+});
+
 describe("separately hosted WebIDs", () => {
   it.each([
     "https://identity.docs-profile.example/card#me",
