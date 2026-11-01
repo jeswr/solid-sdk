@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { frameCache } from "./tasks-frame-fixtures";
@@ -334,9 +335,14 @@ describe("detail move recovery and hierarchy", () => {
   });
 
   it.each([
-    "create",
-    "delete",
-  ])("retries an ambiguous %s with the same destination and publishes its URL mapping", async (stage) => {
+    { stage: "create", reconciliation: "network" },
+    { stage: "delete", reconciliation: "network" },
+    { stage: "create", reconciliation: "forbidden" },
+    { stage: "delete", reconciliation: "forbidden" },
+  ])("retries an ambiguous $stage after $reconciliation reconciliation with the same destination and publishes its URL mapping", async ({
+    stage,
+    reconciliation,
+  }) => {
     const { pod, cache, store, inbox, target, parent, failures } = await setup();
     const mappings = vi.fn();
     const unsubscribe = cache.subscribeTaskMoves(mappings);
@@ -356,8 +362,10 @@ describe("detail move recovery and hierarchy", () => {
         pod.files.delete(parent.url);
         throw new TypeError("Response lost");
       }
-      if (failed && request.method === "GET" && [destination, parent.url].includes(request.url))
+      if (failed && request.method === "GET" && [destination, parent.url].includes(request.url)) {
+        if (reconciliation === "forbidden") return new Response(null, { status: 403 });
         throw new TypeError("Reconciliation unavailable");
+      }
     };
     expect(await cache.moveTaskToProject(parent, target)).toBeUndefined();
     expect(mappings).not.toHaveBeenCalled();
@@ -394,6 +402,79 @@ describe("detail move recovery and hierarchy", () => {
     retry();
     await vi.waitFor(() => expect(mappings).toHaveBeenCalledOnce());
     expect(await store.listTasks(target.tracker.stateStore as string)).toHaveLength(1);
+  });
+
+  it.each([
+    "source",
+    "child",
+  ])("replans Retry after a concurrent %s edit and a confirmed rollback", async (editedResource) => {
+    const { pod, cache, store, inbox, target, parent, child, remoteChild, failures } =
+      await setup();
+    const editedTask = editedResource === "source" ? parent : remoteChild;
+    const mappings = vi.fn();
+    cache.subscribeTaskMoves(mappings);
+    let destination = "";
+    pod.intercept = async (request) => {
+      if (
+        !destination &&
+        request.method === "PUT" &&
+        request.url.startsWith(target.tracker.stateStore as string)
+      ) {
+        destination = request.url;
+        await store.updateTask(editedTask, (task) => {
+          task.title = "Concurrent edit";
+        });
+      }
+    };
+    expect(await cache.moveTaskToProject(parent, target)).toBeUndefined();
+    expect(failures).toHaveBeenCalledOnce();
+    expect(failures.mock.calls[0]?.[0]).toMatchObject({ status: 412 });
+    expect(mappings).not.toHaveBeenCalled();
+    expect(pod.files.has(destination)).toBe(false);
+    expect(cache.getSnapshot().views.find((view) => view.url === editedTask.url)?.title).toBe(
+      "Concurrent edit",
+    );
+    const refreshedParent = await store.readTask(parent.url);
+    const refreshedChildren = await Promise.all(
+      [child, remoteChild].map((item) => store.readTask(item.url)),
+    );
+    for (const item of refreshedChildren) expect(item.task.parent).toBe(parent.task.id);
+
+    const offset = pod.mutations().length;
+    const retry = failures.mock.calls[0]?.[1] as () => void;
+    retry();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(failures).toHaveBeenCalledOnce();
+    expect(mappings).toHaveBeenCalledExactlyOnceWith({ from: parent.url, to: destination });
+    expect(pod.files.has(parent.url)).toBe(false);
+    const moved = await store.readTask(destination);
+    expect(moved.task.title).toBe(editedResource === "source" ? "Concurrent edit" : "Parent");
+    expect(await store.listTasks(target.tracker.stateStore as string)).toHaveLength(1);
+    expect(cache.getSnapshot().tasks[target.url]?.items[0]?.task.title).toBe(moved.task.title);
+    expect(cache.getSnapshot().views.some((view) => view.url === parent.url)).toBe(false);
+    for (const item of refreshedChildren) {
+      const saved = await store.readTask(item.url);
+      expect(saved.task.title).toBe(item.task.title);
+      expect(saved.task.parent).toBe(moved.task.id);
+      expect(cache.getSnapshot().views.find((view) => view.url === item.url)?.parentId).toBe(
+        moved.task.id,
+      );
+      expect(
+        pod
+          .mutations()
+          .slice(offset)
+          .find((request) => request.url === item.url)
+          ?.headers.get("If-Match"),
+      ).toBe(item.etag);
+    }
+    expect(
+      pod
+        .mutations()
+        .slice(offset)
+        .find((request) => request.url === parent.url)
+        ?.headers.get("If-Match"),
+    ).toBe(refreshedParent.etag);
+    expect(cache.getSnapshot().tasks[inbox.url]?.items).toHaveLength(1);
   });
 
   it("makes an already successful Retry harmless after subsequent task and child edits", async () => {

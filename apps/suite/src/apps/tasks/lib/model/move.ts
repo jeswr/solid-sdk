@@ -21,6 +21,7 @@ export class TaskMove {
   readonly children = new Map<string, StoredTask>();
   private plan!: ChildMove[];
   private rollingBack = false;
+  private replan = false;
   private result: StoredTask | undefined;
   constructor(
     private readonly io: RdfIO,
@@ -29,6 +30,11 @@ export class TaskMove {
     private readonly listChildren: () => Promise<StoredTask[]>,
     private readonly modified: Date,
   ) {}
+
+  /** A definite rejection was fully compensated; Retry may use fresh resources. */
+  get canReplan(): boolean {
+    return this.replan;
+  }
 
   /** Read before retrying; a lost response is success only when the intended data is present. */
   private async write(url: string, dataset: Store, etag?: string | null): Promise<StoredTask> {
@@ -81,6 +87,7 @@ export class TaskMove {
 
   async run(): Promise<StoredTask> {
     if (this.result) return this.result;
+    this.replan = false;
     if (this.rollingBack) {
       if (await this.io.optional(this.source.url)) await this.rollback();
       else this.rollingBack = false; // Finish forward if the source vanished during rollback.
@@ -126,6 +133,7 @@ export class TaskMove {
           "Couldn't finish moving the task; both copies were retained.",
         );
       }
+      this.replan = rejected;
       throw error;
     }
     this.result = moved;

@@ -632,6 +632,7 @@ export class TasksCache {
         },
         async () => {
           if (settled) return { result: settled, commit: (state) => state };
+          if (operation?.canReplan) operation = undefined;
           operation ??= this.store.prepareTaskMove(
             this.task(source.url, item.url),
             this.project(source.url),
