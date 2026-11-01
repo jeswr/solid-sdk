@@ -564,6 +564,9 @@ export async function createSolidOidcClient(
     }
     const accessToken = currentTokens.accessToken;
     const reqInput = input instanceof Request ? input : undefined;
+    if (reqInput?.bodyUsed) {
+      throw new TypeError("authedFetch: Request body has already been consumed.");
+    }
     // A `Request` always carries an absolute `.url`. A string/URL input may be RELATIVE (browser
     // `fetch` resolves it against the document base); resolve it the same way so we don't reject a
     // valid relative URL — and so the transport check + `htu` + the fetch all use one absolute URL.

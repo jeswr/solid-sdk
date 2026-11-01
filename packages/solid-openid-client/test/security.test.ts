@@ -75,6 +75,41 @@ it("nonce retries start cancellation without awaiting it (finding 4)", async () 
 
 describe("bounded upload cancellation (finding 5)", () => {
   it.each([
+    "partially",
+    "fully",
+  ])("refuses a %s consumed, unlocked Request before reading or sending", async (kind) => {
+    const transport = vi.fn(async () => new Response("ok"));
+    const { client } = await login(transport);
+    const init = {
+      method: "PUT",
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("abc"));
+          controller.enqueue(new TextEncoder().encode("def"));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    };
+    const request = new Request("https://op.example/resource", init);
+    const body = request.body;
+    if (!body) throw new Error("Missing test Request body.");
+    const reader = body.getReader();
+    expect((await reader.read()).done).toBe(false);
+    if (kind === "fully") {
+      while (!(await reader.read()).done) {
+        /* consume the remaining chunks */
+      }
+    }
+    reader.releaseLock();
+    expect(request.bodyUsed).toBe(true);
+    expect(body.locked).toBe(false);
+    const read = vi.spyOn(body, "getReader");
+    await expect(client.fetch(request)).rejects.toThrow(/body.*(used|consumed)/i);
+    expect(read).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+  it.each([
     "Request",
     "init",
   ])("rejects unfinished oversized %s without awaiting cancel", async (input) => {

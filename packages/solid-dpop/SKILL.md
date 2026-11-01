@@ -35,7 +35,7 @@ await refreshSession(session);
 - Treat serialized sessions like private keys. Keep file permissions restrictive and never log tokens or JWKs.
 - Require HTTPS except for explicit loopback development. Validate discovered issuer equality and every contacted endpoint through the existing transport guards.
 - Set `allowInsecureLoopback: true` explicitly for HTTP loopback issuers/endpoints. Discovery compares issuer strings exactly, including trailing slashes, and validates JWKS URLs too. DNS/SSRF pinning belongs to the injected transport.
-- Discovery/token responses default to 1 MiB and 30 seconds (`maxResponseBytes`, `requestTimeoutMs`). Token types must be DPoP. Credential-bearing requests use manual redirects; resource redirects are returned, or rejected for caller `redirect: "error"`.
+- Discovery/token responses default to 1 MiB and 30 seconds (`maxResponseBytes`, `requestTimeoutMs`). An adapter that must parse raw discovery/token JSON before handing a response to solid-dpop uses `readOidcJson(response, signal)` (same 1 MiB cap, abortable). Token types must be DPoP. Credential-bearing requests use manual redirects; resource redirects are returned, or rejected for caller `redirect: "error"`.
 - Compose loopback login using `startLoopbackListener(path, expectedState)` or the generated `listener.state`. Invalid callback state must not terminate login. Reapply development transport options when refreshing a session loaded from disk.
 - Keep PKCE S256, OAuth state, and OIDC nonce mandatory on authorization-code flows.
 

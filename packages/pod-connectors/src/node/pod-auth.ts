@@ -1,10 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { assertWithinPodScope, refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
-import { createSession, discoveryUrl, type FetchLike, rdfFetchFor } from "@jeswr/solid-dpop";
+import {
+  createSession,
+  discoveryUrl,
+  type FetchLike,
+  rdfFetchFor,
+  readOidcJson,
+} from "@jeswr/solid-dpop";
 import { freshRdf } from "../pod/rdf-read.js";
 import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
 import type { NodeConfig } from "./config.js";
-import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
+import { httpsUrl, NodeRuntimeError, textValue } from "./errors.js";
 
 /** Buffer a replayable body for nonce retries, observing the effective caller signal. */
 async function readRequestBody(request: Request): Promise<Uint8Array | undefined> {
@@ -72,7 +78,7 @@ export async function createClientCredentialsFetch(
       if (!tokenEndpoint) {
         const response = await fetchSafe(url, init as RequestInit);
         if (!response.ok) throw new Error("Discovery failed");
-        const metadata = object(await response.json());
+        const metadata = await readOidcJson(response, init?.signal);
         if (metadata.issuer !== config.oidcIssuer) throw new Error("Issuer mismatch");
         tokenEndpoint = httpsUrl(metadata.token_endpoint);
       }
@@ -81,7 +87,7 @@ export async function createClientCredentialsFetch(
     if (url !== tokenEndpoint) throw new Error("Unexpected authorization endpoint");
     const response = await fetchSafe(url, init as RequestInit);
     if (response.ok) {
-      const token = object(await response.clone().json());
+      const token = await readOidcJson(response, init?.signal);
       textValue(token.access_token);
       if (
         typeof token.token_type !== "string" ||
@@ -92,6 +98,7 @@ export async function createClientCredentialsFetch(
             token.expires_in <= 0))
       )
         throw new Error("Invalid DPoP token");
+      return Response.json(token, { status: response.status, headers: response.headers });
     }
     return response;
   };

@@ -240,3 +240,54 @@ export async function requestToken<T>(
     throw error;
   });
 }
+
+/**
+ * Read an OIDC discovery or token JSON object, capped at 1 MiB and abortable, for adapters that
+ * inspect raw auth responses before handing them to solid-dpop.
+ */
+export async function readOidcJson(
+  response: Response,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  if (!response.body) throw new Error("OIDC response has no JSON body.");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    if (!signal) return;
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      signal?.throwIfAborted();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 1024 * 1024) throw new Error("OIDC response exceeds byte limit.");
+      chunks.push(value);
+    }
+  } catch (error) {
+    // Cancellation hooks are advisory and must not stall rejection.
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
+    return value as Record<string, unknown>;
+  } catch {
+    throw new Error("Invalid OIDC JSON response.");
+  }
+}
