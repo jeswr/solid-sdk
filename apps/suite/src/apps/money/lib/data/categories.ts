@@ -26,10 +26,21 @@ export async function loadCategories(client: MoneyClient) {
   }
 }
 /** Read/validate before touching any shards. Keep unrelated RDF on category saves. */
-export async function saveCategories(client: MoneyClient, categories: readonly Category[]) {
-  categoryTree(categories);
+export async function saveCategories(
+  client: MoneyClient,
+  change: (categories: Category[]) => readonly Category[],
+) {
   const store = storeOf(client);
   const loaded = await store.read("categories.ttl");
+  const categories = change(loaded.document.categories());
+  categoryTree(categories);
+  await writeCategories(client, loaded, categories);
+}
+async function writeCategories(
+  client: MoneyClient,
+  loaded: Awaited<ReturnType<ReturnType<typeof storeOf>["read"]>>,
+  categories: readonly Category[],
+) {
   for (const old of loaded.document.categories()) {
     for (const predicate of [V.type, V.label, V.parent]) {
       for (const quad of [
@@ -44,10 +55,11 @@ export async function saveCategories(client: MoneyClient, categories: readonly C
     }
   }
   putCategories(loaded.document, categories);
-  await store.write(loaded.url, loaded.document, loaded.condition);
+  await storeOf(client).write(loaded.url, loaded.document, loaded.condition);
 }
 export async function deleteCategory(client: MoneyClient, id: string, replacement?: string) {
-  const { categories } = await loadCategories(client);
+  const loaded = await storeOf(client).read("categories.ttl");
+  const categories = loaded.document.categories();
   if (!categories.some((c) => c.id === id)) throw new Error("This category no longer exists");
   if (
     replacement === id ||
@@ -69,7 +81,7 @@ export async function deleteCategory(client: MoneyClient, id: string, replacemen
       affected.map((row) => row.id),
       replacement,
     );
-  await saveCategories(client, next);
+  await writeCategories(client, loaded, next);
 }
 
 export function reparent(category: Category, parent: string | undefined): Category {

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
@@ -44,9 +44,24 @@ async function shot(page: Page, info: TestInfo, name: string) {
     true,
   );
 }
+async function dialogFits(page: Page) {
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const bounds = await dialog.boundingBox();
+  const width = page.viewportSize()!.width;
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+  for (const control of await dialog.locator("input, button, [role=combobox]").all()) {
+    if (!(await control.isVisible())) continue;
+    const box = await control.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(bounds!.x);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width + 1);
+  }
+}
 async function addAccount(page: Page, name: string) {
   const dialog = page.getByRole("dialog", { name: "Add account", exact: true });
   await expect(dialog).toBeVisible();
+  await dialogFits(page);
   await dialog.getByLabel("Account name", { exact: true }).fill(name);
   await dialog.getByLabel("Opening balance", { exact: true }).fill("500");
   await dialog.getByLabel("Opening date", { exact: true }).fill("2026-08-31");
@@ -68,6 +83,16 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   ).toBeVisible();
   await shot(page, info, "overview");
   const before = await page.locator(".mon-worth h2").innerText();
+  const beforeMinor = BigInt(before.replace(/[^0-9-]/g, ""));
+  const fixtureMinor = (await readFile(fixture, "utf8"))
+    .trim()
+    .split("\n")
+    .slice(1)
+    .reduce((sum, line) => sum + BigInt(line.split(",")[2]!) * BigInt(100), BigInt(0));
+  const expectedWorth = new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+  }).format(Number(beforeMinor + BigInt(50000) + fixtureMinor) / 100);
   await page.getByRole("main").getByRole("link", { name: "Import statement", exact: true }).click();
   await page.getByRole("button", { name: "Create an account", exact: true }).click();
   await addAccount(page, "Statement account");
@@ -82,6 +107,18 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   await expect(
     page.getByText("100 of 100 transactions selected · 0 possible duplicates", { exact: true }),
   ).toBeVisible();
+  const previewRegion = page.getByRole("region", {
+    name: "Statement preview, scroll to review all columns and rows",
+    exact: true,
+  });
+  await previewRegion.focus();
+  await expect(previewRegion).toBeFocused();
+  if (info.project.name.startsWith("375")) {
+    const bounds = await previewRegion.boundingBox();
+    expect(bounds!.width).toBeLessThan(375);
+    expect(bounds!.height).toBeLessThanOrEqual(521);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2200);
+  }
   await shot(page, info, "import-preview");
   await page.getByRole("button", { name: "Import 100 transactions", exact: true }).click();
   await expect(
@@ -91,6 +128,11 @@ test("import, inline and bulk categorisation, overview, category moves and paire
     page.getByRole("status").filter({ hasText: "100 transactions added" }),
   ).toBeVisible();
   await page.getByRole("link", { name: "View ledger", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Statement account", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".mon-subtitle .mon-amount")).toHaveText("-£3,000.00");
   await page.getByRole("button", { name: "Last 90 days", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "100 results" })).toBeVisible();
   if (info.project.name.startsWith("375")) {
@@ -126,6 +168,7 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   await page.getByRole("button", { name: "Transfer", exact: true }).click();
   await choose(page, "To account", "Savings");
   const transfer = page.getByRole("dialog", { name: "Transfer", exact: true });
+  await dialogFits(page);
   await transfer.getByLabel("Amount (GBP)", { exact: true }).fill("25");
   await transfer.getByRole("button", { name: "Create transfer", exact: true }).click();
   await expect(transfer).toBeHidden();
@@ -133,7 +176,8 @@ test("import, inline and bulk categorisation, overview, category moves and paire
     page.getByText("Paired transfer", { exact: true }).filter({ visible: true }),
   ).toBeVisible();
   await page.goto("/money");
-  await expect(page.locator(".mon-worth h2")).not.toHaveText(before);
+  await page.reload();
+  await expect(page.locator(".mon-worth h2")).toHaveText(expectedWorth);
   await expect(
     page
       .getByRole("link", { name: "Statement account", exact: true })
@@ -150,10 +194,12 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   ).toBeVisible();
   await page.getByRole("button", { name: "Add category", exact: true }).click();
   const category = page.getByRole("dialog", { name: "Add category", exact: true });
+  await dialogFits(page);
   await category.getByLabel("Category name", { exact: true }).fill("Travel");
   await category.getByRole("button", { name: "Create category", exact: true }).click();
   await expect(category).toBeHidden();
   await page.getByRole("button", { name: "Move Travel", exact: true }).click();
+  await dialogFits(page);
   await choose(page, "Parent category", "Fun");
   await page.getByRole("button", { name: "Move category", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
@@ -162,6 +208,12 @@ test("import, inline and bulk categorisation, overview, category moves and paire
   await fun.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("treeitem", { name: /^Travel,/ })).toBeFocused();
+  await page.keyboard.press("F2");
+  const rename = page.getByRole("textbox", { name: "Rename Travel", exact: true });
+  await expect(rename).toBeFocused();
+  await rename.fill("Journeys");
+  await rename.press("Enter");
+  await expect(page.getByRole("treeitem", { name: /^Journeys,/ })).toBeVisible();
   await shot(page, info, "categories");
 });
 test("transaction entry, searching, validation and refusing a transfer leg", async ({ page }) => {
@@ -169,6 +221,7 @@ test("transaction entry, searching, validation and refusing a transfer leg", asy
   await page.getByRole("main").getByRole("link", { name: "Current account", exact: true }).click();
   await page.getByRole("button", { name: "Add transaction", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "Add transaction", exact: true });
+  await dialogFits(page);
   await dialog.getByRole("button", { name: "Add transaction", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("Enter a payee");
   await dialog.getByLabel("Payee / description", { exact: true }).fill("Keyboard coffee");

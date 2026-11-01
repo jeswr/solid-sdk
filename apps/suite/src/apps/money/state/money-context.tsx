@@ -44,6 +44,7 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
   const baseline = useRef(empty);
   const pending = useRef<{ id: number; apply: Optimistic }[]>([]);
   const generation = useRef(0);
+  const invalidated = useRef(false);
   const serial = useRef(Promise.resolve());
   const counter = useRef(0);
   const alive = useRef(true);
@@ -65,6 +66,11 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
   }, [session, today]);
   const refresh = useCallback(async () => {
     const request = ++generation.current;
+    if (pending.current.length) {
+      invalidated.current = true;
+      return;
+    }
+    invalidated.current = false;
     try {
       const next = await read();
       if (!alive.current || request !== generation.current || pending.current.length) return;
@@ -92,6 +98,7 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
     });
     const unsubscribe = session.subscribe((url) => {
       if (!url.startsWith(moneyRoot(session))) return;
+      invalidated.current = true;
       ++generation.current;
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -131,26 +138,29 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
           );
         }
         // Always reload: multi-shard writes can finish some shards before a failure.
+        const request = ++generation.current;
         try {
-          baseline.current = await read();
-          if (alive.current) {
+          const next = await read();
+          if (alive.current && request === generation.current) {
+            baseline.current = next;
             setStatus(baseline.current.accounts.length ? "ready" : "empty");
             setError(undefined);
           }
         } catch (failure) {
-          if (alive.current) {
+          if (alive.current && request === generation.current) {
             setError(failure);
             setStatus("error");
           }
         }
         pending.current = pending.current.filter((op) => op.id !== id);
         paint();
+        if (alive.current && !pending.current.length && invalidated.current) await refresh();
         return success;
       });
       serial.current = task.then(() => undefined);
       return task;
     },
-    [paint, read],
+    [paint, read, refresh],
   );
   const value = useMemo(
     () => ({ ...snapshot, status, error, saving, session, today, refresh, mutate }),

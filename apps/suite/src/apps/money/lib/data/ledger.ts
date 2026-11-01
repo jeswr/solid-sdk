@@ -3,7 +3,10 @@ import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import {
   addAmounts,
+  conditionalHeaders,
+  MoneyIoError,
   monthKey,
+  type Precondition,
   putTransaction,
   type Range,
   runningBalance,
@@ -98,14 +101,77 @@ export async function updateTransaction(
   parseMoney(value.currency, value.amount);
   validateTransaction(value);
   const store = storeOf(client);
-  if (monthKey(original.postingTime) !== monthKey(value.postingTime)) {
-    // Explicit delete/create. A failure after deletion is surfaced to the caller for review.
-    await deleteTransaction(client, original);
-    return addTransaction(client, original.id.slice(original.id.indexOf("#") + 1), value);
-  }
   if (value.id !== original.id) throw new Error("A transaction ID cannot change");
-  await store.saveTransactions([value]);
+  const source = await store.read(original.id.slice(0, original.id.indexOf("#")));
+  const current = source.document.transactions().find((row) => row.id === original.id);
+  const moving = monthKey(original.postingTime) !== monthKey(value.postingTime);
+  const moved = {
+    ...value,
+    id: `${store.resolve(`transactions/${monthKey(value.postingTime)}.ttl`)}#${original.id.split("#")[1]}`,
+  };
+  // Compare the record the editor actually read; a new shard ETag alone cannot detect stale forms.
+  if (current && !sameTransaction(current, original)) throw new MoneyIoError(412);
+  if (!current && !moving) throw new MoneyIoError(412);
+  if (moving) {
+    const destination = await store.read(moved.id.split("#")[0]!);
+    const existing = destination.document.transactions().find((row) => row.id === moved.id);
+    if (existing && !sameTransaction(existing, moved)) throw new MoneyIoError(412);
+    // An identical destination is a previous partially completed attempt. Never overwrite it.
+    if (!existing) {
+      if (!current) throw new MoneyIoError(412);
+      putTransaction(destination.document, moved);
+      await store.write(destination.url, destination.document, destination.condition);
+    }
+    if (current) {
+      try {
+        await deleteAtVersion(client, original, source.condition);
+      } catch (cause) {
+        throw new Error(
+          "The destination was saved, but the move did not finish. Retry the same edit to finish safely; both copies may currently be visible.",
+          { cause },
+        );
+      }
+    }
+    return moved;
+  }
+  putTransaction(source.document, value);
+  await store.write(source.url, source.document, source.condition);
   return value;
+}
+function sameTransaction(left: Transaction, right: Transaction) {
+  // Ledger rows also carry presentation fields such as runningBalance. Compare persisted fields only.
+  return (
+    [
+      "id",
+      "account",
+      "postingTime",
+      "amount",
+      "currency",
+      "description",
+      "category",
+      "payee",
+      "derivedFrom",
+      "debitAccount",
+      "creditAccount",
+    ] as const
+  ).every((key) => left[key] === right[key]);
+}
+/** Reuse the model's RDF deletion, pinned to the source version checked before creating the destination. */
+async function deleteAtVersion(client: MoneyClient, row: Transaction, condition: Precondition) {
+  const headers = conditionalHeaders(condition);
+  return deleteTransaction(
+    {
+      ...client,
+      fetch: (input, init) =>
+        client.fetch(
+          input,
+          init?.method === "PUT"
+            ? { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), ...headers } }
+            : init,
+        ),
+    },
+    row,
+  );
 }
 export async function bulkCategorise(
   client: MoneyClient,
@@ -118,7 +184,20 @@ export async function bulkCategorise(
     throw new Error(
       "Transfer legs must be changed together. Exclude transfers from your selection.",
     );
-  return storeOf(client).saveTransactions(rows.map((row) => categorised(row, category)));
+  const store = storeOf(client);
+  const saved: string[] = [];
+  for (const key of new Set(rows.map((row) => monthKey(row.postingTime)))) {
+    const loaded = await store.read(`transactions/${key}.ttl`);
+    const current = loaded.document.transactions();
+    for (const row of rows.filter((row) => monthKey(row.postingTime) === key)) {
+      const latest = current.find((value) => value.id === row.id);
+      if (!latest || latest.debitAccount || latest.creditAccount) throw new MoneyIoError(412);
+      putTransaction(loaded.document, categorised(latest, category));
+    }
+    await store.write(loaded.url, loaded.document, loaded.condition);
+    saved.push(loaded.url);
+  }
+  return saved;
 }
 export async function deleteTransaction(client: MoneyClient, row: Transaction) {
   return storeOf(client).deleteTransaction(row.id.slice(row.id.indexOf("#") + 1), row.postingTime);

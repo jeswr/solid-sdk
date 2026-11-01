@@ -1,16 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import {
-  Button,
-  DataTable,
-  EditableText,
-  EmptyState,
-  FilterChips,
-  Input,
-  useSelection,
-} from "@jeswr/suite-ui";
+import { Button, DataTable, EmptyState, FilterChips, Input, useSelection } from "@jeswr/suite-ui";
 import { DateTimeField } from "@jeswr/suite-ui/date-time";
-import { ArrowLeftRight, Plus } from "lucide-react";
+import { ArrowLeftRight, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { renameAccount } from "../lib/data/accounts";
@@ -54,6 +46,8 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
   const [transfer, setTransfer] = useState(false);
   const [edit, setEdit] = useState<Transaction>();
   const [deleting, setDeleting] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState("");
   const selection = useSelection();
   const range = presets[0] === "custom" ? custom : rangeFor(presets[0] ?? "90", money.today);
   const result = useTransactions(account, range, {
@@ -106,24 +100,20 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
           <Link href="/money/accounts" className="mon-back">
             Accounts
           </Link>
-          <h1>
-            <EditableText
-              label="Account name"
-              value={account.label}
-              validate={(value) => (value.trim() ? undefined : "Enter an account name")}
-              onCommit={(value) =>
-                void money.mutate(
-                  () => renameAccount(money.session, account.id, value),
-                  (snapshot) => ({
-                    ...snapshot,
-                    accounts: snapshot.accounts.map((a) =>
-                      a.id === account.id ? { ...a, label: value } : a,
-                    ),
-                  }),
-                )
-              }
-            />
-          </h1>
+          <div className="mon-account-title">
+            <h1>{account.label}</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Rename account"
+              onClick={() => {
+                setName(account.label);
+                setRenaming(true);
+              }}
+            >
+              <Pencil size={16} aria-hidden="true" />
+            </Button>
+          </div>
           <p className="mon-subtitle">
             {account.type} · {account.currency} · Current balance{" "}
             <Amount amount={account.currentBalance} currency={account.currency} />
@@ -252,7 +242,7 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
           />
         ) : (
           <>
-            <div className="mon-desktop">
+            <div className="mon-desktop" data-selection-empty={ids.length === 0}>
               <DataTable
                 label="Transactions"
                 items={rows}
@@ -365,6 +355,45 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
           </>
         )}
       </section>
+      <Modal
+        open={renaming}
+        onOpenChange={setRenaming}
+        title="Rename account"
+        description="Choose a name for this account."
+      >
+        <form
+          className="mon-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!name.trim()) return;
+            if (
+              await money.mutate(
+                () => renameAccount(money.session, account.id, name.trim()),
+                (snapshot) => ({
+                  ...snapshot,
+                  accounts: snapshot.accounts.map((a) =>
+                    a.id === account.id ? { ...a, label: name.trim() } : a,
+                  ),
+                }),
+              )
+            )
+              setRenaming(false);
+          }}
+        >
+          <label htmlFor="mon-account-name">
+            Account name
+            <Input
+              id="mon-account-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+            />
+          </label>
+          <Button type="submit" disabled={money.saving || !name.trim()}>
+            Save name
+          </Button>
+        </form>
+      </Modal>
       <TransactionDialog
         account={account}
         open={add || Boolean(edit)}

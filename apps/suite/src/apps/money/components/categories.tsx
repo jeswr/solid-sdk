@@ -3,7 +3,7 @@
 import { Button, EditableText, EmptyState, Input } from "@jeswr/suite-ui";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useRef, useState } from "react";
-import { deleteCategory, loadCategories, reparent, saveCategories } from "../lib/data/categories";
+import { deleteCategory, reparent, saveCategories } from "../lib/data/categories";
 import { storeOf } from "../lib/data/container";
 import { type Category, type CategoryNode, categoryTree } from "../lib/model";
 import { useMoney } from "../state/money-context";
@@ -55,10 +55,7 @@ export function CategoriesScreen() {
       return result;
     };
     return money.mutate(
-      async () => {
-        const latest = await loadCategories(money.session);
-        await saveCategories(money.session, apply(latest.categories));
-      },
+      () => saveCategories(money.session, apply),
       (snapshot) => ({ ...snapshot, categories: apply(snapshot.categories) }),
     );
   };
@@ -116,7 +113,7 @@ export function CategoriesScreen() {
             else if (node.parent) focus(node.parent);
           } else if (event.key === "Enter" || event.key === "F2") {
             event.preventDefault();
-            event.currentTarget.querySelector<HTMLButtonElement>("button[data-rename]")?.click();
+            event.currentTarget.querySelector<HTMLButtonElement>("[data-rename] button")?.click();
           }
         }}
       >

@@ -11,7 +11,13 @@ import {
   sniffDateFormat,
   sniffDelimiter,
 } from "../import";
-import { importStatement, MoneyIoError, monthKey, type Transaction } from "../model";
+import {
+  conditionalHeaders,
+  importStatement,
+  MoneyIoError,
+  monthKey,
+  putTransaction,
+} from "../model";
 import { parseMoney } from "../reports";
 import { type MoneyClient, storeOf } from "./container";
 import { allTransactions, categorised } from "./ledger";
@@ -108,6 +114,31 @@ export async function previewImport(
     category: row.category,
   }));
 }
+interface ImportPlan {
+  account: string;
+  currency: string;
+  format: "csv" | "ofx";
+  options: CsvOptions;
+  selection: { include: boolean; category?: string | undefined }[];
+  status: "pending" | "completed";
+}
+export class PendingImportError extends Error {
+  constructor() {
+    super(
+      "This statement has an unfinished import. Resume import to recover missing rows using the original mapping and selection.",
+    );
+  }
+}
+async function readImportPlan(client: MoneyClient, text: string) {
+  const journal = storeOf(client).resolve(`statements/${statementId(text)}.import.json`);
+  const response = await client.fetch(journal, { redirect: "error" });
+  if (!response.ok && response.status !== 404) throw new MoneyIoError(response.status);
+  const previous: ImportPlan | undefined = response.ok ? await response.json() : undefined;
+  return { journal, response, previous };
+}
+export async function importStatus(client: MoneyClient, text: string) {
+  return (await readImportPlan(client, text)).previous?.status ?? "new";
+}
 export async function commitImport(
   client: MoneyClient,
   account: string,
@@ -117,57 +148,97 @@ export async function commitImport(
   options: CsvOptions,
   preview: readonly PreviewRow[],
   progress: (done: number, total: number) => void,
+  recover = false,
 ) {
   const store = storeOf(client);
+  const key = statementId(text);
+  const { journal, response, previous } = await readImportPlan(client, text);
+  const alreadyImported = () =>
+    new Error("This statement has already been imported. Open the ledger to review it.");
+  if (previous?.status === "completed") throw alreadyImported();
+  if (previous && !recover) throw new PendingImportError();
+  if (
+    previous &&
+    (previous.account !== account || previous.currency !== currency || previous.format !== format)
+  )
+    throw new Error(
+      "Resume this import in its original account and currency using the original format.",
+    );
+  const plan: ImportPlan = previous ?? {
+    account,
+    currency,
+    format,
+    options,
+    selection: preview.map(({ include, category }) => ({ include, category })),
+    status: "pending",
+  };
+  let condition = previous
+    ? { etag: response.headers.get("etag") ?? "" }
+    : { create: true as const };
   const statement =
     format === "csv"
-      ? ({ format, text, options: { ...options, currency } } as const)
+      ? ({ format, text, options: { ...plan.options, currency } } as const)
       : ({ format, text } as const);
   const checked = await importStatement(
     {
       ...store,
-      put: async (path, body, contentType, condition) => {
-        try {
-          return await store.put(path, body, contentType, condition);
-        } catch (error) {
-          if (error instanceof MoneyIoError && error.status === 412)
-            throw new Error(
-              "This statement has already been imported. Open the ledger to review it.",
-            );
-          throw error;
-        }
+      put: async (path, body, contentType, sourceCondition) => {
+        // The original may have been saved just before a failed write/response. Never replace it.
+        const original = await client.fetch(store.resolve(path), { redirect: "error" });
+        if (!original.ok && original.status !== 404) throw new MoneyIoError(original.status);
+        if (original.ok && (!previous || (await original.text()) !== text)) throw alreadyImported();
+        const reserved = await store.put(
+          journal,
+          JSON.stringify(plan),
+          "application/json",
+          condition,
+        );
+        condition = { etag: reserved.headers.get("etag") ?? "" };
+        conditionalHeaders(condition);
+        return original.ok ? original : store.put(path, body, contentType, sourceCondition);
       },
       saveTransactions: async (values) => {
         const included = values.flatMap((row, index) =>
-          preview[index]?.include ? [categorised(row, preview[index].category)] : [],
+          plan.selection[index]?.include ? [categorised(row, plan.selection[index].category)] : [],
         );
-        const shards = new Map<string, Transaction[]>();
+        const shards = new Map<string, typeof included>();
         for (const row of included) {
-          const key = monthKey(row.postingTime);
-          const group = shards.get(key) ?? [];
+          const month = monthKey(row.postingTime);
+          const group = shards.get(month) ?? [];
           group.push(row);
-          shards.set(key, group);
+          shards.set(month, group);
         }
         const saved: string[] = [];
         progress(0, shards.size);
-        for (const rows of shards.values()) {
-          saved.push(...(await store.saveTransactions(rows)));
+        for (const [month, rows] of shards) {
+          const loaded = await store.read(`transactions/${month}.ttl`);
+          const existing = new Set(loaded.document.transactions().map((row) => row.id));
+          const missing = rows.filter((row) => !existing.has(row.id));
+          // Recovery fills gaps only, preserving edits to rows saved by a previous attempt.
+          if (missing.length) {
+            for (const row of missing) putTransaction(loaded.document, row);
+            await store.write(loaded.url, loaded.document, loaded.condition);
+          }
+          saved.push(loaded.url);
           progress(saved.length, shards.size);
         }
+        await store.put(
+          journal,
+          JSON.stringify({ ...plan, status: "completed" }),
+          "application/json",
+          condition,
+        );
         return saved;
       },
     },
-    statementId(text),
+    key,
     account,
     currency,
     statement,
   );
-  return {
-    ...checked,
-    transactions: checked.transactions.flatMap((row, index) => {
-      const entry = preview[index] as PreviewRow;
-      return entry.include ? [categorised(row, entry.category)] : [];
-    }),
-    count: preview.filter((row) => row.include).length,
-  };
+  const transactions = checked.transactions.flatMap((row, index) => {
+    const entry = plan.selection[index]!;
+    return entry.include ? [categorised(row, entry.category)] : [];
+  });
+  return { ...checked, transactions, count: transactions.length };
 }

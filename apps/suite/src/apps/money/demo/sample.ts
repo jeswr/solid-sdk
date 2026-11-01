@@ -58,7 +58,7 @@ async function seed(session: PodSession, now: Date) {
         parent: id,
       });
   }
-  await saveCategories(session, categories);
+  await saveCategories(session, () => categories);
   const category = (label: string) => categories.find((c) => c.label === label)?.id;
   let index = 0;
   for (let day = 1; day <= 90; day++) {

@@ -9,6 +9,7 @@ import { encodeRef } from "@/lib/refs";
 import {
   commitImport,
   detectFormat,
+  importStatus,
   type PreviewRow,
   previewImport,
   suggestMapping,
@@ -37,6 +38,7 @@ export function ImportScreen() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [count, setCount] = useState(0);
+  const [recover, setRecover] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const readFile = async (chosen?: File) => {
     if (!chosen) return;
@@ -46,6 +48,7 @@ export function ImportScreen() {
       if (chosen.size > 10485760) throw new Error("Choose a statement smaller than 10 MiB.");
       const text = await chosen.text();
       const format = detectFormat(chosen.name, text);
+      setRecover(false);
       setFile({ name: chosen.name, text, format });
       if (format === "csv") {
         const suggested = suggestMapping(text);
@@ -80,6 +83,10 @@ export function ImportScreen() {
         options,
         rules,
       );
+      const status = await importStatus(money.session, file.text);
+      if (status === "completed")
+        throw new Error("This statement has already been imported. Open the ledger to review it.");
+      setRecover(status === "pending");
       if (!result.length)
         throw new Error("This statement has no transactions. Choose another file.");
       setRows(result);
@@ -331,7 +338,18 @@ export function ImportScreen() {
               Possible duplicates are excluded by default. Review categories before importing into{" "}
               {account?.label}.
             </p>
-            <div className="mon-preview-list">
+            {recover && (
+              <p role="status" className="mon-hint">
+                Resume uses your original mapping and row selection. Rows already saved stay
+                unchanged.
+              </p>
+            )}
+            <section
+              className="mon-preview-list"
+              aria-label="Statement preview, scroll to review all columns and rows"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need access to the scroll region.
+              tabIndex={0}
+            >
               <table className="mon-simple-table">
                 <caption className="sr-only">Statement preview</caption>
                 <thead>
@@ -351,6 +369,7 @@ export function ImportScreen() {
                           type="checkbox"
                           aria-label={`Include row ${index + 1}`}
                           checked={entry.include}
+                          disabled={recover}
                           onChange={(e) =>
                             setRows((current) =>
                               current.map((row, i) =>
@@ -371,6 +390,7 @@ export function ImportScreen() {
                         <CategorySelect
                           label={`Category for import row ${index + 1}`}
                           value={entry.category}
+                          disabled={recover}
                           onChange={(value) =>
                             setRows((current) =>
                               current.map((row, i) =>
@@ -391,7 +411,7 @@ export function ImportScreen() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
             <div className="mon-wizard-actions">
               <Button
                 variant="outline"
@@ -400,7 +420,7 @@ export function ImportScreen() {
                 Back
               </Button>
               <Button
-                disabled={!rows.some((row) => row.include) || money.saving}
+                disabled={(!recover && !rows.some((row) => row.include)) || money.saving}
                 onClick={async () => {
                   if (!file || !account) return;
                   setStep("import");
@@ -415,19 +435,23 @@ export function ImportScreen() {
                       options,
                       rows,
                       (done, total) => setProgress({ done, total }),
+                      recover,
                     );
                     setCount(result.count);
                   });
                   if (saved) setStep("done");
                   else {
+                    setRecover(true);
                     setError(
-                      "The import did not finish. A statement may already be imported, or some transactions may have been saved. Review the ledger before trying again.",
+                      "The import did not finish. Resume import to restore missing rows using the original mapping and selection. Transactions already saved will be kept. Completed statements cannot be imported again.",
                     );
                     setStep("preview");
                   }
                 }}
               >
-                Import {rows.filter((row) => row.include).length} transactions
+                {recover
+                  ? "Resume import"
+                  : `Import ${rows.filter((row) => row.include).length} transactions`}
               </Button>
             </div>
           </>

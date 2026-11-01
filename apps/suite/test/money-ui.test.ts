@@ -21,6 +21,7 @@ import { SearchScreen } from "../src/apps/money/components/search";
 import { createAccount } from "../src/apps/money/lib/data/accounts";
 import { saveCategories } from "../src/apps/money/lib/data/categories";
 import { provision, storeOf } from "../src/apps/money/lib/data/container";
+import { commitImport, previewImport, suggestMapping } from "../src/apps/money/lib/data/import";
 import { addTransaction, bulkCategorise, categorised } from "../src/apps/money/lib/data/ledger";
 import { MoneyProvider, useMoney } from "../src/apps/money/state/money-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -55,13 +56,14 @@ function Probe() {
 async function setup(empty = false) {
   const pod = createDemoPod({ root: "https://money-ui.example/", latency: 0 });
   let broken = false;
+  let transport = pod.fetch;
   const session: PodSession = {
     mode: "demo",
     storageUrl: pod.root,
     webId: pod.root + "me",
     displayName: "Example",
     fetch: async (input, init) =>
-      broken ? new Response(null, { status: 500 }) : pod.fetch(input, init),
+      broken ? new Response(null, { status: 500 }) : transport(input, init),
     subscribe: pod.subscribe,
     reset: async () => {},
   };
@@ -84,7 +86,7 @@ async function setup(empty = false) {
         date: "2026-01-01",
       })
     ).id;
-    await saveCategories(session, cats);
+    await saveCategories(session, () => cats);
     rowId = (
       await addTransaction(session, "market", {
         account: id,
@@ -102,6 +104,10 @@ async function setup(empty = false) {
   });
   return {
     app,
+    pod,
+    intercept: (fetch: typeof globalThis.fetch) => {
+      transport = fetch;
+    },
     session,
     id,
     rowId,
@@ -123,7 +129,7 @@ it("renders overview, ledger, cards, category tree and search with named control
   expect(f.app.host.textContent).toContain("£980.00");
   expect(f.app.host.textContent).toContain("Market");
   await screen(f, h(LedgerScreen, { accountId: f.id }));
-  expect(f.app.host.querySelector("h1")?.textContent).toContain("Daily spending");
+  expect(f.app.host.querySelector("h1")?.textContent).toBe("Daily spending");
   expect(f.app.host.querySelector(".mon-ledger-card")?.textContent).toContain("Market");
   expect(f.app.host.querySelectorAll('[aria-label="Category for Market"]').length).toBeGreaterThan(
     0,
@@ -140,6 +146,14 @@ it("renders overview, ledger, cards, category tree and search with named control
   expect(food?.getAttribute("aria-expanded")).toBe("false");
   await key(food as HTMLElement, "ArrowRight");
   expect(food?.getAttribute("aria-expanded")).toBe("true");
+  for (const shortcut of ["Enter", "F2"]) {
+    food?.focus();
+    await key(food as HTMLElement, shortcut);
+    const input = document.activeElement as HTMLInputElement;
+    expect(input.tagName).toBe("INPUT");
+    expect(input.value).toBe("Food");
+    await key(input, "Escape");
+  }
   await screen(f, h(SearchScreen));
   expect(f.app.host.querySelector("h1")?.textContent).toContain("Market");
   expect(f.app.host.querySelector('a[href^="/money/a/"]')?.textContent).toBe("Market");
@@ -309,4 +323,177 @@ it("displays large balances and negative fractions without floating-point roundi
     ),
   );
   expect(app.host.textContent).toBe("£90,071,992,547,409.93-£0.01JP¥12");
+});
+
+it("reconciles notifications received during a mutation reload after its debounce expires", async () => {
+  const f = await setup();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  let intercept = true;
+  f.intercept(async (input, init) => {
+    const response = await f.pod.fetch(input, init);
+    if (intercept && !init?.method && String(input).endsWith("categories.ttl")) {
+      intercept = false;
+      entered.resolve();
+      await release.promise;
+    }
+    return response;
+  });
+  let task!: Promise<boolean>;
+  await act(async () => {
+    task = money.mutate(async () => {});
+    await entered.promise;
+  });
+  const added = { id: f.cats[0]!.id + "-new", label: "External category" };
+  await act(async () => {
+    await saveCategories({ ...f.session, fetch: f.pod.fetch }, (current) => [...current, added]);
+    // Let the notification debounce fire while the captured stale response is still pending.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  });
+  expect(money.categories).not.toContainEqual(added);
+  await act(async () => {
+    release.resolve();
+    await task;
+  });
+  expect(money.categories).toContainEqual(added);
+  expect(money.saving).toBe(false);
+});
+it("generation-fences mutation reloads when another write is queued and defers manual refresh while saving", async () => {
+  const f = await setup();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  let intercept = true;
+  f.intercept(async (input, init) => {
+    const response = await f.pod.fetch(input, init);
+    if (intercept && !init?.method && String(input).endsWith("categories.ttl")) {
+      intercept = false;
+      entered.resolve();
+      await release.promise;
+    }
+    return response;
+  });
+  let first!: Promise<boolean>;
+  let second!: Promise<boolean>;
+  const added = { id: f.cats[0]!.id + "-queued", label: "Queued category" };
+  await act(async () => {
+    first = money.mutate(async () => {});
+    await entered.promise;
+  });
+  await act(async () => {
+    second = money.mutate(
+      () => saveCategories(f.session, (current) => [...current, added]),
+      (snapshot) => ({ ...snapshot, categories: [...snapshot.categories, added] }),
+    );
+    await money.refresh();
+  });
+  expect(money.categories).toContainEqual(added);
+  await act(async () => {
+    release.resolve();
+    await Promise.all([first, second]);
+  });
+  expect(money.categories.filter((c) => c.id === added.id)).toEqual([added]);
+  expect(money.status).toBe("ready");
+});
+
+it("offers resume after reopening an import whose rows saved but completion marker failed", async () => {
+  const f = await setup();
+  const text = `Date,Payee,Amount\n${money.today},Recovery purchase,-3`;
+  const options = suggestMapping(text).options;
+  const preview = await previewImport(f.session, f.id, "GBP", text, "csv", options);
+  await expect(
+    commitImport(
+      {
+        ...f.session,
+        fetch: async (input, init) => {
+          if (
+            init?.method === "PUT" &&
+            String(input).endsWith(".json") &&
+            String(init.body).includes('"completed"')
+          )
+            return new Response(null, { status: 500 });
+          return f.pod.fetch(input, init);
+        },
+      },
+      f.id,
+      "GBP",
+      text,
+      "csv",
+      options,
+      preview,
+      () => {},
+    ),
+  ).rejects.toMatchObject({ status: 500 });
+  await act(() => money.refresh());
+  await screen(f, h(ImportScreen));
+  const input = f.app.host.querySelector<HTMLInputElement>('[aria-label="Statement file"]')!;
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [new File([text], "retry.csv", { type: "text/csv" })],
+  });
+  await act(async () => {
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const button = (label: string) =>
+    Array.from(f.app.host.querySelectorAll("button")).find((node) => node.textContent === label)!;
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(f.app.host.textContent).toContain("CSV ready");
+  });
+  await click(button("Continue"));
+  await click(button("Preview transactions"));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(f.app.host.textContent).toContain("0 of 1 transactions selected");
+  });
+  expect(button("Resume import").disabled).toBe(false);
+  expect(f.app.host.textContent).toContain("original mapping and row selection");
+  await click(button("Resume import"));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(f.app.host.textContent).toContain("1 transactions added to Daily spending");
+  });
+  expect(money.transactions.filter((row) => row.description === "Recovery purchase")).toHaveLength(
+    1,
+  );
+});
+
+it("renames the account heading and saves a category name entirely from the keyboard", async () => {
+  const f = await setup();
+  await screen(f, h(LedgerScreen, { accountId: f.id }));
+  await click(f.app.host.querySelector('[aria-label="Rename account"]')!);
+  const input = document.querySelector<HTMLInputElement>("#mon-account-name")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "Everyday account",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(f.app.host.querySelector("h1")?.textContent).toBe("Everyday account");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+  await screen(f, h(CategoriesScreen));
+  const food = f.app.host.querySelector<HTMLElement>('[role="treeitem"][aria-label^="Food,"]')!;
+  food.focus();
+  await key(food, "Enter");
+  const rename = document.activeElement as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      rename,
+      "Meals",
+    );
+    rename.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await key(rename, "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.saving).toBe(false);
+  });
+  await act(() => money.refresh());
+  expect(money.categories.find((c) => c.id === f.cats[0]!.id)?.label).toBe("Meals");
 });

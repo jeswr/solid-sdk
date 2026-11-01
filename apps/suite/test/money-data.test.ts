@@ -298,12 +298,16 @@ describe("Money data against the demo pod", () => {
     loaded.document.node(food.id).types.add(`${NS.SCHEMA}Thing`);
     loaded.document.node(url + "#note").description = "Preserve me";
     await store.write(url, loaded.document, loaded.condition);
-    await categories.saveCategories(client, [food, categories.reparent(child, food.id), other]);
+    await categories.saveCategories(client, () => [
+      food,
+      categories.reparent(child, food.id),
+      other,
+    ]);
     expect((await categories.loadCategories(client)).upgraded).toBe(false);
     const a = await account(client);
     await add(client, a.id, "purchase", "-4", today, food.id);
     await expect(
-      categories.saveCategories(client, [{ ...food, parent: child.id }, child, other]),
+      categories.saveCategories(client, () => [{ ...food, parent: child.id }, child, other]),
     ).rejects.toThrow("hierarchy");
     await expect(categories.deleteCategory(client, food.id)).rejects.toThrow("in use");
     await expect(categories.deleteCategory(client, "absent")).rejects.toThrow("no longer exists");
@@ -536,7 +540,7 @@ describe("Money data against the demo pod", () => {
       { id: cat + "#income", label: "Income" },
       { id: cat + "#salary", label: "Salary", parent: cat + "#income" },
     ];
-    await categories.saveCategories(client, cats);
+    await categories.saveCategories(client, () => cats);
     await add(client, a.id, "purchase", "-12", today, cats[1]!.id);
     await add(client, a.id, "refund", "2", today, cats[1]!.id);
     await add(client, a.id, "income", "100", today, cats[3]!.id);
