@@ -107,6 +107,74 @@ public class PdfPreviewStoreTest {
         assertEquals(0, files());
     }
 
+    @Test public void aStaleHandleLeavesTheLiveTransferAndFileIntact() throws Exception {
+        String stale = store.begin("a.pdf", PDF.length, now);
+        String live = store.begin("b.pdf", PDF.length * 2L, now);
+        assertEquals("invalid", code(() -> store.append(stale, PDF, now)));
+        assertEquals("invalid", code(() -> store.finish(stale, now)));
+        store.discard(stale);
+        store.release(stale);
+        store.append(live, PDF, now);
+        store.append(live, PDF, now);
+        File file = store.finish(live, now);
+        // After finish, a late call from either caller must not delete the file a viewer has open.
+        assertEquals("invalid", code(() -> store.append(stale, PDF, now)));
+        assertEquals("invalid", code(() -> store.append(live, PDF, now)));
+        store.discard(live);
+        store.discard(stale);
+        store.release(stale);
+        assertTrue(file.exists());
+        store.release(live);
+        assertFalse(file.exists());
+    }
+
+    @Test public void discardDropsOnlyTheLiveUnfinishedTransfer() throws Exception {
+        String handle = store.begin("a.pdf", PDF.length, now);
+        store.discard(handle);
+        assertEquals(0, files());
+        assertEquals("invalid", code(() -> store.append(handle, PDF, now)));
+    }
+
+    @Test public void sweepDeletesAbandonedTransfersAndOldFinishedFiles() throws Exception {
+        String partial = store.begin("a.pdf", PDF.length, now);
+        store.sweep(now + PdfPreviewStore.IDLE_MS);
+        assertEquals(1, files());
+        store.sweep(now + PdfPreviewStore.IDLE_MS + 1);
+        assertEquals(0, files());
+        assertEquals("invalid", code(() -> store.append(partial, PDF, now)));
+        String done = store.begin("a.pdf", PDF.length, now);
+        store.append(done, PDF, now);
+        File file = store.finish(done, now);
+        store.sweep(now + PdfPreviewStore.FINISHED_MS);
+        assertTrue(file.exists());
+        store.sweep(now + PdfPreviewStore.FINISHED_MS + 1);
+        assertFalse(file.exists());
+        store.sweep(now + 10 * PdfPreviewStore.FINISHED_MS);
+    }
+
+    @Test public void boundsTheNameInUtf16Units() throws Exception {
+        store.begin("a".repeat(PdfPreviewStore.MAX_NAME_UNITS), PDF.length, now);
+        assertEquals("invalid", code(() -> store.begin("a".repeat(PdfPreviewStore.MAX_NAME_UNITS + 1), PDF.length, now)));
+    }
+
+    @Test public void acceptsOnlyWholeNonNegativeNumbersAsTheSize() throws Exception {
+        assertEquals(10L, PdfPreviewStore.declaredSize(10));
+        assertEquals(10L, PdfPreviewStore.declaredSize(10.0));
+        assertEquals(Long.MAX_VALUE, PdfPreviewStore.declaredSize(1e300));
+        for (Object bad : new Object[] {null, "10", true, 1.5, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+            assertEquals("invalid", code(() -> PdfPreviewStore.declaredSize(bad)));
+        }
+    }
+
+    @Test public void acceptsOnlyCanonicalPaddedBase64Chunks() throws Exception {
+        for (String good : new String[] {"AAAA", "AA==", "AAA=", "+/+/"}) PdfPreviewStore.checkChunk(good);
+        String longest = "A".repeat(4 * ((PdfPreviewStore.MAX_CHUNK_BYTES + 2) / 3));
+        PdfPreviewStore.checkChunk(longest);
+        for (String bad : new String[] {null, "", "AAA", "A===", "AA=A", "=AAA", "AA-_", "AA\nA", longest + "AAAA"}) {
+            assertEquals("invalid", code(() -> PdfPreviewStore.checkChunk(bad)));
+        }
+    }
+
     @Test public void emptiesTheDirectoryOnLaunch() throws Exception {
         File stale = new File(new File(root, "left-by-a-killed-process"), "x.pdf");
         assertTrue(stale.getParentFile().mkdirs());

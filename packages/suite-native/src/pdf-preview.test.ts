@@ -5,6 +5,7 @@ import {
   openPdf,
   PDF_PREVIEW_CHUNK_BYTES,
   PDF_PREVIEW_MAX_BYTES,
+  PDF_PREVIEW_NAME_CODE_POINTS,
   PdfPreviewError,
   type PdfPreviewPlugin,
 } from "./pdf-preview.js";
@@ -46,6 +47,42 @@ describe("openPdf", () => {
     ]);
     expect(Buffer.concat(decoded).equals(Buffer.from(bytes))).toBe(true);
     expect(native.pdfOpen).toHaveBeenCalledWith({ handle: "h1" });
+  });
+
+  it("stops before the next native call once the signal aborts", async () => {
+    const before = new AbortController();
+    before.abort();
+    const idle = plugin();
+    expect(await code(openPdf(idle, "a.pdf", pdf(10), before.signal))).toBe("cancelled");
+    expect(idle.pdfBegin).not.toHaveBeenCalled();
+
+    const during = new AbortController();
+    const native = plugin({
+      pdfChunk: vi.fn(async () => {
+        during.abort();
+      }),
+    });
+    const bytes = pdf(PDF_PREVIEW_CHUNK_BYTES * 2);
+    expect(await code(openPdf(native, "a.pdf", bytes, during.signal))).toBe("cancelled");
+    expect(native.pdfChunk).toHaveBeenCalledTimes(1);
+    expect(native.pdfOpen).not.toHaveBeenCalled();
+
+    const last = new AbortController();
+    const single = plugin({
+      pdfChunk: vi.fn(async () => {
+        last.abort();
+      }),
+    });
+    expect(await code(openPdf(single, "a.pdf", pdf(10), last.signal))).toBe("cancelled");
+    expect(single.pdfOpen).not.toHaveBeenCalled();
+  });
+
+  it("cuts long display names on a code point boundary", async () => {
+    const native = plugin();
+    await openPdf(native, "😀".repeat(PDF_PREVIEW_NAME_CODE_POINTS + 10), pdf(10));
+    const [[{ name }]] = native.pdfBegin.mock.calls as unknown as [[{ name: string }]];
+    expect(Array.from(name)).toHaveLength(PDF_PREVIEW_NAME_CODE_POINTS);
+    expect(name).toBe("😀".repeat(PDF_PREVIEW_NAME_CODE_POINTS));
   });
 
   it("refuses an oversized file before anything crosses the bridge", async () => {

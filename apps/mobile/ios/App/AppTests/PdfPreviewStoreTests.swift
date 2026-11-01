@@ -6,7 +6,7 @@ import XCTest
 final class PdfPreviewStoreTests: XCTestCase {
     private var root: URL!
     private var store: PdfPreviewStore!
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private let now: TimeInterval = 1_000
     private let pdf = Data("%PDF-1.7\n%%EOF\n".utf8)
 
     override func setUpWithError() throws {
@@ -78,10 +78,73 @@ final class PdfPreviewStoreTests: XCTestCase {
 
     func testDropsAHandleIdleForSixtySeconds() throws {
         let handle = try store.begin(name: "a.pdf", size: Int64(pdf.count * 2), now: now)
-        try store.append(handle: handle, data: pdf, now: now.addingTimeInterval(PdfPreviewStore.idle))
-        let late = now.addingTimeInterval(2 * PdfPreviewStore.idle + 1)
+        try store.append(handle: handle, data: pdf, now: now + PdfPreviewStore.idle)
+        let late = now + 2 * PdfPreviewStore.idle + 1
         XCTAssertEqual(refusal { try store.append(handle: handle, data: pdf, now: late) }, "invalid")
         XCTAssertEqual(try files(), 0)
+    }
+
+    func testAStaleHandleLeavesTheLiveTransferAndFileIntact() throws {
+        let stale = try store.begin(name: "a.pdf", size: Int64(pdf.count), now: now)
+        let live = try store.begin(name: "b.pdf", size: Int64(pdf.count * 2), now: now)
+        XCTAssertEqual(refusal { try store.append(handle: stale, data: pdf, now: now) }, "invalid")
+        XCTAssertEqual(refusal { _ = try store.finish(handle: stale, now: now) }, "invalid")
+        store.release(handle: stale)
+        try store.append(handle: live, data: pdf, now: now)
+        try store.append(handle: live, data: pdf, now: now)
+        let file = try store.finish(handle: live, now: now)
+        // After finish, a late call from either caller must not delete the file QuickLook shows.
+        XCTAssertEqual(refusal { try store.append(handle: stale, data: pdf, now: now) }, "invalid")
+        XCTAssertEqual(refusal { try store.append(handle: live, data: pdf, now: now) }, "invalid")
+        store.release(handle: stale)
+        store.sweep(now: now + 100 * PdfPreviewStore.idle)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        store.release(handle: live)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testSweepDeletesAnAbandonedTransfer() throws {
+        let handle = try store.begin(name: "a.pdf", size: Int64(pdf.count), now: now)
+        store.sweep(now: now + PdfPreviewStore.idle)
+        XCTAssertEqual(try files(), 1)
+        store.sweep(now: now + PdfPreviewStore.idle + 1)
+        XCTAssertEqual(try files(), 0)
+        XCTAssertEqual(refusal { try store.append(handle: handle, data: pdf, now: now) }, "invalid")
+        store.sweep(now: now + 10 * PdfPreviewStore.idle)
+    }
+
+    func testReleasesTheFinishedFileWhenTheViewerCloses() throws {
+        let handle = try store.begin(name: "a.pdf", size: Int64(pdf.count), now: now)
+        try store.append(handle: handle, data: pdf, now: now)
+        let file = try store.finish(handle: handle, now: now)
+        store.release(root.appendingPathComponent("other.pdf"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        store.release(file)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testBoundsTheNameInUtf16Units() throws {
+        _ = try store.begin(name: String(repeating: "a", count: PdfPreviewStore.maxNameUnits), size: Int64(pdf.count), now: now)
+        let long = String(repeating: "a", count: PdfPreviewStore.maxNameUnits + 1)
+        XCTAssertEqual(refusal { _ = try store.begin(name: long, size: Int64(self.pdf.count), now: self.now) }, "invalid")
+    }
+
+    func testAcceptsOnlyWholeNonNegativeNumbersAsTheSize() {
+        XCTAssertEqual(PdfPreviewStore.declaredSize(NSNumber(value: 10)), 10)
+        XCTAssertEqual(PdfPreviewStore.declaredSize(NSNumber(value: 10.0)), 10)
+        XCTAssertEqual(PdfPreviewStore.declaredSize(NSNumber(value: 1e300)), PdfPreviewStore.maxBytes + 1)
+        let bad: [Any?] = [nil, "10", NSNumber(value: true), kCFBooleanFalse, NSNumber(value: 1.5),
+                           NSNumber(value: -1), NSNumber(value: Double.nan), NSNumber(value: Double.infinity)]
+        for value in bad { XCTAssertNil(PdfPreviewStore.declaredSize(value)) }
+    }
+
+    func testAcceptsOnlyCanonicalPaddedBase64Chunks() {
+        XCTAssertEqual(PdfPreviewStore.decodeChunk("JVBERi0="), Data("%PDF-".utf8))
+        let longest = String(repeating: "A", count: 4 * ((PdfPreviewStore.maxChunkBytes + 2) / 3))
+        XCTAssertNotNil(PdfPreviewStore.decodeChunk(longest))
+        for bad in ["", "AAA", "A===", "AB==", "AA-_", "AA\nA", " AAAA", longest + "AAAA"] {
+            XCTAssertNil(PdfPreviewStore.decodeChunk(bad), bad)
+        }
     }
 
     func testEmptiesTheDirectoryOnLaunch() throws {

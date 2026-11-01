@@ -1,6 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
 import Capacitor
-import CoreFoundation
 import Foundation
 import QuickLook
 import UIKit
@@ -31,10 +30,17 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
 
     override public func load() {
         queue.async { _ = try? self.store() }
+        NotificationCenter.default.addObserver(self, selector: #selector(sweepPreviews),
+                                               name: UIApplication.willEnterForegroundNotification, object: nil)
     }
 
+    @objc private func sweepPreviews() {
+        queue.async { try? self.store().sweep() }
+    }
+
+    /// Rejects only: the store already discarded a live transfer it refused, and a call with a
+    /// stale handle must not disturb the live one.
     private func reject(_ call: CAPPluginCall, _ error: Error) {
-        try? store().clear()
         let code = (error as? PdfPreviewStore.Refused)?.code ?? "failed"
         call.reject(code == "no-viewer" ? "No PDF viewer is available" : "Cannot preview this PDF", code)
     }
@@ -43,15 +49,10 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
         queue.async {
             do {
                 // Inspect the original value: Capacitor's numeric accessors coerce booleans and fractions.
-                guard let name = call.getString("name"), let number = call.options["size"] as? NSNumber,
-                      CFGetTypeID(number) != CFBooleanGetTypeID() else {
+                guard let name = call.getString("name"),
+                      let size = PdfPreviewStore.declaredSize(call.options["size"]) else {
                     throw PdfPreviewStore.Refused(code: "invalid")
                 }
-                let value = number.doubleValue
-                guard value.isFinite, value >= 0, value.rounded() == value else {
-                    throw PdfPreviewStore.Refused(code: "invalid")
-                }
-                let size = value > Double(PdfPreviewStore.maxBytes) ? PdfPreviewStore.maxBytes + 1 : Int64(value)
                 call.resolve(["handle": try self.store().begin(name: name, size: size)])
             } catch { self.reject(call, error) }
         }
@@ -61,8 +62,7 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
         queue.async {
             do {
                 guard let handle = call.getString("handle"), let encoded = call.getString("data"),
-                      encoded.utf8.count <= 4 * ((PdfPreviewStore.maxChunkBytes + 2) / 3),
-                      let data = Data(base64Encoded: encoded), data.base64EncodedString() == encoded else {
+                      let data = PdfPreviewStore.decodeChunk(encoded) else {
                     throw PdfPreviewStore.Refused(code: "invalid")
                 }
                 try self.store().append(handle: handle, data: data)
@@ -82,7 +82,11 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
 
     private func present(_ file: URL, _ call: CAPPluginCall) {
         guard QLPreviewController.canPreview(file as NSURL), let presenter = topViewController() else {
-            queue.async { self.reject(call, PdfPreviewStore.Refused(code: "no-viewer")) }
+            let handle = call.getString("handle") ?? ""
+            queue.async {
+                try? self.store().release(handle: handle)
+                self.reject(call, PdfPreviewStore.Refused(code: "no-viewer"))
+            }
             return
         }
         let viewer = QLPreviewController()

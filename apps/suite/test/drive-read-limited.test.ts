@@ -47,6 +47,24 @@ describe("DriveClient.readLimited", () => {
     expect(onCancel).toHaveBeenCalled();
   });
 
+  it("accepts a declared Content-Length equal to the limit", async () => {
+    const { body } = stream([new Uint8Array(9)]);
+    const { client: drive } = client(
+      () => new Response(body, { headers: { "content-length": "9" } }),
+    );
+    expect((await drive.readLimited(FILE, 9))?.size).toBe(9);
+  });
+
+  it("falls back to the streaming cap when Content-Length is not a number", async () => {
+    const chunks = [new Uint8Array(6), new Uint8Array(6), new Uint8Array(6)];
+    const { body, onCancel } = stream(chunks);
+    const { client: drive } = client(
+      () => new Response(body, { headers: { "content-length": "lots" } }),
+    );
+    expect(await drive.readLimited(FILE, 9)).toBeUndefined();
+    expect(onCancel).toHaveBeenCalled();
+  });
+
   it("stops reading a body that exceeds the limit despite a smaller Content-Length", async () => {
     const pull = vi.fn();
     const { body, onCancel } = stream([new Uint8Array(4), new Uint8Array(4), new Uint8Array(4)]);

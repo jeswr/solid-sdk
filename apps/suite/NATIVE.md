@@ -34,8 +34,9 @@ adaptations.
 
 Before anything else renders, the root layout's startup check (MOB-P3 E6) requires a secure
 context, `crypto.subtle`, `navigator.locks` and IndexedDB. Without one of them the app shows an
-update screen and no provider, session restore or pod-auth runs; the exported HTML holds nothing
-below the check. In Drive, PDFs open in the platform viewer through the `SuiteFiles` plugin
+update screen and no provider renders, so no session restore or pod-auth runs. The modules below
+the gate still load (their code is in the page payload), so they must not touch the platform at
+import time. In Drive, PDFs open in the platform viewer through the `SuiteFiles` plugin
 ("Open PDF", E5); files over 25 MiB offer the download instead.
 
 `route-manifest.json` has `version: 1`, `routes`, `assets`, and `adaptations`. Each route has a

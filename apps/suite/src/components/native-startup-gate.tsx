@@ -13,8 +13,9 @@ const clientSnapshot = () => {
 const serverSnapshot = () => null;
 
 /**
- * Renders the app only once the startup check passes (MOB-P3 E6). The exported HTML holds
- * nothing below the gate, so no page code, and no pod-auth, runs before the check.
+ * Renders the app only once the startup check passes (MOB-P3 E6), so no provider, session restore
+ * or pod-auth runs before it. Modules below the gate still load with the page, so they must not
+ * touch the platform at import time.
  */
 export function NativeStartupGate({ children }: { children: ReactNode }) {
   const missing = useSyncExternalStore(noSubscription, clientSnapshot, serverSnapshot);

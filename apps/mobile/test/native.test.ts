@@ -363,6 +363,10 @@ describe("iOS project", () => {
     expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
     expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
     expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);
+    // A stale caller's refusal must not clear the live preview; expiry uses the monotonic clock.
+    expect(source).not.toMatch(/func reject[^}]*clear\(\)/);
+    expect(source).toContain("UIApplication.willEnterForegroundNotification");
+    expect(read("ios/App/App/PdfPreviewStore.swift")).not.toContain("Date()");
     const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
     for (const file of [
       "PdfPreviewStore.swift",
@@ -503,6 +507,12 @@ describe("Android project", () => {
     expect(source).not.toContain("FLAG_GRANT_WRITE_URI_PERMISSION");
     expect(source.indexOf("resolveActivity")).toBeLessThan(source.indexOf("startActivity"));
     expect(source).toContain('"pdf-preview"');
+    // One store per process, swept on resume, a stale caller's refusal never clears the live
+    // preview, and expiry uses the monotonic clock.
+    expect(source).toContain("private static PdfPreviewStore store;");
+    expect(source).toMatch(/handleOnResume\(\)[\s\S]*sweep\(SystemClock\.elapsedRealtime\(\)\)/);
+    expect(source).not.toContain("currentTimeMillis");
+    expect(source).not.toContain("store().clear()");
     expect(manifest).toMatch(
       /<queries>\s*<intent>\s*<action android:name="android.intent.action.VIEW" \/>\s*<data android:mimeType="application\/pdf" \/>\s*<\/intent>\s*<\/queries>/,
     );

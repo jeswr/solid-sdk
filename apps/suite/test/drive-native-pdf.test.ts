@@ -5,7 +5,10 @@ import { click, h, mount } from "./drive-ui-dom";
 const mocks = vi.hoisted(() => ({
   readLimited: vi.fn<(url: string, limit: number) => Promise<Blob | undefined>>(),
   download: vi.fn(),
-  openPdf: vi.fn<(plugin: unknown, name: string, bytes: Uint8Array) => Promise<void>>(),
+  openPdf:
+    vi.fn<
+      (plugin: unknown, name: string, bytes: Uint8Array, signal?: AbortSignal) => Promise<void>
+    >(),
   plugin: { pluginName: "SuiteFiles" },
 }));
 vi.mock("../src/apps/drive/state/drive-context", () => ({
@@ -45,7 +48,12 @@ it("hands the bounded bytes and name to the platform viewer", async () => {
   expect(view.host.textContent).toContain("report.pdf");
   await click(button(view.host, "Open PDF"));
   expect(mocks.readLimited).toHaveBeenCalledWith(item().url, PDF_PREVIEW_LIMIT);
-  expect(mocks.openPdf).toHaveBeenCalledWith(mocks.plugin, "report.pdf", expect.any(Uint8Array));
+  expect(mocks.openPdf).toHaveBeenCalledWith(
+    mocks.plugin,
+    "report.pdf",
+    expect.any(Uint8Array),
+    expect.any(AbortSignal),
+  );
   expect(new TextDecoder().decode(mocks.openPdf.mock.calls[0]?.[2])).toBe("%PDF-1.7\n");
   // Ready to open again once the viewer has it.
   expect(button(view.host, "Open PDF").disabled).toBe(false);
@@ -98,4 +106,53 @@ it("disables the button while the file is on its way", async () => {
   await click(button(view.host, "Open PDF"));
   expect(button(view.host, "Opening").disabled).toBe(true);
   finish();
+});
+
+it("offers to try again after a failure and succeeds on retry", async () => {
+  mocks.openPdf.mockRejectedValueOnce(Object.assign(new Error("refused"), { code: "failed" }));
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  expect(view.host.textContent).toContain("Can't preview this file");
+  await click(button(view.host, "Try again"));
+  expect(mocks.openPdf).toHaveBeenCalledTimes(2);
+  expect(button(view.host, "Open PDF").disabled).toBe(false);
+});
+
+it("offers no retry when there is no viewer", async () => {
+  mocks.openPdf.mockRejectedValue(Object.assign(new Error("refused"), { code: "no-viewer" }));
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  expect(view.host.textContent).not.toContain("Try again");
+});
+
+it("aborts the transfer when the preview goes away, and ignores its late result", async () => {
+  let fail!: (error: unknown) => void;
+  mocks.openPdf.mockReturnValue(
+    new Promise<void>((_, reject) => {
+      fail = reject;
+    }),
+  );
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  const signal = mocks.openPdf.mock.calls[0]?.[3];
+  expect(signal?.aborted).toBe(false);
+  await view.unmount();
+  expect(signal?.aborted).toBe(true);
+  fail(Object.assign(new Error("cancelled"), { code: "cancelled" }));
+  await Promise.resolve();
+});
+
+it("stops after the read when the preview went away during it", async () => {
+  let finish!: (blob: Blob) => void;
+  mocks.readLimited.mockReturnValue(
+    new Promise<Blob>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  await view.unmount();
+  finish(pdf);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.openPdf).not.toHaveBeenCalled();
 });

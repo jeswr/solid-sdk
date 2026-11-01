@@ -12,12 +12,17 @@ import java.util.UUID;
  * The PDF preview handoff's cache (MOB-P3 E5): cache/pdf-preview/&lt;handle&gt;/&lt;name&gt;.pdf, at most
  * one file. Native code enforces the 25 MiB cap on the declared size and on every append, requires
  * the first bytes to be {@code %PDF-}, accepts one handle at a time and drops a handle idle for 60
- * seconds. All operations are serialised.
+ * seconds (checked on the next call or {@link #sweep}). A call naming any other handle is refused
+ * without touching the live one. Times are monotonic milliseconds. All operations are serialised.
  */
 public final class PdfPreviewStore {
     public static final long MAX_BYTES = 25L * 1024 * 1024;
     public static final int MAX_CHUNK_BYTES = 1024 * 1024;
     public static final long IDLE_MS = 60_000;
+    /** A finished file outlives the viewer's launch by this long, then {@link #sweep} deletes it. */
+    public static final long FINISHED_MS = 5 * 60_000;
+    /** Longest display name accepted, in UTF-16 code units (the iOS store uses the same bound). */
+    public static final int MAX_NAME_UNITS = 4096;
     private static final byte[] SIGNATURE = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
     /** A refusal with the code the plugin rejects with. */
@@ -49,7 +54,7 @@ public final class PdfPreviewStore {
     public synchronized String begin(String name, long size, long now) throws Refused, IOException {
         clear();
         if (size > MAX_BYTES) throw new Refused("too-large");
-        if (name == null || name.length() > 4096 || size < SIGNATURE.length) throw new Refused("invalid");
+        if (name == null || name.length() > MAX_NAME_UNITS || size < SIGNATURE.length) throw new Refused("invalid");
         String id = UUID.randomUUID().toString();
         File dir = new File(root, id);
         File created = new File(dir, fileName(name));
@@ -93,6 +98,21 @@ public final class PdfPreviewStore {
         return file;
     }
 
+    /** Discards an unfinished transfer when {@code id} is live; a stale caller changes nothing. */
+    public synchronized void discard(String id) throws IOException {
+        if (handle != null && !finished && handle.equals(id)) clear();
+    }
+
+    /** Deletes the preview, finished or not, when {@code id} is live (no viewer took the file). */
+    public synchronized void release(String id) throws IOException {
+        if (handle != null && handle.equals(id)) clear();
+    }
+
+    /** Deletes an abandoned transfer after the idle limit and a finished file after FINISHED_MS. */
+    public synchronized void sweep(long now) throws IOException {
+        if (handle != null && now - touched > (finished ? FINISHED_MS : IDLE_MS)) clear();
+    }
+
     /** Drops the handle and empties the directory. */
     public synchronized void clear() throws IOException {
         handle = null;
@@ -104,9 +124,26 @@ public final class PdfPreviewStore {
     }
 
     private void current(String id, long now) throws Refused, IOException {
+        // Another handle, or this one after finish: refuse without disturbing the live preview.
         if (handle == null || finished || !handle.equals(id)) throw new Refused("invalid");
         if (now - touched > IDLE_MS) {
             clear();
+            throw new Refused("invalid");
+        }
+    }
+
+    /** The declared size from the bridge: a whole, non-negative JS number (capped at Long.MAX_VALUE). */
+    static long declaredSize(Object raw) throws Refused {
+        if (!(raw instanceof Number)) throw new Refused("invalid");
+        double size = ((Number) raw).doubleValue();
+        if (!Double.isFinite(size) || size != Math.floor(size) || size < 0) throw new Refused("invalid");
+        return size > Long.MAX_VALUE ? Long.MAX_VALUE : (long) size;
+    }
+
+    /** Padded standard base64 of at most one chunk; anything else is refused before decoding. */
+    static void checkChunk(String data) throws Refused {
+        if (data == null || data.isEmpty() || data.length() > 4 * ((MAX_CHUNK_BYTES + 2) / 3) ||
+            data.length() % 4 != 0 || !data.matches("[A-Za-z0-9+/]*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")) {
             throw new Refused("invalid");
         }
     }

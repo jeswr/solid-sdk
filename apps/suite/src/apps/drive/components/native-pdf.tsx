@@ -8,7 +8,7 @@
  */
 import { Button } from "@jeswr/suite-ui";
 import { Download, FileText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DriveItem } from "../lib/client/client";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions } from "../state/ui";
@@ -25,12 +25,12 @@ const MESSAGES: Record<Exclude<HandoffState, "idle" | "opening">, string> = {
 };
 
 /** Opens the bridge lazily: only native builds ever load @capacitor/core. */
-async function handOff(name: string, bytes: Uint8Array): Promise<void> {
+async function handOff(name: string, bytes: Uint8Array, signal: AbortSignal): Promise<void> {
   const [{ filesPlugin }, { openPdf }] = await Promise.all([
     import("@jeswr/suite-native/capacitor"),
     import("@jeswr/suite-native"),
   ]);
-  await openPdf(filesPlugin, name, bytes);
+  await openPdf(filesPlugin, name, bytes, signal);
 }
 
 function codeOf(error: unknown): HandoffState {
@@ -44,18 +44,25 @@ export function NativePdfHandoff({ item }: { item: DriveItem }) {
   const [state, setState] = useState<HandoffState>(
     item.size !== undefined && item.size > PDF_PREVIEW_LIMIT ? "too-large" : "idle",
   );
+  // Leaving the preview stops the transfer before its next native call.
+  const transfer = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => transfer.current?.abort(), []);
   const open = async () => {
+    transfer.current?.abort();
+    const controller = new AbortController();
+    transfer.current = controller;
     setState("opening");
     try {
       const blob = await client.readLimited(item.url, PDF_PREVIEW_LIMIT);
+      if (controller.signal.aborted) return;
       if (!blob) {
         setState("too-large");
         return;
       }
-      await handOff(item.name, new Uint8Array(await blob.arrayBuffer()));
+      await handOff(item.name, new Uint8Array(await blob.arrayBuffer()), controller.signal);
       setState("idle");
     } catch (error) {
-      setState(codeOf(error));
+      if (!controller.signal.aborted) setState(codeOf(error));
     }
   };
   const message = state === "idle" || state === "opening" ? undefined : MESSAGES[state];
@@ -71,9 +78,16 @@ export function NativePdfHandoff({ item }: { item: DriveItem }) {
           <FileText aria-hidden="true" size={16} /> {state === "opening" ? "Opening…" : "Open PDF"}
         </Button>
       ) : (
-        <Button onClick={() => void actions.download(item)}>
-          <Download aria-hidden="true" size={16} /> Download
-        </Button>
+        <>
+          {state === "failed" ? (
+            <Button variant="outline" onClick={() => void open()}>
+              Try again
+            </Button>
+          ) : null}
+          <Button onClick={() => void actions.download(item)}>
+            <Download aria-hidden="true" size={16} /> Download
+          </Button>
+        </>
       )}
     </div>
   );
