@@ -296,8 +296,10 @@ function authorizationClaimValues(
  * fail-closed check before any of these fields are trusted.
  */
 export function readBoundAuthorization(vc: VerifiableCredential): BoundAuthorization | undefined {
-  const types = vc.type ?? [];
+  // Presented credentials reach this reader before Phase A; malformed input fails closed.
+  const types: unknown = vc.type ?? [];
   if (
+    !Array.isArray(types) ||
     !types.some(
       (type) =>
         type === "AgentAuthorizationCredential" ||
