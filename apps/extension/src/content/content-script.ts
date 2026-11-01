@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The ISOLATED-world bridge between the page (MAIN-world `window.solid`) and the service
  * worker. It is the trust boundary: the page can only ASK; this script decides what to
@@ -66,8 +67,8 @@ window.addEventListener('message', (event) => {
           url: data.url,
           method: data.method,
           headers: data.headers ?? {},
-          body: data.body,
-          bodyBase64: data.bodyBase64,
+          ...(data.body !== undefined ? { body: data.body } : {}),
+          ...(data.bodyBase64 !== undefined ? { bodyBase64: data.bodyBase64 } : {}),
           // Forward whether this was the best-effort global-fetch patch (autoDivert) vs an
           // explicit window.solid.fetch — drives the SW's native-passthrough-vs-403 choice
           // (High #1). It is a behaviour HINT, never a security input: the SW still runs the

@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -185,6 +186,7 @@ it.each([
 });
 
 it.each([
+  {},
   { body: 'hello' },
   { bodyBase64: 'AID/' },
   { bodyBase64: '' },
@@ -195,6 +197,9 @@ it.each([
     ...fields,
   });
   post(fields);
+  const forwarded = sendMessage.mock.calls[0][0] as Record<string, unknown>;
+  if (!('body' in fields)) expect(forwarded).not.toHaveProperty('body');
+  if (!('bodyBase64' in fields)) expect(forwarded).not.toHaveProperty('bodyBase64');
   expect(sendMessage).toHaveBeenCalledWith(
     expect.objectContaining({ ...fields, stampedOrigin: 'https://granted.example' }),
     expect.any(Function),

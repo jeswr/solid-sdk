@@ -11,6 +11,25 @@ export function assertBodySize(size: number, error = REQUEST_BODY_LIMIT_ERROR): 
   if (size > MAX_BODY_BYTES) throw new Error(error);
 }
 
+/** Count UTF-8 bytes before copying a known text body, including lone surrogates. */
+export function assertTextBodySize(value: string): void {
+  let size = value.length;
+  assertBodySize(size);
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit < 0x80) continue;
+    if (unit < 0x800) size++;
+    else {
+      size += 2;
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        const next = value.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) i++;
+      }
+    }
+    assertBodySize(size);
+  }
+}
+
 /** Bound allocation while reading, and cancel without waiting for an uncooperative source. */
 export async function readBodyBounded(
   body: ReadableStream<Uint8Array> | null,

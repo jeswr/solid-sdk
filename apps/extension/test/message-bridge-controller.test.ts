@@ -14,8 +14,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageBridgeLoginController } from '../src/popup/message-bridge-controller';
-import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR } from '../src/shared/body-codec';
-import type { SessionState } from '../src/shared/messages';
+import {
+  base64ToBytes,
+  MAX_BODY_BYTES,
+  REQUEST_BODY_LIMIT_ERROR,
+  validateBodyFields,
+} from '../src/shared/body-codec';
+import type { FetchRequest, SessionState } from '../src/shared/messages';
 
 /** A mock of `chrome.runtime.sendMessage` (callback form) returning a canned reply. */
 type SendImpl = (message: unknown) => unknown;
@@ -29,6 +34,9 @@ function installChrome(impl: SendImpl): void {
       lastError: undefined as { message?: string } | undefined,
       sendMessage: (message: unknown, callback: (response: unknown) => void) => {
         sentMessages.push(message);
+        const request = message as Partial<FetchRequest>;
+        if (request.type === 'SOLID_FETCH_REQUEST')
+          validateBodyFields(request.body, request.bodyBase64);
         // Resolve asynchronously, like the real callback channel.
         Promise.resolve(sendImpl(message)).then((r) => callback(r));
       },
@@ -52,6 +60,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -318,13 +327,12 @@ describe('NO-TOKEN-LEAK invariant', () => {
   it('rebuilds a 204 No Content response (null-body status) without throwing', async () => {
     installChrome((m) => {
       if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        // The SW serialises an empty body as '' even for null-body statuses.
+        // Null-body worker replies omit both body fields.
         return {
           requestId: (m as { requestId: string }).requestId,
           status: 204,
           statusText: 'No Content',
           headers: {},
-          body: '',
         };
       }
       return activeState();
@@ -358,12 +366,13 @@ describe('NO-TOKEN-LEAK invariant', () => {
 
     const sent = sentMessages.find(
       (m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST',
-    ) as { url: string; method: string; headers: Record<string, string>; body: string | null };
+    ) as FetchRequest;
     // NOT "[object Request]" — the Request's fields are read.
     expect(sent.url).toBe('https://alice.pod.example/c/r.ttl');
     expect(sent.method).toBe('PUT');
     expect(sent.headers['content-type']).toBe('text/turtle');
-    expect(sent.body).toBe('<#it> a <#Note>.');
+    expect(sent.body).toBeUndefined();
+    expect(new TextDecoder().decode(base64ToBytes(sent.bodyBase64!))).toBe('<#it> a <#Note>.');
     // Still no credential popup-side.
     const headerKeys = Object.keys(sent.headers).map((k) => k.toLowerCase());
     expect(headerKeys).not.toContain('authorization');
@@ -403,148 +412,54 @@ describe('NO-TOKEN-LEAK invariant', () => {
     stream.close();
   });
 
-  it('REJECTS a Request with a binary/multipart body (text-only protocol; no silent coercion)', async () => {
+  it.each([
+    ['binary MIME', 'image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff])],
+    ['missing MIME', null, new Uint8Array([0x1f, 0x8b, 0xff, 0xfe, 0xc0])],
+    ['empty MIME', '', new Uint8Array([0x1f, 0x8b, 0xff, 0xfe, 0xc0])],
+    ['whitespace MIME', '   ', new Uint8Array([0x1f, 0x8b, 0xff, 0xfe, 0xc0])],
+    ['text MIME with invalid UTF-8', 'text/plain', new Uint8Array([0xff, 0xc0])],
+    ['untyped Turtle', null, new TextEncoder().encode('<#it> <#label> "héllo 🌍" .')],
+    ['empty-typed Turtle', '', new TextEncoder().encode('<#it> <#label> "héllo 🌍" .')],
+    ['UTF-8 BOM', 'text/plain', new Uint8Array([0xef, 0xbb, 0xbf, 0x41])],
+  ] as const)('preserves opaque Request bytes (%s)', async (_label, contentType, bytes) => {
     installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 200, body: '' };
-      }
-      return activeState();
-    });
-    const c = new MessageBridgeLoginController();
-    await c.restore(); // log in so authenticatedFetch is the proxy
-    const form = new FormData();
-    form.append('f', new Blob([new Uint8Array([1, 2, 3])]), 'b.bin');
-    const req = new Request('https://alice.pod.example/upload', { method: 'POST', body: form });
-    await expect(c.authenticatedFetch(req)).rejects.toThrow(/only text request bodies/);
-    // It refused BEFORE sending anything over the wire.
-    expect(sentMessages.some((m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST')).toBe(
-      false,
-    );
-  });
-
-  // --- Content-Type / body-shape policy (roborev finding: missing-CT must not corrupt binary) ---
-
-  it('a missing-Content-Type Turtle (string) Request body still round-trips as text', async () => {
-    installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 201, body: '' };
-      }
-      return activeState();
-    });
-    const c = new MessageBridgeLoginController();
-    await c.restore(); // log in so authenticatedFetch is the proxy
-    // A Request whose body is RDF text but with NO declared content-type. The Solid write
-    // case must keep working: it is valid UTF-8 text, so it must be carried, not rejected.
-    // (Constructing from a string would auto-set text/plain, so build from UTF-8 bytes with
-    // the auto CT removed to exercise the genuinely-missing-CT path.)
-    const turtle = '<#it> a <#Note> ; <#label> "héllo ünïçödé" .';
-    const req = new Request('https://alice.pod.example/c/note.ttl', {
-      method: 'PUT',
-      body: new TextEncoder().encode(turtle),
-    });
-    req.headers.delete('content-type'); // ensure the ambiguous missing-CT path
-    expect(req.headers.get('content-type')).toBeNull();
-
-    const res = await c.authenticatedFetch(req);
-    expect(res.status).toBe(201);
-    const sent = sentMessages.find(
-      (m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST',
-    ) as { body: string | null };
-    expect(sent).toBeDefined();
-    expect(sent.body).toBe(turtle); // faithfully decoded, not corrupted
-  });
-
-  it('REJECTS a Request with an EXPLICIT binary content-type (e.g. image/png)', async () => {
-    installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 201, body: '' };
-      }
-      return activeState();
-    });
-    const c = new MessageBridgeLoginController();
-    await c.restore(); // log in so authenticatedFetch is the proxy
-    const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], {
-      type: 'image/png',
-    });
-    const req = new Request('https://alice.pod.example/c/logo.png', { method: 'PUT', body: png });
-    expect(req.headers.get('content-type')).toBe('image/png');
-    await expect(c.authenticatedFetch(req)).rejects.toThrow(/only text request bodies/);
-    // Refused before any wire send — no corrupted write.
-    expect(sentMessages.some((m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST')).toBe(
-      false,
-    );
-  });
-
-  it('REJECTS a Request with a binary body and NO content-type (no silent .text() corruption)', async () => {
-    installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 201, body: '' };
-      }
-      return activeState();
-    });
-    const c = new MessageBridgeLoginController();
-    await c.restore(); // log in so authenticatedFetch is the proxy
-    // A genuinely binary (non-UTF-8) payload constructed from bytes → the Request carries
-    // NO content-type. This is the ambiguous path the old isTextContentType(null)===true let
-    // through and corrupted; it must now FAIL LOUDLY (detected via the raw bytes).
-    const binary = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00, 0xfe, 0xc0]); // gzip-ish
-    const req = new Request('https://alice.pod.example/c/blob.bin', {
-      method: 'PUT',
-      body: binary,
-    });
-    expect(req.headers.get('content-type')).toBeNull();
-    await expect(c.authenticatedFetch(req)).rejects.toThrow(/only text request bodies/);
-    // Refused before any wire send — the corrupted text was never transmitted.
-    expect(sentMessages.some((m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST')).toBe(
-      false,
-    );
-  });
-
-  it('REJECTS a binary body with an EMPTY/whitespace Content-Type (empty CT == missing, roborev 3495)', async () => {
-    installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 201, body: '' };
-      }
-      return activeState();
-    });
-    const c = new MessageBridgeLoginController();
-    await c.restore(); // log in so authenticatedFetch is the proxy
-    // An empty (or whitespace-only) Content-Type must be normalised to "missing" so the
-    // byte guard runs — otherwise isTextContentType('')===true let a binary body through and
-    // corrupted it (the empty-header gap roborev job 3495 flagged on the prior fix).
-    const binary = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00, 0xfe, 0xc0]); // gzip-ish
-    const req = new Request('https://alice.pod.example/c/blob.bin', {
-      method: 'PUT',
-      body: binary,
-    });
-    req.headers.set('content-type', '   '); // empty/whitespace-only → must NOT be trusted as text
-    await expect(c.authenticatedFetch(req)).rejects.toThrow(/only text request bodies/);
-    expect(sentMessages.some((m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST')).toBe(
-      false,
-    );
-  });
-
-  it('a missing/empty-CT Turtle text body still round-trips (empty CT does not break the Solid write)', async () => {
-    installChrome((m) => {
-      if ((m as { type: string }).type === 'SOLID_FETCH_REQUEST') {
-        return { requestId: (m as { requestId: string }).requestId, status: 201, body: '' };
-      }
-      return activeState();
+      const message = m as FetchRequest;
+      return message.type === 'SOLID_FETCH_REQUEST'
+        ? { requestId: message.requestId, status: 201 }
+        : activeState();
     });
     const c = new MessageBridgeLoginController();
     await c.restore();
-    const turtle = '<#it> a <#Note> ; <#label> "héllo ünïçödé" .';
-    const req = new Request('https://alice.pod.example/c/note.ttl', {
-      method: 'PUT',
-      body: new TextEncoder().encode(turtle),
-    });
-    req.headers.set('content-type', ''); // empty CT, but valid UTF-8 text → must still carry
-    const res = await c.authenticatedFetch(req);
-    expect(res.status).toBe(201);
+    const req = new Request('https://alice.pod.example/upload', { method: 'PUT', body: bytes });
+    if (contentType !== null) req.headers.set('content-type', contentType);
+    expect((await c.authenticatedFetch(req)).status).toBe(201);
     const sent = sentMessages.find(
-      (m) => (m as { type?: string }).type === 'SOLID_FETCH_REQUEST',
-    ) as { body: string | null };
-    expect(sent.body).toBe(turtle);
+      (m) => (m as FetchRequest).type === 'SOLID_FETCH_REQUEST',
+    ) as FetchRequest;
+    expect(sent).not.toHaveProperty('body');
+    expect(base64ToBytes(sent.bodyBase64!)).toEqual(bytes);
+    expect(req.bodyUsed).toBe(false);
+  });
+
+  it('preserves an already constructed multipart Request byte-exact', async () => {
+    installChrome((m) => {
+      const message = m as FetchRequest;
+      return message.type === 'SOLID_FETCH_REQUEST'
+        ? { requestId: message.requestId, status: 201 }
+        : activeState();
+    });
+    const c = new MessageBridgeLoginController();
+    await c.restore();
+    const form = new FormData();
+    form.append('f', new Blob([new Uint8Array([0, 128, 255])]), 'b.bin');
+    const req = new Request('https://alice.pod.example/upload', { method: 'POST', body: form });
+    const expected = new Uint8Array(await req.clone().arrayBuffer());
+    await c.authenticatedFetch(req);
+    const sent = sentMessages.find(
+      (m) => (m as FetchRequest).type === 'SOLID_FETCH_REQUEST',
+    ) as FetchRequest;
+    expect(base64ToBytes(sent.bodyBase64!)).toEqual(expected);
+    expect(sent.headers['content-type']).toBe(req.headers.get('content-type'));
   });
 
   it('authenticatedFetch lets an explicit init override a Request (fetch semantics)', async () => {
@@ -600,5 +515,211 @@ describe('NO-TOKEN-LEAK invariant', () => {
     const wire = JSON.stringify(reqs);
     expect(wire).not.toContain('ATTACKER');
     expect(wire).not.toContain('forged-proof');
+  });
+});
+
+describe('bounded text/base64 adapter protocol', () => {
+  const url = 'https://alice.pod.example/resource';
+
+  async function connect(reply: Record<string, unknown> = { status: 204 }) {
+    installChrome((m) => {
+      const message = m as FetchRequest;
+      return message.type === 'SOLID_FETCH_REQUEST'
+        ? { requestId: message.requestId, ...reply }
+        : activeState();
+    });
+    const controller = new MessageBridgeLoginController();
+    await controller.restore();
+    sentMessages.length = 0;
+    return controller;
+  }
+
+  it.each([undefined, null])('omits both body fields for absent init.body=%s', async (body) => {
+    const controller = await connect();
+    await controller.authenticatedFetch(url, { body });
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]).not.toHaveProperty('body');
+    expect(sentMessages[0]).not.toHaveProperty('bodyBase64');
+  });
+
+  it.each([
+    ['string', (): string => 'héllo 🌍', { body: 'héllo 🌍' }],
+    ['empty string', (): string => '', { body: '' }],
+    ['ArrayBuffer', () => new Uint8Array([0, 128, 255]).buffer, { bodyBase64: 'AID/' }],
+    [
+      'typed-array subview',
+      () => new Uint8Array([7, 0, 128, 255, 8]).subarray(1, 4),
+      { bodyBase64: 'AID/' },
+    ],
+    [
+      'DataView',
+      () => new DataView(new Uint8Array([7, 0, 128, 255, 8]).buffer, 1, 3),
+      { bodyBase64: 'AID/' },
+    ],
+    ['empty binary', () => new Uint8Array(0), { bodyBase64: '' }],
+    [
+      'Blob',
+      () => new Blob([new Uint8Array([0, 128, 255])], { type: 'image/png' }),
+      { bodyBase64: 'AID/', contentType: 'image/png' },
+    ],
+    [
+      'File',
+      () => new File([new Uint8Array([0, 128, 255])], 'x.pdf', { type: 'application/pdf' }),
+      { bodyBase64: 'AID/', contentType: 'application/pdf' },
+    ],
+    [
+      'URLSearchParams',
+      () => new URLSearchParams({ label: 'héllo 🌍' }),
+      {
+        body: 'label=h%C3%A9llo+%F0%9F%8C%8D',
+        contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
+      },
+    ],
+  ] as const)('uses the page bridge encoding for %s', async (_label, makeBody, expected) => {
+    const controller = await connect();
+    await controller.authenticatedFetch(url, { method: 'POST', body: makeBody() });
+    const sent = sentMessages[0] as FetchRequest;
+    expect(sent.body).toBe('body' in expected ? expected.body : undefined);
+    expect(sent.bodyBase64).toBe('bodyBase64' in expected ? expected.bodyBase64 : undefined);
+    if ('body' in expected) expect(sent).not.toHaveProperty('bodyBase64');
+    else expect(sent).not.toHaveProperty('body');
+    if ('contentType' in expected) expect(sent.headers['content-type']).toBe(expected.contentType);
+  });
+
+  it.each([
+    { bodyBase64: 'AID/', expected: [0, 128, 255] },
+    { bodyBase64: '', expected: [] },
+  ])('decodes binary replies, including an empty binary body (case %#)', async ({
+    bodyBase64,
+    expected,
+  }) => {
+    const controller = await connect({ status: 200, bodyBase64 });
+    const response = await controller.authenticatedFetch(url);
+    expect(new Uint8Array(await response.clone().arrayBuffer())).toEqual(new Uint8Array(expected));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(expected));
+  });
+
+  it.each([
+    { body: 'text', bodyBase64: 'AA==' },
+    { body: null },
+    { body: 42 },
+    { bodyBase64: null },
+    { bodyBase64: 42 },
+    { bodyBase64: 'AA A' },
+    { bodyBase64: 'AB==' },
+  ])('rejects malformed worker body fields before decoding (case %#)', async (fields) => {
+    const controller = await connect({ status: 200, ...fields });
+    const decode = vi.spyOn(globalThis, 'atob');
+    await expect(controller.authenticatedFetch(url)).rejects.toThrow();
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'base64',
+    'padding overflow',
+    'text',
+    'multibyte text',
+  ])('rejects an oversized %s reply before binary decoding', async (kind) => {
+    const fields =
+      kind === 'base64'
+        ? { bodyBase64: 'A'.repeat(Math.ceil(MAX_BODY_BYTES / 3) * 4 + 4) }
+        : kind === 'padding overflow'
+          ? { bodyBase64: `${'A'.repeat(Math.ceil(MAX_BODY_BYTES / 3) * 4 - 1)}=` }
+          : {
+              body:
+                kind === 'text'
+                  ? 'a'.repeat(MAX_BODY_BYTES + 1)
+                  : 'é'.repeat(MAX_BODY_BYTES / 2 + 1),
+            };
+    const controller = await connect({ status: 200, ...fields });
+    const decode = vi.spyOn(globalThis, 'atob');
+    await expect(controller.authenticatedFetch(url)).rejects.toThrow(REQUEST_BODY_LIMIT_ERROR);
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['text', () => 'a'.repeat(MAX_BODY_BYTES + 1)],
+    ['multibyte text', () => 'é'.repeat(MAX_BODY_BYTES / 2 + 1)],
+    ['bytes', () => new Uint8Array(MAX_BODY_BYTES + 1)],
+    ['Blob', () => new Blob([new Uint8Array(MAX_BODY_BYTES + 1)])],
+  ] as const)('bounds known %s request sizes before native Request construction', async (_label, makeBody) => {
+    const controller = await connect();
+    const body = makeBody();
+    const construct = vi.fn();
+    vi.stubGlobal(
+      'Request',
+      new Proxy(Request, {
+        construct(target, args) {
+          construct();
+          return Reflect.construct(target, args);
+        },
+      }),
+    );
+    await expect(controller.authenticatedFetch(url, { method: 'PUT', body })).rejects.toThrow(
+      REQUEST_BODY_LIMIT_ERROR,
+    );
+    expect(construct).not.toHaveBeenCalled();
+    expect(sentMessages).toHaveLength(0);
+  });
+
+  it.each([
+    () => new FormData(),
+    () => new ReadableStream(),
+  ])('rejects unsupported direct request bodies before sending (case %#)', async (makeBody) => {
+    const controller = await connect();
+    await expect(
+      controller.authenticatedFetch(url, { method: 'POST', body: makeBody() }),
+    ).rejects.toThrow('does not support FormData or ReadableStream');
+    expect(sentMessages).toHaveLength(0);
+  });
+
+  it('snapshots mutable request bytes and headers before yielding', async () => {
+    const controller = await connect();
+    const bytes = new Uint8Array([0, 128, 255]);
+    const headers = new Headers({ 'content-type': 'image/png' });
+    const init = { method: 'PUT', body: bytes, headers };
+    const result = controller.authenticatedFetch(url, init);
+    bytes.fill(42);
+    headers.set('content-type', 'text/plain');
+    init.method = 'POST';
+    await result;
+    expect(sentMessages[0]).toMatchObject({
+      method: 'PUT',
+      bodyBase64: 'AID/',
+      headers: { 'content-type': 'image/png' },
+    });
+  });
+
+  it('inherits a Request body when init.body is null and preserves its bytes', async () => {
+    const controller = await connect();
+    const req = new Request(url, { method: 'PUT', body: new Uint8Array([0, 128, 255]) });
+    await controller.authenticatedFetch(req, { body: null });
+    expect(sentMessages[0]).toMatchObject({ bodyBase64: 'AID/' });
+    expect(req.bodyUsed).toBe(false);
+  });
+
+  it('lets a body override replace a consumed Request body', async () => {
+    const controller = await connect();
+    const req = new Request(url, { method: 'PUT', body: 'consumed' });
+    await req.text();
+    await controller.authenticatedFetch(req, { body: new Uint8Array([0, 128, 255]) });
+    expect(sentMessages[0]).toMatchObject({ bodyBase64: 'AID/' });
+  });
+
+  it('rejects pre-aborted requests without sending to the worker', async () => {
+    const controller = await connect();
+    const signal = AbortSignal.abort(new Error('already cancelled'));
+    await expect(controller.authenticatedFetch(url, { signal })).rejects.toThrow(
+      'already cancelled',
+    );
+    expect(sentMessages).toHaveLength(0);
+  });
+
+  it('rejects a GET body before sending to the worker', async () => {
+    const controller = await connect();
+    await expect(controller.authenticatedFetch(url, { body: new Uint8Array([0]) })).rejects.toThrow(
+      'GET/HEAD',
+    );
+    expect(sentMessages).toHaveLength(0);
   });
 });

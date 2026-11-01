@@ -1,5 +1,11 @@
 import { decodeJwt } from 'jose';
-import { base64ToBytes, bytesToBase64, MAX_BODY_BYTES } from '../src/shared/body-codec';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  MAX_BODY_BYTES,
+  RESPONSE_BODY_LIMIT_ERROR,
+} from '../src/shared/body-codec';
+import type { FetchRequest } from '../src/shared/messages';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 //
@@ -542,6 +548,115 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
     expect(cacheStore.size).toBe(0);
     expect(idbMeta.size).toBe(0);
     expect(idbNonces.size).toBe(0);
+  });
+});
+
+// The real adapter's body protocol against the worker listener, replica and DPoP egress.
+// The transport fixture supplies a granted HTTP sender/stamp to reach the body boundary;
+// popup-origin authorization is outside these serialization regression tests.
+describe('popup adapter to worker body protocol', () => {
+  const url = 'https://alice.pod.example/private/resource';
+  const origin = 'https://pm.example';
+  const sender = { origin, url: `${origin}/app` };
+
+  async function connect() {
+    await seedSession();
+    storage.set('solid:granted-origins', [origin]);
+    await loadWorker();
+    const requests: FetchRequest[] = [];
+    vi.spyOn(chrome.runtime, 'sendMessage').mockImplementation(((
+      message: Record<string, unknown>,
+      callback?: (response: unknown) => void,
+    ) => {
+      if (!callback) return Promise.resolve(); // Worker broadcasts have no callback.
+      // Chrome's JSON channel drops undefined fields and cannot transport raw bytes.
+      const wire = JSON.parse(JSON.stringify(message));
+      if (wire.type === 'SOLID_FETCH_REQUEST') requests.push(wire);
+      void sendMessage({ ...wire, stampedOrigin: origin }, sender).then(callback);
+    }) as typeof chrome.runtime.sendMessage);
+    const { MessageBridgeLoginController } = await import('../src/popup/message-bridge-controller');
+    const controller = new MessageBridgeLoginController();
+    expect(await controller.restore()).toEqual({
+      outcome: 'restored',
+      webId: 'https://alice.pod.example/profile/card#me',
+    });
+    return { controller, requests };
+  }
+
+  it('omits absent bodies on a GET accepted by the real worker validator', async () => {
+    const { controller, requests } = await connect();
+    fetchImpl = async () => new Response('GET accepted');
+    const response = await controller.authenticatedFetch(url);
+    expect(await response.text()).toBe('GET accepted');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty('body');
+    expect(requests[0]).not.toHaveProperty('bodyBase64');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('carries a text body unchanged through the worker to authenticated egress', async () => {
+    const { controller, requests } = await connect();
+    const body = '\uFEFFhéllo 🌍';
+    fetchImpl = async (_url, init) => {
+      expect(init?.body).toBe(body);
+      expect(new Headers(init?.headers).get('authorization')).toBe('DPoP access-token-xyz');
+      return new Response(null, { status: 204 });
+    };
+    const response = await controller.authenticatedFetch(url, { method: 'PUT', body });
+    expect(response.status).toBe(204);
+    expect(response.body).toBeNull();
+    expect(requests[0].body).toBe(body);
+    expect(requests[0]).not.toHaveProperty('bodyBase64');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('carries binary requests and replies byte-exact through both real codecs', async () => {
+    const { controller, requests } = await connect();
+    const bytes = Uint8Array.from({ length: 1024 }, (_, i) => i % 256);
+    fetchImpl = async (_url, init) => {
+      expect(init?.body).toEqual(bytes);
+      return new Response(bytes, { headers: { 'content-type': 'image/png' } });
+    };
+    const response = await controller.authenticatedFetch(url, {
+      method: 'POST',
+      body: new DataView(bytes.buffer),
+      headers: { 'content-type': 'image/png' },
+    });
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(requests[0].bodyBase64).toBe(bytesToBase64(bytes));
+    expect(requests[0]).not.toHaveProperty('body');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('decodes binary GET replies on cold and revalidated cached reads', async () => {
+    const { controller } = await connect();
+    const bytes = new Uint8Array([0, 128, 255, 239, 187, 191]);
+    let reads = 0;
+    fetchImpl = async () =>
+      ++reads === 1
+        ? new Response(bytes, { headers: { 'content-type': 'image/png', etag: '"binary"' } })
+        : new Response(null, { status: 304 });
+    for (let i = 0; i < 2; i++) {
+      const response = await controller.authenticatedFetch(url);
+      expect(response.status).toBe(200);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    }
+    expect(reads).toBe(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('"binary"');
+  });
+
+  it('surfaces the worker size rejection for an oversized reply without caching it', async () => {
+    const { controller } = await connect();
+    const cancel = vi.fn();
+    fetchImpl = async () =>
+      new Response(new ReadableStream({ cancel }), {
+        headers: { 'content-length': String(MAX_BODY_BYTES + 1) },
+      });
+    await expect(controller.authenticatedFetch(url)).rejects.toThrow(RESPONSE_BODY_LIMIT_ERROR);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
   });
 });
 

@@ -37,9 +37,19 @@ import type {
   RecentLoginAccount,
   RestoreOutcome,
 } from '@jeswr/solid-elements';
-import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR, readBodyBounded } from '../shared/body-codec';
+import {
+  assertBodySize,
+  assertTextBodySize,
+  base64ToBytes,
+  bytesToBase64,
+  MAX_BODY_BYTES,
+  REQUEST_BODY_LIMIT_ERROR,
+  readBodyBounded,
+  validateBodyFields,
+} from '../shared/body-codec';
 import type {
   ActionResult,
+  FetchRequest,
   FetchResponse,
   GetStateRequest,
   LoginRequest,
@@ -69,66 +79,6 @@ const STRIPPED_REQUEST_HEADERS = new Set(['authorization', 'dpop']);
  * write/delete operations commonly return `204 No Content`.
  */
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
-
-/**
- * Whether an EXPLICIT request `Content-Type` is text-safe to carry over the (text-only)
- * protocol. NOTE the asymmetry vs. {@link isBinaryRequestBody}, which is intentional:
- *
- *   - A PRESENT content-type is authoritative. `multipart/*` and any non-text/non-json/
- *     non-urlencoded type returns `false` → the body is REJECTED (never silently
- *     `.text()`-coerced, which would corrupt a binary resource write).
- *   - A MISSING content-type (`null`) returns `true` here — preserving the common Solid
- *     RDF (Turtle) write case where a body may arrive without a declared type — BUT the
- *     ambiguous missing-CT path is NOT trusted blindly: the proxy ALSO runs
- *     {@link isBinaryRequestBody} over the actual bytes for a missing-CT Request body, so
- *     a genuinely binary payload with no content-type still fails loudly. See
- *     `#proxyFetch` for the combined policy.
- */
-function isTextContentType(contentType: string | null): boolean {
-  if (!contentType) return true;
-  const ct = contentType.split(';', 1)[0].trim().toLowerCase();
-  if (ct.startsWith('multipart/')) return false;
-  return (
-    ct.startsWith('text/') ||
-    ct === 'application/json' ||
-    ct.endsWith('+json') ||
-    ct.endsWith('+xml') ||
-    ct === 'application/xml' ||
-    ct === 'application/x-www-form-urlencoded' ||
-    ct === 'application/sparql-update' ||
-    ct === 'application/sparql-query' ||
-    ct === 'application/ld+json' ||
-    ct === 'application/trig' ||
-    ct === 'application/n-quads' ||
-    ct === 'application/n-triples'
-  );
-}
-
-/**
- * Detect a genuinely BINARY request body by inspecting the raw bytes — the guard for the
- * AMBIGUOUS "missing Content-Type" path, where the declared type can't tell us whether
- * the source was a string or a binary blob.
- *
- * Why bytes, not the body-source object: a `Request` exposes its body only as an opaque
- * `ReadableStream`, so we cannot recover whether it was constructed from a string vs a
- * Blob/ArrayBuffer/typed-array. We CAN, however, decode the bytes as strict UTF-8 and see
- * whether they round-trip losslessly: a `TextDecoder('utf-8', { fatal: true })` THROWS on
- * any byte sequence that is not valid UTF-8 (PNG/gzip/most binary). Valid-UTF-8 text — the
- * Solid Turtle/RDF write case — decodes cleanly and is treated as text. (The Request
- * constructor itself auto-sets `text/plain` for a string body, so a missing CT already
- * signals a non-string source; this bytes check is the belt-and-braces confirmation that
- * still admits the legitimate untyped-text case.)
- *
- * Returns `true` ⇒ reject as unsupported binary; `false` ⇒ safe to carry as text.
- */
-function isBinaryRequestBody(bytes: Uint8Array): boolean {
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return false; // valid UTF-8 → safe to send as text
-  } catch {
-    return true; // invalid UTF-8 → genuinely binary, must not be text-coerced
-  }
-}
 
 /** Promise-wrap the callback form of `chrome.runtime.sendMessage`. */
 function send<T>(message: unknown): Promise<T> {
@@ -304,80 +254,107 @@ export class MessageBridgeLoginController implements LoginController {
    * Normalises `RequestInfo | URL` the way `fetch` does — a `Request` contributes its
    * url/method/headers/body, and an explicit `init` overrides — rather than coercing the
    * input to a string (which would send `"[object Request]"` and drop method/headers/body).
-   * Text-only bodies today (binary is a documented future protocol extension).
+   * Uses the page bridge's bounded text/base64 protocol; opaque Request bodies
+   * stay byte-exact regardless of their declared Content-Type.
    */
   async #proxyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const isRequest = typeof Request !== 'undefined' && input instanceof Request;
-    const url = isRequest ? input.url : input.toString();
-    const method = init?.method ?? (isRequest ? input.method : 'GET');
+    const request = input instanceof Request ? input : null;
+    // Snapshot Web IDL dictionary members (including inherited properties) before
+    // any body read yields. Native Request construction snapshots headers and bytes.
+    const snapshot = init
+      ? (Object.fromEntries(
+          [
+            'method',
+            'headers',
+            'body',
+            'mode',
+            'credentials',
+            'cache',
+            'redirect',
+            'referrer',
+            'referrerPolicy',
+            'integrity',
+            'keepalive',
+            'signal',
+            'duplex',
+            'priority',
+            'window',
+          ].map((key) => [key, Reflect.get(init, key)]),
+        ) as RequestInit)
+      : undefined;
+    const signal = snapshot?.signal === undefined ? request?.signal : snapshot.signal;
+    signal?.throwIfAborted();
+    const source = snapshot?.body;
+    const method = snapshot?.method ?? request?.method ?? 'GET';
+    if ((source != null || request?.body != null) && /^(GET|HEAD)$/i.test(method))
+      throw new TypeError('Request with GET/HEAD method cannot have body');
 
-    // Headers: a Request's headers first, then init overrides win (fetch semantics).
-    const headers = new Headers(isRequest ? input.headers : undefined);
-    if (init?.headers) {
-      for (const [k, v] of new Headers(init.headers).entries()) headers.set(k, v);
+    // Bound known sizes BEFORE native Request construction can copy/encode them.
+    let body: string | undefined;
+    let bodyBase64: string | undefined;
+    if (typeof source === 'string') assertTextBodySize(source);
+    else if (
+      ArrayBuffer.isView(source) ||
+      Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+    )
+      assertBodySize((source as ArrayBuffer | ArrayBufferView).byteLength);
+    else if (source instanceof Blob) assertBodySize(source.size);
+    else if (source instanceof URLSearchParams) {
+      body = source.toString();
+      assertBodySize(body.length); // URL-encoded form data is ASCII.
+      // Serialize once so Request construction uses exactly the checked string.
+      if (snapshot) snapshot.body = body;
+    } else if (source != null) {
+      throw new Error(
+        'authenticatedFetch does not support FormData or ReadableStream request bodies',
+      );
     }
-    // Strip any caller-supplied credential headers — the worker attaches its own.
+
+    // A null init.body inherits a Request body, as in native fetch. Clone only
+    // inherited bodies so an explicit override can replace a used/locked input.
+    const normalized = new Request(request && source == null ? request.clone() : input, snapshot);
+    if (
+      source instanceof URLSearchParams &&
+      !new Headers(snapshot?.headers ?? request?.headers).has('content-type')
+    )
+      normalized.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    // Strip caller credentials; only the worker attaches Authorization/DPoP.
+    const headers = normalized.headers;
     for (const h of STRIPPED_REQUEST_HEADERS) headers.delete(h);
 
-    // Body: init.body wins; otherwise a Request's body. The protocol is text-only today
-    // (binary is a documented future extension), so reject NON-text bodies LOUDLY rather
-    // than silently text-coercing a binary payload (which would corrupt the write). The
-    // policy (see isTextContentType / isBinaryRequestBody):
-    //   • init.body — a non-string value is binary by construction → reject; a string is text.
-    //   • a Request body with an EXPLICIT non-text Content-Type (multipart/image/…) → reject.
-    //   • a Request body with a missing/ambiguous Content-Type — preserve the common Solid
-    //     RDF (Turtle) untyped-text write, BUT confirm against the raw BYTES: valid UTF-8 is
-    //     sent as text, non-UTF-8 (genuinely binary) is rejected, not corrupted.
-    let body: string | null = null;
-    if (init?.body != null) {
-      if (typeof init.body !== 'string') {
-        throw new Error('authenticatedFetch currently supports only string request bodies.');
-      }
-      body = init.body;
-    } else if (isRequest && input.body) {
-      // Normalize an EMPTY / whitespace-only Content-Type to "missing" (null) so it takes
-      // the same ambiguous-but-byte-verified path as a no-Content-Type body — an empty
-      // header must not be trusted as text-safe and bypass the binary guard (roborev 3495).
-      const rawContentType = input.headers.get('content-type');
-      const contentType = rawContentType && rawContentType.trim() !== '' ? rawContentType : null;
-      if (!isTextContentType(contentType)) {
-        throw new Error('authenticatedFetch currently supports only text request bodies.');
-      }
-      // Read the bytes once. For an explicitly text-typed body we trust the type and decode;
-      // for the ambiguous MISSING/empty content-type we additionally verify the bytes are valid
-      // UTF-8 text — a binary payload with no usable content-type must fail loudly, not be coerced.
+    if (typeof source === 'string') body = source;
+    else if (body === undefined && normalized.body !== null) {
       const bytes = await readBodyBounded(
-        input.clone().body,
+        normalized.body,
         MAX_BODY_BYTES,
         REQUEST_BODY_LIMIT_ERROR,
-        init?.signal ?? input.signal,
+        signal ?? undefined,
       );
-      if (contentType === null && isBinaryRequestBody(bytes)) {
-        throw new Error(
-          'authenticatedFetch currently supports only text request bodies (binary body with no Content-Type).',
-        );
-      }
-      body = new TextDecoder().decode(bytes);
+      bodyBase64 = bytesToBase64(bytes);
     }
+    signal?.throwIfAborted();
 
     const requestId = crypto.randomUUID();
-    const reply = await send<FetchResponse>({
+    const message: FetchRequest = {
       type: 'SOLID_FETCH_REQUEST',
       requestId,
-      url,
-      method,
+      url: normalized.url,
+      method: normalized.method,
       headers: Object.fromEntries(headers.entries()),
-      body,
-    });
+      ...(body !== undefined ? { body } : {}),
+      ...(bodyBase64 !== undefined ? { bodyBase64 } : {}),
+    };
+    const reply = await send<FetchResponse>(message);
     if (reply?.error) {
       throw new Error(reply.error);
     }
-    // Null-body statuses (the Fetch spec set) MUST be constructed with a null body —
-    // `new Response('', { status: 204 })` throws. The SW serialises an empty body as ''
-    // for these, so coerce to null. Solid writes/deletes commonly return 204 No Content.
+    // Validate even null-body replies before decoding or constructing a Response.
+    validateBodyFields(reply.body, reply.bodyBase64);
+    const responseBody =
+      reply.bodyBase64 !== undefined ? base64ToBytes(reply.bodyBase64) : (reply.body ?? null);
     const status = reply.status ?? 200;
-    const nullBody = NULL_BODY_STATUSES.has(status);
-    return new Response(nullBody ? null : (reply.body ?? null), {
+    const nullBody = normalized.method === 'HEAD' || NULL_BODY_STATUSES.has(status);
+    return new Response(nullBody ? null : responseBody, {
       status,
       statusText: reply.statusText,
       headers: new Headers(reply.headers ?? {}),

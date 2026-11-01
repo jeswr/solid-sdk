@@ -664,8 +664,8 @@ describe('inject — binary bodies and Request inputs', () => {
     const promise = solidApi().fetch(new Request('https://pod.example/data', { method }));
     const message = await fetchMessage();
     expect(message).toMatchObject({ method });
-    expect(message.body).toBeUndefined();
-    expect(message.bodyBase64).toBeUndefined();
+    expect(message).not.toHaveProperty('body');
+    expect(message).not.toHaveProperty('bodyBase64');
     finishFetch(message);
     await promise;
   });

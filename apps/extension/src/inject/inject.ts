@@ -11,6 +11,7 @@
 
 import {
   assertBodySize,
+  assertTextBodySize,
   base64ToBytes,
   bytesToBase64,
   MAX_BODY_BYTES,
@@ -111,25 +112,6 @@ type PendingFetch = Pending<Response> & {
   readonly input: RequestInfo | URL;
   readonly init?: RequestInit;
 };
-
-/** Count UTF-8 bytes without allocating an encoded copy, including lone surrogates. */
-function assertTextBodySize(value: string): void {
-  let size = value.length;
-  assertBodySize(size);
-  for (let i = 0; i < value.length; i++) {
-    const unit = value.charCodeAt(i);
-    if (unit < 0x80) continue;
-    if (unit < 0x800) size++;
-    else {
-      size += 2;
-      if (unit >= 0xd800 && unit <= 0xdbff) {
-        const next = value.charCodeAt(i + 1);
-        if (next >= 0xdc00 && next <= 0xdfff) i++;
-      }
-    }
-    assertBodySize(size);
-  }
-}
 
 /** Preserve the worker's final URL metadata through native body cloning. */
 function withResponseMetadata(response: Response, url: string, redirected: boolean): Response {
@@ -429,8 +411,8 @@ function installSolidInjection(): void {
         url: request?.url ?? snapInput.toString(),
         method,
         headers: Object.fromEntries(headers.entries()),
-        body,
-        bodyBase64,
+        ...(body !== undefined ? { body } : {}),
+        ...(bodyBase64 !== undefined ? { bodyBase64 } : {}),
         autoDivert,
       });
     });
