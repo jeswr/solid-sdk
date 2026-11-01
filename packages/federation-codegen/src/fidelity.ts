@@ -459,6 +459,16 @@ function assertCompositeFidelity(
           );
         }
         const target = composite.nodes.find((candidate) => candidate.name === field.node);
+        const targetShape = shapeByTarget.get(target?.typeIris[0] ?? "");
+        if (
+          constraint.hasClass !== undefined &&
+          (targetShape?.aliasTypeIris?.includes(constraint.hasClass) ||
+            target?.aliasTypeIris?.includes(constraint.hasClass))
+        ) {
+          throw new FidelityError(
+            `composite ${composite.name} link ${field.name} sh:class ${constraint.hasClass} is a target type alias removed by migration`,
+          );
+        }
         if (
           target?.typeIris.length !== 1 ||
           !linkTargetConforms(shapes, constraint, target.typeIris[0] as string)

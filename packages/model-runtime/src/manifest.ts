@@ -720,6 +720,16 @@ function validateCompositeEntity(raw: Record<string, unknown>): CompositeManifes
       if (!seenNodeNames.has(target)) {
         fail(`composite nested field "${field.name}" targets unknown node "${target}"`);
       }
+      if (
+        field.hasClass !== undefined &&
+        nodes
+          .find((candidate) => candidate.name === target)
+          ?.aliasTypeIris?.includes(field.hasClass)
+      ) {
+        fail(
+          `composite nested field "${field.name}" sh:class ${field.hasClass} is a target type alias removed by migration`,
+        );
+      }
       if (target === root) fail(`composite nested field "${field.name}" links into the root node`);
       if (target === node.name)
         fail(`composite nested field "${field.name}" links a node to itself`);

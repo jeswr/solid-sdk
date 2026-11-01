@@ -409,6 +409,15 @@ function compileCompositeEntity(
           );
         }
         const targetClass = compConfig.nodes[targetNode]?.targetClass;
+        const targetShape = targetClass === undefined ? undefined : shapeByTarget.get(targetClass);
+        if (
+          constraint.hasClass !== undefined &&
+          targetShape?.aliasTypeIris?.includes(constraint.hasClass)
+        ) {
+          throw new Error(
+            `composite ${compConfig.name} link ${shapeFieldName} sh:class ${constraint.hasClass} is a target type alias removed by migration`,
+          );
+        }
         if (!targetClass || !linkTargetConforms(shapes, constraint, targetClass)) {
           throw new Error(
             `composite ${compConfig.name} link ${shapeFieldName} target class does not conform to sh:class / sh:node`,
