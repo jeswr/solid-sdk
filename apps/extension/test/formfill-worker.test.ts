@@ -244,6 +244,61 @@ describe('form-fill worker boundary and consent', () => {
     expect(await worker.request(request, sender)).toEqual({ values: [] });
     expect(storage['solid:formfill-grants']).toBeUndefined();
   });
+  it('fails closed on stale preview reads and remembered Fill decisions after a worker restart', async () => {
+    vi.useFakeTimers();
+    const { requestId } = await open();
+    expect((await read(requestId))?.values).toContainEqual({
+      field: 'name',
+      category: 'contact',
+      value: 'Person 1',
+    });
+    expect(storage).toEqual({});
+
+    // Termination drops the execution context's timers/listeners and pending response.
+    // Retain chrome.storage.local, as a real MV3 restart does, without cancelling the request.
+    vi.clearAllTimers();
+    removed.clear();
+    tabRemoved.clear();
+    tabUpdated.clear();
+    const commit = vi.fn();
+    worker = new FormFillWorker({
+      profiles: listProfiles,
+      load,
+      commit: async (id, task) => {
+        commit(id);
+        return task();
+      },
+    });
+    listProfiles.mockClear();
+    load.mockClear();
+    current.mockClear();
+
+    expect(await read(requestId)).toBeNull();
+    expect(await read(requestId, '2')).toBeNull();
+    const staleFill: FormFillPreviewRequest = {
+      type: 'SOLID_FORMFILL_DECISION',
+      requestId,
+      profileId: '1',
+      categories: ['contact', 'address'],
+      remember: true,
+    };
+    expect(await worker.preview(staleFill, trusted)).toBeNull();
+    expect(listProfiles).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+    expect(current).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    expect(storage).toEqual({});
+    expect(created).toHaveLength(1);
+
+    const fresh = await open();
+    expect(fresh.requestId).not.toBe(requestId);
+    expect(await worker.preview(staleFill, trusted)).toBeNull();
+    expect((await read(fresh.requestId))?.selected).toEqual([]);
+    expect(commit).not.toHaveBeenCalled();
+    await decide(fresh.requestId, '1', []);
+    expect(await fresh.response).toEqual({ values: [] });
+    expect(storage).toEqual({});
+  });
   it('times out stalled data loads without opening a late preview', async () => {
     vi.useFakeTimers();
     let release!: (value: { data: ReturnType<typeof data>; current: typeof current }) => void;
