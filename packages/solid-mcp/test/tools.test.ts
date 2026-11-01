@@ -315,11 +315,13 @@ describe("tool registry over a fetch-free portable pod", () => {
       contentType: "application/ld+json",
     });
     expect((await fetchTool.handler({ id: FILE })).isError).toBe(true);
-    pod.read.mockResolvedValueOnce({
+    const redirected = {
       body: new TextEncoder().encode('<#item> <http://schema.org/name> "portable" .'),
       contentType: "text/turtle",
       url: `${ROOT}redirected/file`,
-    });
+    };
+    // The alias read, then the canonical read that authorizes the final resource.
+    pod.read.mockResolvedValueOnce(redirected).mockResolvedValueOnce(redirected);
     const rdf = await fetchTool.handler({ id: FILE });
     expect(JSON.parse((rdf.content[0] as { text: string }).text).text).toContain(
       `${ROOT}redirected/file#item`,
@@ -330,6 +332,29 @@ describe("tool registry over a fetch-free portable pod", () => {
       url: "https://evil.example/file",
     });
     expect((await fetchTool.handler({ id: FILE })).isError).toBe(true);
+  });
+
+  it("returns the canonical read after an alias, so its redaction applies", async () => {
+    const pod = portablePod();
+    const fetchTool = createPodToolRegistry(pod).find((tool) => tool.name === "fetch");
+    if (!fetchTool) throw new Error("fetch missing from registry");
+    const canonical = `${ROOT}canonical/file`;
+    pod.read
+      .mockResolvedValueOnce({
+        body: new TextEncoder().encode("unredacted alias"),
+        contentType: "text/plain",
+        url: canonical,
+      })
+      .mockResolvedValueOnce({
+        body: new TextEncoder().encode("redacted"),
+        contentType: "text/plain",
+        url: canonical,
+      });
+    const result = JSON.parse(
+      ((await fetchTool.handler({ id: FILE })).content[0] as { text: string }).text,
+    );
+    expect(result.text).toBe("redacted");
+    expect(pod.read).toHaveBeenLastCalledWith(canonical, expect.anything());
   });
 
   it("enforces server read-only even if the injected backend allows writes", async () => {

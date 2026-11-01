@@ -93,14 +93,18 @@ function hasContainerTypeLink(header: string): boolean {
   for (const link of header.matchAll(/<([^<>]*)>((?:[^"<,]|"(?:[^"\\]|\\.)*")*)/g)) {
     if (!/^http:\/\/www\.w3\.org\/ns\/ldp#(?:Basic|Direct|Indirect)?Container$/.test(link[1] ?? ""))
       continue;
-    for (const rel of (link[2] ?? "").matchAll(
-      /(?:^|;)\s*rel\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;,]+))/gi,
-    )) {
-      if (
-        (rel[1] ?? rel[2] ?? "").replace(/\\(.)/g, "$1").toLowerCase().split(/\s+/).includes("type")
-      )
-        return true;
+    // Consume whole parameters so a quoted value cannot impersonate a rel parameter.
+    const params = /\s*;\s*([^\s=;,"]+)\s*(?:=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;,"]*)))?/y;
+    const source = link[2] ?? "";
+    let parsed = 0;
+    for (let param = params.exec(source); param; param = params.exec(source)) {
+      parsed = params.lastIndex;
+      if (param[1]?.toLowerCase() !== "rel") continue;
+      const rels = (param[2] ?? param[3] ?? "").replace(/\\(.)/g, "$1").toLowerCase();
+      if (rels.split(/\s+/).includes("type")) return true;
     }
+    // Unparseable parameters on a container type link fail closed as a container.
+    if (source.slice(parsed).trim() !== "") return true;
   }
   return false;
 }

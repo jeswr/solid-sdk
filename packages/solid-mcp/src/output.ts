@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6
 /** The sole projection from caller-authorized PodPort data to public pod output. */
-import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import {
   LiteralFrom,
@@ -13,7 +12,7 @@ import {
 import { ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
-import { serializeBoundedTurtle } from "./bounded-rdf.js";
+import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
 import type { PodChild, SearchMatch } from "./pod.js";
 import { podReadMode, withPodReadLimits, withPodReadMode } from "./pod-operation.js";
@@ -80,6 +79,7 @@ export class PodOutput {
       if (podReadMode() !== "fetch-complete" && result.body.byteLength > cap)
         throw new Error("Resource exceeds the bounded read limit.");
       const finalUrl = requirePodScopedUrl({ podRoot: this.pod.root }, result.url ?? target);
+      let output = result;
       // A redirect/alias is a separate resource, subject to the same purpose check.
       if (!isFetchPodRead(this.pod.read) && documentUrl(finalUrl) !== documentUrl(target)) {
         const final = await this.pod.read(finalUrl, options);
@@ -87,10 +87,16 @@ export class PodOutput {
           throw new Error("Resource exceeds the bounded read limit.");
         if (documentUrl(final.url ?? finalUrl) !== documentUrl(finalUrl))
           throw new Error("pod-scope violation: ambiguous resource alias");
+        // The canonical read is authoritative: a decorator may redact it differently.
+        output = {
+          ...final,
+          url: finalUrl,
+          ...(result.isContainer || final.isContainer ? { isContainer: true } : {}),
+        };
       }
       this.authorized.add(documentUrl(target));
       this.authorized.add(documentUrl(finalUrl));
-      return result;
+      return output;
     });
   }
 
@@ -219,9 +225,11 @@ export class PodOutput {
       const contentType = mediaType(read.contentType);
       let projected = await this.containerRdf(url, read);
       if (!projected && RDF_MEDIA_TYPES.has(contentType)) {
-        const dataset = await parseRdf(new TextDecoder().decode(read.body), contentType, {
-          baseIRI: read.url ?? url,
-        });
+        const dataset = await parseBoundedRdf(
+          new TextDecoder().decode(read.body),
+          contentType,
+          read.url ?? url,
+        );
         projected = await this.containerRdf(url, read, dataset);
       }
       return projected
