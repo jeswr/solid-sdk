@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Health model (HLT-00)
 
@@ -25,6 +26,10 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   for byte streams. Consumers can add samples to month documents and persist each shard. Keep
   chunk sizes bounded; backpressure occurs between chunks. A late XML error may follow yielded
   samples, so callers choose preview/staging versus partial-import reporting.
+  The `iriFor(index, attributes)` callback also receives the decoded source-record attributes,
+  allowing callers to derive identities independent of export filename, ordering and chunking.
+  HLT-01 fingerprints sorted attributes with injected SHA-256 before persistence, so repeated or
+  overlapping exports replace the same observations without saving the XML or its attributes.
 - `createHealthStore(fetch, storageRoot, owner)`: pod-scoped, redirect-refusing I/O.
   Inline JSON-LD contexts are supported; external contexts/imports are rejected on resource
   and ACL reads. Use
@@ -40,6 +45,9 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   Workout reads merge native indexes with `health/workouts.ttl` (Apple Health) and
   `health/activities.ttl` (Garmin/Fitbit), or explicitly supplied in-scope connector paths.
   Missing connector files are empty; other read errors propagate. Results are unique by subject IRI.
+  `importGpx` accepts an optional `onRouteSaved` callback after a route is saved or an identical
+  existing route is verified, before writing its index. The data layer uses it to report partial
+  imports; retrying with the same ID resumes that route without creating another resource.
   `migrate` rewrites vocabulary in an explicitly supplied existing resource once; repeat calls
   perform no PUT. Discovery of resources to migrate stays with the caller.
 

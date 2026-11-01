@@ -17,6 +17,11 @@ Keep the existing scope delegate as an additional member filter, including its s
 root-alias rules. Malformed and unsafe entries are skipped individually. Keep recursion,
 request headers, key mapping, clear ordering, watch handling, and redirect wrappers local.
 This package is security-critical: no guard may be loosened.
+The shared helper accepts only NamedNode descendants of the currently listed container,
+in addition to the driver-base guard. Prefix clear must never follow sibling resources or
+containers, including sibling cycles, or DELETE outside the cleared prefix.
+The helper streams listing bodies with a default 16 MiB byte limit and the parser's default
+quad limit. Preserve PARSE_LIMIT failures instead of treating them as empty listings.
 
 Scope wrappers use guarded-fetch's `snapshotFetchInput(input, init, { metadataOnly: true })` to validate fresh
 Request snapshots, never caller-shadowable `url` properties. Match main's transport boundary:
