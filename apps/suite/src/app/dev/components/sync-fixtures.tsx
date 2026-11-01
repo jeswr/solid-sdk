@@ -97,6 +97,20 @@ export const syncScenarios: { name: string; snapshot: SyncSnapshot }[] = [
       conflicts: [{ ...conflict, id: "last", name: "Last conflict" }],
     },
   },
+  {
+    // Nothing focusable inside: only the region itself can take keyboard scrolling.
+    name: "Long pending queue",
+    snapshot: {
+      ...saved,
+      pending: Array.from({ length: 24 }, (_, i) => ({
+        id: `pending-${i}`,
+        label: `Waiting change ${i + 1}`,
+        where: "My Drive / Work",
+        queuedAt: new Date(now.getTime() - (i + 1) * 60000),
+        state: "pending" as const,
+      })),
+    },
+  },
 ];
 
 function Frame({ title, children }: { title: string; children: ReactNode }) {

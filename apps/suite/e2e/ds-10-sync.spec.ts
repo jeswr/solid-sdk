@@ -134,7 +134,26 @@ test("sheet: a long queue scrolls inside the sheet to its last action", async ({
   // The scroll happened inside the sheet; the locked page did not move.
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await last.click();
-  await expect(page.getByRole("alertdialog").or(page.getByRole("dialog"))).not.toHaveCount(0);
+  const decision = page.getByRole("dialog", { name: "This item changed somewhere else" });
+  await expect(decision).toBeVisible();
+  await expect(decision.getByRole("button", { name: "Keep both" })).toBeFocused();
+});
+
+test("sheet: a long queue with no buttons scrolls from the keyboard", async ({ page }) => {
+  await page.goto("/dev/components/sync-sheet");
+  await page.getByRole("button", { name: "Open Long pending queue", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Sync status" });
+  await expect(sheet).toBeVisible();
+  const region = sheet.getByRole("region", { name: "Sync items" });
+  const scrollTop = () => region.evaluate((node) => node.scrollTop);
+  expect(await scrollTop()).toBe(0);
+  // Tab reaches the scroll region; the arrow and End keys then scroll it.
+  for (let i = 0; i < 5 && !(await region.evaluate((n) => n === document.activeElement)); i++)
+    await page.keyboard.press("Tab");
+  await expect(region).toBeFocused();
+  await page.keyboard.press("End");
+  await expect.poll(scrollTop).toBeGreaterThan(0);
+  await expect(sheet.getByText("Waiting change 24")).toBeInViewport();
 });
 
 test("keyboard: pill opens sheet, Escape restores pill; conflict returns to Resolve", async ({
