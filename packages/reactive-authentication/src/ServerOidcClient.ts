@@ -161,7 +161,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
     const claims = oauth.getValidatedIdTokenClaims(processed);
     if (claims !== undefined) {
       await oauth.validateApplicationLevelSignature(as, response, oauthOptions(http));
-      const id = claims.webid;
+      const id = claims.webid ?? claims.sub;
       if (typeof id !== "string" || !id) throw new Error("Missing verified WebID");
       const parsed = new URL(id);
       if (parsed.protocol !== "https:" || parsed.username || parsed.password)

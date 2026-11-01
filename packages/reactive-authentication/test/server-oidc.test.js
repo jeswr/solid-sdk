@@ -319,12 +319,64 @@ test.each([
   expect(f.op.captured.filter((r) => r.url.endsWith("/token"))).toHaveLength(0);
 });
 
+test("uses a verified HTTPS subject as the WebID when the webid claim is absent, including refresh", async () => {
+  const f = await fixture();
+  f.op.controls.idSubject = f.op.controls.webId;
+  f.op.controls.webId = undefined;
+  const session = await f.login();
+  expect(session.webId).toBe(f.op.controls.idSubject);
+  expect(f.client.currentWebId()).toBe(session.webId);
+  await f.client.refresh(session.tokens.refreshToken);
+  expect(f.client.currentWebId()).toBe(session.webId);
+});
+
+test("prefers the verified webid claim over a distinct HTTPS subject", async () => {
+  const f = await fixture();
+  f.op.controls.idSubject = "https://other.example/profile#me";
+  expect((await f.login()).webId).toBe(f.op.controls.webId);
+});
+
+test("rejects a subject fallback signed by an unrelated key", async () => {
+  const keys = await generateKeyPair("ES256");
+  const f = await fixture((fetcher) => async (input, init) => {
+    const response = await fetcher(input, init);
+    if (new Request(input, init).url !== `${POD_ISSUER}token`) return response;
+    const tokens = await response.json();
+    tokens.id_token = await new SignJWT(decodeJwt(tokens.id_token))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" })
+      .sign(keys.privateKey);
+    return Response.json(tokens);
+  });
+  f.op.controls.idSubject = f.op.controls.webId;
+  f.op.controls.webId = undefined;
+  await expect(f.login()).rejects.toThrow();
+  expect(f.client.currentWebId()).toBeUndefined();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
+});
+
 test.each([
-  "",
+  "opaque-subject",
   "http://insecure.example/me",
   "https://u:p@identity.example/me",
-])("rejects an unsafe or absent verified WebID (%s)", async (webId) => {
+  "https://u@identity.example/me",
+  "https://",
+])("rejects an unsafe verified subject fallback (%s)", async (subject) => {
   const f = await fixture();
+  f.op.controls.webId = undefined;
+  f.op.controls.idSubject = subject;
+  await expect(f.login()).rejects.toThrow();
+  expect(f.client.currentWebId()).toBeUndefined();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
+});
+
+test.each([
+  "",
+  42,
+  "http://insecure.example/me",
+  "https://u:p@identity.example/me",
+])("rejects an invalid explicit verified WebID even with a safe subject (%s)", async (webId) => {
+  const f = await fixture();
+  f.op.controls.idSubject = f.op.controls.webId;
   f.op.controls.webId = webId;
   await expect(f.login()).rejects.toThrow("WebID");
 });
