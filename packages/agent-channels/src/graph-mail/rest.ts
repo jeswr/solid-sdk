@@ -23,16 +23,24 @@ export function messageId(value: unknown): string {
     throw new ChannelParseError("invalid Graph message id");
   return value;
 }
-/** Only the selected inbox delta operation may receive a stored continuation token. */
-export function deltaLink(value: unknown, token?: "$skiptoken" | "$deltatoken"): string {
+/** Without an inbox ID this checks syntax only; the reader pins the folder before use. */
+export function deltaLink(
+  value: unknown,
+  inboxId: string | undefined,
+  token?: "$skiptoken" | "$deltatoken",
+): string {
   try {
     if (typeof value !== "string" || value.length > 8192) throw new Error();
     const url = new URL(value);
+    const path = /^\/v1\.0\/me\/mailfolders(?:\/([^/]+)|\('([^']+)'\))\/messages\/delta$/i.exec(
+      url.pathname,
+    );
+    const folder = messageId(decodeURIComponent(path?.[1] ?? path?.[2] ?? ""));
     const params = url.searchParams;
     const selected = token ?? (params.has("$skiptoken") ? "$skiptoken" : "$deltatoken");
     if (
       url.origin !== GRAPH ||
-      url.pathname !== DELTA_PATH ||
+      (inboxId !== undefined && folder.toLowerCase() !== "inbox" && folder !== inboxId) ||
       url.username ||
       url.password ||
       url.hash ||
@@ -60,7 +68,11 @@ export function graphMailRest(options: OriginFetchOptions = {}) {
     beforeRequest?: () => Promise<void>,
   ) => {
     const target =
-      path === DELTA_INITIAL ? path : path.startsWith("/") ? `${BASE}${path}` : deltaLink(path);
+      path === DELTA_INITIAL
+        ? path
+        : path.startsWith("/")
+          ? `${BASE}${path}`
+          : deltaLink(path, undefined);
     const ref = Object.freeze({ id: accountId(account) });
     const grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
     assertGrant(grant, access);

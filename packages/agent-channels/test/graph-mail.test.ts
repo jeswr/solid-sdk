@@ -23,12 +23,13 @@ const fixtures = JSON.parse(
   readFileSync(new URL("fixtures/graph-mail.json", import.meta.url), "utf8"),
 );
 const bounds = { maxItems: 100, maxBytes: 1024 * 1024 };
+const inboxId = "AQMk+inbox/==";
 const link = (token = "delta1", kind = "$deltatoken") =>
   `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?${kind}=${token}`;
 const cursor = (extra: Record<string, unknown> = {}) =>
   JSON.stringify({ account: account.id, url: link(), pending: [], resume: "", ...extra });
 function reader(replies: unknown[]) {
-  const fake = fixtureTransport(replies);
+  const fake = fixtureTransport([{ id: inboxId }, ...replies]);
   const tokens = new RecordingTokenProvider();
   const config = {
     tokens,
@@ -60,16 +61,19 @@ it("ingests inbox delta pages and MIME with read grants, stable IDs and the exis
   expect(parsed.warnings).toContain("signature-unverified");
   expect(r.binding.ingest.threadKey?.(parsed)).toBe(parsed.threadId);
   expect(JSON.parse(first.next)).toMatchObject({
-    url: link("page2", "$skiptoken"),
+    url: fixtures.first["@odata.nextLink"],
     pending: [],
     resume: "",
   });
   const last = await r.binding.ingest.list(account, first.next, bounds);
   expect(last.items.map((i) => i.id)).toEqual(["AAMk-two=="]);
-  expect(JSON.parse(last.next).url).toBe(link());
+  expect(JSON.parse(last.next).url).toBe(fixtures.last["@odata.deltaLink"]);
   expect(await r.binding.ingest.list(account, last.next, bounds)).toMatchObject({ items: [] });
-  expect(r.requests[0]?.url.href).toBe(DELTA_INITIAL);
-  expect(r.requests[1]?.url.pathname).toBe("/v1.0/me/messages/AAMk%2Bone%2F%3D%3D/$value");
+  expect(r.requests[0]?.url.href).toBe(
+    "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id",
+  );
+  expect(r.requests[1]?.url.href).toBe(DELTA_INITIAL);
+  expect(r.requests[2]?.url.pathname).toBe("/v1.0/me/messages/AAMk%2Bone%2F%3D%3D/$value");
   expect(r.tokens.calls.every((c) => c.access === "read")).toBe(true);
   expect(r.requests.every((r) => r.headers.get("prefer")?.includes('IdType="ImmutableId"'))).toBe(
     true,
@@ -103,6 +107,76 @@ it("keeps pending IDs and continuation links until item and aggregate-byte bound
   ).rejects.toThrow("byte bound");
 });
 
+it.each([
+  "mailfolders/inbox",
+  "mailFolders/INBOX",
+  "mailfolders('inbox')",
+  "mailfolders('AQMk+inbox/==')",
+  "mailFolders('AQMk%2Binbox%2F%3D%3D')",
+  "mailfolders/AQMk%2Binbox%2F%3D%3D",
+])("follows equivalent inbox continuation paths (%s), including across reader restarts", async (path) => {
+  const next = link("page2", "$skiptoken").replace("mailFolders/inbox", path);
+  const delta = link().replace("mailFolders/inbox", path);
+  const r = reader([{ value: [{ id: "a" }, { id: "b" }], "@odata.nextLink": next }, mime()]);
+  const first = await r.binding.ingest.list(account, undefined, { ...bounds, maxItems: 1 });
+  expect(JSON.parse(first.next)).toMatchObject({ pending: ["b"], resume: next });
+  const restarted = reader([mime(), { value: [], "@odata.deltaLink": delta }]);
+  const second = await restarted.binding.ingest.list(account, first.next, bounds);
+  expect(second.items.map((item) => item.id)).toEqual(["b"]);
+  expect(JSON.parse(second.next).url).toBe(next);
+  const last = await restarted.binding.ingest.list(account, second.next, bounds);
+  expect(JSON.parse(last.next).url).toBe(delta);
+  expect(restarted.requests[2]?.url.href).toBe(next);
+  expect(restarted.queue).toEqual([]);
+});
+
+it("pins returned and saved continuation folders independently, including pending resumes", async () => {
+  for (const path of ["mailfolders/sentitems", "mailfolders('AQMk-other==')"]) {
+    const wrong = link().replace("mailFolders/inbox", path);
+    const page = reader([{ value: [{ id: "a" }], "@odata.deltaLink": wrong }]);
+    await expect(page.binding.ingest.list(account, undefined, bounds)).rejects.toThrow(
+      "inbox delta link",
+    );
+    expect(page.requests).toHaveLength(2);
+    for (const state of [cursor({ url: wrong }), cursor({ pending: ["a"], resume: wrong })]) {
+      const saved = reader([]);
+      await expect(saved.binding.ingest.list(account, state, bounds)).rejects.toThrow(
+        "inbox delta link",
+      );
+      expect(saved.requests).toHaveLength(1);
+    }
+  }
+});
+
+it("resolves each account's inbox separately and retries failed resolution without trusting a cursor", async () => {
+  const r = reader([
+    fixtures.empty,
+    { id: "otherInbox" },
+    { value: [], "@odata.deltaLink": link() },
+  ]);
+  await r.binding.ingest.list(account, undefined, bounds);
+  const other = { id: "other-account" };
+  const saved = cursor({ account: other.id, url: fixtures.last["@odata.deltaLink"] });
+  await expect(r.binding.ingest.list(other, saved, bounds)).rejects.toThrow("inbox delta link");
+  expect(r.requests).toHaveLength(3);
+  await r.binding.ingest.list(other, undefined, bounds);
+  expect(r.requests).toHaveLength(4);
+  expect(r.tokens.calls.map((call) => call.account.id)).toEqual([
+    account.id,
+    account.id,
+    other.id,
+    other.id,
+  ]);
+  for (const response of [{}, { id: "../other" }, new Response(null, { status: 503 })]) {
+    const retry = reader([{ id: inboxId }, fixtures.empty]);
+    retry.queue[0] = response;
+    await expect(retry.binding.ingest.list(account, undefined, bounds)).rejects.toThrow();
+    expect(retry.requests).toHaveLength(1);
+    expect((await retry.binding.ingest.list(account, undefined, bounds)).items).toEqual([]);
+    expect(retry.queue).toEqual([]);
+  }
+});
+
 it("resets only expired delta state, skips deleted MIME and leaves failed cursors retryable", async () => {
   const r = reader([
     new Response(null, { status: 410 }),
@@ -110,13 +184,13 @@ it("resets only expired delta state, skips deleted MIME and leaves failed cursor
     new Response(null, { status: 404 }),
   ]);
   expect((await r.binding.ingest.list(account, cursor(), bounds)).items).toEqual([]);
-  expect(r.requests[1]?.url.href).toBe(DELTA_INITIAL);
+  expect(r.requests[2]?.url.href).toBe(DELTA_INITIAL);
   for (const status of [400, 401, 403, 404, 429, 500]) {
     const failed = reader([new Response(null, { status })]);
     await expect(failed.binding.ingest.list(account, cursor(), bounds)).rejects.toThrow(
       `HTTP ${status}`,
     );
-    expect(failed.requests).toHaveLength(1);
+    expect(failed.requests).toHaveLength(2);
   }
   await expect(
     reader([new Response(null, { status: 410 })]).binding.ingest.list(account, undefined, bounds),
@@ -138,6 +212,9 @@ it("refuses invalid bounds, account cursors and unsafe continuation URLs before 
     cursor({ account: "other" }),
     cursor({ extra: 1 }),
     cursor({ url: null }),
+    cursor({ url: link().replace("graph.microsoft.com", "evil.test") }),
+    cursor({ url: link().replace("/me/", "/users/other/") }),
+    cursor({ url: link().replace("/messages/delta", "/sendMail") }),
     cursor({ pending: null }),
     cursor({ pending: ["bad.id"], resume: link() }),
     cursor({ pending: ["a"] }),
@@ -164,6 +241,10 @@ it("refuses invalid bounds, account cursors and unsafe continuation URLs before 
     link().replace("/me/", "/users/other/"),
     link().replace("/inbox/", "/sentitems/"),
     link().replace("/messages/delta", "/messages"),
+    link().replace("/inbox/", "/%ZZ/"),
+    link().replace("/inbox/", "/inbox%2Fmessages/"),
+    link().replace("mailFolders/inbox", "mailfolders('inbox')/childFolders('other')"),
+    link().replace("mailFolders/inbox", "mailfolders('other')"),
     link().replace("https://", "https://user@"),
     link().replace("https://", "https://user:secret@"),
     `${link()}#fragment`,
@@ -175,9 +256,9 @@ it("refuses invalid bounds, account cursors and unsafe continuation URLs before 
     `${link()}&$deltatoken=other`,
     `${link()}&access_token=secret`,
   ])
-    expect(() => deltaLink(bad)).toThrow("inbox delta link");
-  expect(deltaLink(`${link()}&$select=id`)).toContain("$select=id");
-  expect(deltaLink(link("skip", "$skiptoken"))).toContain("$skiptoken=skip");
+    expect(() => deltaLink(bad, inboxId)).toThrow("inbox delta link");
+  expect(deltaLink(`${link()}&$select=id`, inboxId)).toContain("$select=id");
+  expect(deltaLink(link("skip", "$skiptoken"), inboxId)).toContain("$skiptoken=skip");
 });
 
 it("fails closed on malformed pages, tombstones and repeated page links", async () => {

@@ -40,8 +40,8 @@ function cursorState(cursor: string, account: string): State {
     value.pending.length > 0 !== (value.resume !== "")
   )
     throw new ChannelParseError("invalid account cursor");
-  if (value.url !== DELTA_INITIAL) deltaLink(value.url);
-  if (value.resume !== "") deltaLink(value.resume);
+  if (value.url !== DELTA_INITIAL) deltaLink(value.url, undefined);
+  if (value.resume !== "") deltaLink(value.resume, undefined);
   value.pending.forEach(messageId);
   return value as unknown as State;
 }
@@ -58,6 +58,7 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
   assertEmailAddress(config.recipient);
   assertFooter(footer);
   const rest = graphMailRest(options.transport);
+  const inboxIds = new Map<string, string>();
   return {
     id: "graph-mail",
     carriage: EMAIL_MIME,
@@ -94,6 +95,17 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
           cursor === undefined
             ? { account: ref.id, url: DELTA_INITIAL, pending: [], resume: "" }
             : cursorState(cursor, ref.id);
+        // Resolve the well-known folder independently of any untrusted cursor or page link.
+        let inboxId = inboxIds.get(ref.id);
+        if (inboxId === undefined) {
+          inboxId = messageId(
+            (await responseBody(await rest("/mailFolders/inbox?$select=id", ref, tokens, "read")))
+              .id,
+          );
+          inboxIds.set(ref.id, inboxId);
+        }
+        if (state.url !== DELTA_INITIAL) deltaLink(state.url, inboxId);
+        if (state.resume !== "") deltaLink(state.resume, inboxId);
         if (!state.pending.length) {
           let response = await rest(state.url, ref, tokens, "read");
           // Only an explicitly expired sync state starts a new inbox baseline.
@@ -109,7 +121,9 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
           if ((next === undefined) === (delta === undefined))
             throw new ChannelParseError("Graph delta page requires one continuation");
           state.resume =
-            next === undefined ? deltaLink(delta, "$deltatoken") : deltaLink(next, "$skiptoken");
+            next === undefined
+              ? deltaLink(delta, inboxId, "$deltatoken")
+              : deltaLink(next, inboxId, "$skiptoken");
           if (next !== undefined && state.resume === state.url)
             throw new ChannelParseError("repeated Graph delta link");
           const ids: string[] = [];

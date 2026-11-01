@@ -153,7 +153,8 @@ blocks and text body to report unverified discovery hints; see its PROTOCOL.md.
 
 `./graph-mail` exports `ORIGINS` and `createGraphMailReader` with the same
 `{ tokens, parseEmail, recipient, ownAccounts, footer?, transport? }` options as Gmail.
-It reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows validated
+It resolves `/v1.0/me/mailFolders/inbox?$select=id` once per account and reader,
+then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows validated
 `@odata.nextLink` / `@odata.deltaLink` URLs, and retrieves each message's MIME via
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
@@ -162,7 +163,8 @@ tombstones are skipped; a MIME 404 skips a deleted item. Only HTTP 410 on a save
 delta state restarts the initial inbox sync. Other errors preserve the previous
 cursor for retry. Pages cap at 512 rows and cursors at 64 KiB.
 
-Continuation URLs must stay on the exact inbox delta operation at
+Continuation URLs accept slash and parenthesized folder keys, including lowercase
+`mailfolders`, for the inbox alias or the independently resolved inbox ID. They must stay on the inbox delta operation at
 `https://graph.microsoft.com`; credentials in URLs, fragments, duplicate query
 parameters, other operations and repeated next-page links are refused. The
 declared origins are `https://graph.microsoft.com` and
