@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type {
   CreateWorkbookInput,
   OpenedWorkbook,
@@ -8,7 +9,11 @@ import type {
   WorkbookSummary,
   WorkbookVersion,
 } from "../contract";
-import { WorkbookNotFoundError } from "../contract";
+import {
+  WorkbookConflictError,
+  WorkbookNotFoundError,
+  WorkbookPartialSaveError,
+} from "../contract";
 import {
   createSheetStorage,
   type Precondition,
@@ -16,9 +21,8 @@ import {
   type WorkbookMetadata,
   workbookLayout,
 } from "../model";
-import { csvToWorkbook } from "../univer-spike";
 import { assertWorkbook, directChild, slug } from "./layout";
-import { freshSnapshot, type ProjectedSheet, project } from "./projection";
+import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
 import { hasStatus, resources, strongEtag } from "./resources";
 
@@ -34,8 +38,8 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     container: string,
     sheets: ProjectedSheet[],
     base?: Readonly<Record<string, string>>,
+    derived: Record<string, string> = {},
   ): Promise<Record<string, string>> {
-    const derived: Record<string, string> = {};
     for (const sheet of sheets) {
       const urls = workbookLayout(container).sheet(sheet.number);
       const writes: [string, (condition: Precondition) => Promise<string | null>][] = [
@@ -57,6 +61,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   }
 
   async function create(input: CreateWorkbookInput): Promise<OpenedWorkbook> {
+    const { freshSnapshot, project } = await import("./projection");
     const snapshot = freshSnapshot(input.title, input.snapshot);
     const sheets = project(snapshot);
     const date = now();
@@ -81,20 +86,29 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         if (hasStatus(error, 412)) continue;
         throw error;
       }
-      const snapshotEtag = await io.etag(
-        layout.snapshot,
-        await storage.saveSnapshot(container, snapshot, { ifNoneMatch: "*" }),
-      );
-      const derived = await writeSheets(container, sheets);
-      const metadata = { ...initial, sheets: sheets.map(({ number, name }) => ({ number, name })) };
-      const indexEtag = await io.etag(
-        layout.index,
-        await io.authoritative(container, () =>
-          storage.saveIndex(container, metadata, { ifMatch: reservation }),
-        ),
-      );
-      await register();
-      return { container, metadata, snapshot, version: { snapshotEtag, indexEtag, derived } };
+      try {
+        const snapshotEtag = await io.etag(
+          layout.snapshot,
+          await storage.saveSnapshot(container, snapshot, { ifNoneMatch: "*" }),
+        );
+        const derived = await writeSheets(container, sheets);
+        const metadata = {
+          ...initial,
+          sheets: sheets.map(({ number, name }) => ({ number, name })),
+        };
+        const indexEtag = await io.etag(
+          layout.index,
+          await io.authoritative(container, () =>
+            storage.saveIndex(container, metadata, { ifMatch: reservation }),
+          ),
+        );
+        await register();
+        return { container, metadata, snapshot, version: { snapshotEtag, indexEtag, derived } };
+      } catch (error) {
+        // This slug was reserved by us. Do not leave an unreadable workbook behind.
+        await remove(container).catch(() => {});
+        throw error;
+      }
     }
     throw new Error("Could not allocate a spreadsheet slug after 50 attempts");
   }
@@ -131,9 +145,13 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     saveOptions: { force?: boolean; title?: string } = {},
   ): Promise<SaveResult> {
     container = checked(container);
-    const sheets = project(snapshot);
     const layout = workbookLayout(container);
     const previous = await storage.loadIndex(container);
+    const previousIndexEtag = strongEtag(previous.etag, layout.index);
+    if (!saveOptions.force && previousIndexEtag !== base.indexEtag)
+      throw new WorkbookConflictError(container);
+    const { project } = await import("./projection");
+    const sheets = project(snapshot);
     const snapshotMatch = saveOptions.force
       ? await io.etag(layout.snapshot, null)
       : base.snapshotEtag;
@@ -143,13 +161,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         storage.saveSnapshot(container, snapshot, { ifMatch: snapshotMatch }),
       ),
     );
-    const derived = await writeSheets(container, sheets, saveOptions.force ? {} : base.derived);
-    for (const sheet of previous.value.sheets) {
-      if (sheet.number <= sheets.length) continue;
-      const urls = layout.sheet(sheet.number);
-      await io.remove(urls.csv);
-      await io.remove(urls.descriptor);
-    }
+    const derived = { ...(saveOptions.force ? {} : base.derived) };
     const metadata: WorkbookMetadata = {
       ...previous.value,
       // index.ttl owns the title once created (rename writes it there); the engine
@@ -158,14 +170,42 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       modified: now(),
       sheets: sheets.map(({ number, name }) => ({ number, name })),
     };
-    const indexMatch = saveOptions.force ? await io.etag(layout.index, null) : base.indexEtag;
-    const indexEtag = await io.etag(
-      layout.index,
-      await io.authoritative(container, () =>
-        storage.saveIndex(container, metadata, { ifMatch: indexMatch }),
-      ),
+    let indexEtag = previousIndexEtag;
+    try {
+      await writeSheets(container, sheets, saveOptions.force ? {} : base.derived, derived);
+      const indexMatch = saveOptions.force ? await io.etag(layout.index, null) : base.indexEtag;
+      indexEtag = await io.etag(
+        layout.index,
+        await io.authoritative(container, () =>
+          storage.saveIndex(container, metadata, { ifMatch: indexMatch }),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof WorkbookConflictError) throw error;
+      if (error instanceof Error && hasStatus(error.cause, 412))
+        throw new WorkbookConflictError(container);
+      throw new WorkbookPartialSaveError({ snapshotEtag, indexEtag, derived }, error);
+    }
+    // Listing also finds leftovers from a previous save whose cleanup failed.
+    // Cleanup is best effort and must never turn a published save into a failure.
+    const sheetRoot = new URL("sheets/", container).href;
+    await storage.listContainer(sheetRoot).then(
+      async (children) => {
+        for (const child of children) {
+          if (child.isContainer || !directChild(sheetRoot, child.id)) continue;
+          const match = /^(\d+)\.(csv|jsonld)$/.exec(child.id.slice(sheetRoot.length));
+          if (match && Number(match[1]) > sheets.length) await io.remove(child.id).catch(() => {});
+        }
+      },
+      () => {},
     );
-    return { metadata, version: { snapshotEtag, indexEtag, derived } };
+    const active = Object.fromEntries(
+      sheets.flatMap(({ number }) => {
+        const urls = layout.sheet(number);
+        return [urls.csv, urls.descriptor].map((url) => [url, derived[url] as string]);
+      }),
+    );
+    return { metadata, version: { snapshotEtag, indexEtag, derived: active } };
   }
 
   async function rename(
@@ -222,6 +262,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
           const child = containers[cursor++] as (typeof containers)[number];
           try {
             const { value } = await storage.loadIndex(checked(child.id));
+            if (value.sheets.length === 0) continue;
             result.push({
               container: child.id,
               title: value.title,
@@ -243,13 +284,15 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     root,
     list,
     create,
-    createFromCsv: ({ title, csv, sheetName = "Sheet1" }) =>
-      create({
+    async createFromCsv({ title, csv, sheetName = "Sheet1" }) {
+      const { csvToWorkbook } = await import("../univer-spike");
+      return create({
         title,
         snapshot: csvToWorkbook("new", title, [
           { id: "sheet1", name: sheetName, csv },
         ]) as unknown as Snapshot,
-      }),
+      });
+    },
     open,
     save,
     rename,

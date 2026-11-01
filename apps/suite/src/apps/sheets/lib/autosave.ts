@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export type SaveStatus = "saved" | "saving" | "unsaved" | "offline" | "conflict" | "error";
 
 export interface AutosaveOptions<T> {
@@ -67,6 +68,9 @@ export function createAutosave<T>(options: AutosaveOptions<T>) {
   }
 
   return {
+    get dirty() {
+      return Boolean(pending || inFlight);
+    },
     get status() {
       return status;
     },

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -53,7 +54,10 @@ test("create, edit, add a sheet, download CSV, and persist across reload", async
   await expect(page.getByRole("heading", { name: "No spreadsheets yet" })).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await capture(page, info, "list");
-  await page.getByRole("main").getByRole("link", { name: "New spreadsheet", exact: true }).click();
+  await page
+    .locator(".sht-state")
+    .getByRole("button", { name: "New spreadsheet", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/sheets\/s\//);
   await waitForEngine(page);
   // A1 is directly beneath the column header. All edits go through real keyboard input.

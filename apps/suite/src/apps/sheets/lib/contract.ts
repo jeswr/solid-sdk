@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * The Sheets app's two seams (SHT-01), shared by the data layer and the editor UI:
  *
@@ -68,6 +69,17 @@ export class WorkbookConflictError extends Error {
   }
 }
 
+/** The snapshot was saved; retry projections using this version, including partial ETags. */
+export class WorkbookPartialSaveError extends Error {
+  constructor(
+    readonly version: WorkbookVersion,
+    readonly cause: unknown,
+  ) {
+    super(`Couldn't finish saving this spreadsheet: ${String(cause)}`, { cause });
+    this.name = "WorkbookPartialSaveError";
+  }
+}
+
 /** The workbook container or its `index.ttl`/`workbook.json` is missing or unreadable. */
 export class WorkbookNotFoundError extends Error {
   constructor(readonly container: string) {
@@ -100,10 +112,11 @@ export interface WorkbookService {
   open(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
-   * when `force`), then the derived CSVs/descriptors (deleting ones for sheets
-   * that no longer exist), then `index.ttl` (modified date, `title` when given
-   * else the stored title, sheet list). Throws
-   * `WorkbookConflictError` on a 412 for `workbook.json` or `index.ttl`.
+   * when `force`), then the derived CSVs/descriptors, then `index.ttl` (modified date,
+   * `title` when given else the stored title, sheet list). Checks the index version
+   * before writing; stale projections are removed only after publishing the index.
+   * A WorkbookPartialSaveError carries the retry version after a partial write. Throws
+   * `WorkbookConflictError` on a 412 from a conditional write.
    */
   save(
     container: string,

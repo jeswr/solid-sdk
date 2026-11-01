@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { IWorkbookData } from "@univerjs/core";
 import { describe, expect, it } from "vitest";
 import { WorkbookConflictError, WorkbookNotFoundError } from "../src/apps/sheets/lib/contract";
@@ -108,12 +109,14 @@ describe("Sheets failure and scope handling", () => {
     h.setHook((c) =>
       c.method === "PUT" && c.url === url ? new Response(null, { status: 412 }) : undefined,
     );
-    await expect(h.service.save(book.container, book.snapshot, book.version)).rejects.toThrow(url);
+    await expect(
+      h.service.save(book.container, book.snapshot, book.version),
+    ).rejects.toBeInstanceOf(WorkbookConflictError);
     let opened = await h.service.open(book.container);
     h.calls.length = 0;
-    await expect(h.service.save(book.container, book.snapshot, opened.version)).rejects.toThrow(
-      url,
-    );
+    await expect(
+      h.service.save(book.container, book.snapshot, opened.version),
+    ).rejects.toBeInstanceOf(WorkbookConflictError);
     expect(h.calls.filter((c) => c.url === url && c.method === "PUT")).toHaveLength(2);
     opened = await h.service.open(book.container);
     h.setHook((c) =>
@@ -162,7 +165,7 @@ describe("Sheets failure and scope handling", () => {
     const invalid = { value: Number.NaN };
     h.calls.length = 0;
     await expect(h.service.save(book.container, invalid, book.version)).rejects.toThrow("JSON");
-    expect(h.calls).toHaveLength(0);
+    expect(h.calls.map((call) => call.method)).toEqual(["GET"]);
     const unnamed = snapshot();
     const engine = unnamed as unknown as IWorkbookData;
     Reflect.deleteProperty(engine.sheets.data as object, "name");
@@ -209,15 +212,14 @@ describe("Sheets failure and scope handling", () => {
     await expect(h.service.remove(`${ROOT}failed/`)).rejects.toMatchObject({ status: 503 });
   });
 
-  it("names delete failures, including stale derived files", async () => {
+  it("ignores stale cleanup failures but reports explicit removal failures", async () => {
     const h = await harness();
     const book = await h.service.create({
       title: "Delete errors",
       snapshot: snapshot(undefined, true),
     });
-    const url = workbookLayout(book.container).sheet(2).csv;
     h.setHook((c) => (c.method === "DELETE" ? new Response(null, { status: 403 }) : undefined));
-    await expect(h.service.save(book.container, snapshot(), book.version)).rejects.toThrow(url);
+    await expect(h.service.save(book.container, snapshot(), book.version)).resolves.toBeDefined();
     await expect(h.service.remove(book.container)).rejects.toThrow(
       "Could not delete spreadsheet resource:",
     );

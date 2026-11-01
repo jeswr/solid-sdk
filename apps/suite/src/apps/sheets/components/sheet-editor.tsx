@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   AlertDialog,
@@ -158,6 +159,7 @@ export function SheetEditor({ container }: { container: string }) {
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
   const fileTrigger = useRef<HTMLButtonElement>(null);
+  const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [dialog, setDialog] = useState<"import" | "delete">();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
@@ -385,7 +387,16 @@ export function SheetEditor({ container }: { container: string }) {
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog open={state.status === "conflict"}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            loadTheirVersion.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            fileTrigger.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>This spreadsheet changed somewhere else</AlertDialogTitle>
             <AlertDialogDescription>
@@ -393,18 +404,19 @@ export function SheetEditor({ container }: { container: string }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button
-              variant="outline"
+            <AlertDialogCancel
+              ref={loadTheirVersion}
               disabled={busy}
-              onClick={() =>
+              onClick={(event) => {
+                event.preventDefault();
                 void action(async () => {
                   const snapshot = await state.reload();
                   engine.current?.load(snapshot);
-                })
-              }
+                });
+              }}
             >
               Load their version
-            </Button>
+            </AlertDialogCancel>
             <Button
               variant="outline"
               disabled={busy}
@@ -422,9 +434,10 @@ export function SheetEditor({ container }: { container: string }) {
             >
               Save mine as a copy
             </Button>
-            <Button
+            <AlertDialogAction
               disabled={busy}
-              onClick={() =>
+              onClick={(event) => {
+                event.preventDefault();
                 void action(async () => {
                   if (engine.current)
                     state.scheduleSave(() => {
@@ -432,11 +445,11 @@ export function SheetEditor({ container }: { container: string }) {
                       return engine.current.snapshot();
                     });
                   await state.retry(true);
-                })
-              }
+                });
+              }}
             >
               Keep mine
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

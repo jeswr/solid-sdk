@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import {
@@ -41,7 +42,7 @@ export const mountUniver: MountEngine = async (container, options) => {
   let generation = 0;
   let editedSinceLoad = false;
   const notify = () => {
-    if (disposed || loading || queued) return;
+    if (disposed || queued) return;
     queued = true;
     const current = generation;
     queueMicrotask(() => {
