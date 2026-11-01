@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** One request-wide deadline and limits, including discovery, body reads and RDF parsing. */
 import { DataFactory, Parser, type Quad, Store } from 'n3';
 
@@ -17,6 +18,7 @@ export class ResolutionBudget {
   private documents = 0;
   private limited = false;
   private readonly saiDocuments = new Map<string, Set<string>>();
+  private readonly parsed = new Map<string, { text: string; store: Store }>();
   private readonly cancel = () => this.controller.abort();
 
   constructor(private readonly parent?: AbortSignal) {
@@ -56,6 +58,7 @@ export class ResolutionBudget {
 
   /** SAI keeps its tighter caps; they too span all requested classes. */
   saiDocument(kind: string, url: string, limit: number): boolean {
+    if (!this.active()) return false;
     const documents = this.saiDocuments.get(kind) ?? new Set<string>();
     if (documents.has(url)) return true;
     if (documents.size >= limit) return false;
@@ -66,6 +69,8 @@ export class ResolutionBudget {
 
   /** Race even transports/streams that ignore cancellation; fence their late completions. */
   async run<T>(task: () => Promise<T>, signal = this.signal): Promise<T> {
+    signal = signal === this.signal ? signal : AbortSignal.any([this.signal, signal]);
+    if (!this.active()) this.signal.throwIfAborted();
     signal.throwIfAborted();
     let cancel = () => {};
     const aborted = new Promise<never>((_resolve, reject) => {
@@ -90,26 +95,34 @@ export class ResolutionBudget {
 
   parse(url: string, text: string): Store {
     this.checkText(text);
+    const key = url.split('#')[0];
+    const cached = this.parsed.get(key);
+    if (cached?.text === text) return cached.store;
     let quads = 0;
-    const store = new Store(
-      new Parser({
-        baseIRI: url.split('#')[0],
-        factory: {
-          ...DataFactory,
-          quad: (...args: Parameters<typeof DataFactory.quad>) => {
-            if (++quads > RESOLUTION_LIMITS.quads) this.exhaust();
-            if (!this.active()) this.signal.throwIfAborted();
-            return DataFactory.quad(
-              args[0] as Quad['subject'],
-              args[1] as Quad['predicate'],
-              args[2] as Quad['object'],
-              args[3] as Quad['graph'],
-            );
-          },
+    const store = new Store();
+    const parsed = new Parser({
+      baseIRI: url.split('#')[0],
+      factory: {
+        ...DataFactory,
+        quad: (...args: Parameters<typeof DataFactory.quad>) => {
+          if (++quads > RESOLUTION_LIMITS.quads) this.exhaust();
+          if (!this.active()) this.signal.throwIfAborted();
+          return DataFactory.quad(
+            args[0] as Quad['subject'],
+            args[1] as Quad['predicate'],
+            args[2] as Quad['object'],
+            args[3] as Quad['graph'],
+          );
         },
-      }).parse(text),
-    );
+      },
+    }).parse(text);
+    // Store insertion is synchronous too; the parser's factory checks only cover parsing.
+    for (const quad of parsed) {
+      if (!this.active()) this.signal.throwIfAborted();
+      store.addQuad(quad);
+    }
     if (!this.active()) this.signal.throwIfAborted();
+    this.parsed.set(key, { text, store });
     return store;
   }
 

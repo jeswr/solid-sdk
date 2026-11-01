@@ -1,11 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { Store } from 'n3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RESOLUTION_LIMITS,
   ResolutionBudget,
 } from '../src/background/core/class-resolution-budget';
-import { resolveClassTargets } from '../src/background/core/class-resolve';
+import {
+  parseTargetsForClass,
+  parseTypeIndexRefs,
+  resolveClassTargets,
+} from '../src/background/core/class-resolve';
 import { createInternalRead } from '../src/background/core/class-resolve-read';
 import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
 
@@ -218,6 +223,40 @@ describe('Preferences discovery', () => {
     ]);
   });
 
+  it.each([
+    '"not a pointer"',
+    '_:index',
+    '<urn:private:index>',
+    '<ftp://pod.example/index>',
+  ])('follows preferences when the private-index object is %s', async (object) => {
+    const h = harness({
+      [webId]: `<${webId}> <${solid}privateTypeIndex> ${object}; <${pim}preferencesFile> <${pod}/prefs> .`,
+      [`${pod}/prefs`]: `<${webId}> <${solid}privateTypeIndex> <${pod}/private> .`,
+      [`${pod}/private`]: index(),
+    });
+    expect(await h.resolve()).toMatchObject({
+      truncated: false,
+      targets: [{ url: `${pod}/contacts/` }],
+    });
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([
+      webId,
+      `${pod}/prefs`,
+      `${pod}/private`,
+    ]);
+  });
+
+  it('still suppresses preferences when a usable private pointer also has a public declaration', async () => {
+    const h = harness({
+      [webId]: `<${webId}> <${solid}privateTypeIndex> <${pod}/index>; <${solid}publicTypeIndex> <${pod}/index>; <${pim}preferencesFile> <${pod}/prefs> .`,
+      [`${pod}/index`]: index(),
+    });
+    expect((await h.resolve()).targets).toHaveLength(1);
+    expect(h.send.mock.calls.map(([url, auth]) => [url, auth])).toEqual([
+      [webId, false],
+      [`${pod}/index`, false],
+    ]);
+  });
+
   it('skips preferences entirely when the profile advertises a private index', async () => {
     const h = harness({
       [webId]: `<${webId}> <${solid}privateTypeIndex> <${pod}/private>; <${pim}preferencesFile> <${pod}/prefs> .`,
@@ -419,4 +458,212 @@ it('reuses an already read redirect destination without a second document fetch'
     url: `${pod}/index`,
   });
   expect(h.send).toHaveBeenCalledTimes(2);
+});
+
+// A profile below both per-document caps reproduced a 16.4-second quadratic traversal.
+it('discovers 49,990 index links well within the whole-resolution deadline', async () => {
+  const profile = `@prefix s: <${solid}> . <${webId}> s:publicTypeIndex ${Array.from(
+    { length: 49_990 },
+    (_, i) => `<i${i}>`,
+  ).join(',')} .`;
+  expect(new TextEncoder().encode(profile).length).toBeLessThan(RESOLUTION_LIMITS.bytes);
+  const h = harness({ [webId]: profile });
+  const send = h.send.getMockImplementation()!;
+  h.send.mockImplementation(async (...args) =>
+    args[0] === webId ? send(...args) : new Response(index()),
+  );
+  const started = performance.now();
+  expect(await h.resolve()).toMatchObject({
+    truncated: true,
+    targets: [{ url: `${pod}/contacts/`, check: 'unchecked' }],
+  });
+  // Leave headroom for the concurrent coverage suite while rejecting the original 16.4s case.
+  expect(performance.now() - started).toBeLessThan(RESOLUTION_LIMITS.milliseconds / 2);
+  expect(h.send).toHaveBeenCalledTimes(128);
+});
+
+it.each([
+  'index refs',
+  'registration subjects',
+  'instances',
+  'containers',
+  'storage',
+] as const)('checks the deadline inside the synchronous %s traversal', async (phase) => {
+  const h = harness();
+  const now = Date.now();
+  let clock = now;
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
+  const predicate =
+    phase === 'index refs'
+      ? `${solid}publicTypeIndex`
+      : phase === 'registration subjects'
+        ? `${solid}forClass`
+        : phase === 'instances'
+          ? `${solid}instance`
+          : phase === 'containers'
+            ? `${solid}instanceContainer`
+            : `${pim}storage`;
+  const read = Store.prototype.readQuads;
+  let visited = 0;
+  vi.spyOn(Store.prototype, 'readQuads').mockImplementation(function* (this: Store, ...args) {
+    for (const quad of read.apply(this, args)) {
+      if (quad.predicate.value === predicate && ++visited === 3) clock += 10_000;
+      yield quad;
+    }
+  });
+  const links = Array.from({ length: 100 }, (_, i) => `<${pod}/target${i}/>`).join(',');
+  if (phase === 'index refs') {
+    expect(
+      parseTypeIndexRefs(webId, `<${webId}> <${predicate}> ${links} .`, webId, h.budget),
+    ).toHaveLength(2);
+  } else if (phase === 'storage') {
+    h.send.mockResolvedValue(new Response(`<${webId}> <${predicate}> ${links} .`));
+    expect((await h.resolve(PIM_STORAGE_CLASS)).targets).toHaveLength(2);
+  } else {
+    const text =
+      phase === 'registration subjects'
+        ? Array.from({ length: 100 }, (_, i) => `<#r${i}> <${predicate}> <${dataClass}> .`).join(
+            '\n',
+          )
+        : `<#r> <${solid}forClass> <${dataClass}>; <${predicate}> ${links} .`;
+    expect(
+      parseTargetsForClass(`${pod}/index`, text, dataClass, new Set([pod]), h.budget),
+    ).toHaveLength(phase === 'registration subjects' ? 0 : 2);
+  }
+  expect(visited).toBe(3);
+  expect(h.budget.truncated).toBe(true);
+});
+
+it.each([
+  'hasRegistrySet',
+  'hasDataRegistry',
+  'hasDataRegistration',
+  'registeredShapeTree',
+  'shape',
+])('checks the deadline inside SAI %s traversal', async (predicate) => {
+  const urls = {
+    set: `${pod}/set`,
+    registry: `${pod}/data/`,
+    registration: `${pod}/data/contact/`,
+    tree: `${pod}/tree`,
+  };
+  const st = 'http://www.w3.org/ns/shapetrees#';
+  const path = [
+    [webId, 'hasRegistrySet', urls.set],
+    [urls.set, 'hasDataRegistry', urls.registry],
+    [urls.registry, 'hasDataRegistration', urls.registration],
+    [urls.registration, 'registeredShapeTree', urls.tree],
+    [urls.tree, 'shape', `${pod}/tree#shape`],
+  ];
+  const docs = Object.fromEntries(
+    path.map(([subject, pred, object]) => [
+      subject,
+      `<${subject}> <${pred === 'shape' ? st : interop}${pred}> ${
+        pred === predicate
+          ? Array.from({ length: 100 }, (_, i) => `<${object}${i}>`).join(',')
+          : `<${object}>`
+      } .`,
+    ]),
+  );
+  const h = harness(docs);
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
+  const read = Store.prototype.readQuads;
+  let visited = 0;
+  vi.spyOn(Store.prototype, 'readQuads').mockImplementation(function* (this: Store, ...args) {
+    for (const quad of read.apply(this, args)) {
+      if (
+        quad.predicate.value === `${predicate === 'shape' ? st : interop}${predicate}` &&
+        ++visited === 3
+      )
+        clock += 10_000;
+      yield quad;
+    }
+  });
+  expect(await h.resolve()).toMatchObject({ truncated: true, targets: [] });
+  expect(visited).toBe(3);
+});
+
+it('races the budget deadline even when run receives an independent operation signal', async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const operation = new AbortController();
+  let release!: () => void;
+  const pending = h.budget.run(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    operation.signal,
+  );
+  const rejected = expect(pending).rejects.toThrow();
+  await vi.advanceTimersByTimeAsync(10_000);
+  await rejected;
+  release();
+  expect(operation.signal.aborted).toBe(false);
+  expect(h.budget.truncated).toBe(true);
+});
+
+it('retains targets discovered before a synchronous target traversal hits its deadline', async () => {
+  const h = harness({
+    [webId]: `<${webId}> <${solid}publicTypeIndex> <${pod}/index> .`,
+    [`${pod}/index`]: `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/one/>, <${pod}/two/>, <${pod}/three/> .`,
+  });
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
+  const read = Store.prototype.readQuads;
+  let visited = 0;
+  vi.spyOn(Store.prototype, 'readQuads').mockImplementation(function* (this: Store, ...args) {
+    for (const quad of read.apply(this, args)) {
+      if (quad.predicate.value === `${solid}instanceContainer` && ++visited === 3) clock += 10_000;
+      yield quad;
+    }
+  });
+  expect(await h.resolve()).toMatchObject({
+    truncated: true,
+    targets: [
+      { url: `${pod}/one/`, check: 'unchecked' },
+      { url: `${pod}/two/`, check: 'unchecked' },
+    ],
+  });
+  expect(visited).toBe(3);
+});
+
+it('checks the deadline while inserting parsed quads into the RDF store', () => {
+  const h = harness();
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
+  const add = Store.prototype.addQuad;
+  let inserted = 0;
+  vi.spyOn(Store.prototype, 'addQuad').mockImplementation(function (this: Store, ...args) {
+    if (++inserted === 2) clock += 10_000;
+    return add.apply(this, args);
+  });
+  expect(() => h.budget.parse(webId, '<a> <b> <c>, <d>, <e>, <f>.')).toThrow();
+  expect(inserted).toBe(2);
+  expect(h.budget.truncated).toBe(true);
+});
+
+it('fences a supplied fetch after operation cancellation even with a separate live budget', async () => {
+  const h = harness();
+  const operation = new AbortController();
+  let release!: (body: { ok: boolean; text: string; url: string }) => void;
+  const fetch = vi.fn(
+    () =>
+      new Promise<{ ok: boolean; text: string; url: string }>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const pending = resolveClassTargets(dataClass, {
+    webId,
+    fetch,
+    budget: h.budget,
+    signal: operation.signal,
+  });
+  operation.abort();
+  expect(await pending).toEqual({ targets: [], truncated: false });
+  release({ ok: true, text: `<${webId}> <${solid}publicTypeIndex> <${pod}/index> .`, url: webId });
+  await Promise.resolve();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(h.budget.active()).toBe(true);
 });

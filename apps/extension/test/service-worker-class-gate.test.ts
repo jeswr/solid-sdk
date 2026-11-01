@@ -3703,6 +3703,299 @@ describe('worker-owned class discovery', () => {
     }
   });
 
+  it.each([
+    'close tab',
+    'deadline',
+    'expired handoff',
+  ] as const)('cancels a refresh during persistence on %s and hands the rotated chain to a later request', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const before = structuredClone(profileDb.state);
+    const write = profileDb.write.bind(profileDb);
+    let release!: () => void;
+    let started!: () => void;
+    let writeSignal: AbortSignal | undefined;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state, signal) => {
+      writeSignal = signal;
+      started();
+      await held;
+      return write(state, signal);
+    });
+    fetchImpl = async (url) =>
+      url === 'https://idp.example/token'
+        ? Response.json({
+            access_token: 'rotated-access',
+            refresh_token: 'rotated-refresh',
+            expires_in: 3600,
+          })
+        : new Response('');
+    vi.useFakeTimers();
+    try {
+      const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+      await entered;
+      if (ending !== 'deadline') removedTab(75);
+      else await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(result).toMatchObject({ error: expect.any(String) });
+      expect(JSON.stringify(result)).not.toContain('rotated');
+      expect(writeSignal?.aborted).toBe(true);
+      expect(createdWindows).toHaveLength(0);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(profileDb.state).toEqual(before);
+      if (ending === 'expired handoff') {
+        vi.setSystemTime(Date.now() + 3600_000);
+        fetchImpl = async (url, init) => {
+          if (url !== 'https://idp.example/token') return new Response('');
+          expect(new URLSearchParams(init?.body as URLSearchParams).get('refresh_token')).toBe(
+            'rotated-refresh',
+          );
+          return Response.json({
+            access_token: 'next-access',
+            refresh_token: 'next-refresh',
+            expires_in: 3600,
+          });
+        };
+      }
+      // A completed redemption is retained only inside the worker. The next live request
+      // persists it without trying to redeem the now-spent refresh token again.
+      const other = { origin: 'https://recovery.example', url: 'https://recovery.example/app' };
+      const next = request([dataClass], other);
+      await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+      expect(profileDb.state.records[0].session?.refreshToken).toBe(
+        ending === 'expired handoff' ? 'next-refresh' : 'rotated-refresh',
+      );
+      expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(
+        ending === 'expired handoff' ? 2 : 1,
+      );
+      await deny();
+      expect((await next).ok).toBe(false);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails the cancelled request when a token commit won the abort race and preserves that chain', async () => {
+    await seedSession();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const write = profileDb.write.bind(profileDb);
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(profileDb, 'write').mockImplementationOnce(async (state) => {
+      await write(state);
+      started();
+      await held;
+    });
+    fetchImpl = async (url) =>
+      url === 'https://idp.example/token'
+        ? Response.json({
+            access_token: 'committed-access',
+            refresh_token: 'committed-refresh',
+            expires_in: 3600,
+          })
+        : new Response('');
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    removedTab(75);
+    expect(await pending).toMatchObject({ error: expect.any(String) });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(profileDb.state.records[0].session?.refreshToken).toBe('committed-refresh');
+    const next = request([dataClass], {
+      origin: 'https://recovery.example',
+      url: 'https://recovery.example/app',
+    });
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await deny();
+    expect((await next).ok).toBe(false);
+    expect(fetchCalls.filter((call) => call.url === 'https://idp.example/token')).toHaveLength(1);
+  });
+
+  it.each([
+    'session',
+    'origin grant',
+  ] as const)('bounds the final %s lookup, retains targets with truncation and fences its late continuation', async (lookup) => {
+    await seedSession();
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      if (lookup === 'session') {
+        const session = WorkerStore.prototype.session;
+        vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+          this: ProfileStore,
+          id,
+        ) {
+          started();
+          await held;
+          return session.call(this, id);
+        });
+      } else {
+        const list = OriginGrantStore.prototype.list;
+        vi.spyOn(OriginGrantStore.prototype, 'list').mockImplementationOnce(async function (
+          this: InstanceType<typeof OriginGrantStore>,
+        ) {
+          started();
+          await held;
+          return list.call(this);
+        });
+      }
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    vi.useFakeTimers();
+    try {
+      const pending = request();
+      await entered;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(createdWindows).toHaveLength(1);
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { truncated: true, targets: [{ url: `${pod}/finance/` }] },
+      ]);
+      expect(fetchCalls).toHaveLength(2);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(createdWindows).toHaveLength(1);
+      expect(fetchCalls).toHaveLength(2);
+      await deny();
+      expect((await pending).ok).toBe(false);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    'close tab',
+    'revoke',
+  ] as const)('fences cancellation during final authority lookup on %s', async (ending) => {
+    await seedSession();
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      const session = WorkerStore.prototype.session;
+      vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+        this: ProfileStore,
+        id,
+      ) {
+        started();
+        await held;
+        return session.call(this, id);
+      });
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    await entered;
+    if (ending === 'close tab') removedTab(75);
+    else await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+    expect(await pending).toMatchObject({ error: expect.any(String) });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createdWindows).toHaveLength(0);
+    expect(fetchCalls).toHaveLength(2);
+  });
+
+  it.each([
+    'preflight',
+    'final authority',
+  ] as const)('bounds the page resolveClass %s await and fences its late completion', async (phase) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holdSession = () => {
+      const session = WorkerStore.prototype.session;
+      vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+        this: ProfileStore,
+        id,
+      ) {
+        started();
+        await held;
+        return session.call(this, id);
+      });
+    };
+    if (phase === 'preflight') holdSession();
+    fetchImpl = async (url) => {
+      if (url === WEBID)
+        return new Response(`<${WEBID}> <${solid}publicTypeIndex> <${privateIndex}> .`);
+      holdSession();
+      return new Response(
+        `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    };
+    vi.useFakeTimers();
+    try {
+      const pending = send(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: 'page-resolve',
+          classIRI: dataClass,
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      );
+      await entered;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toMatchObject({ requestId: 'page-resolve', error: expect.any(String) });
+      expect(vi.getTimerCount()).toBe(0);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCalls).toHaveLength(phase === 'preflight' ? 0 : 2);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
   it('charges nonce re-sends against the same 128 network reads and discards the last challenge', async () => {
     await seedSession();
     await loadWorker();

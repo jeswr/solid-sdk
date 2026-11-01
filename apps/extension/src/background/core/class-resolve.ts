@@ -33,8 +33,8 @@ import { ResolutionBudget } from './class-resolution-budget';
 import type { InternalRead } from './class-resolve-read';
 import {
   type ClassResolution,
+  ClassTargetCollector,
   memoiseResolveFetch,
-  mergeClassTargets,
   resolveSaiTargets,
 } from './class-resolve-sai';
 
@@ -100,17 +100,20 @@ export function parseTypeIndexRefs(
 ): Array<{ url: string; authenticated: boolean }> {
   const store = parse(profileUrl, profileTurtle, budget);
   const out: Array<{ url: string; authenticated: boolean }> = [];
+  const seen = new Set<string>();
   for (const pred of [PUBLIC_TYPE_INDEX, PRIVATE_TYPE_INDEX]) {
-    for (const q of store.getQuads(
+    for (const q of store.readQuads(
       DataFactory.namedNode(webId),
       DataFactory.namedNode(pred),
       null,
       null,
     )) {
+      if (budget && !budget.active()) return out;
       if (q.object.termType !== 'NamedNode') continue;
-      const n = normaliseTargetUrl(q.object.value);
-      if (n && !out.some((ref) => ref.url === q.object.value))
+      if (!seen.has(q.object.value) && normaliseTargetUrl(q.object.value)) {
+        seen.add(q.object.value);
         out.push({ url: q.object.value, authenticated: pred === PRIVATE_TYPE_INDEX });
+      }
     }
   }
   return out;
@@ -129,6 +132,7 @@ export function parseTargetsForClass(
   classIRI: string,
   allowedOrigins?: ReadonlySet<string>,
   budget?: ResolutionBudget,
+  onTarget?: (target: PinnedTarget) => void,
 ): PinnedTarget[] {
   const store = parse(typeIndexUrl, typeIndexTurtle, budget);
   const seen = new Set<string>();
@@ -136,23 +140,26 @@ export function parseTargetsForClass(
 
   // Subjects registering this class (match on the NamedNode class object).
   const subjects = new Set<string>();
-  for (const q of store.getQuads(
+  for (const q of store.readQuads(
     null,
     DataFactory.namedNode(FOR_CLASS),
     DataFactory.namedNode(classIRI),
     null,
   )) {
-    subjects.add(q.subject.value);
+    if (budget && !budget.active()) return out;
+    if (q.subject.termType === 'NamedNode') subjects.add(q.subject.value);
   }
 
   const collect = (pred: string, kind: PinnedTarget['kind']): void => {
     for (const subject of subjects) {
-      for (const q of store.getQuads(
+      if (budget && !budget.active()) return;
+      for (const q of store.readQuads(
         DataFactory.namedNode(subject),
         DataFactory.namedNode(pred),
         null,
         null,
       )) {
+        if (budget && !budget.active()) return;
         if (q.object.termType !== 'NamedNode') continue;
         const n = normaliseTargetUrl(q.object.value);
         if (n === null) continue;
@@ -160,7 +167,10 @@ export function parseTargetsForClass(
         const dedupe = `${kind} ${n.url}`;
         if (seen.has(dedupe)) continue;
         seen.add(dedupe);
-        out.push({ url: n.url, kind });
+        if (budget && !budget.active()) return;
+        const target = { url: n.url, kind };
+        out.push(target);
+        onTarget?.(target);
       }
     }
   };
@@ -176,22 +186,29 @@ function parseStorageTargets(
   profileUrl: string,
   allowedOrigins?: ReadonlySet<string>,
   budget?: ResolutionBudget,
+  onTarget?: (target: PinnedTarget) => void,
 ): PinnedTarget[] {
   const store = parse(profileUrl, profileTurtle, budget);
   const roots = new Set<string>();
-  for (const q of store.getQuads(
+  const out: PinnedTarget[] = [];
+  for (const q of store.readQuads(
     DataFactory.namedNode(webId),
     DataFactory.namedNode(PIM_STORAGE),
     null,
     null,
   )) {
+    if (budget && !budget.active()) break;
     if (q.object.termType !== 'NamedNode') continue;
     const n = normaliseTargetUrl(q.object.value);
     if (n === null || !n.url.endsWith('/')) continue;
     if (allowedOrigins && !allowedOrigins.has(n.origin)) continue;
+    if (roots.has(n.url)) continue;
     roots.add(n.url);
+    const target = { url: n.url, kind: 'container' as const };
+    out.push(target);
+    onTarget?.(target);
   }
-  return [...roots].map((url) => ({ url, kind: 'container' }));
+  return out;
 }
 
 /**
@@ -206,26 +223,28 @@ export async function resolveClassTargets(
 ): Promise<ClassResolution> {
   const budget = opts.budget ?? opts.read?.budget ?? new ResolutionBudget(opts.signal);
   const ownsBudget = !opts.budget && !opts.read;
-  const fetch = memoiseResolveFetch(
-    opts.read
-      ? opts.read.fetch
-      : async (url, authenticated) => {
-          if (!budget.document()) return { ok: false, text: '', url };
-          const body = await budget.run(() => opts.fetch(url, authenticated));
-          budget.checkText(body.text);
-          return body;
-        },
-  );
+  const fetch = memoiseResolveFetch(async (url, authenticated) => {
+    if (opts.signal?.aborted || !budget.active() || (!opts.read && !budget.document()))
+      return { ok: false, text: '', url };
+    const body = await budget.run(
+      () => (opts.read?.fetch ?? opts.fetch)(url, authenticated),
+      opts.signal,
+    );
+    budget.checkText(body.text);
+    return body;
+  });
   const options = { ...opts, fetch, budget };
+  // Annotate and deduplicate at discovery time. No potentially huge merge/copy may run
+  // after the deadline: the same array of already discovered targets survives truncation.
+  const found = new ClassTargetCollector();
   try {
-    if (classIRI === PIM_STORAGE_CLASS) {
-      const targets = await resolveTypeIndexTargets(classIRI, options);
-      return mergeClassTargets({ targets: [], truncated: budget.truncated }, targets);
+    let truncated = false;
+    if (classIRI !== PIM_STORAGE_CLASS) {
+      const profile = await fetch(opts.webId, false);
+      ({ truncated } = await resolveSaiTargets(classIRI, options, profile, found));
     }
-    const profile = await fetch(opts.webId, false);
-    const sai = await resolveSaiTargets(classIRI, options, profile);
-    const indexed = await resolveTypeIndexTargets(classIRI, options);
-    return mergeClassTargets({ ...sai, truncated: sai.truncated || budget.truncated }, indexed);
+    await resolveTypeIndexTargets(classIRI, options, (target) => found.add(target, 'type-index'));
+    return { targets: found.targets, truncated: truncated || budget.truncated };
   } finally {
     if (ownsBudget) budget.dispose();
   }
@@ -234,100 +253,99 @@ export async function resolveClassTargets(
 async function resolveTypeIndexTargets(
   classIRI: string,
   opts: ResolveOptions,
-): Promise<PinnedTarget[]> {
+  onTarget: (target: PinnedTarget) => void,
+): Promise<void> {
   const profile = await safeFetch(opts.fetch, opts.webId, false);
-  if (profile === null) return [];
-
-  let refs: ReturnType<typeof parseTypeIndexRefs>;
+  if (profile === null || opts.signal?.aborted) return;
+  const accept = (target: PinnedTarget) => {
+    opts.read?.allowTarget(target);
+    onTarget(target);
+  };
+  const documents = new Map<string, { url: string; authenticated: boolean }>();
+  const discover = (refs: ReturnType<typeof parseTypeIndexRefs>) => {
+    // Public declarations take precedence across profile + preferences, including fragments.
+    for (const ref of refs) {
+      if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
+      const key = new URL(ref.url).href.split('#')[0];
+      if (!documents.has(key) || !ref.authenticated) documents.set(key, ref);
+    }
+  };
   try {
-    if (classIRI === PIM_STORAGE_CLASS)
-      return parseStorageTargets(
+    if (classIRI === PIM_STORAGE_CLASS) {
+      parseStorageTargets(
         opts.webId,
         profile.text,
         profile.url,
         opts.allowedOrigins,
         opts.budget,
+        accept,
       );
-    refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url, opts.budget);
+      return;
+    }
+    discover(parseTypeIndexRefs(opts.webId, profile.text, profile.url, opts.budget));
     const store = parse(profile.url, profile.text, opts.budget);
-    // C1: preferences are a fallback only when the WebID has no private-index pointer.
-    if (
-      !store.countQuads(
-        DataFactory.namedNode(opts.webId),
-        DataFactory.namedNode(PRIVATE_TYPE_INDEX),
-        null,
-        null,
-      )
-    ) {
-      for (const q of store.getQuads(
+    // C1: malformed statements are not private-index pointers. Public precedence in
+    // the deduplicated refs must not hide a usable private declaration on the WebID.
+    let hasPrivateIndex = false;
+    for (const q of store.readQuads(
+      DataFactory.namedNode(opts.webId),
+      DataFactory.namedNode(PRIVATE_TYPE_INDEX),
+      null,
+      null,
+    )) {
+      if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
+      if (q.object.termType === 'NamedNode' && normaliseTargetUrl(q.object.value)) {
+        hasPrivateIndex = true;
+        break;
+      }
+    }
+    if (!hasPrivateIndex) {
+      for (const q of store.readQuads(
         DataFactory.namedNode(opts.webId),
         DataFactory.namedNode(PREFERENCES_FILE),
         null,
         null,
       )) {
-        if (q.object.termType !== 'NamedNode' || !opts.budget?.active()) continue;
+        if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
+        if (q.object.termType !== 'NamedNode' || !normaliseTargetUrl(q.object.value)) continue;
         const url = q.object.value;
         if (!opts.authenticatedOrigins || !isAllowedOrigin(url, opts.authenticatedOrigins))
           continue;
         opts.read?.allowDocument(url, true);
         const preferences = await safeFetch(opts.fetch, url, true);
-        if (!preferences) continue;
+        if (!preferences || opts.signal?.aborted) continue;
         try {
-          refs.push(
-            ...parseTypeIndexRefs(opts.webId, preferences.text, preferences.url, opts.budget),
-          );
+          discover(parseTypeIndexRefs(opts.webId, preferences.text, preferences.url, opts.budget));
         } catch {
           /* An unreadable/malformed preferences document contributes nothing. */
         }
       }
     }
-    // Public declarations take precedence across profile + preferences, including fragments.
-    const documents = new Map<string, { url: string; authenticated: boolean }>();
-    for (const ref of refs) {
-      const key = new URL(ref.url).href.split('#')[0];
-      if (!documents.has(key) || !ref.authenticated) documents.set(key, ref);
-    }
-    refs = [...documents.values()];
   } catch {
-    return [];
+    return;
   }
 
-  const seen = new Set<string>();
-  const out: PinnedTarget[] = [];
-  for (const ref of refs) opts.read?.allowDocument(ref.url, ref.authenticated);
-  for (const ref of refs) {
-    if (!opts.budget?.active()) break;
-    // Public indexes may live beside the WebID or on any other http(s) host. Only
-    // private-index egress is confined to authenticated origins; targets are filtered below.
+  // Allow all separately discovered redirect destinations before reading the first index.
+  for (const ref of documents.values()) {
+    if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
+    opts.read?.allowDocument(ref.url, ref.authenticated);
+  }
+  for (const ref of documents.values()) {
+    if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
+    // Foreign public indexes stay anonymous; only private reads need credential origins.
     if (
       ref.authenticated &&
       (!opts.authenticatedOrigins || !isAllowedOrigin(ref.url, opts.authenticatedOrigins))
     )
       continue;
     const body = await safeFetch(opts.fetch, ref.url, ref.authenticated);
-    if (body === null) continue;
-    let targets: PinnedTarget[];
+    if (!body || opts.signal?.aborted) continue;
     try {
-      targets = parseTargetsForClass(
-        body.url,
-        body.text,
-        classIRI,
-        opts.allowedOrigins,
-        opts.budget,
-      );
+      parseTargetsForClass(body.url, body.text, classIRI, opts.allowedOrigins, opts.budget, accept);
     } catch {
-      continue;
-    }
-    for (const t of targets) {
-      const dedupe = `${t.kind} ${t.url}`;
-      if (seen.has(dedupe)) continue;
-      seen.add(dedupe);
-      if (!opts.budget?.active()) break;
-      opts.read?.allowTarget(t);
-      out.push(t);
+      /* A failed document contributes nothing; earlier targets remain available. */
     }
   }
-  return out;
 }
 
 /** Whether `url`'s origin is in `allowed` (fail-closed on an unparseable URL). */

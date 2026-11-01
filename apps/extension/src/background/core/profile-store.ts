@@ -24,7 +24,7 @@ export interface ProfileSnapshot {
 
 export interface ProfilePersistence {
   read(): Promise<ProfileSnapshot>;
-  write(state: ProfileSnapshot): Promise<void>;
+  write(state: ProfileSnapshot, signal?: AbortSignal): Promise<void>;
 }
 
 export interface LegacyProfile {
@@ -251,7 +251,10 @@ export class ProfileStore {
       signal?.throwIfAborted();
       await op(this.find(state, id));
       signal?.throwIfAborted();
-      await this.persistence.write(state);
+      await this.persistence.write(state, signal);
+      // A transaction may have committed just before abort was delivered. Keep the rotated
+      // chain durably available to later requests, but never report success to this waiter.
+      signal?.throwIfAborted();
     });
   }
 

@@ -279,6 +279,27 @@ describe('ProfileStore lifecycle and adversarial isolation', () => {
     await store.updateSession(a.profile.id, a.session, new AbortController().signal);
   });
 
+  it.each([
+    false,
+    true,
+  ])('rejects cancellation during persistence (commit won=%s)', async (committed) => {
+    const a = await login();
+    const controller = new AbortController();
+    const updated = { ...a.session, accessToken: 'rotated', refreshToken: 'rotated-refresh' };
+    const write = db.write.bind(db);
+    vi.spyOn(db, 'write').mockImplementationOnce(async (state, signal) => {
+      expect(signal).toBe(controller.signal);
+      // Model abort before commit, and commit winning just before abort delivery.
+      if (committed) await write(state);
+      controller.abort();
+      if (!committed) await write(state, signal);
+    });
+    await expect(store.updateSession(a.profile.id, updated, controller.signal)).rejects.toThrow();
+    expect((await store.session(a.profile.id))?.session).toEqual(committed ? updated : a.session);
+    // A cancelled waiter cannot poison the profile writer or roll back a committed chain.
+    await store.rename(a.profile.id, 'Still usable');
+  });
+
   it('enforces eight profiles under concurrent additions and permits re-login at the limit', async () => {
     const credentials = await Promise.all(
       Array.from({ length: 9 }, (_, i) => profileCredentials(String(i))),

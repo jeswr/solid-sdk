@@ -262,7 +262,7 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
 - **`resolveClass`** first walks the WebID's SAI registry set → data registries → data
   registrations, then its public/private Solid Type Indexes for `solid:forClass`. It merges
   index links from the profile, following authenticated `pim:preferencesFile` documents
-  only when the profile lacks `solid:privateTypeIndex`. It
+  only when the profile lacks a usable NamedNode HTTP(S) `solid:privateTypeIndex`. It
   deduplicates container/instance targets by kind and URL on allowed pod origins.
   SAI registrations must be containers strictly inside their registry on the same origin.
   Their shape tree must match the class through the reviewed shipped table (currently
@@ -272,7 +272,15 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   result reports truncation. One request-wide budget covers all requested classes and rungs:
   128 network document reads (including redirect hops and nonce retries), 10 seconds,
   three redirects per document, 1 MiB per streamed body and 50,000 quads per document.
-  The deadline and request cancellation also cover session refresh and profile-queue waits.
+  The deadline and request cancellation also cover session refresh, profile-queue waits and
+  final authority lookups. RDF discovery uses linear deduplication and checks the deadline
+  while traversing links and targets; parsed documents are reused within the request.
+  Cancelled token writes abort their IndexedDB transaction. A completed refresh whose write
+  was aborted is held only in worker memory, bound to its predecessor session, for the next
+  live request to persist without redeeming the spent predecessor again. Losing the worker
+  before that retry may require sign-in. If commit wins the abort race, the durable rotated
+  chain is preserved for later requests; the cancelled request still fails and receives no
+  refreshed session. Cancellation never triggers a rollback to a spent refresh token.
   Exhaustion preserves already discovered targets as unchecked and shows
   “Some data could not be checked” in consent. Documents are memoised within the request.
   The worker supplies a document-confined internal GET/HEAD capability, cancelled on session
