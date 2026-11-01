@@ -1,40 +1,38 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Input } from "@jeswr/suite-ui";
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { ComposeDue } from "../lib/compose/quick-add";
 import type { StoredProject } from "../lib/model/store";
-import { useTasks } from "../state/tasks-context";
-export const TASK_PLACEHOLDER =
-  "Add a task… e.g. Pay rent tomorrow 5pm #Home @bills p2 every month";
-/** Replace the input with Composer in TSK-05; project/section and focus remain here. */
+import { Composer } from "./composer/composer";
+
+export { TASK_PLACEHOLDER } from "./composer/composer";
 export function AddTaskRow({
   project,
   sectionId,
   hideTrigger = false,
+  due,
 }: {
   project: StoredProject;
   sectionId?: string | undefined;
   hideTrigger?: boolean;
+  due?: ComposeDue | undefined;
 }) {
-  const { createTask } = useTasks();
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
   const container = useRef<HTMLDivElement>(null);
-  const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const target = container.current;
     const focus = () => {
       setOpen(true);
-      input.current?.focus();
+      requestAnimationFrame(() =>
+        container.current?.querySelector<HTMLInputElement>("input")?.focus(),
+      );
     };
     target?.addEventListener("tasks:add", focus);
     return () => target?.removeEventListener("tasks:add", focus);
   }, []);
-  useEffect(() => {
-    if (open) input.current?.focus();
-  }, [open]);
   return (
     <div
       ref={container}
@@ -43,38 +41,22 @@ export function AddTaskRow({
       hidden={hideTrigger && !open}
     >
       {open ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!title.trim()) return;
-            void createTask(project, { title, sectionId });
-            setTitle("");
-            input.current?.focus();
+        <Composer
+          project={project}
+          sectionId={sectionId}
+          due={due}
+          onClose={() => {
+            setOpen(false);
+            requestAnimationFrame(() => {
+              if (hideTrigger)
+                container.current
+                  ?.closest(".tsk-content")
+                  ?.querySelector<HTMLButtonElement>(".tsk-empty-add")
+                  ?.focus();
+              else trigger.current?.focus();
+            });
           }}
-        >
-          <Input
-            ref={input}
-            aria-label={sectionId ? "Task title in section" : "Task title"}
-            placeholder={TASK_PLACEHOLDER}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setOpen(false);
-                setTitle("");
-                requestAnimationFrame(() => {
-                  if (hideTrigger) {
-                    container.current
-                      ?.closest(".tsk-content")
-                      ?.querySelector<HTMLButtonElement>(".tsk-empty-add")
-                      ?.focus();
-                  } else trigger.current?.focus();
-                });
-              }
-            }}
-          />
-        </form>
+        />
       ) : (
         <button ref={trigger} type="button" className="tsk-ghost" onClick={() => setOpen(true)}>
           <Plus size={16} aria-hidden="true" />

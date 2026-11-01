@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError } from "../lib/model/errors";
 import { DataFactory } from "../lib/model/rdf";
@@ -6,6 +8,8 @@ import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { type CompletionPlan, planComplete } from "../lib/views/completion";
+import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -32,6 +36,10 @@ export interface NewTask extends Omit<TaskDetails, "state"> {
   due?: Date | undefined;
   allDay?: string | undefined;
   position?: number | undefined;
+  priority?: TaskDetails["priority"];
+  recurrence?: TaskDetails["recurrence"];
+  reminders?: TaskDetails["reminders"];
+  labelIds?: string[] | undefined;
 }
 type Patch = (state: TasksSnapshot) => TasksSnapshot;
 function projectTasks(project: StoredProject, items: StoredTask[]) {
@@ -390,8 +398,14 @@ export class TasksCache {
           ? { dueDate: data.due }
           : {}),
       allDay: data.allDay,
-      rank: data.position ?? data.rank,
-      categoryTypes: data.categoryTypes ?? (data.sectionId ? [data.sectionId] : []),
+      rank: this.appendPosition(project, data).position,
+      categoryTypes: [
+        ...new Set([
+          ...(data.categoryTypes ?? []),
+          ...(data.sectionId ? [data.sectionId] : []),
+          ...(data.labelIds ?? []),
+        ]),
+      ],
     };
     const dataset = createTask(url, details);
     const optimistic = {
@@ -402,16 +416,59 @@ export class TasksCache {
     };
     const attempt = (reconcile = false): Promise<StoredTask | undefined> =>
       this.mutate(
-        (state) => replaceTask(state, project.url, url, optimistic),
+        (state) => {
+          // Reconciliation may already have loaded a create whose response was lost.
+          if (state.tasks[project.url]?.items.some((item) => item.url === url)) return state;
+          const placement = this.appendPosition(project, data, state);
+          let next = state;
+          for (const patch of placement.renumber ?? []) {
+            const sibling = next.tasks[project.url]?.items.find((item) => item.url === patch.url);
+            if (sibling)
+              next = replaceTask(
+                next,
+                project.url,
+                sibling.url,
+                changeTask(sibling, (task) => {
+                  task.rank = patch.position;
+                }),
+              );
+          }
+          return replaceTask(
+            next,
+            project.url,
+            url,
+            changeTask(optimistic, (task) => {
+              task.rank = placement.position;
+            }),
+          );
+        },
         async () => {
           const current = this.project(project.url);
           if (`${current.tracker.stateStore}${id}.ttl` !== url) throw new ModelError(409, url);
-          const task =
-            (reconcile ? await this.optionalTask(url) : undefined) ??
-            (await this.store.createTask(current, details, id));
+          const existing = reconcile ? await this.optionalTask(url) : undefined;
+          if (existing)
+            return {
+              result: existing,
+              commit: (state) => replaceTask(state, project.url, url, existing),
+            };
+          const placement = this.appendPosition(current, data, this.baseline);
+          details.rank = placement.position;
+          const updated: StoredTask[] = [];
+          for (const patch of placement.renumber ?? [])
+            updated.push(
+              await this.store.updateTask(this.task(project.url, patch.url), (task) => {
+                task.rank = patch.position;
+              }),
+            );
+          const task = await this.store.createTask(current, details, id);
           return {
             result: task,
-            commit: (state) => replaceTask(state, project.url, task.url, task),
+            commit: (state) => {
+              let next = state;
+              for (const sibling of updated)
+                next = replaceTask(next, project.url, sibling.url, sibling);
+              return replaceTask(next, project.url, task.url, task);
+            },
           };
         },
         () => {
@@ -428,6 +485,40 @@ export class TasksCache {
       if (error instanceof ModelError && [404, 410].includes(error.status)) return undefined;
       throw error;
     }
+  }
+  private appendPosition(
+    project: StoredProject,
+    data: NewTask,
+    snapshot = this.snapshot,
+  ): DropPosition {
+    const position = data.position ?? data.rank;
+    if (position !== undefined) return { position };
+    const sectionId =
+      data.sectionId ??
+      project.tracker.sections.find((section) => data.categoryTypes?.includes(section.id))?.id;
+    const siblings = (snapshot.tasks[project.url]?.items ?? [])
+      .map((item) => toTaskView(item, project))
+      .filter((task) => task.sectionId === sectionId && task.parentId === data.parent)
+      .sort(compareTasks("manual"));
+    return siblings.length ? positionForDrop(siblings, siblings.length) : { position: 1 };
+  }
+  /** Serialize tracker writes with other mutations, rechecking names against the latest baseline. */
+  ensureLabels(
+    project: StoredProject,
+    names: readonly string[],
+  ): Promise<StoredProject | undefined> {
+    const current = this.baseline.projects.find((item) => item.url === project.url);
+    if (!this.pending.length && current && !missingLabels(current, names).length)
+      return Promise.resolve(current);
+    const define = (tracker: TaskTracker) => {
+      for (const name of missingLabels({ ...project, tracker }, names)) {
+        const source = this.snapshot.projects
+          .flatMap((item) => item.tracker.labels)
+          .find((label) => label.name.toLowerCase() === name.toLowerCase());
+        tracker.defineCategory("Label", name, undefined, source?.color);
+      }
+    };
+    return this.updateProject(project, define);
   }
   updateTask(item: StoredTask, change: (task: TaskItem) => void): Promise<StoredTask | undefined> {
     const project = this.snapshot.projects.find((project) =>

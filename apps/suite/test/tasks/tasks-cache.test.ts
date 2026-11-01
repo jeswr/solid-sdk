@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
+import { duplicateTaskData } from "../../src/apps/tasks/lib/detail/task-data";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { TaskStore } from "../../src/apps/tasks/lib/model/store";
 import {
@@ -229,6 +231,119 @@ describe("Tasks cache and pure optimistic helpers", () => {
       }),
     ).toBeUndefined();
     expect(await cache.deleteTask(task)).toBeUndefined();
+  });
+
+  it("ensures labels before task creation and persists every composer property", async () => {
+    const { cache, store, inbox, pod } = await setup();
+    const home = await cache.createProject("Home");
+    if (!home) throw new Error("Expected Home");
+    await cache.updateProject(home, (tracker) => {
+      tracker.defineCategory("Label", "Bills", undefined, "var(--warning)");
+    });
+    const labelled = await cache.ensureLabels(inbox, ["Bills", "BILLS", "shopping"]);
+    if (!labelled) throw new Error("Expected labels");
+    expect(labelled.tracker.labels).toHaveLength(2);
+    expect(labelled.tracker.labels.find((label) => label.name === "Bills")?.color).toBe(
+      "var(--warning)",
+    );
+    const writeCount = pod.mutations().length;
+    await cache.ensureLabels(inbox, ["bills"]);
+    expect(pod.mutations()).toHaveLength(writeCount);
+    const labelId = labelled.tracker.labels[0]?.id;
+    if (!labelId) throw new Error("Expected label id");
+    const parent = await cache.createTask(labelled, {
+      title: "Parent",
+      due: now,
+      labelIds: [labelId],
+      priority: "medium",
+      recurrence: { frequency: "DAILY", interval: 2 },
+      reminders: [{ offset: "-PT1H" }],
+    });
+    if (!parent) throw new Error("Expected parent");
+    const [child, sibling] = await Promise.all([
+      cache.createTask(labelled, { title: "Child", parent: parent.task.id }),
+      cache.createTask(labelled, { title: "Sibling" }),
+    ]);
+    const stored = (await store.readTask(parent.url)).task;
+    expect(stored.priority).toBe("medium");
+    expect(stored.recurrence?.interval).toBe(2);
+    expect(stored.reminders).toMatchObject([{ offset: "-PT1H" }]);
+    expect(stored.types.has(labelId)).toBe(true);
+    expect(child?.task.parent).toBe(parent.task.id);
+    expect(parent.task.rank).toBe(1);
+    expect(child?.task.rank).toBe(1);
+    expect(sibling?.task.rank).toBe(2);
+    const persisted = await store.readProject(inbox.url);
+    expect(persisted.tracker.labels).toHaveLength(2);
+  });
+  it("keeps detail duplication fields alongside composer categories and explicit positions", async () => {
+    const { cache, store, inbox } = await setup();
+    await cache.addSection(inbox, "Doing");
+    const project = await cache.ensureLabels(inbox, ["bills", "shopping"]);
+    const sectionId = project?.tracker.sections[0]?.id;
+    const labelIds = project?.tracker.labels.map((label) => label.id);
+    if (!project || !sectionId || !labelIds) throw new Error("Missing categories");
+    const original = await cache.createTask(project, {
+      title: "Original",
+      state: "closed",
+      endedAt: now,
+      dueDate: now,
+      rank: 8,
+      categoryTypes: [sectionId, labelIds[0] as string, "https://pod.test/custom"],
+      reminders: [{ offset: "PT0S" }],
+    });
+    if (!original) throw new Error("Missing original");
+    const duplicate = await cache.createTask(project, duplicateTaskData(original, webId));
+    expect(duplicate?.task.state).toBe("open");
+    expect(duplicate?.task.endedAt).toBeUndefined();
+    expect(duplicate?.task.dueDate).toEqual(now);
+    expect(duplicate?.task.rank).toBe(8);
+    expect(duplicate?.task.types.has(sectionId)).toBe(true);
+    expect(duplicate?.task.types.has(labelIds[0] as string)).toBe(true);
+    expect(duplicate?.task.types.has("https://pod.test/custom")).toBe(true);
+    expect(duplicate?.task.reminders).toMatchObject([{ offset: "PT0S" }]);
+    const combined = await cache.createTask(project, {
+      ...duplicateTaskData(original, webId),
+      position: 9,
+      sectionId,
+      labelIds,
+    });
+    if (!combined) throw new Error("Missing combined task");
+    const persisted = await store.readTask(combined.url);
+    expect(persisted.task.rank).toBe(9);
+    expect([...persisted.task.types]).toEqual(
+      expect.arrayContaining([sectionId, ...labelIds, "https://pod.test/custom"]),
+    );
+  });
+  it("appends after cross-app tasks with no position by persisting the shared renumber plan", async () => {
+    const { cache, store, inbox } = await setup();
+    const first = await cache.createTask(inbox, { title: "Ranked", position: 8 });
+    if (!first) throw new Error("Expected ranked task");
+    const foreign = await store.createTask(inbox, { title: "From another app", state: "open" });
+    await cache.invalidate(foreign.url);
+    const added = await cache.createTask(inbox, { title: "Last" });
+    expect((await store.readTask(first.url)).task.rank).toBe(1);
+    expect((await store.readTask(foreign.url)).task.rank).toBe(2);
+    expect(added?.task.rank).toBe(3);
+  });
+  it("serializes simultaneous label ensures and rolls failed definitions back", async () => {
+    const { cache, store, inbox, failures } = await setup();
+    await Promise.all([
+      cache.ensureLabels(inbox, ["new"]),
+      cache.ensureLabels(inbox, ["NEW", "other"]),
+    ]);
+    expect(
+      cache
+        .getSnapshot()
+        .projects[0]?.tracker.labels.map((label) => label.name)
+        .sort(),
+    ).toEqual(["new", "other"]);
+    vi.spyOn(store, "updateProject").mockRejectedValueOnce(new Error("No write"));
+    expect(await cache.ensureLabels(inbox, ["failed"])).toBeUndefined();
+    expect(
+      cache.getSnapshot().projects[0]?.tracker.labels.some((label) => label.name === "failed"),
+    ).toBe(false);
+    expect(failures).toHaveBeenCalledOnce();
   });
 
   it("moves only within bounds and recomputes overlays from the confirmed baseline", () => {
