@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 /** Drive sidebar (04-drive §2.1): New menu, navigation, usage and demo reset. */
 
@@ -27,6 +29,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { ExtensionSessionError } from "../../../lib/session/extension-pod-session";
+import { usePodSessionState } from "../../../lib/session/pod-session";
 import { formatFileSize } from "../lib/files";
 import { useDrive } from "../state/drive-context";
 import { useDriveUi } from "../state/ui";
@@ -107,6 +112,29 @@ export function DriveSidebar({
 }) {
   const pathname = usePathname();
   const { session } = useDrive();
+  const { extension, connectExtension, extensionError } = usePodSessionState();
+  const [connecting, setConnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState(false);
+  const connect = async () => {
+    setConnecting(true);
+    try {
+      await connectExtension();
+    } finally {
+      setConnecting(false);
+    }
+  };
+  const disconnect = async () => {
+    if (session.mode !== "extension") return;
+    setDisconnectError(false);
+    setConnecting(true);
+    try {
+      await session.disconnect();
+    } catch {
+      setDisconnectError(true);
+    } finally {
+      setConnecting(false);
+    }
+  };
   return (
     <div className="drv-sidebar">
       <NewMenu
@@ -155,8 +183,44 @@ export function DriveSidebar({
             <Button variant="ghost" size="sm" onClick={() => void session.reset()}>
               <RotateCcw aria-hidden="true" size={14} /> Reset demo
             </Button>
+            {extension?.present ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={connecting}
+                onClick={() => void connect()}
+              >
+                Use your pod through the Solid extension
+              </Button>
+            ) : null}
+            {extensionError ? (
+              <p role="status">
+                {extensionError instanceof ExtensionSessionError &&
+                extensionError.code === "no-storage"
+                  ? "Your storage grant has no usable root. Connect again to choose your pod."
+                  : extensionError instanceof ExtensionSessionError &&
+                      extensionError.code === "not-granted"
+                    ? "No storage grant yet. Connect to use your pod."
+                    : "Couldn't reach the extension. Please try again."}
+              </p>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <div className="drv-demo">
+            <p>
+              Using your pod through the Solid extension as <strong>{session.displayName}</strong>
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={connecting}
+              onClick={() => void disconnect()}
+            >
+              Disconnect
+            </Button>
+            {disconnectError ? <p role="status">Couldn't disconnect. Please try again.</p> : null}
+          </div>
+        )}
       </div>
     </div>
   );

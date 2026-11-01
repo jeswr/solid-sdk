@@ -92,6 +92,97 @@ describe("CSS client credentials", () => {
     await createCliFetch({ ...rest, tokenUrl: TOKEN }, css.fetch);
     expect(css.stats).toMatchObject({ tokens: 1, discoveries: 0 });
   });
+  it.each([
+    "http://127.0.0.1:9090/internal",
+    "http://localhost:9090/internal",
+    "http://[::1]:9090/internal",
+  ])("refuses a public issuer advertising loopback token endpoint %s before POST", async (endpoint) => {
+    const raw = vi.fn(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === "POST")
+        return Response.json({ access_token: "fixture", token_type: "DPoP" });
+      return Response.json({ issuer: ISSUER, token_endpoint: endpoint });
+    });
+    await expect(createCliFetch(config, raw)).rejects.toThrow(/login failed/);
+    expect(raw).toHaveBeenCalledTimes(1);
+    expect(raw.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
+  });
+  it.each([
+    "issuer",
+    "tokenUrl",
+  ])("supports explicitly configured HTTP loopback %s", async (kind) => {
+    const issuer = "http://127.0.0.1:3000/";
+    const endpoint = `${issuer}token`;
+    const raw = vi.fn(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === "POST") {
+        expect(request.url).toBe(endpoint);
+        expect(request.headers.get("authorization")).toMatch(/^Basic /);
+        proofOf(request);
+        return Response.json({ access_token: "fixture", token_type: "DPoP" });
+      }
+      return Response.json({ issuer, token_endpoint: endpoint });
+    });
+    await createCliFetch(
+      {
+        ...config,
+        ...(kind === "tokenUrl" ? { tokenUrl: endpoint } : { oidcIssuer: issuer }),
+      },
+      raw,
+    );
+    expect(raw).toHaveBeenCalledTimes(kind === "issuer" ? 2 : 1);
+  });
+  it.each(["discovery", "token"])("caps streamed %s JSON at 1 MiB before parsing", async (kind) => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const json =
+      kind === "discovery"
+        ? { issuer: ISSUER, token_endpoint: TOKEN }
+        : { access_token: "fixture", token_type: "DPoP" };
+    const response = new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (pulls === 0) controller.enqueue(new TextEncoder().encode(JSON.stringify(json)));
+            else if (pulls <= 32) controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+            else controller.close();
+            pulls++;
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      // A dishonest length must not bypass the streamed limit.
+      { headers: { "content-length": "1" } },
+    );
+    const raw = vi.fn(async (_input, init) =>
+      kind === "discovery" && init?.method === "POST"
+        ? Response.json({ access_token: "fixture", token_type: "DPoP" })
+        : response,
+    );
+    await expect(
+      createCliFetch({ ...config, ...(kind === "token" ? { tokenUrl: TOKEN } : {}) }, raw),
+    ).rejects.toThrow(/login failed/);
+    expect(raw).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pulls).toBeLessThan(33);
+  });
+  it("propagates the discovery deadline signal and cancels an unfinished JSON body", async () => {
+    vi.useFakeTimers();
+    const started = Promise.withResolvers<void>();
+    const cancel = vi.fn();
+    let signal: AbortSignal | null | undefined;
+    const raw: typeof fetch = async (_input, init) => {
+      signal = init?.signal;
+      return new Response(new ReadableStream({ start: () => started.resolve(), cancel }));
+    };
+    const rejected = expect(createCliFetch(config, raw)).rejects.toThrow(/login failed/);
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+    expect(signal?.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
   it("retries AS and resource nonce challenges with newly signed proofs", async () => {
     const css = mockCss();
     let tokenAttempts = 0;
@@ -166,6 +257,9 @@ describe("CSS client credentials", () => {
   it.each([
     { issuer: "https://wrong.example/", token_endpoint: TOKEN },
     { issuer: ISSUER, token_endpoint: "http://insecure.example/token" },
+    { issuer: ISSUER, token_endpoint: TOKEN, authorization_endpoint: "http://127.0.0.1/auth" },
+    { issuer: ISSUER, token_endpoint: TOKEN, registration_endpoint: "http://127.0.0.1/register" },
+    { issuer: ISSUER, token_endpoint: TOKEN, jwks_uri: "http://127.0.0.1/jwks" },
     { issuer: ISSUER, token_endpoint: "https://user:fixture@issuer.example/token" },
     { issuer: ISSUER },
   ])("refuses invalid discovery metadata %j", async (metadata) => {
