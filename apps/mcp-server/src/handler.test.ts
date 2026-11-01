@@ -6,6 +6,15 @@ import { navigation } from "../test/navigation.js";
 import { createApp } from "./handler.js";
 
 const ORIGIN = "https://mcp.example";
+const CLIENT_ORIGIN = "https://client.example";
+const publicOAuthRoutes = [
+  ["/.well-known/oauth-authorization-server/auth", "GET"],
+  ["/.well-known/oauth-protected-resource/mcp", "GET"],
+  ["/auth/jwks", "GET"],
+  ["/auth/register", "POST"],
+  ["/auth/token", "POST"],
+  ["/auth/revoke", "POST"],
+] as const;
 const verifier = "v".repeat(43);
 const csrf = (html: string) => {
   const value = html.match(/name="csrf" value="([^"]+)"/)?.[1];
@@ -20,7 +29,7 @@ const post = (path: string, cookie: string, fields: Record<string, string>, orig
     body: new URLSearchParams(fields),
   });
 
-async function fixture(upstreamFetch?: typeof fetch) {
+async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly string[] = []) {
   let now = Math.floor(Date.now() / 1000);
   const vault = createSessionVault({
     key: Buffer.alloc(32, 8).toString("base64"),
@@ -50,6 +59,7 @@ async function fixture(upstreamFetch?: typeof fetch) {
     podSessions: sessions,
     now: () => now,
     upstreamFetch,
+    allowedOrigins,
   };
   const app = await createApp(options);
   const registration = await app(
@@ -130,6 +140,152 @@ async function fixture(upstreamFetch?: typeof fetch) {
 }
 
 describe("OAuth composition", () => {
+  it.each(
+    publicOAuthRoutes,
+  )("allows browser preflight and responses on %s", async (path, method) => {
+    const { app } = await fixture(undefined, [CLIENT_ORIGIN]);
+    const preflight = await app(
+      request(path, {
+        method: "OPTIONS",
+        headers: {
+          origin: CLIENT_ORIGIN,
+          "access-control-request-method": method,
+          "access-control-request-headers": "content-type, mcp-protocol-version",
+        },
+      }),
+    );
+    expect(preflight.status).toBe(204);
+    expect(await preflight.text()).toBe("");
+    expect(preflight.headers.get("access-control-allow-methods")).toBe(`${method}, OPTIONS`);
+    expect(preflight.headers.get("access-control-allow-headers")?.toLowerCase()).toBe(
+      "content-type, mcp-protocol-version",
+    );
+    const response = await app(request(path, { method, headers: { origin: CLIENT_ORIGIN } }));
+    // Invalid POST bodies still return readable OAuth errors to the allowed browser.
+    expect(response.status).toBe(method === "GET" ? 200 : 415);
+    for (const result of [preflight, response]) {
+      expect(result.headers.get("access-control-allow-origin")).toBe(CLIENT_ORIGIN);
+      expect(result.headers.get("vary")).toBe("Origin");
+      expect(result.headers.get("access-control-allow-credentials")).toBeNull();
+      expect(result.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it("completes registration, PKCE token exchange and revocation for an allowed browser", async () => {
+    const f = await fixture(undefined, [CLIENT_ORIGIN]);
+    const registration = await f.app(
+      request("/auth/register", {
+        method: "POST",
+        headers: { origin: CLIENT_ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({
+          redirect_uris: ["http://127.0.0.1:4321/callback"],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(registration.status).toBe(201);
+    expect(registration.headers.get("access-control-allow-origin")).toBe(CLIENT_ORIGIN);
+    const { client_id: clientId } = await registration.json();
+    const login = await f.start({ client_id: clientId });
+    await f.app(
+      post("/auth/login", login.cookie, { csrf: login.csrf, webid: "https://pod.example/" }),
+    );
+    const consent = await f.app(
+      request("/auth/callback?code=pod-code&state=upstream-state", {
+        headers: { cookie: login.cookie },
+      }),
+    );
+    const approved = await f.app(
+      post("/auth/consent", login.cookie, { csrf: csrf(await consent.text()), decision: "allow" }),
+    );
+    const token = await f.app(
+      post(
+        "/auth/token",
+        "",
+        {
+          grant_type: "authorization_code",
+          client_id: clientId,
+          redirect_uri: "http://127.0.0.1:4321/callback",
+          resource: `${ORIGIN}/mcp`,
+          code_verifier: verifier,
+          code: (await navigation(approved)).searchParams.get("code") as string,
+        },
+        CLIENT_ORIGIN,
+      ),
+    );
+    expect(token.status).toBe(200);
+    expect(token.headers.get("access-control-allow-origin")).toBe(CLIENT_ORIGIN);
+    const tokens = await token.json();
+    const revoked = await f.app(
+      post("/auth/revoke", "", { token: tokens.refresh_token, client_id: clientId }, CLIENT_ORIGIN),
+    );
+    expect(revoked.status).toBe(200);
+    expect(revoked.headers.get("access-control-allow-origin")).toBe(CLIENT_ORIGIN);
+    expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+  });
+
+  it("rejects unlisted origins and invalid preflight methods without widening browser form access", async () => {
+    const f = await fixture(undefined, [CLIENT_ORIGIN]);
+    for (const [path, method] of publicOAuthRoutes) {
+      for (const origin of ["https://evil.example", `${CLIENT_ORIGIN}.evil.example`, "null"]) {
+        for (const init of [
+          { method, headers: { origin } },
+          { method: "OPTIONS", headers: { origin, "access-control-request-method": method } },
+        ]) {
+          const response = await f.app(request(path, init));
+          expect(response.status).toBe(403);
+          expect(response.headers.get("access-control-allow-origin")).toBeNull();
+        }
+      }
+      const preflight = await f.app(
+        request(path, {
+          method: "OPTIONS",
+          headers: { origin: CLIENT_ORIGIN, "access-control-request-method": "DELETE" },
+        }),
+      );
+      expect(preflight.status).toBe(405);
+      expect(preflight.headers.get("access-control-allow-methods")).toBeNull();
+      for (const headers of [{}, { origin: ORIGIN }]) {
+        const response = await f.app(request(path, { method, headers }));
+        expect(response.status).toBe(method === "GET" ? 200 : 415);
+        expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      }
+      const noOrigin = await f.app(
+        request(path, { method: "OPTIONS", headers: { "access-control-request-method": method } }),
+      );
+      expect(noOrigin.status).toBe(405);
+      expect(noOrigin.headers.get("access-control-allow-origin")).toBeNull();
+    }
+    const login = await f.start();
+    const consent = await f.consent();
+    for (const [path, cookie, fields] of [
+      ["/auth/login", login.cookie, { csrf: login.csrf, webid: "https://pod.example/" }],
+      ["/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" }],
+    ] as const) {
+      const response = await f.app(post(path, cookie, fields, CLIENT_ORIGIN));
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      const preflight = await f.app(
+        request(path, {
+          method: "OPTIONS",
+          headers: { origin: CLIENT_ORIGIN, "access-control-request-method": "POST" },
+        }),
+      );
+      expect(preflight.status).toBe(405);
+      expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+    }
+    expect(f.sessions.begin).toHaveBeenCalledOnce();
+  });
+
+  it("keeps public OAuth browser access disabled without an allowlist", async () => {
+    const { app } = await fixture();
+    for (const [path, method] of publicOAuthRoutes) {
+      const response = await app(request(path, { method, headers: { origin: CLIENT_ORIGIN } }));
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    }
+  });
+
   it("serves health, exact Client ID Document, metadata and security headers", async () => {
     const { app } = await fixture();
     for (const path of [

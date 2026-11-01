@@ -85,6 +85,15 @@ export async function createApp(
       now,
     });
   const oauth = as(async () => false);
+  const allowedOrigins = new Set(options.allowedOrigins ?? []);
+  const publicOAuthMethods = new Map([
+    ["/.well-known/oauth-authorization-server/auth", "GET"],
+    ["/.well-known/oauth-protected-resource/mcp", "GET"],
+    ["/auth/jwks", "GET"],
+    ["/auth/register", "POST"],
+    ["/auth/token", "POST"],
+    ["/auth/revoke", "POST"],
+  ]);
   const http = createMcpHttpHandler({
     resourceUrl: resource,
     resourceMetadataUrl: oauth.protectedResourceMetadataUrl(),
@@ -164,6 +173,39 @@ export async function createApp(
           )
         : failure(405);
     if (url.pathname === "/mcp") return http(request);
+    const oauthMethod = publicOAuthMethods.get(url.pathname);
+    if (oauthMethod) {
+      const requestOrigin = request.headers.get("origin");
+      if (
+        requestOrigin !== null &&
+        requestOrigin !== origin.origin &&
+        !allowedOrigins.has(requestOrigin)
+      )
+        return failure(403);
+      let response: Response;
+      if (request.method === "OPTIONS") {
+        if (
+          requestOrigin === null ||
+          request.headers.get("access-control-request-method") !== oauthMethod
+        )
+          return failure(405);
+        response = new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Methods": `${oauthMethod}, OPTIONS`,
+            "Access-Control-Allow-Headers": "Content-Type, MCP-Protocol-Version",
+          },
+        });
+      } else {
+        response = await oauth.handle(
+          new Request(`${origin.origin}${url.pathname}${url.search}`, request),
+        );
+      }
+      response.headers.set("Vary", "Origin");
+      if (requestOrigin !== null && allowedOrigins.has(requestOrigin))
+        response.headers.set("Access-Control-Allow-Origin", requestOrigin);
+      return response;
+    }
     if (url.pathname === "/auth/authorize" && request.method === "GET") {
       if (url.search.length > 16_384) return failure(414);
       const authorizationUrl = new URL(`${issuer}/authorize`);
