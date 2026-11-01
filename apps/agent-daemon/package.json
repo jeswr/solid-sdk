@@ -31,7 +31,8 @@
     "build": "pnpm -w exec tsc -p apps/agent-daemon/tsconfig.json",
     "typecheck": "pnpm -w exec tsc -p apps/agent-daemon/tsconfig.json --noEmit && pnpm -w exec tsc -p apps/agent-daemon/tsconfig.test.json",
     "lint": "pnpm -w exec biome check apps/agent-daemon",
-    "test": "pnpm -w exec vitest run --root apps/agent-daemon"
+    "test": "pnpm -w exec vitest run --root apps/agent-daemon",
+    "demo:d2": "pnpm -w exec vitest run --root apps/agent-daemon demos/d2-spending-limits.test.ts --disableConsoleIntercept"
   },
   "dependencies": {
     "@jeswr/agent-audit": "workspace:*",

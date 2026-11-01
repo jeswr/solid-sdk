@@ -197,3 +197,6 @@ disabled. Locally:
 docker build -f apps/agent-daemon/Containerfile --target css-test -t agent-daemon:css .
 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:css
 ```
+The [D-2 spending-limit demo](demos/README.md) exercises hostile email and A2A
+fixtures, Transfer prohibition, cumulative GBP 30/day soft caps and printed audit
+evidence against local CSS. Run it with `pnpm --filter @jeswr/app-agent-daemon run demo:d2`.
