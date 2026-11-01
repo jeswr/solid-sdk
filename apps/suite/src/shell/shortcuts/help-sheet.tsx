@@ -77,9 +77,15 @@ export function CharacterKeysToggle() {
 export function ShortcutHelpSheet({
   open,
   onOpenChange,
+  returnFocusTo,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Where focus goes on close when the sheet was opened from a surface that is itself
+   * closing (the command palette): its input is gone by then, so it can't be the target.
+   */
+  returnFocusTo?: HTMLElement | null;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
@@ -87,11 +93,12 @@ export function ShortcutHelpSheet({
       <DialogContent
         className="max-h-[85dvh] overflow-auto"
         onOpenAutoFocus={() => {
-          returnFocus.current = document.activeElement as HTMLElement;
+          returnFocus.current = returnFocusTo ?? (document.activeElement as HTMLElement);
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          returnFocus.current?.focus();
+          const target = returnFocus.current;
+          (target?.isConnected ? target : document.getElementById("main-content"))?.focus();
         }}
       >
         <DialogTitle>Keyboard shortcuts</DialogTitle>

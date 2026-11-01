@@ -37,18 +37,22 @@ test("single-key shortcuts can be turned off, and the switch stays reachable", a
   await expect(sidebar).not.toHaveAttribute("aria-keyshortcuts", /./);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The palette (a modifier shortcut) still reaches the help sheet and its switch.
+  // The palette (a modifier shortcut) still reaches the help sheet and its switch,
+  // and closing help returns focus to where the person was before the palette.
+  await sidebar.focus();
   await page.keyboard.press("ControlOrMeta+k");
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect(palette).toBeVisible();
   await expect(palette.getByText("g d", { exact: true })).toHaveCount(0);
-  await page.getByRole("option", { name: "Keyboard shortcuts" }).click();
+  await page.keyboard.type("Keyboard shortcuts");
+  await page.keyboard.press("Enter");
   await expect(help).toBeVisible();
   await expect(toggle).not.toBeChecked();
   await toggle.check();
   await page.keyboard.press("Escape");
   if (await help.isVisible()) await page.keyboard.press("Escape");
   await expect(help).toBeHidden();
+  await expect(sidebar).toBeFocused();
   await page.getByRole("heading", { level: 1 }).click();
   await page.keyboard.press("?");
   await expect(help).toBeVisible();
