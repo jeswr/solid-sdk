@@ -175,8 +175,35 @@ test("preferences stay scoped to their account", async ({ page }) => {
   const dialog = await menu(page);
   await dialog.getByRole("button", { name: /Rowan Vale/ }).click();
   await expect(page).toHaveURL(/\/settings\/appearance$/);
-  await expect(page.getByRole("combobox", { name: "Density", exact: true })).toHaveValue("comfortable");
+  await expect(page.getByRole("combobox", { name: "Density", exact: true })).toHaveValue(
+    "comfortable",
+  );
   await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
+});
+
+test("desktop notifications need the account's own opt-in, saved per account", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["notifications"]);
+  await page.goto("/settings/notifications");
+  const optIn = page.getByRole("checkbox", { name: "Show desktop notifications for this account" });
+  await expect(optIn).toBeEnabled();
+  await expect(optIn).not.toBeChecked();
+  await optIn.check();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (id) => JSON.parse(localStorage.getItem(`suite.prefs.v1.${id}`) ?? "{}").desktop,
+        demoAccount.id,
+      ),
+    )
+    .toBe(true);
+  await page.getByRole("checkbox", { name: "Access requests" }).uncheck();
+  await page.reload();
+  await expect(optIn).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Access requests" })).not.toBeChecked();
+  await accessible(page);
 });
 
 for (const [section, title] of [

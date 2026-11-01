@@ -10,12 +10,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { shouldNotifyDesktop } from "../lib/notifications-delivery";
 import type { AccessDecider, NotificationSource } from "../lib/notifications-model";
 import { startNotificationUpdates } from "../lib/notifications-scheduler";
 import { useAccounts } from "../session/accounts-provider";
 import { createNotificationsController, type NotificationsController } from "./controller";
 import { createDemoNotificationSource } from "./demo-source";
-import { desktopEnabled, showDesktopNotification } from "./desktop";
+import { accountPreferences, showDesktopNotification } from "./desktop";
 import { localNotificationSource } from "./local-store";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
@@ -38,7 +39,7 @@ export function NotificationSessionProvider({
   const controller = useMemo(
     () =>
       createNotificationsController(sources, decider, (item) => {
-        if (["shared", "access-request", "task"].includes(item.kind) && desktopEnabled(accountId))
+        if (shouldNotifyDesktop(item.kind, accountPreferences(accountId), new Date()))
           void showDesktopNotification(item).catch(() => {
             /* Delivery failure never interrupts the tray. */
           });

@@ -19,6 +19,7 @@ export function NotificationSettings() {
   const untilId = useId();
   const notifications = usePreferences("notifications");
   const quiet = usePreferences("quietHours");
+  const desktop = usePreferences("desktop");
   const [permission, setPermission] = useState("Checking…");
   const [error, setError] = useState("");
   useEffect(() => {
@@ -30,8 +31,12 @@ export function NotificationSettings() {
   }, []);
   return (
     <>
+      <p>
+        Every notification appears in the tray. These settings choose which ones also pop up on your
+        desktop.
+      </p>
       <fieldset>
-        <legend>Notify me about</legend>
+        <legend>Pop up on the desktop for</legend>
         {kinds.map(([key, label]) => (
           <label key={key} className="settings-toggle">
             <input
@@ -55,7 +60,9 @@ export function NotificationSettings() {
           onClick={async () => {
             setError("");
             try {
-              setPermission(await Notification.requestPermission());
+              const granted = await Notification.requestPermission();
+              setPermission(granted);
+              if (granted === "granted") desktop.update(true);
             } catch {
               setError("Couldn't ask for notification permission. Check your browser settings.");
             }
@@ -63,6 +70,15 @@ export function NotificationSettings() {
         >
           Enable desktop notifications
         </Button>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={desktop.value && permission === "granted"}
+            disabled={permission !== "granted"}
+            onChange={(event) => desktop.update(event.target.checked)}
+          />
+          Show desktop notifications for this account
+        </label>
         {permission === "denied" && (
           <p>Allow notifications in your browser settings to enable them here.</p>
         )}
@@ -70,7 +86,7 @@ export function NotificationSettings() {
         {error && <p role="alert">{error}</p>}
       </section>
       <fieldset>
-        <legend>Quiet hours</legend>
+        <legend>Quiet hours (no desktop pop-ups)</legend>
         <label className="settings-toggle">
           <input
             type="checkbox"

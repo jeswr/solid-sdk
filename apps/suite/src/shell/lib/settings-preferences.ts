@@ -27,6 +27,8 @@ export const preferencesSchema = z.object({
       storage: true,
       system: true,
     }),
+  /** Per-account opt-in to desktop pop-ups; browser permission alone never turns them on. */
+  desktop: z.boolean().catch(false),
   quietHours: z
     .object({
       enabled: z.boolean().catch(false),

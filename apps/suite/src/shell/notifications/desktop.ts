@@ -1,5 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { SuiteNotification } from "../lib/notifications-model";
+import {
+  defaultPreferences,
+  type Preferences,
+  parsePreferences,
+  preferencesKey,
+} from "../lib/settings-preferences";
 
 export function desktopPermission(): NotificationPermission | "unsupported" {
   return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
@@ -9,15 +15,12 @@ export async function requestDesktopPermission(): Promise<NotificationPermission
   if (typeof Notification === "undefined") return "unsupported";
   return Notification.requestPermission();
 }
-export function desktopEnabled(accountId: string): boolean {
+/** The account's saved preferences, read fresh so a Settings change applies at once. */
+export function accountPreferences(accountId: string): Preferences {
   try {
-    const preferences = JSON.parse(localStorage.getItem(`suite.prefs.v1.${accountId}`) ?? "null");
-    return (
-      preferences?.["notifications.desktop"] === true ||
-      preferences?.notifications?.desktop === true
-    );
+    return parsePreferences(localStorage.getItem(preferencesKey(accountId)));
   } catch {
-    return false;
+    return defaultPreferences;
   }
 }
 /** Permission is never requested here. The provider separately checks the account's opt-in. */

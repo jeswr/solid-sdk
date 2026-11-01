@@ -2,32 +2,28 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { demoNotifications } from "../src/shell/notifications/demo-source";
 import {
-  desktopEnabled,
+  accountPreferences,
   desktopPermission,
   requestDesktopPermission,
   showDesktopNotification,
 } from "../src/shell/notifications/desktop";
 
 afterEach(() => vi.unstubAllGlobals());
-it("defaults off, tolerates storage restrictions and reads either preference key form per account", () => {
+it("reads the account's saved opt-in from Settings, defaulting off and tolerating blocked storage", () => {
   vi.stubGlobal("localStorage", { getItem: () => null });
-  expect(desktopEnabled("one")).toBe(false);
+  expect(accountPreferences("one").desktop).toBe(false);
   vi.stubGlobal("localStorage", {
     getItem: (key: string) =>
-      key.endsWith("one")
-        ? '{"notifications.desktop":true}'
-        : '{"notifications":{"desktop":false}}',
+      key === "suite.prefs.v1.one" ? '{"desktop":true}' : '{"desktop":"yes"}',
   });
-  expect(desktopEnabled("one")).toBe(true);
-  expect(desktopEnabled("two")).toBe(false);
-  vi.stubGlobal("localStorage", { getItem: () => '{"notifications":{"desktop":true}}' });
-  expect(desktopEnabled("nested")).toBe(true);
+  expect(accountPreferences("one").desktop).toBe(true);
+  expect(accountPreferences("two").desktop).toBe(false);
   vi.stubGlobal("localStorage", {
     getItem: () => {
       throw new Error("Blocked");
     },
   });
-  expect(desktopEnabled("one")).toBe(false);
+  expect(accountPreferences("one").desktop).toBe(false);
 });
 it("unsupported and denied environments never prompt or display implicitly", async () => {
   vi.stubGlobal("Notification", undefined);
