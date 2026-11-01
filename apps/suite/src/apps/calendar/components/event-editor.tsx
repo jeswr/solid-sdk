@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { podScopedUrl } from "@jeswr/guarded-fetch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,15 +45,21 @@ import {
 } from "../lib/model";
 import { useCalendarState, useEventMutations } from "../state/calendar-context";
 import {
+  applySeriesPlan,
   decodeEventRef,
   editorRecurrence,
+  localEventItem,
   planSeriesEdit,
   quickDraft,
+  removeReplacement,
   type SeriesMode,
+  type SeriesReplacement,
+  withSourceCalendar,
 } from "../state/editing";
 import { type CalendarInfo, calendarHref, dateKey, eventDateRange, localDate } from "../state/view";
 import { useCalendarNavigation } from "./calendar-app";
 import { CalendarScreen } from "./calendar-views";
+import { SeriesScopeDialog } from "./series-scope-dialog";
 
 interface Quick {
   data: CalendarEvent;
@@ -366,27 +371,10 @@ export function CalendarEditorRoute({ eventRef }: { eventRef: string }) {
         editing?.consumeDraft();
       } else {
         const url = decodeEventRef(eventRef, session.storageUrl, calendars.calendars);
-        const prepare = (item: StoredItem<CalendarEvent>) => {
-          const source = calendars.calendars.find((c) =>
-            podScopedUrl(c.container, item.url, { allowRoot: false }),
-          );
-          return {
-            ...item,
-            data: {
-              ...item.data,
-              inCalendar: item.data.inCalendar ?? (source ? `${source.url}#it` : undefined),
-            },
-          };
-        };
-        const local = [...writes].reverse().find((w) => w.url === url);
-        if (local && local.kind !== "delete")
-          setLoaded(
-            prepare({
-              url,
-              etag: local.confirmation?.etag ?? (local.kind === "update" ? local.etag : null),
-              data: local.data,
-            }),
-          );
+        const prepare = (item: StoredItem<CalendarEvent>) =>
+          withSourceCalendar(item, calendars.calendars);
+        const local = localEventItem(url, writes);
+        if (local) setLoaded(prepare(local));
         else
           void calendarIO(session.fetch, session.storageUrl)
             .loadEvent(url)
@@ -430,7 +418,7 @@ function EventEditor({
 }) {
   const { calendars, closeEvent, session } = useCalendarState();
   const confirmed = useRef(item);
-  const replacement = useRef<{ url: string; etag: string | null } | undefined>(undefined);
+  const replacement = useRef<SeriesReplacement["current"]>(undefined);
   const editing = useCalendarEditing();
   const router = useRouter();
   const params = useSearchParams();
@@ -511,12 +499,6 @@ function EventEditor({
     if (!calendar) throw new Error("Choose a calendar.");
     return result;
   }
-  async function removeReplacement() {
-    const pending = replacement.current;
-    if (!pending) return;
-    await mutations.delete(pending.url, pending.etag ?? "", true);
-    replacement.current = undefined;
-  }
   async function persist(action: "save" | "delete", mode: SeriesMode) {
     if (busy) return;
     try {
@@ -526,40 +508,15 @@ function EventEditor({
       setBusy(true);
       setScope(undefined);
       setError("");
-      // Finish a failed compensation before retrying, so a retry cannot duplicate replacements.
-      await removeReplacement();
       const target = calendar as CalendarInfo;
-      const create = async (event: CalendarEvent, compound: boolean) => {
-        const url = new URL(`${crypto.randomUUID()}.ttl`, target.container).href;
-        await mutations.create(url, { ...event, uid: crypto.randomUUID() }, compound);
-        if (compound) {
-          replacement.current = { url, etag: null };
-          replacement.current.etag = await mutations.resolve(url, null);
-        }
-      };
-      const moving =
-        source.url &&
-        plan.original &&
-        plan.original.inCalendar !== source.data.inCalendar &&
-        mode === "all";
-      const compound = Boolean(plan.created || moving);
-      // Compound operations require confirmed prerequisites; ordinary edits can stay queued offline.
-      const etag = source.url ? await mutations.resolve(source.url, source.etag, compound) : "";
-      if (moving && plan.original) await create(plan.original, true);
-      else if (plan.created) await create(plan.created, true);
-      if (source.url) {
-        if (plan.original && !moving)
-          await mutations.update(source.url, plan.original, etag, compound);
-        else await mutations.delete(source.url, etag, compound);
-      } else if (plan.original) await create(plan.original, false);
-      replacement.current = undefined;
+      await applySeriesPlan({ plan, source, mode, target, mutations, replacement });
       if (target) editing?.remember(target.url);
       close();
     } catch (failure) {
       let message =
         failure instanceof Error ? failure.message : "Couldn't save this event. Please retry.";
       try {
-        await removeReplacement();
+        await removeReplacement(mutations, replacement);
       } catch {
         message = "Couldn't finish saving. Save again to retry cleanup; your draft is still here.";
       }
@@ -812,36 +769,13 @@ function EventEditor({
           <AlertDialogAction onClick={close}>Discard</AlertDialogAction>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog
-        open={Boolean(scope)}
-        onOpenChange={(open) => {
-          if (!open) setScope(undefined);
+      <SeriesScopeDialog
+        action={scope}
+        onChoose={(mode) => {
+          if (scope) void persist(scope, mode);
         }}
-      >
-        <AlertDialogContent className="cal-series-dialog">
-          <AlertDialogTitle>
-            {scope === "delete" ? "Delete recurring event" : "Edit recurring event"}
-          </AlertDialogTitle>
-          <AlertDialogDescription>Which events should change?</AlertDialogDescription>
-          {(
-            [
-              ["this", "This event"],
-              ["following", "This and following events"],
-              ["all", "All events"],
-            ] as const
-          ).map(([mode, label]) => (
-            <Button
-              key={mode}
-              onClick={() => {
-                if (scope) void persist(scope, mode);
-              }}
-            >
-              {label}
-            </Button>
-          ))}
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-        </AlertDialogContent>
-      </AlertDialog>
+        onCancel={() => setScope(undefined)}
+      />
     </>
   );
 }
