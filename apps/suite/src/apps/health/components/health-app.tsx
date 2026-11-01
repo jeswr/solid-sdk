@@ -5,6 +5,7 @@ import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import {
   Activity,
   ArrowDownToLine,
+  ArrowUpFromLine,
   Footprints,
   HeartPulse,
   LayoutDashboard,
@@ -17,9 +18,9 @@ import {
   Syringe,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { CATALOGUE, type MetricId } from "../lib/data/metrics";
 import { HealthProvider, useHealth } from "../state/health-context";
@@ -31,7 +32,7 @@ export function useMeasurement() {
 }
 const icons = [Footprints, HeartPulse, Moon, Scale, Activity];
 function Sidebar() {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const { session } = useHealth();
   const links = [
     { href: "/health", label: "Summary", icon: LayoutDashboard },
@@ -45,6 +46,7 @@ function Sidebar() {
     { href: "/health/immunisations", label: "Immunisations", icon: Syringe },
     { href: "/health/workouts", label: "Workouts", icon: Footprints },
     { href: "/health/import", label: "Import", icon: ArrowDownToLine },
+    { href: "/health/export", label: "Export", icon: ArrowUpFromLine },
   ];
   return (
     <div className="hlt-sidebar">

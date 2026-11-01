@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { CapabilityProvider } from "@jeswr/suite-ui/sync";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { useSuiteEnvironment } from "../environment";
 import { demoCapabilitiesWith } from "../lib/settings-capabilities";
 import { useAccounts } from "../session/accounts-provider";
@@ -20,7 +21,7 @@ const sections = [
 ] as const;
 
 export function SettingsLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const { active } = useAccounts();
   const env = useSuiteEnvironment();
   const page = sections.find(([slug]) => pathname === `/settings/${slug}`)?.[1] ?? "Account";

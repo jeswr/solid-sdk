@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { useParams, usePathname } from "next/navigation";
+import { notFound, useParams, usePathname } from "next/navigation";
+import { useMemo } from "react";
 
 type Params = Record<string, string | string[]>;
 
@@ -9,8 +10,39 @@ type Params = Record<string, string | string[]>;
 export const useRouteParams: <T extends Params = Params>(pattern: string) => T | undefined =
   process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? useNativeRouteParams : useWebRouteParams;
 
+/**
+ * Params for a page that renders only on its own route. Undefined only while the native export
+ * shows its placeholder page (prerendering `/x/__/`, or before the pathname is known); a real
+ * path that does not match, such as a bad percent-encoding, is a 404 rather than a skeleton.
+ */
+export function usePageRouteParams<T extends Params = Params>(pattern: string): T | undefined {
+  const params = useRouteParams<T>(pattern);
+  const pathname = usePathname();
+  if (params) return params;
+  if (!pathname || pathname.split("/").includes("__")) return undefined;
+  notFound();
+}
+
+/** Next's client `useParams()` keeps values percent-encoded; decode each one exactly once. */
 function useWebRouteParams<T extends Params>(): T {
-  return useParams<T>();
+  const params = useParams<T>();
+  return useMemo(() => decodeParams(params) as T, [params]);
+}
+
+/** Decode route values, keeping any value that is not valid percent-encoding as it arrived. */
+export function decodeParams(params: Params): Params {
+  const result: Params = {};
+  for (const [key, value] of Object.entries(params))
+    result[key] = Array.isArray(value) ? value.map(safeDecode) : safeDecode(value);
+  return result;
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 /**

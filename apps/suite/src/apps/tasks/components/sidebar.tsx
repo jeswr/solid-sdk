@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AlertDialog,
@@ -31,9 +32,10 @@ import {
   Tag,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
@@ -52,7 +54,7 @@ function ProjectRow({
   last: boolean;
 }) {
   const tasks = useTasks();
-  const path = usePathname();
+  const path = useRoutePathname();
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -170,7 +172,7 @@ export function TasksSidebar() {
   const router = useRouter();
   const tasks = useTasks();
   const { preferences, dispatch } = useTasksPreferences();
-  const path = usePathname();
+  const path = useRoutePathname();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);

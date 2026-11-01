@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
@@ -108,9 +107,10 @@ export class RdfIO {
     if (!types.has(`${NS.LDP}BasicContainer`) && !types.has(`${NS.LDP}Container`))
       throw new TypeError("Expected an LDP container.");
   }
-  async list(url: string): Promise<string[]> {
-    const resource = await this.optional(url);
+  async list(url: string, { strict = false } = {}): Promise<string[]> {
+    const resource = strict ? await this.read(url) : await this.optional(url);
     if (!resource) return [];
+    if (strict) this.requireContainer(resource);
     return [...node(resource.url, resource.dataset).iris(`${NS.LDP}contains`)];
   }
 }

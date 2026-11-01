@@ -2,14 +2,14 @@
 "use client";
 import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { decodeRef } from "@/lib/refs";
-import { useRouteParams } from "@/lib/route-params";
+import { usePageRouteParams } from "@/lib/route-params";
 import { LabelView } from "./views/label-view";
 import { ProjectView } from "./views/project-view";
 
 /** Reads the project ref on the client, so the native export's placeholder page works too. */
 export function ProjectRoute() {
-  const params = useRouteParams<{ ref: string }>("/tasks/p/[ref]");
-  // Only the literal placeholder path (`/tasks/p/__/`) has no params.
+  const params = usePageRouteParams<{ ref: string }>("/tasks/p/[ref]");
+  // Only the native placeholder page has no params; any other miss is a 404.
   if (!params) return <LoadingSkeleton preset="list" />;
   let url: string;
   try {
@@ -27,7 +27,7 @@ export function ProjectRoute() {
 
 /** Reads the label on the client, so the native export's placeholder page works too. */
 export function LabelRoute() {
-  const params = useRouteParams<{ label: string }>("/tasks/l/[label]");
+  const params = usePageRouteParams<{ label: string }>("/tasks/l/[label]");
   if (!params) return <LoadingSkeleton preset="list" />;
   return <LabelView label={params.label} />;
 }

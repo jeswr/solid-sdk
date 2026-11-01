@@ -83,7 +83,9 @@ export function viewItems<T extends DriveItem>(
   items: readonly T[],
   options: ViewOptions = {},
 ): T[] {
-  const visible = items.filter((item) => !item.name.startsWith("."));
+  const visible = items.filter(
+    (item) => !item.name.startsWith(".") && !/\.(acl|acr)$/i.test(item.name),
+  );
   const byUrl = new Map(visible.map((item) => [item.url, item]));
   let entries = visible.map(toListEntry);
   if (options.types && options.types.length > 0) entries = filterEntries(entries, options.types);
