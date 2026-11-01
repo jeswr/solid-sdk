@@ -6,7 +6,6 @@
  * demo pod until sign-in lands) inside the interim suite frame.
  */
 
-import { Toaster } from "@jeswr/suite-ui";
 import { createContext, type ReactNode, useContext } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
@@ -50,8 +49,8 @@ function SessionGate({ children }: { children: ReactNode }) {
 export function HomeApp({ children }: { children: ReactNode }) {
   return (
     <PodSessionProvider>
+      {/* Toasts go to the shell's toast region, which every page outside Drive mounts. */}
       <SessionGate>{children}</SessionGate>
-      <Toaster position="bottom-center" />
     </PodSessionProvider>
   );
 }
