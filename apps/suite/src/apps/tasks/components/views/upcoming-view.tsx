@@ -2,7 +2,7 @@
 "use client";
 import { Button, IconButton } from "@jeswr/suite-ui";
 import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dateFromDayKey, localDayKey, shortDayLabel, startOfWeek } from "../../lib/views/days";
 import { agenda, shiftWeek, weekStrip } from "../../lib/views/upcoming";
 import { useNow } from "../../state/clock";
@@ -29,9 +29,22 @@ export function UpcomingView() {
     ...groups.later,
   ];
   const root = useRef<HTMLDivElement>(null);
+  const stripRoot = useRef<HTMLDivElement>(null);
   const project =
     tasks.projects.find((project) => project.url === tasks.inboxUrl) ?? tasks.projects[0];
   const [selected, setSelected] = useState<string>();
+  const visibleDayKey = (
+    strip.find((day) => day.dayKey === selected) ??
+    strip.find((day) => day.isToday) ??
+    strip[0]
+  )?.dayKey;
+  // Narrower viewports can still scroll: reveal the selection, Today, or the week's first day.
+  useEffect(() => {
+    const active = stripRoot.current?.querySelector<HTMLElement>(
+      `[data-day-key="${visibleDayKey}"]`,
+    );
+    active?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "instant" });
+  }, [visibleDayKey]);
   return (
     <CrossProjectView
       title="Upcoming"
@@ -70,7 +83,7 @@ export function UpcomingView() {
               <ChevronRight size={18} aria-hidden="true" />
             </IconButton>
           </div>
-          <div className="tsk-week-strip">
+          <div className="tsk-week-strip" ref={stripRoot}>
             {strip.map((day) => (
               <button
                 key={day.dayKey}

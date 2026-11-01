@@ -7,6 +7,7 @@ import { TaskItem } from "../../src/apps/tasks/lib/model/task";
 import { TaskTracker } from "../../src/apps/tasks/lib/model/tracker";
 import { createDemoPod, type DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../../src/lib/demo-pod/seed";
+import { encodeRef } from "../../src/lib/refs";
 
 const now = new Date("2026-11-02T10:00:00Z");
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
@@ -142,8 +143,50 @@ async function accessible(page: Page) {
     ),
   ).toEqual([]);
   expect(await page.locator("body").evaluate((body) => body.scrollWidth <= innerWidth)).toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight <= innerHeight))
+    .toBe(true);
   await expect(page.locator("h1")).toHaveCount(1);
 }
+
+test("long Upcoming, Inbox and project lists scroll within the viewport frame", async ({
+  page,
+}) => {
+  let homeUrl = "";
+  await seed(page, async (store, inbox) => {
+    const home = await store.createProject("Home");
+    homeUrl = home.url;
+    for (const project of [inbox, home]) {
+      for (let index = 0; index < 40; index++) {
+        await store.createTask(project, {
+          title: `${project.tracker.title} task ${index}`,
+          state: "open",
+          allDay: "2026-11-02",
+          rank: index,
+        });
+      }
+    }
+  });
+  for (const path of ["/tasks/upcoming", "/tasks/inbox", `/tasks/p/${encodeRef(homeUrl)}`]) {
+    await page.goto(path);
+    const main = page.getByRole("main");
+    const rows = main.locator("[data-tsk-row]");
+    await expect(rows).toHaveCount(path === "/tasks/upcoming" ? 80 : 40);
+    await expect
+      .poll(() => main.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
+    await rows.last().scrollIntoViewIfNeeded();
+    await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(rows.last()).toBeInViewport();
+    expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0);
+    expect(
+      await page.locator(".ish-frame").evaluate((frame) => frame.getBoundingClientRect().bottom),
+    ).toBe(page.viewportSize()?.height);
+    const capture = await page.screenshot({ fullPage: true });
+    expect(capture.readUInt32BE(20)).toBe(page.viewportSize()?.height);
+    await accessible(page);
+  }
+});
 
 test("scenario 2: overdue count, Reschedule all, and all-day-first Today ordering", async ({
   page,
@@ -209,6 +252,26 @@ test("scenario 8 keyboard: seven counted days and reschedule to Wednesday retain
   await page.goto("/tasks/upcoming");
   await expect(page).toHaveTitle("Upcoming · Tasks · Solid Suite");
   await expect(page.locator(".tsk-day-cell")).toHaveCount(7);
+  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(0);
+  expect(
+    await page.locator(".tsk-week-strip").evaluate((strip) => {
+      const bounds = strip.getBoundingClientRect();
+      return [...strip.querySelectorAll("button")].every((button) => {
+        const cell = button.getBoundingClientRect();
+        return (
+          cell.width >= 44 &&
+          cell.height >= 44 &&
+          cell.left >= bounds.left &&
+          cell.right <= bounds.right
+        );
+      });
+    }),
+  ).toBe(true);
+  for (const button of await page.locator(".tsk-week-controls button").all()) {
+    const bounds = await button.boundingBox();
+    expect(bounds?.width).toBeGreaterThanOrEqual(44);
+    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+  }
   await expect(page.locator('.tsk-day-cell[data-day-key="2026-11-03"]')).toHaveAccessibleName(
     "Tue 3 Nov, 1 task",
   );
@@ -247,6 +310,7 @@ test("scenario 3 Completed: completion-day group and reopen persist without ende
   });
   await page.goto("/tasks/completed");
   await expect(page).toHaveTitle("Completed · Tasks · Solid Suite");
+  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(0);
   const group = page.getByRole("region", { name: "Today", exact: true });
   await expect(
     group.getByRole("checkbox", { name: "Reopen 'Finished bill'", exact: true }),

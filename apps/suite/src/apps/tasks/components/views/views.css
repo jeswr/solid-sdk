@@ -67,9 +67,13 @@
   color: var(--foreground-muted);
   font-size: var(--text-xs);
 }
+.tsk-week-controls > button {
+  min-width: 44px;
+  min-height: 44px;
+}
 .tsk-week-strip {
   display: grid;
-  grid-template-columns: repeat(7, minmax(52px, 1fr));
+  grid-template-columns: repeat(7, minmax(44px, 1fr));
   gap: 4px;
   overflow-x: auto;
   padding: 4px;
@@ -79,8 +83,9 @@
   display: grid;
   justify-items: center;
   gap: 4px;
+  min-width: 44px;
   min-height: 84px;
-  padding: 8px;
+  padding: 8px 4px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -95,7 +100,7 @@
 }
 .tsk-day-cell[data-today] {
   background: var(--primary-soft);
-  color: var(--primary);
+  color: var(--primary-soft-foreground);
 }
 .tsk-day-cell[aria-pressed="true"] {
   border-color: var(--primary);

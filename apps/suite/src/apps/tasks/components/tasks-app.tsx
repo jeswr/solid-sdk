@@ -35,6 +35,8 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
 function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
   const pathname = usePathname();
+  // Smart views have fixed grouping/order; only project lists consume the sort preference.
+  const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
   const params = useSearchParams();
   const route = useParams();
   const router = useRouter();
@@ -180,14 +182,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
       app="tasks"
       sidebar={<TasksSidebar />}
       context={<span className="tsk-context-title">{title}</span>}
-      actions={
-        <SortMenu
-          viewId={pathname}
-          defaultSort={
-            pathname === "/tasks/today" || pathname === "/tasks/upcoming" ? "due" : "manual"
-          }
-        />
-      }
+      actions={supportsSort ? <SortMenu viewId={pathname} /> : undefined}
       details={details}
       onDetailsClose={closeDetails}
     >

@@ -224,7 +224,14 @@ describe("Upcoming", () => {
     await click(button("Today", host));
     expect(titles(region(host, "Overdue"))).toEqual(["Late"]);
     const cell = host.querySelector('.tsk-day-cell[data-day-key="2026-11-04"]') as HTMLElement;
+    cell.scrollIntoView = vi.fn();
     await click(cell);
+    expect(cell.getAttribute("aria-pressed")).toBe("true");
+    expect(cell.scrollIntoView).toHaveBeenCalledWith({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "instant",
+    });
     expect(document.activeElement?.getAttribute("data-day-key")).toBe("2026-11-04");
     await click(button("Add task", region(host, "Wed 4 Nov")));
     expect(host.querySelector(".tsk-composer-chips")?.textContent).toContain("Due Wed");
