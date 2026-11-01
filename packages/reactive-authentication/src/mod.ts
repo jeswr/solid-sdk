@@ -36,6 +36,7 @@ export * from "./DynamicRegistrationClientProvider.js";
 export * from "./FencedCache.js";
 export * from "./Identity.js";
 export * from "./IssuerHint.js";
+export * from "./IssuerNotAuthorizedError.js";
 export * from "./IssuerProvider.js";
 export * from "./IssuerRequestCancelledError.js";
 export { contextKey, withLock } from "./locks.js";

@@ -14,6 +14,7 @@ import type {
   PodAuthOptions,
 } from "./types.js";
 
+export { IssuerNotAuthorizedError } from "@jeswr/reactive-authentication";
 export type {
   AuthEvent,
   AuthEventType,

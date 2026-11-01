@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { AmbiguousIssuerError, createPodAuth, type PodAuthOptions } from "./index.js";
+import {
+  AmbiguousIssuerError,
+  createPodAuth,
+  IssuerNotAuthorizedError,
+  type PodAuthOptions,
+} from "./index.js";
 import * as node from "./node.js";
 import { createMemoryStore, createMockOp } from "./testing.js";
 
@@ -293,7 +298,9 @@ test("selected account must match authenticated claims and issuer profile trust"
   );
   expect(await f.auth.identity()).toBeNull();
   const untrusted = fixture({ issuers: ["https://evil.example/"] });
-  await expect(untrusted.auth.login({ issuer: untrusted.op.issuer })).rejects.toThrow("issuer");
+  await expect(untrusted.auth.login({ issuer: untrusted.op.issuer })).rejects.toBeInstanceOf(
+    IssuerNotAuthorizedError,
+  );
   expect(await untrusted.auth.identity()).toBeNull();
 });
 

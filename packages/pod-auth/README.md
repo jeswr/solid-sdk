@@ -36,6 +36,12 @@ Explicit WebID and issuer hints must agree with the profile and the authenticate
 Concurrent logins with the same hint share one promise; different hints reject while login is pending.
 Call `logout()` before switching accounts on the same instance.
 
+For an issuer-only Solid login, the returned WebID must list that issuer as `solid:oidcIssuer`.
+The protocol engine enforces this binding with `verifyWebId: true` before storing a session or reporting
+an identity. An unlisted issuer rejects `login()` with `IssuerNotAuthorizedError`, re-exported from
+pod-auth with `webId` and `issuer` fields. Profile fetch and parse failures keep their existing errors.
+Issuer-only login reads the profile once; WebID hints retain profile discovery and claim-equality checks.
+
 `auth.fetch` is the manager's unbound fetch function. Global fetch is preserved and captured for all
 protocol requests. Providers are ordered Solid-OIDC, UMA, then LWS; UMA and the default LWS ID-token
 source share the Solid session and its fence. LWS-specific Bearer challenges bypass the broad Solid
@@ -47,6 +53,32 @@ Client Identifier Documents require HTTPS. `{ dynamicRegistration: true }` is pe
 loopback callback outside production. Plain HTTP additionally requires `allowInsecureLoopback: true`;
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
 must match the current application origin. Loopback includes localhost, 127.0.0.0/8 and ::1.
+
+## Provider directory and sign-in addresses
+
+`@jeswr/pod-auth/directory` exports the deeply frozen `KNOWN_PROVIDERS`, `SolidProvider` metadata,
+`providersFromConfig` for comma-separated HTTPS provider URLs, `classifyLoginInput` for immediate URL
+validation, and `resolveLoginTarget` to check a WebID or provider address. Pass a pristine public fetch
+as `publicFetch`, captured before any authentication wrapper; never pass `auth.fetch`.
+
+```ts
+import { resolveLoginTarget } from '@jeswr/pod-auth/directory';
+const target = await resolveLoginTarget(address, { fetch: publicFetch });
+const hint = target.kind === 'webid'
+  ? { webId: target.webId }
+  : { issuer: target.issuer };
+await auth.login(hint);
+```
+
+Resolution tries both interpretations, requires discovery to name the supplied issuer, honors an
+optional abort signal, and caps each response at 1 MiB. Invalid URLs throw `InvalidLoginAddressError`
+(a `TypeError`); an address answering as neither kind throws `NotALoginAddressError`. HTTP is allowed
+only on loopback with `allowInsecureLoopback: true`. The directory has no auth state or DOM dependency.
+
+`createRecentProvidersStore(storage)` remembers at most five public HTTPS issuer addresses, most
+recent first. It tolerates corrupt or unavailable storage and stores no credentials. Default providers
+use monograms; `label` and `iconUrl` are optional host configuration. Re-verify the provider directory
+and sign-up links live before release.
 
 ## Generate the suite Client Identifier Document
 
