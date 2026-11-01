@@ -326,18 +326,21 @@ test("RDF redirects remain public, preserve the original subject, and reject ins
 });
 
 test("a transport's final response URL is scheme checked", async () => {
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
   const fetch = transport(() => {
-    const response = metadata();
+    const response = new Response(new ReadableStream({ cancel }));
     Object.defineProperty(response, "url", { value: "http://remote.example/metadata" });
     return response;
   });
   await expect(resolveLoginTarget(issuer, { fetch })).rejects.toBeInstanceOf(NotALoginAddressError);
+  expect(cancel).toHaveBeenCalledTimes(2);
 });
 
 test.each([
   "json",
   "rdf",
   "declared",
+  "non-json",
 ])("%s bodies above 1 MiB are cancelled before parsing", async (kind) => {
   const cancel = vi.fn();
   const fetch = transport((request) => {
@@ -351,12 +354,75 @@ test.each([
         },
         cancel,
       }),
-      { headers: kind === "declared" ? { "content-length": "1048577" } : {} },
+      {
+        headers:
+          kind === "declared"
+            ? { "content-length": "1048577" }
+            : kind === "non-json"
+              ? { "content-type": "text/html" }
+              : {},
+      },
     );
   });
   await expect(
     resolveLoginTarget(kind === "rdf" ? webId : issuer, { fetch }),
   ).rejects.toBeInstanceOf(NotALoginAddressError);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  ["issuer", "large"],
+  ["webid", "large"],
+  ["issuer", "stalled"],
+  ["webid", "stalled"],
+])("%s probes cancel unread %s 404 bodies without waiting for cancellation", async (kind, bodyKind) => {
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (bodyKind === "large") controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+    },
+    cancel,
+  });
+  const getReader = vi.spyOn(body, "getReader");
+  const fetch = transport((request) => {
+    const target =
+      kind === "issuer" ? request.url === discovery : !request.url.includes(".well-known");
+    return new Response(target ? body : null, { status: 404 });
+  });
+  await expect(
+    resolveLoginTarget(kind === "issuer" ? issuer : webId, { fetch }),
+  ).rejects.toBeInstanceOf(NotALoginAddressError);
+  expect(getReader).not.toHaveBeenCalled();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("a rejected discarded-body cancellation does not prevent the fallback probe", async () => {
+  const cancel = vi.fn(async () => {
+    throw new Error("cancellation failed");
+  });
+  const fetch = transport((request) =>
+    request.url === discovery
+      ? new Response(new ReadableStream({ cancel }), { status: 503 })
+      : profile(issuer),
+  );
+  expect(await resolveLoginTarget(issuer, { fetch })).toEqual({ kind: "webid", webId: issuer });
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("RDF redirects discard their body without waiting for stalled cancellation", async () => {
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const fetch = transport((request) =>
+    request.url === "https://id.example/alice"
+      ? new Response(new ReadableStream({ cancel }), {
+          status: 302,
+          headers: { location: "https://profile.example/card" },
+        })
+      : profile(),
+  );
+  expect(await resolveLoginTarget(webId, { fetch })).toEqual({ kind: "webid", webId });
   expect(cancel).toHaveBeenCalledOnce();
   expect(fetch).toHaveBeenCalledTimes(2);
 });
@@ -398,16 +464,25 @@ test.each([
 ])("abort interrupts a stalled %s even when the transport ignores its signal", async (kind) => {
   const controller = new AbortController();
   const ready = Promise.withResolvers<void>();
-  const cancel = vi.fn();
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
   const fetch = transport(async () => {
-    ready.resolve();
-    if (kind === "network") return await new Promise<Response>(() => {});
-    return new Response(
-      new ReadableStream({
-        cancel,
-        pull: () => ready.resolve(),
-      }),
-    );
+    if (kind === "network") {
+      ready.resolve();
+      return await new Promise<Response>(() => {});
+    }
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const getReader = body.getReader.bind(body);
+    vi.spyOn(body, "getReader").mockImplementation(() => {
+      const reader = getReader();
+      const read = reader.read.bind(reader);
+      vi.spyOn(reader, "read").mockImplementation(() => {
+        const pending = read();
+        ready.resolve();
+        return pending;
+      });
+      return reader;
+    });
+    return new Response(body);
   });
   const pending = resolveLoginTarget(kind === "rdf-body" ? webId : issuer, {
     fetch,
@@ -416,6 +491,34 @@ test.each([
   await ready.promise;
   controller.abort();
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect(fetch).toHaveBeenCalledOnce();
+  if (kind === "network") expect(cancel).not.toHaveBeenCalled();
+  else expect(cancel).toHaveBeenCalledOnce();
+});
+
+test("a response arriving after abort is cancelled without being read", async () => {
+  const controller = new AbortController();
+  const ready = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<Response>();
+  const cancelled = Promise.withResolvers<void>();
+  const cancel = vi.fn(() => {
+    cancelled.resolve();
+    return new Promise<void>(() => {});
+  });
+  const body = new ReadableStream<Uint8Array>({ cancel });
+  const getReader = vi.spyOn(body, "getReader");
+  const fetch = transport(() => {
+    ready.resolve();
+    return response.promise;
+  });
+  const pending = resolveLoginTarget(issuer, { fetch, signal: controller.signal });
+  await ready.promise;
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  response.resolve(new Response(body));
+  await cancelled.promise;
+  expect(getReader).not.toHaveBeenCalled();
+  expect(cancel).toHaveBeenCalledOnce();
   expect(fetch).toHaveBeenCalledOnce();
 });
 

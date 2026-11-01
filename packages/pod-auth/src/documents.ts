@@ -63,17 +63,26 @@ export function boundedDocumentFetch(transport: typeof fetch, insecure: boolean)
   return async (input, init) => {
     const request = new Request(input, { ...init, credentials: "omit" });
     secureUrl(request.url, insecure, "sign-in address");
-    const response = await abortable(request.signal, () => transport(request));
-    if (!response.ok || response.body === null) return response;
-    if (response.url !== "") secureUrl(response.url, insecure, "sign-in address");
-    const bytes = await readLimited(response, response.body, request.signal);
-    const limited = new Response(bytes, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
+    return await abortable(request.signal, async () => {
+      const response = await transport(request);
+      try {
+        // A transport that ignores abort may still return a body needing cleanup.
+        request.signal.throwIfAborted();
+        if (response.url !== "") secureUrl(response.url, insecure, "sign-in address");
+        if (!response.ok || response.body === null) return response;
+        const bytes = await readLimited(response, response.body, request.signal);
+        const limited = new Response(bytes, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+        // The RDF reader uses the final URL as the base after browser-managed redirects.
+        Object.defineProperty(limited, "url", { value: response.url });
+        return limited;
+      } finally {
+        // Discard errors, redirects and rejected URLs without waiting for hostile cancellation.
+        if (!response.bodyUsed) void response.body?.cancel().catch(() => {});
+      }
     });
-    // The RDF reader uses the final URL as the base after browser-managed redirects.
-    Object.defineProperty(limited, "url", { value: response.url });
-    return limited;
   };
 }
