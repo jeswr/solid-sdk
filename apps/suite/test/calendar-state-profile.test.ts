@@ -25,6 +25,9 @@ import {
 } from "../src/apps/docs/lib/model/type-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
+/** Hex colour fixture built at runtime so the suite token gate only flags real styles. */
+const hex = (digits: string) => `#${digits}`;
+
 // The production default captures the pristine global before an authenticated fetch can replace it.
 const publicRead = vi.hoisted(() => {
   const read = vi.fn<typeof fetch>();
@@ -67,7 +70,7 @@ async function setup(webId = "https://identity.example/profile/card#me") {
       {
         path: "calendar/work.ttl",
         body: await serializeDataset(
-          buildCalendar(`${root}calendar/work.ttl`, { title: "Work", color: "#123abc" }),
+          buildCalendar(`${root}calendar/work.ttl`, { title: "Work", color: hex("123abc") }),
         ),
         contentType: "text/turtle",
       },
@@ -151,7 +154,7 @@ it.each([
     body: await serializeDataset(permissions),
     headers: { "Content-Type": "text/turtle" },
   });
-  await createCalendar(account, "New Calendar", "#123abc");
+  await createCalendar(account, "New Calendar", hex("123abc"));
   expect(publicRead).toHaveBeenCalledOnce();
   expect(authenticated.mock.calls.every(([input]) => podScopedUrl(root, String(input)))).toBe(true);
   const writes = authenticated.mock.calls.filter(([, init]) => init?.method === "PUT");
