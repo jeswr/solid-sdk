@@ -668,6 +668,76 @@ describe("Anthropic Proposer SDK isolation", () => {
     expect(s.send).not.toHaveBeenCalled();
     expect(JSON.stringify(r)).not.toContain(KEY);
   });
+  it.each([
+    false,
+    true,
+  ])("keeps streamed response latencies disjoint with late fragments (result usage fallback: %s)", async (fallback) => {
+    let time = 0;
+    sdk.query.mockImplementation(async function* () {
+      time = 20;
+      yield streamStart("msg-1");
+      time = 25;
+      yield assistant();
+      time = 30;
+      if (!fallback) yield streamOutput(200);
+      time = 35;
+      yield streamStop;
+      time = 40;
+      yield assistant();
+      time = 50;
+      yield streamStart("msg-2");
+      time = 55;
+      yield assistant();
+      time = 60;
+      yield assistant("msg-2");
+      time = 75;
+      yield streamOutput(120);
+      time = 80;
+      yield streamStop;
+      time = 85;
+      yield assistant("msg-2");
+      time = 90;
+      yield { ...success, usage: { input_tokens: 22, output_tokens: 320 } };
+    });
+    const r = await setup({ provider: "anthropic", now: () => time }).gateway.proposer.propose(
+      [],
+      context(),
+    );
+    expect(r.calls.map((c) => c.latencyMs)).toEqual([35, 45]);
+    expect(r.calls.reduce((sum, c) => sum + c.latencyMs, 0)).toBe(80);
+    expect(r.calls.map((c) => c.tokens)).toEqual([
+      { input: 11, output: 200 },
+      { input: 11, output: 120 },
+    ]);
+  });
+  it.each([
+    false,
+    true,
+  ])("keeps failed retry latencies disjoint (response complete: %s)", async (complete) => {
+    let time = 0;
+    sdk.query.mockImplementation(async function* () {
+      time = 10;
+      yield streamStart("msg-1");
+      if (complete) {
+        time = 20;
+        yield streamOutput(7);
+        time = 30;
+        yield streamStop;
+      }
+      time = 40;
+      yield { type: "system", subtype: "api_retry" };
+      time = 60;
+      yield { type: "system", subtype: "api_retry" };
+    });
+    const error = await failure(
+      setup({ provider: "anthropic", now: () => time, maxRetries: 1 }).gateway.proposer.propose(
+        [],
+        context(),
+      ),
+    );
+    expect(error.calls.map((c) => c.latencyMs)).toEqual(complete ? [30, 30] : [10, 50]);
+    expect(error.calls.map((c) => c.retries)).toEqual([0, 2]);
+  });
   it("reconciles cumulative stream usage before late assistant fragments without double counting the result", async () => {
     events([
       streamStart("msg-1"),
@@ -725,6 +795,7 @@ describe("Anthropic Proposer SDK isolation", () => {
   });
   it.each([
     [streamOutput(7)],
+    [streamStop, streamOutput(7)],
     [streamStart("msg-1"), streamStop, streamOutput(7)],
     [assistant(), assistant("msg-2"), success],
     [assistant(), { ...success, usage: { input_tokens: 11, output_tokens: -1 } }],

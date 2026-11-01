@@ -67,11 +67,13 @@ export async function anthropicPropose(
     type Entry = { index: number; tools: Set<string>; start: number; outputFinal: boolean };
     const seen = new Map<string, Entry>();
     let streaming: Entry | undefined;
+    let timing: Entry | undefined;
     function entryFor(id: string, usage: Usage): Entry {
       let entry = seen.get(id);
       if (!entry) {
         entry = { index: calls.length, tools: new Set(), start: callStart, outputFinal: false };
         seen.set(id, entry);
+        timing = entry;
         // Assistant/message_start output counts are placeholders until message_delta arrives.
         calls.push(
           record(config, "proposer", { ...usage, output_tokens: 0 }, 0, now() - callStart, retries),
@@ -88,13 +90,19 @@ export async function anthropicPropose(
       const previous = calls[entry.index] as ModelCall;
       const input = usage.input_tokens ?? previous.inputTokens;
       const output = usage.output_tokens ?? previous.outputTokens;
+      let latencyMs = previous.latencyMs;
+      // Closed responses can still receive assistant fragments or result usage updates.
+      if (entry === timing) {
+        callStart = now();
+        latencyMs = Math.max(0, callStart - entry.start);
+      }
       calls[entry.index] = {
         ...previous,
         tokens: { input, output },
         inputTokens: input,
         outputTokens: output,
         toolCalls: entry.tools.size,
-        latencyMs: Math.max(0, now() - entry.start),
+        latencyMs,
       };
     }
     try {
@@ -155,7 +163,9 @@ export async function anthropicPropose(
             );
             streaming.outputFinal = true;
           } else if (event.event.type === "message_stop") {
+            if (streaming) update(streaming);
             streaming = undefined;
+            timing = undefined;
           }
         }
         if (event.type === "assistant") {
