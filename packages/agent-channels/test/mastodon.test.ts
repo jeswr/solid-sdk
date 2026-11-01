@@ -636,6 +636,59 @@ it("qualifies local sender handles with their configured instance", () => {
   );
 });
 
+it.each([
+  ["alice.smith@remote.example", "alice.smith@remote.example"],
+  ["alice-smith@remote.example", "alice-smith@remote.example"],
+  ["alice..-smith@remote.example", "alice..-smith@remote.example"],
+  ["alice@bücher.example", "alice@xn--bcher-kva.example"],
+  ["alice@XN--BCHER-KVA.EXAMPLE", "alice@xn--bcher-kva.example"],
+  ["alice@bücher.example:8443", "alice@xn--bcher-kva.example:8443"],
+  ["local.user-name", "local.user-name"],
+])("normalizes federated handle %s for ingest and pinned recipients", async (acct, normalized) => {
+  expect(handle(acct)).toBe(normalized);
+  const row = { ...fixtures.notification, account: { acct } };
+  const r = reader([[row], []]);
+  const result = await r.binding.ingest.list(account, undefined, bounds);
+  expect(result.items).toHaveLength(1);
+  expect(r.binding.ingest.parse(result.items[0] as InboundRawMessage).sender?.handle).toBe(
+    acct.includes("@") ? normalized : `${normalized}@instance.example`,
+  );
+  const s = sender([fixtures.accepted], {
+    recipients: new Map([[message.to?.actor, acct]]),
+  });
+  const proposal = signed();
+  const wire = await s.send.render(proposal, MASTODON_FOOTER);
+  expect(JSON.parse(wire.bytes).request.status.split("\n")[0]).toBe(`@${normalized}`);
+  expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
+  await expect(
+    s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+  ).resolves.toEqual({
+    outcome: "accepted",
+    providerRef: "600",
+  });
+  expect(JSON.parse(s.requests[0]?.body ?? "null").status.split("\n")[0]).toBe(`@${normalized}`);
+});
+
+it.each([
+  ".alice@remote.example",
+  "alice-@remote.example",
+  "alice@.remote.example",
+  "alice@remote.example-",
+  "alice@remote.example/path",
+  "alice@remote.example?query",
+  "alice@remote.example#fragment",
+  "alice@remote.example@other.example",
+  "alice@remote.example:65536",
+  "alice\n",
+  "alice@remote.example\n",
+  `alice@${"é.".repeat(60)}example`,
+])("rejects unsafe or invalid federated handle %j", (acct) => {
+  expect(() => handle(acct)).toThrow("invalid Mastodon account handle");
+  expect(() => sender([], { recipients: new Map([[message.to?.actor, acct]]) })).toThrow(
+    "invalid Mastodon account handle",
+  );
+});
+
 it("accepts the exact status byte ceiling and counts Unicode by UTF-8 bytes", async () => {
   const s = sender([fixtures.accepted]);
   const empty = await s.send.render(signed({ ...message, body: { want: [""] } }), MASTODON_FOOTER);

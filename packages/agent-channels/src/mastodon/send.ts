@@ -63,7 +63,7 @@ export function createMastodonSend(
   const origin = instanceOrigin(options.instance ?? DEFAULT_INSTANCE);
   const account = Object.freeze({ id: accountId(options.account) });
   const recipients = new Map(options.recipients);
-  for (const recipient of recipients.values()) handle(recipient);
+  for (const [actor, recipient] of recipients) recipients.set(actor, handle(recipient));
   const verify = options.verify;
   const verifyApproval = options.verifyApproval;
   const now = options.now ?? Date.now;

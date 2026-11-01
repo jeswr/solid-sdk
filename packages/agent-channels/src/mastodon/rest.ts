@@ -38,13 +38,24 @@ export function id(value: unknown): string {
   return value;
 }
 export function handle(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length > 256 ||
-    !/^[A-Za-z0-9_]+(?:@[A-Za-z0-9.-]+(?::[0-9]+)?)?$/.test(value)
-  )
+  if (typeof value !== "string" || value.length > 256)
     throw new ChannelParseError("invalid Mastodon account handle");
-  return value;
+  // Mastodon's USERNAME_RE and Unicode HOST_LABEL_CHAR, with an optional instance port.
+  const match =
+    /^([a-z0-9_]+(?:[.-]+[a-z0-9_]+)*)(?:@([\p{L}\p{M}\p{N}\p{Pc}ßς۽۾་〇]+(?:[.-]+[\p{L}\p{M}\p{N}\p{Pc}ßς۽۾་〇]+)*)(:[0-9]+)?)?$/iu.exec(
+      value,
+    );
+  if (!match || match[0] !== value) throw new ChannelParseError("invalid Mastodon account handle");
+  if (!match[2]) return value;
+  try {
+    // Match the URL normalization used when qualifying local handles by instance host.
+    const host = new URL(`https://${match[2]}${match[3] ?? ""}`).host;
+    const normalized = `${match[1]}@${host}`;
+    if (normalized.length > 256) throw new Error();
+    return normalized;
+  } catch {
+    throw new ChannelParseError("invalid Mastodon account handle");
+  }
 }
 export async function responseJson(response: Response): Promise<unknown> {
   if (!response.ok) throw new Error(`Mastodon read failed: HTTP ${response.status}`);
