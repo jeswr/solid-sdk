@@ -2,8 +2,8 @@
 import { readFileSync } from "node:fs";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { ManifestFieldGuards } from "@jeswr/model-runtime";
-import { describe, expect, it } from "vitest";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import { describe, expect, it } from "vitest";
 import {
   AdmissionError,
   assertFidelity,
