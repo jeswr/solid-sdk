@@ -33,7 +33,15 @@ export function createLocalNotificationStore(
       if (!factory) throw new Error("Notification storage is unavailable");
       const request = factory.open(`suite-notifications-${accountId}`, 1);
       request.onupgradeneeded = () => request.result.createObjectStore("events", { keyPath: "id" });
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        // Let "Clear saved copies" (or an upgrade) proceed: close and reopen lazily.
+        db.onversionchange = () => {
+          db.close();
+          database = undefined;
+        };
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error("Notification storage is busy"));
     });

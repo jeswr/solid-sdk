@@ -47,9 +47,26 @@ describe("clearing saved copies", () => {
         return request;
       },
     };
-    await expect(clearSavedCopies({ databaseFactory })).rejects.toThrow(
+    await expect(clearSavedCopies({ databaseFactory, blockedTimeoutMs: 1 })).rejects.toThrow(
       eventName === "blocked" ? "Close other" : "Couldn't clear",
     );
+  });
+  it("waits out a blocked delete that then succeeds", async () => {
+    const databaseFactory = {
+      databases: async () => [{ name: "suite-files" }],
+      deleteDatabase() {
+        const request = {} as IDBOpenDBRequest;
+        queueMicrotask(() => {
+          request.onblocked?.call(request, new Event("blocked") as IDBVersionChangeEvent);
+          request.onblocked?.call(request, new Event("blocked") as IDBVersionChangeEvent);
+          setTimeout(() => request.onsuccess?.call(request, new Event("success")), 5);
+        });
+        return request;
+      },
+    };
+    await expect(
+      clearSavedCopies({ databaseFactory, blockedTimeoutMs: 1000 }),
+    ).resolves.toBeUndefined();
   });
   it("reports unavailable enumeration and browser storage failures", async () => {
     await expect(

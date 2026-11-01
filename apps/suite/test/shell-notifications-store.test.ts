@@ -81,3 +81,24 @@ it("persists events and read status in the account's IndexedDB events store", as
   const anotherAccount = createLocalNotificationStore("unrelated", factory);
   expect(await anotherAccount.list(new AbortController().signal)).toEqual([]);
 });
+
+it("closes its connection on versionchange so saved copies can be cleared", async () => {
+  const { createRequire } = await import("node:module");
+  const { IDBFactory } = createRequire(
+    new URL("../../../packages/solid-offline/package.json", import.meta.url),
+  )("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
+  const factory = new IDBFactory();
+  const store = createLocalNotificationStore("clearable", factory);
+  const item = demoNotifications()[0]!;
+  await store.add(item);
+  const blocked = vi.fn();
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.deleteDatabase("suite-notifications-clearable");
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = blocked;
+  });
+  expect(blocked).not.toHaveBeenCalled();
+  // The store reopens lazily on the next write.
+  await expect(store.markRead!([item.id])).resolves.toBeUndefined();
+});
