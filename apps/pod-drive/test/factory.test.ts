@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { describe, expect, it, vi } from "vitest";
-import { createDriveStore } from "../src/drive.js";
+import { createDriveStore, DriveAccessError, listContainer } from "../src/drive.js";
 
 // Exercise real factory discovery separately from legacy HTTP-contract fixtures.
 vi.unmock("@jeswr/storage-client");
 
 describe.each(["solid", "lws"] as const)("real PodClient discovery for %s", (protocol) => {
-  it("uses the authenticated transport for discovery and app data", async () => {
+  it("retries failed discovery, then uses the authenticated transport for app data", async () => {
     const root = `https://${protocol}.pod-drive-factory.example/`;
     const description = `${root}.well-known/storage`;
     const file = `${root}note.ttl`;
@@ -63,11 +64,123 @@ describe.each(["solid", "lws"] as const)("real PodClient discovery for %s", (pro
         );
       throw new Error("Unexpected SDK request");
     });
-    const entries = (await createDriveStore({ root, fetch }).list()).container.entries;
+    fetch.mockRejectedValueOnce(new TypeError("Temporary network failure"));
+    const store = createDriveStore({ root, fetch });
+    const failures = await Promise.allSettled([store.list(), store.list()]);
+    expect(failures).toMatchObject([
+      { status: "rejected", reason: { code: "network" } },
+      { status: "rejected", reason: { code: "network" } },
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const entries = (await store.list()).container.entries;
     expect(entries.map((entry) => entry.name)).toEqual(["note.ttl"]);
     expect(requests.some((request) => request.url === description)).toBe(true);
     expect(
       requests.find((request) => request.method === "GET" && request.url === root)?.accept,
     ).toContain(protocol === "solid" ? "text/turtle" : "application/lws+json");
+    expect((await store.list()).container.entries).toEqual(entries);
+  });
+});
+
+describe("cold discovery", () => {
+  it.each([401, 403] as const)("preserves a %i without discovery links", async (status) => {
+    for (const factory of [false, true]) {
+      const root = `https://access-${status}-${factory}.pod-drive.example/private/`;
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status }));
+      const result = factory
+        ? createDriveStore({ root, fetch }).list()
+        : listContainer(root, { fetch });
+      const error = await result.catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(DriveAccessError);
+      expect(error).toMatchObject({ status, url: root, cause: { code: "no-storage-link" } });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
+    }
+  });
+
+  it.each([
+    false,
+    true,
+  ])("resolves only the Solid slash redirect before listing (store=%s)", async (factory) => {
+    const root = `https://slash-${factory}.pod-drive.example/`;
+    const container = `${root}drive/`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === container.slice(0, -1))
+        return new Response(null, { status: 301, headers: { location: "/drive/" } });
+      if (init?.method === "HEAD")
+        return new Response(null, {
+          headers: {
+            "updates-via": "wss://updates.pod-drive.example/",
+            ...(url === root
+              ? { link: '<http://www.w3.org/ns/pim/space#Storage>; rel="type"' }
+              : {}),
+          },
+        });
+      if (init?.method === "OPTIONS") return new Response(null, { status: 204 });
+      return new Response(`<${container}> a <http://www.w3.org/ns/ldp#Container>.`, {
+        headers: { "content-type": "text/turtle" },
+      });
+    });
+    const listing = factory
+      ? await createDriveStore({ root: container.slice(0, -1), fetch }).list()
+      : await listContainer(container.slice(0, -1), { fetch });
+    expect(listing.url).toBe(container);
+    expect(listing.container.entries).toEqual([]);
+    expect(fetch.mock.calls.filter(([url]) => String(url) === container.slice(0, -1))).toHaveLength(
+      1,
+    );
+    expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+  });
+
+  it("keeps a slashless opaque LWS container unchanged", async () => {
+    const root = "https://opaque.pod-drive.example/";
+    const container = `${root}opaque-container`;
+    const description = `${root}storage`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === description)
+        return new Response(
+          JSON.stringify({
+            id: description,
+            type: "Storage",
+            service: [{ type: "StorageRoot", serviceEndpoint: root }],
+          }),
+          { headers: { "content-type": "application/lws+cid" } },
+        );
+      expect(url).toBe(container);
+      return new Response(
+        init?.method === "HEAD" ? null : JSON.stringify({ type: "Container", items: [] }),
+        {
+          headers: {
+            link: `<${description}>; rel="https://www.w3.org/ns/lws#storage", <https://www.w3.org/ns/lws#Container>; rel="type"`,
+            "content-type": "application/lws+json",
+          },
+        },
+      );
+    });
+    expect((await listContainer(container, { fetch })).url).toBe(container);
+    expect(fetch.mock.calls.some(([url]) => String(url) === `${container}/`)).toBe(false);
+  });
+
+  it.each([
+    null,
+    "https://foreign.example/drive/",
+    "/elsewhere/",
+    "http://[",
+  ])("refuses a redirect with Location %s", async (location) => {
+    const url = "https://redirect.pod-drive.example/drive";
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(null, {
+          status: 308,
+          headers: location === null ? {} : { location },
+        }),
+    );
+    await expect(listContainer(url, { fetch })).rejects.toMatchObject({
+      code: "description-unreachable",
+      status: 308,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

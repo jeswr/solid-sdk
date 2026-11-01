@@ -66,6 +66,51 @@ function displayEntry(entry: Entry): DriveEntry {
   };
 }
 
+/** Keep access status and accept only the exact trailing-slash container redirect. */
+async function discoverStorage(
+  url: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<StorageClient> {
+  let accessFailure: { status: 401 | 403; url: string } | undefined;
+  let slashRedirect = false;
+  const transport: typeof fetch = async (input, init) => {
+    const response = await fetchImpl(input, init);
+    if (response.status === 401 || response.status === 403) {
+      accessFailure = { status: response.status, url: String(input) };
+    }
+    if (
+      String(input) === url &&
+      init?.method === "HEAD" &&
+      !url.endsWith("/") &&
+      [301, 302, 303, 307, 308].includes(response.status)
+    ) {
+      const location = response.headers.get("location");
+      if (location) {
+        try {
+          slashRedirect = new URL(location, url).href === `${url}/`;
+        } catch {
+          // Malformed and unrelated redirects keep the SDK's refusal.
+        }
+      }
+    }
+    return response;
+  };
+  try {
+    return (
+      await createPodClient({
+        storage: url,
+        fetch: transport,
+        ...(signal ? { signal } : {}),
+      })
+    ).storage;
+  } catch (error) {
+    if (accessFailure) throw new DriveAccessError(accessFailure.status, accessFailure.url, error);
+    if (slashRedirect) return discoverStorage(`${url}/`, fetchImpl, signal);
+    throw error;
+  }
+}
+
 /** List through the SDK, including every LWS page, preserving opaque container URLs. */
 export async function listContainer(
   containerUrl: string,
@@ -75,13 +120,7 @@ export async function listContainer(
   try {
     const storage =
       options.storage ??
-      (
-        await createPodClient({
-          storage: containerUrl,
-          fetch: options.fetch ?? globalThis.fetch,
-          ...(options.signal ? { signal: options.signal } : {}),
-        })
-      ).storage;
+      (await discoverStorage(containerUrl, options.fetch ?? globalThis.fetch, options.signal));
     if (storage.protocol === "solid" && !url.endsWith("/")) url += "/";
     // HEAD supplies a validator; traversal and pagination belong entirely to the SDK.
     const head = await storage.head(url, {
@@ -117,9 +156,10 @@ export function createDriveStore(options: {
   const client = () =>
     (pending ??= options.storage
       ? Promise.resolve(options.storage)
-      : createPodClient({ storage: options.root, fetch: options.fetch ?? globalThis.fetch }).then(
-          ({ storage }) => storage,
-        ));
+      : discoverStorage(options.root, options.fetch ?? globalThis.fetch).catch((error: unknown) => {
+          pending = undefined;
+          throw error;
+        }));
   return {
     async list(url = options.root) {
       return listContainer(url, { storage: await client() });
