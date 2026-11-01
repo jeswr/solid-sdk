@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // W3C Bitstring Status List v1.0 — credential revocation / suspension status
@@ -539,7 +540,7 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<string 
   const stream = res.body;
   if (stream === null || stream === undefined || typeof stream.getReader !== "function") {
     const text = await res.text();
-    return Buffer.byteLength(text, "utf8") > maxBytes ? undefined : text;
+    return new TextEncoder().encode(text).byteLength > maxBytes ? undefined : text;
   }
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
@@ -560,7 +561,11 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<string 
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks).toString("utf8");
+  // Preserve UTF-8 sequences across chunk boundaries and the BOM, as Buffer did.
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  let text = "";
+  for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+  return text + decoder.decode();
 }
 
 /**

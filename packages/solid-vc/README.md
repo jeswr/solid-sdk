@@ -33,7 +33,13 @@ public-key fixtures in `test/fixtures/origin-main-credentials.json` cover both s
 npm install github:jeswr/solid-vc#main
 ```
 
-Requires Node.js 24 or newer.
+Requires Node.js 24 or newer, or a browser with WebCrypto in a secure context. Hashing
+and random identifiers use `globalThis.crypto`; status-list compression uses fflate with
+strict base64url and streaming expansion bounds, member checksums and completeness checks.
+The public entry bundles with esbuild's `platform: "browser"` without Node builtins.
+Browser WebID/status resolution requires an injected fetch; the DNS-pinned Node default
+is disabled by the package's browser mapping. Non-extractable P-256 private keys can be
+passed directly in a `KeyPair` to `DataIntegritySuite("ecdsa-rdfc-2019")` without export.
 
 ## Minimal usage
 
