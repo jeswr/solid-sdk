@@ -14,7 +14,7 @@ import {
   ErrorState,
   FilterChips,
 } from "@jeswr/suite-ui";
-import { ArrowRight, Disc3, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
+import { ArrowRight, Disc3, FileUp, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -22,6 +22,7 @@ import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
+import { SCROBBLE_AGENTS } from "../lib/data/scrobbles";
 import { formatDuration } from "../lib/library";
 import type { ArtistPeriod } from "../lib/model";
 import { albumHref, artistHref, playlistHref } from "../lib/navigation";
@@ -279,6 +280,12 @@ function DeletePlaylist({ playlist }: { playlist: MusicPlaylist }) {
     </Dialog>
   );
 }
+const SOURCES: Record<string, string> = {
+  "https://open.spotify.com/": "Spotify",
+  [SCROBBLE_AGENTS.lastfm]: "Last.fm",
+  [SCROBBLE_AGENTS.listenbrainz]: "ListenBrainz",
+};
+const playSource = (agent: string | undefined) => (agent && SOURCES[agent]) || "Music";
 function HistoryView() {
   const music = useMusic();
   const snapshot = music.snapshot;
@@ -318,10 +325,17 @@ function HistoryView() {
                           timeZone: "UTC",
                         })}
                       </time>
-                      {track ? <TrackName track={track} /> : <span>Unavailable song</span>}
-                      <Badge variant="secondary">
-                        {play.agent === "https://open.spotify.com/" ? "Spotify" : "Music"}
-                      </Badge>
+                      {track ? (
+                        <TrackName track={track} />
+                      ) : play.title ? (
+                        <span className="mus-track-name">
+                          <strong>{play.title}</strong>
+                          {play.artist && <span className="mus-muted">{play.artist}</span>}
+                        </span>
+                      ) : (
+                        <span>Unavailable song</span>
+                      )}
+                      <Badge variant="secondary">{playSource(play.agent)}</Badge>
                     </li>
                   );
                 })}
@@ -332,7 +346,7 @@ function HistoryView() {
       ) : (
         <Empty
           title="No listening history yet"
-          body="Your listening history will appear here, grouped by day."
+          body="Your listening history will appear here, grouped by day. You can also import it from Last.fm or ListenBrainz."
         />
       )}
       {music.olderError && <ErrorState error="unreachable" actions={{ retry: music.older }} />}
@@ -606,6 +620,14 @@ export function MusicScreen({
           {view === "home" && <p className="mus-muted">Good music. All yours.</p>}
         </div>
         {view === "playlists" && <CreatePlaylist />}
+        {view === "history" && (
+          <Button asChild variant="outline">
+            <Link href="/music/import">
+              <FileUp size={16} aria-hidden="true" />
+              Import history
+            </Link>
+          </Button>
+        )}
         {view === "liked" && (
           <span className="mus-header-icon">
             <Heart size={28} aria-hidden="true" />

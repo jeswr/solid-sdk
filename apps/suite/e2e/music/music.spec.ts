@@ -275,3 +275,80 @@ test("imports the offline Spotify fixture and finds its tracks", async ({ page }
   ).not.toHaveCount(0);
   await accessible(page);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+test("imports Last.fm and ListenBrainz history once, keeping unknown songs by name", async ({
+  page,
+}, info) => {
+  const seconds = Math.floor(Date.now() / 1000);
+  const files = [
+    {
+      name: "scrobbles.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        [
+          "artist,album,track,timestamp",
+          `Mira & the Tides,Soft Horizons,Morning Glass,${seconds - 3600}`,
+          `Imaginary Band,,Faraway Song,${seconds - 7200}`,
+          "not a full row",
+        ].join("\n"),
+      ),
+    },
+    {
+      name: "listens.jsonl",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          listened_at: seconds - 10800,
+          track_metadata: { artist_name: "Nora Field", track_name: "Embers" },
+        }),
+      ),
+    },
+  ];
+  await ready(page, "/music/import", "Import listening history");
+  const input = page.getByLabel("Choose export files", { exact: true });
+  await input.setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("x"),
+  });
+  await expect(page.locator(".mus-import-error")).toContainText("Choose Last.fm .csv files");
+  await expect(input).toHaveAccessibleDescription(/Choose Last\.fm \.csv files/);
+  await input.setInputFiles(files);
+  const preview = page.locator(".mus-import-preview");
+  await expect(preview.getByRole("heading", { name: "Ready to import" })).toBeVisible();
+  await expect(preview).toContainText("3 listens from");
+  await expect(
+    preview.locator("div", { hasText: "Songs in your library" }).locator("dd"),
+  ).toHaveText("1");
+  await expect(preview.locator("div", { hasText: "Kept by name" }).locator("dd")).toHaveText("2");
+  await expect(preview.locator("div", { hasText: "Rows skipped" }).locator("dd")).toHaveText("1");
+  await accessible(page);
+  await capture(page, info, "import-preview");
+  await page.getByRole("button", { name: "Import 3 listens", exact: true }).click();
+  await expect(preview.getByRole("heading", { name: "Import finished" })).toBeVisible();
+  await expect(preview).toContainText("Added 3 listens.");
+  await page.getByRole("link", { name: "View history", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "History", exact: true })).toBeVisible();
+  const timeline = page.locator(".mus-timeline");
+  for (const [song, artist, source] of [
+    ["Faraway Song", "Imaginary Band", "Last.fm"],
+    ["Embers", "Nora Field", "ListenBrainz"],
+  ] as const) {
+    const row = timeline.locator("li", { hasText: song });
+    await expect(row).toContainText(artist);
+    await expect(row).toContainText(source);
+  }
+  await expect(
+    timeline.locator("li", { hasText: "Morning Glass" }).filter({ hasText: "Last.fm" }),
+  ).toHaveCount(1);
+  await accessible(page);
+  await capture(page, info, "import-history");
+  await page.getByRole("link", { name: "Import history", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Import listening history", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Choose export files", { exact: true }).setInputFiles(files);
+  await page.getByRole("button", { name: "Import 3 listens", exact: true }).click();
+  await expect(preview).toContainText("Added 0 listens. 3 listens were already in Music.");
+});

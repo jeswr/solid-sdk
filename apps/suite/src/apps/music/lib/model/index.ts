@@ -14,6 +14,9 @@ export {
 } from "./history";
 export {
   appendPlayback,
+  appendPlaybacks,
+  type ImportedPlayback,
+  type ImportedRecording,
   loadHistory,
   loadLibrary,
   loadMusic,
