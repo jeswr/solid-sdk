@@ -7,7 +7,9 @@ import { parseArgs } from "node:util";
 import ts from "typescript";
 
 export function importsGoogleFonts(source, path) {
-  if (!source.includes("next/font/google")) return false;
+  // A specifier that does not contain the raw text must use an escape ("next\/font\/google"),
+  // so any file with a backslash goes to the AST, which decodes it.
+  if (!source.includes("next/font/google") && !source.includes("\\")) return false;
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
   let found = false;
   function visit(node) {
