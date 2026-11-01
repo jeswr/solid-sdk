@@ -338,13 +338,13 @@ for (const path of ["profile/card", "settings/privateTypeIndex.ttl"]) {
     await open(page);
     const original = await editDemo(page, [{ path, body: "deliberately invalid Turtle" }]);
     await page.goto(`/calendar/search?q=stand&d=${DATE}`);
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator(".suite-async-error")).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Retry", exact: true }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator(".suite-async-error")).toBeVisible();
     await editDemo(page, original);
     await expect(page.getByRole("button", { name: /^Team stand-up,/ }).first()).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator(".suite-async-error")).toHaveCount(0);
   });
 }
 
