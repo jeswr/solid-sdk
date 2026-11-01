@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { atomNames, type FixtureName, primitiveNames } from "./fixture-names";
 import { ShellSearchFixture } from "./global-search/fixture";
+import { SyncFixtures } from "./sync-fixtures";
 
 function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
   const id = useId();
@@ -684,6 +685,13 @@ function StateExamples() {
 export function FixtureCatalog({ name }: { name: FixtureName }) {
   if (name === "global-search" || name === "command-palette" || name === "shortcut-help")
     return <ShellSearchFixture component={name} />;
+  if (
+    name === "offline-pill" ||
+    name === "sync-sheet" ||
+    name === "conflict-dialog" ||
+    name === "capability-gate"
+  )
+    return <SyncFixtures name={name} />;
   const names = name === "primitives" ? primitiveNames : name === "atoms" ? atomNames : [name];
   return (
     <main id="main-content" tabIndex={-1} className="fixture-page">
