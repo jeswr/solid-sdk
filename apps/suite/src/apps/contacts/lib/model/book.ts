@@ -98,11 +98,15 @@ export class ContactsModel {
     return new URL(`${kind}/${crypto.randomUUID()}.ttl`, book.url).href;
   }
 
-  private async planContact(
+  async planContact(
     book: Snapshot<AddressBookData>,
     data: ContactData,
     url: string,
-  ): Promise<{ id: string; changes: Change[] }> {
+  ): Promise<{
+    id: string;
+    document: { url: string; dataset: Store; etag: null };
+    changes: Change[];
+  }> {
     validateContact(data);
     const doc = this.transport.url(url);
     const people = await this.loadPeople(book);
@@ -114,6 +118,7 @@ export class ContactsModel {
     entry.inAddressBook = `${book.url}#this`;
     return {
       id: `${doc}#this`,
+      document: { url: doc, dataset, etag: null },
       changes: [{ url: doc, dataset, etag: null }, replacement(people, index)],
     };
   }
@@ -209,6 +214,14 @@ export class ContactsModel {
     book: Snapshot<AddressBookData>,
     person: Snapshot<ContactData>,
   ): Promise<void> {
+    await this.transport.commit(await this.planDeleteContact(book, person));
+  }
+
+  /** Plan against fresh memberships before the caller journals any destructive writes. */
+  async planDeleteContact(
+    book: Snapshot<AddressBookData>,
+    person: Snapshot<ContactData>,
+  ): Promise<Change[]> {
     const people = await this.loadPeople(book);
     const groups = await this.loadGroups(book);
     const changes: Change[] = [];
@@ -222,7 +235,7 @@ export class ContactsModel {
     const index = new Store([...people.dataset]);
     removeSubject(index, `${person.url}#this`);
     changes.push(replacement(people, index), replacement(person));
-    await this.transport.commit(changes);
+    return changes;
   }
 
   loadFlatContacts(url: string) {
@@ -235,6 +248,12 @@ export class ContactsModel {
     sourceUrl: string,
     destination = this.newDocument(book, "people"),
   ): Promise<string> {
+    const { plan, source } = await this.planMigration(book, sourceUrl, destination);
+    await this.transport.commit([...plan.changes, replacement(source)]);
+    return plan.id;
+  }
+
+  async planMigration(book: Snapshot<AddressBookData>, sourceUrl: string, destination: string) {
     const source = await this.loadFlatContacts(sourceUrl);
     const candidate = source.data[0];
     if (
@@ -249,9 +268,8 @@ export class ContactsModel {
     }
     requireLosslessMigration(source.dataset, candidate.id, candidate.data);
     // Require a source ETag BEFORE creating anything; preserve the original on every failure.
-    const deletion = replacement(source);
+    replacement(source);
     const plan = await this.planContact(book, candidate.data, destination);
-    await this.transport.commit([...plan.changes, deletion]);
-    return plan.id;
+    return { plan, source };
   }
 }

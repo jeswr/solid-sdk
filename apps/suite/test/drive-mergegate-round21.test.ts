@@ -42,7 +42,7 @@ it("Restore retains recovery while a child DELETE is still accepted on the serve
   expect(await (await fresh.read(source)).text()).toBe("secret contents");
 });
 
-it.each([200, 204, 404, 410])("DELETE %s is terminal without polling", async (status) => {
+it.each([200, 204, 205, 404, 410])("DELETE %s is terminal without polling", async (status) => {
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   const url = `${PRIVATE}secret`;

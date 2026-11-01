@@ -37,6 +37,8 @@ describe("registered project container isolation", () => {
       );
       pod.seed(url, await serialize(project.dataset));
     }
+    // Non-Turtle members of a registered container are not project candidates.
+    pod.seed(`${containers[1]}notes.txt`, "not a tracker");
     await new TypeIndex(
       new RdfIO(pod.fetch),
       storage,
