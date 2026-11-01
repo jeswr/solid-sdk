@@ -1,12 +1,15 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
 /** A prompt has one id from scheduling through decryption; cancellation makes every callback inert. */
 final class SecureStoreOperations {
+    interface StoreLoader { SecureStore load() throws Exception; }
     interface Authenticator { Prompt create(); }
     interface Prompt {
         void start(Object cryptoObject, Callback callback);
@@ -46,6 +49,7 @@ final class SecureStoreOperations {
     private long nextId;
     private long generation;
     private final Map<String, Long> keyGenerations = new HashMap<>();
+    private final Map<String, ArrayDeque<Ticket>> admittedReads = new HashMap<>();
     private Operation pending;
 
     SecureStoreOperations(Executor serial, Executor main, Authenticator authenticator) {
@@ -80,6 +84,39 @@ final class SecureStoreOperations {
 
     synchronized Ticket ticket(String key) {
         return new Ticket(key, ++nextId, generation, keyGenerations.getOrDefault(key, 0L), foreground);
+    }
+
+    /** Called synchronously by the origin-checked WebMessage listener, before Capacitor dispatch. */
+    synchronized void admitRead(String callbackId, Object rawKey) {
+        final String key;
+        try { key = SecureStoreValidation.key(rawKey); }
+        catch (SecureStoreException e) { return; } // Invalid gets reject without consuming a ticket.
+        admittedReads.computeIfAbsent(callbackId, ignored -> new ArrayDeque<>()).addLast(ticket(key));
+    }
+
+    synchronized Ticket takeReadTicket(String callbackId, String key) throws SecureStoreException {
+        ArrayDeque<Ticket> tickets = admittedReads.get(callbackId);
+        if (tickets == null) throw new SecureStoreException("cancelled");
+        // Capacitor's taskHandler invokes calls in admission order. Retain stale entries across
+        // commits: a replacement document reusing an id must never lend its ticket to an old call.
+        Ticket ticket = tickets.removeFirst();
+        if (tickets.isEmpty()) admittedReads.remove(callbackId);
+        if (!ticket.key.equals(key)) throw new SecureStoreException("cancelled");
+        check(ticket);
+        return ticket;
+    }
+
+    /** Shared production read path; the store remains lazy until the admitted ticket is checked. */
+    void get(StoreLoader store, Ticket ticket, Result result) {
+        serial.execute(() -> {
+            try {
+                check(ticket);
+                SecureStore current = store.load();
+                SecureStore.Read read = current.beginGet(ticket.key, ticket.foreground && foreground());
+                if (read.gated()) begin(current, read, ticket, result);
+                else deliver(ticket, current.finishGet(read, null), result);
+            } catch (Exception e) { result.failure(SecureStoreException.code(e)); }
+        });
     }
 
     synchronized void check(Ticket ticket) throws SecureStoreException {

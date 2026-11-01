@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import static org.junit.Assert.*;
@@ -31,19 +32,139 @@ public class SecureStoreOperationsTest {
         @Override public void success(SecureStore.Value value) { events.add(value.value + ":" + value.version); }
         @Override public void failure(String code) { events.add(code); }
     }
-    private Tasks serial, main;
+    private Tasks dispatch, serial, main;
     private List<Prompt> prompts;
     private SecureStoreOperations operations;
     private SecureStore store;
     private Crypto crypto;
+    private int loads;
 
     @Before public void setup() throws Exception {
-        serial = new Tasks(); main = new Tasks(); prompts = new ArrayList<>(); crypto = new Crypto();
+        dispatch = new Tasks(); serial = new Tasks(); main = new Tasks(); prompts = new ArrayList<>(); crypto = new Crypto(); loads = 0;
         store = new SecureStore(NS, new Memory(), crypto); store.set("a", "secret", true, 0);
         operations = new SecureStoreOperations(serial, main, () -> { Prompt prompt = new Prompt(); prompts.add(prompt); return prompt; });
     }
     private Result begin() throws Exception {
         Result result = new Result(); operations.begin(store, store.beginGet("a"), result); return result;
+    }
+
+    /** The FIFO boundary where Capacitor holds plugin.invoke(), before get can run any storage work. */
+    private Result dispatchRead(String callbackId, Object rawKey) {
+        Result result = new Result();
+        dispatch.execute(() -> {
+            try {
+                String key = SecureStoreValidation.key(rawKey);
+                SecureStoreOperations.Ticket ticket = operations.takeReadTicket(callbackId, key);
+                operations.get(() -> { loads++; return store; }, ticket, result);
+            } catch (Exception e) { result.failure(SecureStoreException.code(e)); }
+        });
+        return result;
+    }
+
+    private Result admitRead(String callbackId, Object key) {
+        operations.admitRead(callbackId, key);
+        return dispatchRead(callbackId, key);
+    }
+
+    @Test public void readAdmittedBeforeCommitButDispatchedAfterwardsCancelsWithoutCryptoOrPrompt() {
+        operations.foreground(true);
+        Result result = admitRead("read", "a");
+        assertEquals(1, dispatch.tasks.size()); // Capacitor has not invoked get yet.
+        assertTrue(serial.tasks.isEmpty()); assertTrue(prompts.isEmpty());
+        operations.navigation(); // Same generation bump as the shell's main-frame commit hook.
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("cancelled"), result.events);
+        assertEquals(0, loads); assertTrue(prompts.isEmpty()); assertEquals(0, crypto.prepares); assertEquals(0, crypto.opens);
+    }
+
+    @Test public void commitAfterDispatchStillCancelsBeforeTheQueuedStoreLoad() {
+        operations.foreground(true);
+        Result result = admitRead("read", "a"); dispatch.run();
+        assertEquals(1, serial.tasks.size()); assertEquals(0, loads);
+        operations.navigation(); serial.run(); main.run();
+        assertEquals(List.of("cancelled"), result.events);
+        assertEquals(0, loads); assertTrue(prompts.isEmpty()); assertEquals(0, crypto.prepares);
+    }
+
+    @Test public void readAdmittedAndDispatchedInOneDocumentResolvesAndConsumesItsTicket() {
+        operations.foreground(true);
+        Result result = admitRead("read", "a");
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(1, prompts.size()); assertEquals(1, prompts.get(0).starts);
+        prompts.get(0).callback.success("authorized"); serial.run(); main.run();
+        assertEquals(List.of("secret:1"), result.events);
+        assertEquals(1, crypto.prepares); assertEquals(1, crypto.opens);
+        Result duplicate = dispatchRead("read", "a"); dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("cancelled"), duplicate.events);
+        assertEquals(1, prompts.size()); assertEquals(1, crypto.prepares);
+    }
+
+    @Test public void admittedUngatedAndMissingReadsResolveWithoutPrompts() throws Exception {
+        operations.foreground(true); store.set("a", "ungated", false, 1);
+        Result present = admitRead("present", "a");
+        Result missing = admitRead("missing", "b");
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("ungated:2"), present.events); assertEquals(List.of("null:0"), missing.events);
+        assertTrue(prompts.isEmpty()); assertEquals(0, crypto.prepares); assertEquals(1, crypto.opens);
+    }
+
+    @Test public void readAdmittedInTheBackgroundCannotPromptAfterResume() {
+        Result result = admitRead("read", "a"); operations.foreground(true);
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("background"), result.events);
+        assertTrue(prompts.isEmpty()); assertEquals(0, crypto.prepares); assertEquals(0, crypto.opens);
+    }
+
+    @Test public void reusedCallbackIdCannotLendANewDocumentsTicketToTheOutgoingRead() {
+        operations.foreground(true);
+        Result outgoing = admitRead("read", "a");
+        operations.navigation();
+        Result replacement = admitRead("read", "a");
+        assertEquals(2, dispatch.tasks.size());
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("cancelled"), outgoing.events); assertTrue(replacement.events.isEmpty());
+        assertEquals(1, prompts.size()); assertEquals(1, prompts.get(0).starts); assertEquals(1, crypto.prepares);
+        prompts.get(0).callback.success("authorized"); serial.run(); main.run();
+        assertEquals(List.of("secret:1"), replacement.events);
+        assertEquals(1, crypto.opens);
+        assertEquals("cancelled", assertThrows(SecureStoreException.class, () -> operations.takeReadTicket("read", "a")).code);
+    }
+
+    @Test public void missingOrMismatchedAdmissionRejectsBeforeCryptoOrPrompt() {
+        operations.foreground(true);
+        Result missing = dispatchRead("unadmitted", "a");
+        operations.admitRead("read", "b");
+        Result mismatched = dispatchRead("read", "a");
+        Result consumed = dispatchRead("read", "b");
+        dispatch.run(); serial.run(); main.run();
+        for (Result result : new Result[]{missing, mismatched, consumed}) assertEquals(List.of("cancelled"), result.events);
+        assertEquals(0, loads); assertTrue(prompts.isEmpty()); assertEquals(0, crypto.prepares); assertEquals(0, crypto.opens);
+    }
+
+    @Test public void invalidReadsDoNotConsumeTheNextValidAdmissionWithTheSameCallbackId() {
+        operations.foreground(true);
+        Result invalid = admitRead("read", "INVALID");
+        Result valid = admitRead("read", "a");
+        dispatch.run(); serial.run(); main.run();
+        assertEquals(List.of("invalid"), invalid.events); assertEquals(1, prompts.size());
+        prompts.get(0).callback.success("authorized"); serial.run(); main.run();
+        assertEquals(List.of("secret:1"), valid.events);
+        assertEquals(1, crypto.prepares); assertEquals(1, crypto.opens);
+    }
+
+    @Test public void nullAndDanglingCallbackIdsKeepTheirOwnAdmissionFifos() throws Exception {
+        operations.foreground(true);
+        // JSObject.getString defaults to null; Capacitor also permits its "-1" dangling id.
+        for (String id : new String[]{null, "", "-1"}) {
+            Result outgoing = admitRead(id, "a"); operations.navigation();
+            Result replacement = admitRead(id, "a");
+            dispatch.run(); serial.run(); main.run();
+            assertEquals(List.of("cancelled"), outgoing.events);
+            Prompt prompt = prompts.get(prompts.size() - 1);
+            prompt.callback.success("authorized"); serial.run(); main.run();
+            assertEquals(List.of("secret:1"), replacement.events);
+            assertEquals("cancelled", assertThrows(SecureStoreException.class, () -> operations.takeReadTicket(id, "a")).code);
+        }
     }
 
     @Test public void backgroundRejectsWithoutSchedulingAPrompt() throws Exception {

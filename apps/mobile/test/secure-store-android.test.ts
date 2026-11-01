@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
@@ -15,6 +16,77 @@ describe("Android secure store guardrails", () => {
     expect(java("MainActivity")).toContain("WebViewFeature.WEB_MESSAGE_LISTENER");
     expect(java("SuiteWebViewClient")).toContain("onPageCommitVisible");
     expect(java("SuiteWebViewClient")).toContain(".mainFrameNavigation()");
+  });
+
+  test("takes read tickets inside the origin-checked listener before Capacitor dispatch", () => {
+    const activity = java("MainActivity");
+    const install = activity.indexOf("new SuiteMessageHandler(bridge, webView)");
+    expect(install).toBeGreaterThan(-1);
+    for (const guard of [
+      'WebViewCompat.removeWebMessageListener(webView, "androidBridge")',
+      "bridge.getAllowedOriginRules().clear()",
+      "bridge.getAllowedOriginRules().add(bridge.getServerUrl())",
+    ]) {
+      expect(activity.indexOf(guard)).toBeGreaterThan(-1);
+      expect(activity.indexOf(guard)).toBeLessThan(install);
+    }
+    expect(activity.indexOf("webView.removeJavascriptInterface(name)")).toBeGreaterThan(install);
+    expect(activity.indexOf("webView.loadUrl(bridge.getAppUrl())")).toBeGreaterThan(install);
+
+    const handler = java("SuiteMessageHandler");
+    expect(handler).toContain("extends MessageHandler");
+    expect(handler).toContain("super(bridge, webView, null)");
+    expect(handler).toContain('"get".equals(message.getString("methodName"))');
+    const admit = handler.indexOf(
+      '.admitRead(message.getString("callbackId"), options.opt("key"))',
+    );
+    expect(admit).toBeGreaterThan(handler.indexOf("if (handle == null) return"));
+    expect(admit).toBeLessThan(handler.indexOf("super.postMessage(json)"));
+
+    // The superclass owns frame/origin checks and WebMessage replies. Pin the installed source
+    // contract: admission relies on its synchronous virtual call, before taskHandler dispatch.
+    const capacitor = readFileSync(
+      new URL(
+        "../node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/MessageHandler.java",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(capacitor).toMatch(/if \(isMainFrame\) \{\s+postMessage\(message.getData\(\)\)/);
+    expect(capacitor).toContain(
+      'WebViewCompat.addWebMessageListener(webView, "androidBridge", bridge.getAllowedOriginRules(), capListener)',
+    );
+    expect(capacitor).toContain('String callbackId = postData.getString("callbackId")');
+  });
+
+  test("consumes admission FIFO tickets and cancels stale reads before storage work", () => {
+    const plugin = java("SuiteSecureStorePlugin");
+    const get = plugin.slice(
+      plugin.indexOf("@PluginMethod public void get("),
+      plugin.indexOf("@PluginMethod public void set("),
+    );
+    expect(get).toContain("ticket = operations.takeReadTicket(call.getCallbackId(), key)");
+    expect(get).not.toContain("operations.ticket(");
+    expect(get).toContain("operations.get(this::store, ticket,");
+    expect(get.indexOf("operations.takeReadTicket(")).toBeLessThan(
+      get.indexOf("operations.get(this::store, ticket,"),
+    );
+    expect(plugin).toContain("operations.admitRead(callbackId, key)");
+    expect(plugin).toContain("void mainFrameNavigation() { operations.navigation(); }");
+
+    const operations = java("SecureStoreOperations");
+    expect(operations).toContain("synchronized void admitRead(String callbackId, Object rawKey)");
+    expect(operations).toContain(".addLast(ticket(key))");
+    expect(operations).toContain("Ticket ticket = tickets.removeFirst()");
+    expect(operations).toContain("if (tickets.isEmpty()) admittedReads.remove(callbackId)");
+    expect(operations).toContain(
+      'if (!ticket.key.equals(key)) throw new SecureStoreException("cancelled")',
+    );
+    expect(operations).toContain("synchronized void navigation() { cancel(); }");
+    expect(operations).toContain("generation++");
+    const read = operations.slice(operations.indexOf("void get(StoreLoader store,"));
+    expect(read).toContain("serial.execute(");
+    expect(read.indexOf("check(ticket)")).toBeLessThan(read.indexOf("store.load()"));
   });
 
   test("pins the biometric permission, key generation and credential fallback", () => {

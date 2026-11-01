@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import android.os.Handler;
@@ -55,28 +56,19 @@ public class SuiteSecureStorePlugin extends Plugin {
 
     @PluginMethod public void get(PluginCall call) {
         final String key;
-        try { key = SecureStoreValidation.key(call.getData().opt("key")); }
+        final SecureStoreOperations.Ticket ticket;
+        try {
+            key = SecureStoreValidation.key(call.getData().opt("key"));
+            ticket = operations.takeReadTicket(call.getCallbackId(), key);
+        }
         catch (Exception e) { reject(call, e); return; }
-        SecureStoreOperations.Ticket ticket = operations.ticket(key);
-        queue.execute(() -> {
-            try {
-                operations.check(ticket);
-                SecureStore current = store();
-                SecureStore.Read read = current.beginGet(key, ticket.foreground && operations.foreground());
-                SecureStoreOperations.Result result = new SecureStoreOperations.Result() {
-                    @Override public void success(SecureStore.Value value) {
-                        JSObject data = new JSObject();
-                        data.put("value", value.value == null ? JSONObject.NULL : value.value); data.put("version", value.version);
-                        call.resolve(data);
-                    }
-                    @Override public void failure(String code) { call.reject(code, code); }
-                };
-                if (read.gated()) operations.begin(current, read, ticket, result);
-                else {
-                    SecureStore.Value value = current.finishGet(read, null);
-                    operations.deliver(ticket, value, result);
-                }
-            } catch (Exception e) { reject(call, e); }
+        operations.get(this::store, ticket, new SecureStoreOperations.Result() {
+            @Override public void success(SecureStore.Value value) {
+                JSObject data = new JSObject();
+                data.put("value", value.value == null ? JSONObject.NULL : value.value); data.put("version", value.version);
+                call.resolve(data);
+            }
+            @Override public void failure(String code) { call.reject(code, code); }
         });
     }
 
@@ -115,6 +107,7 @@ public class SuiteSecureStorePlugin extends Plugin {
     }
 
     @PluginMethod public void cancel(PluginCall call) { operations.cancel(); call.resolve(new JSObject()); }
+    void admitRead(String callbackId, Object key) { operations.admitRead(callbackId, key); }
     void mainFrameNavigation() { operations.navigation(); }
     @Override protected void handleOnResume() { operations.foreground(true); }
     @Override protected void handleOnPause() { operations.foreground(false); }
