@@ -38,9 +38,8 @@ export function ImageUpload({
     selectionAnchor.current = anchor;
     insertFragment.current = () => {
       if (!transfer || editor.isDestroyed) return;
-      editor.view.dispatch(editor.state.tr.setSelection(anchor.selection));
       // Run the usual paste normalization and URL filters on the retained fragment.
-      editor.view.pasteHTML(transfer.fragment.innerHTML);
+      anchor.insert(() => editor.view.pasteHTML(transfer.fragment.innerHTML));
     };
     return () => {
       anchor.release();
@@ -111,14 +110,15 @@ export function ImageUpload({
         }
         return;
       }
-      editor.view.dispatch(editor.state.tr.setSelection(anchor.selection));
-      editor
-        .chain()
-        .insertContent({
-          type: "image",
-          attrs: { src, alt: decorative ? "" : alt.trim() },
-        })
-        .run();
+      anchor.insert(() =>
+        editor
+          .chain()
+          .insertContent({
+            type: "image",
+            attrs: { src, alt: decorative ? "" : alt.trim() },
+          })
+          .run(),
+      );
       close();
     } catch {
       setState("error");

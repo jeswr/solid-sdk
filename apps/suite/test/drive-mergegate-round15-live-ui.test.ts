@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import type { DriveClient } from "../src/apps/drive/lib/client/client";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -12,7 +13,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => navigation.params,
 }));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

@@ -369,7 +369,20 @@ describe("openPopupUnlessRenewable (the click-handler front door)", () => {
     const controller = makeController();
     const spy = vi.fn((issuer: URL) => issuer instanceof URL);
     openPopupUnlessRenewable(controller, { canRenewWithoutInteraction: spy }, "https://as.test");
-    expect(spy).toHaveBeenCalledWith(new URL("https://as.test"));
+    expect(spy).toHaveBeenCalledWith(new URL("https://as.test"), undefined);
+  });
+
+  it("passes the expected WebID through to the probe", () => {
+    const controller = makeController();
+    const spy = vi.fn<(issuer: URL, webId?: string) => boolean>(() => false);
+    openPopupUnlessRenewable(
+      controller,
+      { canRenewWithoutInteraction: spy },
+      "https://as.test",
+      "https://pod.test/bob#me",
+    );
+    expect(spy).toHaveBeenCalledWith(new URL("https://as.test"), "https://pod.test/bob#me");
+    expect(controller.isOpen).toBe(true);
   });
 });
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
@@ -43,6 +44,11 @@ describe("confirmProposal — the graduated human-confirm gate", () => {
   it.each([
     ["no owner evidence", {}, undefined],
     ["a fabricated reply reference", { inReplyTo: "urn:agentic:raw:forged" }, THREAD],
+    [
+      "Actor-written reply linkage and provenance without owner evidence",
+      { inReplyTo: "urn:agentic:raw:forged", derivedFrom: "urn:agentic:raw:forged" },
+      undefined,
+    ],
     ["a novel recipient on a known thread", { recipient: "mallory@example.com" }, THREAD],
     ["a different channel", { channel: "slack" }, THREAD],
     ["no established recipients", {}, { ...THREAD, recipients: [] }],

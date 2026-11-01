@@ -5,6 +5,7 @@
 Solid-OIDC login and session helpers for Node.js, plus RFC 9449 DPoP proof primitives.
 
 > Experimental and security-sensitive. Review the authentication flow before production use.
+> Deprecated for new integrations in favour of `@jeswr/pod-auth`; retained for existing consumers.
 
 ## Install
 
@@ -39,6 +40,32 @@ const response = await authedFetch(
 `openBrowser` is supplied. Persist the refresh token together with the same DPoP key pair, and
 re-persist after `refreshSession` rotates a token; a new key cannot redeem a token bound to the old
 key.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Transport and response limits
+
+Discovery requires an exact issuer match, including trailing slashes. The issuer and all advertised
+token, authorization, registration, and JWKS URLs must use HTTPS. Local development can explicitly
+set `allowInsecureLoopback: true` for HTTP on `localhost`, `127.0.0.1`, or `[::1]`.
+This is a URL transport check; DNS resolution and SSRF pinning remain the consumer's responsibility.
+
+Discovery and token responses have a streamed 1 MiB cap and a 30-second deadline covering transport
+and response consumption (and the token nonce retry). Configure `maxResponseBytes` and
+`requestTimeoutMs` on client credentials, `cliLogin`/`exchangeCode` options, or the optional third
+options argument to `discoverProvider`/`refreshSession`. Refresh inherits options from an in-memory
+auth-code session; after loading a persisted session, supply development opt-in and custom budgets
+again through `refreshSession`'s third argument. Token responses must declare `token_type: "DPoP"`
+(case-insensitive). Token HTTP errors expose only status and an allowlisted RFC 6749 error code.
+
+Credential-bearing requests always use `redirect: "manual"`. Token redirects are errors.
+`authedFetch` and `rdfFetchFor` return resource redirects unfollowed, including when the caller asks
+for `redirect: "follow"`; `redirect: "error"` rejects a resource redirect. Injected transports must
+honour manual redirects. Discarded nonce responses are cancelled on a best-effort basis without
+waiting for cancellation to finish.
+
+For a composed CLI flow, call `startLoopbackListener(path, expectedState)` with the state used in
+the authorization URL, or use the generated `listener.state`. Missing, mismatched, or duplicate
+callback state cannot complete the login. Callback errors use a constant plain-text response.
 
 ## Key API
 

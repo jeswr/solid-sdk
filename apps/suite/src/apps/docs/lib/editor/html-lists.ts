@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 
-/** Lift block images and supply the required paragraph before a list's leading block. */
+/** Preserve counters and task states, then normalize blocks for the list schema. */
 export function normaliseHtmlLists(root: ParentNode) {
   for (const paragraph of root.querySelectorAll("p")) {
     if (paragraph.querySelector("img") && !paragraph.textContent?.trim())
@@ -15,21 +15,45 @@ export function normaliseHtmlLists(root: ParentNode) {
         (input) => input.closest("li") === item,
       ),
     );
-    if (!checks.some(Boolean)) continue;
-    // The schema has homogeneous lists. Split on item kind, as the Markdown
-    // importer does, and count task items when resuming ordinary numbering.
+    const ordered = list.tagName === "OL";
+    const reversed = ordered && list.hasAttribute("reversed");
+    if (
+      !checks.some(Boolean) &&
+      !(ordered && items.some((item) => item.hasAttribute("value"))) &&
+      !reversed
+    )
+      continue;
+    // The schema stores counters on lists, not items, and has homogeneous item
+    // kinds. Split on either boundary, counting task items before resuming.
     const groups: Element[] = [];
+    let counter = ordered
+      ? reversed && !list.hasAttribute("start")
+        ? items.length
+        : (list as HTMLOListElement).start
+      : 1;
+    let previous = counter - 1;
     items.forEach((item, index) => {
+      const explicit = item
+        .getAttribute("value")
+        ?.trim()
+        .match(/^[+-]?\d+/)?.[0];
+      if (ordered && explicit && Number.isSafeInteger(Number(explicit))) counter = Number(explicit);
       const check = checks[index];
       const task = Boolean(check);
       let group = groups.at(-1);
-      if (!group || (group.getAttribute("data-type") === "taskList") !== task) {
+      if (
+        !group ||
+        (group.getAttribute("data-type") === "taskList") !== task ||
+        (ordered && !task && counter !== previous + 1)
+      ) {
         group = task ? list.ownerDocument.createElement("ul") : (list.cloneNode(false) as Element);
         if (task) group.setAttribute("data-type", "taskList");
         else {
           group.removeAttribute("data-type");
-          if (list.tagName === "OL")
-            group.setAttribute("start", String((list as HTMLOListElement).start + index));
+          if (ordered) {
+            group.setAttribute("start", String(counter));
+            group.removeAttribute("reversed");
+          }
         }
         groups.push(group);
       }
@@ -41,6 +65,9 @@ export function normaliseHtmlLists(root: ParentNode) {
         if (label) label.replaceWith(...label.childNodes);
       }
       group.append(item);
+      if (ordered) item.removeAttribute("value");
+      previous = counter;
+      counter += reversed ? -1 : 1;
     });
     list.replaceWith(...groups);
   }

@@ -10,6 +10,12 @@ vi.mock("@/lib/demo-pod/browser", () => ({
   getDemoPod: () => Promise.resolve({ fetch: vi.fn(), subscribe: vi.fn() }),
   resetDemoPod: vi.fn(),
 }));
+// No Solid extension in this test: settle the 500 ms extension probe at once so the demo session
+// opens on promise turns alone.
+vi.mock("../src/lib/session/extension-session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/lib/session/extension-session")>()),
+  detectSolidExtension: () => Promise.resolve(false),
+}));
 vi.mock("../src/apps/docs/components/common", () => ({ DocumentSkeleton: () => "skeleton" }));
 vi.mock("../src/apps/docs/components/docs-workspace", () => ({
   DocsWorkspace: () => (mocks.Workspace ? createElement(mocks.Workspace) : null),
@@ -44,8 +50,9 @@ it("hydrates a workspace whose code loads after the session settles against the 
     onRecoverableError: recoverable,
   });
   try {
+    // Let the session settle (promise turns only, flushed by one macrotask) before the code loads.
     await act(async () => {
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => load({ default: Status }));
     expect(recoverable).not.toHaveBeenCalled();

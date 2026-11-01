@@ -37,7 +37,12 @@
       "types": "./dist/shell/index.d.ts",
       "import": "./dist/shell/index.js"
     },
-    "./styles/shell.css": "./dist/styles/shell.css"
+    "./styles/shell.css": "./dist/styles/shell.css",
+    "./sign-in": {
+      "types": "./dist/sign-in/index.d.ts",
+      "import": "./dist/sign-in/index.js"
+    },
+    "./styles/sign-in.css": "./dist/styles/sign-in.css"
   },
   "files": [
     "dist",

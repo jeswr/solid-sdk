@@ -237,6 +237,7 @@ export async function discoverProfileLinks(
   fetchImpl: typeof fetch,
   podRoot: string,
   requireReadable: boolean,
+  publicFetch?: typeof fetch,
 ): Promise<{ publicIndexes: string[]; privateIndexes: string[]; preferences: string[] }> {
   const scopedFetch = createPodScopedFetch(podRoot, { fetch: fetchImpl });
   const documents = new Map<string, DatasetCore | undefined>([[documentUrl(webId), profile]]);
@@ -244,12 +245,26 @@ export async function discoverProfileLinks(
   const privateIndexes = new Set<string>();
   const preferences = new Set<string>();
   const checked = (url: string) => documentUrl(assertWithinPodScope(podRoot, url));
-  const read = async (url: string): Promise<DatasetCore | undefined> => {
+  const publicDocument = (value: string) => {
+    if (!publicFetch) return checked(value);
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+      throw new Error("Invalid public profile document URL.");
+    return documentUrl(url.href);
+  };
+  const addPrivate = (values: Iterable<string>, into: Set<string>) => {
+    for (const value of values) {
+      // Confined sessions cannot read private metadata outside their storage grant.
+      if (publicFetch && !podScopedUrl(podRoot, value)) continue;
+      into.add(checked(value));
+    }
+  };
+  const read = async (url: string, http = scopedFetch): Promise<DatasetCore | undefined> => {
     if (documents.has(url)) return documents.get(url);
     if (documents.size >= 32) throw new Error("Too many linked Type Index profile documents.");
     let dataset: DatasetCore | undefined;
     try {
-      dataset = (await readRdf(url, scopedFetch)).dataset;
+      dataset = (await readRdf(url, http)).dataset;
     } catch (error) {
       if (
         !(
@@ -264,19 +279,21 @@ export async function discoverProfileLinks(
   };
   const profiles = new Set([documentUrl(webId)]);
   for (const url of profiles) {
-    const dataset = await read(url);
+    const dataset = await read(url, publicFetch ?? scopedFetch);
     if (!dataset) continue;
     const anchor = new ProfileTypeIndexAnchor(webId, dataset, DataFactory);
-    for (const index of anchor.publicIndexes) publicIndexes.add(checked(index));
-    for (const index of anchor.privateIndexes) privateIndexes.add(checked(index));
-    for (const prefs of anchor.preferencesFiles) preferences.add(checked(prefs));
-    for (const extended of anchor.extendedProfiles) profiles.add(checked(extended));
+    for (const index of anchor.publicIndexes) publicIndexes.add(publicDocument(index));
+    addPrivate(anchor.privateIndexes, privateIndexes);
+    addPrivate(anchor.preferencesFiles, preferences);
+    for (const extended of anchor.extendedProfiles) profiles.add(publicDocument(extended));
   }
   for (const url of preferences) {
     const dataset = await read(url);
     if (!dataset) continue;
-    for (const index of new ProfileTypeIndexAnchor(webId, dataset, DataFactory).privateIndexes)
-      privateIndexes.add(checked(index));
+    addPrivate(
+      new ProfileTypeIndexAnchor(webId, dataset, DataFactory).privateIndexes,
+      privateIndexes,
+    );
   }
   return {
     publicIndexes: [...publicIndexes],
@@ -449,6 +466,8 @@ export async function ensureTypeRegistrations(opts: {
  * Set `requireReadable` for bootstrap decisions: an inaccessible index cannot
  * prove absence and must prevent creating a competing registration. A 404 is
  * confirmed absence in either mode.
+ * `publicFetch` separates credential-free profile/public-index reads from storage-scoped
+ * private metadata. Off-storage private links are skipped in this read-only mode.
  */
 export async function discoverRegistrations(
   webId: string,
@@ -456,14 +475,25 @@ export async function discoverRegistrations(
   fetchImpl: typeof fetch,
   podRoot: string,
   requireReadable = false,
+  publicFetch?: typeof fetch,
 ): Promise<RegisteredLocation[]> {
-  const links = await discoverProfileLinks(webId, profile, fetchImpl, podRoot, requireReadable);
+  const links = await discoverProfileLinks(
+    webId,
+    profile,
+    fetchImpl,
+    podRoot,
+    requireReadable,
+    publicFetch,
+  );
   const checked = new Set([...links.publicIndexes, ...links.privateIndexes]);
   const scopedFetch = createPodScopedFetch(podRoot, { fetch: fetchImpl });
   const out: RegisteredLocation[] = [];
   for (const url of checked) {
     try {
-      const { dataset } = await readRdf(url, scopedFetch);
+      const { dataset } = await readRdf(
+        url,
+        publicFetch && links.publicIndexes.includes(url) ? publicFetch : scopedFetch,
+      );
       for (const location of new TypeIndexDataset(dataset, DataFactory).all()) {
         if (location.instance && !podScopedUrl(podRoot, location.instance)) continue;
         if (location.container && !podScopedUrl(podRoot, location.container)) continue;
@@ -485,12 +515,16 @@ export async function discoverRegistrations(
  * Discover before bootstrap, failing if the profile or an existing advertised
  * index cannot be read. Order is public then private, preserving each index's
  * registration order so callers can consistently choose the first match.
+ * Supplying `publicFetch` enables best-effort discovery for confined storage sessions;
+ * this result must not be used to decide whether to bootstrap missing registrations.
  */
 export async function discoverProfileRegistrations(
   webId: string,
   fetchImpl: typeof fetch,
   podRoot: string,
+  publicFetch?: typeof fetch,
 ): Promise<RegisteredLocation[]> {
-  const { dataset } = await readRdf(webId, refuseRedirects(fetchImpl));
-  return discoverRegistrations(webId, dataset, fetchImpl, podRoot, true);
+  const profileFetch = publicFetch ? refuseRedirects(publicFetch) : undefined;
+  const { dataset } = await readRdf(webId, profileFetch ?? refuseRedirects(fetchImpl));
+  return discoverRegistrations(webId, dataset, fetchImpl, podRoot, !publicFetch, profileFetch);
 }
