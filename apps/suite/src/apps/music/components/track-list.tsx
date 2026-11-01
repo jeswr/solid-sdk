@@ -22,7 +22,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { type MusicTrack, sortTracks } from "../lib/data/library";
+import { type MusicTrack, sortTracks, withLiveState } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { formatDuration } from "../lib/library";
 import { albumHref, artistHref } from "../lib/navigation";
@@ -183,8 +183,7 @@ export function TrackList({
   const router = useRouter();
   const music = useMusic();
   const [sort, setSort] = useState<"title" | "artist" | "albumTitle" | "added">("title");
-  const current = new Map(music.snapshot?.library.tracks.map((track) => [track.id, track]));
-  const visibleTracks = tracks.map((track) => current.get(track.id) ?? track);
+  const visibleTracks = withLiveState(tracks, music.snapshot?.library.tracks);
   const items = sortable ? sortTracks(visibleTracks, sort) : visibleTracks;
   if (!tracks.length)
     return (

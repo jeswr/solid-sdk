@@ -120,6 +120,21 @@ export async function loadLibrary(
   return { tracks, models, documents, albums, artists };
 }
 
+/**
+ * Refreshes rendered tracks from the live library while keeping each row's album context:
+ * album views pass album-specific copies of tracks that appear on several albums.
+ */
+export function withLiveState(
+  tracks: MusicTrack[],
+  live: readonly MusicTrack[] = [],
+): MusicTrack[] {
+  const current = new Map(live.map((track) => [track.id, track]));
+  return tracks.map((track) => {
+    const fresh = current.get(track.id);
+    return fresh ? { ...fresh, albumId: track.albumId, albumTitle: track.albumTitle } : track;
+  });
+}
+
 export function search(library: Library, query: string): MusicTrack[] {
   const words = query.toLocaleLowerCase().trim().split(/\s+/u);
   return library.tracks.filter((track) =>

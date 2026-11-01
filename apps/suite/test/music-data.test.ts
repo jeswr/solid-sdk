@@ -13,11 +13,13 @@ import {
   createDocument,
   documentUrl,
   loadLibrary,
+  type MusicTrack,
   musicRoot,
   provision,
   requireEtag,
   search,
   sortTracks,
+  withLiveState,
 } from "../src/apps/music/lib/data/library";
 import { LikedSyncPendingError, retryLikedSync, setLiked } from "../src/apps/music/lib/data/liked";
 import {
@@ -107,6 +109,14 @@ describe("Music library on the demo pod", () => {
     expect(library.artists[0]?.albumIds).toHaveLength(1);
     expect(library.tracks[0]?.durationSeconds).toBe(180);
     expect(search(library, "junipers small")).toHaveLength(3);
+    const [first, second] = library.tracks as [MusicTrack, MusicTrack];
+    const albumCopy = { ...first, loved: !first.loved, albumId: "urn:other", albumTitle: "Other" };
+    expect(withLiveState([albumCopy, second], library.tracks)).toEqual([
+      { ...first, albumId: "urn:other", albumTitle: "Other" },
+      second,
+    ]);
+    const orphan = { ...second, id: "urn:gone" };
+    expect(withLiveState([orphan])).toEqual([orphan]);
     expect(search(library, " APPLE ").map((t) => t.id)).toEqual([tracks[1]?.value]);
     expect(search(library, "unknown")).toEqual([]);
     expect(search(library, "")).toHaveLength(3);
