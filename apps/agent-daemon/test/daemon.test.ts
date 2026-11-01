@@ -62,7 +62,14 @@ function harness() {
     rawMediaType: "text/plain",
     warnings: [],
     messageId: "seed",
-    jsonLdBlocks: ['{"@type":"Example"}'],
+    jsonLdBlocks: [
+      JSON.stringify({
+        "@context": { agent: "https://jeswr.org/ns/agent#" },
+        "@type": "agent:SignedMessage",
+        "agent:wireFormat": "jws-compact",
+        "agent:compactJws": "fixture.signed.envelope",
+      }),
+    ],
   };
   const ingest = {
     list: vi.fn(async (_account: { id: string }, _cursor?: string, _limits?: unknown) => ({
@@ -172,6 +179,17 @@ it("proposes only for structured or independently owner-flagged messages", async
     await createDaemon({ ...h.options, isFlagged: vi.fn(async () => flagged) }).once();
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(flagged ? 1 : 0);
   }
+});
+it.each([
+  "not JSON",
+  '{"@type":"https://schema.org/Event"}',
+  '{"@context":"https://untrusted.example/context","@type":"agent:SignedMessage"}',
+  '{"@context":{"agent":"https://jeswr.org/ns/agent#"},"@type":"agent:SignedMessage","agent:wireFormat":"jws-compact","agent:compactJws":"invalid"}',
+])("does not treat unrelated or malformed metadata as a proposer envelope: %s", async (block) => {
+  const h = harness();
+  Object.assign(h.message, { jsonLdBlocks: [block] });
+  await createDaemon(h.options).once();
+  expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
 });
 it("never commits a cursor or executes after an ACL, inbox, model, audit, or cursor failure", async () => {
   for (const stage of ["acl", "inbox", "model", "audit", "cursor"]) {

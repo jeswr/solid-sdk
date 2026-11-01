@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { ChannelParseError } from "@jeswr/agent-channels";
-import { digestOf, newUrn, podRecordSchema } from "@jeswr/agent-model";
+import { AGENT, digestOf, newUrn, parseBoundedJson, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
@@ -25,6 +25,22 @@ const triageSchema = z.object({
   urgency: z.enum(["urgent", "not_urgent"]),
   confidence: z.number().min(0).max(1),
 });
+const envelopeSchema = z.strictObject({
+  "@context": z.strictObject({ agent: z.literal(AGENT) }),
+  "@type": z.literal("agent:SignedMessage"),
+  "agent:wireFormat": z.literal("jws-compact"),
+  "agent:compactJws": z.string().regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
+});
+function hasStructuredEnvelope(blocks: readonly string[] | undefined): boolean {
+  if (!blocks || blocks.length > 512) return false;
+  return blocks.some((block) => {
+    try {
+      return envelopeSchema.safeParse(parseBoundedJson(block)).success;
+    } catch {
+      return false;
+    }
+  });
+}
 
 /** pod-auth retains credentials and supplies every authenticated pod request. */
 export async function composeDaemon(options: {
@@ -169,7 +185,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
         account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
       const flagged = await o.isFlagged(account.id, thread);
       // A structured part is a processing hint; it never authenticates a sender.
-      if (!flagged && !message.jsonLdBlocks?.length) continue;
+      if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
       let result: Awaited<ReturnType<DaemonOptions["gateway"]["proposer"]["propose"]>>;
       try {
         result = await o.gateway.proposer.propose([{ source, message, triage }], o.proposerContext);
