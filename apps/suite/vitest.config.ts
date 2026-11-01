@@ -21,6 +21,7 @@ export default defineConfig({
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/home/state/presentation.ts",
+        "src/apps/home/lib/permissions/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
