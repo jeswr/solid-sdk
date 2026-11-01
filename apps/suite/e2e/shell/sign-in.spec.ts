@@ -100,13 +100,13 @@ test("demo lands on the start page and the shell keeps the session", async ({ pa
   await page.goto("/search");
   await expect(page.getByRole("heading", { name: "Search", exact: true, level: 1 })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /^Account: / }).filter({ visible: true }),
+    page.getByRole("button", { name: /^Account: / }).filter({ visible: true }),
   ).toBeVisible();
   await accessible(page);
   await screenshot(page, "search", info.project.name);
   await page.reload();
   await expect(
-    page.getByRole("link", { name: /^Account: / }).filter({ visible: true }),
+    page.getByRole("button", { name: /^Account: / }).filter({ visible: true }),
   ).toBeVisible();
   await accessible(page);
   await page.goto("/");

@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  IconButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -46,15 +45,15 @@ export function AccountMenu() {
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <IconButton
-            label={`Account: ${active.name}`}
-            ref={trigger}
-            className="suite-shell-icon-button"
-            variant="ghost"
-          >
+          {/* No aria-label: the sr-only sentence names it, so the name and its text agree
+              (axe label-content-name-mismatch, WCAG 2.5.3). */}
+          <Button ref={trigger} className="suite-shell-icon-button" variant="ghost" size="icon">
             <span className="suite-sr-only">Account: {active.name}</span>
-            <AccountAvatar account={active} />
-          </IconButton>
+            {/* Initials are decoration; the name is the sentence above (WCAG 2.5.3). */}
+            <span aria-hidden="true">
+              <AccountAvatar account={active} />
+            </span>
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
