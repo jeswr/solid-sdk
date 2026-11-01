@@ -140,7 +140,7 @@ describe("validateIntent reports, never throws or hangs", () => {
       await shape(`sh:and ( <urn:L0> <urn:L0> ) .\n${levels}<urn:L40> sh:nodeKind sh:IRI`),
     );
     expect(report.conforms).toBe(false);
-    expect(report.results[0]?.message).toMatch(/evaluation budget/);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
@@ -160,7 +160,7 @@ describe("validateIntent reports, never throws or hangs", () => {
         await shape(`${extra} .\n${levels}<urn:A2> a sh:NodeShape`),
       );
       expect(report.conforms).toBe(false);
-      expect(report.results[0]?.message).toMatch(/evaluation budget/);
+      expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
     });
   }
 
@@ -189,6 +189,127 @@ describe("validateIntent reports, never throws or hangs", () => {
       const built = await validateIntent(intent, buildShapeForIntent(action));
       expect(built.results.every((r) => !/unbounded cost/.test(r.message))).toBe(true);
     }
+  });
+
+  const quick = async (
+    body: string,
+    data: Intent | Awaited<ReturnType<typeof parseRdf>> = intent,
+  ) => {
+    const started = performance.now();
+    const report = await validateIntent(
+      data,
+      await parseRdf(
+        `@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix a2a: <https://w3id.org/jeswr/a2a#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <https://schema.org/> .
+${body}`,
+        "text/turtle",
+      ),
+    );
+    expect(performance.now() - started).toBeLessThan(2000);
+    return report;
+  };
+
+  it("counts value nodes: a linear chain over a wide path is refused", async () => {
+    const preds = ["rdf:type", "a2a:action", "schema:object", "schema:agent", "a2a:mode"];
+    const wide = `[ sh:zeroOrMorePath [ sh:alternativePath ( ${preds.join(" ")} ${preds
+      .map((p) => `[ sh:inversePath ${p} ]`)
+      .join(" ")} ) ] ]`;
+    let body = "<urn:S> a sh:NodeShape ; sh:targetClass a2a:Intent ; sh:property <urn:P0> .\n";
+    for (let i = 0; i < 8; i++)
+      body += `<urn:P${i}> sh:path ${wide} ; sh:or ( <urn:P${i + 1}> ) .\n`;
+    body += "<urn:P8> sh:path rdf:type ; sh:hasValue <urn:none> .";
+    const report = await quick(body);
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
+  });
+
+  const loop = "_:l rdf:first <urn:x> ; rdf:rest _:l .";
+  for (const [name, body] of [
+    ["sh:in", `<urn:S> sh:targetNode <urn:anything> ; sh:in _:l . ${loop}`],
+    [
+      "a sequence path",
+      `<urn:S> sh:targetNode <urn:a> ; sh:property [ sh:path _:l ; sh:minCount 0 ] . ${loop}`,
+    ],
+    [
+      "sh:alternativePath",
+      `<urn:S> sh:targetNode <urn:a> ; sh:property [ sh:path [ sh:alternativePath _:l ] ; sh:minCount 0 ] . ${loop}`,
+    ],
+    [
+      "sh:languageIn",
+      `<urn:S> sh:targetNode <urn:a> ; sh:languageIn _:l . _:l rdf:first "fr" ; rdf:rest _:l .`,
+    ],
+    [
+      "sh:ignoredProperties",
+      `<urn:S> sh:targetClass a2a:Intent ; sh:closed true ; sh:ignoredProperties _:l . ${loop}`,
+    ],
+  ] as const) {
+    it(`refuses a looping list under ${name}`, async () => {
+      const report = await quick(body);
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/unbounded cost/);
+    });
+  }
+
+  for (const form of ["alt", "seq"] as const) {
+    it(`refuses a property path that shares nodes (${form})`, async () => {
+      let body =
+        "<urn:S> sh:targetClass a2a:Intent ; sh:property [ sh:path _:p0 ; sh:minCount 0 ] .\n";
+      for (let i = 0; i < 20; i++) {
+        body +=
+          form === "alt"
+            ? `_:p${i} sh:alternativePath ( _:p${i + 1} _:p${i + 1} ) .\n`
+            : `_:p${i} sh:zeroOrOnePath ( _:p${i + 1} _:p${i + 1} ) .\n`;
+      }
+      body += `_:p20 sh:inversePath a2a:action .`;
+      const report = await quick(body);
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/property path/);
+    });
+  }
+
+  const diamond = (root: string) => {
+    let triples = "";
+    let previous = [root];
+    for (let i = 0; i < 24; i++) {
+      const current = [`<urn:c${i}a>`, `<urn:c${i}b>`];
+      for (const c of current) for (const p of previous) triples += `${c} rdfs:subClassOf ${p} .\n`;
+      previous = current;
+    }
+    return triples;
+  };
+
+  it("refuses subclass reasoning in the shapes graph", async () => {
+    const report = await quick(
+      `<urn:S> sh:targetClass a2a:Intent ; sh:nodeKind sh:IRI .\n${diamond("rdfs:Class")}`,
+    );
+    expect(report.conforms).toBe(false);
+  });
+
+  it("refuses subclass reasoning in the intent graph, even against the package's own shapes", async () => {
+    const data = await parseRdf(
+      `@prefix a2a: <https://w3id.org/jeswr/a2a#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <https://schema.org/> .
+<urn:i:5> a a2a:Intent ; a2a:action [ a schema:ReadAction ; schema:object <https://alice.example/x> ] .
+${diamond("a2a:Intent")}`,
+      "text/turtle",
+    );
+    const started = performance.now();
+    const report = await validateIntent(data, buildShapeForIntent("read"));
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/rdfs:subClassOf/);
+  });
+
+  it("still evaluates bounded paths, lists and logical shapes", async () => {
+    const report = await quick(
+      `<urn:S> sh:targetClass a2a:Intent ; sh:property [
+  sh:path ( a2a:action [ sh:alternativePath ( schema:object schema:target ) ] ) ;
+  sh:minCount 1 ; sh:nodeKind sh:IRI ;
+  sh:not [ sh:in ( <https://mallory.example/x> ) ]
+] ; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:BlankNode ] ) .`,
+    );
+    expect(report.conforms).toBe(true);
   });
 
   it("an invalid regex or an invalid Intent is a non-conformance", async () => {

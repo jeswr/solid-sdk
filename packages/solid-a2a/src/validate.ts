@@ -54,82 +54,315 @@ const SH_PATTERN = "http://www.w3.org/ns/shacl#pattern";
 
 const SH_NS = "http://www.w3.org/ns/shacl#";
 const RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-/** Constraints whose object is one shape the validator evaluates per value node. */
-const SHAPE_REFS = new Set(
-  ["node", "property", "not", "qualifiedValueShape"].map((p) => SH_NS + p),
-);
-/** Constraints whose object is an RDF list of shapes. */
-const SHAPE_LISTS = new Set(["and", "or", "xone"].map((p) => SH_NS + p));
-/**
- * The most shape evaluations one validation may unfold to, counting a shape once
- * per reference path. The validator does not memoise, so a small graph whose
- * shapes each name the next one twice costs 2^depth; this request-sized budget
- * refuses that before any work starts. The package's own shapes unfold to a few
- * dozen.
- */
-const MAX_SHAPE_EVALUATIONS = 1024;
-const MAX_LIST_LENGTH = 256;
-const OVER_BUDGET = "Shapes that unfold past the evaluation budget";
+const RDF_TYPE = `${RDF_NS}type`;
+const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
+const RDFS_SUBCLASS_OF = `${RDFS}subClassOf`;
 
 /**
- * Why a shapes graph is refused before validation, or undefined when it is
- * bounded: a reference cycle, a list that loops or runs long, disjoint qualified
- * shapes (each check re-evaluates every sibling), or an unfolded size over budget.
+ * The SHACL Core a peer shape may use. Left out: `sh:pattern`/`sh:flags` (a
+ * peer's regex), `sh:qualifiedValueShapesDisjoint` (each check re-runs every
+ * sibling), and SHACL-SPARQL. The rest is bounded below.
  */
-function unboundedShapes(graph: Store): string | undefined {
+const ALLOWED_SH = new Set(
+  [
+    "targetClass",
+    "targetNode",
+    "targetSubjectsOf",
+    "targetObjectsOf",
+    "property",
+    "path",
+    "inversePath",
+    "alternativePath",
+    "zeroOrMorePath",
+    "oneOrMorePath",
+    "zeroOrOnePath",
+    "node",
+    "not",
+    "and",
+    "or",
+    "xone",
+    "qualifiedValueShape",
+    "qualifiedMinCount",
+    "qualifiedMaxCount",
+    "minCount",
+    "maxCount",
+    "nodeKind",
+    "hasValue",
+    "in",
+    "datatype",
+    "class",
+    "minLength",
+    "maxLength",
+    "languageIn",
+    "uniqueLang",
+    "equals",
+    "disjoint",
+    "lessThan",
+    "lessThanOrEquals",
+    "minInclusive",
+    "maxInclusive",
+    "minExclusive",
+    "maxExclusive",
+    "closed",
+    "ignoredProperties",
+    "name",
+    "description",
+    "message",
+    "severity",
+    "order",
+    "group",
+    "deactivated",
+    "defaultValue",
+  ].map((p) => SH_NS + p),
+);
+/** Constraints whose object is one shape evaluated at each value node. */
+const SHAPE_REFS = ["node", "property", "not", "qualifiedValueShape"].map((p) => SH_NS + p);
+/** Constraints whose object is a list of shapes evaluated at each value node. */
+const SHAPE_LISTS = ["and", "or", "xone"].map((p) => SH_NS + p);
+
+/**
+ * The most shape evaluations one validation may make, counted as the validator
+ * makes them: it does not memoise, so a shape reached twice, or through several
+ * value nodes, is evaluated each time. Request-sized; the package's own shapes
+ * over an honest intent make a few dozen.
+ */
+const MAX_SHAPE_EVALUATIONS = 2_000;
+/** An intent graph is a handful of triples; pairwise constraints are quadratic in it. */
+const MAX_DATA_QUADS = 1_000;
+const MAX_SHAPE_QUADS = 10_000;
+/** The validator walks lists with no cycle check and paths without memoising. */
+const MAX_LIST_LENGTH = 256;
+const MAX_PATH_SIZE = 64;
+
+const UNBOUNDED = "are not evaluated (unbounded cost)";
+
+/**
+ * Why a validation is refused before it starts, or undefined when its cost is
+ * bounded. Refused: SHACL outside {@link ALLOWED_SH}; `rdfs:subClassOf` in either
+ * graph (walked with no visited set); an RDF list that loops, branches or runs
+ * long; a property path that unfolds past {@link MAX_PATH_SIZE} nodes; a shape
+ * reference cycle; and more than {@link MAX_SHAPE_EVALUATIONS} evaluations over
+ * this data, computed exactly (with memoisation) from the shapes and the data.
+ */
+function unboundedValidation(shapes: Store, data: Store): string | undefined {
+  if (shapes.size > MAX_SHAPE_QUADS) return `Shapes over ${MAX_SHAPE_QUADS} triples ${UNBOUNDED}`;
+  if (data.size > MAX_DATA_QUADS)
+    return `Intent graphs over ${MAX_DATA_QUADS} triples ${UNBOUNDED}`;
+  for (const q of shapes.getQuads(null, null, null, null)) {
+    const p = q.predicate.value;
+    if ((p.startsWith(SH_NS) && !ALLOWED_SH.has(p)) || p === RDFS_SUBCLASS_OF) {
+      return `Shapes using <${p}> ${UNBOUNDED}`;
+    }
+  }
+  if (data.getQuads(null, RDFS_SUBCLASS_OF, null, null).length > 0) {
+    return `Intent graphs using rdfs:subClassOf ${UNBOUNDED}`;
+  }
+
   const key = (t: Term) => `${t.termType}:${t.value}`;
+  const objects = (graph: Store, subject: Term, predicate: string) =>
+    graph.getObjects(subject as Quad["subject"], predicate, null);
+
+  // Lists: each cell has one first and one rest, and every chain reaches rdf:nil.
+  const listLength = new Map<string, number>();
+  const walk = (cell: Term, depth: number): number | undefined => {
+    if (cell.termType === "NamedNode" && cell.value === `${RDF_NS}nil`) return 0;
+    const known = listLength.get(key(cell));
+    if (known !== undefined) return known;
+    if (depth > MAX_LIST_LENGTH) return undefined;
+    const first = objects(shapes, cell, `${RDF_NS}first`);
+    const rest = objects(shapes, cell, `${RDF_NS}rest`);
+    if (first.length !== 1 || rest.length !== 1) return undefined;
+    const tail = walk(rest[0] as Term, depth + 1);
+    if (tail === undefined) return undefined;
+    listLength.set(key(cell), tail + 1);
+    return tail + 1;
+  };
   const listMembers = (head: Term): Term[] | undefined => {
+    if (walk(head, 0) === undefined) return undefined;
     const members: Term[] = [];
-    const seen = new Set<string>();
-    let node = head;
-    while (!(node.termType === "NamedNode" && node.value === `${RDF_NS}nil`)) {
-      if (seen.has(key(node)) || members.length >= MAX_LIST_LENGTH) return undefined;
-      seen.add(key(node));
-      const first = graph.getObjects(node, `${RDF_NS}first`, null);
-      const rest = graph.getObjects(node, `${RDF_NS}rest`, null);
-      if (first.length !== 1 || rest.length !== 1) return undefined;
-      members.push(first[0] as Term);
-      node = rest[0] as Term;
+    for (let cell = head; !(cell.termType === "NamedNode" && cell.value === `${RDF_NS}nil`); ) {
+      members.push(objects(shapes, cell, `${RDF_NS}first`)[0] as Term);
+      cell = objects(shapes, cell, `${RDF_NS}rest`)[0] as Term;
     }
     return members;
   };
-  if (graph.getQuads(null, `${SH_NS}qualifiedValueShapesDisjoint`, null, null).length > 0) {
-    return "Shapes using sh:qualifiedValueShapesDisjoint are not evaluated (unbounded cost)";
+  for (const head of SHAPE_LISTS.flatMap((p) => shapes.getObjects(null, p, null))) {
+    if (listMembers(head) === undefined) return `Shapes with a malformed shape list ${UNBOUNDED}`;
   }
-  const size = new Map<string, number>();
-  const active = new Set<string>();
-  const unfold = (shape: Term): number | string => {
-    const k = key(shape);
-    const known = size.get(k);
-    if (known !== undefined) return known;
-    if (active.has(k)) return "Shapes that reference themselves";
-    active.add(k);
-    let total = 1;
-    for (const quad of graph.getQuads(shape, null, null, null)) {
-      let refs: Term[] = [];
-      if (SHAPE_REFS.has(quad.predicate.value)) refs = [quad.object];
-      else if (SHAPE_LISTS.has(quad.predicate.value)) {
-        const members = listMembers(quad.object);
-        if (members === undefined) return "Shapes with a malformed sh:and/sh:or/sh:xone list";
-        refs = members;
-      }
-      for (const ref of refs) {
-        const child = unfold(ref);
-        if (typeof child === "string") return child;
-        total += child;
-        if (total > MAX_SHAPE_EVALUATIONS) return OVER_BUDGET;
+  for (const cell of [
+    ...shapes.getSubjects(`${RDF_NS}first`, null, null),
+    ...shapes.getSubjects(`${RDF_NS}rest`, null, null),
+  ]) {
+    if (walk(cell, 0) === undefined) return `Shapes with a looping or malformed list ${UNBOUNDED}`;
+  }
+
+  // Paths: a tree of at most MAX_PATH_SIZE nodes once shared nodes are unfolded.
+  // Evaluated here as sets over the data (memoised), to count value nodes.
+  type PathFn = (focus: Term) => Term[];
+  const pathSize = (path: Term, budget: number): number | undefined => {
+    if (budget <= 0) return undefined;
+    if (path.termType === "NamedNode" && objects(shapes, path, `${RDF_NS}first`).length === 0) {
+      return 1;
+    }
+    const list = objects(shapes, path, `${RDF_NS}first`).length > 0 ? listMembers(path) : undefined;
+    // The inverse of anything but a predicate would need a scan of every node.
+    if (objects(shapes, path, `${SH_NS}inversePath`).some((p) => p.termType !== "NamedNode")) {
+      return undefined;
+    }
+    const parts = list ?? [
+      ...objects(shapes, path, `${SH_NS}inversePath`),
+      ...objects(shapes, path, `${SH_NS}zeroOrMorePath`),
+      ...objects(shapes, path, `${SH_NS}oneOrMorePath`),
+      ...objects(shapes, path, `${SH_NS}zeroOrOnePath`),
+      ...objects(shapes, path, `${SH_NS}alternativePath`).flatMap((l) => listMembers(l) ?? [l]),
+    ];
+    if (parts.length === 0) return undefined;
+    let size = 1;
+    for (const part of parts) {
+      const n = pathSize(part, budget - size);
+      if (n === undefined) return undefined;
+      size += n;
+    }
+    return size <= budget ? size : undefined;
+  };
+  const unique = (terms: Term[]) => [...new Map(terms.map((t) => [key(t), t])).values()];
+  const closure = (step: PathFn, start: Term[]): Term[] => {
+    const seen = new Map(start.map((t) => [key(t), t]));
+    const queue = [...start];
+    for (let t = queue.pop(); t !== undefined; t = queue.pop()) {
+      for (const next of step(t)) {
+        if (!seen.has(key(next))) {
+          seen.set(key(next), next);
+          queue.push(next);
+        }
       }
     }
+    return [...seen.values()];
+  };
+  const pathFn = (path: Term): PathFn => {
+    const evaluate = rawPathFn(path);
+    const memo = new Map<string, Term[]>();
+    return (focus) => {
+      const known = memo.get(key(focus));
+      if (known !== undefined) return known;
+      const result = evaluate(focus);
+      memo.set(key(focus), result);
+      return result;
+    };
+  };
+  const rawPathFn = (path: Term): PathFn => {
+    const list = objects(shapes, path, `${RDF_NS}first`).length > 0 ? listMembers(path) : undefined;
+    if (list !== undefined) {
+      const steps = list.map(pathFn);
+      return (focus) => steps.reduce((nodes, step) => unique(nodes.flatMap(step)), [focus]);
+    }
+    if (path.termType === "NamedNode") {
+      return (focus) => data.getObjects(focus as Quad["subject"], path.value, null);
+    }
+    const [inverse] = objects(shapes, path, `${SH_NS}inversePath`);
+    if (inverse !== undefined) {
+      // pathSize admits only a predicate's inverse.
+      return (focus) => data.getSubjects(inverse.value, focus as Quad["object"], null);
+    }
+    const [alternatives] = objects(shapes, path, `${SH_NS}alternativePath`);
+    if (alternatives !== undefined) {
+      const steps = (listMembers(alternatives) ?? []).map(pathFn);
+      return (focus) => unique(steps.flatMap((step) => step(focus)));
+    }
+    const [zeroOrMore] = objects(shapes, path, `${SH_NS}zeroOrMorePath`);
+    if (zeroOrMore !== undefined) {
+      const step = pathFn(zeroOrMore);
+      return (focus) => closure(step, [focus]);
+    }
+    const [oneOrMore] = objects(shapes, path, `${SH_NS}oneOrMorePath`);
+    if (oneOrMore !== undefined) {
+      const step = pathFn(oneOrMore);
+      return (focus) => closure(step, step(focus));
+    }
+    const [zeroOrOne] = objects(shapes, path, `${SH_NS}zeroOrOnePath`);
+    const step = pathFn(zeroOrOne as Term);
+    return (focus) => unique([focus, ...step(focus)]);
+  };
+  const paths = new Map<string, PathFn>();
+  for (const q of shapes.getQuads(null, `${SH_NS}path`, null, null)) {
+    if (pathSize(q.object, MAX_PATH_SIZE) === undefined) {
+      return `Shapes with a property path past ${MAX_PATH_SIZE} steps or malformed ${UNBOUNDED}`;
+    }
+    paths.set(key(q.subject), pathFn(q.object));
+  }
+
+  // Shape references: the validator recurses for as long as a cycle allows.
+  const refsOf = (shape: Term): Term[] | undefined => {
+    const refs: Term[] = SHAPE_REFS.flatMap((p) => objects(shapes, shape, p));
+    for (const p of SHAPE_LISTS) {
+      for (const head of objects(shapes, shape, p)) {
+        const members = listMembers(head);
+        if (members === undefined) return undefined;
+        refs.push(...members);
+      }
+    }
+    return refs;
+  };
+  const done = new Set<string>();
+  const active = new Set<string>();
+  const acyclic = (shape: Term): boolean => {
+    const k = key(shape);
+    if (done.has(k)) return true;
+    if (active.has(k)) return false;
+    active.add(k);
+    if (!(refsOf(shape) ?? []).every(acyclic)) return false;
     active.delete(k);
-    size.set(k, total);
+    done.add(k);
+    return true;
+  };
+  for (const subject of shapes.getSubjects(null, null, null)) {
+    if (!acyclic(subject)) return `Shapes that reference themselves ${UNBOUNDED}`;
+  }
+
+  // The evaluations for `shape` at `focus`: the shape, each value node, and each
+  // referenced shape at each value node.
+  const memo = new Map<string, number>();
+  const cost = (shape: Term, focus: Term): number => {
+    const k = `${key(shape)} ${key(focus)}`;
+    const known = memo.get(k);
+    if (known !== undefined) return known;
+    const path = paths.get(key(shape));
+    const values = path === undefined ? [focus] : path(focus);
+    let total = 1 + values.length;
+    const refs = refsOf(shape) ?? [];
+    for (const value of values) {
+      for (const ref of refs) {
+        total += cost(ref, value);
+        if (total > MAX_SHAPE_EVALUATIONS) break;
+      }
+      if (total > MAX_SHAPE_EVALUATIONS) break;
+    }
+    memo.set(k, total);
     return total;
   };
+  const instances = (c: Term) => data.getSubjects(RDF_TYPE, c as Quad["object"], null);
   let total = 0;
-  for (const subject of graph.getSubjects(null, null, null)) {
-    const n = unfold(subject);
-    if (typeof n === "string") return `${n} are not evaluated (unbounded cost)`;
-    total += n;
-    if (total > MAX_SHAPE_EVALUATIONS) return `${OVER_BUDGET} are not evaluated (unbounded cost)`;
+  for (const shape of shapes.getSubjects(null, null, null)) {
+    const focusNodes = [
+      ...objects(shapes, shape, `${SH_NS}targetNode`),
+      ...objects(shapes, shape, `${SH_NS}targetClass`).flatMap(instances),
+      ...objects(shapes, shape, `${SH_NS}targetSubjectsOf`).flatMap((p) =>
+        data.getSubjects(p.value, null, null),
+      ),
+      ...objects(shapes, shape, `${SH_NS}targetObjectsOf`).flatMap((p) =>
+        data.getObjects(null, p.value, null),
+      ),
+      // A shape that is also an rdfs:Class targets its instances.
+      ...(shapes.getQuads(shape as Quad["subject"], RDF_TYPE, `${RDFS}Class`, null).length > 0
+        ? instances(shape)
+        : []),
+    ];
+    for (const focus of focusNodes) {
+      total += cost(shape, focus);
+      if (total > MAX_SHAPE_EVALUATIONS) {
+        return `Shapes that need more than ${MAX_SHAPE_EVALUATIONS} evaluations over this intent ${UNBOUNDED}`;
+      }
+    }
   }
   return undefined;
 }
@@ -154,7 +387,7 @@ async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<V
   }
   // Shapes use the SAME total renaming, without interpreting constraint roles.
   const shapeGraph = validationDataset(toDataset(shapes), false) as Store;
-  const unbounded = unboundedShapes(shapeGraph);
+  const unbounded = unboundedValidation(shapeGraph, dataGraph as Store);
   if (unbounded !== undefined) return { conforms: false, results: [{ message: unbounded }] };
 
   const validator = new SHACLValidator(shapeGraph);
