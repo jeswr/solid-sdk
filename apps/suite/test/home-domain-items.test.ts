@@ -69,6 +69,13 @@ describe("Home session discovery cache", () => {
     const refreshed = store.getSnapshot();
     expect(refreshed.truncated).toBe(true);
     expect(refreshed.items).toContain(originalNote);
+    // contacts/people.ttl is an uncategorised card that the Socials scan reads and discards;
+    // only the Other scan, truncated here, can vouch for it.
+    expect(
+      original.some(
+        (card) => card.domain.id === "other" && card.url === `${DEMO_ROOT}contacts/people.ttl`,
+      ),
+    ).toBe(true);
     for (const card of original)
       expect(refreshed.items.some((item) => item.url === card.url)).toBe(true);
     expect(fetch.mock.calls.length).toBeGreaterThan(256);

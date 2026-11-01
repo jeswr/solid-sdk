@@ -81,6 +81,11 @@ function reconcileItems(
   failures: readonly DiscoveryFailure[],
   unavailable: readonly string[],
   preserveUnvisited: (item: DomainItem) => boolean,
+  /**
+   * Resources read by the scan of the item's own domain. Another domain's scan may read
+   * the item and discard it, which says nothing about whether it still exists.
+   */
+  visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
 ): DomainItem[] {
   const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
   const items = new Map(result.items.map((item) => [key(item), item]));
@@ -88,7 +93,7 @@ function reconcileItems(
     const failedRead = failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
       preserveUnvisited(item) &&
-      !result.etags.has(item.url) &&
+      !visitedFor(item).has(item.url) &&
       (!result.listings.has(item.containerUrl) ||
         result.listings.get(item.containerUrl)?.has(item.url));
     if (
@@ -184,8 +189,9 @@ function createDomainStore(session: HomeSession) {
         // Usage is a separate, complete walk; it runs alongside discovery.
         const usage = storageUsage(fetch, session.storageUrl);
         // Independent budgets keep a large domain from starving every other domain.
+        const scanned = [...DOMAINS, UNCATEGORISED];
         const domains = await Promise.all(
-          [...DOMAINS, UNCATEGORISED].map((domain) =>
+          scanned.map((domain) =>
             discoverDomainItems(domain, {
               fetch,
               storage: session.storageUrl,
@@ -235,6 +241,9 @@ function createDomainStore(session: HomeSession) {
                 location.instance?.split("#")[0] === item.url ||
                 (location.container !== undefined && inStorage(item.url, location.container)),
             ),
+          (item) =>
+            domains[scanned.findIndex((domain) => domain.id === item.domain.id)]?.etags ??
+            result.etags,
         );
         const used = await usage;
         const views = new Map(
