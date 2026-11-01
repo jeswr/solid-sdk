@@ -117,3 +117,76 @@ private ingestion, deterministic triage, proposal eligibility, signed approval a
 halt, executor transmission, audit mirroring, scheduler and shutdown races, CLI
 validation and confirmation-gated plist creation. On macOS the installer test also
 runs `plutil -lint`; elsewhere Python plistlib validates the XML plist.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+The A-042 cloud variant is **undeployed**. Build its nonroot distroless Node 24
+image from the workspace root with
+`docker build -f apps/agent-daemon/Containerfile -t agent-daemon:local .`.
+The build uses the frozen workspace lock, disables dependency lifecycle scripts,
+builds dependencies first and copies a production-only pnpm deployment into the
+runtime. No credentials or host-specific composition are baked into the base image.
+
+The cloud executable is `bin/awp-cloud.mjs`. A reviewed derived image must copy a
+trusted composition to `/app/host/compose.mjs` and run Node with
+`--import /app/host/compose.mjs /app/bin/awp-cloud.mjs`. That preload imports
+`configureCloud` from `/app/dist/index.js` and registers an async factory. The
+factory receives `{ store, local, lease, apiKey }` and returns
+`{ daemon, bindings, a2a, close }`. Construct the normal daemon with those local
+state capabilities and the supplied process lease; retain all A-012 authority,
+executor, outbox, audit and shutdown obligations described above. The cloud owner
+acquires the file lease before composing the host and retains it through daemon
+and inbound handler drain. `close` releases the pod session before that file lease
+is released. No composition is inferred from the environment, downloaded, or read
+from the credential mount.
+
+`bindings` must enumerate **all** ingest and executor binding IDs. The cloud host
+allows only explicit network-capable binding IDs; iMessage, linked-device Signal
+and WhatsApp, MCP subprocesses and unknown bindings are refused. The host must
+include `a2a` and a trusted `a2a({ body, headers, signal })` receiver returning
+`{ status, body }`. The HTTP boundary forwards the exact bounded bytes and peer
+authorization headers; the receiver must authenticate the peer, verify envelopes
+and persist inbound data before acknowledging. It cannot grant authority or send.
+It must honor cancellation. The existing A2A channel module is still a scaffold;
+this task supplies the cloud hosting boundary, not a replacement protocol or a
+default verifier. An absent composition/receiver fails startup.
+
+Cloud configuration requires `AGENT_ENVIRONMENT=dev`, `AGENT_A2A_ENABLED=true`, an
+absolute `AGENT_CREDENTIAL_DIR` and port `AGENT_A2A_PORT` (default 8080). Only this
+explicit entrypoint opens ingress: `POST /a2a`, with JSON and a 64 KiB body limit,
+plus body-free `GET /livez` and `/readyz` process probes. Probes mean the trusted
+composition and ingress are available; pod authority and provider availability
+still fail closed independently inside the executor. Local `awp` behavior is unchanged.
+
+Mount a dedicated Azure Files SMB share at `/var/lib/jeswr-agent`, owned by UID/GID
+65532 with `dir_mode=0700,file_mode=0600`. Existing credential-store checks remain
+mandatory; an incompatible mount fails startup. Profiles, grants, cursors, proposal
+results, ledger and the exclusive process lease persist across revisions. Keep one
+replica and single-revision mode. A crash leaves its lease intact; prove that old
+writers and provider requests are stopped before manual recovery. Never remove a
+lease by age or as part of image startup. Verify SMB exclusive creation, rename
+and fsync behavior before authorizing a real deployment.
+
+ACA resolves versionless Key Vault secret references using a dedicated UAMI and
+secret-scoped `Key Vault Secrets User` assignments. The factory's
+`apiKey("openai" | "anthropic")` reads only the corresponding injected environment
+variable. Supply it to the gateway's explicit token seam; API keys are not copied
+to token-file records (whose provenance contract remains 1Password-specific).
+Pod client credentials use separate ACA secret references consumed by the trusted
+host's pod-auth composition. No Azure SDK, runtime 1Password call, interactive
+OAuth listener, provider request or real credentials are needed to build or test.
+
+[The GitOps handoff](deploy/gitops/README.md) contains the dev-only Bicep module and
+its integration requirements. Nothing is connected to a deploy workflow. Jesse's
+explicit go is required before enabling or deploying it.
+
+CI's `agent-daemon-container` workflow builds the production image and the
+`css-test` target. The latter runs the existing A-012 memory-CSS golden path
+(private inbound data, proposal, signed approval, transmission, audit, signed halt)
+and the cloud regressions inside distroless Node 24 with container networking
+disabled. Locally:
+
+```sh
+docker build -f apps/agent-daemon/Containerfile --target css-test -t agent-daemon:css .
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:css
+```

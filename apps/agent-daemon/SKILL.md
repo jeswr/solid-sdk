@@ -29,6 +29,15 @@ Hold the exclusive process lease through watcher cleanup and executor drain.
 Never reclaim a crashed lease by age. No default inbound server; only explicit
 credential login may open its PKCE loopback listener.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+A-042 adds the separate, opt-in cloud entrypoint `bin/awp-cloud.mjs`. Read the
+README cloud contract and `deploy/gitops/README.md` before editing it. Only a
+trusted image-baked preload may configure its A2A receiver. Keep dev-only settings,
+bounded ingress, explicit cloud binding allowlist, UID 65532 owner-only Files
+storage, Key Vault/UAMI secret references, and complete shutdown drain. The normal
+CLI still has no inbound server. The A2A protocol remains a trusted host seam.
+The GitOps files are an undeployed handoff; never deploy or enable without Jesse's go.
+
 Installer confirmation precedes all filesystem writes. Refuse existing plist files
 and symlinks; never load launchd automatically. Logs exclude bodies and secret or
 provider exception text, and redact paths and WebIDs. No runtime 1Password calls.
