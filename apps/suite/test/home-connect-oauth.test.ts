@@ -11,13 +11,21 @@ const config: OAuthAppConfig = {
   tokenExchange: "public",
 };
 afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.resetModules();
 });
 
 function browser(blocked = false) {
   const events = new EventTarget();
+  const navigate = vi.fn<(href: string) => void>();
   const popup = {
+    location: {
+      set href(value: string) {
+        navigate(value);
+      },
+    },
     closed: false,
     close() {
       this.closed = true;
@@ -46,22 +54,20 @@ function browser(blocked = false) {
       }),
     );
   };
-  return { open, popup, sourceFetch, callback, events };
+  return { open, navigate, popup, sourceFetch, callback, events };
 }
 
 describe("Connect source login uses package PKCE without persisting tokens", () => {
   it("authorizes through the named popup and exchanges only over the pristine source transport", async () => {
-    const { open, popup, sourceFetch, callback } = browser();
-    open.mockImplementation((url) => {
-      if (url) queueMicrotask(() => callback(url));
-      return popup;
-    });
+    const { open, navigate, popup, sourceFetch, callback } = browser();
+    navigate.mockImplementation((url) => queueMicrotask(() => callback(url)));
     const { login } = await import("../src/apps/home/components/connect/oauth-login");
     const result = await login("spotify", config, new AbortController().signal, () => {
       throw new Error("Unexpected blocked popup");
     });
     expect(result.accessToken).toBe("memory-only");
-    expect(open.mock.calls[1]?.[0]).toContain("code_challenge_method=S256");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0]?.[0]).toContain("code_challenge_method=S256");
     expect(sourceFetch).toHaveBeenCalledTimes(1);
     expect(sourceFetch.mock.calls[0]?.[0]).toBe("https://source.example/token");
     expect(popup.closed).toBe(true);
@@ -105,15 +111,121 @@ describe("Connect source login uses package PKCE without persisting tokens", () 
     expect(sourceFetch).toHaveBeenCalledTimes(1);
   });
   it("cancels waiting login and closes the named popup", async () => {
-    const { open, popup, sourceFetch } = browser();
+    const { navigate, popup, sourceFetch } = browser();
     const controller = new AbortController();
-    open.mockImplementation((url) => {
-      if (url) queueMicrotask(() => controller.abort());
+    navigate.mockImplementation(() => queueMicrotask(() => controller.abort()));
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    await expect(login("spotify", config, controller.signal, () => {})).rejects.toThrow();
+    expect(popup.closed).toBe(true);
+    expect(sourceFetch).not.toHaveBeenCalled();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
+describe("OAuth cancellation boundaries", () => {
+  it("does not create a popup for an already cancelled request", async () => {
+    const { open, sourceFetch } = browser();
+    const controller = new AbortController();
+    controller.abort();
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    await expect(login("spotify", config, controller.signal, () => {})).rejects.toThrow();
+    expect(open).not.toHaveBeenCalled();
+    expect(sourceFetch).not.toHaveBeenCalled();
+  });
+  it("closes a popup when cancellation occurs during its creation", async () => {
+    const { open, popup, navigate } = browser();
+    const controller = new AbortController();
+    open.mockImplementation(() => {
+      controller.abort();
       return popup;
     });
     const { login } = await import("../src/apps/home/components/connect/oauth-login");
     await expect(login("spotify", config, controller.signal, () => {})).rejects.toThrow();
     expect(popup.closed).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+  it("rejects immediately during PKCE and never reopens or navigates the popup when crypto finishes", async () => {
+    const { open, popup, navigate, sourceFetch } = browser();
+    const digest = deferred<ArrayBuffer>();
+    vi.spyOn(crypto.subtle, "digest").mockReturnValueOnce(digest.promise);
+    const controller = new AbortController();
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    const pending = login("spotify", config, controller.signal, () => {});
+    const rejected = expect(pending).rejects.toThrow();
+    controller.abort();
+    await rejected;
+    expect(popup.closed).toBe(true);
+    digest.resolve(new ArrayBuffer(32));
+    await digest.promise;
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(sourceFetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    false,
+    true,
+  ])("cleans callback listeners on cancellation (blocked=%s)", async (blocked) => {
+    const { navigate, callback, sourceFetch, events } = browser(blocked);
+    const remove = vi.spyOn(window, "removeEventListener");
+    const href = deferred<string>();
+    navigate.mockImplementation((url) => href.resolve(url));
+    const controller = new AbortController();
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    const pending = login("spotify", config, controller.signal, (url) => href.resolve(url));
+    const rejected = expect(pending).rejects.toThrow();
+    const url = await href.promise;
+    controller.abort();
+    await rejected;
+    callback(url);
+    events.dispatchEvent(new MessageEvent("message", { origin, data: {} }));
+    expect(remove).toHaveBeenCalledWith("message", expect.any(Function));
+    expect(sourceFetch).not.toHaveBeenCalled();
+  });
+  it("aborts the token exchange transport and cannot return a late token response", async () => {
+    const { navigate, callback, sourceFetch, popup } = browser();
+    navigate.mockImplementation((url) => queueMicrotask(() => callback(url)));
+    const entered = deferred<AbortSignal>();
+    const response = deferred<Response>();
+    sourceFetch.mockImplementation(async (_input, init) => {
+      if (!init?.signal) throw new Error("Exchange must receive an abort signal");
+      entered.resolve(init.signal);
+      return response.promise;
+    });
+    const controller = new AbortController();
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    const pending = login("spotify", config, controller.signal, () => {});
+    const rejected = expect(pending).rejects.toThrow();
+    const receivedSignal = await entered.promise;
+    expect(receivedSignal.aborted).toBe(false);
+    controller.abort();
+    await rejected;
+    expect(receivedSignal.aborted).toBe(true);
+    expect(popup.closed).toBe(true);
+    response.resolve(Response.json({ access_token: "late-token" }));
+    await response.promise;
+    expect(sourceFetch).toHaveBeenCalledTimes(1);
+  });
+  it("stops when the popup is manually closed", async () => {
+    const { navigate, popup, sourceFetch } = browser();
+    const navigated = deferred<void>();
+    navigate.mockImplementation(() => navigated.resolve());
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    vi.useFakeTimers();
+    const pending = login("spotify", config, new AbortController().signal, () => {});
+    const rejected = expect(pending).rejects.toThrow();
+    await navigated.promise;
+    popup.close();
+    await vi.advanceTimersByTimeAsync(500);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
     expect(sourceFetch).not.toHaveBeenCalled();
   });
 });

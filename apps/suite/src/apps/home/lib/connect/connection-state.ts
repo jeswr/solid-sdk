@@ -27,7 +27,7 @@ export function connectionReducer(
     return {
       connectedAt: current?.connectedAt ?? action.at,
       lastSync: current?.lastSync,
-      cursor: current?.cursor,
+      cursor: current?.mode === action.mode ? current.cursor : undefined,
       added: current?.added ?? 0,
       skipped: current?.skipped ?? 0,
       resourceUrls: current?.resourceUrls ?? [],

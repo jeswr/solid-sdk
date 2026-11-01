@@ -25,9 +25,14 @@ import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
 import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
 import { entries, registry } from "./config";
-import { createImportWriter, fetchWithSignal, fileWithSignal } from "./import-service";
+import {
+  createImportWriter,
+  fetchWithSignal,
+  fileWithSignal,
+  runSavedImport,
+} from "./import-service";
 import { login, sourceFetch } from "./oauth-login";
-import { withSelectedScopes } from "./scopes";
+import { requiredScopesFor, withRequiredScopes, withSelectedScopes } from "./scopes";
 import { ConnectorLogo, StatusBadge } from "./shared";
 import { useOnline } from "./use-online";
 
@@ -39,13 +44,15 @@ export function ConnectFlow({ service }: { service: string }) {
 
 function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const session = useHomeSession();
-  const [connections, update] = useConnectors(session.webId);
+  const [, update] = useConnectors(session.webId);
   const online = useOnline();
   const adapter = registry.adapterById(entry.id);
   const fileAdapter = fileAdapterById(entry.id);
   const metadata = entry.tier === "C" ? fileAdapter?.metadata : adapter?.metadata;
   const scopes = metadata?.scopes ?? [];
   const [selected, setSelected] = useState<readonly string[]>(scopes);
+  const required = requiredScopesFor(entry.id);
+  const selectedScopes = withRequiredScopes(entry.id, selected);
   const [step, setStep] = useState(1);
   const [phase, setPhase] = useState<
     "idle" | "waiting" | "running" | "done" | "error" | "cancelled"
@@ -88,63 +95,60 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     setBlockedHref(undefined);
     setWritten(0);
     setProgress(undefined);
-    update(entry.id, { type: "start", at: new Date().toISOString(), mode });
+    setPhase(mode === "live" && adapter?.oauth ? "waiting" : "running");
     try {
-      let sourceAuth: SourceAuth | undefined;
-      if (mode === "live" && adapter?.oauth) {
-        setPhase("waiting");
-        const config = { ...adapter.oauth, scopes: selected };
-        const token = await login(entry.id, config, abort.signal, setBlockedHref);
-        const transport = fetchWithSignal(sourceFetch, abort.signal);
-        sourceAuth =
-          adapter.createSourceAuth?.(config, token, transport) ??
-          createSourceAuth(entry.id, adapter, token, transport);
-      }
-      abort.signal.throwIfAborted();
-      setBlockedHref(undefined);
-      setStep(3);
-      setPhase("running");
-      const writer = createImportWriter(session, entry.id, abort.signal, (url, doc) => {
-        if (doc.slug === "_provenance.ttl") return;
-        update(entry.id, { type: "written", url });
-        // Progress counts successful documents until the runner supplies item counts.
-        setWritten((count) => count + 1);
-      });
-      const onProgress = (value: ImportProgress) => {
-        abort.signal.throwIfAborted();
-        setProgress(value);
-      };
-      const cursor = mode === "live" ? connections[entry.id]?.cursor : undefined;
-      const result =
-        mode === "file" && fileAdapter && file
-          ? await runFileImport({
-              adapter: fileAdapter,
-              file: fileWithSignal(file, abort.signal),
-              podWriter: writer,
-              onProgress,
-            })
-          : await runImport({
-              adapter: withSelectedScopes(adapter as NonNullable<typeof adapter>, selected),
-              mode: mode === "demo" ? "demo" : "live",
-              ...(sourceAuth ? { sourceAuth } : {}),
-              podWriter: writer,
-              // Demo replays complete fixtures; live resumes the successful checkpoint.
-              ...(cursor ? { cursor } : {}),
-              onProgress,
-            });
-      abort.signal.throwIfAborted();
-      const added = result.state?.counts.items ?? result.written.length;
-      update(entry.id, {
-        type: "success",
-        at: new Date().toISOString(),
-        added,
-        skipped: result.skipped ?? 0,
-        cursor: result.cursor,
-      });
+      const result = await runSavedImport(
+        session.storageUrl,
+        entry.id,
+        mode,
+        abort.signal,
+        (action) => update(entry.id, action),
+        async (cursor) => {
+          let sourceAuth: SourceAuth | undefined;
+          if (mode === "live" && adapter?.oauth) {
+            setPhase("waiting");
+            const config = { ...adapter.oauth, scopes: selectedScopes };
+            const token = await login(entry.id, config, abort.signal, setBlockedHref);
+            const transport = fetchWithSignal(sourceFetch, abort.signal);
+            sourceAuth =
+              adapter.createSourceAuth?.(config, token, transport) ??
+              createSourceAuth(entry.id, adapter, token, transport);
+          }
+          abort.signal.throwIfAborted();
+          setBlockedHref(undefined);
+          setStep(3);
+          setPhase("running");
+          const writer = createImportWriter(session, entry.id, abort.signal, (url, doc) => {
+            if (doc.slug === "_provenance.ttl") return;
+            update(entry.id, { type: "written", url });
+            // Progress counts successful documents until the runner supplies item counts.
+            setWritten((count) => count + 1);
+          });
+          const onProgress = (value: ImportProgress) => {
+            abort.signal.throwIfAborted();
+            setProgress(value);
+          };
+          return mode === "file" && fileAdapter && file
+            ? await runFileImport({
+                adapter: fileAdapter,
+                file: fileWithSignal(file, abort.signal),
+                podWriter: writer,
+                onProgress,
+              })
+            : await runImport({
+                adapter: withSelectedScopes(adapter as NonNullable<typeof adapter>, selectedScopes),
+                mode: mode === "demo" ? "demo" : "live",
+                ...(sourceAuth ? { sourceAuth } : {}),
+                podWriter: writer,
+                // Demo replays complete fixtures; live resumes the successful checkpoint.
+                ...(cursor ? { cursor } : {}),
+                onProgress,
+              });
+        },
+      );
       setReport(result);
       setPhase("done");
     } catch (error) {
-      update(entry.id, { type: abort.signal.aborted ? "incomplete" : "error" });
       setFailure(error);
       setPhase(abort.signal.aborted ? "cancelled" : "error");
     } finally {
@@ -272,6 +276,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       <input
                         type="checkbox"
                         checked={selected.includes(scope)}
+                        disabled={required.includes(scope)}
                         onChange={(event) =>
                           setSelected((current) =>
                             event.target.checked
@@ -281,6 +286,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                         }
                       />
                       {scopeLabel(scope)}
+                      {required.includes(scope) && (
+                        <span> — Required to identify your account before importing.</span>
+                      )}
                     </label>
                   ))}
                 </fieldset>

@@ -2,10 +2,47 @@
 import {
   createFetchPodWriter,
   type ImportFile,
+  type ImportReport,
   type NormalisedDoc,
   type PodWriter,
 } from "@jeswr/pod-connectors";
 import type { PodSession } from "../../../../lib/session/pod-session";
+import type {
+  ConnectionAction,
+  ConnectionMode,
+  ConnectorConnection,
+} from "../../lib/connect/connection-state";
+import { withConnectorLock } from "../../lib/connect/import-lock";
+
+/** Read the current checkpoint only after acquiring the reservation, and persist
+ * every outcome before releasing it. update must read durable state, not React state. */
+export function runSavedImport(
+  storage: string,
+  id: string,
+  mode: ConnectionMode,
+  signal: AbortSignal,
+  update: (action: ConnectionAction) => ConnectorConnection,
+  run: (cursor: string | undefined) => Promise<ImportReport>,
+): Promise<ImportReport> {
+  return withConnectorLock(storage, id, signal, async () => {
+    const connection = update({ type: "start", at: new Date().toISOString(), mode });
+    try {
+      const result = await run(mode === "live" ? connection.cursor : undefined);
+      signal.throwIfAborted();
+      update({
+        type: "success",
+        at: new Date().toISOString(),
+        added: result.state?.counts.items ?? result.written.length,
+        skipped: result.skipped ?? 0,
+        cursor: result.cursor,
+      });
+      return result;
+    } catch (error) {
+      update({ type: signal.aborted ? "incomplete" : "error" });
+      throw error;
+    }
+  });
+}
 
 export function fetchWithSignal(transport: typeof fetch, signal: AbortSignal): typeof fetch {
   return (input, init) => {

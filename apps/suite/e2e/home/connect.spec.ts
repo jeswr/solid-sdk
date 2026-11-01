@@ -58,6 +58,12 @@ test("catalogue filters use the URL, search matches descriptions, n focuses sear
   await expect(page.getByRole("heading", { name: "Spotify", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "GitHub", exact: true })).toHaveCount(0);
   await expect(page.getByText("Coming soon", { exact: true })).toHaveCount(0);
+  const media = page.getByRole("button", { name: "Media", exact: true });
+  await media.focus();
+  await page.evaluate(() => localStorage.setItem("suite.settings.shortcuts", "off"));
+  await page.keyboard.press("n");
+  await expect(media).toBeFocused();
+  await page.evaluate(() => localStorage.setItem("suite.settings.shortcuts", "on"));
   await page.keyboard.press("n");
   const search = page.getByRole("searchbox", { name: "Search services" });
   await expect(search).toBeFocused();
@@ -210,4 +216,30 @@ test("cancelling a pending file import preserves incomplete status across reload
   await expect(page.getByText("Last sync incomplete", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText("Last sync incomplete", { exact: true })).toBeVisible();
+});
+
+for (const service of ["discord", "reddit"]) {
+  test(`${service} requires identity permission and explains why`, async ({ page }) => {
+    await page.goto(`/connect/${service}`);
+    const identity = page.getByRole("checkbox", { name: /Required to identify your account/ });
+    await expect(identity).toBeChecked();
+    await expect(identity).toBeDisabled();
+    for (const box of await page.getByRole("checkbox").all()) {
+      if (await box.isEnabled()) await box.uncheck();
+    }
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeEnabled();
+    await accessible(page);
+  });
+}
+
+test("Discord completes in Socials and links to its Home domain", async ({ page }) => {
+  await page.goto("/connect/discord");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Continue with Discord" }).click();
+  await expect(page.getByRole("heading", { name: "Added 3 items to Socials" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "See in Socials" })).toHaveAttribute(
+    "href",
+    "/home/socials",
+  );
+  await accessible(page);
 });

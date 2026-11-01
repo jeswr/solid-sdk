@@ -91,8 +91,10 @@ export function useConnectors(webId: string) {
   const update = useCallback(
     (id: string, action: ConnectionAction) => {
       const current = preferences.read(webId);
-      preferences.write(webId, { ...current, [id]: connectionReducer(current[id], action) });
+      const next = connectionReducer(current[id], action);
+      preferences.write(webId, { ...current, [id]: next });
       for (const listener of listeners) listener();
+      return next;
     },
     [webId],
   );

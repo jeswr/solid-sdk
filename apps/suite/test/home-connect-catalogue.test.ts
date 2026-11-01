@@ -72,6 +72,21 @@ describe("connector catalogue", () => {
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
   });
+  it("uses source-aware destinations for Discord and Steam, retaining GitHub in Work", () => {
+    expect(destinationsFor("discord")).toEqual([
+      { domain: "socials", label: "Socials › Following" },
+    ]);
+    expect(destinationsFor("steam")).toEqual([
+      { domain: "media", label: "Media › Streaming" },
+      { domain: "socials", label: "Socials › Following" },
+    ]);
+    expect(destinationsFor("github")).toEqual([
+      { domain: "work-study", label: "Work & Study › Work experience" },
+    ]);
+    expect(catalogue(createRegistry()).find((entry) => entry.id === "discord")?.domains).toEqual([
+      "socials",
+    ]);
+  });
   it("filters by domain and by name or description without case sensitivity", () => {
     const entries = catalogue(createRegistry());
     expect(filterCatalogue(entries, ["media"], "SPOTIFY").map((entry) => entry.id)).toEqual([

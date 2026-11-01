@@ -46,6 +46,11 @@ export function ConnectCatalogue() {
         )
       )
         return;
+      try {
+        if (localStorage.getItem("suite.settings.shortcuts") === "off") return;
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
+      }
       event.preventDefault();
       input.current?.focus();
     };

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
-import { classificationForClass } from "../model/domains";
+import { classificationForSourceClass } from "../model/classify";
 
 export interface ConnectorEntry {
   id: string;
@@ -63,10 +63,16 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+const accountSources: Readonly<Record<string, readonly string[]>> = {
+  github: ["https://github.com/"],
+  discord: ["https://discord.com/"],
+  steam: ["https://steamcommunity.com/"],
+};
+
 export function destinationsFor(id: string): { domain: string; label: string }[] {
   const destinations = new Map<string, { domain: string; label: string }>();
   for (const iri of classes[id] ?? ["unknown"]) {
-    const { domain, dataType } = classificationForClass(iri);
+    const { domain, dataType } = classificationForSourceClass(iri, accountSources[id] ?? []);
     const label = dataType ? `${domain.label} › ${dataType.label}` : domain.label;
     destinations.set(label, { domain: domain.id, label });
   }

@@ -50,6 +50,39 @@ describe("durable connection state", () => {
       connectionReducer(restarted, { type: "success", at, added: 4, skipped: 0 }).cursor,
     ).toBeUndefined();
   });
+  it("clears checkpoints when changing modes, including after a cancelled live attempt", () => {
+    const demo = connectionReducer(start(), {
+      type: "success",
+      at,
+      added: 3,
+      skipped: 0,
+      cursor: "fixture-cursor",
+    });
+    const live = connectionReducer(demo, { type: "start", at, mode: "live" });
+    expect(live.cursor).toBeUndefined();
+    const retry = connectionReducer(connectionReducer(live, { type: "incomplete" }), {
+      type: "start",
+      at,
+      mode: "live",
+    });
+    expect(retry.cursor).toBeUndefined();
+    const successful = connectionReducer(retry, {
+      type: "success",
+      at,
+      added: 2,
+      skipped: 0,
+      cursor: "real-cursor",
+    });
+    expect(connectionReducer(successful, { type: "start", at, mode: "live" }).cursor).toBe(
+      "real-cursor",
+    );
+    expect(
+      connectionReducer(successful, { type: "start", at, mode: "demo" }).cursor,
+    ).toBeUndefined();
+    expect(
+      connectionReducer(successful, { type: "start", at, mode: "file" }).cursor,
+    ).toBeUndefined();
+  });
   it("isolates accounts and strips tokens from storage", () => {
     const values = new Map<string, string>();
     const store = createConnectorPreferences({

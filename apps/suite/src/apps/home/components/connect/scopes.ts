@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 import type { IntegrationAdapter } from "@jeswr/pod-connectors";
 
+const prerequisites: Readonly<Record<string, readonly string[]>> = {
+  discord: ["identify"],
+  reddit: ["identity"],
+};
+export const requiredScopesFor = (id: string): readonly string[] => prerequisites[id] ?? [];
+export const withRequiredScopes = (id: string, selected: readonly string[]): readonly string[] => [
+  ...new Set([...requiredScopesFor(id), ...selected]),
+];
+
 interface ScopeRule {
   scopes: readonly string[];
   document: RegExp;
@@ -61,8 +70,9 @@ const rules: Readonly<Record<string, readonly ScopeRule[]>> = {
  * Identity lookups needed to resolve selected collections remain available. */
 export function withSelectedScopes(
   adapter: IntegrationAdapter,
-  selected: readonly string[],
+  selection: readonly string[],
 ): IntegrationAdapter {
+  const selected = withRequiredScopes(adapter.metadata.id, selection);
   const policy = rules[adapter.metadata.id] ?? [];
   const allowed = (value: string, kind: "document" | "request") => {
     const rule = policy.find((rule) => rule[kind].test(value));
