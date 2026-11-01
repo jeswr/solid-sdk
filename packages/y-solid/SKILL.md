@@ -3,6 +3,7 @@ name: y-solid
 description: Use when maintaining @jeswr/y-solid, its StorageClient log, YSolidProvider, header ordering, compaction, notifications, or legacy layout compatibility.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Yjs update log persistence
 
@@ -36,6 +37,8 @@ use returned URLs. Replay every snapshot first, then every update by header time
 and URL tie-break. Preserve headerless v0.1 loading. Never filter updates by snapshot time
 or choose only the newest snapshot. Re-list unread members after a 404/410 during loading;
 exhausted rounds must reject before synced.
+Only a 404/410 on the initial container request can mean an empty log. Propagate
+continuation-page failures even when all preceding pages were empty.
 
 Validate untrusted Yjs payloads on scratch docs before applying generated diffs to the live
 doc. Compaction refuses corrupt batches, encodes state only after ingestion, creates a fresh

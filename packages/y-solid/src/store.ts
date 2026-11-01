@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { compareRecords, decodeRecord, encodeRecord } from "./record.js";
@@ -34,7 +35,7 @@ function positive(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
 }
 
-function missing(cause: unknown): boolean {
+function missing(cause: unknown): cause is StorageError {
   return cause instanceof StorageError && (cause.code === "not-found" || cause.status === 410);
 }
 
@@ -124,7 +125,10 @@ export class SolidUpdateStore {
         }
       }
     } catch (cause) {
-      if (!missing(cause) || size > 0) throw cause;
+      // Empty pages may still have a continuation: only absence of the initial
+      // container is an empty log, never a missing cursor or other request.
+      if (!missing(cause) || cause.url !== this.container || cause.method !== "GET" || size > 0)
+        throw cause;
     }
     // Only a complete listing can retire observations. Preserve reads made while
     // this listing was in flight, which may include newly appended resources.

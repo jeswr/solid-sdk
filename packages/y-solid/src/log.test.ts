@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import fc from "fast-check";
@@ -523,6 +524,24 @@ describe.each(["solid", "lws"] as const)("%s observation retention", (protocol) 
       }
     });
     await expect(store.listUpdateUrls()).rejects.toMatchObject({ code: "not-found" });
+    expect(observations(store)).toEqual(before);
+  });
+
+  it.each([
+    404, 410,
+  ])("keeps observations when an empty listing's cursor returns %s", async (status) => {
+    const { storage, container } = await setup(protocol);
+    const listAll = vi.fn(storage.listAll);
+    const store = new SolidUpdateStore({ storage: { ...storage, listAll }, container });
+    await store.appendUpdate(state("unlisted").update);
+    await store.loadUpdates();
+    const before = new Map(observations(store));
+    const cursor = `${container}?page=2`;
+    listAll.mockImplementation(async function* () {
+      yield* []; // The first page completes without yielding any entries.
+      throw new StorageError("not-found", { url: cursor, method: "GET", status });
+    });
+    await expect(store.loadUpdates()).rejects.toMatchObject({ url: cursor, status });
     expect(observations(store)).toEqual(before);
   });
 

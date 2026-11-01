@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/y-solid
 
@@ -111,6 +112,8 @@ Loading applies **every snapshot first**, then every update, ordered by header t
 value with a URL tie-break. It keeps older offline writes and concurrent snapshots. If a listed
 member disappears (404/410), loading re-lists unread members, up to five passes by default;
 it fails instead of reporting synced if no clean pass completes.
+A 404/410 for the initial container means an empty log. A failed continuation page rejects
+loading, including after empty pages, so an incomplete listing cannot report synced.
 
 Compaction validates all payloads on scratch documents, encodes the current state, creates a
 fresh `JYS1` snapshot, and requires `created: true` before any deletion. A snapshot larger

@@ -1,10 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Doc } from "yjs";
+import { SolidPersistence } from "./provider.js";
 import { LOG_HEADER_BYTES } from "./record.js";
 import { SolidUpdateStore, UPDATE_CONTENT_TYPE } from "./store.js";
 import { makePod } from "./testPod.js";
@@ -419,14 +423,47 @@ describe("hostile container listing — fail closed per entry", () => {
 });
 
 describe("missing container", () => {
-  it("listUpdateUrls returns [] when the container 404s", async () => {
-    // A fetch that 404s everything (no container present at all).
-    const fetch404: typeof globalThis.fetch = async () => new Response(null, { status: 404 });
+  it.each([
+    404, 410,
+  ])("returns an empty log when the initial container returns %s", async (status) => {
+    const fetchMissing: typeof globalThis.fetch = async () => new Response(null, { status });
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: fetch404 }),
+      storage: createSolidBackend({ root: CONTAINER, fetch: fetchMissing }),
     });
     expect(await store.listUpdateUrls()).toEqual([]);
     expect(await store.loadUpdates()).toEqual([]);
+  });
+
+  it.each([
+    403, 404, 410,
+  ])("rejects hydration when an empty first page leads to a cursor returning %s", async (status) => {
+    const cursor = `${CONTAINER}?cursor=next%2Fpage`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(init).toMatchObject({ redirect: "manual", cache: "no-cache" });
+      if (input === CONTAINER) {
+        return new Response(JSON.stringify({ type: "Container", items: [] }), {
+          headers: { "content-type": "application/lws+json", link: `<${cursor}>; rel=next` },
+        });
+      }
+      expect(input).toBe(cursor);
+      return new Response(null, { status });
+    });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createLwsBackend({ root: CONTAINER, fetch }),
+    });
+    await expect(store.loadUpdates()).rejects.toMatchObject({ url: cursor, status });
+    const doc = new Doc();
+    const provider = new SolidPersistence({ doc, store });
+    try {
+      await expect(provider.whenSynced).rejects.toMatchObject({ url: cursor, status });
+      expect(provider.synced).toBe(false);
+      expect(doc.getText("body").toString()).toBe("");
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([CONTAINER, cursor, CONTAINER, cursor]);
+    } finally {
+      provider.destroy();
+      doc.destroy();
+    }
   });
 });
