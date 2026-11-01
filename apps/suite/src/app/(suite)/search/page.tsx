@@ -8,6 +8,7 @@ import { type AppSlug, EmptyState, suiteApps } from "@jeswr/suite-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { SearchResult } from "@/shell/lib/search-results";
+import { runSearch } from "@/shell/lib/search-run";
 import { SearchResultsView } from "@/shell/search/results-view";
 import { useShellSearchSource } from "@/shell/search/search-context";
 import { useAccounts } from "@/shell/session/accounts-provider";
@@ -38,12 +39,17 @@ function SearchPage() {
     }
     const controller = new AbortController();
     setState((current) => ({ results: current.results, loading: true }));
-    source
-      .search(query, { ...(scope ? { scope } : {}), signal: controller.signal })
-      .then(({ results }) => setState({ results, loading: false }))
-      .catch(() => {
-        if (!controller.signal.aborted) setState({ results: [], loading: false, error: "unknown" });
-      });
+    void runSearch(
+      source,
+      query,
+      { ...(scope ? { scope } : {}), signal: controller.signal },
+      (outcome) =>
+        setState(
+          outcome.kind === "results"
+            ? { results: outcome.results, loading: false }
+            : { results: [], loading: false, error: "unknown" },
+        ),
+    );
     return () => controller.abort();
   }, [query, scope, source, attempt]);
   return (
