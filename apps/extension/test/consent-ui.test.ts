@@ -126,7 +126,12 @@ it.each([
     copy: 'This site can read and change everything in this pod',
   },
   { modes: ['read'] as const, copy: 'This site can read everything in this pod' },
-  { modes: ['append'] as const, copy: 'This site can read and change everything in this pod' },
+  { modes: ['append'] as const, copy: 'This site can add to anything in this pod' },
+  { modes: ['write'] as const, copy: 'This site can change everything in this pod' },
+  {
+    modes: ['read', 'append'] as const,
+    copy: 'This site can read everything in this pod and add to it',
+  },
 ])('warns about full pod access for $modes and requires selection plus Share', async ({
   modes,
   copy,

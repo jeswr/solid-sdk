@@ -231,7 +231,12 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
     );
     const classes = grant.scope.classes;
     const chips = element('div', undefined, 'grants-summary');
-    const labels = [...new Set(classes?.map((item) => dataClassCopy(item.dataClass).label))];
+    // Whole-pod access is never hidden behind the "+N" overflow.
+    const ordered = [...(classes ?? [])].sort(
+      (a, b) =>
+        Number(b.dataClass === PIM_STORAGE_CLASS) - Number(a.dataClass === PIM_STORAGE_CLASS),
+    );
+    const labels = [...new Set(ordered.map((item) => dataClassCopy(item.dataClass).label))];
     if (classes === undefined) chips.append(element('span', 'All data in connected storage'));
     else if (!classes.length) chips.append(element('span', 'No data access'));
     else {

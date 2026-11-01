@@ -145,6 +145,28 @@ describe('sites with access view', () => {
     expect(root.querySelector('.grants-feature')?.textContent).toBe('Used to plan your week');
   });
 
+  it('never hides full pod access behind the overflow chip', async () => {
+    const grant = siteGrant();
+    const classes = ['Person', 'Event', 'TextDigitalDocument', 'PostalAddress', 'OtherClass']
+      .map((name, index) => ({
+        ...grant.scope.classes![0],
+        grantId: `class-${index}`,
+        dataClass: `https://schema.org/${name}`,
+      }))
+      .concat({
+        ...grant.scope.classes![0],
+        grantId: 'storage',
+        dataClass: PIM_STORAGE_CLASS,
+        targets: [{ url: 'https://pod.example/', kind: 'container' as const }],
+      });
+    const { root } = await fixture([siteGrant({ scope: { pods: [], classes } })]);
+    const chips = [...root.querySelectorAll('.grants-summary span')].map(
+      (node) => node.textContent,
+    );
+    expect(chips[0]).toBe('Full access to your pod');
+    expect(chips).toContain('+2');
+  });
+
   it('keeps an open confirmation and its focus through refresh, then returns to its trigger', async () => {
     const { doc, button, dialog, controller } = await fixture();
     button('Revoke').focus();

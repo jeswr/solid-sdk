@@ -6,6 +6,18 @@ import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
 import type { ConsentDecisionMessage, PendingConsentView } from '../shared/messages';
 import { PIM_STORAGE_CLASS } from '../shared/storage-class';
 
+/** Whole-pod warning copy derived from the modes actually requested (write implies append). */
+function storageWarning(modes: readonly string[]): string {
+  const read = modes.includes('read');
+  const write = modes.includes('write');
+  const append = modes.includes('append');
+  if (read && write) return 'This site can read and change everything in this pod';
+  if (read && append) return 'This site can read everything in this pod and add to it';
+  if (write) return 'This site can change everything in this pod';
+  if (append) return 'This site can add to anything in this pod';
+  return 'This site can read everything in this pod';
+}
+
 function fmtExpiry(ms: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(ms);
 }
@@ -59,11 +71,7 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
       el('span', { class: 'class-title card-title', text: copy.label, id: titleId }),
       el('span', {
         class: isStorage ? 'card-description warning' : 'card-description hint',
-        text: isStorage
-          ? c.modes.every((mode) => mode === 'read')
-            ? 'This site can read everything in this pod'
-            : 'This site can read and change everything in this pod'
-          : copy.description,
+        text: isStorage ? storageWarning(c.modes) : copy.description,
         id: descriptionId,
       }),
     );
