@@ -3916,6 +3916,30 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
     }
   });
 
+  it("restore() on a LIVE controller signs it out when the binding is disproved", async () => {
+    const store = new RecordingStore();
+    const ls = installKeyedLocalStorage();
+    try {
+      const controller = createSolidAuth({
+        authFlow,
+        callbackUri: "https://app.example/callback",
+        clientId: "https://app.example/clientid.jsonld",
+        store,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
+      });
+      await controller.login(Alice);
+      expect(controller.webId).toBe(Alice);
+
+      agentIssuer = "https://other-idp.example/";
+      expect(await controller.restore()).toEqual({ outcome: "login" });
+      expect(controller.webId).toBeNull(); // the live session is gone too
+      expect(store.map.has(Issuer)).toBe(false);
+    } finally {
+      ls.restore();
+    }
+  });
+
   it("restore() restores nothing but KEEPS the credential when the profile cannot be read", async () => {
     const store = new RecordingStore();
     const ls = installKeyedLocalStorage();

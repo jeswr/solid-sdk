@@ -1382,7 +1382,10 @@ class SolidAuthEngine implements SolidAuth {
     }
     if (generation !== this.#generation) return undefined;
     if (!bound) {
-      await this.#forget(issuer);
+      // A live session on this issuer (restore() called while signed in) rests on the
+      // same disproved binding: sign it out too, not just the stored credential.
+      if (this.#session?.issuer.href === issuer.href) await this.logout().catch(() => {});
+      else await this.#forget(issuer);
       return undefined;
     }
     // We don't have the full AS/client here; rebuild a minimal live session for the
@@ -3365,7 +3368,12 @@ export function secureRedirectFetch(
   allowInsecureLoopback: boolean,
 ): typeof fetch {
   const assertSecure = (url: string): void => {
-    validateWebId(url, allowInsecureLoopback);
+    try {
+      validateWebId(url, allowInsecureLoopback);
+    } catch {
+      // Generic on purpose: a redirect target may carry signed query parameters.
+      throw new Error("Refusing a WebID profile read that is not over https.");
+    }
   };
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url = input instanceof Request ? input.url : String(input);

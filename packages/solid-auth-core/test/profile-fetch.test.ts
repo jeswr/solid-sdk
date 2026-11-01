@@ -26,6 +26,16 @@ describe("secureRedirectFetch", () => {
     expect(base).toHaveBeenCalledTimes(1);
   });
 
+  it("does not echo the refused redirect target (it may carry secrets)", async () => {
+    const base = scripted({
+      "https://alice.example/card": redirect("http://alice.example/card?access_token=s3cret"),
+    });
+    const fetch = secureRedirectFetch(base as unknown as typeof globalThis.fetch, false);
+    await expect(fetch("https://alice.example/card")).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining("s3cret") }),
+    );
+  });
+
   it("follows https redirects (303 for a slash WebID, cross-origin permanent ids)", async () => {
     const base = scripted({
       "https://w3id.example/alice": redirect("https://alice.example/card", 303),
