@@ -20,7 +20,7 @@ const post = (path: string, cookie: string, fields: Record<string, string>, orig
     body: new URLSearchParams(fields),
   });
 
-async function fixture() {
+async function fixture(upstreamFetch?: typeof fetch) {
   let now = Math.floor(Date.now() / 1000);
   const vault = createSessionVault({
     key: Buffer.alloc(32, 8).toString("base64"),
@@ -44,7 +44,13 @@ async function fixture() {
     }),
     isActive: async (id) => active.has(id),
   };
-  const options = { publicOrigin: ORIGIN, vault, podSessions: sessions, now: () => now };
+  const options = {
+    publicOrigin: ORIGIN,
+    vault,
+    podSessions: sessions,
+    now: () => now,
+    upstreamFetch,
+  };
   const app = await createApp(options);
   const registration = await app(
     request("/auth/register", {
@@ -219,6 +225,38 @@ describe("OAuth composition", () => {
       post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "deny" }),
     );
     expect((await navigation(response)).searchParams.get("error")).toBe("access_denied");
+    expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+  });
+
+  it("resolves fragment WebIDs before discovery and rejects a different verified owner", async () => {
+    const f = await fixture(
+      async () =>
+        new Response(
+          "<https://pod.example/profile/card#other> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://pod.example/>.",
+          { headers: { "content-type": "text/turtle" } },
+        ),
+    );
+    const login = await f.start();
+    expect(
+      (
+        await f.app(
+          post("/auth/login", login.cookie, {
+            csrf: login.csrf,
+            webid: "https://pod.example/profile/card#other",
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(f.sessions.begin).toHaveBeenCalledWith(
+      "https://pod.example/",
+      `${ORIGIN}/auth/callback`,
+    );
+    const response = await f.app(
+      request("/auth/callback?code=x&state=upstream-state", { headers: { cookie: login.cookie } }),
+    );
+    expect(new URL(response.headers.get("location") as string).searchParams.get("error")).toBe(
+      "access_denied",
+    );
     expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
   });
 

@@ -12,7 +12,7 @@ import {
 import { createSolidMcpServer } from "@jeswr/solid-mcp";
 import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
 import { createVaultOAuthStores, decode, digest, encode, vaultSigningKey } from "./persistence.js";
-import { podRootFor, withCssCompatibility } from "./pod.js";
+import { podLoginFor, podRootFor, withCssCompatibility } from "./pod.js";
 import { equalSecret, escapeHtml, form, page, publicOrigin, secureResponse } from "./security.js";
 
 export interface AppOptions {
@@ -34,6 +34,7 @@ interface BrowserFlow {
   csrf: string;
   authorizationUrl: string;
   state?: string;
+  expectedWebId?: string;
   session?: PodSession;
   clientId?: string;
   clientName?: string;
@@ -196,10 +197,13 @@ export async function createApp(
         const starting = { ...flow, phase: "starting" as const };
         await transition(key, bytes, starting);
         let state: string | undefined;
+        let expectedWebId: string | undefined;
         const provider: PodSessionProvider = {
           ...sessions,
           async begin(webid, redirect) {
-            const result = await sessions.begin(webid, redirect);
+            const login = await podLoginFor(webid, options.upstreamFetch);
+            expectedWebId = login.expectedWebId;
+            const result = await sessions.begin(login.issuer, redirect);
             state = result.state;
             return result;
           },
@@ -211,7 +215,12 @@ export async function createApp(
           await vault.delete(key);
           return response;
         }
-        await transition(key, encode(starting), { ...flow, phase: "pending", state });
+        await transition(key, encode(starting), {
+          ...flow,
+          phase: "pending",
+          state,
+          expectedWebId,
+        });
         return response;
       }
       if (
@@ -256,6 +265,10 @@ export async function createApp(
       // A false decision creates no grant. Only the later browser approval POST
       // may call the trusted authorize seam with the verified server-side session.
       const response = await as(async (validated) => {
+        if (flow.expectedWebId && validated.session.webId !== flow.expectedWebId) {
+          await sessions.revoke(validated.session.id);
+          return false;
+        }
         context = validated;
         return false;
       }).handle(new Request(`${callback}${url.search}`));

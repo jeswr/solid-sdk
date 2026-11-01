@@ -7,6 +7,13 @@ import { DataFactory } from "n3";
 
 /** Resolve only the verified WebID; ambiguous storage requires operator selection. */
 export async function podRootFor(webId: string, transport?: typeof fetch): Promise<string> {
+  const profile = await profileFor(webId, transport);
+  const roots = [...profile.storageUrls];
+  if (roots.length !== 1) throw new Error("Expected exactly one advertised pod root");
+  return roots[0] as string;
+}
+
+async function profileFor(webId: string, transport?: typeof fetch): Promise<Agent> {
   const url = new URL(webId);
   url.hash = "";
   const { dataset } = await fetchRdf(url.href, {
@@ -15,9 +22,18 @@ export async function podRootFor(webId: string, transport?: typeof fetch): Promi
         createNodeGuardedFetch({ maxBytes: 1024 * 1024, timeoutMs: 8_000, maxRedirects: 0 }),
     ),
   });
-  const roots = [...new Agent(webId, dataset, DataFactory).storageUrls];
-  if (roots.length !== 1) throw new Error("Expected exactly one advertised pod root");
-  return roots[0] as string;
+  return new Agent(webId, dataset, DataFactory);
+}
+
+/** A fragment WebID is a profile identity, never an issuer discovery URL. */
+export async function podLoginFor(
+  input: string,
+  transport?: typeof fetch,
+): Promise<{ issuer: string; expectedWebId?: string }> {
+  if (!new URL(input).hash) return { issuer: input };
+  const issuers = [...(await profileFor(input, transport)).oidcIssuer];
+  if (issuers.length !== 1) throw new Error("WebID must advertise exactly one issuer");
+  return { issuer: issuers[0] as string, expectedWebId: input };
 }
 
 /** Adapt CSS's PUT responses without relaxing conditional writes or ACL checks.
