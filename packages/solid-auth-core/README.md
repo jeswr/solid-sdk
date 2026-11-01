@@ -1,4 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-auth-core
 
@@ -41,6 +43,56 @@ await auth.logout();
 
 Call `dropLiveSession()` for transient failures that should preserve the durable refresh credential.
 Call `logout()` for intentional sign-out or a definitive invalid grant.
+
+## Credentialed redirects
+
+Credentialed requests always use `redirect: "manual"`, overriding the caller's redirect
+policy. The controller and proactive fetch wrapper follow visible 301/302/303/307/308
+redirects only when each destination passes the same live allowed-origin check as the
+initial request. Each hop receives a fresh DPoP proof for its URL and method, bound to
+the attached access token. Resource-server nonces are cached only for the checked hop's
+origin. Redirects outside the allowlist are returned unchanged without contacting the
+destination. Credential-free passthrough and fallback requests retain the caller's
+original redirect policy (`follow`, `error`, or `manual`), including when an upgrade
+is superseded before credentials attach or a retry loses its live session. Manual
+mode is derived only when credential headers survive Request construction; fallback
+sources keep the caller's policy. Credential-free redirects are handled by the transport
+under that policy. Neither wrapper attaches SDK tokens to `mode: "no-cors"` requests,
+and direct `upgrade()` calls leave them unchanged. Browser-filtered caller credential
+headers do not force manual redirects; these requests retain the caller's policy.
+
+Derived requests preserve the caller's referrer, referrer policy, mode, credentials,
+cache, integrity, keepalive, abort signal, and priority where supported, on passthrough,
+fallback, credential attachment, and every followed hop. Only the URL, redirect policy,
+credential headers, and method/body/content headers change as described here. Inherited
+`mode: "navigate"` becomes `"same-origin"` when deriving a Request, following Fetch's
+constructor rule for a non-empty init (including service-worker navigation requests).
+
+Passthrough and fallback requests carrying caller-owned `Authorization`, `DPoP`, or
+`Proxy-Authorization` headers also use manual mode, whether supplied through `init.headers`
+or a Request. Their redirects are always returned unfollowed, including same-origin redirects:
+the SDK cannot mint fresh proofs for those credentials. On SDK-authenticated redirects,
+an origin change strips `Cookie`, `Cookie2`, `Proxy-Authorization`, `Authorization`, and
+caller `DPoP` headers before attaching freshly scoped SDK credentials. Same-origin hops
+preserve those headers before the SDK replaces its authorization and proof.
+The `authenticatedFetch` handle retains this boundary before login and after logout;
+`publicFetch` remains the explicit pristine transport.
+
+POST requests become GET on 301/302; 303 changes methods other than GET/HEAD to GET.
+These rewrites discard the body and its content headers, including Content-Length.
+Other redirects preserve the method and replay bodies supplied through `init.body` as
+text, bytes, Blob, URLSearchParams, or FormData, buffered before sending. Buffering checks
+the request's abort signal before
+reading and races each read against cancellation. An abort cancels the reader and rejects
+with the signal's reason (an AbortError by default), without waiting for buffering or
+source cancellation to finish. ReadableStream bodies and bodies supplied through a
+Request are treated as streams: redirects requiring their replay are returned unfollowed.
+Following more than 20 hops throws a TypeError.
+
+Browsers hide manual redirect details behind an `opaqueredirect` response. This response
+is returned as-is, so credentialed redirects in browsers surface to the caller instead
+of being followed. Direct `WebIdDPoPTokenProvider.upgrade()` calls that attach credentials
+also return Requests with manual redirect mode; the fetch wrappers own the hop loop.
 
 ## Key API
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 //
 // @jeswr/solid-auth-core/react — the thin React layer over the framework-free
 // core: ONE SessionProvider + useSolidSession() replacing the 14 hand-rolled,
@@ -48,9 +49,11 @@ export interface SolidSession {
   /** The authenticated WebID, or null. */
   webId: string | null;
   /**
-   * The session-bound fetch (attaches the DPoP token for allowed origins; the
-   * pristine fetch while logged out). STABLE identity across renders — safe in
-   * dependency arrays; it reads the live session on every call.
+   * The session-bound fetch attaches the DPoP token for allowed origins. While
+   * logged out it adds no session credentials; caller-owned Authorization, DPoP,
+   * or Proxy-Authorization still forces manual redirects. Credential-free calls
+   * retain the caller's redirect policy. STABLE identity across renders — safe
+   * in dependency arrays; it reads the live session on every call.
    */
   fetch: typeof fetch;
   /** The pristine, credential-free fetch (foreign-origin / public reads). */
@@ -127,8 +130,9 @@ export function SessionProvider(props: SessionProviderProps): ReactNode {
   }, [auth]);
 
   // STABLE-identity handles (per auth object, i.e. for the provider's lifetime):
-  // the fetch delegates PER-CALL to the live engine getter (authenticatedFetch is
-  // pristine while logged out, the DPoP-attaching wrapper while live), so
+  // the fetch delegates PER-CALL to the live engine getter (authenticatedFetch
+  // adds no session credentials while logged out and keeps the caller-credential
+  // manual redirect boundary; while live it attaches DPoP for allowed origins), so
   // consumers can safely keep `session.fetch` / `login` / `logout` in dependency
   // arrays without effect churn on every status change. (setError from useState
   // is itself identity-stable, so these closures never go stale.)

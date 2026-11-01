@@ -17,6 +17,7 @@
     "coverage:music": "vitest run --coverage"
   },
   "dependencies": {
+    "@jeswr/pod-connectors": "workspace:*",
     "@jeswr/suite-ui": "workspace:*",
     "@univerjs/core": "1.2.0",
     "@univerjs/sheets": "1.2.0",
