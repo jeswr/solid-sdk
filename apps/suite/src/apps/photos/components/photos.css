@@ -218,6 +218,18 @@
 .pho-tile:focus-within .pho-tile-caption {
   opacity: 1;
 }
+.pho-tile-caption[data-source="google-photos"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  opacity: 1;
+}
+.pho-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .pho-favourite-mark {
   position: absolute;
   bottom: var(--space-2);

@@ -498,12 +498,9 @@ export function AlbumsScreen() {
             return (
               <li key={album.url}>
                 <Link href={`/photos/a/${encodeRef(album.url)}`} className="pho-album-card">
-                  <div className="pho-album-cover">
+                  <div className="pho-album-cover" aria-hidden="true">
                     {cover ? (
-                      <PhotoImage
-                        url={cover.thumbnailUrl ?? cover.contentUrl}
-                        name={`${album.name} cover`}
-                      />
+                      <PhotoImage url={cover.thumbnailUrl ?? cover.contentUrl} name="" />
                     ) : (
                       <Album size={32} aria-hidden="true" />
                     )}

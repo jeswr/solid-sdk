@@ -102,7 +102,14 @@ async function stripJpeg(original: Blob) {
     const length = ((bytes[offset] as number) << 8) | (bytes[offset + 1] as number);
     if (length < 2 || offset + length > bytes.length) throw new Error("Invalid JPEG segment");
     offset += length;
-    if (!((marker >= 225 && marker <= 239 && marker !== 238) || marker === 254))
+    // ICC profiles are APP2 chunks with this signature (possibly split across
+    // several segments). Keep their complete payload, sequence and count bytes.
+    const icc =
+      marker === 226 &&
+      length >= 16 &&
+      String.fromCharCode(...bytes.slice(offset - length + 2, offset - length + 14)) ===
+        "ICC_PROFILE\0";
+    if (icc || !((marker >= 225 && marker <= 239 && marker !== 238) || marker === 254))
       parts.push(bytes.slice(start, offset));
     if (marker === 218) {
       const scan = offset;
@@ -174,6 +181,21 @@ async function stripWebp(original: Blob) {
   );
   return new Blob([header, ...chunks], { type: "image/webp" });
 }
+export class LocationStripError extends Error {}
+/** Canvas captures only one APNG frame. Refuse stripping before any upload. */
+function assertStaticPng(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  for (let offset = 8; offset + 12 <= bytes.length; ) {
+    const size = view.getUint32(offset);
+    if (offset + size + 12 > bytes.length) throw new Error("Invalid PNG chunk");
+    if (String.fromCharCode(...bytes.slice(offset + 4, offset + 8)) === "acTL")
+      throw new LocationStripError(
+        "Animated PNGs cannot have location removed safely. Turn off Remove location from uploads to keep all frames and the original metadata, then upload again.",
+      );
+    offset += size + 12;
+  }
+}
 export const browserEncoder: ImageEncoder = {
   async dimensions(original) {
     const image = await decode(original);
@@ -193,7 +215,9 @@ export const browserEncoder: ImageEncoder = {
       throw new Error(
         "Turn off Strip location for this image format, or upload a JPEG, PNG or WebP",
       );
-    const exif = await readExif(await original.arrayBuffer());
+    const buffer = await original.arrayBuffer();
+    assertStaticPng(buffer);
+    const exif = await readExif(buffer);
     if ((exif.orientation ?? 1) !== 1)
       throw new Error("Convert this oriented image to JPEG before stripping location");
     return render(original, undefined, original.type);

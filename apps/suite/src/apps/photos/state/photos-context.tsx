@@ -13,7 +13,7 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
-import { browserEncoder } from "../lib/browser/encoder";
+import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
 import {
   createAlbum,
   deleteAlbum,
@@ -107,7 +107,7 @@ function usePhotosState(session: PodSession) {
       () => live && setStatus("error"),
     );
     const unsubscribe = session.subscribe((url) => {
-      if (!url.startsWith(io.root)) return;
+      if (!url.startsWith(io.root) && !url.startsWith(io.googlePhotos.root)) return;
       ++generation.current;
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -242,6 +242,7 @@ function usePhotosState(session: PodSession) {
   );
   const moveToTrash = useCallback(
     (photos: LibraryPhoto[]) => {
+      let complete = true;
       const refs = new Set(photos.map((photo) => photo.ref));
       const patch: Patch = (s) => ({
         ...s,
@@ -249,8 +250,13 @@ function usePhotosState(session: PodSession) {
       });
       return run(patch, async () => {
         const urls: string[] = [];
+        const moved = new Set<string>();
+        const failures: unknown[] = [];
         for (const photo of photos) {
-          if (photo.readOnly) throw new Error("Imported photos are read-only");
+          if (photo.readOnly) {
+            failures.push(new Error("Imported photos are read-only"));
+            continue;
+          }
           let operation = trashOperations.current.get(photo.url);
           if (!operation) {
             // Recover an incomplete move after a reload as well as within this session.
@@ -273,21 +279,38 @@ function usePhotosState(session: PodSession) {
             session.webId,
             new Date().toISOString(),
           );
-          if (!outcome.ok) throw outcome.error;
+          if (!outcome.ok) {
+            failures.push(outcome.error);
+            continue;
+          }
           trashOperations.current.delete(photo.url);
           urls.push(outcome.value);
+          moved.add(photo.ref);
         }
-        toast("Moved to trash", {
-          duration: 10000,
-          action: {
-            label: "Undo",
-            onClick: () => {
-              void restore(urls);
+        complete = failures.length === 0;
+        if (failures.length)
+          toast.error(
+            `${failures.length} photo${failures.length === 1 ? "" : "s"} couldn't be moved to trash. ${
+              failures.some((error) => statusOf(error) === 412)
+                ? "An item changed elsewhere. Your photos have been refreshed."
+                : "Please try again."
+            }`,
+          );
+        if (urls.length)
+          toast(
+            complete
+              ? "Moved to trash"
+              : `Moved ${urls.length} of ${photos.length} photos to trash`,
+            {
+              duration: 10000,
+              action: {
+                label: "Undo",
+                onClick: () => restore(urls),
+              },
             },
-          },
-        });
-        return patch;
-      });
+          );
+        return (s) => ({ ...s, photos: s.photos.filter((photo) => !moved.has(photo.ref)) });
+      }).then((ok) => ok && complete);
     },
     [io, run, session.webId, restore],
   );
@@ -376,7 +399,9 @@ function usePhotosState(session: PodSession) {
             toast.error(
               result && !result.ok && statusOf(result.error) === 412
                 ? "This upload already exists or changed elsewhere. Your library has been refreshed. Check Photos before retrying."
-                : `Couldn't upload ${input.file.name}. Retry in the upload panel.`,
+                : result && !result.ok && result.error instanceof LocationStripError
+                  ? result.error.message
+                  : `Couldn't upload ${input.file.name}. Retry in the upload panel.`,
             );
           else announce(`${input.file.name} uploaded`);
           return (s) => s;

@@ -2,6 +2,7 @@
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { scenes } from "../src/apps/photos/demo/images";
+import { browserEncoder, LocationStripError } from "../src/apps/photos/lib/browser/encoder";
 import { createAlbum } from "../src/apps/photos/lib/data/albums";
 import { createKeywordWriter, listLibrary } from "../src/apps/photos/lib/data/library";
 import { photoDataStorage } from "../src/apps/photos/lib/data/storage";
@@ -9,6 +10,7 @@ import { listTrash, purgePhoto, restorePhoto, trashPhoto } from "../src/apps/pho
 import { uploadFiles } from "../src/apps/photos/lib/data/upload";
 import { buildTrash, type ImageEncoder, RestoreReceipt } from "../src/apps/photos/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { animatedPng } from "./photos/animated-png";
 
 const ROOT = "https://recovery.demo.pod/";
 const NOW = "2026-11-01T12:00:00.000Z";
@@ -66,6 +68,86 @@ async function photo(s: ReturnType<typeof setup>) {
 }
 
 describe("Photos recovery regressions", () => {
+  it("refuses animated PNG stripping before any write, and preserves every original byte when stripping is off", async () => {
+    const s = setup();
+    const original = animatedPng();
+    const options = {
+      encoder: { ...encoder, stripLocation: browserEncoder.stripLocation },
+      stripLocation: true,
+      now: NOW,
+      id: () => "animation",
+    };
+    const file = { name: "animation.png", original };
+    const rejected = (await uploadFiles(s.io, [file], options))[0];
+    expect(rejected).toMatchObject({ ok: false, error: expect.any(LocationStripError) });
+    expect(s.pod.snapshot().resources).toHaveLength(0);
+    expect((await uploadFiles(s.io, [file], { ...options, stripLocation: false }))[0]?.ok).toBe(
+      true,
+    );
+    expect(await (await s.pod.fetch(`${s.io.root}originals/animation.png`)).arrayBuffer()).toEqual(
+      await original.arrayBuffer(),
+    );
+  });
+  it.each([
+    "originals/photo.png",
+    "thumbs/photo.webp",
+  ])("reconciles a lost response for %s against cached bytes and a fresh strong ETag", async (path) => {
+    const s = setup();
+    const url = `${s.io.root}${path}`;
+    s.lost.add(`PUT ${url}`);
+    expect((await s.upload())[0]?.ok).toBe(false);
+    const before = await s.pod.fetch(url);
+    expect(before.status).toBe(200);
+    const bytes = await before.arrayBuffer();
+    s.lost.clear();
+    expect((await s.upload("photo", "2026-11-02T12:00:00Z"))[0]?.ok).toBe(true);
+    const saved = await s.pod.fetch(url);
+    expect(await saved.arrayBuffer()).toEqual(bytes);
+    expect(saved.headers.get("etag")).toBe(before.headers.get("etag"));
+    expect((await listLibrary(s.io)).items).toHaveLength(1);
+    expect((await s.io.loadPhoto(`${s.io.root}items/photo.ttl`)).photo?.created).toBe(NOW);
+    expect(s.io.createdBinaries.size).toBe(0);
+    expect(s.io.uploads.size).toBe(0);
+  });
+  it("can retry an ambiguous write that never committed or whose binary was removed", async () => {
+    const s = setup();
+    const url = `${s.io.root}originals/photo.png`;
+    s.lost.add(`PUT ${url}`);
+    expect((await s.upload())[0]?.ok).toBe(false);
+    await s.pod.fetch(url, { method: "DELETE" });
+    s.lost.clear();
+    expect((await s.upload())[0]?.ok).toBe(true);
+  });
+  it("retains ambiguous writes across failed reads and refuses missing validators or different bytes", async () => {
+    for (const scenario of ["read-failure", "missing-etag", "length", "pixels"]) {
+      const s = setup();
+      const url = `${s.io.root}originals/photo.png`;
+      s.lost.add(`PUT ${url}`);
+      expect((await s.upload())[0]?.ok).toBe(false);
+      s.lost.clear();
+      const bytes = new Uint8Array(await (await s.pod.fetch(url)).arrayBuffer());
+      if (scenario === "read-failure") s.fail.set(`GET ${url}`, 500);
+      if (scenario === "missing-etag") s.noEtag.add(`GET ${url}`);
+      if (scenario === "length" || scenario === "pixels") {
+        bytes[0] = (bytes[0] as number) ^ 1;
+        await s.pod.fetch(url, {
+          method: "PUT",
+          body: scenario === "length" ? bytes.slice(1) : bytes,
+        });
+      }
+      const result = (await s.upload())[0];
+      expect(result?.ok).toBe(false);
+      if (scenario === "length" || scenario === "pixels")
+        expect(result).toMatchObject({ error: { status: 412 } });
+      expect((await s.pod.fetch(url)).status).toBe(200);
+      expect((await s.pod.fetch(`${s.io.root}items/photo.ttl`)).status).toBe(404);
+      if (scenario === "read-failure" || scenario === "missing-etag") {
+        s.fail.clear();
+        s.noEtag.clear();
+        expect((await s.upload())[0]?.ok).toBe(true);
+      }
+    }
+  });
   it("creates selected album members atomically even when PUT omits its ETag", async () => {
     const s = setup();
     const url = `${s.io.root}albums/populated.ttl`;

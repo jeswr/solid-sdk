@@ -2,6 +2,7 @@
 import { isomorphic } from "rdf-isomorphic";
 import { buildPhoto, groupPhotos, type Photo, PhotoIoError, type PhotoStorage } from "../model";
 import type { StoredAlbum } from "./albums";
+import type { googlePhotosStorage } from "./google-photos";
 import { children, collect, requireEtag } from "./shared";
 
 export interface LibraryPhoto extends Photo {
@@ -9,6 +10,7 @@ export interface LibraryPhoto extends Photo {
   ref: string;
   etag: string | null;
   readOnly: boolean;
+  source?: "google-photos";
 }
 export function dayGroups(photos: readonly LibraryPhoto[]) {
   return [...groupPhotos(photos, "day")].map(([key, items]) => ({
@@ -17,12 +19,16 @@ export function dayGroups(photos: readonly LibraryPhoto[]) {
     monthLabel:
       key === "undated"
         ? "Undated"
-        : new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" }).format(
-            new Date(`${key}T12:00:00Z`),
-          ),
+        : new Intl.DateTimeFormat(undefined, {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${key}T12:00:00Z`)),
   }));
 }
-export async function listLibrary(io: PhotoStorage) {
+export async function listLibrary(
+  io: PhotoStorage & { googlePhotos?: ReturnType<typeof googlePhotosStorage> },
+) {
   const result = await collect(await children(io, "items/"), async (url) => {
     const { photos, etag } = await io.loadPhotos(url);
     return photos.map(({ subject, photo }) => ({
@@ -33,6 +39,11 @@ export async function listLibrary(io: PhotoStorage) {
       readOnly: photos.length !== 1 || subject !== `${url}#it`,
     }));
   });
+  if (io.googlePhotos) {
+    const imported = await io.googlePhotos.listPhotos();
+    result.items.push(...imported.items);
+    result.failures.push(...imported.failures);
+  }
   const groups = dayGroups(result.items);
   return { ...result, items: groups.flatMap((group) => group.photos), groups };
 }

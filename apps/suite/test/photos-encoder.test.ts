@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { scenes } from "../src/apps/photos/demo/images";
 import { browserEncoder } from "../src/apps/photos/lib/browser/encoder";
 import { getOrientationTransform } from "../src/apps/photos/lib/library/orientation";
 import { readExif, thumbnailPlan } from "../src/apps/photos/lib/model";
+import { animatedPng } from "./photos/animated-png";
 import { tiffFixture } from "./photos/fixtures";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -41,6 +43,55 @@ function jpeg(orientation: number) {
   );
 }
 describe("Photos browser encoder contracts", () => {
+  it("preserves every JPEG ICC profile segment byte for byte while removing non-profile APP2 metadata", async () => {
+    const original = new Uint8Array(await jpeg(6).arrayBuffer());
+    const segment = (payload: Uint8Array) =>
+      Uint8Array.from([
+        255,
+        226,
+        (payload.length + 2) >> 8,
+        (payload.length + 2) & 255,
+        ...payload,
+      ]);
+    const signature = [...new TextEncoder().encode("ICC_PROFILE\0")];
+    const profile = [
+      segment(Uint8Array.from([...signature, 1, 2, 0, 128, 255, 42])),
+      segment(Uint8Array.from([...signature, 2, 2, 17, 0, 31])),
+    ] as const;
+    const privateMetadata = segment(new TextEncoder().encode("GPS location in APP2"));
+    const input = new Blob(
+      [original.slice(0, -2), profile[0], privateMetadata, profile[1], original.slice(-2)],
+      { type: "image/jpeg" },
+    );
+    const stripped = new Uint8Array(
+      await (await browserEncoder.stripLocation(input)).arrayBuffer(),
+    );
+    const expected = new Uint8Array(
+      await (await browserEncoder.stripLocation(jpeg(6))).arrayBuffer(),
+    );
+    expect(stripped).toEqual(
+      new Uint8Array(
+        await new Blob([expected.slice(0, -2), ...profile, expected.slice(-2)]).arrayBuffer(),
+      ),
+    );
+    expect(new TextDecoder().decode(stripped)).not.toContain("GPS");
+    expect((await readExif(stripped.buffer)).orientation).toBe(6);
+  });
+  it("rejects stripping animated PNGs before a canvas can discard frames", async () => {
+    const bytes = Uint8Array.from(atob(scenes[0][0]), (c) => c.charCodeAt(0));
+    const animated = animatedPng();
+    const decode = vi.fn();
+    vi.stubGlobal("createImageBitmap", decode);
+    await expect(browserEncoder.stripLocation(animated)).rejects.toThrow(
+      "Turn off Remove location from uploads to keep all frames",
+    );
+    expect(decode).not.toHaveBeenCalled();
+    const invalid = new Blob(
+      [bytes.slice(0, 33), Uint8Array.from([255, 255, 255, 255, 73, 68, 65, 84, 0, 0, 0, 0])],
+      { type: "image/png" },
+    );
+    await expect(browserEncoder.stripLocation(invalid)).rejects.toThrow("Invalid PNG chunk");
+  });
   it("strips private JPEG segments losslessly and preserves all eight raw orientations exactly once", async () => {
     for (let orientation = 1; orientation <= 8; orientation++) {
       const original = jpeg(orientation);

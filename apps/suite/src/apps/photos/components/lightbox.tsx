@@ -309,7 +309,12 @@ function InfoPane({ photo }: { photo: LibraryPhoto }) {
           </div>
         </form>
       )}
-      {!editable && <p>Imported metadata is read-only.</p>}
+      {!editable && (
+        <p>
+          {photo.source === "google-photos" && "From Google Photos. "}
+          Imported metadata is read-only.
+        </p>
+      )}
     </aside>
   );
 }

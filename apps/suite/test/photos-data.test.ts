@@ -35,6 +35,7 @@ import {
   type ImageEncoder,
   type Photo,
   PhotographDoc,
+  photoStorage,
 } from "../src/apps/photos/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -145,7 +146,7 @@ describe("Photos library and shared reads", () => {
     await expect(listLibrary(io)).rejects.toMatchObject({ status: 403 });
   });
   it("bounds concurrency, preserves order and validates each listed URL before reading it", async () => {
-    const { io } = setup();
+    const { io, fetch } = setup();
     let active = 0;
     let max = 0;
     const urls = Array.from({ length: 20 }, (_, index) => `${index}`);
@@ -187,10 +188,31 @@ describe("Photos library and shared reads", () => {
     for (const value of [null, "", 'W/"weak"']) expect(() => requireEtag(value)).toThrow("ETag");
     expect(requireEtag('"strong"')).toBe('"strong"');
     expect(dayGroups([])).toEqual([]);
+    expect(await listLibrary(photoStorage(fetch, ROOT))).toEqual({
+      items: [],
+      failures: [],
+      groups: [],
+    });
   });
 });
 
 describe("Photos album operations", () => {
+  it("clears a removed explicit cover on save and reload, including the final member", async () => {
+    const { io } = setup();
+    const refs = [`${io.root}items/one.ttl#it`, `${io.root}items/two.ttl#it`];
+    const album = await createAlbum(io, "Covers", NOW, refs);
+    await saveAlbum(io, coverAlbum(album, refs[0] as string));
+    for (const ref of refs) {
+      const loaded = (await listAlbums(io)).items[0];
+      if (!loaded) throw new Error("Missing album");
+      const covered = coverAlbum(loaded, ref);
+      expect(changeMembers(covered, [], false).coverUrl).toBe(ref);
+      await saveAlbum(io, changeMembers(covered, [ref], false));
+      const reloaded = (await listAlbums(io)).items[0];
+      expect(reloaded?.coverUrl).toBeUndefined();
+      expect(reloaded?.members).toEqual(ref === refs[0] ? [refs[1]] : []);
+    }
+  });
   it("creates collision-safe names and persists rename, membership, order, cover and deletion", async () => {
     const { io, failures, writes } = setup();
     expect((await listAlbums(io)).items).toEqual([]);

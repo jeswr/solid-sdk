@@ -54,7 +54,9 @@ export function changeMembers(
   let changed: Album = album;
   for (const member of members)
     changed = add ? addMember(changed, member) : removeMember(changed, member);
-  return { ...album, ...changed };
+  const result = { ...album, ...changed };
+  if (result.coverUrl && !result.members.includes(result.coverUrl)) delete result.coverUrl;
+  return result;
 }
 export function orderAlbum(album: StoredAlbum, members: readonly string[]): StoredAlbum {
   return { ...album, ...reorderMembers(album, members) };

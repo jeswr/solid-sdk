@@ -20,7 +20,10 @@ export function requireEtag(etag: string | null): string {
   return etag;
 }
 /** Missing collections are empty. Permission and transport failures remain errors. */
-export async function children(io: PhotoStorage, path: string): Promise<string[]> {
+export async function children(
+  io: Pick<PhotoStorage, "root" | "list">,
+  path: string,
+): Promise<string[]> {
   const container = new URL(path, io.root);
   let urls: string[];
   try {

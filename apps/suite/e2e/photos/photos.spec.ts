@@ -168,7 +168,8 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   await navigate(page, "Albums");
   await page.reload();
   const card = page.getByRole("link", { name: "Weekend 2 photos", exact: true });
-  const coverImage = card.getByRole("img", { name: "Weekend cover", exact: true });
+  const coverImage = card.locator("img");
+  await expect(coverImage).toHaveAttribute("alt", "");
   await expect(coverImage).toBeVisible();
   expect(
     await coverImage.evaluate(async (image: HTMLImageElement) =>
@@ -184,6 +185,7 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   await favouriteBox.getByRole("button", { name: "Close photo", exact: true }).click();
   await expect(page.getByRole("link", { name: "Open Upload 1.png", exact: true })).toBeFocused();
   await navigate(page, "Favourites");
+  await page.reload();
   await expect(page.getByRole("link", { name: "Open Upload 1.png", exact: true })).toBeVisible();
   await capture(page, info, "favourites");
   await page.getByRole("link", { name: "Open Upload 1.png", exact: true }).click();
@@ -192,12 +194,37 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
     .getByRole("button", { name: "Move to trash", exact: true })
     .click();
   await navigate(page, "Trash");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
   await capture(page, info, "trash");
   await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await saved(page);
   await expect(page.getByRole("heading", { name: "Trash is empty", exact: true })).toBeVisible();
   await navigate(page, "Favourites");
+  await page.reload();
   await expect(page.getByRole("link", { name: "Open Upload 1.png", exact: true })).toBeVisible();
   expect(remoteRequests).toEqual([]);
+});
+
+test.describe("browser locale", () => {
+  test.use({ locale: "en-GB" });
+  test("formats day headings using the browser's locale", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
+    await page.goto("/photos");
+    await expect(opens(page)).toHaveCount(12);
+    const expected = await page.evaluate(() => {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date("2026-10-29T00:00:00Z"));
+    });
+    await expect(
+      page.getByRole("heading", { level: 2, name: expected, exact: true }),
+    ).toBeVisible();
+  });
 });
 
 test("search, selection, direct lightbox reload and album deletion keep originals", async ({

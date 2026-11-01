@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
+  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -25,7 +26,7 @@ function dayLabel(key: string) {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   if (key === today) return "Today";
   if (key === yesterday) return "Yesterday";
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -290,7 +291,10 @@ export function PhotoGrid({
                           <Heart size={16} fill="currentColor" aria-label="Favourite" />
                         </span>
                       )}
-                      <span className="pho-tile-caption">{photo.name}</span>
+                      <span className="pho-tile-caption" data-source={photo.source}>
+                        <span className="pho-tile-name">{photo.name}</span>
+                        {photo.source === "google-photos" && <Badge>From Google Photos</Badge>}
+                      </span>
                       {album && (
                         <div className="pho-tile-menu">
                           <DropdownMenu>
