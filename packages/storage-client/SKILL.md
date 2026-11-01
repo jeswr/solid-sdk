@@ -43,7 +43,8 @@ await storage.write(created.url, 'second draft', {
 
 Read [LWS app differences](../../skills/lws-vs-solid/SKILL.md) before assuming path containment,
 permission headers or recursive notifications. Use [pod-notifications](../pod-notifications/SKILL.md)
-for changes; [pod-access](../pod-access/SKILL.md) currently has no sharing implementation.
+for changes; [pod-access](../pod-access/SKILL.md) provides WAC/ACP and LWS ODRL sharing/requests.
+Availability describes server support, not caller permission.
 
 `capabilities` in the factory options is an optional `DescriptionCache`, shared with other
 capability consumers; the default is the capabilities package's shared in-memory cache.
@@ -489,12 +490,11 @@ RDF/JS types (`DatasetCore`, `Quad`, `Term`) come from `@jeswr/fetch-rdf`'s type
 emitted declarations need no `@rdfjs/types` dependency (which the layer guard does not allow).
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-003-storage-client.md` in
-`solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
+`solid-suite-planning/specs/sdk-core/` and this repository's `AGENTS.md`.
 
 This package is security critical. Keep coverage thresholds at 100% and add behavioral and adversarial tests with the implementation.
-
-Keep development tool versions aligned with the root manifest. The pinned pnpm 10.4.1 with
-`ignore-scripts` requires local tool declarations for filtered scripts.
+Keep dev tool versions aligned with the root. pnpm 10.4.1 with `ignore-scripts` requires
+local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
 

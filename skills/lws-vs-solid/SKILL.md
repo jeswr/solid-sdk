@@ -17,7 +17,7 @@ states. These skills describe the public APIs in this checkout, including incomp
 - [storage-client](../../packages/storage-client/SKILL.md): reads, listings and conditional mutations.
 - [pod-auth](../../packages/pod-auth/SKILL.md): sessions, credential boundaries and agent identities.
 - [pod-notifications](../../packages/pod-notifications/SKILL.md): push, polling and reconciliation.
-- [pod-access](../../packages/pod-access/SKILL.md): offline WAC/ACP translation core; sharing and grant APIs remain unimplemented.
+- [pod-access](../../packages/pod-access/SKILL.md): Solid WAC/ACP and LWS ODRL sharing, access requests, offline policy translation and notifications.
 
 For HTTP contracts and specification sources, read [solid-lws](../solid-lws/SKILL.md).
 Keep protocol internals in the SDK; apps import the storage-client root entry point rather
@@ -31,7 +31,7 @@ than its `/solid` or `/lws` backends. Discovery failure is an error, not permiss
 | Containment | Container membership corresponds to paths; `parentOf` uses path arithmetic. | Parentage comes from `up` and listings. Containers can have opaque, slashless identifiers. | Use `list` / `listAll`, `entry.kind` and `parentOf`; do not infer LWS kind or logical parent from a slash. |
 | Conditional edits | Mutations require `ifMatch` at the SDK boundary. `write` / `writeRdf` with `'*'` omit the Solid precondition. | Mutations require `ifMatch`. `write` / `writeRdf` with `'*'` send `If-Match: *`, which still cannot create a missing resource. | Preserve the observed ETag verbatim and re-read on `precondition-failed` (412). Prefer that ETag over `'*'`. |
 | Caller permission hints | `read` / `head` can populate `allow` from WAC-Allow when present. | `allow` is always `null`; there is no WAC-Allow-based permission result. | Null is unknown. Capability availability is server support, not proof that this caller can perform an operation. Handle 401/403. |
-| Sharing | Discovered access-control models can be WAC or ACP. | Access control may advertise `odrl-grants` or `none`; request/grant services are optional. | Check `state` and model before choosing an integration. pod-access implements no sharing API in this base. |
+| Sharing | Discovered access-control models can be WAC or ACP. | Access control may advertise `odrl-grants` or `none`; request/grant services are optional. | Check `state`, model, supported profiles and endpoints; use `createAccessClient` from pod-access. |
 | Container notifications | Container channels and polling cover membership; use `hot` for edits to specific resources. | Push retains recursive server semantics; polling still covers direct membership. | `depth: 'recursive'` is best effort and creates no client traversal. Reconcile after interruptions. |
 | Container paging | Current Solid backend returns one page. | `next` cursors are opaque, and `total` can be absent or approximate. | Prefer `listAll`; for manual paging pass the returned cursor unchanged and stop only at `next === null`. |
 | Moves | Copy+delete emulation changes identity and can fail partially. | Requires advertised MoveResource support; `name` is ignored and identity may change. | Check `features.move` details and retain the returned URL; do not promise atomic rename or preserved sharing. |
@@ -96,7 +96,9 @@ Access requests/grants require an advertised supported access profile. A grant i
 authorization record managed by the server, not an OAuth token to put in an Authorization
 header. `pod-auth` owns protocol discovery and credential exchange. Agent identities can have
 `webId: null`; use identity presence to recognize authentication and keep keys/tokens out of UI
-state. The pod-access translation core does not expose `share()` or grant operations.
+state. Use `createAccessClient({ storage, storageId: description.id, identity })` for LWS grants
+and requests; the identity callback returns the current caller identifier or null. These grant
+records remain separate from the offline translation core's neutral policy rules.
 
 Use `createNotifications` with the same fetch and storage client. Re-fetch on changes and
 reconcile on `resync`; events are hints, not a resource snapshot or guaranteed replay log.

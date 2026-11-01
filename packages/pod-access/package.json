@@ -46,6 +46,8 @@
     "@vitest/coverage-v8": "^4.1.9"
   },
   "dependencies": {
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@rdfjs/types": "2.0.1",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",

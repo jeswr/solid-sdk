@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Dialect-aware WAC/ACP parsing, serialization, translation and narrowing proofs. */
+/** Solid/LWS sharing, WAC/ACP translation and bounded access proofs. */
+export { createAccessClient } from "./access.js";
 export {
   assertNotWider,
   effectiveMembers,
@@ -34,7 +36,12 @@ export {
   translatePolicy,
 } from "./translation.js";
 export type {
+  AccessClient,
+  AccessClientOptions,
   AccessDocument,
+  AccessGrant,
+  AccessMode,
+  AccessRequest,
   AccessSystem,
   Denial,
   EffectivePolicy,
@@ -46,5 +53,6 @@ export type {
   ReportKind,
   ReportOption,
   Resolutions,
+  RevocationKey,
   Subject,
 } from "./types.js";
