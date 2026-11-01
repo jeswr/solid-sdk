@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -6,12 +7,23 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   checkFixture,
+  checkGatedUnwrap,
   checkNavigation,
   checkRejectedShare,
+  checkSecureStoreFiles,
+  checkSecureStoreFixture,
   parseDevtoolsSockets,
   quoteAndroidShell,
 } from "./checks.ts";
 import { fixturePorts, startFixtureServer } from "./fixture-server.mjs";
+import {
+  assertUnsecuredEmulator,
+  attemptGatedUnwrap,
+  clearEmulatorPin,
+  enrollFingerprint,
+  gatedUiPreflight,
+  gatedUnwrapPreflight,
+} from "./secure-store-probes.ts";
 import { verifyRejectedShare, waitForTextShare } from "./share-probes.ts";
 
 const execute = promisify(execFile);
@@ -22,10 +34,19 @@ const APK = fileURLToPath(
   new URL("../android/app/build/outputs/apk/debug/app-debug.apk", import.meta.url),
 );
 const artifacts = new URL("artifacts/", import.meta.url);
+/** @type {import('./checks.ts').SecureStoreReport} */
+const secureStoreReport = {
+  ungated: null,
+  gated: {
+    fingerprint: { status: "failed", reason: "lane did not reach gated probes" },
+    credential: { status: "failed", reason: "lane did not reach gated probes" },
+  },
+};
 const report = {
   startedAt: new Date().toISOString(),
   status: "running",
   steps: [],
+  secureStore: secureStoreReport,
   realSuite: {
     status: "deferred",
     blockedBy: "MOB-06",
@@ -38,6 +59,7 @@ let serial;
 // Diagnostics and cleanup touch a device only once it is proven to be a booted emulator.
 let emulatorVerified = false;
 let forwardCreated = false;
+let pinInstalled = false;
 const reversed = [];
 
 async function adb(args, timeout = 30000) {
@@ -279,6 +301,106 @@ async function run() {
     );
     assertChecks(checkFixture(report.fixture, fixture.suiteOrigin, fixture.foreignOrigin));
     assertChecks(checkRejectedShare(report.fixture.shares?.pending, report.fixture.shares?.events));
+    secureStoreReport.ungated = report.fixture.secureStore;
+    assertChecks(checkSecureStoreFixture(report.fixture));
+  });
+  await step(
+    "AndroidKeyStore secure-store state exists and contains no plaintext marker",
+    async () => {
+      try {
+        const directory = "no_backup/securestore";
+        const paths = (await shell("run-as", APP, "find", directory, "-type", "f"))
+          .split(/\r?\n/)
+          .filter(Boolean);
+        // Check every file, including any temporary state files, while the retained item is live.
+        const files = [];
+        for (const path of paths) {
+          if (!/^no_backup\/securestore\/[a-zA-Z0-9._-]+$/.test(path))
+            throw new Error("Unexpected secure-store state path");
+          files.push({ path, base64: await shell("run-as", APP, "base64", path) });
+        }
+        assertChecks(checkSecureStoreFiles(files, report.fixture.secureStore.marker));
+        secureStoreReport.disk = {
+          files: files.map(({ path, base64 }) => ({
+            path,
+            bytes: Buffer.from(base64, "base64").length,
+          })),
+          plaintextAbsent: true,
+        };
+      } finally {
+        secureStoreReport.cleanup = await cdp.evaluate("window.__e2eSecureStore.cleanup()");
+        assertChecks(
+          secureStoreReport.cleanup?.value === null ? [] : ["Secure-store cleanup failed"],
+        );
+      }
+    },
+  );
+  await step("Attempt real gated unwraps with fingerprint and device PIN", async () => {
+    const io = {
+      shell,
+      finger: () => adb(["emu", "finger", "touch", "1"]),
+      ui: async () => {
+        await shell("uiautomator", "dump", "/data/local/tmp/p4-e2e-ui.xml");
+        return shell("cat", "/data/local/tmp/p4-e2e-ui.xml");
+      },
+      evaluate: (expression) => cdp.evaluate(expression),
+      pause: () => delay(250),
+    };
+    let pin = "not automatable on this runner: PIN setup did not finish";
+    let fingerprint = "not automatable on this runner: no PIN";
+    // Refuse an existing credential before arming cleanup or changing the lock.
+    await assertUnsecuredEmulator(shell);
+    try {
+      // This lane already owns a disposable emulator. Never change a physical device's lock.
+      // A timed-out/ambiguous set-pin may still mutate the emulator, so arm cleanup first.
+      pinInstalled = true;
+      const output = await shell("locksettings", "set-pin", "1234");
+      if (!/PIN set/i.test(output)) throw new Error(`set-pin did not confirm success: ${output}`);
+      const verified = await shell("locksettings", "verify", "--old", "1234");
+      if (!/successfully/i.test(verified)) throw new Error("PIN verification failed");
+      pin = "installed and verified";
+      fingerprint = await enrollFingerprint(io);
+    } catch (error) {
+      pin = `not automatable on this runner: PIN setup: ${String(error)}`;
+    }
+    secureStoreReport.setup = { pin, fingerprint };
+    console.log(`e2e secure-store setup: ${pin}; fingerprint: ${fingerprint}`);
+    await shell("input", "keyevent", "3");
+    await shell("am", "start", "-W", "-n", MAIN);
+    try {
+      secureStoreReport.status = await cdp.evaluate("window.__e2eSecureStore.status()");
+    } catch (error) {
+      secureStoreReport.status = { error: String(error) };
+    }
+    const runner = {
+      pinVerified: pin === "installed and verified",
+      fingerprintEnrolled: fingerprint === "enrolled",
+      setup: secureStoreReport.setup,
+    };
+    for (const path of ["fingerprint", "credential"]) {
+      try {
+        secureStoreReport.gated[path] =
+          gatedUnwrapPreflight(path, runner, secureStoreReport.status) ??
+          (await gatedUiPreflight(io)) ??
+          (await attemptGatedUnwrap(path, io));
+      } catch (error) {
+        secureStoreReport.gated[path] = {
+          status: "failed",
+          reason: `Gated bridge probe: ${String(error)}`,
+        };
+      } finally {
+        // Cancel before clearing, then restore the fixture foreground for the next fresh get.
+        await cdp.evaluate("window.__e2eSecureStore.cleanup()");
+        await shell("am", "start", "-W", "-n", MAIN);
+      }
+      const verdict = secureStoreReport.gated[path];
+      console.log(
+        `e2e secure-store ${path}: ${verdict.status === "not automatable" ? "not automatable on this runner" : verdict.status}${verdict.reason ? `: ${verdict.reason}` : ""}`,
+      );
+    }
+    // Run both paths even if the first fails, then fail the job on any actual failure.
+    for (const verdict of Object.values(secureStoreReport.gated))
+      assertChecks(checkGatedUnwrap(verdict));
   });
   await step("ACTION_SEND delivers exactly the text through SuiteShareIntake", async () => {
     const text = `MOB-07 text ${randomUUID()} spaces 'quotes' "double" $dollar ; & literal`;
@@ -362,6 +484,16 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (pinInstalled) {
+    try {
+      await clearEmulatorPin(shell);
+      report.pinCleanup = "passed";
+    } catch (error) {
+      report.pinCleanup = String(error);
+      report.status = "failed";
+      process.exitCode = 1;
+    }
+  }
   cdp?.close();
   const cleanupErrors = [];
   for (const cleanup of [

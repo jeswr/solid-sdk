@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 /** Pure assertions shared by the Node 24 driver and Vitest. Missing evidence always fails. */
 export const CAPABILITIES = ["secureContext", "cryptoSubtle", "locks", "serviceWorker"] as const;
 export const FRAME_PROBES = [
@@ -10,6 +11,35 @@ export const FRAME_PROBES = [
 ] as const;
 export const IOS_FRAME_PROBES = ["webkitBridge", "prompt"] as const;
 export const IOS_OBSERVATION_MS = 2000;
+export const SECURE_STORE_PROBES = FRAME_PROBES.flatMap((channel) =>
+  ["get", "set"].map((method) => `${channel}.${method}`),
+);
+export const GATED_NOT_AUTOMATABLE_REASONS = [
+  "PIN setup failed",
+  "fingerprint enrollment failed",
+  "UI dump unreadable before gated read",
+] as const;
+
+export type GatedUnwrapVerdict = {
+  status: "passed" | "failed" | "not automatable";
+  reason?: string;
+  gatedReadStarted?: boolean;
+  promptObserved?: boolean;
+  authenticationAttempted?: boolean;
+  authenticationSent?: boolean;
+  authenticationConfirmed?: boolean;
+  evidence?: unknown;
+};
+
+/** report.json's secureStore member; skips remain visible even when the overall job passes. */
+export interface SecureStoreReport {
+  ungated: unknown;
+  disk?: { files: { path: string; bytes: number }[]; plaintextAbsent: true };
+  cleanup?: unknown;
+  setup?: { pin: string; fingerprint: string };
+  status?: unknown;
+  gated: { fingerprint: GatedUnwrapVerdict; credential: GatedUnwrapVerdict };
+}
 
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -120,6 +150,153 @@ export function checkFixture(
 }
 
 const responsesAsRecords = (value: unknown) => (Array.isArray(value) ? value.map(record) : []);
+
+const versioned = (value: unknown) => {
+  const row = record(value);
+  return Number.isSafeInteger(row.version) && Number(row.version) >= 0;
+};
+const advanced = (before: unknown, after: unknown) =>
+  versioned(before) &&
+  versioned(after) &&
+  Number(record(after).version) > Number(record(before).version);
+const sameRead = (value: unknown, expected: unknown, committed: unknown) =>
+  versioned(value) &&
+  record(value).value === expected &&
+  record(value).version === record(committed).version;
+
+export function checkSecureStoreStatus(value: unknown): string[] {
+  const status = record(value);
+  return status.available === true &&
+    typeof status.userPresence === "boolean" &&
+    typeof status.hardwareBacked === "boolean"
+    ? []
+    : ["SuiteSecureStore.status failed"];
+}
+
+export function checkSecureStoreFixture(value: unknown): string[] {
+  const fixture = record(value);
+  const result = record(fixture.secureStore);
+  const marker = result.marker;
+  const failures = checkSecureStoreStatus(result.status);
+  if (typeof marker !== "string" || !/^p4-e2e-plaintext-marker-[a-z0-9-]+$/.test(marker))
+    failures.push("Missing secure-store plaintext marker");
+  if (
+    record(result.initial).value !== null ||
+    !advanced(result.initial, result.created) ||
+    !sameRead(result.read, marker, result.created)
+  )
+    failures.push("Secure-store set/get value or version mismatch");
+  if (result.staleCode !== "stale")
+    failures.push("Secure-store old version was not rejected as stale");
+  if (
+    !advanced(result.read, result.updated) ||
+    !sameRead(result.updatedRead, `${marker}-updated`, result.updated)
+  )
+    failures.push("Secure-store current version update failed");
+  if (record(result.removed).value !== null || !advanced(result.updated, result.removed))
+    failures.push("Secure-store remove failed");
+  const before = result.beforeClear;
+  const after = result.afterClear;
+  if (
+    !Array.isArray(before) ||
+    before.length !== 2 ||
+    !before.every((row) => versioned(row) && record(row).value === marker) ||
+    !Array.isArray(after) ||
+    after.length !== 2 ||
+    !after.every((row, i) => record(row).value === null && advanced(before[i], row))
+  )
+    failures.push("Secure-store clear did not remove both populated keys");
+  if (!versioned(result.retainedSet) || !sameRead(result.retained, marker, result.retainedSet))
+    failures.push("Missing retained secure-store item for disk inspection");
+  const hostile = record(record(fixture.hostile).secureStore);
+  const ids = new Set<unknown>();
+  for (const key of SECURE_STORE_PROBES) {
+    const probe = record(hostile[key]);
+    if (
+      probe.status !== "no-response" ||
+      probe.transport !== false ||
+      typeof probe.observedMs !== "number" ||
+      !Number.isFinite(probe.observedMs) ||
+      probe.observedMs < 2000 ||
+      typeof probe.callbackId !== "string" ||
+      !probe.callbackId.startsWith("p4-hostile-") ||
+      ids.has(probe.callbackId)
+    )
+      failures.push(`Hostile secure-store call replied or isolation unproven: ${key}`);
+    ids.add(probe.callbackId);
+  }
+  if (!Array.isArray(fixture.secureStoreResponses) || fixture.secureStoreResponses.length)
+    failures.push("Hostile secure-store native reply reached the top frame or history missing");
+  return failures;
+}
+
+/** Decode binary evidence before searching: text-only grep would miss DataOutput UTF-16LE. */
+export function checkSecureStoreFiles(
+  files: { path: string; base64: string }[],
+  marker: string,
+): string[] {
+  const failures: string[] = [];
+  if (
+    !marker.startsWith("p4-e2e-plaintext-marker-") ||
+    !files.some((file) => /^no_backup\/securestore\/[a-f0-9]{64}\.bin$/.test(file.path))
+  )
+    failures.push("Missing secure-store state file or marker");
+  for (const file of files) {
+    const compact = file.base64.replace(/\s/g, "");
+    const bytes = Buffer.from(compact, "base64");
+    if (!bytes.length || bytes.toString("base64") !== compact)
+      failures.push(`Empty or invalid secure-store file: ${file.path}`);
+    for (const encoding of ["utf8", "utf16le"] as const) {
+      if (bytes.includes(Buffer.from(marker, encoding)))
+        failures.push(`Plaintext marker found in secure-store file (${encoding}): ${file.path}`);
+    }
+  }
+  return failures;
+}
+
+export function checkGatedUnwrap(value: unknown): string[] {
+  const verdict = record(value);
+  const evidence = record(verdict.evidence);
+  const runner = record(evidence.runner);
+  const setupFailure =
+    evidence.source === "runner setup" &&
+    checkSecureStoreStatus(evidence.status).length === 0 &&
+    ((verdict.reason === "PIN setup failed" && runner.pinVerified === false) ||
+      (verdict.reason === "fingerprint enrollment failed" &&
+        evidence.path === "fingerprint" &&
+        runner.pinVerified === true &&
+        record(evidence.status).userPresence === true &&
+        runner.fingerprintEnrolled === false));
+  const uiFailure =
+    verdict.reason === "UI dump unreadable before gated read" &&
+    evidence.source === "uiautomator" &&
+    typeof evidence.uiError === "string" &&
+    evidence.uiError.trim().length > 0;
+  if (
+    verdict.status === "not automatable" &&
+    GATED_NOT_AUTOMATABLE_REASONS.some((reason) => reason === verdict.reason) &&
+    evidence.phase === "before-gated-read" &&
+    (setupFailure || uiFailure) &&
+    verdict.gatedReadStarted === false &&
+    [
+      verdict.authenticationAttempted,
+      verdict.authenticationSent,
+      verdict.authenticationConfirmed,
+    ].every((flag) => flag === false) &&
+    evidence.stage === undefined
+  )
+    return [];
+  return verdict.status === "passed" &&
+    verdict.promptObserved === true &&
+    verdict.authenticationSent === true &&
+    evidence.stage === "done" &&
+    typeof evidence.value === "string" &&
+    evidence.value.startsWith("p4-e2e-gated-") &&
+    versioned(evidence.committed) &&
+    sameRead(evidence.read, evidence.value, evidence.committed)
+    ? []
+    : ["Gated secure-store unwrap failed or evidence missing"];
+}
 
 export function checkTextShare(value: unknown, text: string): string[] {
   if (!Array.isArray(value) || value.length !== 1)
