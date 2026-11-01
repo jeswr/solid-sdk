@@ -12,6 +12,7 @@
 @import "@jeswr/suite-ui/styles/sharing.css";
 @import "../components/interim-shell/shell.css";
 @import "@jeswr/suite-ui/styles/sync.css";
+@import "@jeswr/suite-ui/styles/sign-in.css";
 @import "../shell/shell.css";
 @source "../../../../packages/suite-ui/src";
 
