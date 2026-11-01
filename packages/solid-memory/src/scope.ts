@@ -1,4 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { assertWithinPodScope, PodScopeError } from "@jeswr/guarded-fetch";
+
 /**
  * Container-scope guard for `MemoryStore` (see `./store.ts`).
  *
@@ -62,46 +65,42 @@ export function normalizeContainer(container: string): string {
  *
  * Guards against any encoding/normalisation trick producing a URL outside the pod
  * sub-tree the store owns.
+ * @deprecated Use `assertWithinPodScope` from `@jeswr/guarded-fetch` for new callers.
  */
 export function assertWithinBase(
   container: string,
   url: string,
   opts?: { allowRoot?: boolean },
 ): void {
-  const b = new URL(container);
-  let u: URL;
+  // The legacy API accepts ABSOLUTE targets only; the shared primitive also
+  // accepts relative references, so parse without a base before delegating.
+  let target: URL;
   try {
-    u = new URL(url);
+    target = new URL(url);
   } catch {
-    throw new Error(`[solid-memory] target URL is invalid: ${url}`);
+    throw new Error("[solid-memory] target URL is invalid");
   }
-  // Refuse a target with embedded credentials (https://user:pass@host/…) — the
-  // origin/path checks below would pass for the store's own host, but a userinfo
-  // component has no business in a target address (it leaks into logs/errors and
-  // `fetch` rejects it anyway). Fail closed here, in the one reviewed guard.
-  if (u.username !== "" || u.password !== "") {
+  try {
+    assertWithinPodScope(container, target.href, {
+      // The shared primitive aliases `/alice` to `/alice/`. The old API rejects
+      // that alias, including `/alice/` for `/alice//`, even for container operations.
+      allowRoot: opts?.allowRoot === true && target.pathname === new URL(container).pathname,
+    });
+  } catch (error) {
+    if (!(error instanceof PodScopeError)) throw error;
+    // Retain the existing diagnostic vocabulary without copying scope logic.
     throw new Error(
-      `[solid-memory] target URL embeds credentials (userinfo refused): ${u.origin}${u.pathname}`,
-    );
-  }
-  if (u.origin !== b.origin) {
-    throw new Error(
-      `[solid-memory] target URL ${url} escapes container origin ${b.origin} (refused)`,
-    );
-  }
-  if (!u.pathname.startsWith(b.pathname)) {
-    throw new Error(
-      `[solid-memory] target URL ${url} escapes container path ${b.pathname} (refused)`,
-    );
-  }
-  // Reject the container ROOT itself for resource CRUD — it is not a managed
-  // mem:MemoryItem resource, and acting on it (PUT/DELETE/GET) would target the
-  // container document. Compare on the normalised path+origin (ignoring any
-  // query/fragment, which a target never carries) so trailing-slash / `?`/`#`
-  // variants of the root cannot slip through.
-  if (opts?.allowRoot !== true && u.origin === b.origin && u.pathname === b.pathname) {
-    throw new Error(
-      `[solid-memory] target URL ${url} is the container root, not a managed resource (refused)`,
+      `[solid-memory] ${error.message
+        .replace("escapes pod", "escapes container")
+        .replace(
+          "is the pod base itself",
+          "is the container root (escapes container path for resource operations)",
+        )
+        .replace(
+          "must not embed credentials (user:pass@)",
+          "embeds credentials (userinfo refused)",
+        )}`,
+      { cause: error },
     );
   }
 }

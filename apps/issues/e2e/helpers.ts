@@ -1,6 +1,12 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 export const CSS_BASE = process.env.IT_CSS_BASE ?? "http://localhost:3000";
+const cssUrl = new URL(CSS_BASE);
+if (cssUrl.protocol !== "http:" || cssUrl.hostname !== "localhost" || cssUrl.origin !== CSS_BASE) {
+  throw new Error("IT_CSS_BASE must be an http://localhost:<port> origin; never use a live server.");
+}
 
 /**
  * Drive the CSS login (and consent, if shown) inside the interactive popup. The

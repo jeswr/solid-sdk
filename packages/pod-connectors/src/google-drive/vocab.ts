@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralAs,
   LiteralFrom,
@@ -11,7 +12,7 @@ import {
 import { PodThing, SCHEMA } from "../core/vocab.js";
 
 /** Adapter state is isolated from standard descriptive properties. */
-export const DRIVE_VOCAB = "https://jeswr.org/ns/pod-drive#";
+export const DRIVE_VOCAB = NS.POD_DRIVE;
 export class DriveMetadata extends PodThing {
   get encodingFormat(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SCHEMA}encodingFormat`, LiteralAs.string);

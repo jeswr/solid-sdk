@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-community-feeds
@@ -52,6 +53,11 @@ hosts.
 - Model: `CommunityChannel`, `CommunityThread`, `CommunityMessage`, and read-marker types.
 - JSON-LD projections: `channelToAs2`, `threadToAs2`, `messageToAs2`.
 - Defaults: `SOLID_CHANNELS` names the public Solid Matrix and forum endpoints.
+
+The JSON-LD projections write the extension property
+`https://jeswr.org/ns/community#source` on channels, threads and messages. They keep
+the standard dereferenced ActivityStreams `@context` URL unchanged. This package
+has no JSON-LD/RDF ingestion API; Matrix and Discourse readers are unaffected.
 
 ## Links
 

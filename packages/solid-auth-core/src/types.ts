@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 // (Ported from @jeswr/solid-elements `src/login-controller.ts` — the seam types are
 // extracted here so the framework-free auth core has no web-components dependency.)
 //
@@ -11,7 +12,8 @@
 //     `globalThis.fetch`. Carries NO credentials and never upgrades on a 401.
 //     Use for foreign-origin / public reads so a session token can never leak
 //     cross-origin.
-// Before login both are the pristine fetch (there is no session to bind).
+// Before login authenticatedFetch passes through without adding session credentials,
+// retaining its manual-redirect boundary for caller-owned credential headers.
 //
 // This module is PURE TYPES + one tiny pure helper — no auth dep, no DOM dep.
 
@@ -128,9 +130,10 @@ export interface SolidAuthController {
   readonly publicFetch: typeof fetch;
 
   /**
-   * The session-bound authenticated fetch. Before login this equals
-   * {@link publicFetch} (nothing to bind). After login it attaches the user's
-   * DPoP-bound token for allowed origins only.
+   * The session-bound authenticated fetch. Without a session it passes through
+   * without adding credentials. After login it attaches the user's DPoP-bound token
+   * for allowed origins only. Passthrough requests carrying caller-owned
+   * Authorization, DPoP, or Proxy-Authorization always return redirects unfollowed.
    */
   readonly authenticatedFetch: typeof fetch;
 
@@ -191,7 +194,7 @@ export interface SolidAuthController {
   /**
    * Log out: clear the in-memory session AND the persisted credential, so a
    * subsequent restore falls back to login. After resolve, {@link webId} is null
-   * and {@link authenticatedFetch} is the pristine fetch again.
+   * and {@link authenticatedFetch} no longer adds session credentials.
    *
    * This is the FULL, definitive teardown — an intentional user sign-out, or a
    * DEFINITIVE auth failure (`invalid_grant` / a 401 proving the refresh token is
@@ -216,7 +219,7 @@ export interface SolidAuth extends SolidAuthController {
    * Drop the LIVE in-memory session WITHOUT deleting the durable credential or the
    * silent-restore pointer — the TRANSIENT-failure teardown. After resolve,
    * {@link SolidAuthController.webId} is null and
-   * {@link SolidAuthController.authenticatedFetch} is the pristine fetch again
+   * {@link SolidAuthController.authenticatedFetch} no longer adds session credentials
    * (exactly like {@link SolidAuthController.logout}), but the persisted DPoP-bound
    * refresh token AND the restore pointer SURVIVE — so the next page load (or a
    * later {@link SolidAuthController.restore} on this one) silently re-establishes

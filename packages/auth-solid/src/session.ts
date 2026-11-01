@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Session / JWT persistence helpers — the consumer-side glue that carries the Solid DPoP-bound
  * tokens + the DPoP private key through the Auth.js `jwt` / `session` callbacks, so that a later
@@ -43,6 +44,8 @@ export interface SolidJwtState {
   readonly webid?: string;
   /** The issuer (OP). */
   readonly issuer?: string;
+  /** Latest authorization-server DPoP nonce; persisted for refresh only, never for pod requests. */
+  readonly authorizationServerNonce?: string;
 }
 
 /** The minimal Auth.js `account` shape we read (a subset of `@auth/core`'s `Account`). */

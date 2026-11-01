@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Term IRIs + constants for the ODRL usage-control surface (M3 of the
@@ -31,11 +32,20 @@ export const PROV = "http://www.w3.org/ns/prov#" as const;
  * (`odrl:grantUse`, `odrl:nextPolicy`, `odrl:transfer`, Offer/Agreement,
  * assigner/assignee) is used verbatim at its canonical IRI.
  */
-export const ODRLD = "https://w3id.org/jeswr/odrl-delegation#" as const;
+// Canonical source: @jeswr/suite-vocab NS.ODRL_DELEGATION
+export const ODRLD = "https://jeswr.org/ns/odrl-delegation#" as const;
+/** Phase-1 wire namespace and read alias for stored delegation terms. */
+export const LEGACY_ODRLD_NS = "https://w3id.org/jeswr/odrl-delegation#" as const;
+/** Restore the phase-1 wire spelling of a trusted delegation vocabulary term. */
+export function legacyOdrlIri(iri: string): string {
+  return iri.startsWith(ODRLD) ? LEGACY_ODRLD_NS + iri.slice(ODRLD.length) : iri;
+}
+
 /**
  * The profile identifier a policy asserts via `odrl:profile` to opt in to the
  * agent-delegation profile semantics (`docs/delegation-profile.md`).
  */
+// Protocol opt-in identifier: preserve the published profile IRI.
 export const ODRLD_PROFILE_IRI = "https://w3id.org/jeswr/odrl-delegation" as const;
 /** RDF namespace. */
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#" as const;
@@ -443,9 +453,10 @@ export const LEFT_OPERAND_IRI: Readonly<Record<LeftOperandName, string>> = {
   delegationDepth: ODRLD_DELEGATION_DEPTH,
 };
 /** Reverse: left-operand IRI → short name. */
-export const IRI_TO_LEFT_OPERAND: Readonly<Record<string, LeftOperandName>> = Object.fromEntries(
-  Object.entries(LEFT_OPERAND_IRI).map(([k, v]) => [v, k as LeftOperandName]),
-) as Readonly<Record<string, LeftOperandName>>;
+export const IRI_TO_LEFT_OPERAND: Readonly<Record<string, LeftOperandName>> = Object.fromEntries([
+  ...Object.entries(LEFT_OPERAND_IRI).map(([k, v]) => [v, k as LeftOperandName]),
+  [`${LEGACY_ODRLD_NS}delegationDepth`, "delegationDepth"],
+]) as Readonly<Record<string, LeftOperandName>>;
 
 // --- ODRL constraint operators (standard) ---------------------------------
 /** `odrl:eq` — equal to. */
@@ -685,8 +696,8 @@ export const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
  * byte-identical to what it was before the profile existed.
  */
 export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>> = {
-  odrld: ODRLD,
-  delegatedUnder: { "@id": ODRLD_DELEGATED_UNDER, "@type": "@id" },
+  odrld: LEGACY_ODRLD_NS,
+  delegatedUnder: { "@id": legacyOdrlIri(ODRLD_DELEGATED_UNDER), "@type": "@id" },
 } as const;
 
 /**
@@ -703,25 +714,25 @@ export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>> =
  */
 export const DECISION_RECORD_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
   odrl: ODRL,
-  odrld: ODRLD,
+  odrld: LEGACY_ODRLD_NS,
   prov: PROV,
   acl: ACL,
   dpv: DPV,
   xsd: XSD,
   endedAtTime: { "@id": PROV_ENDED_AT_TIME, "@type": XSD_DATETIME },
-  evaluatedPolicy: { "@id": ODRLD_EVALUATED_POLICY, "@type": "@id" },
-  requestAgent: { "@id": ODRLD_REQUEST_AGENT, "@type": "@id" },
-  requestAction: { "@id": ODRLD_REQUEST_ACTION, "@type": "@id" },
-  requestTarget: { "@id": ODRLD_REQUEST_TARGET, "@type": "@id" },
-  requestPurpose: { "@id": ODRLD_REQUEST_PURPOSE, "@type": "@id" },
-  decision: ODRLD_DECISION,
-  reason: ODRLD_REASON,
-  conflict: { "@id": ODRLD_CONFLICT, "@type": XSD_BOOLEAN },
-  decidingRule: { "@id": ODRLD_DECIDING_RULE },
-  activeDuty: { "@id": ODRLD_ACTIVE_DUTY },
-  onDuty: { "@id": ODRLD_ON_DUTY, "@type": "@id" },
-  ruleKind: ODRLD_RULE_KIND,
-  fulfilled: { "@id": ODRLD_FULFILLED, "@type": XSD_BOOLEAN },
+  evaluatedPolicy: { "@id": legacyOdrlIri(ODRLD_EVALUATED_POLICY), "@type": "@id" },
+  requestAgent: { "@id": legacyOdrlIri(ODRLD_REQUEST_AGENT), "@type": "@id" },
+  requestAction: { "@id": legacyOdrlIri(ODRLD_REQUEST_ACTION), "@type": "@id" },
+  requestTarget: { "@id": legacyOdrlIri(ODRLD_REQUEST_TARGET), "@type": "@id" },
+  requestPurpose: { "@id": legacyOdrlIri(ODRLD_REQUEST_PURPOSE), "@type": "@id" },
+  decision: legacyOdrlIri(ODRLD_DECISION),
+  reason: legacyOdrlIri(ODRLD_REASON),
+  conflict: { "@id": legacyOdrlIri(ODRLD_CONFLICT), "@type": XSD_BOOLEAN },
+  decidingRule: { "@id": legacyOdrlIri(ODRLD_DECIDING_RULE) },
+  activeDuty: { "@id": legacyOdrlIri(ODRLD_ACTIVE_DUTY) },
+  onDuty: { "@id": legacyOdrlIri(ODRLD_ON_DUTY), "@type": "@id" },
+  ruleKind: legacyOdrlIri(ODRLD_RULE_KIND),
+  fulfilled: { "@id": legacyOdrlIri(ODRLD_FULFILLED), "@type": XSD_BOOLEAN },
   action: { "@id": ODRL_ACTION, "@type": "@id" },
   target: { "@id": ODRL_TARGET, "@type": "@id" },
   assignee: { "@id": ODRL_ASSIGNEE, "@type": "@id" },

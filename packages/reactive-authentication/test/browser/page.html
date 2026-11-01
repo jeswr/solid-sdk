@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: page flow</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<pre id="result">Running…</pre>
+<script type="module">
+const q = new URLSearchParams(location.search)
+const op = q.get("op"), rs = q.get("rs")
+const {CredentialBoundary, DPoPTokenProvider, DynamicRegistrationClientProvider, ReactiveFetchManager, XASProvider} = RA
+const http = {allowInsecureRequests: true}
+const provider = new DPoPTokenProvider(new URL("/callback.html", location.href).href, document.querySelector("authorization-code-flow"),
+    new XASProvider({getIssuer: async () => new URL(op)}, http), new DynamicRegistrationClientProvider(http), undefined, {http})
+const manager = new ReactiveFetchManager({providers: [provider], boundary: new CredentialBoundary([`${rs}/alice/`], {allowInsecureHttp: true})})
+manager.registerGlobally()
+try {
+    const get = await fetch(`${rs}/alice/page`)
+    const put = await fetch(`${rs}/alice/page`, {method: "PUT", body: "replayed body", headers: {"content-type": "text/plain"}})
+    const outside = await fetch(`${rs}/alice-evil/page`)
+    // An authenticated write answered by a redirect: browsers hide the target (opaqueredirect); it is
+    // returned as-is and the write is not repeated to discover it.
+    const redirected = await fetch(`${rs}/alice/redirect-write`, {method: "POST", body: "once"})
+    const identity = await provider.identity(new Request(`${rs}/alice/page`))
+    window.__result = {get: [get.status, await get.text()], put: put.status, outside: outside.status, subject: identity?.subject, redirected: [redirected.type, redirected.status]}
+} catch (e) {
+    window.__result = {error: String(e.stack ?? e)}
+}
+document.querySelector("#result").textContent = JSON.stringify(window.__result)
+</script>
+</html>

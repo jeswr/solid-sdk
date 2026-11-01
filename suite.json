@@ -27,6 +27,7 @@
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",
     "@jeswr/guarded-fetch",
+    "@jeswr/ldp-container",
     "@jeswr/matrix-chat-to-pod",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",
@@ -87,6 +88,8 @@
     "@jeswr/agent-memory",
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
+    "@jeswr/reactive-authentication",
+    "@jeswr/fetch-rdf-engine-tests",
     "@jeswr/suite-native"
   ],
   "applications": [

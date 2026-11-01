@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
@@ -93,5 +94,18 @@ describe("parseMyActivity", () => {
   });
   it("respects the limit", () => {
     expect(parseMyActivity(SAMPLE, 2)).toHaveLength(2);
+  });
+});
+
+describe("legacy activity clearing", () => {
+  it("removes complete empty category snapshots and reports clearing as success", async () => {
+    const { pod } = await fileImport(googleTakeoutFileAdapter, memoryFile("a.json", SAMPLE));
+    const { report } = await fileImport(googleTakeoutFileAdapter, memoryFile("a.json", "[]"), {
+      pod,
+    });
+    expect(report.written).toHaveLength(0);
+    expect(pod.urls()).not.toContain(DOCS);
+    expect(pod.urls()).not.toContain(MEDIA);
+    expect(pod.urls()).not.toContain(CAL);
   });
 });

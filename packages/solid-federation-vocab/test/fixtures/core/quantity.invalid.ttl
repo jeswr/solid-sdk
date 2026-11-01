@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/core#numericValue
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#QuantityShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/Quantity-16> a core:Quantity.

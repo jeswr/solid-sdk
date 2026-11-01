@@ -202,8 +202,8 @@ export const TIER_C: readonly CatalogEntry[] = [
   C(
     "google-takeout",
     "Google Takeout",
-    ["documents", "media", "calendar"],
-    "Everything Google holds, filed by category.",
+    ["documents", "media", "calendar", "contacts", "mail", "mobility", "health"],
+    "Mail, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
     "Takeout archive",
   ),
 ];

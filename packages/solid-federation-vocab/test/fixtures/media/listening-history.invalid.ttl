@@ -1,0 +1,11 @@
+# expect: https://jeswr.org/ns/core#subject
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/media/shapes#ListeningHistoryShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix media: <https://jeswr.org/ns/sectors/media#>.
+
+<https://example.org/fixtures/media/ListeningHistory-10> a media:ListeningHistory;
+    core:hasPart "Fixture".
+<https://example.org/fixtures/media/support-11> a core:Agent.

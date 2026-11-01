@@ -1,0 +1,10 @@
+# expect: https://jeswr.org/ns/sectors/health/diet#targetTrigger
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#EliminationProtocolShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/EliminationProtocol-9> a diet:EliminationProtocol;
+    diet:phase <https://example.org/fixtures/health/diet/support-11>.
+<https://example.org/fixtures/health/diet/support-10> a diet:TriggerClass.
+<https://example.org/fixtures/health/diet/support-11> a diet:ProtocolPhase.

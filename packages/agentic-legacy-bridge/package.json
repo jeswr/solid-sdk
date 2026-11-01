@@ -64,11 +64,12 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "n3": "^2.0.3",
-    "rdf-canonize": "5.0.0"
+    "rdf-canonize": "5.0.0",
+    "@jeswr/agent-channels": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",

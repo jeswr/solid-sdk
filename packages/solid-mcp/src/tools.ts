@@ -1,8 +1,11 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
+import { fetchDocument } from "./fetch.js";
+import { podOutputError } from "./output.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -38,7 +41,7 @@ function toolText(text: string): CallToolResult {
 function toolError(error: unknown): CallToolResult {
   return {
     isError: true,
-    content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+    content: [{ type: "text", text: podOutputError(error).message }],
   };
 }
 
@@ -66,9 +69,44 @@ function defineTool<Shape extends z.ZodRawShape>(
   };
 }
 
-/** Build only the four existing pod tools; aliases share schemas, handlers and write policy. */
+/** Build pod tools and ChatGPT search/fetch; legacy search retains its array response. */
 export function createPodToolRegistry(pod: PodPort, readOnly = true): readonly PodTool[] {
   return [
+    defineTool(
+      {
+        name: "search",
+        aliases: [],
+        title: "Search the Solid pod",
+        readOnly: true,
+        description:
+          "Search by resource name, URL, or RDF literals, including memory notes and chat titles. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
+        inputSchema: z.object({ query: z.string().describe("Case-insensitive search term.") }),
+        async handler({ query }) {
+          const matches = await search(pod, query);
+          return toolText(
+            JSON.stringify({
+              results: matches.map(({ url, name }) => ({ id: url, title: name, url })),
+            }),
+          );
+        },
+      },
+      readOnly,
+    ),
+    defineTool(
+      {
+        name: "fetch",
+        aliases: [],
+        title: "Fetch a Solid resource",
+        readOnly: true,
+        description:
+          "Fetch a pod URL from search. Returns {id,title,text,url,metadata}: RDF as Turtle, text/* as text, binary metadata only; metadata.truncated flags the 1 MiB cap.",
+        inputSchema: z.object({ id: z.string().describe("Absolute resource URL within the pod.") }),
+        async handler({ id }) {
+          return toolText(JSON.stringify(await fetchDocument(pod, id)));
+        },
+      },
+      readOnly,
+    ),
     defineTool(
       {
         name: "pod_list",
@@ -108,8 +146,8 @@ export function createPodToolRegistry(pod: PodPort, readOnly = true): readonly P
     ),
     defineTool(
       {
-        name: "search",
-        aliases: ["solid_search"],
+        name: "solid_search",
+        aliases: [],
         title: "Search the Solid pod",
         readOnly: true,
         description:

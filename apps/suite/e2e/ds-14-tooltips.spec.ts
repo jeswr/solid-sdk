@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.clock.install();
+});
+
 async function accessible(page: Page) {
   const result = await new AxeBuilder({ page }).analyze();
   expect(
@@ -37,10 +41,19 @@ async function tooltip(page: Page, info: TestInfo, target: Locator, label: strin
   await page.keyboard.press("Escape");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
   await expect(target).toBeFocused();
-  await page.keyboard.press("Tab");
+  await target.evaluate((element) => (element as HTMLElement).blur());
   await target.hover();
   await expect(page.getByRole("tooltip")).toHaveText(label);
   await capture(page, info, `${name}-hover`);
+  // Hover the visible content: Radix's role="tooltip" node is visually hidden.
+  const content = page.locator('[data-slot="tooltip-content"]');
+  await expect(target).not.toBeFocused();
+  await content.hover();
+  await expect(content).toBeVisible();
+  // WCAG 1.4.13: content stays open while hovered, including inside modal dialogs.
+  await page.clock.runFor(1000);
+  await expect(content).toBeVisible();
+  await expect(page.getByRole("tooltip")).toHaveText(label);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
 }

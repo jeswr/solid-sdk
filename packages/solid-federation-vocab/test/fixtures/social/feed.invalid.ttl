@@ -1,0 +1,7 @@
+# expect: http://purl.org/dc/terms/title
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/social/shapes#FeedShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix social: <https://jeswr.org/ns/sectors/social#>.
+
+<https://example.org/fixtures/social/Feed-2> a social:Feed.

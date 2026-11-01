@@ -1,6 +1,6 @@
 ---
 name: pod-auth
-description: Work on @jeswr/pod-auth, the suite client authentication and session lifecycle package in the Solid SDK workspace.
+description: Use when working on @jeswr/pod-auth, the suite client authentication and session lifecycle package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
@@ -57,84 +58,12 @@ export const googleCalendarAdapter: IntegrationAdapter = {
       batch = await fetchEvents(ctx);
     }
     const doc = ctx.resolve(SLUG);
-    const events = syncToken ? copyDataset(existing) : new Store();
-    const deletedMasters = new Set<string>();
-    const cancelledInstances: { parent: string; date: string }[] = [];
-    let skipped = 0;
-    for (const item of batch.items) {
-      if (!item || typeof item.id !== "string" || !item.id) {
-        skipped++;
-        continue;
-      }
-      const iri = eventIri(doc, item.id);
-      if (item.status === "cancelled") {
-        removeEvent(events, iri);
-        if (item.recurringEventId) {
-          const date = item.originalStartTime
-            ? eventDate(item.originalStartTime, batch.timeZone)
-            : undefined;
-          if (date) cancelledInstances.push({ parent: eventIri(doc, item.recurringEventId), date });
-        } else {
-          deletedMasters.add(iri);
-        }
-        continue;
-      }
-      if (!item.start || !item.end) {
-        skipped++;
-        continue;
-      }
-      const start = eventDate(item.start, batch.timeZone);
-      const end = eventDate(item.end, batch.timeZone);
-      if (!start || !end) {
-        skipped++;
-        continue;
-      }
-      // Validate recurrence before touching the previous item in the working copy.
-      const timeZone = item.start.timeZone ?? batch.timeZone;
-      const rules = parseRecurrence(item.recurrence ?? [], timeZone);
-      // Only instance exclusions survive a master replacement; its EXDATEs are authoritative.
-      const previousInstanceExclusions = [...instanceExclusions(events, iri).dates];
-      removeEvent(events, iri);
-      const event = new GoogleCalendarEvent(iri, events, DataFactory).mark();
-      event.identifier = item.id;
-      event.summary = item.summary ?? "(no title)";
-      event.details = item.description || undefined;
-      event.location = item.location || undefined;
-      event.sourceUrl = item.htmlLink ?? `${API}/${encodeURIComponent(item.id)}`;
-      event.start = start;
-      event.end = end;
-      if (item.created) event.dateCreated = validDate(item.created);
-      if (item.updated) event.dateModified = validDate(item.updated);
-      if (item.recurringEventId) {
-        event.parent = eventIri(doc, item.recurringEventId);
-        event.originalStart = item.originalStartTime
-          ? eventDate(item.originalStartTime, batch.timeZone)
-          : undefined;
-      }
-      for (const [index, rule] of rules.entries()) {
-        const ruleIri = `${iri}/recurrence-${index}`;
-        event.recurrence.add(ruleIri);
-        event.schedules.add(ruleIri);
-        const recurrence = new RecurrenceRule(ruleIri, events, DataFactory);
-        recurrence.setRule(rule);
-        recurrence.timezone = timeZone;
-      }
-      for (const date of previousInstanceExclusions) addInstanceException(events, iri, date);
-    }
-    // Google does not guarantee parent/child ordering, even across pages.
-    for (const iri of deletedMasters) {
-      for (const q of [
-        ...events.match(
-          null,
-          DataFactory.namedNode(`${SCHEMA}superEvent`),
-          DataFactory.namedNode(iri),
-        ),
-      ])
-        removeEvent(events, q.subject.value);
-      removeEvent(events, iri);
-    }
-    for (const { parent, date } of cancelledInstances) addInstanceException(events, parent, date);
-    addInstanceExceptions(events);
+    const { dataset: events, skipped } = calendarEvents(
+      batch.items,
+      doc,
+      batch.timeZone,
+      syncToken ? existing : undefined,
+    );
     await ctx.write({
       slug: SLUG,
       category: "calendar",
@@ -147,6 +76,94 @@ export const googleCalendarAdapter: IntegrationAdapter = {
     return { cursor: batch.cursor, skipped: skipped || undefined };
   },
 };
+
+/** Shared API/Takeout mapping; preserves recurrence and cancellation semantics. */
+export function calendarEvents(
+  items: readonly GCalEvent[],
+  doc: string,
+  calendarTimeZone?: string,
+  existing?: DatasetCore,
+): { dataset: Store; skipped: number } {
+  const events = copyDataset(existing);
+  const deletedMasters = new Set<string>();
+  const cancelledInstances: { parent: string; date: string }[] = [];
+  let skipped = 0;
+  for (const item of items) {
+    if (!item || typeof item.id !== "string" || !item.id) {
+      skipped++;
+      continue;
+    }
+    const iri = eventIri(doc, item.id);
+    if (item.status === "cancelled") {
+      removeEvent(events, iri);
+      if (item.recurringEventId) {
+        const date = item.originalStartTime
+          ? eventDate(item.originalStartTime, calendarTimeZone)
+          : undefined;
+        if (date) cancelledInstances.push({ parent: eventIri(doc, item.recurringEventId), date });
+      } else {
+        deletedMasters.add(iri);
+      }
+      continue;
+    }
+    if (!item.start || !item.end) {
+      skipped++;
+      continue;
+    }
+    const start = eventDate(item.start, calendarTimeZone);
+    const end = eventDate(item.end, calendarTimeZone);
+    if (!start || !end) {
+      skipped++;
+      continue;
+    }
+    // Validate recurrence before touching the previous item in the working copy.
+    const timeZone = item.start.timeZone ?? calendarTimeZone;
+    const rules = parseRecurrence(item.recurrence ?? [], timeZone);
+    // Only instance exclusions survive a master replacement; its EXDATEs are authoritative.
+    const previousInstanceExclusions = [...instanceExclusions(events, iri).dates];
+    removeEvent(events, iri);
+    const event = new GoogleCalendarEvent(iri, events, DataFactory).mark();
+    event.identifier = item.id;
+    event.summary = item.summary ?? "(no title)";
+    event.details = item.description || undefined;
+    event.location = item.location || undefined;
+    event.sourceUrl = item.htmlLink ?? `${API}/${encodeURIComponent(item.id)}`;
+    event.start = start;
+    event.end = end;
+    if (item.created) event.dateCreated = validDate(item.created);
+    if (item.updated) event.dateModified = validDate(item.updated);
+    if (item.recurringEventId) {
+      event.parent = eventIri(doc, item.recurringEventId);
+      event.originalStart = item.originalStartTime
+        ? eventDate(item.originalStartTime, calendarTimeZone)
+        : undefined;
+    }
+    for (const [index, rule] of rules.entries()) {
+      const ruleIri = `${iri}/recurrence-${index}`;
+      event.recurrence.add(ruleIri);
+      event.schedules.add(ruleIri);
+      const recurrence = new RecurrenceRule(ruleIri, events, DataFactory);
+      recurrence.setRule(rule);
+      recurrence.timezone = timeZone;
+    }
+    for (const date of previousInstanceExclusions) addInstanceException(events, iri, date);
+  }
+  // Google does not guarantee parent/child ordering, even across pages.
+  for (const iri of deletedMasters) {
+    for (const q of [
+      ...events.match(
+        null,
+        DataFactory.namedNode(`${SCHEMA}superEvent`),
+        DataFactory.namedNode(iri),
+      ),
+    ])
+      removeEvent(events, q.subject.value);
+    removeEvent(events, iri);
+  }
+  for (const { parent, date } of cancelledInstances) addInstanceException(events, parent, date);
+  addInstanceExceptions(events);
+  return { dataset: events, skipped };
+}
 
 async function fetchEvents(
   ctx: ImportContext,

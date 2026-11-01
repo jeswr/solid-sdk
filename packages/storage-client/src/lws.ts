@@ -1,3 +1,3 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved lws entry point for @jeswr/storage-client; implementation follows T-001. */
-export {};
+/** LWS StorageClient backend (ADR-003 §7). */
+export { createLwsBackend, type LwsBackendOptions } from "./lws-backend.js";

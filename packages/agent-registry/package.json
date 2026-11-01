@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-registry",
   "version": "0.1.0",
   "private": true,
-  "description": "Account and binding inventory (experimental scaffold).",
+  "description": "Owner-private account inventory import and settings assessment.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -19,6 +19,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "default": "./dist/settings.js"
     }
   },
   "files": [
@@ -31,5 +35,14 @@
     "typecheck": "pnpm -w exec tsc -p packages/agent-registry/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-registry/tsconfig.test.json",
     "lint": "pnpm -w exec biome check packages/agent-registry",
     "test": "pnpm -w exec vitest run --root packages/agent-registry"
+  },
+  "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1"
   }
 }

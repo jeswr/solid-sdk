@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // resolveComponent + collectTypes tests: the priority + first-registered tie-break +
@@ -11,16 +12,47 @@ import {
   resolveComponent,
   resolveComponentForClass,
 } from "../src/index.js";
-import { BOOKMARKS_TTL, CONTAINER_TTL, parseTurtle } from "./fixtures.js";
+import {
+  BOOKMARKS_TTL,
+  CONTAINER_TTL,
+  LEGACY_BOOKMARKS_TTL,
+  MIXED_BOOKMARKS_TTL,
+  parseRdfTurtle,
+  parseTurtle,
+} from "./fixtures.js";
 
 const TASK = "http://www.w3.org/2005/01/wf/flow#Task";
 const INDIVIDUAL = "http://www.w3.org/2006/vcard/ns#Individual";
 const ADDRESS_BOOK = "http://www.w3.org/2006/vcard/ns#AddressBook";
-const BOOKMARK = "https://w3id.org/jeswr/bookmark#Bookmark";
+const BOOKMARK = "https://jeswr.org/ns/bookmark#Bookmark";
+const LEGACY_BOOKMARK = "https://w3id.org/jeswr/bookmark#Bookmark";
 const NOTE = "https://www.w3.org/ns/activitystreams#Note";
 const LDP_CONTAINER = "http://www.w3.org/ns/ldp#Container";
 
 describe("resolveComponent", () => {
+  it.each([
+    BOOKMARK,
+    LEGACY_BOOKMARK,
+  ])("resolves %s in both modes with unchanged precedence", (cls) => {
+    expect(resolveComponent([cls, LDP_CONTAINER])?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponent([cls, NOTE])?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponent([cls, TASK])?.tagName).toBe("jeswr-task-list");
+    expect(resolveComponent([cls, ADDRESS_BOOK])?.tagName).toBe("jeswr-contact-list");
+    expect(resolveComponent([cls, INDIVIDUAL], { mode: "edit" })?.tagName).toBe(
+      "jeswr-bookmark-form",
+    );
+    expect(resolveComponent([cls, TASK], { mode: "edit" })?.tagName).toBe("jeswr-task-form");
+    expect(resolveComponentForClass(cls)?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponentForClass(cls, { mode: "edit" })?.tagName).toBe("jeswr-bookmark-form");
+  });
+
+  it.each([
+    "view",
+    "edit",
+  ] as const)("prefers the canonical registration for mixed types in %s mode", (mode) => {
+    expect(resolveComponent([LEGACY_BOOKMARK, BOOKMARK], { mode })?.targetClass).toBe(BOOKMARK);
+  });
+
   it("resolves each bound RDF class to its element", () => {
     expect(resolveComponent([TASK])?.tagName).toBe("jeswr-task-list");
     expect(resolveComponent([INDIVIDUAL])?.tagName).toBe("jeswr-contact-list");
@@ -96,6 +128,16 @@ describe("resolveComponentForClass", () => {
 });
 
 describe("collectTypes", () => {
+  it.each([
+    BOOKMARKS_TTL,
+    LEGACY_BOOKMARKS_TTL,
+    MIXED_BOOKMARKS_TTL,
+  ])("resolves parsed bookmark data in either namespace", async (ttl) => {
+    const types = collectTypes(await parseRdfTurtle(ttl));
+    expect(resolveComponent(types)?.tagName).toBe("jeswr-bookmark-list");
+    expect(resolveComponent(types, { mode: "edit" })?.tagName).toBe("jeswr-bookmark-form");
+  });
+
   it("collects every rdf:type NamedNode object (PM's collectTypes scan)", () => {
     const types = collectTypes(parseTurtle(CONTAINER_TTL));
     expect(types.has(LDP_CONTAINER)).toBe(true);

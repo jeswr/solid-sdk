@@ -79,6 +79,110 @@ const SCOPE_PM = 'https://pm.example';
 const SCOPE_B = 'https://appB.example';
 const URL = 'https://alice.pod.example/finance/budget.ttl';
 
+describe('SharedReplica — redirects use only the final gated URL', () => {
+  const FINAL = `${URL}/`;
+  it('stores a redirected GET only under the final URL and gates direct cache hits', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    const gate = vi.fn(async (_url: string, _method: string) => ({ grantScope: SCOPE_PM }));
+    const egress: EgressPort = {
+      fetch: async () => ({
+        response: new Response('final bytes', { headers: { etag: 'final-etag' } }),
+        url: FINAL,
+      }),
+    };
+    const replica = new SharedReplica({ gate, egress, cache, db, webId: WEBID_A });
+    const result = await replica.read(URL, 'GET', {}, undefined);
+    expect('deny' in result).toBe(false);
+    expect(gate.mock.calls).toEqual([
+      [URL, 'GET'],
+      [FINAL, 'GET'],
+    ]);
+    expect([...db.rows.values()].map((row) => row.resourceUrl)).toEqual([FINAL]);
+    expect(cache.bytes.size).toBe(1);
+    const match = vi.spyOn(cache, 'match');
+    const denied = new SharedReplica({ gate: deny(), egress, cache, db, webId: WEBID_A });
+    expect('deny' in (await denied.read(FINAL, 'GET', {}, undefined))).toBe(true);
+    expect(match).not.toHaveBeenCalled();
+  });
+
+  it('never stores or serves a final URL refused by its gate', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    const gate = async (url: string) =>
+      url === FINAL ? { deny: DENY_RES } : { grantScope: SCOPE_PM };
+    const egress: EgressPort = {
+      fetch: async () => ({ response: new Response('secret'), url: FINAL }),
+    };
+    const replica = new SharedReplica({ gate, egress, cache, db, webId: WEBID_A });
+    expect('deny' in (await replica.read(URL, 'GET', {}, undefined))).toBe(true);
+    expect(cache.bytes.size).toBe(0);
+  });
+
+  it('invalidates an old alias entry and never serves its bytes for a redirected 304', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    const egress = scriptedEgress([
+      () => new Response('old original bytes', { headers: { etag: 'old-etag' } }),
+    ]);
+    await new SharedReplica({ gate: allow(SCOPE_PM), egress, cache, db, webId: WEBID_A }).read(
+      URL,
+      'GET',
+      {},
+      undefined,
+    );
+    const redirected: EgressPort = {
+      fetch: async () => ({
+        response: new Response(null, { status: 304 }),
+        url: FINAL,
+      }),
+    };
+    const replica = new SharedReplica({
+      gate: allow(SCOPE_PM),
+      egress: redirected,
+      cache,
+      db,
+      webId: WEBID_A,
+    });
+    const result = await replica.read(URL, 'GET', {}, undefined);
+    if ('deny' in result) throw new Error('unexpected deny');
+    expect(result.fromCache).toBe(false);
+    expect(result.response.status).toBe(304);
+    expect(await result.response.text()).toBe('');
+    expect(cache.bytes.size).toBe(0);
+    expect(db.rows.size).toBe(0);
+  });
+
+  it('leaves cached bytes intact when egress rejects a write redirect', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    const warm = new SharedReplica({
+      gate: allow(SCOPE_PM),
+      cache,
+      db,
+      webId: WEBID_A,
+      egress: scriptedEgress([() => new Response('cached', { headers: { etag: 'etag' } })]),
+    });
+    await warm.read(URL, 'GET', {}, undefined);
+    const replica = new SharedReplica({
+      gate: allow(SCOPE_PM),
+      cache,
+      db,
+      webId: WEBID_A,
+      egress: {
+        fetch: async () => {
+          throw new TypeError('Redirect rejected');
+        },
+      },
+    });
+    await expect(replica.write(URL, 'POST', {}, 'body', undefined)).rejects.toThrow(
+      'Redirect rejected',
+    );
+    expect(cache.bytes.size).toBe(1);
+    expect(db.rows.size).toBe(1);
+  });
+});
+
 function allow(grantScope: string) {
   return async () => ({ grantScope });
 }

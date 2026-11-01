@@ -64,6 +64,8 @@ export interface ReplicaResult {
   readonly fromCache: boolean;
   /** The freshest server DPoP nonce observed on an egress (cache the next call), if any. */
   readonly nonce?: string;
+  /** Final authorized URL when egress followed a redirect. */
+  readonly url?: string;
 }
 
 /** The authenticated-egress port — the SW's sole DPoP egress (authenticated-fetch.ts). */
@@ -79,7 +81,7 @@ export interface EgressPort {
     headers: Record<string, string>,
     body: string | null,
     nonce: string | undefined,
-  ): Promise<{ response: Response; nonce?: string }>;
+  ): Promise<{ response: Response; nonce?: string; url?: string }>;
 }
 
 /**
@@ -88,7 +90,10 @@ export interface EgressPort {
  * requesting origin) on ALLOW, or an error Response on DENY. The replica NEVER touches the
  * cache or the pod before this resolves to ALLOW.
  */
-export type ReplicaGate = () => Promise<{ grantScope: string } | { deny: Response }>;
+export type ReplicaGate = (
+  url: string,
+  method: string,
+) => Promise<{ grantScope: string } | { deny: Response }>;
 
 /** The minimal Cache-API surface the replica uses (the SW's own named cache). */
 export interface ReplicaByteCache {
@@ -182,7 +187,7 @@ export class SharedReplica {
   ): Promise<ReplicaResult | { deny: Response }> {
     // (1) GATE FIRST — applies to a cache HIT exactly as to an egress. No cached body is ever
     // returned before this resolves to ALLOW.
-    const decision = await this.cfg.gate();
+    const decision = await this.cfg.gate(url, method);
     if ('deny' in decision) return { deny: decision.deny };
 
     // Low #5: a HEAD response must carry NO body — neither the cached GET body (304 path) nor a
@@ -196,11 +201,16 @@ export class SharedReplica {
 
     // No WebID / no grant-scope ⇒ un-keyable ⇒ never cache: a plain authenticated egress.
     if (keyReq === null || metaKey === null) {
-      const { response, nonce: n } = await this.cfg.egress.fetch(url, method, headers, null, nonce);
+      const {
+        response,
+        nonce: n,
+        url: finalUrl,
+      } = await this.cfg.egress.fetch(url, method, headers, null, nonce);
       return {
         response: isHead ? bodylessForHead(response) : response,
         fromCache: false,
         nonce: n,
+        url: finalUrl,
       };
     }
 
@@ -212,13 +222,33 @@ export class SharedReplica {
       cachedBytes && meta?.etag ? { name: 'If-None-Match', value: meta.etag } : null;
     const reqHeaders = withConditional(headers, conditional);
 
-    const { response, nonce: serverNonce } = await this.cfg.egress.fetch(
-      url,
-      method,
-      reqHeaders,
-      null,
-      nonce,
-    );
+    const {
+      response,
+      nonce: serverNonce,
+      url: finalUrl = url,
+    } = await this.cfg.egress.fetch(url, method, reqHeaders, null, nonce);
+
+    // Redirect aliases are never replica keys: bytes belong ONLY to the final, gated URL.
+    // Always gate a direct lookup too (above). A revoked target cannot be reached through
+    // a warm alias, and a redirected 304 can never confirm the original URL's cached body.
+    if (finalUrl !== url) {
+      const finalDecision = await this.cfg.gate(finalUrl, method);
+      if ('deny' in finalDecision) return { deny: finalDecision.deny };
+      if (cachedBytes || meta) await this.invalidate(metaKey, keyReq);
+      if (response.ok && method.toUpperCase() === 'GET') {
+        const finalScope = { webId: this.cfg.webId, grantScope: finalDecision.grantScope };
+        const finalKey = computeReplicaKey(finalScope, finalUrl, varyKey);
+        const finalRequest = replicaKeyRequest(finalScope, finalUrl, varyKey);
+        if (finalKey !== null && finalRequest !== null)
+          await this.store(finalScope, finalUrl, varyKey, finalKey, finalRequest, response);
+      }
+      return {
+        response: isHead ? bodylessForHead(response) : response,
+        fromCache: false,
+        nonce: serverNonce,
+        url: finalUrl,
+      };
+    }
 
     // 304 Not Modified: the provisional cached body is confirmed fresh — serve it, touch it.
     // For a HEAD, serve the headers/status only (no cached body — Low #5).
@@ -264,7 +294,7 @@ export class SharedReplica {
     body: string | null,
     nonce: string | undefined,
   ): Promise<ReplicaResult | { deny: Response }> {
-    const decision = await this.cfg.gate();
+    const decision = await this.cfg.gate(url, method);
     if ('deny' in decision) return { deny: decision.deny };
 
     const scope: ReplicaScope = { webId: this.cfg.webId, grantScope: decision.grantScope };
@@ -282,6 +312,7 @@ export class SharedReplica {
       if (meta?.etag) reqHeaders = withConditional(headers, { name: 'If-Match', value: meta.etag });
     }
 
+    // The egress rejects write redirects; only GET/HEAD may discover and re-send.
     const { response, nonce: serverNonce } = await this.cfg.egress.fetch(
       url,
       method,

@@ -2,6 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+// Recurrence fixtures exercise browser-local calendar arithmetic over UK DST changes.
+process.env.TZ = "Europe/London";
 export default defineConfig({
   // Match Next's Yjs singleton when testing the workspace persistence provider.
   resolve: {
@@ -21,6 +24,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
@@ -30,12 +34,14 @@ export default defineConfig({
         "src/apps/docs/lib/convert/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
+        "src/apps/health/lib/fhir/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/docs/lib/find/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
+        "src/apps/tasks/lib/todoist/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/music/lib/lyrics/**/*.ts",
         "src/apps/music/lib/scrobbles/**/*.ts",
@@ -44,11 +50,14 @@ export default defineConfig({
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
+        "src/apps/money/lib/model/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
+        "src/apps/calendar/lib/quickadd/**/*.ts",
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
+        "src/apps/chat/lib/model/**/*.ts",
         "src/apps/chat/lib/search/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/transform/**/*.ts",
@@ -66,12 +75,14 @@ export default defineConfig({
         "src/apps/tasks/lib/tree/**/*.ts",
         "src/lib/search/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/docs/lib/markdown/**/*.ts",
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/sheets/lib/structure/**/*.ts",
         "src/apps/sheets/lib/csv/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
+        "src/apps/sheets/lib/condformat/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/calendar/lib/invites/**/*.ts",
         "src/apps/calendar/lib/recurrence/**/*.ts",
@@ -83,6 +94,7 @@ export default defineConfig({
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/health/lib/units/**/*.ts",
         "src/apps/health/lib/trends/**/*.ts",
+        "src/apps/health/lib/medication/**/*.ts",
         "src/apps/money/lib/budget/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
         "src/apps/contacts/lib/dedupe/**/*.ts",
@@ -105,6 +117,7 @@ export default defineConfig({
         "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/apps/mail/lib/quotes/**/*.ts",
         "src/lib/demo-pod/{pod,seed,binaries}.ts",
         "src/lib/refs.ts",
         "src/apps/drive/lib/client/**/*.ts",
@@ -112,7 +125,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
-      reporter: ["text", "json-summary"],
+      reporter: ["text", "json", "json-summary"],
       thresholds: {
         perFile: true,
         statements: 100,

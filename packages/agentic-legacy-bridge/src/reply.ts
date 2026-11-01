@@ -75,33 +75,9 @@ export interface BuildReplyOptions {
   readonly sign?: ReplySigner;
 }
 
-/** A MIME part (for `multipart/alternative`). */
-export interface MimePart {
-  readonly contentType: string;
-  readonly body: string;
-}
+export type { BuiltReply, MimePart } from "@jeswr/agent-channels";
 
-/** The assembled reply carrier. */
-export interface BuiltReply {
-  /** The JSON-LD credential (with a `proof` iff a signer was supplied). */
-  readonly credential: Record<string, unknown>;
-  /** True iff the credential carries a Data Integrity proof. */
-  readonly signed: boolean;
-  /** An HTML-safe `<script type="application/ld+json">…</script>` block for the body. */
-  readonly inlineHtml: string;
-  /** The `application/ld+json` fallback part for `multipart/alternative`. */
-  readonly mimePart: MimePart;
-  /** Reply headers (`X-Agentic-Reply` → the pod copy) — safe, single-line values only. */
-  readonly headers: Readonly<Record<string, string>>;
-  /**
-   * The complete plain-text legacy-channel body: the answer, where available,
-   * followed by the single upgrade recommendation. Absent only when neither was
-   * supplied. Channel senders must use this as plain text, never as markup.
-   */
-  readonly humanText?: string;
-  /** A plain-text onboarding block for the human body, when an onboarding URL was given. */
-  readonly onboardingBlock?: string;
-}
+import type { BuiltReply, MimePart } from "@jeswr/agent-channels";
 
 const MAX_NAME_CHARS = 200;
 const MAX_OFFERS = 32;

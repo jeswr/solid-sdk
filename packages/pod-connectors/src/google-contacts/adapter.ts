@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -117,40 +118,49 @@ export const googleContactsAdapter: IntegrationAdapter = {
     }
     for (const doc of docs) await ctx.write(doc);
 
-    const index = new Store();
-    const book = new AddressBook(bookIri, index, DataFactory);
-    book.types.add(`${VCARD}AddressBook`);
-    book.title = "Google Contacts";
-    book.nameEmailIndex = ctx.resolve(PEOPLE);
-    await ctx.write({
-      slug: INDEX,
-      category: "contacts",
-      forClass: `${VCARD}AddressBook`,
-      dataset: index,
-      registrationContainer: "contacts/",
-    });
-    const people = new Store();
-    for (const [slug, fn] of current) {
-      const contact = new Contact(`${ctx.resolve(slug)}#this`, people, DataFactory);
-      contact.inAddressBook = bookIri;
-      contact.fn = fn;
-    }
-    // Exactly one membership rewrite, including empty increments and full snapshots.
-    await ctx.write({
-      slug: PEOPLE,
-      category: "contacts",
-      forClass: `${VCARD}Individual`,
-      dataset: people,
-      skipRegistration: true,
-    });
+    await writeContactIndex(ctx, current);
     ctx.progress({ label: "Done", done: current.size, total: current.size });
     return { cursor: batch.cursor, skipped: skipped || undefined };
   },
 };
 
+/** Shared SolidOS address book/index snapshot writer for API and Takeout. */
+export async function writeContactIndex(
+  ctx: Pick<ImportContext, "resolve" | "write">,
+  current: ReadonlyMap<string, string>,
+): Promise<void> {
+  const bookIri = `${ctx.resolve(INDEX)}#this`;
+  const index = new Store();
+  const book = new AddressBook(bookIri, index, DataFactory);
+  book.types.add(`${VCARD}AddressBook`);
+  book.title = "Google Contacts";
+  book.nameEmailIndex = ctx.resolve(PEOPLE);
+  await ctx.write({
+    slug: INDEX,
+    category: "contacts",
+    forClass: `${VCARD}AddressBook`,
+    dataset: index,
+    registrationContainer: "contacts/",
+  });
+  const people = new Store();
+  for (const [slug, fn] of current) {
+    const contact = new Contact(`${ctx.resolve(slug)}#this`, people, DataFactory);
+    contact.inAddressBook = bookIri;
+    contact.fn = fn;
+  }
+  // Exactly one membership rewrite, including empty increments and full snapshots.
+  await ctx.write({
+    slug: PEOPLE,
+    category: "contacts",
+    forClass: `${VCARD}Individual`,
+    dataset: people,
+    skipRegistration: true,
+  });
+}
+
 /** Accept only this adapter's managed person paths, even if local RDF was edited externally. */
-function members(
-  ctx: ImportContext,
+export function members(
+  ctx: Pick<ImportContext, "resolve">,
   dataset: DatasetCore | undefined,
   book: string,
 ): Map<string, string> {
@@ -172,7 +182,7 @@ function members(
 }
 
 /** Canonical pathId segment only; shared by membership reads and container traversal. */
-function managedPersonSlug(ctx: ImportContext, iri: string): string | undefined {
+function managedPersonSlug(ctx: Pick<ImportContext, "resolve">, iri: string): string | undefined {
   const root = ctx.resolve(PERSON_ROOT);
   const suffix = "/index.ttl";
   if (!iri.startsWith(root) || !iri.endsWith(suffix)) return undefined;

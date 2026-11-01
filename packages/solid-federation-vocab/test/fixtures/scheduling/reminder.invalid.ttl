@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/scheduling#triggerOffset
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/scheduling/shapes#ReminderShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/Reminder-11> a sched:Reminder;
+    sched:triggerOffset "wrong datatype".

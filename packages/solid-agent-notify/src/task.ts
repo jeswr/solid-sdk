@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * task.ts — the shared federation TASK model on top of the AS2.0 notification.
@@ -6,7 +7,7 @@
  * notification: app A POSTs an `as:Announce` to agent B's inbox whose `as:object`
  * IS a `wf:Task` (the SolidOS workflow-ontology task/issue, the same shape
  * solid-issues + Pod Manager read/write). This module builds + reads that shape
- * using the SHARED federation vocab terms pinned at https://w3id.org/jeswr/task
+ * using the SHARED federation vocab terms pinned at https://jeswr.org/ns/task#
  * (re-used `wf:` + `dct:` + `as:` — NOT new terms), via TYPED `@rdfjs/wrapper`
  * accessors over an n3 `Store` (house rule: never hand-concat / hand-build RDF
  * triples).

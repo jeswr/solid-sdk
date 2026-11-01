@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -54,13 +55,14 @@ import {
 import { normaliseAccessRequest } from './core/class-request';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
+import { fetchWithRedirects } from './core/manual-redirect';
 import {
   canonicalOrigin,
   liveOriginGrant,
   type OriginGrant,
   OriginGrantStore,
 } from './core/origin-grant';
-import { computeAllowedOrigins, isValidClientIdUrl } from './core/origin-policy';
+import { computeAllowedOrigins, isTokenEndpoint, isValidClientIdUrl } from './core/origin-policy';
 import {
   type EgressPort,
   purgeReplica,
@@ -614,10 +616,15 @@ async function handleProfileFetch(
     // decision (idempotent) and returns the verified grant-scope on ALLOW; the replica never
     // touches the cache or the pod before this resolves to ALLOW, so a warm cache can never
     // bypass the per-origin gate.
-    const gate = async (): Promise<{ grantScope: string } | { deny: Response }> => {
+    const gate = async (
+      url = message.url,
+      method = message.method,
+    ): Promise<{ grantScope: string } | { deny: Response }> => {
       signal.throwIfAborted();
+      if (!isValidClientIdUrl(url) || isTokenEndpoint(url, fetchSession.tokenEndpoint))
+        return { deny: denyResponse(DENY_MESSAGE['cross-origin-foreign']) };
       const decision = await gateAccess(
-        message,
+        { ...message, url, method },
         requestingOrigin,
         sender,
         fetchSession.allowedOrigins,
@@ -625,6 +632,18 @@ async function handleProfileFetch(
         ctx.profileId,
       );
       signal.throwIfAborted();
+      return decision;
+    };
+    // Re-check every URL/method that supplied this operation's bytes before committing or
+    // relaying them. A redirect target's scope can be revoked while its body is in flight.
+    const sent = new Map<string, { url: string; method: string }>();
+    const gateAll = async () => {
+      let decision = await gate();
+      if ('deny' in decision) return decision;
+      for (const hop of sent.values()) {
+        decision = await gate(hop.url, hop.method);
+        if ('deny' in decision) return decision;
+      }
       return decision;
     };
 
@@ -645,12 +664,11 @@ async function handleProfileFetch(
     const nonce = origin ? await db.getNonce(origin) : undefined;
 
     // The SW's sole DPoP egress (authenticated-fetch.ts), wrapped as the replica's egress
-    // port. The DPoP-bound, origin-gated, §8-nonce-retry egress is PRESERVED VERBATIM — the
-    // replica only chooses WHEN to call it (revalidate vs write-through) and adds the
-    // conditional header; it never re-implements the credential path.
+    // port. Each hop and nonce retry re-runs the full live URL/method gate after signing.
+    // The replica adds conditional headers; it never re-implements the credential path.
     const egress: EgressPort = {
       fetch: async (url, method, headers, body, n) => {
-        const decision = await gate();
+        const decision = await gate(url, method);
         if ('deny' in decision) throw new Error(await decision.deny.text());
         const result = await authenticatedFetch(fetchSession, {
           url,
@@ -658,10 +676,21 @@ async function handleProfileFetch(
           headers,
           body,
           nonce: n,
+          signal,
+          authorize: async (hopUrl, hopMethod) => {
+            const latest = await gate(hopUrl, hopMethod);
+            if ('deny' in latest) throw new Error(await latest.deny.text());
+          },
           fetchImpl: (input, init) =>
             cancellable(signal, async () => {
-              const latest = await gate();
+              const hopUrl = input.toString();
+              // A probe discovers a GET/HEAD target, so check the original method's
+              // grant. Its HEAD method does not grant it any additional authority.
+              const probing = init!.redirect === 'follow';
+              const hopMethod = probing ? method : init!.method!;
+              const latest = await gate(hopUrl, hopMethod);
               if ('deny' in latest) throw new Error(await latest.deny.text());
+              if (!probing) sent.set(`${hopMethod} ${hopUrl}`, { url: hopUrl, method: hopMethod });
               onEgress();
               return fetch(input, { ...init, signal });
             }),
@@ -678,7 +707,7 @@ async function handleProfileFetch(
           statusText: result.response.statusText,
           headers: result.response.headers,
         });
-        return { response, nonce: result.nonce };
+        return { response, nonce: result.nonce, url: result.url };
       },
     };
 
@@ -687,7 +716,7 @@ async function handleProfileFetch(
     const persist = <T>(task: () => Promise<T>): Promise<T> =>
       withProfileTask(ctx.profileId, async () => {
         signal.throwIfAborted();
-        const decision = await gate();
+        const decision = await gateAll();
         if ('deny' in decision) throw new Error(await decision.deny.text());
         return task();
       });
@@ -734,20 +763,28 @@ async function handleProfileFetch(
 
     // Persist the freshest server nonce to IndexedDB so it survives an SW restart.
     const serverNonce = result.nonce;
-    if (origin && serverNonce) await persist(() => db.setNonce(origin, serverNonce));
+    const nonceOrigin = originOf(result.url ?? message.url);
+    if (nonceOrigin && serverNonce) await persist(() => db.setNonce(nonceOrigin, serverNonce));
 
     // Defense-in-depth: relay only the allowlisted, app-relevant response headers back to
     // the page rather than every header the server emitted (see response-headers.ts).
-    const finalDecision = await gate();
+    const finalDecision = await gateAll();
     if ('deny' in finalDecision)
       return { requestId: message.requestId, status: 403, error: await finalDecision.deny.text() };
     const headers = filterResponseHeaders(result.response.headers);
     // A HEAD response carries NO body (Low #5) — the replica already strips it; relay no body.
     const isHead = message.method.toUpperCase() === 'HEAD';
+    // Response.url identifies the fetched document and excludes any fragment.
+    const finalUrl = new URL(result.url ?? message.url);
+    finalUrl.hash = '';
     return {
       requestId: message.requestId,
       status: result.response.status,
       statusText: result.response.statusText,
+      url: finalUrl.href,
+      // Manual resource sends do not set Response.redirected. Distinct sent URLs record
+      // actual redirect hops, including a return to the original URL; nonce retries dedupe.
+      redirected: sent.size > 1,
       headers,
       body: isHead ? undefined : await cancellable(signal, () => result.response.text()),
     };
@@ -1162,27 +1199,36 @@ function makeResolveFetch(
         cancellable(signal, async () => {
           await beforeRequest(input.toString(), authenticated);
           signal.throwIfAborted();
-          return fetch(input, { ...init, credentials: 'omit', redirect: 'error', signal });
+          if (isTokenEndpoint(input.toString(), session.tokenEndpoint))
+            throw new Error('Token endpoint fetch denied');
+          return fetch(input, { ...init, credentials: 'omit', signal });
         });
-      const response = authenticated
-        ? (
-            await authenticatedFetch(session, {
-              url,
-              method: 'GET',
-              headers: { Accept: 'text/turtle' },
-              body: null,
-              nonce: undefined,
-              fetchImpl,
-            })
-          ).response
-        : await fetchImpl(url, { headers: { Accept: 'text/turtle' } });
-      await beforeRequest(url, authenticated);
+      const result = authenticated
+        ? await authenticatedFetch(session, {
+            url,
+            method: 'GET',
+            headers: { Accept: 'text/turtle' },
+            body: null,
+            nonce: undefined,
+            fetchImpl,
+            signal,
+          })
+        : await fetchWithRedirects(
+            { url, method: 'GET', headers: { Accept: 'text/turtle' } },
+            async ({ url, ...init }) => ({
+              response: await fetchImpl(url, { ...init, redirect: 'manual' }),
+            }),
+            fetchImpl,
+            signal,
+          );
+      const { response } = result;
+      await beforeRequest(result.url, authenticated);
       const text = response.ok ? await cancellable(signal, () => response.text()) : '';
-      await beforeRequest(url, authenticated);
+      await beforeRequest(result.url, authenticated);
       signal.throwIfAborted();
-      return { ok: response.ok, text };
+      return { ok: response.ok, text, url: result.url };
     } catch {
-      return { ok: false, text: '' };
+      return { ok: false, text: '', url };
     }
   };
 }

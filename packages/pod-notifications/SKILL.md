@@ -1,6 +1,6 @@
 ---
 name: pod-notifications
-description: Work on @jeswr/pod-notifications, the pod change subscriptions across notification transports package in the Solid SDK workspace.
+description: Use when working on @jeswr/pod-notifications, the pod change subscriptions across notification transports package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

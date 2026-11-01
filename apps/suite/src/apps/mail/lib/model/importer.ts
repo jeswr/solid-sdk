@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { mailtos as addresses, SYSTEM_FOLDERS } from "@jeswr/pod-connectors/mail";
 import { DataFactory, Store } from "n3";
-import PostalMime, { type Address, decodeWords } from "postal-mime";
+import PostalMime, { decodeWords } from "postal-mime";
 import { Attachment } from "./attachment.js";
-import { htmlToText } from "./htmlText.js";
+import { mailBodyText } from "./htmlText.js";
 import type { MailStore } from "./io.js";
 import { MailboxDataset } from "./mailbox.js";
 import { attachmentUrl, mailDocument, mailRoot, systemFolderDocument } from "./paths.js";
@@ -113,16 +114,9 @@ export interface ImportedMail {
   mergedThreads?: string[];
   folders: { iri: string; title: string }[];
   raw: Uint8Array;
+  /** The stored HTML-derived body is capped; full HTML and raw source remain available. */
+  bodyTruncated?: true;
   attachments: { url: string; name: string; contentType: string; content: ArrayBuffer }[];
-}
-function addresses(values: Address[]): string[] {
-  return values.flatMap((value) =>
-    value.group
-      ? addresses(value.group)
-      : value.address
-        ? [`mailto:${encodeURIComponent(value.address)}`]
-        : [],
-  );
 }
 /** MIME decoding is delegated to the browser-safe postal-mime parser. HTML remains inert data. */
 export async function parseEmail(
@@ -143,7 +137,8 @@ export async function parseEmail(
   message.identifier = id;
   message.subjectLine = email.subject;
   message.bodyHtml = email.html;
-  message.body = email.text ?? (email.html === undefined ? undefined : htmlToText(email.html));
+  const body = mailBodyText(email.text, email.html);
+  message.body = body.body;
   message.sender = addresses(email.from ? [email.from] : [])[0];
   for (const iri of addresses(email.to ?? [])) message.to.add(iri);
   for (const iri of addresses(email.cc ?? [])) message.cc.add(iri);
@@ -181,7 +176,7 @@ export async function parseEmail(
   const folders = [...labels].map((title) => ({
     title,
     iri: `${
-      ["Inbox", "Sent", "Drafts", "Trash", "Archive", "Starred"].includes(title)
+      (SYSTEM_FOLDERS as readonly string[]).includes(title)
         ? systemFolderDocument(root, title.toLowerCase())
         : mailDocument(root, "folders", title)
     }#it`,
@@ -208,6 +203,7 @@ export async function parseEmail(
     references: references.map((id) => `${mailDocument(root, "messages", id)}#it`),
     folders,
     raw,
+    ...(body.truncated ? { bodyTruncated: true as const } : {}),
     attachments,
   };
 }

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: automatic boundary</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<pre id="result">Running…</pre>
+<script type="module">
+const q = new URLSearchParams(location.search)
+const op = q.get("op"), rs = q.get("rs")
+const {AutomaticCredentialBoundary, DPoPTokenProvider, DynamicRegistrationClientProvider, ReactiveFetchManager, XASProvider} = RA
+const http = {allowInsecureRequests: true}
+// No roots are configured: they are discovered from 401 Link headers or by walking up to a typed root.
+const boundary = new AutomaticCredentialBoundary({http, allowInsecureHttp: true})
+const provider = new DPoPTokenProvider(new URL("/callback.html", location.href).href, document.querySelector("authorization-code-flow"),
+    new XASProvider({getIssuer: async () => new URL(op)}, http), new DynamicRegistrationClientProvider(http), undefined, {http, context: boundary.contextKey})
+const manager = new ReactiveFetchManager({providers: [provider], boundary})
+try {
+    const described = await manager.fetch(`${rs}/alice/auto`)
+    const walked = await manager.fetch(`${rs}/pods/bob/a/b`)
+    const none = await manager.fetch(`${rs}/alice-evil/auto`)
+    window.__result = {described: described.status, walked: walked.status, none: none.status, roots: boundary.roots.map(r => new URL(r).pathname)}
+} catch (e) {
+    window.__result = {error: String(e.stack ?? e)}
+}
+document.querySelector("#result").textContent = JSON.stringify(window.__result)
+</script>
+</html>

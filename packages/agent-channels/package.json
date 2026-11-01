@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-channels",
   "version": "0.1.0",
   "private": true,
-  "description": "Channel bindings and carriage profiles (experimental scaffold).",
+  "description": "Channel contracts, carriage profiles, guarded origins and local testing bindings.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -162,5 +162,9 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10"
+  },
+  "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*"
   }
 }

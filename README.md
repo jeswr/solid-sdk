@@ -3,8 +3,11 @@
 The **@jeswr Solid suite workspace** — reusable TypeScript SDK packages plus the private
 applications that consume them, consolidated into one pnpm + Turborepo workspace.
 
-Forty publishable packages and thirteen private applications are imported with full git history;
-two maintainer-directed packages (`@jeswr/synthetic-rdf` and `@jeswr/solid-seed`) were added here.
+The workspace contains 72 packages and 18 applications; `suite.json` records the inventory.
+The original forty packages and thirteen applications were imported with full git history.
+Maintainer-directed additions include `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and
+[`@jeswr/ldp-container`](packages/ldp-container/README.md), the shared security-critical
+LDP listing helper (sst-8xm.7). The listing helper has no mirror repository configured.
 Libraries live in `packages/`; deployables live in `apps/` and use `workspace:*` for every SDK
 dependency that exists here. Mirror publishing (`--execute`) has not run yet. The package design,
 inventory, and phased migration plan live in
@@ -67,7 +70,7 @@ Reusable agent guidance lives with the code it describes:
 
 - A skill for a workspace package is [`packages/<package>/SKILL.md`](packages/solid-dpop/SKILL.md).
   Keeping it beside the implementation makes API and security guidance reviewable in the same
-  change as the package. The `solid-fetch-rdf` skill is
+  change as the package. The `fetch-rdf` skill is
   [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
@@ -77,3 +80,11 @@ Reusable agent guidance lives with the code it describes:
 Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
 a package's public API, security boundary, or recommended workflow changes; avoid copying package
 guidance back into a central catch-all document.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+[`skills/INDEX.md`](skills/INDEX.md) lists every shared and package skill. After editing skills, run
+`pnpm run check:skills --write` to regenerate it. `pnpm run check:skills` validates frontmatter,
+names, descriptions, the 500-line body budget, relative links, local user paths, and secret patterns;
+it also rejects a missing or stale index. This read-only check runs in `lint:root`.
+Shared skill companion files and package `references/` are scanned too. Links are checked locally
+without fetching external URLs; fragments and query strings do not affect file resolution.

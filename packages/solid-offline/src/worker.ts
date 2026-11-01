@@ -228,12 +228,17 @@ function getChannel(): BroadcastChannel {
   return channel;
 }
 
-/** Re-open the channel under a new name (#15) if it changed. */
+/**
+ * Re-open the channel under a new name (#15) if it changed. The old channel is
+ * dropped, not closed: an in-flight revalidation captured it in its deps and must
+ * still deliver its terminal event there, or listeners that saw its start stay
+ * `pending`. The worker never listens on it, so an unreferenced old channel is
+ * garbage-collectable.
+ */
 function setChannelName(name: string | undefined): void {
   const resolved = name ?? DEFAULT_CHANNEL_NAME;
   if (resolved === channelName) return;
   channelName = resolved;
-  channel?.close();
   channel = undefined;
 }
 

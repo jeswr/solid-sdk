@@ -5,8 +5,8 @@
 
 An MCP server that exposes a Solid pod as scoped resources and read, search, list, and write tools.
 
-The caller supplies authentication. Access is confined to one pod root, and writes are disabled by
-default.
+Library callers supply authentication; the stdio CLI supports CSS client credentials.
+Access is confined to one pod root, and writes are disabled by default.
 
 > Experimental — AI-agent-generated. Review the scope and keep `readOnly: true` unless the MCP client should modify pod
 > data.
@@ -35,8 +35,120 @@ const server = createSolidMcpServer({
 await server.connect(new StdioServerTransport());
 ```
 
-The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBID`, and
-`SOLID_MCP_READONLY`. Programmatic construction is required for an authenticated fetch today.
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Authenticated stdio CLI
+
+The bundled `solid-mcp` CLI logs in with a Community Solid Server (CSS) account's
+client-credentials token **id and secret**, exchanged for a DPoP-bound access token.
+These are CSS account credentials, not a public OIDC Client Identifier Document.
+Tokens and the DPoP key stay in process memory; expired tokens are re-acquired using
+the same key. Nothing is cached on disk. All registered tools and resources use the
+same authenticated fetch; writes still require `readOnly: false`.
+
+Set environment variables or create `~/.config/solid-mcp/config.json`:
+
+```json
+{
+  "podRoot": "https://alice.example/",
+  "webId": "https://alice.example/profile/card#me",
+  "readOnly": true,
+  "oidcIssuer": "https://solid.example/",
+  "clientId": "YOUR_CSS_CREDENTIAL_ID",
+  "clientSecret": "YOUR_CSS_CREDENTIAL_SECRET"
+}
+```
+
+Create the file privately before editing it, and keep it out of version control:
+
+```sh
+mkdir -p ~/.config/solid-mcp
+install -m 600 /dev/null ~/.config/solid-mcp/config.json
+# Edit the file with your own values, then verify its mode:
+chmod 600 ~/.config/solid-mcp/config.json
+```
+
+An existing config must be a regular file with **exactly mode 0600**; symlinks and
+other modes are refused, including when environment variables override its values.
+Environment variables override individual JSON fields:
+
+| Environment | JSON field | Meaning |
+| --- | --- | --- |
+| `SOLID_MCP_POD_ROOT` | `podRoot` | Required absolute pod/container URL ending in `/` |
+| `SOLID_MCP_WEBID` | `webId` | Optional owner WebID for Type Index discovery |
+| `SOLID_MCP_READONLY` | `readOnly` | Defaults to `true`; explicit `false` enables writes |
+| `SOLID_MCP_CLIENT_ID` | `clientId` | CSS client-credentials token id |
+| `SOLID_MCP_CLIENT_SECRET` | `clientSecret` | CSS client-credentials token secret |
+| `SOLID_MCP_OIDC_ISSUER` | `oidcIssuer` | Issuer used for OIDC discovery |
+| `SOLID_MCP_TOKEN_URL` | `tokenUrl` | Explicit token endpoint; overrides discovery |
+
+Provide both credentials and either the issuer or token endpoint. Partial auth
+settings or failed login stop startup; there is no anonymous fallback after an auth
+failure. With no auth settings, public-pod access remains available. Authenticated
+pod/auth endpoints require HTTPS, with HTTP allowed for loopback development.
+Credentials are only attached within the configured pod scope; off-pod profile
+discovery is anonymous. Diagnostics go to stderr; stdout carries MCP messages only.
+
+### Claude Desktop
+
+Build the CLI and its workspace dependencies from the suite root:
+
+```sh
+pnpm --filter '@jeswr/solid-mcp...' run build
+```
+
+With the private config above, add this to `claude_desktop_config.json` (on macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`). Replace both
+paths with absolute paths for your installation, then restart Claude Desktop.
+See the [official local-server setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+
+```json
+{
+  "mcpServers": {
+    "solid-pod": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/solid-sdk/packages/solid-mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+### Claude Code
+
+Use the same private config and build output. In the project's `.mcp.json`, following
+the [Claude Code MCP configuration](https://code.claude.com/docs/en/mcp):
+
+```json
+{
+  "mcpServers": {
+    "solid-pod": {
+      "type": "stdio",
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/solid-sdk/packages/solid-mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+### Codex
+
+With the same private config and build output, add to `~/.codex/config.toml`, following
+the [official Codex MCP configuration](https://developers.openai.com/codex/mcp/):
+
+```toml
+[mcp_servers.solid-pod]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/solid-sdk/packages/solid-mcp/dist/cli.js"]
+```
+
+For environment-only setup, Codex can forward credentials from its launching shell:
+
+```toml
+[mcp_servers.solid-pod]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/solid-sdk/packages/solid-mcp/dist/cli.js"]
+env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLID_MCP_CLIENT_ID", "SOLID_MCP_CLIENT_SECRET", "SOLID_MCP_OIDC_ISSUER", "SOLID_MCP_TOKEN_URL"]
+```
 
 ## Key API
 
@@ -45,9 +157,10 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
 - Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
-- MCP tools: `pod_list`, `pod_read`, `search`, and opt-in `pod_write`.
+- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
-  Aliases retain the same schemas, output and read-only enforcement.
+  List/read/write aliases retain the same schemas, output and read-only enforcement.
+  `solid_search` retains its optional scope and ranked array response.
 
 ## Portable pod access
 
@@ -69,13 +182,88 @@ the backend default, while RDF/profile reads request RDF explicitly. The fetch a
 and refusal of all mutation redirects. Mutations reject the root and its slashless
 alias. Both adapter and server default to read-only; opt into writes at both layers.
 The configured WebID remains readable for Type Index discovery even when off-pod;
-off-pod profile redirects are refused. Client tools and resources are always confined to the pod root. A custom PodPort
-must enforce its data boundary and mutation policy too.
+off-pod profile redirects are refused for ordinary injected fetch functions. The CLI's
+anonymous transport permits bounded, validated same-origin profile redirects.
+Client tools and resources are always confined to the pod root. A custom PodPort
+must enforce its data boundary and mutation policy too, and retain otherwise ambiguous
+container identities in `PodReadResult.isContainer`.
+Every tool, including `fetch` and both search names, uses the injected port's current
+`read` and `list` methods. Authorization decorators, filtered listings, and redacted
+read results remain authoritative. Fetch-backed streaming and parsing limits are
+enforced inside that boundary.
+Search records a match only after the target read succeeds, including matches
+based solely on a Type Index hint, filename or URL. Read denials discard the
+candidate; an authorized read with no matching RDF literal can still match by name.
+All pod output passes through the operation-local `PodOutput` projection. It uses
+the injected port's current methods and successful reads for the caller's purpose;
+list entries and Type Index registrations grant no permission to disclose data.
+Lists, search descriptions, resource reads, tool results, chat results and write
+receipts share this boundary. A write receipt requires read authorization after
+the write; the write can succeed even if that receipt is denied.
+
+Container representations are rebuilt from authorized children through typed
+RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,
+query/redirect aliases, LDP container type Link headers (including redirect hops),
+and RDF identified as a container or containing membership statements.
+Membership and server-managed descriptions are retained only for authorized
+children. The content of an authorized document is its own data: prose, JSON
+fields and RDF terms are never scanned for URLs, redacted or followed for further
+authorization. Backend errors are mapped to fixed public diagnostics so
+rejected URLs, names and values cannot escape through error messages. Authorization
+decisions are never retained across operations or callers.
+
+Server-rendered container bodies, including plain text and HTML, are never returned.
+The listing requests RDF and fails closed when it cannot produce the filtered graph.
+Initial reads and container projection share a 5000 ms deadline and a 1 MiB
+per-response limit. Native authorization-only reads discard unused bodies;
+decorated reads receive complete bodies up to the input limit. Larger downloads
+fail closed so a content-based authorization check cannot inspect a partial body.
 
 The existing fetch-based server configuration and exported pod operations remain
-supported. Operations also accept a PodPort directly. `search` retains the existing
-ranked array output in this scaffold. HTTP, OAuth, memory and capture tools are
-implemented by subsequent W9 tasks.
+supported. Operations also accept a PodPort directly. The programmatic `search` operation retains its ranked array output; the MCP
+`search` tool returns the ChatGPT envelope described below.
+
+## ChatGPT search and fetch
+
+`search` accepts `{query}` and returns one MCP text block containing JSON:
+`{results:[{id,title,url}]}`. IDs are pod resource URLs. It searches Type Index
+registrations and container listings, matching names, URLs, and RDF literals
+(including memory notes and chat titles). Results are deduplicated and ranked.
+The legacy `solid_search` tool retains its original array response.
+
+The shared discovery/scan limits default to depth 4, 500 distinct resources, and
+5000 ms. Set `searchLimits: {maxDepth, maxResources, maxTimeMs}` in the server
+configuration to override them. Discovery, redirect hops, and hinted resources
+consume the same resource budget. A deadline returns the matches found so far;
+the exact search response has no additional completeness fields. Each scanned
+response is also limited to 1 MiB. Direct Type Index instances are negotiated
+as RDF even when their URLs have no file extension.
+
+`fetch` accepts `{id}` (an absolute pod URL) and returns one MCP text block
+containing `{id,title,text,url,metadata}`. Titles use the decoded filename.
+Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
+parsed with bounded N3/JSON-LD parsers and serialized as Turtle; `text/*` is
+returned as text for ordinary documents. Recognized containers always return projected
+Turtle with its own content type and no source ETag. Named-graph RDF is rendered as a
+union graph (Turtle has no graph labels).
+Other media types, including non-RDF `application/json`, return empty text
+and metadata without downloading the body through an undecorated fetch-backed adapter.
+Custom PodPorts return byte arrays and must bound their own backend reads; the
+server still bounds parsing and tool output.
+
+Both the input and UTF-8 output are capped at 1 MiB. Text returns a complete
+UTF-8 prefix and `metadata.truncated: true` when capped. Oversized RDF returns
+empty text with that flag, since a partial document may be invalid RDF. Missing
+Content-Type is treated as binary. JSON-LD inline contexts are supported; remote
+contexts and `@import` are refused to prevent parser-initiated network requests.
+Parsing stops before storing more than 16,384 quads (including duplicate input
+statements), 1 MiB of expanded term values, or 1 MiB of term bytes across quads.
+N3-family structural nesting is capped at 64 levels; pending contexts and
+generated blank nodes also consume the shared 1 MiB allocation budget.
+The Turtle writer retains at most 1 MiB and stops as soon as its output exceeds
+that limit. These parsing budgets also apply to search profiles, Type Indexes,
+container listings, and literal reads; search skips documents that exceed them.
+All fetch URLs and redirect hops are validated against the configured pod scope.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -144,9 +332,12 @@ are capped at 1 MiB, including chunked bodies; GET, DELETE and other methods ret
 authentication. Invalid JSON/UTF-8 returns 400, oversized bodies return 413, and failures to
 authenticate return 401 with the protected-resource metadata challenge. The application serves
 that metadata separately, by default at the RFC 9728 §3.1 location returned by
-`protectedResourceMetadataUrl(resourceUrl)` (for `https://mcp.example/mcp`:
-`https://mcp.example/.well-known/oauth-protected-resource/mcp`, where `@jeswr/mcp-oauth` serves
-it). Pass `resourceMetadataUrl` to advertise another URL, for example
+`protectedResourceMetadataUrl(resourceUrl)`, using the OAuth server's well-known insertion rule:
+`https://mcp.example/mcp` advertises
+`https://mcp.example/.well-known/oauth-protected-resource/mcp`; a root resource advertises
+`https://mcp.example/.well-known/oauth-protected-resource`. Both the transport and
+`@jeswr/mcp-oauth` use `metadataUrl` from `@jeswr/mcp-oauth/metadata` to construct this URL.
+Pass `resourceMetadataUrl` to advertise another URL, for example
 `oauth.protectedResourceMetadataUrl()` from the composed authorization server.
 
 Host must exactly match the public URL's authority, including any port. Forwarding headers do

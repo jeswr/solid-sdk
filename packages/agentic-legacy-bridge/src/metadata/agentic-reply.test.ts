@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { addInterpretation } from "../reliability.js";
@@ -115,6 +116,44 @@ describe("extractAgenticReplyStructural (unverified — never auto-run)", () => 
 });
 
 describe("extractAgenticReply (the injectable verifier seam)", () => {
+  it.each([
+    { type: ["AcceptAction", "RejectAction"] },
+    { type: ["RejectAction", "AcceptAction"] },
+    { "@type": ["schema:ProposeAction", "https://schema.org/AcceptAction"] },
+    { type: "AcceptAction", "@type": "RejectAction" },
+    { type: "AcceptAction", "@type": "AcceptAction" },
+    { type: ["AcceptAction", "schema:AcceptAction"] },
+    { type: ["AcceptAction", "AcceptAction"] },
+    { type: ["AcceptAction", ...Array(7).fill("Other"), "RejectAction"] },
+    { type: "Other" },
+    {},
+  ])("rejects verified replies without exactly one unambiguous action: %j", async (types) => {
+    const block = JSON.parse(ACCEPT_BLOCK);
+    const { type: _type, ...subject } = block.credentialSubject;
+    block.credentialSubject = { ...subject, ...types };
+    const out = await extractAgenticReply([JSON.stringify(block)], CTX, {
+      verify: () => ({ verified: true, issuer: "https://jeswr.org/agent" }),
+    });
+    expect(out).toEqual({ interpretations: [], patterns: [], verified: false });
+  });
+
+  it.each([
+    "AcceptAction",
+    "schema:AcceptAction",
+    "https://schema.org/AcceptAction",
+  ])("accepts a single supported action spelling: %s", async (action) => {
+    const block = JSON.parse(ACCEPT_BLOCK);
+    block.credentialSubject.type = ["Other", action];
+    const out = await extractAgenticReply([JSON.stringify(block)], CTX, {
+      verify: () => ({ verified: true }),
+    });
+    expect(out.verified).toBe(true);
+    expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)?.object).toEqual({
+      kind: "iri",
+      value: SCHEMA_ACCEPT_ACTION,
+    });
+  });
+
   it("verified block → Calibrated content + issuer asserted at Verified", async () => {
     const out = await extractAgenticReply([ACCEPT_BLOCK], CTX, {
       verify: (credential) => ({

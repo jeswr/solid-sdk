@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The intent ↔ RDF lowering + round-trip. `intentToRdf` lowers a structured
@@ -11,10 +12,11 @@ import type { DatasetCore, Quad } from "@rdfjs/types";
 import { escapeIri, requireIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { Intent, IntentParameter } from "./types.js";
+import { validationDataset } from "./validationDataset.js";
 import {
-  A2A_INLINE_CONTEXT,
   ACL_MODE_IRI,
   type AclMode,
+  LEGACY_A2A_INLINE_CONTEXT,
   VALID_ACL_MODE_IRIS,
   VALID_INTENT_ACTIONS,
 } from "./vocab.js";
@@ -32,6 +34,7 @@ import {
  * the typed wrapper write path.
  */
 export function intentToRdf(intent: Intent): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const builder = new IntentBuilder();
   const node = builder.intent(intent.id);
   if (intent.agent !== undefined) {
@@ -80,6 +83,7 @@ export function intentToTurtle(intent: Intent, format?: string): Promise<string>
  * `application/ld+json`) — see {@link parseIntentGraph}.
  */
 export function intentToJsonLd(intent: Intent): Record<string, unknown> {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   // IRIs are sanitised IDENTICALLY to the Turtle/quad path (intentToRdf) so the two
   // serialisations can never diverge: the `@id` SUBJECT is scheme-agnostically escaped
   // (a subject can never inject), and every object IRI (`target`/`recipient`/`agent`)
@@ -108,7 +112,7 @@ export function intentToJsonLd(intent: Intent): Record<string, unknown> {
   }
 
   const doc: Record<string, unknown> = {
-    "@context": A2A_INLINE_CONTEXT,
+    "@context": LEGACY_A2A_INLINE_CONTEXT,
     "@id": escapeIri(intent.id),
     "@type": "Intent",
     action,
@@ -143,7 +147,9 @@ function actionTypeAlias(intent: Intent): string {
  * `undefined` if there is none / it lacks a recognised action.
  */
 export function intentFromRdf(dataset: DatasetCore): Intent | undefined {
-  const intents = wrapIntent(dataset).intents();
+  const graph = validationDataset(dataset);
+  if (graph === undefined) return undefined;
+  const intents = wrapIntent(graph).intents();
   for (const node of intents) {
     const intent = projectIntent(node);
     if (intent !== undefined) {

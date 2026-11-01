@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Vocab / serialize / canonical / shape edge cases + the public API surface.
@@ -15,6 +16,7 @@ import {
   ACTION_TYPE_IRI,
   INTENT_ACTIONS,
   IRI_TO_ACTION,
+  LEGACY_A2A_NS,
   VALID_ACL_MODE_IRIS,
   VALID_INTENT_ACTIONS,
 } from "../src/vocab.js";
@@ -33,8 +35,8 @@ describe("serialize", () => {
 });
 
 describe("vocab constants", () => {
-  it("mints the a2a extension under w3id.org/jeswr (never @solid/)", () => {
-    expect(A2A).toBe("https://w3id.org/jeswr/a2a#");
+  it("mints the a2a extension under jeswr.org/ns (never @solid/)", () => {
+    expect(A2A).toBe("https://jeswr.org/ns/a2a#");
     expect(A2A.includes("solid")).toBe(false);
   });
 
@@ -70,8 +72,8 @@ describe("vocab constants", () => {
 
 describe("shape builder", () => {
   it("names the default shape after the action", () => {
-    expect(defaultShapeId("read")).toBe(`${A2A}ReadIntentShape`);
-    expect(defaultShapeId("grant")).toBe(`${A2A}GrantIntentShape`);
+    expect(defaultShapeId("read")).toBe(`${LEGACY_A2A_NS}ReadIntentShape`);
+    expect(defaultShapeId("grant")).toBe(`${LEGACY_A2A_NS}GrantIntentShape`);
   });
 
   it("a grant shape declares recipient + mode property shapes", async () => {

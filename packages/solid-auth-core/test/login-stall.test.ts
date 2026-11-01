@@ -223,7 +223,8 @@ describe("interactive login vs a proactive-patched global fetch (suite-tracker-8
         allowedOrigins: deriveProactiveAllowedOrigins({
           podRoot: POD_ROOT,
           webId: WEBID,
-          issuer: ISSUER, // ← the issuer IS in the boundary (the stall precondition)
+          issuer: ISSUER,
+          includeIssuerOrigin: true, // preserve the issuer-in-boundary stall precondition
           extraOrigins: [APP_ORIGIN],
         }),
       },

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * `MemoryStore` — a Solid-pod CRUD store for `mem:MemoryItem` resources under a
@@ -20,11 +21,11 @@
  *
  * **RDF discipline (house rule).** The ONLY RDF the store touches is built/parsed
  * via the model (`buildMemory`/`parseMemoryTtl`), the container listing
- * (`@jeswr/fetch-rdf` `parseRdf` + `@solid/object` `ContainerDataset`), and the
+ * (`@jeswr/ldp-container`), and the
  * Type-Index registration (the typed `TermWrapper` below). NEVER hand-built triples.
  */
 
-import { parseRdf } from "@jeswr/fetch-rdf";
+import { type ContainerMember, readContainerMembers } from "@jeswr/ldp-container";
 import { serialize } from "@jeswr/rdf-serialize";
 import {
   NamedNodeAs,
@@ -34,7 +35,6 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import {
   buildMemory,
@@ -43,7 +43,7 @@ import {
   parseMemoryTtl,
   storeToTurtle,
 } from "./memory.js";
-import { assertWithinBase, isContainerUrl, normalizeContainer } from "./scope.js";
+import { assertWithinBase, normalizeContainer } from "./scope.js";
 import { MEMORY_CLASS, PREFIXES, rdf } from "./vocab.js";
 
 /** Solid Terms vocabulary — the Type-Index registration predicates/class. */
@@ -52,13 +52,7 @@ const SOLID_TYPE_REGISTRATION = `${SOLID}TypeRegistration`;
 const SOLID_FOR_CLASS = `${SOLID}forClass`;
 const SOLID_INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
 
-/** A single member of a container listing. */
-export interface ContainerMember {
-  /** Absolute URL of the member. */
-  readonly url: string;
-  /** True iff the member is itself a container (trailing slash). */
-  readonly container: boolean;
-}
+export type { ContainerMember } from "@jeswr/ldp-container";
 
 /** Options for {@link MemoryStore} construction. */
 export interface MemoryStoreOptions {
@@ -421,54 +415,20 @@ export class MemoryStore {
    * @throws on any non-ok, non-404/410 response.
    */
   async list(): Promise<ContainerMember[]> {
-    const res = await this.request(this.container, {
-      method: "GET",
-      headers: { accept: "text/turtle, application/ld+json;q=0.9" },
-    });
-    if (res.status === 404 || res.status === 410) {
-      return [];
-    }
-    if (!res.ok) {
-      throw new Error(
-        `[solid-memory] list ${this.container} failed: ${res.status} ${res.statusText}`,
-      );
-    }
-    const body = await res.text();
-    // parseRdf resolves relative IRIs against the container URL (baseIRI), so
-    // ldp:contains object IRIs come back absolute.
-    const dataset = await parseRdf(body, res.headers.get("content-type"), {
-      baseIRI: this.container,
-    });
-    const container = new ContainerDataset(dataset, DataFactory).container;
-    if (!container) {
-      // A valid but empty / non-container document — no members.
-      return [];
-    }
-    const members: ContainerMember[] = [];
-    // The container lists ITSELF as a member; skip it. Compare on the normalised
-    // origin + pathname (ignoring any query/fragment) so a root ALIAS a hostile or
-    // buggy server might list — `…/memories/?x=1`, `…/memories/#frag` — is skipped
-    // too, never surfaced as a phantom member. (allowRoot below would otherwise let
-    // such an alias slip past the scope guard, since it shares the container path.)
-    const base = new URL(this.container);
-    for (const resource of container.contains) {
-      // resource.id may be relative; resolve against the container URL to be safe.
-      const absolute = new URL(resource.id, this.container).toString();
-      const member = new URL(absolute);
-      if (member.origin === base.origin && member.pathname === base.pathname) {
-        continue;
-      }
-      // Defence in depth: never surface a member that escapes the container.
-      // `allowRoot` is irrelevant here (every root alias is skipped above), but the
-      // guard's whole point in a listing is to drop non-root escapers.
+    const members = await readContainerMembers(
+      (input, init) => this.request(String(input), init ?? {}),
+      this.container,
+      { scope: this.container, package: "solid-memory" },
+    );
+    // Preserve the legacy delegate's stricter rejection of slashless root aliases.
+    return (members ?? []).filter((member) => {
       try {
-        assertWithinBase(this.container, absolute, { allowRoot: true });
+        assertWithinBase(this.container, member.url, { allowRoot: true });
+        return true;
       } catch {
-        continue;
+        return false;
       }
-      members.push({ url: absolute, container: isContainerUrl(absolute) });
-    }
-    return members;
+    });
   }
 
   /**

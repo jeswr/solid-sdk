@@ -4,7 +4,7 @@
  */
 import { vi } from 'vitest';
 import type { Broadcaster, ByteCache } from '../src/swr.js';
-import type { UpdatedEvent } from '../src/types.js';
+import type { OfflineEvent } from '../src/types.js';
 
 /**
  * An in-memory Cache-API stand-in. Keys on the request URL + the canonical-ish
@@ -44,8 +44,8 @@ export class MockByteCache implements ByteCache {
 }
 
 export class MockBroadcaster implements Broadcaster {
-  messages: UpdatedEvent[] = [];
-  postMessage(message: UpdatedEvent): void {
+  messages: OfflineEvent[] = [];
+  postMessage(message: OfflineEvent): void {
     this.messages.push(message);
   }
 }

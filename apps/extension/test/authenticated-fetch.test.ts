@@ -4,6 +4,7 @@ import * as jose from 'jose';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { authenticatedFetch, type FetchSession } from '../src/background/core/authenticated-fetch';
 import { generateDpopKeyPair } from '../src/background/core/dpop';
+import { opaqueRedirect, redirectProbe } from './redirect-fixtures';
 
 async function makeSession(overrides: Partial<FetchSession> = {}): Promise<FetchSession> {
   return {
@@ -26,17 +27,17 @@ function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>)
 }
 
 describe('authenticatedFetch — credential boundary', () => {
-  it('rejects redirects on the nonce retry as well as the first authenticated request', async () => {
+  it('checks discovery after a nonce retry without reading or re-sending foreign bytes', async () => {
     const session = await makeSession();
-    const foreign = vi.fn(() => ok());
     const fetchImpl = mockFetch(async (_url, init) => {
       if (fetchImpl.mock.calls.length === 1)
         return new Response(null, {
           status: 401,
           headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
         });
-      if (init?.redirect === 'error') throw new TypeError('Redirect rejected');
-      return foreign();
+      return init?.redirect === 'manual'
+        ? opaqueRedirect()
+        : redirectProbe('https://evil.example/');
     });
     await expect(
       authenticatedFetch(session, {
@@ -45,10 +46,16 @@ describe('authenticatedFetch — credential boundary', () => {
         headers: {},
         fetchImpl,
       }),
-    ).rejects.toThrow(/redirect/i);
-    expect(foreign).not.toHaveBeenCalled();
-    expect(fetchImpl.mock.calls).toHaveLength(2);
-    expect(fetchImpl.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
+    ).rejects.toThrow('Redirect target denied');
+    expect(fetchImpl.mock.calls).toHaveLength(3);
+    expect(fetchImpl.mock.calls.map(([, init]) => init?.redirect)).toEqual([
+      'manual',
+      'manual',
+      'follow',
+    ]);
+    expect(
+      fetchImpl.mock.calls.every(([url]) => url === 'https://alice.pod.example/redirect'),
+    ).toBe(true);
   });
 
   it('attaches a DPoP-bound token for an allowed origin', async () => {
@@ -264,5 +271,235 @@ describe('authenticatedFetch — credential boundary', () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(401);
+  });
+});
+
+describe('authenticatedFetch — per-hop authorization and DPoP', () => {
+  it.each([
+    'get',
+    'head',
+  ])('discovers a trailing-slash redirect and re-sends %s with a fresh proof', async (method) => {
+    const session = await makeSession();
+    const authorize = vi.fn(async () => {});
+    const signal = new AbortController().signal;
+    const fetchImpl = mockFetch(async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe('https://alice.pod.example/foo/')
+        : url.endsWith('/foo')
+          ? opaqueRedirect()
+          : ok(),
+    );
+    const result = await authenticatedFetch(session, {
+      url: 'https://alice.pod.example/foo',
+      method,
+      headers: { Cookie: 'page-cookie', Authorization: 'page-token', DPoP: 'page-proof' },
+      signal,
+      authorize,
+      fetchImpl,
+    });
+    expect(result.url).toBe('https://alice.pod.example/foo/');
+    expect(result.method).toBe(method.toUpperCase());
+    expect(await result.response.text()).toBe('body');
+    expect(authorize.mock.calls).toHaveLength(2);
+    expect(fetchImpl.mock.calls[1]).toEqual([
+      'https://alice.pod.example/foo',
+      { method: 'HEAD', credentials: 'omit', redirect: 'follow', headers: {}, signal },
+    ]);
+    const proofs = fetchImpl.mock.calls
+      .filter(([, init]) => init?.redirect === 'manual')
+      .map(([url, init]) => {
+        expect(init?.redirect).toBe('manual');
+        const proof = jose.decodeJwt((init!.headers as Record<string, string>).DPoP);
+        expect(proof.htu).toBe(url);
+        expect(proof.htm).toBe(method.toUpperCase());
+        expect(init?.signal).toBe(signal);
+        return proof;
+      });
+    expect(proofs[0].jti).not.toBe(proofs[1].jti);
+  });
+
+  it.each([
+    'https://evil.example/',
+    'https://idp.example/token?x=1#frag',
+  ])('never requests a redirect target outside credential policy: %s', async (target) => {
+    const session = await makeSession({
+      allowedOrigins: new Set(['https://alice.pod.example', 'https://idp.example']),
+    });
+    const fetchImpl = mockFetch(async (_url, init) =>
+      init?.redirect === 'follow' ? redirectProbe(target) : opaqueRedirect(),
+    );
+    await expect(
+      authenticatedFetch(session, {
+        url: 'https://alice.pod.example/x',
+        method: 'GET',
+        headers: {},
+        fetchImpl,
+      }),
+    ).rejects.toThrow('Redirect target denied');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not downgrade an authenticated request to cleartext', async () => {
+    const session = await makeSession();
+    const fetchImpl = mockFetch(async (_url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe('http://alice.pod.example/private/')
+        : opaqueRedirect(),
+    );
+    await expect(
+      authenticatedFetch(session, {
+        url: 'https://alice.pod.example/x',
+        method: 'GET',
+        headers: {},
+        fetchImpl,
+      }),
+    ).rejects.toThrow('Forbidden URL');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechecks the caller gate on a nonce retry and sends nothing after denial', async () => {
+    const session = await makeSession();
+    const authorize = vi.fn(async () => {}).mockRejectedValueOnce(new Error('revoked'));
+    const fetchImpl = mockFetch(async () => ok());
+    await expect(
+      authenticatedFetch(session, {
+        url: 'https://alice.pod.example/x',
+        method: 'GET',
+        headers: {},
+        authorize,
+        fetchImpl,
+      }),
+    ).rejects.toThrow('revoked');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    authorize.mockResolvedValueOnce().mockRejectedValueOnce(new Error('revoked'));
+    fetchImpl.mockImplementation(
+      async () =>
+        new Response(null, {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'DPoP error="use_dpop_nonce"',
+            'DPoP-Nonce': 'challenge',
+          },
+        }),
+    );
+    await expect(
+      authenticatedFetch(session, {
+        url: 'https://alice.pod.example/x',
+        method: 'GET',
+        headers: {},
+        authorize,
+        fetchImpl,
+      }),
+    ).rejects.toThrow('revoked');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('retries each hop once and scopes nonces per origin (same=%s)', async (sameOrigin) => {
+    const session = await makeSession({
+      allowedOrigins: new Set(['https://alice.pod.example', 'https://other.pod.example']),
+    });
+    const target = sameOrigin
+      ? 'https://alice.pod.example/final'
+      : 'https://other.pod.example/final';
+    let attempts = 0;
+    const fetchImpl = mockFetch(async (_url, init) => {
+      if (init?.redirect === 'follow') {
+        const probe = redirectProbe(target);
+        probe.headers.set('DPoP-Nonce', 'anonymous-probe-nonce');
+        return probe;
+      }
+      const proof = jose.decodeJwt((init!.headers as Record<string, string>).DPoP);
+      switch (++attempts) {
+        case 1:
+          expect(proof.nonce).toBe('cached');
+          return new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'DPoP error="use_dpop_nonce"',
+              'DPoP-Nonce': 'first',
+            },
+          });
+        case 2:
+          expect(proof.nonce).toBe('first');
+          return opaqueRedirect();
+        case 3:
+          expect(proof.nonce).toBe(sameOrigin ? 'first' : undefined);
+          return new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'DPoP error="use_dpop_nonce"',
+              'DPoP-Nonce': 'second',
+            },
+          });
+        default:
+          expect(proof.nonce).toBe('second');
+          return new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'DPoP error="use_dpop_nonce"',
+            },
+          });
+      }
+    });
+    const result = await authenticatedFetch(session, {
+      url: 'https://alice.pod.example/x',
+      method: 'GET',
+      headers: {},
+      nonce: 'cached',
+      fetchImpl,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(result.response.status).toBe(401);
+    expect(result.nonce).toBe('second');
+    const sends = fetchImpl.mock.calls.filter(([, init]) => init?.redirect === 'manual');
+    const proofs = sends.map(([url, init]) => {
+      const proof = jose.decodeJwt((init!.headers as Record<string, string>).DPoP);
+      expect(proof).toMatchObject({ htu: url, htm: 'GET' });
+      return proof.jti;
+    });
+    expect(new Set(proofs).size).toBe(4);
+  });
+
+  it('does not retry a nonce challenge without a nonce header', async () => {
+    const fetchImpl = mockFetch(
+      async () =>
+        new Response(null, {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"' },
+        }),
+    );
+    await authenticatedFetch(await makeSession(), {
+      url: 'https://alice.pod.example/x',
+      method: 'GET',
+      headers: {},
+      fetchImpl,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the global fetch default and strips all auth/transport headers on public requests', async () => {
+    const fetchImpl = mockFetch(async () => ok());
+    vi.stubGlobal('fetch', fetchImpl);
+    try {
+      const result = await authenticatedFetch(await makeSession(), {
+        url: 'https://public.example/x',
+        method: 'GET',
+        headers: {
+          Authorization: 'injected',
+          DPoP: 'injected',
+          Host: 'injected',
+          'Content-Length': '4',
+          Connection: 'keep-alive',
+          Accept: 'text/turtle',
+        },
+      });
+      expect(result.authenticated).toBe(false);
+      expect(fetchImpl.mock.calls[0][1]!.headers).toEqual({ Accept: 'text/turtle' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

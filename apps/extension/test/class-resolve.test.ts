@@ -96,7 +96,7 @@ describe('resolveClassTargets — the walk', () => {
   function fetcher(docs: Record<string, string>) {
     return async (url: string) => {
       const text = docs[url];
-      return text === undefined ? { ok: false, text: '' } : { ok: true, text };
+      return text === undefined ? { ok: false, text: '', url } : { ok: true, text, url };
     };
   }
 
@@ -137,7 +137,7 @@ describe('resolveClassTargets — the walk', () => {
       webId: WEBID,
       fetch: async (url, authenticated) => {
         fetched.push({ url, authenticated });
-        return { ok: true, text: url === WEBID ? profile : PUBLIC_INDEX };
+        return { ok: true, text: url === WEBID ? profile : PUBLIC_INDEX, url };
       },
       authenticatedOrigins: new Set(['https://alice.pod.example']),
       allowedOrigins: new Set(['https://alice.pod.example']),
@@ -158,6 +158,60 @@ describe('resolveClassTargets — the walk', () => {
       fetch: fetcher({}),
     });
     expect(targets).toEqual([]);
+  });
+
+  it('uses the final profile base for refs and private-origin checks while matching the original WebID', async () => {
+    const fetched: Array<{ url: string; authenticated: boolean }> = [];
+    const targets = await resolveClassTargets(FINANCE, {
+      webId: WEBID,
+      fetch: async (url, authenticated) => {
+        fetched.push({ url, authenticated });
+        return url === WEBID
+          ? {
+              ok: true,
+              url: 'https://public.example/profiles/alice/#redirected',
+              text: `@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+                <${WEBID}> solid:publicTypeIndex <../../index.ttl> ;
+                  solid:privateTypeIndex <../../private.ttl> .
+                <#me> solid:publicTypeIndex <../../other.ttl> .`,
+            }
+          : { ok: true, text: PUBLIC_INDEX, url };
+      },
+      authenticatedOrigins: new Set(['https://alice.pod.example']),
+      allowedOrigins: new Set(['https://alice.pod.example']),
+    });
+    expect(targets).toEqual([
+      { url: 'https://alice.pod.example/finance/summary.ttl', kind: 'instance' },
+      { url: 'https://alice.pod.example/finance/', kind: 'container' },
+    ]);
+    expect(fetched).toEqual([
+      { url: WEBID, authenticated: false },
+      { url: 'https://public.example/index.ttl', authenticated: false },
+    ]);
+  });
+
+  it.each([
+    'https://alice.pod.example',
+    'https://public.example',
+  ])('filters redirected relative targets against allowedOrigins (%s)', async (allowedOrigin) => {
+    const targets = await resolveClassTargets(FINANCE, {
+      webId: WEBID,
+      fetch: async (url) =>
+        url === WEBID
+          ? { ok: true, text: PROFILE, url }
+          : {
+              ok: true,
+              url: 'https://public.example/settings/index/#redirected',
+              text: `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${FINANCE}> ;
+                <http://www.w3.org/ns/solid/terms#instanceContainer> <finance/> .`,
+            },
+      allowedOrigins: new Set([allowedOrigin]),
+    });
+    expect(targets).toEqual(
+      allowedOrigin === 'https://public.example'
+        ? [{ url: 'https://public.example/settings/index/finance/', kind: 'container' }]
+        : [],
+    );
   });
 
   it('dedupes targets across the public + private indexes', async () => {

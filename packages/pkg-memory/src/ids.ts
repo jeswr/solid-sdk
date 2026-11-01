@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
@@ -68,7 +69,11 @@ function discrete(colors: Color[]): boolean {
   return colors.every((c) => c.nodes.length === 1);
 }
 
-function labels(store: DatasetCore, maxWork: number): Map<string, string> {
+function labels(
+  store: DatasetCore,
+  maxWork: number,
+  requiredUniqueNodes: ReadonlySet<string> | undefined,
+): Map<string, string> {
   const blank = new Map<string, Term>();
   const others = new Map<string, Term>();
   for (const q of store) {
@@ -151,8 +156,18 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
     }
     return a.length - b.length;
   }
+  const refined = refine(initial, initial);
+  // Storage correspondence cannot rely on arbitrary individuation of tied nodes.
+  if (
+    requiredUniqueNodes &&
+    refined.some(
+      (color) =>
+        color.nodes.length > 1 && color.nodes.some((node) => requiredUniqueNodes.has(node.value)),
+    )
+  )
+    throw new Error("Ambiguous shared blank-node identity");
   return new Map(
-    distinguish(refine(initial, initial))
+    distinguish(refined)
       .filter((c) => c.nodes[0]?.termType === "BlankNode")
       .map((c) => [(c.nodes[0] as Term).value, `cb${colorHash(c)}`]),
   );
@@ -161,26 +176,50 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
 /** Canonical assertion IRI and skolemized graph, compatible with RDFlib 7. */
 export function canonicalizeAssertion(
   dataset: DatasetCore,
-  { maxWork = 10000 }: { maxWork?: number } = {},
+  options: { maxWork?: number } = {},
 ): { id: string; dataset: Store } {
-  if (dataset.size === 0) throw new Error("Empty assertion");
+  const result = canonicalizeAssertionWithLabels(dataset, options);
+  return { id: result.id, dataset: result.dataset };
+}
+
+/** Internal canonical labels let the store align independently parsed blank nodes. */
+export function canonicalizeAssertionWithLabels(
+  dataset: DatasetCore,
+  options: { maxWork?: number } = {},
+): { id: string; dataset: Store; labels: Map<string, string> } {
   const normalized = new Store();
   for (const q of dataset) {
-    if (q.graph.termType !== "DefaultGraph")
-      throw new Error("Assertion must be a single default graph");
     for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
     normalized.addQuad(
       df.quad(
         q.subject,
         q.predicate,
         q.object.termType === "Literal" ? normalizeLiteral(q.object) : q.object,
+        q.graph,
       ),
     );
   }
-  const names = labels(normalized, maxWork);
+  return canonicalizeGraphWithLabels(normalized, options);
+}
+
+/** Internal graph comparison preserves RDF terms; only blank-node labels change. */
+export function canonicalizeGraphWithLabels(
+  dataset: DatasetCore,
+  {
+    maxWork = 10000,
+    requiredUniqueNodes,
+  }: { maxWork?: number; requiredUniqueNodes?: ReadonlySet<string> } = {},
+): { id: string; dataset: Store; labels: Map<string, string> } {
+  if (dataset.size === 0) throw new Error("Empty assertion");
+  for (const q of dataset) {
+    if (q.graph.termType !== "DefaultGraph")
+      throw new Error("Assertion must be a single default graph");
+    for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
+  }
+  const names = labels(dataset, maxWork, requiredUniqueNodes);
   const canonical = (t: Term): Term =>
     t.termType === "BlankNode" ? df.blankNode(names.get(t.value) as string) : t;
-  const lines = [...normalized]
+  const lines = [...dataset]
     .map(
       (q) =>
         `${[q.subject, q.predicate, q.object].map((t) => termN3(canonical(t), true)).join(" ")} .`,
@@ -192,7 +231,7 @@ export function canonicalizeAssertion(
       ? df.namedNode(pkgId("assertion", digest, "node", names.get(t.value) as string))
       : t;
   const out = new Store();
-  for (const q of normalized)
+  for (const q of dataset)
     out.addQuad(
       df.quad(
         skolem(q.subject) as typeof q.subject,
@@ -200,5 +239,5 @@ export function canonicalizeAssertion(
         skolem(q.object) as typeof q.object,
       ),
     );
-  return { id: pkgId("assertion", digest), dataset: out };
+  return { id: pkgId("assertion", digest), dataset: out, labels: names };
 }

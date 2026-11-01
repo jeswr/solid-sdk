@@ -84,6 +84,25 @@ Read-from-cache + always-revalidate (never-authoritative stale-while-revalidate)
   ETag/cache mismatch the SW revalidates against the pod before serving (mirrors the PSS
   S3/QLever "cache is never authoritative" invariant).
 
+Resource GET/HEAD requests use `redirect: 'manual'`. Chrome exposes every redirect as an
+opaque redirect (status 0, no Location), so a separate HEAD probe to the current URL uses
+`credentials: 'omit'`, `redirect: 'follow'` and empty headers to discover its final URL.
+The probe carries no Authorization, DPoP or cookies; its body is never read or returned.
+Its browser-followed chain is anonymous discovery only. An empty, unchanged or unconfirmed
+final URL, a failed probe, or any other status-0 response fails closed. Before directly
+re-sending the original GET/HEAD, the final URL must pass transport policy (HTTPS or dev
+loopback HTTP, no userinfo), token-origin and token-endpoint policy, and the live requesting
+origin's profile binding, pod scope and class targets/method. Each direct request signs a
+fresh DPoP proof for that URL and permits one nonce retry, scoped per origin. Discovery and
+re-send repeat at most five times if the direct requests keep redirecting. Other methods
+fail closed on their first redirect with no probe or second request. Public class discovery
+uses the same probe/validate/re-send flow, with its live gate and token-endpoint guard.
+Redirected GET bytes are cached **only under the final authorized URL**, with the usual
+WebID/grant scope and representation key. The original URL is never an alias cache entry;
+any old entry there is invalidated. A redirected 304 never confirms the original URL's body.
+Direct final-URL reads still run the full gate before touching the cache, and all sent
+URL/method pairs are rechecked before persistence or delivery.
+
 ### 2.3 Write path
 
 A write (PUT/POST/PATCH/DELETE) from any app routes through the same patch→bridge→SW path.

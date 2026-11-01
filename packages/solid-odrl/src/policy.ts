@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The ODRL policy ↔ RDF lowering + round-trip. `policyToRdf` lowers a structured
@@ -27,6 +28,7 @@ import {
   IRI_TO_OPERATOR,
   LEFT_OPERAND_IRI,
   type LeftOperandName,
+  legacyOdrlIri,
   ODRL_ACTION,
   ODRL_AGREEMENT,
   ODRL_ASSIGNEE,
@@ -109,8 +111,9 @@ export function inferDatatype(c: OdrlConstraint, value: string | number): string
 
 /** Write a constraint node under `parent` via `odrl:constraint` (odrl:constraint). */
 function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): void {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
-  b.addIri(node, ODRL_LEFT_OPERAND, LEFT_OPERAND_IRI[c.leftOperand]);
+  b.addIri(node, ODRL_LEFT_OPERAND, legacyOdrlIri(LEFT_OPERAND_IRI[c.leftOperand]));
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   for (const r of rights) {
@@ -299,6 +302,7 @@ function writeRule(
  * through the typed wrapper write path.
  */
 export function policyToRdf(policy: OdrlPolicy): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   // policy.id is the SUBJECT and its own uid — it may legitimately be a non-http
   // absolute IRI (urn:/uuid:), so it is NOT http-restricted here; the GraphBuilder
@@ -325,7 +329,7 @@ export function policyToRdf(policy: OdrlPolicy): Quad[] {
     b.addIri(subject, ODRL_CONFLICT, CONFLICT_IRI[policy.conflict]);
   }
   if (policy.delegatedUnder !== undefined) {
-    b.addIri(subject, ODRLD_DELEGATED_UNDER, policy.delegatedUnder);
+    b.addIri(subject, legacyOdrlIri(ODRLD_DELEGATED_UNDER), policy.delegatedUnder);
   }
   for (const rule of policy.permissions ?? []) {
     writeRule(b, subject, { ...rule, type: "permission" }, policy.assigner, policy.assignee);
@@ -357,6 +361,7 @@ export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<str
  * — see {@link parsePolicy}.
  */
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   // Same sanitisation + fail-closed rule as the RDF path (policyToRdf): id fields
   // are escaped scheme-agnostically (escapeIri); http(s)-contract fields go through
   // requireHttpIri (throws on an unsafe EXPLICIT value rather than silently dropping
@@ -441,7 +446,7 @@ function dutyJsonLd(duty: OdrlDuty): Record<string, unknown> {
 
 function constraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
   const node: Record<string, unknown> = {
-    leftOperand: { "@id": LEFT_OPERAND_IRI[c.leftOperand] },
+    leftOperand: { "@id": legacyOdrlIri(LEFT_OPERAND_IRI[c.leftOperand]) },
     operator: { "@id": OPERATOR_IRI[c.operator] },
   };
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
@@ -525,7 +530,12 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
 
   const conflictIri = firstIri(node.conflicts);
   const conflict = conflictIri !== undefined ? IRI_TO_CONFLICT[conflictIri] : undefined;
-  const delegatedUnder = firstIri(node.delegatedUnders);
+  // Conflicting alias edges must never select a convenient parent authority.
+  const parentTerms = [...node.delegatedUnders];
+  if (parentTerms.some((term) => term.termType !== "NamedNode")) return undefined;
+  const parents = new Set(parentTerms.map((term) => term.value));
+  if (parents.size > 1) return undefined;
+  const delegatedUnder = [...parents][0];
 
   const permissions = [...node.permissions]
     .map((r) => projectRule(r, "permission"))

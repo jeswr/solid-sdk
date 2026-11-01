@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { createSession, discoveryUrl, type FetchLike, rdfFetchFor } from "@jeswr/solid-dpop";
 import { freshRdf } from "../pod/rdf-read.js";
 import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
@@ -113,10 +113,16 @@ export async function createClientCredentialsFetch(
         ? authTransport(url, init)
         : podTransport(url, init);
     return async (input, init) => {
-      const request = new Request(input, init);
+      const snapshot = snapshotFetchInput(input, init);
+      // Materialise string inputs for body/policy access; Requests are already captured.
+      const request =
+        typeof snapshot.input === "string"
+          ? new Request(snapshot.input, snapshot.init)
+          : snapshot.input;
+      const url = typeof snapshot.input === "string" ? request.url : snapshot.url;
       request.signal.throwIfAborted();
-      assertDestination(request.url);
-      const profileRead = request.url === config.profileDocumentUrl && request.method === "GET";
+      assertDestination(url);
+      const profileRead = url === config.profileDocumentUrl && request.method === "GET";
       if (profileRead) selectedIndex = undefined;
       const body = await readRequestBody(request);
       // solid-dpop's fetch adapter does not forward RequestInit.signal. Capture it in
@@ -134,7 +140,7 @@ export async function createClientCredentialsFetch(
         return combined(url, requestInit);
       };
       const authenticated = rdfFetchFor(session, credentials, requestTransport);
-      const response = await authenticated(request.url, {
+      const response = await authenticated(url, {
         method: request.method,
         headers: request.headers,
         body: body as BodyInit | undefined,
@@ -142,7 +148,7 @@ export async function createClientCredentialsFetch(
       if (profileRead && response.ok) {
         // Parse the authenticated response without another network request. Share the
         // writer's selection and storage validation, granting only this one document.
-        const { dataset } = await freshRdf(request.url, async () => response.clone());
+        const { dataset } = await freshRdf(url, async () => response.clone());
         // Node configuration requires HTTPS, including for cross-storage exceptions.
         selectedIndex = httpsUrl(
           validatedTypeIndexTarget(config.webId, dataset, config.podRoot).indexUrl,
