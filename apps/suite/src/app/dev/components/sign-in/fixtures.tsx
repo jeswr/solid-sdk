@@ -18,45 +18,45 @@ const providers: SignInProvider[] = [
     id: "home",
     name: "solid-test.jeswr.org",
     issuer: "https://idp.solid-test.jeswr.org",
-    description: "Your home provider",
   },
   {
     id: "solidcommunity",
     name: "solidcommunity.net",
     issuer: "https://solidcommunity.net/",
-    description: "Free, run by the Solid community",
     signUpUrl: "https://solidcommunity.net/.account/login/password/register/",
   },
   {
     id: "inrupt",
     name: "Inrupt PodSpaces",
     issuer: "https://login.inrupt.com/",
-    description: "Run by Inrupt",
     signUpUrl: "https://start.inrupt.com/",
   },
   {
     id: "solidweb",
     name: "solidweb.org",
     issuer: "https://solidweb.org/",
-    description: "Free community pod host",
   },
   {
     id: "teamid",
     name: "teamid.live",
     issuer: "https://teamid.live/",
-    description: "Free, quick sign-up",
   },
 ];
 const accounts: SignInRecentAccount[] = [
-  { webId: "https://alice.example/profile/card#me", name: "Alice Wilder" },
+  {
+    webId: "https://alice.example/profile/card#me",
+    name: "Alice Wilder",
+    photoUrl: "https://alice.example/photo.png",
+  },
   { webId: "https://bram.example/profile/card#me", name: "Bram Kerst" },
 ];
 const states = [
   { id: "default", label: "Default" },
-  { id: "recent", label: "Recent accounts" },
+  { id: "accounts", label: "Remembered accounts" },
   { id: "pending", label: "Signing in" },
-  { id: "error", label: "Sign-in error" },
-  { id: "custom", label: "Another provider expanded" },
+  { id: "error", label: "WebID error" },
+  { id: "account-error", label: "Account error" },
+  { id: "custom", label: "Other provider expanded" },
 ] as const;
 
 function Demo({ state }: { state: string }) {
@@ -68,14 +68,16 @@ function Demo({ state }: { state: string }) {
     <div className="grid min-w-0 gap-3">
       <SignInCard
         providers={providers}
-        recentAccounts={state === "recent" ? accounts : []}
+        recentAccounts={state === "accounts" || state === "account-error" ? accounts : []}
         recentProviders={["https://past.example/", "https://another.example/"]}
         defaultCustomProviderOpen={state === "custom"}
         pending={pending}
         error={
           state === "error"
             ? "We couldn't sign you in. Check your address or choose your provider below."
-            : null
+            : state === "account-error"
+              ? "We couldn't sign you in. Try your account again."
+              : null
         }
         onWebId={(input) => {
           setStatus(`WebID submitted: ${input}`);
@@ -145,7 +147,7 @@ export function SignInFixtures({ state }: { state: string }) {
       </div>
       <div
         className="grid items-start gap-8"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 420px))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 400px))" }}
       >
         {visible.map((item) => (
           <section

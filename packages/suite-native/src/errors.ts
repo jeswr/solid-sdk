@@ -54,3 +54,22 @@ export class ShareUnavailableError extends SuiteNativeError {
 export class InvalidShareError extends SuiteNativeError {
   override readonly name = "InvalidShareError";
 }
+
+// AUTHORED-BY GPT-5.6 Codex
+export type SecureStoreErrorCode =
+  | "cancelled"
+  | "background"
+  | "lockout"
+  | "unavailable"
+  | "stale"
+  | "full"
+  | "invalid"
+  | "failed";
+
+/** Secure-store failures carry only an S10 code, never native details. */
+export class SecureStoreError extends SuiteNativeError {
+  override readonly name = "SecureStoreError";
+  constructor(readonly code: SecureStoreErrorCode) {
+    super(code);
+  }
+}

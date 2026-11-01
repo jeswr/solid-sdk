@@ -27,6 +27,32 @@ function writer(fetch: typeof globalThis.fetch) {
 }
 
 describe("fetch-backed PodWriter", () => {
+  for (const operation of ["RDF PUT", "binary PUT", "DELETE"] as const) {
+    it.each([
+      303, 307,
+    ])(`refuses %s on ${operation} without false success or replay`, async (status) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async (): Promise<Response> =>
+          fetch.mock.calls.length === 1
+            ? new Response(null, { status, headers: { location: "next.ttl" } })
+            : new Response(null, { status: 200 }),
+      );
+      const port = writer(fetch);
+      const pending =
+        operation === "RDF PUT"
+          ? port.write(doc, { ifNoneMatch: "*" })
+          : operation === "binary PUT"
+            ? port.writeBinary?.({
+                slug: "media/a.bin",
+                body: new Uint8Array([1]),
+                contentType: "application/octet-stream",
+              })
+            : port.remove?.(doc.slug, { ifMatch: '"v1"' });
+      await expect(pending).rejects.toBeInstanceOf(PodScopeError);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]?.[1]?.method).toBe(operation === "DELETE" ? "DELETE" : "PUT");
+    });
+  }
   it("round-trips RDF and preserves read ETags and conditional writes", async () => {
     const pod = createMemoryPod();
     const port = writer(pod.fetch);
@@ -92,7 +118,11 @@ describe("fetch-backed PodWriter", () => {
     expect(failure instanceof RdfFetchError ? failure.cause : failure).toBeInstanceOf(
       PodScopeError,
     );
-    expect(seen).toEqual([port.resolve(doc.slug), port.resolve("media/next.ttl")]);
+    expect(seen).toEqual(
+      operation === "read"
+        ? [port.resolve(doc.slug), port.resolve("media/next.ttl")]
+        : [port.resolve(doc.slug)],
+    );
     expect(
       fetch.mock.calls.every(
         ([, init]) => (init?.method ?? "GET") === (operation === "write" ? "PUT" : "GET"),
@@ -103,7 +133,7 @@ describe("fetch-backed PodWriter", () => {
   it.each([
     "read",
     "write",
-  ] as const)("follows %s redirects within the connector root", async (operation) => {
+  ] as const)("follows read redirects and refuses write redirects: %s", async (operation) => {
     const pod = createMemoryPod();
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       if (String(input).endsWith("items.ttl")) {
@@ -114,8 +144,10 @@ describe("fetch-backed PodWriter", () => {
     const port = writer(fetch);
     await port.write({ ...doc, slug: "media/next.ttl" });
     if (operation === "read") expect((await port.read(doc.slug))?.etag).toBe('"v1"');
-    else await port.write(doc);
-    expect(fetch.mock.calls.at(-1)?.[0]).toBe(port.resolve("media/next.ttl"));
+    else await expect(port.write(doc)).rejects.toBeInstanceOf(PodScopeError);
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      port.resolve(operation === "read" ? "media/next.ttl" : doc.slug),
+    );
   });
 
   it("refuses an unsafe adapter id", () => {
