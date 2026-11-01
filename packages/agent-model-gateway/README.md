@@ -49,7 +49,8 @@ The gateway has no send tool, pod mutation tool or audit writer.
 
 Both contexts return call records with local UUID IRI, context, configured provider/model,
 `tokens: { input, output }` (also `inputTokens`/`outputTokens`), tool-call count, latency and
-retry count. SDK fragments sharing a provider message ID produce one record; its aggregate
+retry count. Anthropic input totals include uncached, cache-creation and cache-read tokens.
+SDK fragments sharing a provider message ID produce one record; its aggregate
 result is not counted again. Partial SDK events supply final output counts per message ID,
 replacing assistant-message placeholders. A result total can fill one missing output count;
 multiple missing counts fail closed rather than guessing their distribution.

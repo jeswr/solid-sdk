@@ -7,7 +7,13 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { z } from "zod";
 import type { Tool } from "./tools.js";
-import { type Configuration, record, type Usage, usageSchema } from "./transport.js";
+import {
+  anthropicInputTokens,
+  type Configuration,
+  record,
+  type Usage,
+  usageSchema,
+} from "./transport.js";
 import type { GatewayOptions, ModelCall } from "./types.js";
 
 const assistant = z.object({
@@ -64,14 +70,26 @@ export async function anthropicPropose(
     let retries = 0;
     let unrecordedAssistant = false;
     let callStart = start;
-    type Entry = { index: number; tools: Set<string>; start: number; outputFinal: boolean };
+    type Entry = {
+      index: number;
+      tools: Set<string>;
+      start: number;
+      outputFinal: boolean;
+      usage: Usage;
+    };
     const seen = new Map<string, Entry>();
     let streaming: Entry | undefined;
     let timing: Entry | undefined;
     function entryFor(id: string, usage: Usage): Entry {
       let entry = seen.get(id);
       if (!entry) {
-        entry = { index: calls.length, tools: new Set(), start: callStart, outputFinal: false };
+        entry = {
+          index: calls.length,
+          tools: new Set(),
+          start: callStart,
+          outputFinal: false,
+          usage,
+        };
         seen.set(id, entry);
         timing = entry;
         // Assistant/message_start output counts are placeholders until message_delta arrives.
@@ -85,10 +103,19 @@ export async function anthropicPropose(
     }
     function update(
       entry: Entry,
-      usage: { input_tokens?: number | null; output_tokens?: number } = {},
+      usage: Partial<Omit<Usage, "input_tokens">> & { input_tokens?: number | null } = {},
     ) {
       const previous = calls[entry.index] as ModelCall;
-      const input = usage.input_tokens ?? previous.inputTokens;
+      // Stream usage is cumulative; omitted/null fields retain the previous component.
+      entry.usage = {
+        ...entry.usage,
+        input_tokens: usage.input_tokens ?? entry.usage.input_tokens,
+        cache_creation_input_tokens:
+          usage.cache_creation_input_tokens ?? entry.usage.cache_creation_input_tokens,
+        cache_read_input_tokens:
+          usage.cache_read_input_tokens ?? entry.usage.cache_read_input_tokens,
+      };
+      const input = anthropicInputTokens(entry.usage);
       const output = usage.output_tokens ?? previous.outputTokens;
       let latencyMs = previous.latencyMs;
       // Closed responses can still receive assistant fragments or result usage updates.

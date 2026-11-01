@@ -9,8 +9,20 @@ const origins = {
 } as const;
 export const ORIGINS: ReadonlySet<string> = new Set(Object.values(origins));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const usageSchema = z.object({ input_tokens: count, output_tokens: count });
+export const usageSchema = z.object({
+  input_tokens: count,
+  output_tokens: count,
+  cache_creation_input_tokens: count.nullish(),
+  cache_read_input_tokens: count.nullish(),
+});
 export type Usage = z.infer<typeof usageSchema>;
+export function anthropicInputTokens(usage: Usage): number {
+  return (
+    usage.input_tokens +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0)
+  );
+}
 export const limitsSchema = z.object({
   provider: z.enum(["anthropic", "openai"]),
   model: z.string().trim().min(1).max(200),
@@ -45,13 +57,14 @@ export function record(
   latencyMs: number,
   retries: number,
 ): ModelCall {
+  const input = config.provider === "anthropic" ? anthropicInputTokens(usage) : usage.input_tokens;
   return {
     id: `urn:uuid:${crypto.randomUUID()}`,
     context,
     provider: config.provider,
     model: config.model,
-    tokens: { input: usage.input_tokens, output: usage.output_tokens },
-    inputTokens: usage.input_tokens,
+    tokens: { input, output: usage.output_tokens },
+    inputTokens: input,
     outputTokens: usage.output_tokens,
     toolCalls,
     latencyMs: Math.max(0, latencyMs),

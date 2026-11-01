@@ -381,6 +381,57 @@ describe("Reader deterministic first and hostile input", () => {
     expect(sdk.query).not.toHaveBeenCalled();
   });
   it.each([
+    { cache: { cache_creation_input_tokens: 6000, cache_read_input_tokens: 3000 }, input: 9004 },
+    { cache: { cache_creation_input_tokens: 6000 }, input: 6004 },
+    { cache: { cache_read_input_tokens: 3000 }, input: 3004 },
+    { cache: { cache_creation_input_tokens: null, cache_read_input_tokens: null }, input: 4 },
+    { cache: { cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, input: 4 },
+    { cache: {}, input: 4 },
+  ])("includes Anthropic Reader cache tokens in input totals: $cache", async ({ cache, input }) => {
+    const s = setup({ provider: "anthropic" }, [
+      Response.json({
+        content: [{ type: "text", text: '{"summary":"safe"}' }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 4, output_tokens: 7, ...cache },
+      }),
+    ]);
+    const r = await s.gateway.reader.extract(message, schema);
+    expect(r.calls).toHaveLength(1);
+    expect(r.calls[0]).toMatchObject({
+      tokens: { input, output: 7 },
+      inputTokens: input,
+      outputTokens: 7,
+    });
+  });
+  it.each([
+    { cache_creation_input_tokens: -1 },
+    { cache_read_input_tokens: 1.5 },
+    { cache_creation_input_tokens: "6000" },
+    { cache_read_input_tokens: Number.MAX_SAFE_INTEGER + 1 },
+  ])("rejects invalid Anthropic cache counters: %o", async (cache) => {
+    const s = setup({ provider: "anthropic" }, [
+      Response.json({
+        content: [{ type: "text", text: '{"summary":"safe"}' }],
+        stop_reason: "end_turn",
+        usage: { ...usage, ...cache },
+      }),
+    ]);
+    const error = await failure(s.gateway.reader.extract(message, schema));
+    expect(error.calls).toHaveLength(1);
+    expect(error.calls[0]?.tokens).toEqual({ input: 0, output: 0 });
+  });
+  it("keeps OpenAI cached tokens within its reported input total", async () => {
+    const s = setup({}, [
+      Response.json({
+        status: "completed",
+        output: output({ summary: "safe" }),
+        usage: { ...usage, input_tokens_details: { cached_tokens: 10 } },
+      }),
+    ]);
+    const r = await s.gateway.reader.extract(message, schema);
+    expect(r.calls[0]).toMatchObject({ tokens: { input: 11, output: 7 }, inputTokens: 11 });
+  });
+  it.each([
     { output: [{ type: "message", content: [{ type: "output_text", text: "not-json" }] }] },
     { output: output({ summary: 123 }) },
     { output: output(["wrong"]) },
@@ -586,6 +637,115 @@ function events(items: unknown[]) {
 }
 
 describe("Anthropic Proposer SDK isolation", () => {
+  it("includes cached input once per SDK message with or without streaming", async () => {
+    const cachedUsage = {
+      input_tokens: 4,
+      output_tokens: 1,
+      cache_creation_input_tokens: 6000,
+      cache_read_input_tokens: 3000,
+    };
+    const cached = { ...assistant(), message: { ...assistant().message, usage: cachedUsage } };
+    for (const streamed of [false, true]) {
+      events([
+        ...(streamed
+          ? [
+              {
+                type: "stream_event",
+                event: { type: "message_start", message: cached.message },
+              },
+            ]
+          : []),
+        cached,
+        cached,
+        ...(streamed ? [streamOutput(7), streamStop] : []),
+        { ...success, usage: { ...cachedUsage, output_tokens: 7 } },
+      ]);
+      const r = await setup({ provider: "anthropic" }).gateway.proposer.propose([], context());
+      expect(r.calls).toHaveLength(1);
+      expect(r.calls[0]).toMatchObject({
+        tokens: { input: 9004, output: 7 },
+        inputTokens: 9004,
+        outputTokens: 7,
+      });
+    }
+  });
+  it("retains cached input across partial and cumulative SDK usage updates", async () => {
+    events([
+      {
+        type: "stream_event",
+        event: {
+          type: "message_start",
+          message: {
+            id: "msg-1",
+            usage: { input_tokens: 4, output_tokens: 1, cache_creation_input_tokens: 6000 },
+          },
+        },
+      },
+      {
+        type: "stream_event",
+        event: {
+          type: "message_delta",
+          usage: { output_tokens: 3, cache_read_input_tokens: 3000 },
+        },
+      },
+      {
+        type: "stream_event",
+        event: {
+          type: "message_delta",
+          usage: {
+            input_tokens: 5,
+            output_tokens: 5,
+            cache_creation_input_tokens: 6500,
+            cache_read_input_tokens: 3000,
+          },
+        },
+      },
+      {
+        type: "stream_event",
+        event: {
+          type: "message_delta",
+          usage: {
+            input_tokens: null,
+            output_tokens: 7,
+            cache_creation_input_tokens: null,
+            cache_read_input_tokens: null,
+          },
+        },
+      },
+      streamStop,
+      assistant(),
+      streamStart("msg-2"),
+      streamOutput(7),
+      streamStop,
+      { ...success, usage: { input_tokens: 16, output_tokens: 14, cache_read_input_tokens: 9000 } },
+    ]);
+    const r = await setup({ provider: "anthropic" }).gateway.proposer.propose([], context());
+    expect(r.calls.map((c) => c.tokens)).toEqual([
+      { input: 9505, output: 7 },
+      { input: 11, output: 7 },
+    ]);
+    expect(r.calls.map((c) => c.inputTokens)).toEqual([9505, 11]);
+  });
+  it("preserves cached input on failed SDK runs", async () => {
+    events([
+      {
+        ...assistant(),
+        message: {
+          ...assistant().message,
+          usage: { ...usage, cache_creation_input_tokens: 6000, cache_read_input_tokens: 3000 },
+        },
+      },
+      { ...success, subtype: "error_max_turns", is_error: true },
+    ]);
+    const error = await failure(
+      setup({ provider: "anthropic" }).gateway.proposer.propose([], context()),
+    );
+    expect(error.calls).toHaveLength(1);
+    expect(error.calls[0]).toMatchObject({
+      tokens: { input: 9011, output: 7 },
+      inputTokens: 9011,
+    });
+  });
   it("rejects invalid opaque JSON before SDK parsing can discard it", async () => {
     const input = {
       action: {
