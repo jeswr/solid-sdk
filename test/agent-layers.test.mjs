@@ -55,6 +55,25 @@ function scan(path, source) {
 }
 
 describe("agent layer boundaries (DESIGN §2.2)", () => {
+  it("permits the two A-027 Matrix dependencies while retaining the channel allowlist", () => {
+    expect(
+      scan(
+        "packages/agent-channels/src/matrix.ts",
+        'import "@jeswr/matrix-chat-to-pod/transform"; import "@matrix-org/matrix-sdk-crypto-nodejs";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan("packages/agent-channels/src/matrix.ts", 'import "@matrix-org/unreviewed-client";').join(
+        "\n",
+      ),
+    ).toContain("outside DESIGN");
+    expect(
+      scan(
+        "packages/agent-channels/src/matrix.ts",
+        'export * from "@jeswr/agent-channels/matrix/send";',
+      ).join("\n"),
+    ).toContain("executor-only");
+  });
   it("rejects type-only ./gmail/send imports outside the executor", () => {
     expect(
       scan(

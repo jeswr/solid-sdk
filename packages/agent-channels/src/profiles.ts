@@ -37,7 +37,7 @@ export const SLACK_METADATA = profile(
   "application/ld+json",
 );
 export const MATRIX_CONTENT = profile(
-  "matrix-content/0.1",
+  "matrix-event/0.1",
   "event-content",
   "required",
   64 * 1024,

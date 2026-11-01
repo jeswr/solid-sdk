@@ -27,6 +27,8 @@ const allowed = {
   "agent-executor": new Set(["model", "mandate", "audit", "credentials", "channels"].map(agent)),
   "agent-model-gateway": new Set([agent("model"), agent("channels"), ...modelSdks]),
   "agent-channels": new Set([
+    "@jeswr/matrix-chat-to-pod",
+    "@matrix-org/matrix-sdk-crypto-nodejs",
     agent("model"),
     "@jeswr/guarded-fetch",
     "@jeswr/fetch-rdf",

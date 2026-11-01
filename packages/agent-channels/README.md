@@ -2,7 +2,7 @@
 
 # @jeswr/agent-channels
 
-> Experimental — AI-agent-generated. Private workspace package; Gmail defaults to dry-run.
+> Experimental — AI-agent-generated. Private workspace package; Gmail and Matrix default to dry-run.
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
 (A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez) and shared metadata carriage
@@ -52,7 +52,7 @@ their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
-Provider exports other than Gmail remain reserved for their own tasks. Packages
+Provider exports other than Gmail and Matrix remain reserved for their own tasks. Packages
 remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
@@ -149,3 +149,41 @@ advertises carriage support; `List-Unsubscribe` is absent. The signed propose
 golden fixture in `test/fixtures/propose.eml` passes STRICT parity on its own output.
 Legacy-bridge's `detectBridgeCapability` consumes the parsed headers, JSON-LD
 blocks and text body to report unverified discovery hints; see its PROTOCOL.md.
+
+
+`./matrix` exports `createMatrixReader`, `createMatrixCrypto`, `parseMatrixMessage`,
+`matrixOrigins` and `MatrixRoomError` (A-027 / sst-dpn). The reader pins `account`,
+`homeserver` (an HTTPS origin) and `userId`. Its runtime origins are derived from that
+trusted configuration; there is no homeserver discovery or redirect following.
+Credentials come exclusively from `TokenProvider.read` (the matching device provider
+from `@jeswr/agent-credentials/matrix` can be supplied structurally).
+
+Each poll fetches the user's `m.direct` account data, sends its room allowlist in the
+`/sync` filter, and checks it locally even if the server ignores the filter. Same-sync
+`m.direct` updates supersede the snapshot; additions cause a retry from the previous
+checkpoint with a fresh filter, so a newly direct room cannot lose filtered-out events. Sync responses/cursors are capped at 1 MiB,
+512 pending events and 512 direct rooms; individual events are capped at 64 KiB.
+The opaque account/homeserver/user cursor buffers pending ciphertext until the caller's
+item and aggregate byte bounds are drained. It never advances past a failed decrypt or
+malformed/truncated DM timeline: `MatrixRoomError.roomId` identifies the failed room,
+and the caller must retain its previous cursor. A limited timeline requires explicit
+history recovery; this binding does not silently accept gaps or auto-backfill history.
+
+The host initializes the Rust SDK's `OlmMachine` with the provisioned device identity
+and private persistent crypto-store path, then supplies `await createMatrixCrypto(machine)`.
+The adapter applies sync to-device events, device lists, key counts and fallback-key
+metadata before decrypting timelines. It performs no key upload, to-device send or other
+network I/O. The host owns machine shutdown and serialization of that device's sync loop.
+The SDK's native library must be provisioned separately: repository policy disables its
+postinstall downloader. Unit tests always use fakes; the additional real Rust session
+test runs when that native library is present and explicitly skips otherwise. It uses
+only a synthetic, in-memory session and no provider or real credentials.
+
+Inbound text uses `matrix-chat-to-pod`'s `matrixEventToCanonical` before becoming a
+BridgeMessage. It keeps the room as thread key, plain text and ciphertext raw digest;
+HTML is never exposed as rendered content. For encrypted events, `native` is bounded
+decrypted event JSON, and parsing checks its room/event/sender against the ciphertext.
+Edits, redactions, media and other non-message events refuse as new text statements.
+The envelope content key supplies unverified JSON-LD only; decryption and parsing grant
+no agent identity or authority. `MATRIX_CONTENT` retains its exported constant name
+but now advertises the brief's `matrix-event/0.1` carriage ID.

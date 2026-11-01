@@ -165,6 +165,8 @@
   },
   "dependencies": {
     "@jeswr/agent-model": "workspace:*",
-    "@jeswr/guarded-fetch": "workspace:*"
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/matrix-chat-to-pod": "workspace:*",
+    "@matrix-org/matrix-sdk-crypto-nodejs": "0.6.6"
   }
 }
