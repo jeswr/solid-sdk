@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 import { type Grant, MODES, PUBLIC, readGrants, SharingError } from "./rdf";
 import type {
   AccessMode,
@@ -25,7 +26,33 @@ function origin(grants: Grant[]): AccessOrigin {
     sources: [...new Set(contributing.map((grant) => grant.document.source))].sort(),
   };
 }
+
+/** One folder control cannot faithfully describe independent WAC defaults. Fail closed
+ * in both projection and diff planning, including descendant-only people/public grants.
+ */
+function assertFolderDefaults(input: SharingInput, grants: Grant[]): void {
+  if (
+    !input.access.resource.endsWith("/") ||
+    !input.access.documents.some((d) => d.model === "wac" && !d.inherited)
+  )
+    return;
+  const defaults = readGrants(input.access, "members");
+  const effective = (grants: Grant[], principal: string) => {
+    const values = allowed(forPrincipal(grants, principal, input.access.resource));
+    if (values.has("Write")) values.add("Append");
+    return values;
+  };
+  for (const principal of new Set([...grants, ...defaults].map((g) => g.principal))) {
+    const folder = effective(grants, principal);
+    const children = effective(defaults, principal);
+    if (MODES.some((mode) => folder.has(mode) !== children.has(mode)))
+      throw new SharingError(
+        "Folder and descendant permissions differ. This configuration is not supported by the sharing dialog.",
+      );
+  }
+}
 function project(input: SharingInput, grants: Grant[], comments: Grant[]): SharingState {
+  assertFolderDefaults(input, grants);
   if (comments.some((grant) => grant.principal === PUBLIC && grant.modes.size > 0)) {
     throw new SharingError(
       "Anonymous comments permissions cannot be expressed by the sharing model",
@@ -33,7 +60,7 @@ function project(input: SharingInput, grants: Grant[], comments: Grant[]): Shari
   }
   const data = grants.filter((grant) => grant.resource === input.access.resource);
   const management = grants.filter(
-    (grant) => grant.document.model === "acp" && grant.resource === grant.document.source,
+    (grant) => grant.document.model === "acp" && grant.resource !== input.access.resource,
   );
   for (const principal of new Set(management.map((grant) => grant.principal))) {
     const policyModes = allowed(management.filter((grant) => grant.principal === principal));
@@ -59,9 +86,7 @@ function project(input: SharingInput, grants: Grant[], comments: Grant[]): Shari
     if (!access.has("Read") || (access.has("Control") && !access.has("Write"))) {
       throw new SharingError("Partial resource permissions cannot be expressed as a sharing role");
     }
-    const policy = grants.filter(
-      (grant) => grant.principal === webId && grant.resource === grant.document.source,
-    );
+    const policy = management.filter((grant) => grant.principal === webId);
     const policyModes = allowed(policy);
     const manages = access.has("Control") || (policyModes.has("Read") && policyModes.has("Write"));
     const commentGrants = input.comments

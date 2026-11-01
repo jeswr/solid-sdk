@@ -487,6 +487,20 @@ describe("roles and durations", () => {
     fireEvent.change(screen.getByLabelText("Access ends on"), { target: { value: "2027-01-02" } });
     expect(onCustomDateChange).toHaveBeenCalledWith("2027-01-02");
   });
+  it("limits durations to the consuming API's supported presets", () => {
+    const onChange = vi.fn();
+    render(
+      <DurationChips
+        value="until-revoked"
+        onChange={onChange}
+        durations={["until-revoked", "day", "month", "year"]}
+      />,
+    );
+    expect(screen.queryByRole("radio", { name: "Custom" })).toBeNull();
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("radio", { name: "1 day" }));
+    expect(onChange).toHaveBeenCalledWith("day");
+  });
 });
 
 describe("consent", () => {

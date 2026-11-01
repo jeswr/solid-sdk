@@ -941,3 +941,33 @@ tr:focus .drv-star {
     display: none;
   }
 }
+
+/* AUTHORED-BY Codex */
+.drv-share-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.drv-share-dialog :is(h2, p, strong, select) {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.drv-share-add {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.drv-share-people {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.drv-share-person {
+  border-bottom: 1px solid var(--border);
+  padding-block: var(--space-3);
+}
+.drv-share-dialog .su-wrap {
+  align-items: end;
+}
