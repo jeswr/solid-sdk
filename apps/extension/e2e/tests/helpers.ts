@@ -12,11 +12,12 @@ export const WORK_WEBID = 'http://localhost:3000/work-pod/profile/card#me';
  * required, so a click on an already-closed window or a no-op control fails the test.
  */
 export async function clickClosingControl(page: Page, target: Locator): Promise<void> {
-  const closed = page.waitForEvent('close');
-  await target.click().catch((error: Error) => {
-    if (!/Target page, context or browser has been closed/.test(error.message)) throw error;
-  });
-  await closed;
+  await Promise.all([
+    page.waitForEvent('close'),
+    target.click().catch((error: Error) => {
+      if (!/Target page, context or browser has been closed/.test(error.message)) throw error;
+    }),
+  ]);
 }
 
 /**
