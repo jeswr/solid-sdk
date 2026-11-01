@@ -48,6 +48,26 @@ it("walks the signed authority chain and runs the zero-credential CLI", async ()
     expect(new Headers(init.headers).has("authorization")).toBe(false);
   }
 });
+it("binds the private proposal commitment without exposing its preimage", async () => {
+  const terms = { ...f.terms, proposalDigest: digestOf("private proposal, carrier and expiry") };
+  for (const record of f.records) {
+    if (record.terms) {
+      record.terms = terms;
+      record.termsDigest = digestOf(terms);
+    }
+  }
+  f.pod.put(
+    f.approvalId,
+    await issueApproval({ ...f.approval, termsDigest: digestOf(terms) }, f.p256, new Date(AT)),
+    "application/trig",
+  );
+  await f.mirror();
+  expect(await audit()).toMatchObject({ ok: true, breaches: [] });
+  terms.proposalDigest = digestOf("changed private proposal");
+  for (const record of f.records) if (record.terms) record.termsDigest = digestOf(terms);
+  await f.mirror();
+  await breach("forged-approval");
+});
 it.each([
   "forged-approval",
   "out-of-scope",

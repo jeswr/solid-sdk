@@ -1,9 +1,52 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AGENT } from "@jeswr/agent-mandate";
-import { canonicalJson } from "@jeswr/agent-model";
+import { canonicalJson, digestOf } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
-import { createExecutor } from "../src/index.js";
+import { createExecutor, proposalApprovalTerms, proposalTermsDigest } from "../src/index.js";
 import { control, harness, NOW, seal, UNTIL } from "./helpers.js";
+
+it("hashes body-free approval terms while binding every private proposal field", async () => {
+  const h = harness();
+  const entry = await h.enqueue();
+  const terms = proposalApprovalTerms(entry);
+  const approved = proposalTermsDigest(entry);
+  expect(digestOf(terms)).toBe(approved);
+  expect(terms.messageDigest).toBe(entry.wireDigest);
+  expect(canonicalJson(terms)).not.toContain(entry.proposal.renderedPreview);
+  expect(canonicalJson(terms)).not.toContain(entry.renderable.compactJws);
+  for (const mutate of [
+    (e: typeof entry) => {
+      e.proposal.intent.parameters = { changed: true };
+    },
+    (e: typeof entry) => {
+      e.proposal.renderedPreview += " changed";
+    },
+    (e: typeof entry) => {
+      e.proposal.validUntil = NOW;
+    },
+    (e: typeof entry) => {
+      Object.assign(e.renderable, { compactJws: "changed.signed.carrier" });
+    },
+    (e: typeof entry) => {
+      Object.assign(e.renderable.message, { id: "urn:message:changed" });
+    },
+    (e: typeof entry) => {
+      Object.assign(e.account, { id: "changed" });
+    },
+    (e: typeof entry) => {
+      Object.assign(e, { wireDigest: digestOf("changed") });
+    },
+    (e: typeof entry) => {
+      Object.assign(e.wire, { mediaType: "text/plain" });
+    },
+  ]) {
+    const changed = structuredClone(entry);
+    mutate(changed);
+    expect(proposalTermsDigest(changed)).not.toBe(approved);
+  }
+  entry.proposal.intent.termsDigest = "excluded self-reference";
+  expect(proposalTermsDigest(entry)).toBe(approved);
+});
 
 describe("DESIGN §4.1 ordered enforcement", () => {
   it("step 1: local halt runs before reading proposal or mandate", async () => {

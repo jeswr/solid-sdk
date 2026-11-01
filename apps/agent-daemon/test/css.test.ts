@@ -318,15 +318,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       isFlagged: async () => false,
       proposalWritten: async () => {
         stores.entries.set(proposal.id, entry);
-        return {
-          action: proposal.intent.action,
-          target: proposal.intent.target,
-          binding: proposal.intent.binding,
-          accountId: entry.account.id,
-          recipientHashes: [proposal.intent.recipientHash],
-          messageDigest: entry.wireDigest,
-          purpose: proposal.intent.purpose,
-        };
+        return entry;
       },
       proposerContext: {
         instructions: "Synthetic test",

@@ -56,6 +56,11 @@ lookup and before handing over send credentials, closing asynchronous revocation
   `wireDigest`, then set `proposal.intent.termsDigest` using this helper before approval.
   It covers the complete intent except the digest itself, proposal id, preview, expiry,
   signed carrier, account, wire digest and media type. Changing any term invalidates old approvals.
+  `proposalApprovalTerms(entry)` returns the body-free preimage shared with agent-audit:
+  action, target, binding, account ID, recipient hashes, wire digest, purpose and a
+  `proposalDigest` committing all the private fields above. `proposalTermsDigest` is
+  exactly `digestOf(proposalApprovalTerms(entry))`. Approvals made with the earlier
+  full-object digest must be reissued; they fail closed under this commitment.
 - The binding's `send.validate(wire, { renderable, intent, account })` must verify that
   every intent term (including recipient, operation, parameters, purpose and amount) and
   the sending account describe the signed carrier and actual destination. It runs before

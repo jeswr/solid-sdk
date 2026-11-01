@@ -62,7 +62,10 @@ For a complete proposal audit, write these linked events in order:
 - `receipt`: a distinct `id`, identities, `proposal`, and `transmission` IRI.
 
 `AuditTerms` contain action/target IRIs, binding, opaque account ID, salted
-recipient hashes, the message digest, and optional purpose IRI. `termsDigest` is
+recipient hashes, the message digest, optional purpose IRI and optional
+`proposalDigest`. Executor-backed records use `proposalApprovalTerms(entry)` from
+agent-executor, whose `proposalDigest` commits the full private intent, carrier,
+preview and expiry without exposing them. `termsDigest` is
 `digestOf(terms)` from agent-model. This exact body-free digest must be signed by
 agent-mandate's `issueApproval`. The full message stays in the private inbox;
 audit accepts its digest only. An uncertain/unsent transmission or absent receipt

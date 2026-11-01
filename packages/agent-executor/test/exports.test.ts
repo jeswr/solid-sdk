@@ -36,6 +36,7 @@ it.each(entries)("resolves the %s public API", (subpath, target) => {
           "createExecutor",
           "createFileTransmissionStore",
           "createHaltFileCheck",
+          "proposalApprovalTerms",
           "proposalTermsDigest",
         ]
       : ["createMemoryStores"],

@@ -2,13 +2,29 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
 import { type BridgeMessage, ChannelParseError } from "@jeswr/agent-channels";
-import { defaultMandate, issueApproval, issueMandate, mandateToTurtle } from "@jeswr/agent-mandate";
+import {
+  type ApprovalContext,
+  createExecutor,
+  type OutboxEntry,
+  proposalApprovalTerms,
+  proposalTermsDigest,
+} from "@jeswr/agent-executor";
+import { createMemoryStores } from "@jeswr/agent-executor/testing";
+import {
+  defaultMandate,
+  issueApproval,
+  issueMandate,
+  mandateToTurtle,
+  solidOdrlEngine,
+  verifyApproval,
+} from "@jeswr/agent-mandate";
 import { canonicalJson, digestBytes, digestOf, newUrn } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError } from "@jeswr/agent-model-gateway";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
   buildBitstringStatusListCredential,
+  createWebIdKeyResolver,
   generateKeyPairForSuite,
   issue,
   publishVerificationMethod,
@@ -117,14 +133,42 @@ function harness() {
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    proposalWritten: async () => ({
-      action: "https://jeswr.org/ns/agent#SendMessage",
-      target: "urn:target:fixture",
-      binding: "direct",
-      accountId: "fixture",
-      recipientHashes: [`sha256:${"a".repeat(64)}`],
-      messageDigest: digestBytes("trusted outbound wire"),
-    }),
+    proposalWritten: async (proposal) => {
+      const renderable: OutboxEntry["renderable"] = {
+        compactJws: "fixture.signed.carrier",
+        message: {
+          profile: "urn:profile:fixture",
+          configuration: "urn:config:fixture",
+          id: "urn:message:fixture",
+          conversation: proposal.intent.conversation,
+          kind: "invoke",
+          from: { actor: AGENT_ID },
+          createdAt: new Date(AT).toISOString(),
+          expiresAt: "2026-11-02T12:00:00.000Z",
+          body: {
+            operation: { id: proposal.intent.operation, version: "1" },
+            input: {},
+            basis: { kind: "public" },
+          },
+        },
+      };
+      const bytes = canonicalJson(renderable);
+      const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/json" };
+      return {
+        proposal: {
+          ...proposal,
+          intent: {
+            ...proposal.intent,
+            action: "https://jeswr.org/ns/agent#SendMessage",
+            recipientHash: `sha256:${"a".repeat(64)}`,
+          },
+        },
+        renderable,
+        account: { id: "fixture" },
+        wire,
+        wireDigest: wire.digest,
+      };
+    },
     gateway: {
       reader,
       proposer: {
@@ -335,35 +379,90 @@ it("refuses changed trusted terms when replaying existing proposal evidence", as
   const h = harness();
   vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
   await expect(createDaemon(h.options).once()).rejects.toThrow("cursor unavailable");
-  const terms = await h.options.proposalWritten(exampleRecords["action-proposal"]);
+  const entry = await h.options.proposalWritten(exampleRecords["action-proposal"]);
   await expect(
     createDaemon({
       ...h.options,
-      proposalWritten: async () => ({ ...terms, messageDigest: digestBytes("different wire") }),
+      proposalWritten: async (proposal) => ({
+        ...entry,
+        proposal,
+        wireDigest: digestBytes("different wire"),
+      }),
     }).once(),
   ).rejects.toThrow("Audit replay conflict");
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
 });
-it("verifies daemon proposal evidence with canonical trusted outbox terms and signed authority", async () => {
+it("refuses an outbox entry for a different proposal before audit or cursor commits", async () => {
+  const h = harness();
+  await expect(
+    createDaemon({
+      ...h.options,
+      proposalWritten: async (proposal) => ({
+        ...(await h.options.proposalWritten(proposal)),
+        proposal: { ...proposal, id: "urn:proposal:different" },
+      }),
+    }).once(),
+  ).rejects.toThrow("Outbox proposal mismatch");
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toEqual([]);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+});
+it("executes and audits daemon proposal evidence using the same signed approval", async () => {
   const h = harness();
   const at = new Date(AT).toISOString();
   const until = "2026-11-02T12:00:00.000Z";
   const mandateId = `${ROOT}agent/mandates/default.ttl`;
   const approvalId = `${ROOT}agent/approvals/fixture.trig`;
   const statusId = `${ROOT}agent/mandates/status.ttl`;
-  const terms = {
+  const proposal = structuredClone(exampleRecords["action-proposal"]);
+  proposal.id = h.workspace.proposalLocation("urn:proposal:fixture");
+  proposal.createdAt = at;
+  proposal.validUntil = until;
+  Object.assign(proposal.intent, {
     action: "https://jeswr.org/ns/agent#SendMessage",
     target: "urn:target:trusted-outbox",
     binding: "gmail",
-    accountId: "own-account",
-    recipientHashes: [`sha256:${"a".repeat(64)}`],
-    messageDigest: digestBytes("exact trusted outgoing wire"),
+    recipientHash: `sha256:${"a".repeat(64)}`,
+    amount: { value: 0, currency: "GBP" },
+  });
+  const renderable: OutboxEntry["renderable"] = {
+    compactJws: "fixture.signed.carrier",
+    message: {
+      profile: "urn:profile:fixture",
+      configuration: "urn:config:fixture",
+      id: "urn:message:fixture",
+      conversation: proposal.intent.conversation,
+      kind: "invoke",
+      from: { actor: AGENT_ID },
+      createdAt: at,
+      expiresAt: until,
+      body: {
+        operation: { id: proposal.intent.operation, version: "1" },
+        input: {},
+        basis: { kind: "public" },
+      },
+    },
   };
+  const bytes = canonicalJson(renderable);
+  const wire = { bytes, mediaType: "application/json", digest: digestBytes(bytes) };
+  const outbox: OutboxEntry = {
+    proposal,
+    renderable,
+    wire,
+    wireDigest: wire.digest,
+    account: { id: "own-account" },
+  };
+  proposal.intent.termsDigest = proposalTermsDigest(outbox);
+  vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue({
+    proposals: [proposal],
+    calls: [],
+  });
+  const terms = proposalApprovalTerms(outbox);
   const mirror = new PodMirror(h.pod.io, ROOT);
   const writer = new AuditWriter(h.ledger, mirror);
-  const project = vi.fn(async () => terms);
+  const project = vi.fn(async () => outbox);
   const options = {
     ...h.options,
     proposalWritten: project,
@@ -380,7 +479,7 @@ it("verifies daemon proposal evidence with canonical trusted outbox terms and si
   const record = h.ledger.entries().find((entry) => entry.record.type === "proposal")?.record;
   if (record?.type !== "proposal") throw new Error("Missing proposal evidence");
   expect(record.terms).toEqual(terms);
-  expect(record.termsDigest).toBe(digestOf(terms));
+  expect(record.termsDigest).toBe(proposalTermsDigest(outbox));
   expect(project).toHaveBeenCalledBefore(h.executor.runOutboxOnce);
   const ed = await generateKeyPairForSuite(`${OWNER}/ed`);
   const p256 = await generateKeyPairForSuite(`${OWNER}/approval`, "P-256");
@@ -427,7 +526,7 @@ it("verifies daemon proposal evidence with canonical trusted outbox terms and si
       {
         id: approvalId,
         approves: record.id,
-        termsDigest: digestOf(terms),
+        termsDigest: proposalTermsDigest(outbox),
         expires: until,
         decision: "approve",
       },
@@ -435,6 +534,50 @@ it("verifies daemon proposal evidence with canonical trusted outbox terms and si
       new Date(AT),
     ),
     "application/trig",
+  );
+  const stores = createMemoryStores(at);
+  stores.entries.set(proposal.id, outbox);
+  const transmit = vi.fn(async () => ({
+    outcome: "accepted" as const,
+    providerRef: "fixture:sent",
+  }));
+  const approvalChecks = vi.fn(async (context: ApprovalContext) => {
+    const response = await h.pod.io(approvalId);
+    const checked = await verifyApproval(await response.text(), {
+      id: approvalId,
+      ownerWebId: OWNER,
+      proposal: context.proposal,
+      termsDigest: context.termsDigest,
+      now: () => context.now,
+      webIdKeyResolver: createWebIdKeyResolver({ fetch: h.pod.io }),
+    });
+    return checked.valid ? [checked.approval] : [];
+  });
+  const executor = createExecutor({
+    ownerWebId: OWNER,
+    agentWebId: AGENT_ID,
+    proposals: stores.proposals,
+    approvals: { findVerified: approvalChecks },
+    controls: stores.controls,
+    clock: stores.clock,
+    transmissions: stores.transmissions,
+    audit: stores.audit,
+    mandates: { load: async () => mandate },
+    policy: solidOdrlEngine,
+    tokens: { send: async () => ({ access: "send", accessToken: "synthetic" }) },
+    bindings: {
+      gmail: {
+        id: "gmail",
+        carriage: { id: "fixture", structured: "native", footer: "none", maxBytes: 65536 },
+        send: { render: async () => wire, validate: async () => ({ ok: true }), transmit },
+      },
+    },
+    dryRun: false,
+  });
+  expect(await executor.transmit(proposal.id)).toMatchObject({ status: "sent" });
+  expect(transmit).toHaveBeenCalledOnce();
+  expect(approvalChecks).toHaveBeenCalledWith(
+    expect.objectContaining({ termsDigest: record.termsDigest }),
   );
   const common = {
     agent: AGENT_ID,

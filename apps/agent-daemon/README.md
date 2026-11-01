@@ -51,10 +51,13 @@ controls, approvals and mandates: parsing RDF is insufficient. Its local HALT ch
 must read `createLocalState(...).halted` on every gate pass. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
 executor obligations. `proposalWritten` must idempotently project proposals into
-the trusted outbox and return its canonical `AuditTerms` (including account-bound
-recipient hashes and the exact wire digest). It must never send or grant approval.
-The daemon writes these terms and their digest into proposal evidence. Its audit
-adapter supplies `append`, `entries` from that same durable ledger, and `sync` to
+the trusted outbox and return the exact `OutboxEntry` used by the executor.
+Set `proposal.intent.termsDigest` with `proposalTermsDigest(entry)` before approval.
+The hook must never send or grant approval. The daemon derives body-free evidence
+with `proposalApprovalTerms(entry)` from agent-executor, including account-bound
+recipient hashes, the exact wire digest and a hash committing the full private
+proposal, carrier and expiry. It records `digestOf(terms)`, matching the executor's
+approval digest. Its audit adapter supplies `append`, `entries` from that same durable ledger, and `sync` to
 retry mirroring existing evidence without appending duplicate records. For an
 `AuditWriter`, use `entries: () => ledger.entries()` and
 `sync: () => mirror.sync(ledger.entries())`. The daemon never imports a channel

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { ChannelParseError } from "@jeswr/agent-channels";
+import { proposalApprovalTerms } from "@jeswr/agent-executor";
 import {
   AGENT,
   canonicalJson,
@@ -237,7 +238,9 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await calls(result.calls, task);
       for (const proposal of result.proposals) {
         await o.workspace.proposal(proposal);
-        const terms = await o.proposalWritten(proposal);
+        const entry = await o.proposalWritten(proposal);
+        if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
+        const terms = proposalApprovalTerms(entry);
         await append({
           type: "proposal",
           id: proposal.id,

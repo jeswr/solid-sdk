@@ -21,10 +21,10 @@ import type {
   TransmitResult,
 } from "./types.js";
 
-/** Approval identity includes every action term, exact carrier, destination and expiry. */
-export function proposalTermsDigest(entry: OutboxEntry): string {
+/** Body-free approval preimage shared with the audit ledger. */
+export function proposalApprovalTerms(entry: OutboxEntry) {
   const { termsDigest: _digest, ...intent } = entry.proposal.intent;
-  return digestOf({
+  const proposalDigest = digestOf({
     id: entry.proposal.id,
     intent,
     preview: entry.proposal.renderedPreview,
@@ -34,6 +34,21 @@ export function proposalTermsDigest(entry: OutboxEntry): string {
     wireDigest: entry.wireDigest,
     wireMediaType: entry.wire.mediaType,
   });
+  return {
+    action: intent.action,
+    target: intent.target,
+    binding: intent.binding,
+    accountId: entry.account.id,
+    recipientHashes: [intent.recipientHash],
+    messageDigest: entry.wireDigest,
+    purpose: intent.purpose,
+    proposalDigest,
+  };
+}
+
+/** Approval identity includes every action term, exact carrier, destination and expiry. */
+export function proposalTermsDigest(entry: OutboxEntry): string {
+  return digestOf(proposalApprovalTerms(entry));
 }
 
 const stateByStore = new WeakMap<

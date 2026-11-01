@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { AuditRecord, AuditTerms, LedgerEntry } from "@jeswr/agent-audit";
+import type { AuditRecord, LedgerEntry } from "@jeswr/agent-audit";
 import type { Bounds, ChannelBinding, Cursor } from "@jeswr/agent-channels";
-import type { createExecutor } from "@jeswr/agent-executor";
+import type { createExecutor, OutboxEntry } from "@jeswr/agent-executor";
 import type { ActionProposal } from "@jeswr/agent-model";
 import type { Gateway, ModelCall, ProposerContext } from "@jeswr/agent-model-gateway";
 import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
@@ -47,8 +47,8 @@ export interface DaemonOptions {
   readonly proposerContext: ProposerContext;
   /** Read trusted owner selections, never flags supplied by channel content. */
   readonly isFlagged: (account: string, thread: string) => Promise<boolean>;
-  /** Idempotently project into the trusted outbox and return its canonical body-free terms. */
-  readonly proposalWritten: (proposal: ActionProposal) => Promise<AuditTerms>;
+  /** Idempotently project into the trusted outbox and return the exact entry used by the executor. */
+  readonly proposalWritten: (proposal: ActionProposal) => Promise<OutboxEntry>;
   readonly audit: {
     append(record: AuditRecord, at: string): Promise<unknown>;
     /** Read the same durable ledger used by append, including failed mirror writes. */

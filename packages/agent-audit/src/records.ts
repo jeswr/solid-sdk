@@ -34,6 +34,8 @@ export const termsSchema = z.strictObject({
   recipientHashes: z.array(recipientHashSchema).min(1).max(100),
   messageDigest: digestSchema,
   purpose: iri.optional(),
+  /** Commits the executor's full intent, carrier, preview and expiry without exposing them. */
+  proposalDigest: digestSchema.optional(),
 });
 const recordSchema = z.strictObject({
   type: z.enum(ENTRY_KINDS),
