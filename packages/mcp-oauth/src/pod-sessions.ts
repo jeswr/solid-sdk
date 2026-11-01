@@ -151,15 +151,21 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       issuer,
       clientId: options.clientId,
       redirectUri: options.redirectUri,
+      lws: true,
       ...(key === undefined ? {} : { dpopKeyPair: await importServerDpopKey(key) }),
       fetch: async (input, init) => {
         const request = new Request(input, init);
-        // Public-client discovery/token calls carry no Authorization header. Check each
-        // credentialed resource attempt after body buffering and DPoP proof generation,
-        // including nonce retries that bypass fetchFor's earlier liveness check.
+        // LWS exchanges carry the subject credential in their form body. Check them as
+        // well as resource attempts after buffering/proof generation, immediately before send.
+        const exchangesSubject =
+          request.method === "POST" &&
+          !request.headers.has("authorization") &&
+          request.headers.get("content-type")?.startsWith("application/x-www-form-urlencoded") &&
+          new URLSearchParams(await request.clone().text()).get("grant_type") ===
+            "urn:ietf:params:oauth:grant-type:token-exchange";
         if (
           sessionId !== undefined &&
-          request.headers.has("authorization") &&
+          (request.headers.has("authorization") || exchangesSubject) &&
           !(await provider.isActive(sessionId))
         )
           throw new Error("Pod session is inactive");

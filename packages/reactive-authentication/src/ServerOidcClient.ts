@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import * as oauth from "oauth4webapi";
 import { withDPoPNonceRetry } from "./dpopNonce.js";
+import { TokenType } from "./lws/constants.js";
+import { LwsTokenProvider } from "./lws/LwsTokenProvider.js";
+import { ReactiveAuthenticationClient } from "./ReactiveAuthenticationClient.js";
 import { type HttpOptions, oauthOptions } from "./transport.js";
 
 /** Sensitive Node vault envelope. Never use this format for browser persistence. */
@@ -27,6 +30,8 @@ export interface ServerOidcOptions {
   redirectUri: string;
   fetch: typeof fetch;
   dpopKeyPair?: ServerDpopKey;
+  /** Answer LWS challenges with the verified OIDC ID token; credentials stay in memory. */
+  lws?: boolean;
 }
 export const SERVER_MAX_REPLAY_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -90,6 +95,60 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
   const dpop = oauth.DPoP(client, dpopKeyPair.keys);
   let current: ServerOidcTokens | undefined;
   let webId: string | undefined;
+  let idTokenExpiresAt = 0;
+  let idTokenSubject = "";
+  let idTokenClient: unknown;
+  const lws = options.lws
+    ? new LwsTokenProvider(
+        {
+          id: JSON.stringify([options.issuer, options.clientId]),
+          async getCredential({ signal }) {
+            signal.throwIfAborted();
+            if (!current?.idToken || idTokenExpiresAt <= Date.now())
+              throw new Error("A current verified ID token is required for LWS");
+            if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/.test(idTokenSubject))
+              throw new Error("LWS requires an ID token with a URI subject");
+            if (idTokenClient !== options.clientId)
+              throw new Error("LWS requires an ID token with the client azp claim");
+            return {
+              token: current.idToken,
+              tokenType: TokenType.idToken,
+              clientId: options.clientId,
+              expiresAt: idTokenExpiresAt,
+            };
+          },
+        },
+        { http },
+      )
+    : undefined;
+  const resourceHttp: HttpOptions =
+    lws === undefined
+      ? http
+      : {
+          fetch: async (input, init) => {
+            const request = new Request(input, init);
+            const headers = new Headers(request.headers);
+            headers.delete("authorization");
+            headers.delete("dpop");
+            let first = true;
+            const reactive = new ReactiveAuthenticationClient({
+              providers: [lws],
+              // The broker owns resource scope and checks liveness on every transport call.
+              boundary: { allows: () => true },
+              fence: lws.fence,
+              maxReplayBodyBytes: SERVER_MAX_REPLAY_BODY_BYTES,
+              fetch: (attempt) => {
+                // Preserve the initial Solid attempt. LWS retries carry only exchanged Bearer tokens.
+                const outgoing = first
+                  ? new Request(attempt, { headers: request.headers })
+                  : attempt;
+                first = false;
+                return options.fetch(outgoing);
+              },
+            });
+            return reactive.fetch(new Request(request, { headers }));
+          },
+        };
   const tokens = async (response: Response, authorization?: ServerAuthorizationState) => {
     const processed =
       authorization === undefined
@@ -109,6 +168,11 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
         throw new Error("Invalid verified WebID");
       webId = id;
     } else webId = undefined;
+    // Retire cached exchanges and fence in-flight LWS requests before replacing OIDC credentials.
+    await lws?.forget();
+    idTokenExpiresAt = (claims?.exp ?? 0) * 1000;
+    idTokenSubject = claims?.sub ?? "";
+    idTokenClient = claims?.azp;
     const refreshToken = processed.refresh_token ?? current?.refreshToken;
     // Restored refreshes may omit rotation. The caller supplies the original below.
     current = {
@@ -202,7 +266,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
             new URL(request.url),
             new Headers(request.headers),
             body,
-            { ...oauthOptions(http, request.signal), DPoP: dpop },
+            { ...oauthOptions(resourceHttp, request.signal), DPoP: dpop },
           );
         } catch (error) {
           if (error instanceof oauth.WWWAuthenticateChallengeError)

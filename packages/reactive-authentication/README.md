@@ -326,3 +326,8 @@ The broker owns encrypted pending-state and private-JWK envelopes, single-use ca
 refresh CAS, durable retirement and URL scope. A server signing key is exported once for its encrypted
 JSON vault, then imported non-extractably; browser sessions retain CryptoKey persistence.
 Resource bodies have an abortable 10 MiB replay cap and nonce challenges retry once.
+With `lws: true`, resource challenges also route through `LwsTokenProvider`, exchanging the
+current verified OIDC ID token (URI `sub` and matching client `azp`) for a storage-audience
+Bearer token. Exchanged tokens stay in
+memory; a missing or expired ID token fails closed. The broker must enforce resource scope
+and session liveness on its injected transport, including discovery, exchange and Bearer retries.

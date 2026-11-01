@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, expect, test, vi } from "vitest";
+import { lwsStorage } from "../../mcp-oauth/test/lws-storage.ts";
 // Shared offline issuer verifies PKCE, DPoP signatures, key binding and refresh rotation.
 import {
   POD_CALLBACK,
@@ -17,19 +18,91 @@ import {
 } from "../src/ServerOidcClient.js";
 
 afterEach(() => vi.restoreAllMocks());
-async function fixture(wrapFetch = (fetcher) => fetcher) {
+async function fixture(wrapFetch = (fetcher) => fetcher, extra = {}) {
   const op = podIssuer();
   const options = {
     issuer: POD_ISSUER,
     clientId: POD_CLIENT,
     redirectUri: POD_CALLBACK,
-    fetch: wrapFetch(op.fetch),
+    fetch: wrapFetch(op.fetch, op),
+    ...extra,
   };
   const client = await createServerOidcClient(options);
   const begin = await client.authorizationUrl();
   const login = () => client.handleCallback({ url: op.callback(begin.url) }, begin.state);
   return { op, options, client, begin, login };
 }
+
+test("exchanges the verified server ID token for LWS Bearer access and reuses/renews it", async () => {
+  let lws;
+  const f = await fixture(
+    (_, op) => {
+      lws = lwsStorage(op);
+      return lws.fetch;
+    },
+    { lws: true },
+  );
+  await f.login();
+  expect((await lws.fetch(`${POD_ROOT}note.txt`)).status).toBe(401);
+  for (let n = 0; n < 2; n++) {
+    expect(
+      await (
+        await f.client.fetch(`${POD_ROOT}note.txt`, {
+          method: "PUT",
+          body: "same LWS bytes",
+        })
+      ).text(),
+    ).toBe("private LWS content");
+  }
+  expect(lws.exchanges).toHaveLength(1);
+  const writes = lws.requests.filter((request) => request.method === "PUT");
+  expect(await Promise.all(writes.map((request) => request.text()))).toEqual(
+    Array(4).fill("same LWS bytes"),
+  );
+  lws.rejected.add("Bearer fixture-lws-1");
+  expect((await f.client.fetch(`${POD_ROOT}note.txt`)).status).toBe(200);
+  expect(lws.exchanges).toHaveLength(2);
+  f.op.controls.idSubject = "https://bob.example/profile#me";
+  f.op.controls.webId = f.op.controls.idSubject;
+  const next = await f.client.authorizationUrl();
+  await f.client.handleCallback({ url: f.op.callback(next.url) }, next.state);
+  expect((await f.client.fetch(`${POD_ROOT}note.txt`)).status).toBe(200);
+  expect(lws.exchanges).toHaveLength(3);
+});
+
+test.each([
+  "missing",
+  "expired",
+  "discovery",
+  "subject",
+  "client",
+])("LWS rejects %s credentials/discovery before exchange", async (kind) => {
+  let lws;
+  const f = await fixture(
+    (_, op) => {
+      lws = lwsStorage(op);
+      return lws.fetch;
+    },
+    { lws: true },
+  );
+  if (kind === "subject") f.op.controls.idSubject = "opaque-subject";
+  if (kind === "client") f.op.controls.idAuthorizedParty = undefined;
+  const session = await f.login();
+  if (kind === "missing") {
+    f.op.controls.refreshIdToken = false;
+    await f.client.refresh(session.tokens.refreshToken);
+  }
+  if (kind === "expired") vi.spyOn(Date, "now").mockReturnValue(Date.now() + 601_000);
+  if (kind === "discovery") lws.controls.wrongResource = true;
+  await expect(f.client.fetch(`${POD_ROOT}note.txt`)).rejects.toThrow(
+    {
+      discovery: "resource does not match",
+      subject: "URI subject",
+      client: "client azp claim",
+    }[kind] ?? "current verified ID token",
+  );
+  expect(lws.exchanges).toHaveLength(0);
+});
 
 test.each([
   false,
