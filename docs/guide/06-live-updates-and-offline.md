@@ -20,31 +20,44 @@ import type { StorageClient } from '@jeswr/storage-client';
 declare const auth: PodAuth;
 declare const storage: StorageClient;
 declare const container: string;
-declare function refresh(url: string): void;
-declare function relistEverything(): Promise<void>;
+// Your data layer: mark a URL stale so the view re-reads it (one re-read at a time).
+declare function markStale(url: string): void;
 
 const notifications = createNotifications({ fetch: auth.fetch, storage });
 const subscription = await notifications.subscribe([container], { depth: 'members' });
 
-subscription.on('change', (event) => refresh(event.object));
-subscription.on('resync', () => void relistEverything());
-subscription.on('state', (state) => console.log('live updates:', state));
+subscription.on('change', (event) => {
+  markStale(event.object);
+  if (event.type !== 'Update') markStale(container); // Something was added, removed or moved.
+});
+// After a gap (a dropped connection, or polling's first pass) events may have been missed.
+subscription.on('resync', () => markStale(container));
+// subscribe() can return before push is connected; catch up once it is.
+let sawLive = subscription.state === 'live';
+subscription.on('state', (state) => {
+  if (state === 'live' && !sawLive) {
+    sawLive = true;
+    markStale(container);
+  }
+});
+markStale(container); // Load now: changes made before subscribing never arrive as events.
 
-// When the view closes, or on logout:
+// When the view closes, or on logout, before clearing app state:
 await subscription.close();
 ```
 
 The rule: **a notification means "this changed, go and look"**. Do not use the event's contents as
-the new data. Re-read the resource through `storage`.
+the new data. Re-read through `storage`, and make sure an older re-read cannot overwrite a newer
+one. The package skill's `watchCollection` is a complete, tested version of this pattern,
+including error handling and orderly shutdown; copy it rather than writing your own.
 
 - `depth: 'members'` watches a container's members; `'recursive'` asks for the whole tree, where
   the server supports it. Neither watches edits inside every member on every server. Put the few
   resources the user is looking at right now in `hot`.
-- `resync` fires after a gap, such as a dropped connection, when events may have been missed.
-  Re-list then.
 - `state` is `'live'`, `'degraded'` (polling, or reconnecting), `'connecting'` or `'closed'`.
   Show a quiet indicator when degraded; do not block the user.
-- `notifications.plan()` tells you which channel it will use, without any network traffic.
+- `subscription.channel` says which transport is actually in use. `notifications.plan()` only
+  says which one the server advertises, without any network traffic.
 
 ## Keep the interface fast
 
@@ -55,9 +68,11 @@ easy to get wrong, such as a late failure undoing a newer edit.
 
 ## Work offline
 
-`solid-offline` adds a service-worker cache for pod data, scoped to the signed-in WebID and purged
-on logout. Cached data is never the source of truth: it is shown straight away, marked stale when
-offline, and checked against the pod when the connection returns.
+`solid-offline` adds a service-worker cache for pod data, scoped to the signed-in WebID. Cached
+data is never the source of truth: it is shown straight away, marked stale when offline, and
+checked against the pod when the connection returns. It does not watch your auth object: in your
+logout and account-switch code, **await `offline.logout()`** to purge that account's cache.
+Closing or dropping the client does not purge anything.
 
 - [solid-offline](../../packages/solid-offline/SKILL.md) is the package API.
 - [solid-offline-patterns](../../skills/solid-offline-patterns/SKILL.md) covers app patterns:
@@ -70,10 +85,13 @@ controls when offline, or keep unsaved edits in local state and save them on rec
 
 For documents several people edit at once, such as text, drawings or spreadsheets, use Yjs with
 `@jeswr/y-solid`. It stores a document as an append-only log of Yjs updates in a pod container and
-compacts the log safely. Any change event for that container means "fetch the new updates".
+compacts the log safely. Wire a container subscription to its `sync()`, so another editor's
+updates arrive promptly.
 
-Real-time sync through a server is advertised as `features.realtimeCollab`. When it is not
-`'available'`, y-solid still works by reading and writing the update log.
+Two limits today. The current persistence is **Solid only**: it names update files itself and reads
+Solid container listings, so it does not work on LWS storage yet. And it has no adapter for a
+server's real-time sync service (`features.realtimeCollab`); collaboration works through the update
+log and notifications alone.
 
 See the [y-solid skill](../../packages/y-solid/SKILL.md).
 

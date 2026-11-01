@@ -69,30 +69,42 @@ called `reading-list`.
 ## Step 2: add a link
 
 ```ts
-import { type BookmarkData, serializeBookmark } from '@jeswr/solid-bookmark';
+import { type BookmarkData, parseBookmarkTtl, serializeBookmark } from '@jeswr/solid-bookmark';
 import type { StorageClient } from '@jeswr/storage-client';
 
 declare const storage: StorageClient;
 declare const container: string;
+interface ReadingItem { readonly url: string; readonly etag: string; readonly bookmark: BookmarkData }
 
-export async function add(data: BookmarkData) {
+export async function add(data: BookmarkData): Promise<ReadingItem> {
   // 1. Create an empty document, so the server tells us its URL.
   const created = await storage.create(container, null, { contentType: 'text/turtle' });
   const etag = created.etag ?? (await storage.head(created.url)).etag;
   if (etag === null) throw new Error('The server gave no ETag');
 
   // 2. Describe the bookmark. Its RDF subject is `<url>#it`, so it needs the URL from step 1.
-  const bookmark = { ...data, created: data.created ?? new Date() };
-  const turtle = await serializeBookmark(created.url, bookmark);
+  const turtle = await serializeBookmark(created.url, { ...data, created: data.created ?? new Date() });
 
   // 3. Write it, saying which version we are replacing.
-  const written = await storage.write(created.url, turtle, { contentType: 'text/turtle', ifMatch: etag });
-  return { url: written.url, etag: written.etag, bookmark };
+  await storage.write(created.url, turtle, { contentType: 'text/turtle', ifMatch: etag });
+
+  // 4. Read back what is stored now, content and ETag together, so the item we return is
+  //    exactly the version a later edit will replace.
+  const stored = await storage.read(created.url, { accept: 'text/turtle' });
+  const bookmark = await parseBookmarkTtl(created.url, await stored.text(), stored.contentType);
+  if (bookmark === undefined || stored.etag === null) throw new Error('The bookmark did not save');
+  return { url: created.url, etag: stored.etag, bookmark };
 }
 ```
 
-Why two requests? The bookmark's RDF names itself with its own URL, and on LWS we cannot know that
-URL until the server has assigned it. Creating first, then writing, works everywhere.
+Why create, then write? The bookmark's RDF names itself with its own URL, and on LWS we cannot
+know that URL until the server has assigned it. Creating first, then writing, works everywhere.
+
+Why read it back? Some servers do not return an ETag from a write. Asking for it separately could
+pick up someone else's change made in between, and pairing their ETag with our data would let the
+next edit overwrite their change unseen. Reading content and ETag in one request avoids that, and
+also gives us the bookmark exactly as stored (the model trims tags and drops unsafe links). The
+full code also refuses a link that is not `http` or `https` before it writes anything.
 
 ## Step 3: list the links
 
@@ -114,7 +126,8 @@ for await (const entry of storage.listAll(container)) {
 
 - `listAll` follows LWS pages for us.
 - `entry.kind` tells containers from documents. Do not look for a trailing `/`.
-- Pods are shared by many apps. A file we cannot parse as a bookmark is skipped, not an error.
+- Pods are shared by many apps. A file we cannot parse as a bookmark, even malformed Turtle, is
+  skipped, not an error. Network and permission errors still reach the caller.
 
 The full code also skips non-Turtle files before downloading them, and sorts the newest first.
 
@@ -178,10 +191,11 @@ import type { PodAuth } from '@jeswr/pod-auth';
 import { createPodClient } from '@jeswr/storage-client';
 
 declare const auth: PodAuth;
+declare function findStorages(auth: PodAuth): Promise<string[]>; // Chapter 3.
+declare function chooseStorage(urls: string[]): Promise<string>; // Your UI.
 
-const identity = (await auth.restore()) ?? (await auth.login());
-const root = identity.storages[0];
-if (root === undefined) throw new Error('This account has no storage');
+(await auth.restore()) ?? (await auth.login());
+const root = await chooseStorage(await findStorages(auth));
 const { storage } = await createPodClient({ fetch: auth.fetch, storage: root });
 // Pass `storage` to openReadingList, exactly as the tests pass the memory pod.
 ```

@@ -39,7 +39,7 @@ The human-readable version of this skill is the developer guide in
 | Typed RDF accessors | `@solid/object`, `@rdfjs/wrapper` | [solid-object](../solid-object/SKILL.md) |
 | Suite vocabulary IRIs | `@jeswr/suite-vocab` | [suite-vocab](../../packages/suite-vocab/SKILL.md) |
 | Domain models | `@jeswr/solid-bookmark`, `@jeswr/solid-task-model`, … | each package README |
-| Collaborative documents | `@jeswr/y-solid` (Yjs) | [y-solid](../../packages/y-solid/SKILL.md) |
+| Collaborative documents (Solid only today) | `@jeswr/y-solid` (Yjs) | [y-solid](../../packages/y-solid/SKILL.md) |
 | Offline cache | `solid-offline` | [solid-offline](../../packages/solid-offline/SKILL.md), [patterns](../solid-offline-patterns/SKILL.md) |
 | React chrome, theming, account menu | `@jeswr/app-shell` | [app-shell](../../packages/app-shell/SKILL.md) |
 | Framework-free web components | `@jeswr/solid-elements` | [solid-elements](../../packages/solid-elements/SKILL.md) |
@@ -57,7 +57,10 @@ Cross-cutting patterns: [lws-vs-solid](../lws-vs-solid/SKILL.md),
 Build these once per signed-in account and drop them all on logout.
 
 ```ts
+import { fetchRdf } from '@jeswr/fetch-rdf';
 import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
+import { Agent } from '@solid/object';
+import { DataFactory } from 'n3';
 import { createNotifications } from '@jeswr/pod-notifications';
 import { createPodClient } from '@jeswr/storage-client';
 
@@ -70,8 +73,12 @@ const auth = createPodAuth({
 });
 
 const identity = (await auth.restore()) ?? (await auth.login());
-const storageRoot = identity.storages[0];
-if (storageRoot === undefined) throw new Error('This account has no storage yet');
+// Signing in says who, not where: read pim:storage from the WebID profile.
+// identity.storages is the credential boundary and can be empty after Solid login.
+if (identity.webId === null) throw new Error('This sketch expects a WebID');
+const profile = await fetchRdf(identity.webId, { fetch: auth.fetch });
+const [storageRoot] = new Agent(identity.webId, profile.dataset, DataFactory).storageUrls;
+if (storageRoot === undefined) throw new Error('Ask the user for their storage URL');
 
 const { storage, features } = await createPodClient({ fetch: auth.fetch, storage: storageRoot });
 const notifications = createNotifications({ fetch: auth.fetch, storage });
@@ -123,7 +130,8 @@ export const subjectOf = bookmarkSubject;
 
 ## Handle errors
 
-Every storage failure is a `StorageError` with a `code`. The ones apps handle:
+Every storage failure is a `StorageError` with a `code`; invalid arguments (such as a missing
+`ifMatch`, even on `delete`) throw `TypeError` before any request. The codes apps handle:
 
 | Code | Meaning | App response |
 | --- | --- | --- |
@@ -162,6 +170,12 @@ feature check, until the package ships it.
   grant API. Show who-has-access as unavailable rather than writing `.acl` files by hand.
 - **React data hooks.** The `@jeswr/suite-sdk` React facade (session, resources, subscriptions) is
   planned; until then apps keep a small context of their own over the three clients above.
+- **A shared sign-in screen** (provider buttons, WebID, "another provider") is being designed for
+  `@jeswr/suite-ui`; until it lands, build the screen in the app following the guide's chapter 3.
+- **Collaboration on LWS.** `@jeswr/y-solid` persistence is Solid-only and has no real-time
+  service adapter.
+- **Offline outbox.** `solid-offline` caches reads; queued offline writes are planned. Await
+  `offline.logout()` yourself on logout.
 - **Type Index client**, multi-account switching, preferences store, trash and versions are in
   progress. Check the package list in `suite.json` before assuming they exist.
 

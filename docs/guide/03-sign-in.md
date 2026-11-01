@@ -104,17 +104,41 @@ const identity = await auth.restore();
 if (identity === null) {
   // Show the sign-in screen.
 } else {
-  // identity.webId, identity.issuer, identity.storages
+  // identity.webId and identity.issuer say who is signed in.
 }
 ```
 
-`restore()` never opens a window. It uses a refresh token stored next to a key that cannot be
-exported from the browser. If the token has expired, it tries one silent re-authorisation and
-otherwise returns `null`. A network failure also returns `null` but keeps the stored session, so
-a later retry can still succeed.
+`restore()` uses a refresh token stored next to a key that cannot be exported from the browser,
+so it normally needs no UI at all. If the provider rejects that token, `restore()` makes one
+silent attempt (`prompt=none`) through your `getCode` hook, so that hook must cope with a request
+the user never sees; it never falls back to an interactive sign-in. If that fails it returns
+`null`. A network failure also returns `null` but keeps the stored session, so a later retry can
+still succeed.
 
-`identity.storages` lists the pods the identity points to. Most apps use the first one, and let the
-user choose when there are several.
+## Find the user's pod
+
+Signing in tells you who the user is, not where their data lives. On Solid, the WebID profile
+lists the user's storages (`pim:storage`). Read it with the shared RDF tools:
+
+```ts
+import { fetchRdf } from '@jeswr/fetch-rdf';
+import type { PodAuth } from '@jeswr/pod-auth';
+import { Agent } from '@solid/object';
+import { DataFactory } from 'n3';
+
+export async function findStorages(auth: PodAuth): Promise<string[]> {
+  const identity = await auth.identity();
+  if (identity === null) throw new Error('Not signed in');
+  if (identity.webId === null) return [...identity.storages]; // Agents without a WebID.
+  const { dataset } = await fetchRdf(identity.webId, { fetch: auth.fetch });
+  return [...new Agent(identity.webId, dataset, DataFactory).storageUrls];
+}
+```
+
+Use the only storage when there is one, and let the user choose when there are several. When
+there are none (a new account on some servers starts with a bare profile), ask the user for their
+storage URL and remember it. `identity.storages` lists the roots `auth.fetch` currently trusts with
+credentials; it can be empty straight after a Solid sign-in, so do not use it to find the pod.
 
 ## Listen for session changes
 

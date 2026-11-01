@@ -38,6 +38,8 @@ app before. It does not assume you know Solid or RDF.
 | Server discovery | `@jeswr/storage-capabilities` | Works |
 | Storage | `@jeswr/storage-client` | Works for Solid and LWS, plus an in-memory pod |
 | Change notifications | `@jeswr/pod-notifications` | Works: WebSocket, streaming HTTP, polling |
+| Collaborative documents | `@jeswr/y-solid` | Works on Solid; LWS **not ready yet** |
+| Shared sign-in screen | `@jeswr/suite-ui` | **Not ready yet**: being designed |
 | Sharing | `@jeswr/pod-access` | **Not ready yet**: translation core only |
 | React data hooks | `@jeswr/suite-sdk` | **Not ready yet**: planned |
 | Type Index, preferences, trash, versions | various | In progress |

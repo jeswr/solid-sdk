@@ -13,7 +13,7 @@ import type { PodAuth } from '@jeswr/pod-auth';
 import { createPodClient } from '@jeswr/storage-client';
 
 declare const auth: PodAuth;
-declare const storageRoot: string; // For example identity.storages[0].
+declare const storageRoot: string; // From the WebID profile; see chapter 3.
 
 const { storage, description, features } = await createPodClient({
   fetch: auth.fetch,
@@ -153,7 +153,11 @@ if (storage.features.move.state === 'available') {
   const moved = await storage.move(note.url, archive, { ifMatch: note.etag });
   console.log(moved.url); // The new URL. Sharing settings do not move with it.
 }
-await storage.delete(archive, { recursive: true });
+
+// Deletes are conditional too, even recursive ones.
+const { etag } = await storage.head(archive);
+if (etag === null) throw new Error('The server gave no ETag');
+await storage.delete(archive, { recursive: true, ifMatch: etag });
 ```
 
 On Solid, a move is a copy then a delete, so it changes the URL and can fail halfway; the client
@@ -162,7 +166,9 @@ bottom up.
 
 ## Errors
 
-Every failure is a `StorageError` with a `code`, a `status` and the `url`. The codes apps usually
+Every storage failure is a `StorageError` with a `code`, a `status` and the `url`. A call with
+bad arguments, such as an edit without `ifMatch`, throws a `TypeError` before any request: that
+is a bug to fix, not an error to handle. The codes apps usually
 handle:
 
 | Code | What happened | What to do |

@@ -75,8 +75,9 @@ Three objects make up an app's data layer:
   speaks. It needs `auth.fetch`.
 - **`notifications`** from `createNotifications` tells you when something in the pod changed.
 
-Apps do not import the protocol back ends (`@jeswr/storage-client/solid` and `/lws`) or the
-low-level auth packages. A workspace check, `pnpm run check:sdk-layers`, enforces that.
+Apps use these three and leave the protocol back ends (`@jeswr/storage-client/solid` and `/lws`)
+and the low-level auth engine to the SDK. A workspace check, `pnpm run check:sdk-layers`, rejects
+app dependencies on the two back ends and on `@sparq-org/sparq`; the rest is up to you.
 
 ## Older packages
 
