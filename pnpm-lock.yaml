@@ -5454,21 +5454,15 @@ importers:
 
   packages/y-solid:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
-      '@jeswr/pod-notifications':
+      '@jeswr/ldp-container':
         specifier: workspace:*
-        version: link:../pod-notifications
-      '@jeswr/storage-client':
-        specifier: workspace:*
-        version: link:../storage-client
-      lib0:
-        specifier: ^0.2.117
-        version: 0.2.117
-      y-protocols:
-        specifier: ^1.0.6
-        version: 1.0.7(yjs@13.6.31)
+        version: link:../ldp-container
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.0.0
@@ -5482,9 +5476,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      fast-check:
-        specifier: ^4.3.0
-        version: 4.10.2
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -36465,11 +36456,6 @@ snapshots:
     dependencies:
       lib0: 0.2.117
       yjs: 13.6.27
-
-  y-protocols@1.0.7(yjs@13.6.31):
-    dependencies:
-      lib0: 0.2.117
-      yjs: 13.6.31
 
   y18n@5.0.8: {}
 

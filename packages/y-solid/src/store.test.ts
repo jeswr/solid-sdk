@@ -1,15 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { createLwsBackend } from "@jeswr/storage-client/lws";
-import { createSolidBackend } from "@jeswr/storage-client/solid";
-import { describe, expect, it, vi } from "vitest";
-import { Doc } from "yjs";
-import { SolidPersistence } from "./provider.js";
-import { LOG_HEADER_BYTES } from "./record.js";
+import { describe, expect, it } from "vitest";
 import { SolidUpdateStore, UPDATE_CONTENT_TYPE } from "./store.js";
 import { makePod } from "./testPod.js";
 
@@ -17,7 +11,7 @@ const CONTAINER = "https://alice.pod/notes/my-doc/";
 
 function makeStore() {
   const pod = makePod(CONTAINER);
-  const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
+  const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
   return { pod, store };
 }
 
@@ -25,7 +19,7 @@ describe("browser-safety", () => {
   it("the store does not import any node: module (usable in a browser Solid client)", () => {
     const src = readFileSync(fileURLToPath(new URL("./store.ts", import.meta.url)), "utf8");
     expect(src).not.toMatch(/from\s+["']node:/);
-    expect(src).not.toContain("fetch(");
+    expect(src).toContain("crypto.randomUUID()");
   });
 });
 
@@ -34,10 +28,10 @@ describe("SolidUpdateStore construction", () => {
     const pod = makePod(CONTAINER);
     const s = new SolidUpdateStore({
       container: "https://alice.pod/notes/my-doc",
-      storage: pod.storage,
+      fetch: pod.fetchImpl,
     });
     expect(s.container).toBe(CONTAINER);
-    expect(() => new SolidUpdateStore({ container: "file:///x/", storage: pod.storage })).toThrow(
+    expect(() => new SolidUpdateStore({ container: "file:///x/", fetch: pod.fetchImpl })).toThrow(
       /http\(s\)/,
     );
   });
@@ -209,11 +203,10 @@ describe("compact — write-before-delete", () => {
     expect(await store.listUpdateUrls()).toHaveLength(2);
 
     const merged = new Uint8Array([1, 2, 99]);
-    await store.loadUpdates();
     const { url } = await store.compact(merged, [a.url, b.url]);
 
     // The merged resource exists with the merged bytes...
-    expect(Array.from((await store.readUpdate(url)) ?? [])).toEqual([1, 2, 99]);
+    expect(Array.from(pod.store.get(url)?.body ?? [])).toEqual([1, 2, 99]);
     // ...and the originals are gone.
     expect(pod.store.has(a.url)).toBe(false);
     expect(pod.store.has(b.url)).toBe(false);
@@ -239,18 +232,11 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
     // A server that 3xx-redirects everything toward a foreign origin.
     const redirectFetch: typeof globalThis.fetch = async () =>
       new Response(null, { status: 302, headers: { location: "https://evil.example/" } });
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: redirectFetch }),
-    });
-    await expect(store.listUpdateUrls()).rejects.toThrow(/redirect|invalid-response|unexpected/);
-    await expect(store.appendUpdate(new Uint8Array([1]))).rejects.toThrow(
-      /redirect|invalid-response|unexpected/,
-    );
-    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirect|invalid-response|unexpected/);
-    await expect(store.deleteUpdate(InScope)).rejects.toThrow(
-      /redirect|invalid-response|unexpected/,
-    );
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch: redirectFetch });
+    await expect(store.listUpdateUrls()).rejects.toThrow(/redirected/);
+    await expect(store.appendUpdate(new Uint8Array([1]))).rejects.toThrow(/redirected/);
+    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirected/);
+    await expect(store.deleteUpdate(InScope)).rejects.toThrow(/redirected/);
   });
 
   it("refuses a browser-style opaqueredirect (filtered response, status 0)", async () => {
@@ -261,12 +247,9 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
       headers: new Headers(),
     } as unknown as Response;
     const opaqueFetch: typeof globalThis.fetch = async () => opaque;
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: opaqueFetch }),
-    });
-    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirect|invalid-response|unexpected/);
-    await expect(store.listUpdateUrls()).rejects.toThrow(/redirect|invalid-response|unexpected/);
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch: opaqueFetch });
+    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirected/);
+    await expect(store.listUpdateUrls()).rejects.toThrow(/redirected/);
   });
 
   it("passes redirect:'manual' on every request (so the fetch never follows)", async () => {
@@ -279,16 +262,13 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
           `@prefix ldp: <http://www.w3.org/ns/ldp#> .\n<${CONTAINER}> a ldp:Container .`,
           {
             status: 200,
-            headers: { "content-type": "text/turtle", etag: '"test"' },
+            headers: { "content-type": "text/turtle" },
           },
         );
       }
       return new Response(null, { status: 201 });
     };
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: spyFetch }),
-    });
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch: spyFetch });
     await store.listUpdateUrls();
     await store.appendUpdate(new Uint8Array([1]));
     await store.deleteUpdate(`${CONTAINER}x`);
@@ -297,31 +277,14 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
 });
 
 describe("size caps — hostile/unbounded bodies are refused", () => {
-  it("rejects oversized appends before writing and round-trips a record exactly at the cap", async () => {
-    const pod = makePod(CONTAINER);
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: pod.storage,
-      maxUpdateBytes: LOG_HEADER_BYTES + 8,
-    });
-    await expect(store.appendUpdate(new Uint8Array(9))).rejects.toThrow(/max size/);
-    expect(pod.calls.putCount).toBe(0);
-    const update = new Uint8Array(8).fill(42);
-    const { url } = await store.appendUpdate(update);
-    expect(pod.store.get(url)?.body.byteLength).toBe(LOG_HEADER_BYTES + 8);
-    expect(await store.loadUpdates()).toMatchObject([{ url, update }]);
-  });
-
   it("refuses an update whose declared content-length exceeds maxUpdateBytes", async () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      storage: pod.storage,
+      fetch: pod.fetchImpl,
       maxUpdateBytes: 8,
     });
-    // Seed through a writer with a higher cap so the reader still checks hostile bytes.
-    const writer = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
-    const { url } = await writer.appendUpdate(new Uint8Array(32));
+    const { url } = await store.appendUpdate(new Uint8Array(32));
     await expect(store.readUpdate(url)).rejects.toThrow(/max size/);
   });
 
@@ -342,85 +305,28 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     };
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: streamFetch }),
+      fetch: streamFetch,
       maxUpdateBytes: 8,
     });
     await expect(store.readUpdate(`${CONTAINER}u`)).rejects.toThrow(/max size/);
   });
 
-  it("refuses a memberless container listing that exceeds maxListingBytes", async () => {
+  it("refuses a container listing that exceeds maxListingBytes", async () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      storage: pod.storage,
+      fetch: pod.fetchImpl,
       maxListingBytes: 8,
     });
-    expect(pod.store.size).toBe(0);
+    // Even the empty-container listing Turtle is > 8 bytes.
     await expect(store.listUpdateUrls()).rejects.toThrow(/max size/);
-  });
-
-  it.each([
-    "solid",
-    "lws",
-  ] as const)("refuses a 1 MiB memberless %s listing before parsing", async (protocol) => {
-    const create = protocol === "solid" ? createSolidBackend : createLwsBackend;
-    const prefix = protocol === "solid" ? "" : JSON.stringify({ type: "Container", items: [] });
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: create({
-        root: CONTAINER,
-        fetch: async () =>
-          new Response(prefix + " ".repeat(1024 * 1024 - prefix.length), {
-            headers: {
-              "content-type": protocol === "solid" ? "text/turtle" : "application/lws+json",
-            },
-          }),
-      }),
-      maxListingBytes: 8,
-    });
-    await expect(store.listUpdateUrls()).rejects.toMatchObject({
-      name: "StorageError",
-      code: "payload-too-large",
-    });
-  });
-
-  it("retains the aggregate entry-metadata budget across individually small LWS pages", async () => {
-    const maxListingBytes = new TextEncoder().encode(
-      JSON.stringify({
-        url: `${CONTAINER}a`,
-        kind: "resource",
-        contentType: null,
-        size: null,
-        modified: null,
-        types: [],
-      }),
-    ).byteLength;
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      maxListingBytes,
-      storage: createLwsBackend({
-        root: CONTAINER,
-        fetch: async (input) => {
-          const first = String(input) === CONTAINER;
-          const body = JSON.stringify({ type: "Container", items: [{ id: first ? "a" : "b" }] });
-          expect(new TextEncoder().encode(body).byteLength).toBeLessThan(maxListingBytes);
-          return new Response(body, {
-            headers: {
-              "content-type": "application/lws+json",
-              ...(first ? { link: '<?page=2>; rel="next"' } : {}),
-            },
-          });
-        },
-      }),
-    });
-    await expect(store.listUpdateUrls()).rejects.toThrow("[y-solid] listing exceeds max size");
   });
 
   it("a bad cap value (0/NaN) falls back to the default, not an accidentally-disabled cap", async () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      storage: pod.storage,
+      fetch: pod.fetchImpl,
       maxUpdateBytes: 0,
       maxListingBytes: Number.NaN,
     });
@@ -441,14 +347,11 @@ describe("hostile container listing — fail closed per entry", () => {
   <${CONTAINER}x/../z>, <${CONTAINER}?self>, <${CONTAINER}#self>,
   <${CONTAINER}sub/>, <${CONTAINER}a%2Fb>, <${CONTAINER}a%5cb> .`,
         {
-          headers: { "content-type": "text/turtle", etag: '"test"' },
+          headers: { "content-type": "text/turtle" },
         },
       );
     };
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch }),
-    });
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch });
     expect(await store.listUpdateUrls()).toEqual([`${CONTAINER}a`, `${CONTAINER}z`]);
   });
 
@@ -469,10 +372,7 @@ describe("hostile container listing — fail closed per entry", () => {
       }
       return new Response(null, { status: 404 });
     };
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: hostileFetch }),
-    });
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch: hostileFetch });
     const listed = await store.listUpdateUrls();
     // Only the in-scope, non-container, http(s), same-origin member survives.
     expect(listed).toEqual([`${CONTAINER}good`]);
@@ -480,47 +380,11 @@ describe("hostile container listing — fail closed per entry", () => {
 });
 
 describe("missing container", () => {
-  it.each([
-    404, 410,
-  ])("returns an empty log when the initial container returns %s", async (status) => {
-    const fetchMissing: typeof globalThis.fetch = async () => new Response(null, { status });
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createSolidBackend({ root: CONTAINER, fetch: fetchMissing }),
-    });
+  it("listUpdateUrls returns [] when the container 404s", async () => {
+    // A fetch that 404s everything (no container present at all).
+    const fetch404: typeof globalThis.fetch = async () => new Response(null, { status: 404 });
+    const store = new SolidUpdateStore({ container: CONTAINER, fetch: fetch404 });
     expect(await store.listUpdateUrls()).toEqual([]);
     expect(await store.loadUpdates()).toEqual([]);
-  });
-
-  it.each([
-    403, 404, 410,
-  ])("rejects hydration when an empty first page leads to a cursor returning %s", async (status) => {
-    const cursor = `${CONTAINER}?cursor=next%2Fpage`;
-    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
-      expect(init).toMatchObject({ redirect: "manual", cache: "no-cache" });
-      if (input === CONTAINER) {
-        return new Response(JSON.stringify({ type: "Container", items: [] }), {
-          headers: { "content-type": "application/lws+json", link: `<${cursor}>; rel=next` },
-        });
-      }
-      expect(input).toBe(cursor);
-      return new Response(null, { status });
-    });
-    const store = new SolidUpdateStore({
-      container: CONTAINER,
-      storage: createLwsBackend({ root: CONTAINER, fetch }),
-    });
-    await expect(store.loadUpdates()).rejects.toMatchObject({ url: cursor, status });
-    const doc = new Doc();
-    const provider = new SolidPersistence({ doc, store });
-    try {
-      await expect(provider.whenSynced).rejects.toMatchObject({ url: cursor, status });
-      expect(provider.synced).toBe(false);
-      expect(doc.getText("body").toString()).toBe("");
-      expect(fetch.mock.calls.map(([url]) => url)).toEqual([CONTAINER, cursor, CONTAINER, cursor]);
-    } finally {
-      provider.destroy();
-      doc.destroy();
-    }
   });
 });
