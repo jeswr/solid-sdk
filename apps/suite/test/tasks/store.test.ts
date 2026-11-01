@@ -468,7 +468,7 @@ describe("project discovery and first use", () => {
       [url, '"3"'],
     ]);
     expect(inbox.url).toBe(url);
-    expect(node(inbox.tracker.id, inbox.dataset).text(initializationState)).toBeUndefined();
+    expect(node(inbox.tracker.id, inbox.dataset).text(initializationState)).toBe("ready");
     expect(
       (await restarted.createTask(inbox, { title: "Recovered", state: "open" })).task.title,
     ).toBe("Recovered");
@@ -514,7 +514,8 @@ describe("project discovery and first use", () => {
     const dataset = new Store([...inbox.dataset]);
     const marker = node(inbox.tracker.id, dataset);
     marker.setText(initializationState, "cleanup");
-    if (field !== "owner") marker.setText(initializationOwner, "cleanup-owner");
+    if (field === "owner") marker.clear(initializationOwner);
+    else marker.setText(initializationOwner, "cleanup-owner");
     const target = field === "resource" ? `${storage}unrelated/` : container;
     marker.iris(cleanupResources).add(target);
     if (field !== "validator") node(target, dataset).setText(cleanupEtag, '"1"');
@@ -546,7 +547,7 @@ describe("project discovery and first use", () => {
     };
     const recovered = await tasks.bootstrapInbox();
     expect(recovered.tracker.title).toBe("Inbox");
-    expect(node(recovered.tracker.id, recovered.dataset).text(initializationState)).toBeUndefined();
+    expect(node(recovered.tracker.id, recovered.dataset).text(initializationState)).toBe("ready");
     expect(
       pod.requests.some((request) => request.method === "DELETE" && request.url === container),
     ).toBe(true);
@@ -986,11 +987,12 @@ describe.each(["project", "task"] as const)("%s listing errors", (kind) => {
   });
   it("propagates unexpected resource read errors", async () => {
     const error = new Error("Unexpected read failure");
-    vi.spyOn(RdfIO.prototype, "list").mockResolvedValue([`${projects}broken.ttl`]);
+    const container = kind === "project" ? projects : `${projects}home/`;
+    vi.spyOn(RdfIO.prototype, "list").mockResolvedValue([`${container}broken.ttl`]);
     vi.spyOn(RdfIO.prototype, "read").mockRejectedValue(error);
     const tasks = store(new Pod(), { typeIndex: false });
     await expect(
-      kind === "project" ? tasks.listProjects() : tasks.listTasks(`${projects}home/`),
+      kind === "project" ? tasks.listProjects() : tasks.listTasks(container),
     ).rejects.toBe(error);
   });
 });
@@ -1068,7 +1070,7 @@ describe("task conditional CRUD", () => {
       }
     }
   });
-  it("uses final response identities for redirected tasks, projects and container listings", async () => {
+  it("rejects redirected tasks, projects and container listings before adopting their identities", async () => {
     const pod = new Pod();
     const tasks = store(pod, { typeIndex: false });
     const home = `${storage}canonical/home.ttl`;
@@ -1116,35 +1118,15 @@ describe("task conditional CRUD", () => {
       return response;
     };
     const io = new RdfIO(pod.fetch);
-    expect((await io.read(projectAlias)).url).toBe(home);
-    await expect(io.container(containerAlias)).resolves.toBeUndefined();
-    expect(await io.list(containerAlias)).toEqual([taskAlias]);
-    const project = await tasks.readProject(projectAlias);
-    expect(project.url).toBe(home);
-    expect(project.tracker.id).toBe(`${home}#this`);
-    expect((await tasks.listProjects()).map((item) => item.tracker.id)).toEqual([`${home}#this`]);
-    const task = await tasks.readTask(taskAlias);
-    expect(task.url).toBe(taskUrl);
-    expect(task.task.id).toBe(`${taskUrl}#it`);
-    expect((await tasks.listTasks(containerAlias)).map((item) => item.task.id)).toEqual([
-      `${taskUrl}#it`,
-    ]);
-    const updated = await tasks.updateTask(task, (item) => {
-      item.title = "Updated";
-    });
-    expect(updated.url).toBe(taskUrl);
-    expect((await tasks.readTask(taskUrl)).task.title).toBe("Updated");
-    const updatedProject = await tasks.updateProject(project, (item) => {
-      item.title = "Renamed";
-    });
-    expect(updatedProject.url).toBe(home);
-    await tasks.deleteTask(updated);
-    expect(
-      pod
-        .mutations()
-        .filter((request) => request.method === "DELETE")
-        .map((request) => request.url),
-    ).toEqual([taskUrl]);
+    const message = "The RDF response URL must match the requested resource.";
+    await expect(io.read(projectAlias)).rejects.toThrow(message);
+    await expect(io.container(containerAlias)).rejects.toThrow(message);
+    await expect(io.list(containerAlias)).rejects.toThrow(message);
+    await expect(tasks.readProject(projectAlias)).rejects.toThrow(message);
+    await expect(tasks.listProjects()).rejects.toThrow(message);
+    await expect(tasks.readTask(taskAlias)).rejects.toThrow(message);
+    await expect(tasks.listTasks(containerAlias)).rejects.toThrow(message);
+    expect(pod.mutations()).toEqual([]);
   });
   it("clears all-day markers on due-date edits and rejects conflicting persisted dates", async () => {
     const pod = new Pod();
@@ -1827,5 +1809,185 @@ describe("transport failures and typed classification", () => {
     await expect(serialize(new Store())).rejects.toThrow("Serializer failed");
     const dataset = await parse(storage, `<${storage}> <${NS.DCT}title> <${storage}name>.`);
     expect(node(storage, dataset).text(`${NS.DCT}title`)).toBeUndefined();
+  });
+});
+
+describe("FRAME project and section operations", () => {
+  it("renames and reorders section classes without changing their identity", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let project = await tasks.createProject("Home");
+    project = await tasks.updateProject(project, (tracker) =>
+      tracker.defineCategory("Section", "Doing", 1),
+    );
+    const id = project.tracker.sections[0]?.id as string;
+    project = await tasks.updateProject(project, (tracker) =>
+      tracker.updateSection(id, { name: "In progress", position: 2 }),
+    );
+    expect(project.tracker.sections[0]).toMatchObject({ id, name: "In progress", position: 2 });
+    expect(() => project.tracker.updateSection("missing", {})).toThrow("Unknown section");
+    expect(() => project.tracker.removeSection("missing")).toThrow("Unknown section");
+    expect(() => project.tracker.updateSection(id, { name: " " })).toThrow("title");
+    expect(() => project.tracker.updateSection(id, { position: Infinity })).toThrow("position");
+    project.tracker.updateSection(id, {});
+    project.tracker.updateSection(id, { position: 3 });
+    project.tracker.updateSection(id, { name: "Doing again" });
+    await expect(
+      tasks.updateProject({ ...project, etag: '"stale"' }, (tracker) =>
+        tracker.updateSection(id, { name: "Stale" }),
+      ),
+    ).rejects.toMatchObject({ status: 412 });
+  });
+  it("removes a section and its task references while retaining labels and tasks", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let project = await tasks.createProject("Home");
+    project = await tasks.updateProject(project, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+      tracker.defineCategory("Label", "Bills");
+    });
+    const id = project.tracker.sections[0]?.id as string;
+    const label = project.tracker.labels[0]?.id as string;
+    const task = await tasks.createTask(project, {
+      title: "Pay rent",
+      state: "open",
+      categoryTypes: [id, label],
+    });
+    const another = store(pod, { uuid: () => "unsectioned" });
+    await another.createTask(project, { title: "Unsectioned", state: "open" });
+    await expect(tasks.deleteSection(project, "unknown")).rejects.toThrow("Unknown section");
+    project = await tasks.deleteSection(project, id);
+    expect(project.tracker.sections).toEqual([]);
+    const current = await tasks.readTask(task.url);
+    expect(current.task.types.has(id)).toBe(false);
+    expect(current.task.types.has(label)).toBe(true);
+    expect(current.task.title).toBe("Pay rent");
+    const writes = pod
+      .mutations()
+      .filter((request) => request.method === "PUT" && request.headers.has("If-Match"));
+    expect(writes.every((request) => request.headers.get("If-Match") !== "*")).toBe(true);
+  });
+  it("deletes a project and its stateStore with conditional deletes", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const project = await tasks.createProject("Home");
+    const task = await tasks.createTask(project, { title: "Pay rent", state: "open" });
+    await tasks.deleteProject(project);
+    expect(pod.files.has(project.url)).toBe(false);
+    expect(pod.files.has(project.tracker.stateStore as string)).toBe(false);
+    expect(pod.files.has(task.url)).toBe(false);
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.method === "DELETE")
+        .every((request) => request.headers.has("If-Match")),
+    ).toBe(true);
+    expect(await tasks.listProjects()).toEqual([]);
+  });
+  it("stops a project delete on a child conflict", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const project = await tasks.createProject("Home");
+    const task = await tasks.createTask(project, { title: "Pay rent", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "DELETE" && request.url === task.url
+        ? new Response(null, { status: 412 })
+        : undefined;
+    await expect(tasks.deleteProject(project)).rejects.toMatchObject({ status: 412 });
+    expect(pod.files.has(project.url)).toBe(true);
+  });
+});
+
+describe("detail project moves", () => {
+  it("preserves fields and uses conditional create/delete with fresh UUID resource", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    let source = await tasks.createProject("Source");
+    let target = await tasks.createProject("Target");
+    source = await tasks.updateProject(source, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+      tracker.defineCategory("Label", "drop");
+    });
+    target = await tasks.updateProject(target, (tracker) => {
+      tracker.defineCategory("Section", "Doing");
+    });
+    const task = await tasks.createTask(
+      source,
+      {
+        title: "Water plants",
+        description: "https://example.org/guide",
+        state: "closed",
+        endedAt: now,
+        dueDate: now,
+        creator: webId,
+        priority: "high",
+        recurrence: { frequency: "DAILY" },
+        reminders: [{ offset: "-PT1H" }],
+        categoryTypes: [...source.tracker.sections, ...source.tracker.labels].map(
+          (entry) => entry.id,
+        ),
+      },
+      "original",
+    );
+    const before = pod.mutations().length;
+    const moved = await tasks.moveTaskToProject(task, source, target);
+    expect(moved.url).toBe(`${target.tracker.stateStore}task-1.ttl`);
+    expect(moved.task.title).toBe("Water plants");
+    expect(moved.task.description).toBe("https://example.org/guide");
+    expect(moved.task.priority).toBe("high");
+    expect(moved.task.creator).toBe(webId);
+    expect(moved.task.created).toEqual(task.task.created);
+    expect(moved.task.endedAt).toEqual(now);
+    expect(moved.task.recurrence?.frequency).toBe("DAILY");
+    expect(moved.task.reminders[0]?.offset).toBe("-PT1H");
+    expect(moved.task.types.has(target.tracker.sections[0]?.id as string)).toBe(true);
+    expect([...moved.task.types]).not.toContain(source.tracker.labels[0]?.id);
+    expect(pod.files.has(task.url)).toBe(false);
+    const requests = pod.mutations().slice(before);
+    expect(requests.map((request) => request.method)).toEqual(["PUT", "DELETE"]);
+    expect(requests[0]?.headers.get("If-None-Match")).toBe("*");
+    expect(requests[1]?.headers.get("If-Match")).toBe(task.etag);
+    const count = pod.mutations().length;
+    expect(await tasks.moveTaskToProject(moved, target, target)).toBe(moved);
+    expect(pod.mutations()).toHaveLength(count);
+  });
+  it("does not delete the source when creation fails, and compensates on source conflicts", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const source = await tasks.createProject("Source");
+    const target = await tasks.createProject("Target");
+    const task = await tasks.createTask(source, { title: "Keep", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url.startsWith(target.tracker.stateStore as string)
+        ? new Response(null, { status: 403 })
+        : undefined;
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(pod.files.has(task.url)).toBe(true);
+    pod.intercept = undefined;
+    const updated = await tasks.updateTask(task, (value) => {
+      value.title = "Remote";
+    });
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toMatchObject({
+      status: 412,
+    });
+    expect(pod.files.has(`${target.tracker.stateStore}task-1.ttl`)).toBe(false);
+    expect((await tasks.readTask(task.url)).task.title).toBe("Remote");
+    expect(updated.etag).not.toBe(task.etag);
+  });
+  it("reports incomplete compensation without overwriting either copy", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const source = await tasks.createProject("Source");
+    const target = await tasks.createProject("Target");
+    const task = await tasks.createTask(source, { title: "Keep", state: "open" });
+    pod.intercept = (request) =>
+      request.method === "DELETE" ? new Response(null, { status: 403 }) : undefined;
+    await expect(tasks.moveTaskToProject(task, source, target)).rejects.toBeInstanceOf(
+      AggregateError,
+    );
+    expect(pod.files.has(task.url)).toBe(true);
+    expect(pod.files.has(`${target.tracker.stateStore}task-1.ttl`)).toBe(true);
   });
 });

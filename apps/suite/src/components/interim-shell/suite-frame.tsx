@@ -18,7 +18,9 @@ import {
   HeartPulse,
   Images,
   Menu,
+  Music,
   Search,
+  SquareCheckBig,
   StickyNote,
   Users,
   Wallet,
@@ -35,6 +37,8 @@ export type SuiteAppId =
   | "photos"
   | "money"
   | "health"
+  | "tasks"
+  | "music"
   | "notes";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
@@ -46,6 +50,8 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
+  { id: "music", label: "Music", href: "/music", icon: Music },
 ];
 
 export interface SuiteFrameProps {
