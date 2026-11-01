@@ -26,6 +26,7 @@ test("memory LWS change -> signed webhook -> HTTP relay -> native EventSource ->
     verificationMethod: [
       { id: keyid, publicKeyJwk: v.jwk, type: "JsonWebKey", controller: description },
     ],
+    authentication: [keyid],
     "@context": "https://www.w3.org/ns/lws/v1",
     service: [
       { type: "StorageRoot", serviceEndpoint: root },

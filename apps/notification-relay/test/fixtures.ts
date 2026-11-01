@@ -37,6 +37,7 @@ export async function vector(alg = "ed25519") {
     id: storage,
     type: "Storage",
     verificationMethod: [{ id: keyid, publicKeyJwk: jwk }],
+    authentication: [keyid],
   };
   function signed(
     json: unknown = event,

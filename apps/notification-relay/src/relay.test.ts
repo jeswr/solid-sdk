@@ -112,6 +112,14 @@ test("rejects unsigned/tampered/foreign-storage notifications and suppresses sig
   expect((await f.deliver()).status).toBe(401);
 });
 
+test("rejects a valid signature when its key lacks an authentication relationship", async () => {
+  const f = await setup();
+  f.fetch.mockResolvedValueOnce(Response.json({ ...f.document, authentication: [] }));
+  const response = await f.deliver();
+  expect(response.status).toBe(401);
+  expect(await response.text()).toBe("");
+});
+
 test("replays Last-Event-ID exclusively and expires events at exactly fifteen minutes", async () => {
   const f = await setup();
   await f.deliver();

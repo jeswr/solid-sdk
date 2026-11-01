@@ -276,6 +276,54 @@ test("requires the matching unambiguous verificationMethod in a bound storage do
   }
 });
 
+test("requires authentication to reference the selected signing key", async () => {
+  const f = await vector();
+  for (const authentication of [
+    undefined,
+    null,
+    keyid,
+    { id: keyid },
+    [],
+    [null, 42, {}, { id: keyid }],
+    ["#other"],
+    ["https://foreign.example/description#key"],
+    [`${storage}#other`],
+    ["key"],
+  ]) {
+    const document = {
+      ...f.document,
+      verificationMethod: [...f.document.verificationMethod, { id: "#other", publicKeyJwk: f.jwk }],
+      authentication,
+      assertionMethod: [keyid],
+    };
+    const verify = createWebhookVerifier({
+      fetch: async () => Response.json(document),
+      now: () => epoch,
+    });
+    await expect(verify(f.signed())).rejects.toThrow("Unauthenticated verification method");
+  }
+});
+
+test("accepts full and fragment authentication references for either verificationMethod id form", async () => {
+  const f = await vector();
+  for (const id of [keyid, "#key"]) {
+    for (const reference of [keyid, "#key"]) {
+      const document = {
+        ...f.document,
+        verificationMethod: [{ id, publicKeyJwk: f.jwk }],
+        authentication: ["#other", reference],
+      };
+      const verify = createWebhookVerifier({
+        fetch: async () => Response.json(document),
+        now: () => epoch,
+      });
+      await expect(verify(f.signed())).resolves.toMatchObject({
+        fingerprint: expect.any(String),
+      });
+    }
+  }
+});
+
 test("refuses private/symmetric keys, forbidden key usages, unknown algorithms and key confusion", async () => {
   const f = await vector();
   for (const jwk of [
@@ -370,6 +418,7 @@ test("bounds the one-hour storage description cache", async () => {
       ...f.document,
       id,
       verificationMethod: [{ id: `${id}#key`, publicKeyJwk: f.jwk }],
+      authentication: [`${id}#key`],
     });
   });
   const verify = createWebhookVerifier({ fetch, now: () => epoch });

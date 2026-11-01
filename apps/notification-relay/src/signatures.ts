@@ -150,6 +150,12 @@ export function createWebhookVerifier(options: {
       .filter((method) => method.id === keyid || method.id === fragment);
     if (method.length !== 1) throw new Error("Unknown verification method");
     const selected = method[0] as Record<string, unknown>;
+    const authentication = cached.document.authentication;
+    if (
+      !Array.isArray(authentication) ||
+      !authentication.some((id) => id === keyid || id === fragment)
+    )
+      throw new Error("Unauthenticated verification method");
     if (
       selected.revoked !== undefined ||
       (selected.controller !== undefined && selected.controller !== storage) ||
