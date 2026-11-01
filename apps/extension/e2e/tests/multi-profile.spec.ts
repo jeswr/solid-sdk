@@ -129,7 +129,7 @@ test('two origins keep their chosen profiles, an ungranted origin stays native, 
         Object.getOwnPropertyNames((window as unknown as SolidPage).solid).sort(),
       ),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
   expect(await siteC.evaluate(() => Function.prototype.toString.call(window.fetch))).toMatch(
     /\{\s*\[native code\]\s*\}/,
   );
@@ -175,7 +175,7 @@ test('two origins keep their chosen profiles, an ungranted origin stays native, 
         Object.getOwnPropertyNames((window as unknown as SolidPage).solid).sort(),
       ),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
   const surviving = await readNote(siteB, WORK_NOTE, true);
   expect(surviving.status).toBe(200);
   expect(surviving.body).toContain('Morgan Chen work note');
@@ -188,5 +188,5 @@ test('two origins keep their chosen profiles, an ungranted origin stays native, 
     await siteC.evaluate(() =>
       Object.getOwnPropertyNames((window as unknown as SolidPage).solid).sort(),
     ),
-  ).toEqual(['login', 'requestAccess']);
+  ).toEqual(['disconnect', 'login', 'requestAccess']);
 });

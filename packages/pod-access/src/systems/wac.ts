@@ -3,17 +3,18 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { AclResource } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { ACL, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
+import { ACL, copyDataset, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 
 /** Read WAC rules for one resource; target reads refuse unknown semantic constructs. */
 export function readWac(
-  dataset: DatasetCore,
+  input: DatasetCore,
   resource: string,
   url: string,
   implementation?: "css" | "ess" | "nss",
   target = false,
 ): EffectivePolicy {
+  const dataset = copyDataset(input);
   const authorizations = [...new AclResource(dataset, DataFactory).authorizations];
   if (target) {
     const known = new Set([
