@@ -2,6 +2,8 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 # Mobile native WebView fixture harness (MOB-07a / MOB-07b)
 
+iOS secure-store accepted residual (S4/S9): a commit after the final generation check but before Capacitor's queued JavaScript delivery may expose an already unlocked value to the allowed same-origin replacement document's `Capacitor.fromNative` wrapper; S9 cancels prompts and does not withdraw unlocked values.
+
 ## Android emulator
 
 This runs DESIGN D2/D3/D7/D8 checks against the actual debug WebView without depending on

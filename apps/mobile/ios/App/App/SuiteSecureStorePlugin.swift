@@ -19,6 +19,8 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     ]
     private let queue = DispatchQueue(label: "org.jeswr.suite.securestore")
     private let cancellation = SecureStoreCancellation()
+    private let admissionLock = NSLock()
+    private var admittedReads = [String: [SecureStoreCancellation.Ticket]]()
     private var loaded: Result<SecureStore, Error>?
 
     override public func load() {
@@ -26,22 +28,51 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
         let authenticator = SecureStoreAuthenticator { [weak self] in
             self?.bridge?.webView?.window?.windowScene?.activationState == .foregroundActive
         }
-        queue.async {
-            self.loaded = Result {
-                guard let origin = origin else { throw SecureStoreFailure.unavailable }
-                let namespace = SecureStoreValidation.namespace(origin)
-                let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                          appropriateFor: nil, create: true)
-                return try SecureStore(namespace: namespace, queue: self.queue,
-                                       installation: SecureStoreInstallation(support: support, keys: SecureStoreKeychainWiper()),
-                                       writer: { try SecureStoreFileWriter(support: support, namespace: namespace) },
-                                       keys: SecureStoreKeyProvider(namespace: namespace), authenticator: authenticator,
-                                       cancellation: self.cancellation)
-            }
+        loadStore { queue, cancellation in
+            guard let origin = origin else { throw SecureStoreFailure.unavailable }
+            let namespace = SecureStoreValidation.namespace(origin)
+            let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                      appropriateFor: nil, create: true)
+            return try SecureStore(namespace: namespace, queue: queue,
+                                   installation: SecureStoreInstallation(support: support, keys: SecureStoreKeychainWiper()),
+                                   writer: { try SecureStoreFileWriter(support: support, namespace: namespace) },
+                                   keys: SecureStoreKeyProvider(namespace: namespace), authenticator: authenticator,
+                                   cancellation: cancellation)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(backgrounded), name: UIScene.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(backgrounded), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(backgrounded), name: UIScene.didDisconnectNotification, object: nil)
+    }
+
+    /// Shares the serial store-loading path with native tests using injected keys/authentication.
+    func loadStore(_ create: @escaping (DispatchQueue, SecureStoreCancellation) throws -> SecureStore) {
+        queue.async { self.loaded = Result { try create(self.queue, self.cancellation) } }
+    }
+
+    /// Called only by BridgeOriginGuard after frame, origin and registered-plugin checks.
+    func admitRead(_ body: Any) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let message = body as? [String: Any], message["type"] as? String == "message",
+              message["pluginId"] as? String == jsName, message["methodName"] as? String == "get",
+              let options = message["options"] as? [String: Any],
+              let key = try? SecureStoreValidation.key(options["key"]) else { return }
+        // Match Capacitor's callbackId default. Invalid keys fail validation without taking a ticket.
+        let callbackId = message["callbackId"] as? String ?? ""
+        admissionLock.lock()
+        defer { admissionLock.unlock() }
+        admittedReads[callbackId, default: []].append(cancellation.ticket(key: key))
+    }
+
+    private func takeReadTicket(callbackId: String) -> SecureStoreCancellation.Ticket? {
+        admissionLock.lock()
+        defer { admissionLock.unlock() }
+        guard var tickets = admittedReads[callbackId], !tickets.isEmpty else { return nil }
+        // Capacitor invokes plugins on its serial bridge queue, in admission order. Keep a FIFO
+        // per callbackId, including stale entries across commits: a new document may reuse an id,
+        // but must never overwrite or lend its ticket to the outgoing document's queued call.
+        let ticket = tickets.removeFirst()
+        admittedReads[callbackId] = tickets.isEmpty ? nil : tickets
+        return ticket
     }
 
     deinit {
@@ -90,19 +121,23 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
         do { key = try SecureStoreValidation.key(call.options["key"]) }
         catch { Self.reject(call, error); return }
         let cancellation = self.cancellation
-        let ticket = cancellation.ticket(key: key)
+        guard let ticket = takeReadTicket(callbackId: call.callbackId), ticket.key == key else {
+            Self.reject(call, SecureStoreFailure.cancelled)
+            return
+        }
+        do { try cancellation.check(ticket) }
+        catch { Self.reject(call, error); return }
         queue.async {
             do {
                 try self.store().get(key: key, ticket: ticket) { result in
                     DispatchQueue.main.async {
                         // Recheck the ticket's document generation on the main thread, including
                         // commits after provisional loading or after decryption completed.
-                        // Capacitor's call.resolve queues one more main-thread hop before
-                        // evaluateJavaScript, which this plugin cannot reach. A
-                        // commit landing in that hop can only be a same-origin document (the navigation
-                        // policy blocks every other origin), and Capacitor's bridge drops a result whose
-                        // callback id that document never issued. S9 cancels prompts; it does not promise
-                        // to withdraw a value the user already unlocked.
+                        // Accepted residual: Capacitor's call.resolve queues another main-thread hop.
+                        // A commit after this check can expose the unlocked plaintext to a replacement
+                        // document's Capacitor.fromNative wrapper before unknown callback ids are dropped.
+                        // Navigation and bridge guards restrict both documents to the same allowed
+                        // origin/principal (S4). S9 cancels prompts, but does not withdraw an unlocked value.
                         cancellation.deliver(ticket, result) { result in
                             switch result {
                             case .success(let read): call.resolve(["value": read.value.map { $0 as Any } ?? NSNull(), "version": read.version])

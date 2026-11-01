@@ -32,7 +32,9 @@ class MainViewController: CAPBridgeViewController {
         let handler = bridge.webViewDelegationHandler
         let controller = handler.contentController
         controller.removeScriptMessageHandler(forName: "bridge")
-        let wrapper = BridgeOriginGuard(inner: handler, allowed: allowed) { [weak bridge] name in
+        let wrapper = BridgeOriginGuard(inner: handler, allowed: allowed, admitted: { [weak secureStore] body in
+            secureStore?.admitRead(body)
+        }) { [weak bridge] name in
             bridge?.plugin(withName: name) != nil
         }
         controller.add(wrapper, name: "bridge")

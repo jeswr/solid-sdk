@@ -166,8 +166,11 @@ describe("iOS secure store guardrails", () => {
       "completion(isCurrent(ticket) ? result : .failure(SecureStoreFailure.cancelled))",
     );
     const get = plugin.slice(plugin.indexOf("@objc func get("), plugin.indexOf("@objc func set("));
-    expect(get).toContain("let ticket = cancellation.ticket(key: key)");
-    expect(get.indexOf("let ticket =")).toBeLessThan(get.indexOf("queue.async"));
+    expect(get).toContain(
+      "let ticket = takeReadTicket(callbackId: call.callbackId), ticket.key == key",
+    );
+    expect(get).not.toContain("cancellation.ticket(key:");
+    expect(get.indexOf("try cancellation.check(ticket)")).toBeLessThan(get.indexOf("queue.async"));
     expect(get).toContain("self.store().get(key: key, ticket: ticket)");
     expect(get).toMatch(
       /DispatchQueue\.main\.async \{\s+(?:\/\/[^\n]*\s+)*cancellation\.deliver\(ticket, result\)/,
@@ -175,6 +178,26 @@ describe("iOS secure store guardrails", () => {
     expect(get.indexOf("cancellation.deliver(ticket, result)")).toBeLessThan(
       get.indexOf("call.resolve("),
     );
+  });
+
+  test("captures read admission after origin checks and before Capacitor queues the invocation", () => {
+    const guard = read("App/BridgeOriginGuard.swift");
+    const receive = guard.slice(guard.indexOf("func userContentController("));
+    expect(receive.indexOf("Self.allows(")).toBeLessThan(receive.indexOf("admitted(message.body)"));
+    expect(receive.indexOf("Self.admits(")).toBeLessThan(receive.indexOf("admitted(message.body)"));
+    expect(receive.indexOf("admitted(message.body)")).toBeLessThan(
+      receive.indexOf("inner?.userContentController("),
+    );
+    expect(read("App/MainViewController.swift")).toContain("secureStore?.admitRead(body)");
+    const admit = plugin.slice(plugin.indexOf("func admitRead("), plugin.indexOf("deinit {"));
+    expect(admit).toContain("dispatchPrecondition(condition: .onQueue(.main))");
+    expect(admit).toContain('message["pluginId"] as? String == jsName');
+    expect(admit).toContain('message["methodName"] as? String == "get"');
+    expect(admit).toContain(
+      "admittedReads[callbackId, default: []].append(cancellation.ticket(key: key))",
+    );
+    expect(admit).toContain("let ticket = tickets.removeFirst()");
+    expect(admit).toContain("admittedReads[callbackId] = tickets.isEmpty ? nil : tickets");
   });
 
   test("localises the Face ID usage description and includes both strings resources", () => {

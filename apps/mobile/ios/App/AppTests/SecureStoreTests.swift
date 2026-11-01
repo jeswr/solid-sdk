@@ -5,6 +5,7 @@ import Foundation
 import CryptoKit
 import LocalAuthentication
 import Security
+import UIKit
 import XCTest
 import WebKit
 @testable import App
@@ -366,6 +367,251 @@ final class SecureStoreNavigationGuardTests: XCTestCase {
     }
 }
 
+/// Uses the production plugin's get/admission paths and serial loader with fake native services.
+private final class SecureStoreAdmissionTestPlugin: SuiteSecureStorePlugin {
+    let keys = FakeSecureStoreKeys()
+    let authenticator = FakeSecureStoreAuthenticator()
+    var ready: (() -> Void)?
+    var storageQueue: DispatchQueue?
+    var testStore: SecureStore?
+
+    override func load() {
+        loadStore { queue, cancellation in
+            let writer = FakeSecureStoreWriter()
+            let store = try SecureStore(namespace: String(repeating: "a", count: 64), queue: queue,
+                                        installation: FakeSecureStoreInstallation(), writer: { writer },
+                                        keys: self.keys, authenticator: self.authenticator, cancellation: cancellation)
+            self.storageQueue = queue
+            self.testStore = store
+            self.ready?()
+            return store
+        }
+    }
+}
+
+/// A real Capacitor bridge and WKScriptMessage channel, without network, Keychain or LA prompts.
+@MainActor
+private final class SecureStoreAdmissionBridge: NSObject, CAPBridgeDelegate, WKScriptMessageHandler {
+    let plugin = SecureStoreAdmissionTestPlugin()
+    let handler: SecureStoreTestNavigationHandler
+    let webView: WKWebView
+    var bridgedWebView: WKWebView? { return webView }
+    var bridgedViewController: UIViewController? { return nil }
+    private(set) var bridge: CapacitorBridge!
+    private var originGuard: BridgeOriginGuard!
+    private var navigationGuard: SecureStoreNavigationGuard!
+    var admitted: (() -> Void)?
+    var received: (([String: Any]) -> Void)?
+
+    init(ready: @escaping () -> Void) throws {
+        let webConfiguration = WKWebViewConfiguration()
+        let handler = SecureStoreTestNavigationHandler()
+        self.handler = handler
+        webConfiguration.userContentController = handler.contentController
+        webView = WKWebView(frame: .zero, configuration: webConfiguration)
+        super.init()
+        let descriptor = InstanceDescriptor()
+        descriptor.serverURL = "https://suite.example"
+        descriptor.handleApplicationNotifications = false
+        let configuration = InstanceConfiguration(with: descriptor, isDebug: false)
+        bridge = CapacitorBridge(with: configuration, delegate: self,
+                                 cordovaConfiguration: descriptor.cordovaConfiguration,
+                                 assetHandler: WebViewAssetHandler(router: CapacitorRouter()),
+                                 delegationHandler: handler, autoRegisterPlugins: false)
+        plugin.ready = ready
+        bridge.registerPluginInstance(plugin)
+        let allowed = try XCTUnwrap(SuiteOrigin(url: configuration.serverURL))
+        originGuard = BridgeOriginGuard(inner: handler, allowed: allowed, admitted: { [weak self] body in
+            self?.plugin.admitRead(body)
+            if let message = body as? [String: Any], message["pluginId"] as? String == "SuiteSecureStore",
+               message["methodName"] as? String == "get" { self?.admitted?() }
+        }) { [weak self] name in self?.bridge.plugin(withName: name) != nil }
+        handler.contentController.removeScriptMessageHandler(forName: "bridge")
+        handler.contentController.add(originGuard, name: "bridge")
+        handler.contentController.add(self, name: "secureStoreResult")
+        // Observe Capacitor's actual JavaScript delivery, including unknown callback ids.
+        handler.contentController.addUserScript(WKUserScript(source: """
+            window.Capacitor.fromNative = result => window.webkit.messageHandlers.secureStoreResult.postMessage(result);
+            """, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        navigationGuard = SecureStoreNavigationGuard(inner: handler) { [weak self] in
+            self?.plugin.navigationCommitted()
+        }
+        webView.navigationDelegate = navigationGuard
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let result = message.body as? [String: Any] else { XCTFail("Missing bridge result"); return }
+        received?(result)
+    }
+
+    func teardown() {
+        webView.stopLoading()
+        handler.contentController.removeScriptMessageHandler(forName: "secureStoreResult")
+        if let queue = plugin.storageQueue { queue.sync { plugin.testStore?.teardown() } }
+        handler.cleanUp()
+    }
+}
+
+@MainActor
+final class SecureStoreAdmissionTests: XCTestCase {
+    private func load(_ fixture: SecureStoreAdmissionBridge, path: String) throws {
+        let committed = expectation(description: "Main-frame commit forwarded")
+        let finished = expectation(description: "Document loaded")
+        fixture.handler.committed = { committed.fulfill() }
+        fixture.handler.finished = { finished.fulfill() }
+        let url = try XCTUnwrap(URL(string: "https://suite.example/\(path)"))
+        // WebKit supplies a real HTTPS document origin without issuing a network request.
+        fixture.webView.loadSimulatedRequest(URLRequest(url: url), responseHTML: "<!doctype html><p>fixture</p>")
+        wait(for: [committed, finished], timeout: 10)
+        fixture.handler.committed = nil
+        fixture.handler.finished = nil
+    }
+
+    private func submit(_ fixture: SecureStoreAdmissionBridge, key: String = "a", callbackId: String = "read") {
+        let admitted = expectation(description: "Origin guard admitted read before dispatch")
+        let submitted = expectation(description: "Read submitted from page")
+        fixture.admitted = {
+            XCTAssertTrue(Thread.isMainThread)
+            admitted.fulfill()
+        }
+        fixture.webView.evaluateJavaScript("""
+            window.webkit.messageHandlers.bridge.postMessage({type: 'message', pluginId: 'SuiteSecureStore',
+                methodName: 'get', callbackId: '\(callbackId)', options: {key: '\(key)'}});
+            """) { _, error in
+            XCTAssertNil(error)
+            submitted.fulfill()
+        }
+        wait(for: [admitted, submitted], timeout: 10)
+        fixture.admitted = nil
+    }
+
+    private func makeFixture() throws -> SecureStoreAdmissionBridge {
+        let ready = expectation(description: "Fake native store loaded")
+        let fixture = try SecureStoreAdmissionBridge { ready.fulfill() }
+        wait(for: [ready], timeout: 2)
+        let queue = try XCTUnwrap(fixture.plugin.storageQueue)
+        let store = try XCTUnwrap(fixture.plugin.testStore)
+        _ = try queue.sync { try store.set(key: "a", value: "token", userPresence: true, version: 0) }
+        try load(fixture, path: "first")
+        return fixture
+    }
+
+    func testReadAdmittedBeforeCommitButDispatchedAfterwardsCancelsWithoutPrompt() throws {
+        let fixture = try makeFixture()
+        defer { fixture.teardown() }
+        let delivered = expectation(description: "Queued read rejected through Capacitor to JavaScript")
+        fixture.received = { result in
+            XCTAssertEqual(result["callbackId"] as? String, "read")
+            XCTAssertEqual(result["success"] as? Bool, false)
+            XCTAssertEqual((result["error"] as? [String: Any])?["code"] as? String, "cancelled")
+            XCTAssertNil(result["data"])
+            delivered.fulfill()
+        }
+        // Hold Capacitor's actual queue, not the storage queue: get has not been invoked yet.
+        fixture.bridge.dispatchQueue.suspend()
+        do {
+            defer { fixture.bridge.dispatchQueue.resume() }
+            submit(fixture)
+            try load(fixture, path: "replacement")
+        }
+        wait(for: [delivered], timeout: 10)
+        let queue = try XCTUnwrap(fixture.plugin.storageQueue)
+        queue.sync {
+            XCTAssertTrue(fixture.plugin.authenticator.sessions.isEmpty)
+            XCTAssertEqual(fixture.plugin.keys.accesses, 0)
+            XCTAssertEqual(fixture.plugin.keys.unwraps, 0)
+        }
+    }
+
+    func testReusedCallbackIdCannotLendReplacementDocumentsTicketToOutgoingRead() throws {
+        let fixture = try makeFixture()
+        defer { fixture.teardown() }
+        let cancelled = expectation(description: "Outgoing read cancelled")
+        let resolved = expectation(description: "Replacement read resolves")
+        var results = 0
+        fixture.received = { result in
+            results += 1
+            XCTAssertEqual(result["callbackId"] as? String, "read")
+            if results == 1 {
+                XCTAssertEqual(result["success"] as? Bool, false)
+                XCTAssertEqual((result["error"] as? [String: Any])?["code"] as? String, "cancelled")
+                cancelled.fulfill()
+            } else {
+                XCTAssertEqual(result["success"] as? Bool, true)
+                XCTAssertEqual((result["data"] as? [String: Any])?["value"] as? String, "token")
+                resolved.fulfill()
+            }
+        }
+        fixture.bridge.dispatchQueue.suspend()
+        do {
+            defer { fixture.bridge.dispatchQueue.resume() }
+            submit(fixture)
+            try load(fixture, path: "replacement")
+            submit(fixture) // Same callback id and key, but a different admitted document generation.
+        }
+        fixture.bridge.dispatchQueue.sync {} // Both invocations have now reached the production plugin.
+        let queue = try XCTUnwrap(fixture.plugin.storageQueue)
+        queue.sync {
+            XCTAssertEqual(fixture.plugin.authenticator.sessions.count, 1)
+            XCTAssertEqual(fixture.plugin.keys.accesses, 1)
+            fixture.plugin.authenticator.sessions.last?.completion?(.success(()))
+        }
+        wait(for: [cancelled, resolved], timeout: 10, enforceOrder: true)
+        XCTAssertEqual(results, 2)
+    }
+
+    func testReadWithoutAdmissionRejectsInsteadOfCapturingCurrentDocument() throws {
+        let fixture = try makeFixture()
+        defer { fixture.teardown() }
+        let rejected = expectation(description: "Unadmitted read cancelled")
+        let call = try XCTUnwrap(CAPPluginCall(callbackId: "unadmitted", methodName: "get", options: ["key": "a"],
+                                             success: { _, _ in XCTFail("Unadmitted read resolved") },
+                                             error: { error in
+                                                 XCTAssertEqual(error?.code, "cancelled")
+                                                 rejected.fulfill()
+                                             }))
+        fixture.plugin.get(call)
+        wait(for: [rejected], timeout: 2)
+        let queue = try XCTUnwrap(fixture.plugin.storageQueue)
+        queue.sync {
+            XCTAssertTrue(fixture.plugin.authenticator.sessions.isEmpty)
+            XCTAssertEqual(fixture.plugin.keys.accesses, 0)
+        }
+    }
+
+    func testInvalidReadDoesNotConsumeNextValidReadsAdmissionWithSameCallbackId() throws {
+        let fixture = try makeFixture()
+        defer { fixture.teardown() }
+        let invalid = expectation(description: "Invalid key rejected")
+        let valid = expectation(description: "Valid read resolves with its own ticket")
+        var results = 0
+        fixture.received = { result in
+            results += 1
+            if results == 1 {
+                XCTAssertEqual((result["error"] as? [String: Any])?["code"] as? String, "invalid")
+                invalid.fulfill()
+            } else {
+                XCTAssertEqual((result["data"] as? [String: Any])?["value"] as? String, "token")
+                valid.fulfill()
+            }
+        }
+        fixture.bridge.dispatchQueue.suspend()
+        do {
+            defer { fixture.bridge.dispatchQueue.resume() }
+            submit(fixture, key: "INVALID")
+            submit(fixture)
+        }
+        fixture.bridge.dispatchQueue.sync {}
+        let queue = try XCTUnwrap(fixture.plugin.storageQueue)
+        queue.sync {
+            XCTAssertEqual(fixture.plugin.authenticator.sessions.count, 1)
+            fixture.plugin.authenticator.sessions.last?.completion?(.success(()))
+        }
+        wait(for: [invalid, valid], timeout: 10, enforceOrder: true)
+        XCTAssertEqual(results, 2)
+    }
+}
+
 /// Asserts a completion result failed with `expected`, without `try`, so completion closures
 /// stay non-throwing (Swift 6.2 infers a closure containing `try` as throwing).
 func assertFailure<Success, Failure: Error>(
@@ -422,6 +668,7 @@ final class FakeSecureStoreKeys: SecureStoreKeyProviding {
     var ungatedExists = true
     var creates = 0
     var unwraps = 0
+    var accesses = 0
     var readError: Error?
     var duringUnwrap: (() -> Void)?
     var eciesKey: SecKey?
@@ -450,6 +697,7 @@ final class FakeSecureStoreKeys: SecureStoreKeyProviding {
     }
 
     func accessControl(keyId: String) throws -> SecAccessControl {
+        accesses += 1
         if let error = readError { throw error }
         if missing.contains(keyId) { throw SecureStoreRecordFailure.missingKey }
         return SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [], nil)!
