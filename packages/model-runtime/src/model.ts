@@ -113,6 +113,8 @@ export interface Model {
 export interface DefineModelOptions {
   /** The RDF/JS DataFactory (defaults to n3's). */
   factory?: DataFactory;
+  /** Full owning model for generated per-node lenses; validated independently. */
+  migrationManifest?: unknown;
 }
 
 /** The resolved per-field runtime plan (mapper + subject convention, computed once). */
@@ -503,7 +505,11 @@ function replaceFieldTerms(doc: TermWrapper, plan: FieldPlan, terms: Term[]): vo
 }
 
 /** A live union of guarded predicate sets; every mutation migrates retained values. */
-function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
+function fieldSet(
+  doc: TermWrapper,
+  plan: FieldPlan,
+  beforeWrite: () => void = () => {},
+): Set<unknown> {
   const canonical = predicateSet(doc, plan);
   const aliases = plan.field.aliasPredicates ?? [];
   if (aliases.length === 0) return canonical;
@@ -526,7 +532,7 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
   };
   const union: Set<unknown> = {
     add(value) {
-      replaceFieldTerms(doc, plan, retainedSetTerms(doc, plan));
+      beforeWrite();
       // Only the explicitly supplied API value goes through the JS write path.
       writeFlatField(
         doc,
@@ -536,14 +542,12 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
       return union;
     },
     delete(value) {
-      const all = retainedSetTerms(doc, plan);
-      const normalized = projectValue(plan, value);
-      const retained = all.filter((term) => !sameValueZero(readTerm(doc, plan, term), normalized));
-      replaceFieldTerms(doc, plan, retained);
-      return retained.length !== all.length;
+      beforeWrite();
+      return canonical.delete(value);
     },
     clear() {
-      replaceFieldTerms(doc, plan, []);
+      beforeWrite();
+      canonical.clear();
     },
     has(value) {
       return sets.some((set) => set.has(value));
@@ -618,10 +622,13 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
  * flat fields go through the exact same audited read/write path as a flat entity's.
  */
 function makeWrapperClass(
-  typeIris: string[],
+  owner: ShapeOwner,
   plans: FieldPlan[],
-  aliasTypeIris: string[] = [],
+  manifest: ModelManifest,
 ): EntityWrapperConstructor {
+  const { typeIris, aliasTypeIris = [] } = owner;
+  const beforeWrite = (doc: TermWrapper, field?: ManifestField) =>
+    migrateBeforeWrite(doc, manifest, { owner, iri: doc.value, field });
   class Wrapper extends TermWrapper {
     constructor(term: string | Term, dataset: DatasetCore, factory: DataFactory) {
       // A model Wrapper represents a named subject, never a literal or blank node.
@@ -641,8 +648,8 @@ function makeWrapperClass(
       return hasDatasetClass(this, this.value, [...typeIris, ...aliasTypeIris]);
     }
     mark(): this {
+      beforeWrite(this);
       const types = this.types;
-      for (const t of aliasTypeIris) types.delete(t);
       for (const t of typeIris) types.add(t);
       return this;
     }
@@ -653,7 +660,7 @@ function makeWrapperClass(
     if (field.collection === "set") {
       Object.defineProperty(Wrapper.prototype, field.name, {
         get(this: TermWrapper) {
-          return fieldSet(this, plan);
+          return fieldSet(this, plan, () => beforeWrite(this, field));
         },
         enumerable: false,
         configurable: true,
@@ -664,6 +671,7 @@ function makeWrapperClass(
           return readSingle(this, plan);
         },
         set(this: TermWrapper, value: unknown) {
+          beforeWrite(this, field);
           writeSingle(this, plan, value);
         },
         enumerable: false,
@@ -836,6 +844,26 @@ function migrationDataset(store: Store, budget: MigrationBudget): DatasetCore {
 }
 
 type ShapeOwner = ManifestEntity | ManifestNode;
+interface MigrationRequest {
+  owner: ShapeOwner;
+  iri: string;
+  /** A field write migrates this field; mark migrates only explicit type aliases. */
+  field?: ManifestField;
+}
+
+/** Commit only a checked migration; a failed check cannot change the live dataset. */
+function migrateBeforeWrite(
+  doc: TermWrapper,
+  manifest: ModelManifest,
+  request: MigrationRequest,
+): void {
+  const output = canonicalizeAliases(doc.dataset, manifest, doc.factory, request);
+  // Snapshot both sides before mutating: a DatasetCore's match() may be live.
+  const current = [...doc.dataset.match()];
+  for (const quad of current) if (!output.has(quad)) doc.dataset.delete(quad);
+  for (const quad of [...output]) if (!doc.dataset.has(quad)) doc.dataset.add(quad);
+}
+
 interface MigrationCheck {
   node: ShapeOwner;
   iri: string;
@@ -851,6 +879,7 @@ function aliasFocusNodes(
   manifest: ModelManifest,
   factory: DataFactory,
   budget: MigrationBudget,
+  request?: MigrationRequest,
 ) {
   const scopes = new Map<ShapeOwner, Set<string>>();
   const checks = new Map<ShapeOwner, Map<string, MigrationCheck>>();
@@ -933,11 +962,37 @@ function aliasFocusNodes(
       }
     }
   }
-  return {
-    scopes,
-    checks: [...checks.values()].flatMap((subjects) => [...subjects.values()]),
-    linkClasses,
-  };
+  const allChecks = [...checks.values()].flatMap((subjects) => [...subjects.values()]);
+  // Direct wrappers may write an untyped or unreached focus. Include that focus
+  // without discarding any checks or link-class proofs from the full owning model.
+  if (request) {
+    const subjects = scopes.get(request.owner) ?? new Set<string>();
+    subjects.add(request.iri);
+    scopes.set(request.owner, subjects);
+    if (!checks.get(request.owner)?.has(request.iri)) {
+      const composite = manifest.entities.find(
+        (entity) =>
+          isCompositeEntity(entity) && entity.nodes.includes(request.owner as ManifestNode),
+      );
+      const byName = new Map(
+        composite && isCompositeEntity(composite)
+          ? composite.nodes.map((node) => [node.name, node])
+          : [],
+      );
+      allChecks.push({
+        node: request.owner,
+        iri: request.iri,
+        byName,
+        strict: false,
+        recognised: false,
+        before: parseShapeAt(request.owner, request.iri, readStore, factory, byName, false, {
+          visits: 0,
+          migration: budget,
+        }),
+      });
+    }
+  }
+  return { scopes, checks: allChecks, linkClasses };
 }
 
 function sameProjection(a: EntityData | undefined, b: EntityData | undefined): boolean {
@@ -951,35 +1006,37 @@ function sameProjection(a: EntityData | undefined, b: EntityData | undefined): b
         right = b[key];
       return Array.isArray(left) && Array.isArray(right)
         ? left.length === right.length &&
-            left.every((value, index) => sameValueZero(value, right[index]))
+            left.every((value) => right.some((other) => sameValueZero(value, other)))
         : sameValueZero(left, right);
     })
   );
 }
 
 /** Canonicalise aliases only at their owning shapes' focus nodes, in a COPY. */
-function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: DataFactory): Store {
-  const owners = manifest.entities.flatMap<ShapeOwner>((entity) =>
-    isCompositeEntity(entity) ? entity.nodes : [entity],
-  );
-  const aliases = owners.flatMap((node) => [
-    ...(node.aliasTypeIris ?? []),
-    ...node.fields.flatMap((field) => field.aliasPredicates ?? []),
-  ]);
-  if (
-    !aliases.some(
-      (alias) =>
-        store.countQuads(null, alias, null, null) || store.countQuads(null, RDF_TYPE, alias, null),
-    )
-  )
-    return new Store([...store]);
+function canonicalizeAliases(
+  dataset: DatasetCore,
+  manifest: ModelManifest,
+  factory: DataFactory,
+  request?: MigrationRequest,
+): Store {
+  const store = new Store([...dataset.match()]);
   const budget: MigrationBudget = { reads: 0 };
-  const { scopes, checks, linkClasses } = aliasFocusNodes(store, manifest, factory, budget);
+  const { scopes, checks, linkClasses } = aliasFocusNodes(
+    store,
+    manifest,
+    factory,
+    budget,
+    request,
+  );
+  const selectedScopes = request ? new Map([[request.owner, new Set([request.iri])]]) : scopes;
   const output = new Store([...store]);
   const migratingTypes = new Set<string>();
-  for (const [node, subjects] of scopes)
+  for (const [node, subjects] of selectedScopes)
     for (const iri of subjects) {
-      if (node.aliasTypeIris?.some((alias) => store.countQuads(iri, RDF_TYPE, alias, null)))
+      if (
+        !request?.field &&
+        node.aliasTypeIris?.some((alias) => store.countQuads(iri, RDF_TYPE, alias, null))
+      )
         migratingTypes.add(iri);
     }
   // Preserve actual DATA-graph class proofs before alias rdf:type deletion.
@@ -988,8 +1045,9 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
     const doc = new TermWrapper(factory.namedNode(iri), output, factory);
     SetFrom.subjectPredicate(doc, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom).add(hasClass);
   }
-  for (const [node, subjects] of scopes) {
+  for (const [node, subjects] of selectedScopes) {
     for (const field of node.fields) {
+      if (request && field !== request.field) continue;
       if (!field.aliasPredicates?.length) continue;
       const plan = planField(field);
       for (const subject of subjects) {
@@ -1007,7 +1065,7 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
         replaceFieldTerms(doc, plan, terms);
       }
     }
-    for (const alias of node.aliasTypeIris ?? []) {
+    for (const alias of request?.field ? [] : (node.aliasTypeIris ?? [])) {
       for (const subject of subjects) {
         const doc = new TermWrapper(factory.namedNode(subject), output, factory);
         const types = SetFrom.subjectPredicate(
@@ -1105,11 +1163,11 @@ function assembleEntity(
 
 function makeEntity(
   entity: ManifestEntity,
-  manifest: ModelManifest,
   factory: DataFactory,
+  migrationManifest: ModelManifest,
 ): ModelEntity {
   const plans = entity.fields.map(planField);
-  const Wrapper = makeWrapperClass(entity.typeIris, plans, entity.aliasTypeIris);
+  const Wrapper = makeWrapperClass(entity, plans, migrationManifest);
 
   const subject = (resourceUrl: string): string =>
     subjectIri(resourceUrl, entity.subject.convention === "hash-it" ? "it" : undefined);
@@ -1118,7 +1176,14 @@ function makeEntity(
     const store = new Store();
     const doc = new Wrapper(subject(resourceUrl), store, factory);
     doc.mark();
-    for (const plan of plans) writeFlatField(doc, plan, data);
+    for (const plan of plans) {
+      migrateBeforeWrite(doc, migrationManifest, {
+        owner: entity,
+        iri: doc.value,
+        field: plan.field,
+      });
+      writeFlatField(doc, plan, data);
+    }
     return store;
   };
 
@@ -1133,7 +1198,7 @@ function makeEntity(
 
   return assembleEntity(
     { name: entity.name, typeIri: entity.typeIris[0] as string, Wrapper, subject, build, parse },
-    manifest,
+    migrationManifest,
     factory,
   );
 }
@@ -1291,7 +1356,7 @@ function parseShapeAt(
     if (childData === undefined) {
       // An optional edge may degrade at the root. Inside sh:node a present
       // violation makes THIS child non-conforming; its incoming edge grades it.
-      if (required || (strict && link.present)) return undefined;
+      if (required || (strict && (link.present || (field.minCount ?? 0) > 0))) return undefined;
       continue;
     }
     Object.assign(data, childData);
@@ -1301,8 +1366,8 @@ function parseShapeAt(
 
 function makeCompositeEntity(
   entity: CompositeManifestEntity,
-  manifest: ModelManifest,
   factory: DataFactory,
+  migrationManifest: ModelManifest,
 ): ModelEntity {
   const runtimes = new Map<string, NodeRuntime>();
   for (const node of entity.nodes) {
@@ -1310,7 +1375,7 @@ function makeCompositeEntity(
     const nested = node.fields.filter((f) => f.kind === "nested");
     runtimes.set(node.name, {
       node,
-      Wrapper: makeWrapperClass(node.typeIris, plans, node.aliasTypeIris),
+      Wrapper: makeWrapperClass(node, plans, migrationManifest),
       plans,
       nested,
     });
@@ -1352,7 +1417,14 @@ function makeCompositeEntity(
       const iri = nodeIri(rt, resourceUrl);
       const doc = new rt.Wrapper(iri, store, factory);
       doc.mark();
-      for (const plan of rt.plans) writeFlatField(doc, plan, data);
+      for (const plan of rt.plans) {
+        migrateBeforeWrite(doc, migrationManifest, {
+          owner: rt.node,
+          iri: doc.value,
+          field: plan.field,
+        });
+        writeFlatField(doc, plan, data);
+      }
       for (const nf of rt.nested) {
         const child = runtimes.get(nf.node as string);
         if (!child) continue;
@@ -1397,7 +1469,7 @@ function makeCompositeEntity(
       build,
       parse,
     },
-    manifest,
+    migrationManifest,
     factory,
   );
 }
@@ -1410,11 +1482,15 @@ function makeCompositeEntity(
 export function defineModel(input: unknown, options: DefineModelOptions = {}): Model {
   const manifest = validateManifest(input);
   const factory = options.factory ?? (N3DataFactory as unknown as DataFactory);
+  const migrationManifest =
+    options.migrationManifest === undefined
+      ? manifest
+      : validateManifest(options.migrationManifest);
   const entities: Record<string, ModelEntity> = {};
   for (const entity of manifest.entities) {
     entities[entity.name] = isCompositeEntity(entity)
-      ? makeCompositeEntity(entity, manifest, factory)
-      : makeEntity(entity, manifest, factory);
+      ? makeCompositeEntity(entity, factory, migrationManifest)
+      : makeEntity(entity, factory, migrationManifest);
   }
   return { manifest, prefixes: { ...manifest.prefixes }, entities };
 }

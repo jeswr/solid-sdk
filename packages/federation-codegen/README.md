@@ -49,7 +49,8 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
   the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
   are admission errors, including on node shapes. Reject implicit class targets: a shape
-  that is also an `rdfs:Class` or `owl:Class` has no exact runtime projection. At the root,
+  that is a SHACL instance of `rdfs:Class` or `owl:Class` in the shapes graph (directly or via
+  `rdfs:subClassOf*` there) has no exact runtime projection. At the root,
   flat Warning/Info class hints may be omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
   Inline or unprojected `sh:node` references are admission errors.
   Decimal/integer bounds and enum members must round-trip through a JS number with

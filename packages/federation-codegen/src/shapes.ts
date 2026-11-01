@@ -85,31 +85,63 @@ export interface NormalizedShapes {
   nodeShapes: NodeShapeModel[];
 }
 
-/** Implicit class targets have no exact projection in the current manifest. */
+/**
+ * Implicit class targets have no exact projection in the current manifest. SHACL
+ * activates them from the SHAPES graph alone (a shape that is a SHACL instance of
+ * rdfs:Class, i.e. through rdf:type then rdfs:subClassOf* in that graph), so the
+ * ontology is deliberately not consulted: its own class declarations are not targets.
+ */
 export function implicitClassTargets(quads: readonly Quad[]): string[] {
-  const shapes = new Set(
-    quads
-      .filter(
-        (q) =>
-          q.predicate.value.startsWith(SH) ||
-          (q.predicate.value === `${RDF}type` &&
-            [`${SH}NodeShape`, `${SH}PropertyShape`].includes(q.object.value)),
-      )
-      .map((q) => `${q.subject.termType}:${q.subject.value}`),
-  );
-  return [
-    ...new Set(
-      quads
-        .filter(
-          (q) =>
-            q.predicate.value === `${RDF}type` &&
-            q.object.termType === "NamedNode" &&
-            [`${RDFS}Class`, "http://www.w3.org/2002/07/owl#Class"].includes(q.object.value) &&
-            shapes.has(`${q.subject.termType}:${q.subject.value}`),
-        )
-        .map((q) => q.subject.value),
-    ),
-  ];
+  const key = (term: Term) => `${term.termType}:${term.value}`;
+  const shapes = new Map<string, Term>();
+  const types = new Map<string, Term[]>();
+  const parents = new Map<string, Term[]>();
+  for (const q of quads) {
+    if (
+      q.predicate.value.startsWith(SH) ||
+      (q.predicate.value === `${RDF}type` &&
+        [`${SH}NodeShape`, `${SH}PropertyShape`].includes(q.object.value))
+    )
+      shapes.set(key(q.subject), q.subject);
+  }
+  for (const graph of [quads])
+    for (const q of graph) {
+      const index =
+        q.predicate.value === `${RDF}type`
+          ? types
+          : q.predicate.value === `${RDFS}subClassOf`
+            ? parents
+            : undefined;
+      if (index) {
+        const values = index.get(key(q.subject)) ?? [];
+        values.push(q.object);
+        index.set(key(q.subject), values);
+      }
+    }
+  let reads = 0;
+  const found: string[] = [];
+  for (const [id, shape] of shapes) {
+    const pending = [...(types.get(id) ?? [])];
+    const seen = new Set<string>();
+    while (pending.length) {
+      if (++reads > 10000)
+        throw new TypeError("implicit class target inspection exceeds the 10,000-read budget");
+      const type = pending.pop() as Term;
+      if (type.termType !== "NamedNode" && type.termType !== "BlankNode") continue;
+      if (
+        type.termType === "NamedNode" &&
+        [`${RDFS}Class`, "http://www.w3.org/2002/07/owl#Class"].includes(type.value)
+      ) {
+        found.push(shape.value);
+        break;
+      }
+      const typeKey = key(type);
+      if (seen.has(typeKey)) continue;
+      seen.add(typeKey);
+      pending.push(...(parents.get(typeKey) ?? []));
+    }
+  }
+  return found;
 }
 
 /** RDF permits co-typing; disjoint focus sets cannot be proved from this profile. */

@@ -77,6 +77,7 @@ function projectField(field: ManifestField): ManifestField {
     predicate: field.predicate,
     kind: "iri",
   };
+  if (field.minCount !== undefined) projected.minCount = field.minCount;
   // The only guard a nested link may carry (the cross-node MUST) — kept so the view
   // stays a faithful projection; it affects only the view's (unexposed) parse.
   if (field.guards?.requiredFailClosed === true) {

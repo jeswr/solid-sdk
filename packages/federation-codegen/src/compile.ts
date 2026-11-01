@@ -432,6 +432,7 @@ function compileCompositeEntity(
           predicate: constraint.pathIri,
           kind: "nested",
           node: targetNode,
+          ...(constraint.minCount !== undefined ? { minCount: constraint.minCount } : {}),
           ...(constraint.node === undefined && constraint.hasClass !== undefined
             ? { classOnly: true }
             : {}),

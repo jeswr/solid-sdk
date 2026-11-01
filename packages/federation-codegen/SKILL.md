@@ -60,8 +60,12 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   against original RDF terms before JS projection. IRI enums preserve exact identities on
   reads and writes; scheme policy filters them without rewriting. Set minimum cardinality
   counts distinct guarded raw terms before JS deduplication; required sets reject invalid terms.
-- Reject shapes that are also `rdfs:Class` or `owl:Class`: implicit class targets have no
-  exact runtime projection. Normalization, admission, compilation and fidelity fail closed.
+- Reject shapes that are SHACL instances of `rdfs:Class` or `owl:Class` in the shapes graph
+  (rdf:type then a bounded, cycle-safe rdfs:subClassOf* walk): implicit class targets have no
+  exact runtime projection. The ontology graph is not consulted, as in SHACL. Normalization,
+  admission, compilation and fidelity fail closed.
+- A nested link's `sh:minCount` is emitted on the link and fidelity-checked independently of
+  severity-graded requiredness.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
   for string-valued nonblank fields. At the root, advisory flat class hints may only be

@@ -7,7 +7,7 @@ import {
   type ModelManifest,
   validateManifest,
 } from "./manifest.js";
-import { defineModel, type EntityWrapper } from "./model.js";
+import { defineModel, type EntityWrapper, MigrationError } from "./model.js";
 
 const NS = "https://example.org/ns#";
 const OLD = "https://example.org/legacy#";
@@ -381,10 +381,12 @@ describe("aliases preserve security guards", () => {
     const ds = store('ex:tags "a" ; old:tags "b", "outside", []');
     const tags = (new guarded.Wrapper(SUBJ, ds, DataFactory) as View).tags;
     expect([...tags]).toEqual(["a", "b"]);
-    tags.add("outside");
-    expect([...tags]).toEqual(["a", "b"]);
-    expect(ds.getQuads(SUBJ, `${OLD}tags`, null, null)).toHaveLength(0);
-    expect(guarded.parse(RES, ds)).toEqual({ tags: ["a", "b"] });
+    // The invalid alias members make the field non-conforming; migrating only the
+    // guarded members would silently change that, so the write fails closed.
+    const before = [...ds];
+    expect(() => tags.add("outside")).toThrow(MigrationError);
+    expect([...ds]).toEqual(before);
+    expect(guarded.parse(RES, ds)).toEqual(required ? undefined : {});
     expect(guarded.parse(RES, guarded.build(RES, { tags: ["a", "outside"] }))).toEqual(
       required ? undefined : {},
     );
