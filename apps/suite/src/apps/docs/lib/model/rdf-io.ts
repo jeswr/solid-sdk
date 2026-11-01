@@ -88,7 +88,7 @@ export async function writeRdf(
     headers["if-match"] = opts.etag;
   }
   const body = await serializeTurtle(dataset, opts.prefixes);
-  const init: RequestInit = { method: "PUT", headers, body };
+  const init: RequestInit = { method: "PUT", redirect: "error", headers, body };
   const res = await opts.fetchImpl(url, init);
   if (!res.ok) throw new ResourceWriteError(url, res.status);
   return { etag: res.headers.get("etag") };
@@ -102,7 +102,7 @@ export async function writeRdf(
  * @throws ResourceDeleteError on any other non-2xx answer.
  */
 export async function deleteRdf(url: string, fetchImpl: typeof fetch): Promise<void> {
-  const init: RequestInit = { method: "DELETE" };
+  const init: RequestInit = { method: "DELETE", redirect: "error" };
   const res = await fetchImpl(url, init);
   if (res.ok || res.status === 404 || res.status === 410) return;
   throw new ResourceDeleteError(url, res.status);

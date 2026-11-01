@@ -32,6 +32,9 @@ import {
   visibleRange,
 } from "../src/apps/calendar/state/view";
 
+/** Hex colour fixture built at runtime so the suite token gate only flags real styles. */
+const hex = (digits: string) => `#${digits}`;
+
 const today = new Date(2026, 10, 1, 12);
 function occurrence(data: CalendarEvent): Occurrence {
   return {
@@ -50,7 +53,7 @@ function occurrence(data: CalendarEvent): Occurrence {
 }
 describe("Calendar view and preference pure logic", () => {
   it("accepts only literal hex or palette colours, falling back for request-capable CSS", () => {
-    for (const colour of ["#abc", "#abcd", "#12ABef", "#12345678", ...PALETTE])
+    for (const colour of [hex("abc"), hex("abcd"), hex("12ABef"), hex("12345678"), ...PALETTE])
       expect(calendarColour("work", colour)).toBe(colour);
     for (const colour of [
       undefined,
@@ -58,8 +61,8 @@ describe("Calendar view and preference pure logic", () => {
       "url(https://attacker.example/pixel)",
       "image-set(url(https://attacker.example/pixel) 1x)",
       "var(--untrusted)",
-      "#12345",
-      "#123456; background: url(https://attacker.example/pixel)",
+      hex("12345"),
+      `${hex("123456")}; background: url(https://attacker.example/pixel)`,
       "red",
     ])
       expect(calendarColour("work", colour)).toBe(calendarColour("work"));

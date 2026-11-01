@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Example: user-delegated Solid login from a CLI, using the authorization-code + PKCE + DPoP flow.
  *
@@ -13,8 +14,8 @@
  *   3. `refreshSession` rotates the access token using the refresh token (request `offline_access`,
  *      which the default scope does, and consent to it).
  *
- * The issuer guard permits `http://localhost:…` / `http://127.0.0.1:…` for local CSS dev but
- * rejects `http://` for real domains — the deliberate fix for the reactive-auth 0.1.3 bug class.
+ * For local CSS development, explicitly set allowInsecureLoopback: true in cliLogin options.
+ * Issuers and endpoints otherwise require HTTPS.
  */
 import { authedFetch, cliLogin, refreshSession } from "../src/index.js";
 
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e: unknown) => {
-  process.stderr.write(`login failed: ${(e as Error).message}\n`);
+main().catch(() => {
+  process.stderr.write("login failed. Check issuer configuration and try again.\n");
   process.exit(1);
 });
