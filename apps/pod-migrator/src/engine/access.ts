@@ -1,56 +1,67 @@
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
-import {
-  ACL,
-  ACP,
-  aclLink,
-  links,
-  parse,
-  RDF,
-  requireOk,
-  requireRepresentation,
-  serialize,
-} from "./rdf.js";
+import { ACL, ACP, aclLink, links, parse, RDF, requireOk, serialize } from "./rdf.js";
+import { ResourceReadError } from "./resource-body.js";
 import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
 import { assertSpecificAccess } from "./target-access.js";
 import type { AccessDocument, AccessSystem, EffectivePolicy, PodSide } from "./types.js";
+
+async function accessRequest<T>(
+  resource: string,
+  document: string,
+  request: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await request();
+  } catch (cause) {
+    throw new ResourceReadError(
+      resource,
+      `Cannot read access document ${document}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      cause,
+    );
+  }
+}
 export async function detectAccessSystem(
   side: PodSide,
   signal?: AbortSignal,
 ): Promise<AccessSystem> {
-  const head = requireOk(await side.http.head(side.root, { signal }));
+  const head = requireOk(
+    await accessRequest(side.root, side.root, () => side.http.head(side.root, { signal })),
+    side.root,
+  );
   const url = aclLink(head, side.root, side.root);
   if (!url) return "unknown";
-  const response = await side.http.get(url, { accept: "text/turtle", signal });
+  const response = await accessRequest(side.root, url, () =>
+    side.http.get(url, { accept: "text/turtle", signal }),
+  );
   const advertised =
     links(head, side.root, "type").includes(`${ACP}AccessControlResource`) ||
     links(response, url, "type").includes(`${ACP}AccessControlResource`);
   if (!response.ok) return advertised ? "acp" : "unknown";
-  try {
-    const dataset = await parse(response, url);
-    const acp = [...dataset].some(
-      (q) =>
-        q.predicate.value.startsWith(ACP) ||
-        (q.object.termType === "NamedNode" && q.object.value.startsWith(ACP)),
-    );
-    const wac =
-      dataset.match(
-        null,
-        DataFactory.namedNode(`${RDF}type`),
-        DataFactory.namedNode(`${ACL}Authorization`),
-      ).size > 0;
-    return (acp || advertised) && wac
-      ? "unknown"
-      : acp || advertised
-        ? "acp"
-        : wac
-          ? "wac"
-          : "unknown";
-  } catch {
-    return "unknown";
-  }
+  const dataset = await accessRequest(side.root, url, () =>
+    parse(response, url, side.http, signal, true),
+  );
+  const acp = [...dataset].some(
+    (q) =>
+      q.predicate.value.startsWith(ACP) ||
+      (q.object.termType === "NamedNode" && q.object.value.startsWith(ACP)),
+  );
+  const wac =
+    dataset.match(
+      null,
+      DataFactory.namedNode(`${RDF}type`),
+      DataFactory.namedNode(`${ACL}Authorization`),
+    ).size > 0;
+  return (acp || advertised) && wac
+    ? "unknown"
+    : acp || advertised
+      ? "acp"
+      : wac
+        ? "wac"
+        : "unknown";
 }
 export async function readAccess(
   side: PodSide,
@@ -61,13 +72,21 @@ export async function readAccess(
   requireSpecific = false,
 ): Promise<AccessDocument | undefined> {
   const url =
-    advertised ?? aclLink(await side.http.head(resource, { signal }), resource, side.root);
+    advertised ??
+    aclLink(
+      await accessRequest(resource, resource, () => side.http.head(resource, { signal })),
+      resource,
+      side.root,
+    );
   if (!url) return undefined;
-  const response = await side.http.get(url, { accept: "text/turtle", signal });
+  const response = await accessRequest(resource, url, () =>
+    side.http.get(url, { accept: "text/turtle", signal }),
+  );
   if (response.status === 404) return undefined;
   requireOk(response);
-  const turtle = await requireRepresentation(response).text();
-  const dataset = await parse(new Response(turtle, { headers: response.headers }), url);
+  const dataset = await accessRequest(resource, url, () =>
+    parse(response, url, side.http, signal, true),
+  );
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
   const inactiveGrants: NonNullable<AccessDocument["inactiveGrants"]> = [];
   const document: AccessDocument = {
@@ -113,15 +132,10 @@ export async function writeAccess(
     system === "wac"
       ? await writeWac(policy, resource, url, prefix)
       : await writeAcp(policy, resource, url, dialect, prefix);
-  const dataset = await parse(
-    new Response(turtle, { headers: { "content-type": "text/turtle" } }),
-    url,
-  );
+  // These complete strings are locally emitted or serialized from a validated network graph.
+  const dataset = await parseRdf(turtle, "text/turtle", { baseIRI: url });
   if (mergeDocument) {
-    const original = await parse(
-      new Response(mergeDocument.turtle, { headers: { "content-type": "text/turtle" } }),
-      url,
-    );
+    const original = await parseRdf(mergeDocument.turtle, "text/turtle", { baseIRI: url });
     for (const quad of original) dataset.add(quad);
     turtle = await serialize(dataset);
   }
