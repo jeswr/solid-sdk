@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
@@ -258,3 +258,27 @@ for (const { zone, now, todayTime } of [
       await accessible(page);
     });
   });
+
+// AUTHORED-BY Claude Opus 5.5
+test("exports a FHIR bundle for a date range and refuses a reversed range", async ({
+  page,
+}, info) => {
+  await ready(page, "/health/export", "Export");
+  await expect(page.getByLabel("From", { exact: true })).toHaveValue("2025-11-02");
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue("2026-11-01");
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download FHIR file", exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe("health-2025-11-02-to-2026-11-01.fhir.json");
+  const bundle = JSON.parse(await readFile(await download.path(), "utf8"));
+  expect(bundle).toMatchObject({ resourceType: "Bundle", type: "collection" });
+  await expect(page.getByRole("heading", { name: "Download ready", exact: true })).toBeVisible();
+  await accessible(page);
+  await capture(page, info, "export");
+  await page.getByLabel("From", { exact: true }).fill("2026-11-01");
+  await page.getByLabel("To", { exact: true }).fill("2026-10-01");
+  await page.getByRole("button", { name: "Download FHIR file", exact: true }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "start date on or before the end date" }),
+  ).toBeVisible();
+});
