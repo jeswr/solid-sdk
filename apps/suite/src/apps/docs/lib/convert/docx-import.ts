@@ -179,7 +179,7 @@ function mapLists(
             : task
               ? "ul[data-type='taskList']"
               : child.numbering?.isOrdered
-                ? `ol[start='${metadata?.start ?? 1}']`
+                ? `ol[start='${metadata?.start ?? 1}']${metadata?.listType ? `[type='${metadata.listType}']` : ""}`
                 : "ul";
         const item = task ? `li[data-type='taskItem'][data-checked='${checked}']` : "li";
         const fresh = ancestors[depth]?.key === key ? "" : ":fresh";

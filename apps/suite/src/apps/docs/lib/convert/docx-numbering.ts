@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+import { htmlListType } from "./docx-list-format";
 import { child, descendants, readXml, type XmlElement } from "./docx-xml";
 
 /** Resolve numbering once for both list mapping and counters, before Mammoth erases IDs. */
@@ -65,17 +66,17 @@ export function readNumbering(body: string, numbering: string, styles = "") {
   };
   const starts = new Map<string, Map<string, number>>();
   const restarts = new Map<string, Map<string, number>>();
-  const formats = new Map<string, Map<string, boolean>>();
+  const formats = new Map<string, Map<string, string>>();
   const byStyle = new Map<string, { id: string; level: string }[]>();
   for (const id of nums.keys()) {
     const levels = new Map<string, number>();
     const resets = new Map<string, number>();
-    const ordered = new Map<string, boolean>();
+    const formatsByLevel = new Map<string, string>();
     const setLevel = (level: XmlElement, index: string) => {
       levels.set(index, Number(child(level, "start")?.attrs.val ?? 1));
       // Word's lvlRestart is one-based; zero explicitly disables restarting.
       resets.set(index, Number(child(level, "lvlRestart")?.attrs.val ?? index) - 1);
-      ordered.set(index, child(level, "numFmt")?.attrs.val !== "bullet");
+      formatsByLevel.set(index, child(level, "numFmt")?.attrs.val ?? "decimal");
       const style = child(level, "pStyle")?.attrs.val;
       if (style !== undefined) {
         const references = byStyle.get(style) ?? [];
@@ -86,7 +87,7 @@ export function readNumbering(body: string, numbering: string, styles = "") {
     for (const [index, level] of levelsFor(id)) setLevel(level, index);
     starts.set(id, levels);
     restarts.set(id, resets);
-    formats.set(id, ordered);
+    formats.set(id, formatsByLevel);
   }
   const counters = new Map<string, Map<string, number>>();
   return descendants(readXml(body), "p").map((paragraph) => {
@@ -117,11 +118,13 @@ export function readNumbering(body: string, numbering: string, styles = "") {
       }
       counters.set(id, values);
     }
-    const ordered = formats.get(id ?? "")?.get(level);
+    const format = formats.get(id ?? "")?.get(level);
     return {
       id,
       start,
-      numbering: id !== "0" && ordered !== undefined ? { level, isOrdered: ordered } : null,
+      listType: htmlListType(format),
+      numbering:
+        id !== "0" && format !== undefined ? { level, isOrdered: format !== "bullet" } : null,
     };
   });
 }
