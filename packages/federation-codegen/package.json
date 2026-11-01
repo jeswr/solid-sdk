@@ -57,6 +57,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-engine": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@types/n3": "^1.26.1",
