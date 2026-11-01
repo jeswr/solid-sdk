@@ -26,6 +26,9 @@ Use the documented tags for theme toggle, account menu, feedback, login, empty/e
 
 - Keep `app-shell-theme`, the `.dark` class, and shared CSS tokens compatible with `@jeswr/app-shell`.
 - Reflect user-visible string properties when attribute-based consumption is part of the contract.
+- Configure the login panel's sign-in field label with `webid-label` / reflected
+  `webIdLabel` (string, default `Your WebID`). Render it as text, never HTML, and
+  preserve the wrapping label's association with the input and its accessible name.
 - Emit composed/bubbling custom events where hosts across shadow boundaries must observe them.
 - Preserve keyboard navigation, focus trapping, Escape behavior, roles, labels, and reduced-motion behavior.
 - Keep feedback WebID inclusion opt-in and validate the GitHub repository target before opening a URL.
