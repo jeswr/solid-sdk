@@ -10,7 +10,6 @@
 @import "@jeswr/suite-ui/styles/components.css";
 @import "@jeswr/suite-ui/styles/collections.css";
 @import "@jeswr/suite-ui/styles/sharing.css";
-@import "../components/interim-shell/shell.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -478,6 +477,17 @@ nav[aria-label="Component fixtures"] {
   accent-color: var(--primary);
 }
 
+/* DS-05 fixture framing uses the mockup state-strip spacing. */
+.ds05-states {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: var(--space-4);
+}
+.ds05-states > section {
+  min-width: 0;
+}
+
 /* DS-08 fixture layout follows the reference card spacing. */
 .date-fixtures > label {
   max-width: 420px;
@@ -495,14 +505,4 @@ nav[aria-label="Component fixtures"] {
 }
 .date-fixture-grid h2 {
   margin: 0 0 var(--space-2);
-}
-/* DS-05 fixture framing uses the mockup state-strip spacing. */
-.ds05-states {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  align-items: start;
-  gap: var(--space-4);
-}
-.ds05-states > section {
-  min-width: 0;
 }
