@@ -61,6 +61,45 @@ const bookmark: BookmarkData | undefined = await parseBookmarkTtl(
 The root entry is browser-safe. Import the `shape` entry only in Node.js because it reads the
 shipped Turtle files with `node:fs`.
 
+## Generated model core
+
+[`bookmark.ttl`](./bookmark.ttl) and [`bookmark.shacl.ttl`](./bookmark.shacl.ttl) are the
+hand-written source of truth. [`codegen.config.json`](./codegen.config.json) supplies the
+subject convention and compatible defaults/tag handling. `@jeswr/federation-codegen`
+generates the committed `src/generated/` manifest, typed runtime shim, normalized SHACL,
+and input/output hashes. The public `src/bookmark.ts` facade delegates to
+`@jeswr/model-runtime`; `vocab.ts` and the public Turtle artifacts remain hand-written.
+
+From the workspace root (Node 24, installed workspace dependencies):
+
+```sh
+pnpm --filter @jeswr/federation-codegen... run build
+pnpm --filter @jeswr/solid-bookmark run codegen
+# After an intentional ontology, shape, or config change, review the diff and use:
+pnpm --filter @jeswr/solid-bookmark run codegen --update-lock
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/solid-bookmark
+```
+
+Do not edit `src/generated/` by hand. A test runs the package's codegen command into a
+temporary directory and compares every artifact, including `codegen.lock.json`, byte for
+byte. The original 78 tests remain the compatibility oracle. Builds copy the generated
+shim and declarations into `dist/generated/`; `dist/` is never committed here.
+
+The facade preserves the original Store/property order and generic Store serialization
+through `@jeswr/rdf-serialize`, including arbitrary legacy triples. Supplemental tests
+pin the original Turtle/JSON bytes and compile a strict consumer of the built declarations,
+including clearing setters under `exactOptionalPropertyTypes`. The shared runtime applies stricter guards outside
+the oracle: ambiguous required URLs reject the record, malformed optional values drop,
+and text writes strip control characters. These shared SHACL/IRI and text guards cannot
+be bypassed by the facade, so those formerly permissive edge behaviors are not retained.
+
+Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this package uses
+`tsc` and its declarations reference the generated wrapper/runtime types. Publish the
+`jeswr/model-runtime` mirror first, then supply
+`--dep-sha @jeswr/model-runtime=<mirror-sha>` to `scripts/mirror-publish.mjs solid-bookmark`
+alongside pins for the package's other workspace runtime dependencies. No runtime is
+declared inlined; the generator is a devDependency and is stripped from mirrors.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-bookmark)

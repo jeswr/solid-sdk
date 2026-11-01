@@ -2,6 +2,7 @@
 name: federation-codegen
 description: Use when generating a typed domain model from a sector ontology plus SHACL profile, writing a codegen.config.json, running admission or the fidelity assertion, migrating a hand-written model package to generated code, or changing @jeswr/federation-codegen.
 ---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -74,7 +75,9 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
 
 The design of record is `decisions/0003-domain-model-codegen.md`.
 
-The bookmarks pilot reads the current `packages/solid-bookmark/bookmark.ttl` and
-`bookmark.shacl.ttl` by relative path. Its current 78-test oracle is verbatim except
-imports; its hand-written facade contains no alias logic and stays under 150 lines.
-Regenerate with the built generator after any input or generator change.
+The bookmarks example points to `packages/solid-bookmark`, which owns its normative
+`bookmark.ttl` + `bookmark.shacl.ttl`, config, `src/generated/`, and facade. Its 78-test
+oracle remains verbatim except imports in the generator integration harness. The harness
+validates generated SHACL as well as the package's normative-shape oracle. Do not restore
+duplicate config or generated files under `examples/bookmark/`. After a generator change,
+build the generator and run `pnpm --filter @jeswr/solid-bookmark run codegen`.
