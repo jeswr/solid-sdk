@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-import { type ImageEncoder, type PreparedPhoto, preparePhoto } from "../model";
+import { isomorphic } from "rdf-isomorphic";
+import { buildPhoto, type ImageEncoder, type PreparedPhoto, preparePhoto } from "../model";
 import { statusOf } from "./shared";
 import type { PhotoDataStorage } from "./storage";
 
@@ -30,12 +31,19 @@ export async function uploadFiles(
     try {
       options.onProgress?.(index, 0);
       const input = { ...file, id, stripLocation: options.stripLocation };
-      prepared = await preparePhoto(
-        new URL("../", io.root).href,
-        input,
-        options.encoder,
-        options.now,
-      );
+      const retry = io.uploads.get(id);
+      if (
+        retry &&
+        (retry.input.original !== file.original ||
+          retry.input.name !== file.name ||
+          retry.input.stripLocation !== options.stripLocation)
+      )
+        throw new TypeError("Retry must use the same upload input");
+      prepared =
+        retry?.prepared ??
+        (await preparePhoto(new URL("../", io.root).href, input, options.encoder, options.now));
+      const now = retry?.now ?? options.now;
+      io.uploads.set(id, { input, prepared, now });
       options.onProgress?.(index, 30);
       const ready = prepared;
       // Preparation is cached; the model owns the create-only upload sequence.
@@ -47,21 +55,35 @@ export async function uploadFiles(
         stripLocation: async () => ready.original,
         thumbnail: async () => ready.thumbnail,
       };
-      await io.uploadPhotos([input], encoder, options.now);
+      await io.uploadPhotos([input], encoder, now);
       options.onProgress?.(index, 100);
       io.createdBinaries.delete(prepared.photo.contentUrl);
       io.createdBinaries.delete(prepared.photo.thumbnailUrl as string);
+      io.uploads.delete(id);
       results.push({ ok: true, url: prepared.itemUrl, id });
     } catch (error) {
       // Never delete a create-only collision. Metadata may have reached the pod even
       // when its response was lost; in that case keep both binaries for reconciliation.
-      if (prepared && statusOf(error) !== 412) {
+      if (prepared) {
         try {
-          const listing = await io.loadPhotos(prepared.itemUrl).catch((failure: unknown) => {
-            if (statusOf(failure) === 404) return { photos: [] };
+          const existing = await io.read(prepared.itemUrl).catch((failure: unknown) => {
+            if (statusOf(failure) === 404) return null;
             throw failure;
           });
-          if (!listing.photos.length) {
+          if (
+            existing &&
+            (await io.ownsBinary(prepared.photo.contentUrl)) &&
+            (await io.ownsBinary(prepared.photo.thumbnailUrl as string)) &&
+            isomorphic([...existing.dataset], [...buildPhoto(prepared.itemUrl, prepared.photo)])
+          ) {
+            io.createdBinaries.delete(prepared.photo.contentUrl);
+            io.createdBinaries.delete(prepared.photo.thumbnailUrl as string);
+            io.uploads.delete(id);
+            options.onProgress?.(index, 100);
+            results.push({ ok: true, url: prepared.itemUrl, id });
+            continue;
+          }
+          if (!existing && statusOf(error) !== 412) {
             for (const url of [prepared.photo.contentUrl, prepared.photo.thumbnailUrl as string]) {
               const etag = io.createdBinaries.get(url);
               if (etag) {

@@ -212,7 +212,9 @@ function InfoPane({ photo }: { photo: LibraryPhoto }) {
     [
       "Uploaded",
       photo.created
-        ? `${new Date(photo.created).toLocaleString("en", { timeZone: "UTC" })} UTC`
+        ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+            new Date(photo.created),
+          )
         : "Not recorded",
     ],
     ["File name", photo.name],

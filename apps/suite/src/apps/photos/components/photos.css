@@ -87,34 +87,22 @@
   font-size: var(--text-sm);
   white-space: nowrap;
 }
-.pho-upload-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-  align-items: center;
-  padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--text-sm);
-  color: var(--foreground-muted);
+.pho-upload-mobile {
+  display: none;
 }
-.pho-upload-options label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--foreground);
-  min-height: 32px;
-}
-.pho-upload-options input,
 .pho-select input {
   accent-color: var(--primary);
   width: 18px;
   height: 18px;
 }
 [data-app="photos"] .su-drop-zone {
-  min-height: calc(100dvh - 200px);
+  min-height: calc(100dvh - 120px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 [data-app="photos"] .su-drop-actions {
-  padding: var(--space-3) var(--space-6) 0;
+  display: none;
 }
 .pho-day {
   margin-bottom: var(--space-8);
@@ -253,6 +241,25 @@
   display: flex;
   gap: var(--space-1);
   flex-wrap: wrap;
+}
+.pho-tiles[data-actions="true"] {
+  height: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-4);
+}
+.pho-tiles[data-actions="true"] .pho-tile {
+  position: relative;
+  inset: auto;
+  width: auto;
+  height: auto;
+}
+.pho-tiles[data-actions="true"] .pho-tile > a {
+  height: 180px;
+}
+.pho-tiles[data-actions="true"] .pho-tile-actions {
+  position: static;
+  padding: var(--space-2);
 }
 .pho-selection {
   position: sticky;
@@ -566,15 +573,8 @@
   .pho-page-header {
     margin-bottom: var(--space-6);
   }
-  .pho-upload-options {
-    padding: var(--space-2) var(--space-4);
-  }
-  .pho-upload-options > span,
   .pho-context {
     display: none;
-  }
-  [data-app="photos"] .su-drop-actions {
-    padding-inline: var(--space-4);
   }
   .pho-albums {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -616,9 +616,6 @@
   }
 }
 @media (pointer: coarse) {
-  .pho-upload-options label {
-    min-height: 44px;
-  }
   .pho-select {
     min-width: 44px;
     min-height: 44px;
@@ -633,5 +630,14 @@
     scroll-behavior: auto;
     transition: none;
     animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .pho-upload-desktop {
+    display: none;
+  }
+  .pho-upload-mobile {
+    display: block;
   }
 }

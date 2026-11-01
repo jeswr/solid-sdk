@@ -2,6 +2,12 @@
 "use client";
 import {
   Button,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   DropZoneOverlay,
   ErrorState,
   LoadingSkeleton,
@@ -11,7 +17,7 @@ import {
 import { Album, Heart, Images, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { PhotosProvider, usePhotos } from "../state/photos-context";
@@ -24,8 +30,48 @@ function Chrome({ children }: { children: ReactNode }) {
   const photos = usePhotos();
   const pathname = usePathname();
   const picker = useRef<HTMLInputElement>(null);
+  const folderPicker = useRef<HTMLInputElement>(null);
   const [strip, setStrip] = useState(true);
+  useEffect(() => {
+    try {
+      setStrip(localStorage.getItem("photos-remove-location") !== "false");
+    } catch {
+      /* Storage may be disabled. */
+    }
+  }, []);
   const request = () => picker.current?.click();
+  const uploadMenu = (className: string) => (
+    <div className={className}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>
+            <Upload size={18} aria-hidden="true" />
+            Upload
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={request}>Upload files</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => folderPicker.current?.click()}>
+            Upload folder
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={strip}
+            onCheckedChange={(value) => {
+              setStrip(value);
+              try {
+                localStorage.setItem("photos-remove-location", String(value));
+              } catch {
+                /* Storage may be disabled. */
+              }
+            }}
+          >
+            Remove location from uploads
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
   const navigation = [
     { href: "/photos", name: "Photos", icon: Images, count: photos.photos.length },
     { href: "/photos/albums", name: "Albums", icon: Album, count: photos.albums.length },
@@ -37,12 +83,6 @@ function Chrome({ children }: { children: ReactNode }) {
     },
     { href: "/photos/trash", name: "Trash", icon: Trash2, count: photos.trash.length },
   ];
-  const uploadButton = (
-    <Button onClick={request}>
-      <Upload size={18} aria-hidden="true" />
-      Upload
-    </Button>
-  );
   return (
     <UploadContext value={request}>
       <SuiteFrame
@@ -51,7 +91,7 @@ function Chrome({ children }: { children: ReactNode }) {
         sidebar={
           <div className="pho-sidebar">
             <div className="pho-brand">Photos</div>
-            {uploadButton}
+            {uploadMenu("pho-upload-desktop")}
             <nav aria-label="Photos">
               <ul>
                 {navigation.map(({ href, name, icon: Icon, count }) => (
@@ -79,7 +119,7 @@ function Chrome({ children }: { children: ReactNode }) {
           action: "/photos/search",
           scopeLabel: "in Photos",
         }}
-        actions={uploadButton}
+        actions={uploadMenu("pho-upload-mobile")}
       >
         <input
           ref={picker}
@@ -93,17 +133,19 @@ function Chrome({ children }: { children: ReactNode }) {
             event.target.value = "";
           }}
         />
-        <div className="pho-upload-options">
-          <label>
-            <input
-              type="checkbox"
-              checked={strip}
-              onChange={(event) => setStrip(event.target.checked)}
-            />
-            Strip location from uploads
-          </label>
-          <span>Keep your places private. Applies to dropped files too.</span>
-        </div>
+        <input
+          ref={folderPicker}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          {...{ webkitdirectory: "" }}
+          aria-label="Upload image folder"
+          onChange={(event) => {
+            photos.upload(Array.from(event.target.files ?? []), strip);
+            event.target.value = "";
+          }}
+        />
         <DropZoneOverlay
           folderName="Photos"
           onFiles={(files) => {

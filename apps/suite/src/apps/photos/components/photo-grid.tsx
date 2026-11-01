@@ -166,8 +166,9 @@ export function PhotoGrid({
               photo.exif.orientation ?? 1,
             ).aspectRatio,
         );
+        const targetRowHeight = width < 500 ? 128 : 138;
         const layout = layoutJustifiedRows(ratios, width, {
-          targetRowHeight: width < 500 ? 128 : 186,
+          targetRowHeight,
           gap: 8,
         });
         return (
@@ -187,7 +188,11 @@ export function PhotoGrid({
                 </span>
               </header>
             )}
-            <ul className="pho-tiles" style={{ height: layout.height }}>
+            <ul
+              className="pho-tiles"
+              data-actions={Boolean(itemActions)}
+              style={itemActions ? undefined : { height: layout.height }}
+            >
               {layout.rows.flatMap((row) =>
                 row.items.map((item) => {
                   const photo = group.photos[item.index] as LibraryPhoto;
@@ -201,7 +206,7 @@ export function PhotoGrid({
                   return (
                     <li
                       key={photo.ref}
-                      style={style}
+                      style={itemActions ? undefined : style}
                       className="pho-tile"
                       data-selected={selected.has(photo.ref)}
                       draggable={Boolean(album)}
@@ -218,6 +223,7 @@ export function PhotoGrid({
                         event.stopPropagation();
                         const ref = drag.current;
                         drag.current = null;
+                        if (ref === photo.ref) return;
                         void state.editAlbum(
                           album.url,
                           (current) => {

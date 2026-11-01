@@ -83,7 +83,7 @@ async function upload(io: ReturnType<typeof photoDataStorage>, id = "one", strip
     id: () => id,
   });
   const result = outcomes[0];
-  if (!result?.ok) throw new Error("Fixture upload failed");
+  if (!result?.ok) throw result && !result.ok ? result.error : new Error("Fixture upload failed");
   return result.url;
 }
 

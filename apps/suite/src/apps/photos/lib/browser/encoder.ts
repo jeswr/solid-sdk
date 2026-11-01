@@ -41,23 +41,9 @@ async function render(blob: Blob, plan?: ThumbnailPlan, type = "image/webp", qua
     bitmap.close();
   }
 }
-/** Strip JPEG metadata without touching compressed pixels. Keep only orientation. */
-async function stripJpeg(original: Blob) {
-  const orientation = (await readExif(await original.arrayBuffer())).orientation ?? 1;
-  const bytes = new Uint8Array(await original.arrayBuffer());
-  const parts: BlobPart[] = [bytes.slice(0, 2)];
-  // Orientation-only APP1; inserted after a leading JFIF header.
-  const orientationBytes = Uint8Array.from([
-    255,
-    225,
-    0,
-    34,
-    69,
-    120,
-    105,
-    102,
-    0,
-    0,
+/** Minimal EXIF TIFF, retaining only the display orientation. */
+function orientationTiff(orientation: number) {
+  return Uint8Array.from([
     73,
     73,
     42,
@@ -85,6 +71,14 @@ async function stripJpeg(original: Blob) {
     0,
     0,
   ]);
+}
+/** Walk every JPEG scan, preserving entropy bytes and removing inter-scan metadata too. */
+async function stripJpeg(original: Blob) {
+  const buffer = await original.arrayBuffer();
+  const orientation = (await readExif(buffer)).orientation ?? 1;
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] !== 255 || bytes[1] !== 216) throw new Error("Invalid JPEG header");
+  const parts: BlobPart[] = [bytes.slice(0, 2)];
   let inserted = false;
   let offset = 2;
   while (offset < bytes.length) {
@@ -93,12 +87,16 @@ async function stripJpeg(original: Blob) {
     while (bytes[offset] === 255) offset++;
     const marker = bytes[offset++];
     if (marker !== 224 && !inserted) {
-      if (orientation !== 1) parts.push(orientationBytes);
+      if (orientation !== 1)
+        parts.push(
+          Uint8Array.from([255, 225, 0, 34, 69, 120, 105, 102, 0, 0]),
+          orientationTiff(orientation),
+        );
       inserted = true;
     }
-    if (marker === 218 || marker === 217) {
-      parts.push(bytes.slice(start));
-      break;
+    if (marker === 217) {
+      parts.push(bytes.slice(start, offset));
+      return new Blob(parts, { type: "image/jpeg" });
     }
     if (marker === undefined || offset + 2 > bytes.length) throw new Error("Invalid JPEG segment");
     const length = ((bytes[offset] as number) << 8) | (bytes[offset + 1] as number);
@@ -106,8 +104,75 @@ async function stripJpeg(original: Blob) {
     offset += length;
     if (!((marker >= 225 && marker <= 239 && marker !== 238) || marker === 254))
       parts.push(bytes.slice(start, offset));
+    if (marker === 218) {
+      const scan = offset;
+      // FF00 is an escaped entropy byte; restart markers are part of the scan.
+      while (offset < bytes.length) {
+        if (bytes[offset] !== 255) {
+          offset++;
+          continue;
+        }
+        let next = offset + 1;
+        while (bytes[next] === 255) next++;
+        const code = bytes[next];
+        if (code === 0 || (code !== undefined && code >= 208 && code <= 215)) offset = next + 1;
+        else break;
+      }
+      parts.push(bytes.slice(scan, offset));
+    }
   }
-  return new Blob(parts, { type: "image/jpeg" });
+  throw new Error("Incomplete JPEG image");
+}
+/** Remove WebP metadata chunks without decoding or recompressing any image frame. */
+async function stripWebp(original: Blob) {
+  const buffer = await original.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  const tag = (start: number) => String.fromCharCode(...bytes.slice(start, start + 4));
+  if (
+    bytes.length < 12 ||
+    tag(0) !== "RIFF" ||
+    tag(8) !== "WEBP" ||
+    view.getUint32(4, true) + 8 !== bytes.length
+  )
+    throw new Error("Invalid WebP container");
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let orientation = 1;
+  let extended: Uint8Array<ArrayBuffer> | undefined;
+  for (let offset = 12; offset < bytes.length; ) {
+    if (offset + 8 > bytes.length) throw new Error("Invalid WebP chunk");
+    const type = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    const end = offset + 8 + size + (size % 2);
+    if (end > bytes.length) throw new Error("Invalid WebP chunk");
+    if (type === "EXIF") {
+      let tiff = bytes.slice(offset + 8, offset + 8 + size);
+      if (String.fromCharCode(...tiff.slice(0, 6)) === "Exif\0\0") tiff = tiff.slice(6);
+      orientation = (await readExif(tiff.buffer)).orientation ?? 1;
+    } else if (["VP8X", "ICCP", "ANIM", "ANMF", "ALPH", "VP8 ", "VP8L"].includes(type)) {
+      const chunk = bytes.slice(offset, end);
+      if (type === "VP8X") {
+        if (size !== 10) throw new Error("Invalid extended WebP header");
+        extended = chunk;
+        chunk[8] = (chunk[8] as number) & ~12;
+      }
+      chunks.push(chunk);
+    }
+    offset = end;
+  }
+  if (orientation !== 1) {
+    if (!extended) throw new Error("WebP EXIF requires an extended header");
+    extended[8] = (extended[8] as number) | 8;
+    const tiff = orientationTiff(orientation);
+    chunks.push(Uint8Array.from([69, 88, 73, 70, tiff.length, 0, 0, 0, ...tiff]));
+  }
+  const header = bytes.slice(0, 12);
+  new DataView(header.buffer).setUint32(
+    4,
+    4 + chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+    true,
+  );
+  return new Blob([header, ...chunks], { type: "image/webp" });
 }
 export const browserEncoder: ImageEncoder = {
   async dimensions(original) {
@@ -121,9 +186,10 @@ export const browserEncoder: ImageEncoder = {
   thumbnail: (original, plan) => render(original, plan),
   async stripLocation(original) {
     if (original.type === "image/jpeg") return stripJpeg(original);
-    // Browser PNG/WebP encoding drops ancillary metadata. Reject other formats
+    if (original.type === "image/webp") return stripWebp(original);
+    // PNG encoding is lossless and drops ancillary metadata. Reject other formats
     // instead of silently uploading location or changing their media type.
-    if (!["image/png", "image/webp"].includes(original.type))
+    if (original.type !== "image/png")
       throw new Error(
         "Turn off Strip location for this image format, or upload a JPEG, PNG or WebP",
       );

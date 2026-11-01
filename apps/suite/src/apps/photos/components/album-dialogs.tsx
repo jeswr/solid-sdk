@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { changeMembers } from "../lib/data/albums";
 import { usePhotos } from "../state/photos-context";
+import { useDialogFocus } from "./dialog-focus";
 
 export function AlbumDialog({
   refs,
@@ -26,6 +27,7 @@ export function AlbumDialog({
   createOnly?: boolean;
 }) {
   const photos = usePhotos();
+  const focus = useDialogFocus();
   const [name, setName] = useState("");
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +57,7 @@ export function AlbumDialog({
         if (!value && !busy) onClose();
       }}
     >
-      <DialogContent className="pho-dialog">
+      <DialogContent className="pho-dialog" {...focus}>
         <DialogHeader>
           <DialogTitle>{createOnly ? "New album" : "Add to album"}</DialogTitle>
           <DialogDescription>
@@ -132,6 +134,7 @@ export function ConfirmDialog({
   onConfirm: () => Promise<boolean>;
 }) {
   const [busy, setBusy] = useState(false);
+  const focus = useDialogFocus();
   return (
     <Dialog
       open={open}
@@ -139,7 +142,7 @@ export function ConfirmDialog({
         if (!value && !busy) onClose();
       }}
     >
-      <DialogContent className="pho-dialog">
+      <DialogContent className="pho-dialog" {...focus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

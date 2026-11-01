@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-import { groupPhotos, type Photo, type PhotoStorage } from "../model";
+import { isomorphic } from "rdf-isomorphic";
+import { buildPhoto, groupPhotos, type Photo, PhotoIoError, type PhotoStorage } from "../model";
 import type { StoredAlbum } from "./albums";
 import { children, collect, requireEtag } from "./shared";
 
@@ -64,4 +65,32 @@ export async function saveKeywords(io: PhotoStorage, photo: LibraryPhoto, keywor
   if (photo.readOnly || photo.ref !== `${photo.url}#it`)
     throw new TypeError("Imported multi-photo documents are read-only");
   return io.savePhoto(photo.url, { ...photo, keywords }, { etag: requireEtag(photo.etag) });
+}
+/** Follow only this client's successful revisions; external changes still fail If-Match. */
+export function createKeywordWriter(io: PhotoStorage) {
+  const revisions = new Map<string, { known: Set<string | null>; current: LibraryPhoto }>();
+  return async (photo: LibraryPhoto, keywords: string[]): Promise<LibraryPhoto> => {
+    const previous = revisions.get(photo.ref);
+    const source = previous?.known.has(photo.etag) ? previous.current : photo;
+    const result = await saveKeywords(io, source, keywords);
+    let etag = result.etag;
+    if (!etag) {
+      const loaded = await io.loadPhoto(photo.url);
+      if (
+        !loaded.photo ||
+        !isomorphic(
+          [...buildPhoto(photo.url, { ...source, keywords })],
+          [...buildPhoto(photo.url, loaded.photo)],
+        )
+      )
+        throw new PhotoIoError(photo.url, 412);
+      etag = loaded.etag;
+    }
+    const current = { ...source, keywords: [...new Set(keywords)], etag: requireEtag(etag) };
+    const known = new Set(previous?.known);
+    known.add(photo.etag);
+    known.add(current.etag);
+    revisions.set(photo.ref, { known, current });
+    return current;
+  };
 }

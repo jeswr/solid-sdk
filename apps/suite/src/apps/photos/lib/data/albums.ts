@@ -16,6 +16,7 @@ export async function createAlbum(
   io: PhotoStorage,
   name: string,
   now: string,
+  members: readonly string[] = [],
 ): Promise<StoredAlbum> {
   name = name.trim();
   if (!name) throw new TypeError("Give the album a name");
@@ -29,7 +30,7 @@ export async function createAlbum(
   await io.ensureContainers(["", "albums/"]);
   for (let suffix = 1; ; suffix++) {
     const url = `${io.root}albums/${slug}${suffix === 1 ? "" : `-${suffix}`}.ttl`;
-    const album: Album = { name, dateCreated: now, members: [] };
+    const album: Album = { name, dateCreated: now, members: [...new Set(members)] };
     try {
       const { etag } = await io.saveAlbum(url, album, { create: true });
       return { ...album, url, etag };

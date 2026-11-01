@@ -107,3 +107,101 @@ describe("Photos browser encoder contracts", () => {
     ).rejects.toThrow("Turn off Strip location");
   });
 });
+
+function webpChunk(type: string, payload: Uint8Array) {
+  const chunk = new Uint8Array(8 + payload.length + (payload.length % 2));
+  chunk.set([...type].map((c) => c.charCodeAt(0)));
+  new DataView(chunk.buffer).setUint32(4, payload.length, true);
+  chunk.set(payload, 8);
+  return chunk;
+}
+function webp(chunks: Uint8Array[]) {
+  const header = Uint8Array.from([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]);
+  new DataView(header.buffer).setUint32(
+    4,
+    4 + chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+    true,
+  );
+  return new Blob([header, ...chunks.map((chunk) => new Uint8Array(chunk))], {
+    type: "image/webp",
+  });
+}
+function chunksOf(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunks = new Map<string, Uint8Array>();
+  for (let offset = 12; offset < bytes.length; ) {
+    const size = new DataView(buffer).getUint32(offset + 4, true);
+    chunks.set(
+      String.fromCharCode(...bytes.slice(offset, offset + 4)),
+      bytes.slice(offset + 8, offset + 8 + size),
+    );
+    offset += 8 + size + (size % 2);
+  }
+  expect(new DataView(buffer).getUint32(4, true) + 8).toBe(bytes.length);
+  return chunks;
+}
+it("removes GPS metadata between progressive JPEG scans without altering entropy or restart markers", async () => {
+  const original = new Uint8Array(await jpeg(6).arrayBuffer());
+  const gps = new TextEncoder().encode(
+    "http://ns.adobe.com/xap/1.0/\0 GPSLatitude=51.05 GPSLongitude=3.72",
+  );
+  const segment = Uint8Array.from([
+    255,
+    225,
+    (gps.length + 2) >> 8,
+    (gps.length + 2) & 255,
+    ...gps,
+  ]);
+  const scan = Uint8Array.from([255, 218, 0, 2, 10, 255, 0, 20, 255, 208, 30, 255, 255, 209, 40]);
+  const bytes = new Blob(
+    [original.slice(0, -2), segment, scan, segment, scan, Uint8Array.from([255, 217]), gps],
+    { type: "image/jpeg" },
+  );
+  const stripped = await browserEncoder.stripLocation(bytes);
+  const output = new Uint8Array(await stripped.arrayBuffer());
+  expect(new TextDecoder().decode(output)).not.toContain("GPS");
+  expect([...output.slice(-2 - scan.length * 2)]).toEqual([...scan, ...scan, 255, 217]);
+  expect((await readExif(output.buffer)).orientation).toBe(6);
+});
+it("strips WebP GPS without recompressing pixels or changing orientation, including animation chunks", async () => {
+  const pixel = webpChunk("VP8 ", Uint8Array.from([1, 2, 255, 0, 5]));
+  const frame = webpChunk("ANMF", Uint8Array.from([8, 7, 6, 5]));
+  const xmp = webpChunk("XMP ", new TextEncoder().encode("GPSLatitude=51"));
+  for (let orientation = 1; orientation <= 8; orientation++) {
+    const header = webpChunk("VP8X", Uint8Array.from([14, 0, 0, 0, 1, 0, 0, 1, 0, 0]));
+    const tiff = new Uint8Array(tiffFixture(orientation));
+    const prefixed =
+      orientation % 2 === 0 ? Uint8Array.from([69, 120, 105, 102, 0, 0, ...tiff]) : tiff;
+    const original = webp([header, pixel, frame, webpChunk("EXIF", prefixed), xmp]);
+    const stripped = await browserEncoder.stripLocation(original);
+    const buffer = await stripped.arrayBuffer();
+    const chunks = chunksOf(buffer);
+    expect(chunks.get("VP8 ")).toEqual(pixel.slice(8, 13));
+    expect(chunks.get("ANMF")).toEqual(frame.slice(8));
+    expect(chunks.has("XMP ")).toBe(false);
+    expect((chunks.get("VP8X")?.[0] ?? 0) & 12).toBe(orientation === 1 ? 0 : 8);
+    const exif = chunks.get("EXIF");
+    if (orientation === 1) expect(exif).toBeUndefined();
+    else {
+      const metadata = await readExif(new Uint8Array(exif as Uint8Array).buffer);
+      expect(metadata.orientation).toBe(orientation);
+      expect(metadata.location).toBeUndefined();
+    }
+    expect(stripped.type).toBe("image/webp");
+    expect(new TextDecoder().decode(buffer)).not.toContain("GPS");
+  }
+});
+it("preserves a simple WebP bitstream exactly and rejects malformed containers instead of uploading metadata", async () => {
+  const original = webp([webpChunk("VP8L", Uint8Array.from([47, 0, 1, 2, 3]))]);
+  expect(await (await browserEncoder.stripLocation(original)).arrayBuffer()).toEqual(
+    await original.arrayBuffer(),
+  );
+  const invalid = [
+    new Blob(["not webp"], { type: "image/webp" }),
+    webp([Uint8Array.from([1])]),
+    webp([Uint8Array.from([86, 80, 56, 32, 255, 255, 255, 255])]),
+    webp([webpChunk("VP8X", new Uint8Array(1))]),
+    webp([webpChunk("EXIF", new Uint8Array(tiffFixture(6)))]),
+  ];
+  for (const blob of invalid) await expect(browserEncoder.stripLocation(blob)).rejects.toThrow();
+});

@@ -73,6 +73,16 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   });
   await page.goto("/photos");
   await expect(opens(page)).toHaveCount(12);
+  const uploadButton = page.getByRole("button", { name: "Upload", exact: true });
+  await expect(uploadButton).toHaveCount(1);
+  await uploadButton.click();
+  await expect(page.getByRole("menuitem", { name: "Upload files", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Upload folder", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Remove location from uploads", exact: true }),
+  ).toBeChecked();
+  await page.keyboard.press("Escape");
+  await expect(uploadButton).toBeFocused();
   await page.getByLabel("Upload images", { exact: true }).setInputFiles(
     [1, 2, 3].map((n) => ({
       name: `Upload ${n}.png`,
@@ -108,6 +118,9 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   await navigate(page, "Albums");
   await page.getByRole("button", { name: "New album", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New album", exact: true });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New album", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "New album", exact: true }).click();
   await dialog.getByLabel("Album name", { exact: true }).fill("Weekend");
   await dialog.getByRole("button", { name: "Create album", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -121,6 +134,7 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   await picker.getByRole("button", { name: "Add 2 photos", exact: true }).click();
   await expect(picker).toBeHidden();
   await saved(page);
+  await expect(page.getByRole("button", { name: "Add photos", exact: true })).toBeFocused();
   await expect(opens(page)).toHaveCount(2);
   // Member order follows the explicit picker selection, independent of timeline dates.
   await expect(opens(page).first()).toHaveAttribute("data-photo-ref", /.+/);
@@ -130,10 +144,39 @@ test("upload, keyboard lightbox, undo, albums, reorder, cover, favourites and tr
   await expect(opens(page).first()).toHaveAttribute("aria-label", "Open Upload 2.png");
   await page.reload();
   await expect(opens(page).first()).toHaveAttribute("aria-label", "Open Upload 2.png");
+  // Dropping the second member onto itself must leave the saved order unchanged.
+  const self = page
+    .locator(".pho-tile")
+    .filter({ has: page.getByRole("link", { name: "Open Upload 1.png", exact: true }) });
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  await self.dispatchEvent("dragstart", { dataTransfer: transfer });
+  await self.dispatchEvent("drop", { dataTransfer: transfer });
+  await self.dispatchEvent("dragend", { dataTransfer: transfer });
+  await saved(page);
+  await expect(opens(page).first()).toHaveAttribute("aria-label", "Open Upload 2.png");
+  const chosenThumbnail = await page
+    .getByRole("link", { name: "Open Upload 1.png", exact: true })
+    .locator("img")
+    .evaluate(async (image: HTMLImageElement) =>
+      Array.from(new Uint8Array(await (await fetch(image.src)).arrayBuffer())),
+    );
+  const albumUrl = page.url();
   await page.getByRole("button", { name: "Actions for Upload 1.png", exact: true }).click();
   await page.getByRole("menuitem", { name: "Set as cover", exact: true }).click();
   await saved(page);
   await capture(page, info, "album");
+  await navigate(page, "Albums");
+  await page.reload();
+  const card = page.getByRole("link", { name: "Weekend 2 photos", exact: true });
+  const coverImage = card.getByRole("img", { name: "Weekend cover", exact: true });
+  await expect(coverImage).toBeVisible();
+  expect(
+    await coverImage.evaluate(async (image: HTMLImageElement) =>
+      Array.from(new Uint8Array(await (await fetch(image.src)).arrayBuffer())),
+    ),
+  ).toEqual(chosenThumbnail);
+  await page.goto(albumUrl);
+  await expect(opens(page)).toHaveCount(2);
   await page.getByRole("link", { name: "Open Upload 1.png", exact: true }).click();
   const favouriteBox = page.getByRole("dialog", { name: "Upload 1.png", exact: true });
   await favouriteBox.getByRole("button", { name: "Favourite", exact: true }).click();
@@ -184,6 +227,10 @@ test("search, selection, direct lightbox reload and album deletion keep original
   await page.getByRole("button", { name: "Close photo", exact: true }).click();
   await navigate(page, "Albums");
   await page.getByRole("link", { name: /Ghent trip/ }).click();
+  await page.getByRole("button", { name: "Delete album", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Delete this album?", exact: true });
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Delete album", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "Delete album", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Delete this album?", exact: true })

@@ -22,7 +22,7 @@ import {
   saveAlbum,
 } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
-import { type LibraryPhoto, listLibrary, saveKeywords } from "../lib/data/library";
+import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
 import { statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import {
@@ -49,6 +49,8 @@ const Context = createContext<ReturnType<typeof usePhotosState> | null>(null);
 function usePhotosState(session: PodSession) {
   const io = useMemo(() => photoDataStorage(session.fetch, session.storageUrl), [session]);
   const preferences = useMemo(() => preferenceStore(session.fetch, session.storageUrl), [session]);
+  const writeKeywords = useMemo(() => createKeywordWriter(io), [io]);
+  const trashOperations = useRef(new Map<string, string>());
   const [snapshot, setSnapshot] = useState<Snapshot>(empty);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [saving, setSaving] = useState(false);
@@ -181,8 +183,7 @@ function usePhotosState(session: PodSession) {
       return run(
         (s) => ({ ...s, albums: [...s.albums, temporary] }),
         async () => {
-          const created = await createAlbum(io, name, new Date().toISOString());
-          if (refs.length) await saveAlbum(io, { ...created, members: refs });
+          const created = await createAlbum(io, name, new Date().toISOString(), refs);
           const patch: Patch = (s) => ({
             ...s,
             albums: [...s.albums, { ...created, members: refs }],
@@ -250,14 +251,30 @@ function usePhotosState(session: PodSession) {
         const urls: string[] = [];
         for (const photo of photos) {
           if (photo.readOnly) throw new Error("Imported photos are read-only");
+          let operation = trashOperations.current.get(photo.url);
+          if (!operation) {
+            // Recover an incomplete move after a reload as well as within this session.
+            const recovery = baseline.current.trash.find(
+              (item) =>
+                item.record.originalUrl === photo.url &&
+                item.record.actor === session.webId &&
+                !item.record.state &&
+                item.url.endsWith(".ttl"),
+            );
+            operation = recovery
+              ? recovery.url.slice(`${io.root}.trash/`.length, -4)
+              : crypto.randomUUID();
+            trashOperations.current.set(photo.url, operation);
+          }
           const outcome = await trashPhoto(
             io,
             photo.url,
-            crypto.randomUUID(),
+            operation,
             session.webId,
             new Date().toISOString(),
           );
           if (!outcome.ok) throw outcome.error;
+          trashOperations.current.delete(photo.url);
           urls.push(outcome.value);
         }
         toast("Moved to trash", {
@@ -304,12 +321,14 @@ function usePhotosState(session: PodSession) {
         ),
       });
       return run(patch, async () => {
-        // Preserve the revision the user edited; conflicts require an explicit retry.
-        await saveKeywords(io, photo, value);
-        return patch;
+        const saved = await writeKeywords(photo, value);
+        return (s) => ({
+          ...s,
+          photos: s.photos.map((item) => (item.ref === saved.ref ? saved : item)),
+        });
       });
     },
-    [io, run],
+    [writeKeywords, run],
   );
   const startUpload = useCallback(
     (id: string) => {
@@ -400,7 +419,10 @@ function usePhotosState(session: PodSession) {
   };
   const dismissUploads = () => {
     for (const item of uploads)
-      if (["done", "failed", "skipped"].includes(item.status)) uploadInputs.current.delete(item.id);
+      if (["done", "failed", "skipped"].includes(item.status)) {
+        uploadInputs.current.delete(item.id);
+        io.uploads.delete(item.id);
+      }
     setUploads((items) =>
       items.filter((item) => !["done", "failed", "skipped"].includes(item.status)),
     );

@@ -22,6 +22,7 @@ import { changeMembers, type StoredAlbum } from "../lib/data/albums";
 import { type LibraryPhoto, searchPhotos } from "../lib/data/library";
 import { usePhotos } from "../state/photos-context";
 import { AlbumDialog, ConfirmDialog } from "./album-dialogs";
+import { useDialogFocus } from "./dialog-focus";
 import { PhotoGrid } from "./photo-grid";
 import { PhotoImage } from "./photo-image";
 import { useRequestUpload } from "./photos-app";
@@ -65,6 +66,7 @@ export function CollectionScreen({
   const [selected, setSelected] = useState(new Set<string>());
   const [add, setAdd] = useState(false);
   const [picker, setPicker] = useState(false);
+  const pickerFocus = useDialogFocus();
   const [picked, setPicked] = useState(new Set<string>());
   const [confirmation, setConfirmation] = useState<"album" | "empty" | "purge" | null>(null);
   const [purgeUrls, setPurgeUrls] = useState<string[]>([]);
@@ -332,7 +334,7 @@ export function CollectionScreen({
           }
           primaryAction={
             kind === "album" ? (
-              <Button onClick={() => setPicker(true)}>Add photos</Button>
+              <Button onClick={() => setPicker(true)}>Choose photos</Button>
             ) : kind === "timeline" ? (
               <Button onClick={requestUpload}>Upload photos</Button>
             ) : (
@@ -384,7 +386,7 @@ export function CollectionScreen({
         onClose={() => setAdd(false)}
       />
       <Dialog open={picker} onOpenChange={setPicker}>
-        <DialogContent className="pho-picker">
+        <DialogContent className="pho-picker" {...pickerFocus}>
           <DialogHeader>
             <DialogTitle>Add photos to {album?.name}</DialogTitle>
             <DialogDescription>
