@@ -148,6 +148,10 @@
       "types": "./dist/direct/send.d.ts",
       "default": "./dist/direct/send.js"
     },
+    "./provider/send": {
+      "types": "./dist/provider/send.d.ts",
+      "default": "./dist/provider/send.js"
+    },
     "./testing/send": {
       "types": "./dist/testing/send.d.ts",
       "default": "./dist/testing/send.js"

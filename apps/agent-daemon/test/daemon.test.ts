@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
 import { type BridgeMessage, ChannelParseError, DIRECT } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
@@ -22,7 +23,7 @@ import {
 } from "@jeswr/agent-mandate";
 import { canonicalJson, digestBytes, digestOf, newUrn, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
-import { createGateway, GatewayError } from "@jeswr/agent-model-gateway";
+import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
   buildBitstringStatusListCredential,
@@ -36,6 +37,7 @@ import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
+import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
 import { createLocalState } from "../src/local.js";
 import { createMemoryPod, createMemoryState } from "../src/testing.js";
@@ -220,6 +222,115 @@ function harness() {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+const measuredCall = (context: ModelCall["context"], id = context): ModelCall => ({
+  id: `urn:model-call:${id}`,
+  context,
+  provider: "openai",
+  model: "fixture",
+  tokens: { input: 7, output: 3 },
+  inputTokens: 7,
+  outputTokens: 3,
+  toolCalls: 1,
+  latencyMs: 2.4,
+  retries: 1,
+});
+
+it.each([
+  0, 1, 2,
+])("awp stats includes a flagged runtime task with Reader and Proposer calls for %i proposals", async (count) => {
+  const h = harness();
+  Object.assign(h.message, { jsonLdBlocks: [] });
+  vi.mocked(h.options.isFlagged).mockResolvedValue(true);
+  const reader = measuredCall("reader");
+  const proposer = measuredCall("proposer");
+  vi.spyOn(h.options.gateway.reader, "extract").mockImplementation(async (_message, schema) => ({
+    data: schema.parse({ primary: "needs_reply", urgency: "not_urgent", confidence: 1 }),
+    calls: [{ ...reader, taskId: "model-task", conversation: "urn:model-conversation" }],
+  }));
+  vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue({
+    calls: [proposer],
+    proposals: Array.from({ length: count }, (_, i) => ({
+      ...exampleRecords["action-proposal"],
+      id: `urn:proposal:model-${i}`,
+    })),
+  });
+  const daemon = createDaemon(h.options);
+  await daemon.once();
+  const records = h.ledger
+    .entries()
+    .map((e) => e.record)
+    .filter((r) => r.type !== "ledger-checkpoint");
+  const taskId = records[0]?.taskId;
+  expect(taskId).toMatch(/^task-[a-f0-9]{64}$/);
+  expect(records.every((r) => r.taskId === taskId)).toBe(true);
+  expect(records.filter((r) => r.type === "model-call")).toHaveLength(2);
+  expect(records.every((r) => r.conversation !== "urn:model-conversation")).toBe(true);
+  const directory = await mkdtemp(join(tmpdir(), "awp-runtime-stats-"));
+  try {
+    const host = createCliHost({
+      daemon,
+      local: createLocalState(directory),
+      ledger: h.ledger,
+      accounts: vi.fn(),
+      credentials: {} as never,
+      openLoginUrl: vi.fn(),
+      launchCommand: [],
+    });
+    const print = vi.fn();
+    const stderr = vi.fn();
+    expect(
+      await runCli(["stats"], host, {
+        print,
+        stderr,
+        confirm: vi.fn(),
+        signal: new AbortController().signal,
+      }),
+    ).toBe(0);
+    const report = JSON.parse(print.mock.calls[0]?.[0] as string);
+    expect(report.tasks).toMatchObject([
+      {
+        taskId,
+        modelCalls: 2,
+        toolCalls: 2,
+        inputTokens: 14,
+        outputTokens: 6,
+        tokens: 20,
+        retries: 2,
+      },
+    ]);
+    expect(report.unassignedEntries).toBe(0);
+    expect(stderr).not.toHaveBeenCalled();
+    // Cursor replay retains the task and producing Proposer call without invoking it again.
+    await createDaemon(h.options).once();
+    expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+    expect(h.ledger.entries()).toHaveLength(records.length);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "reader",
+  "proposer",
+] as const)("failed %s model calls retain daemon-derived task context", async (context) => {
+  const h = harness();
+  const call = measuredCall(context);
+  if (context === "reader")
+    vi.spyOn(h.options.gateway.reader, "extract").mockRejectedValueOnce(new GatewayError([call]));
+  else
+    vi.mocked(h.options.gateway.proposer.propose).mockRejectedValueOnce(new GatewayError([call]));
+  await expect(createDaemon(h.options).once()).rejects.toThrow();
+  const records = h.ledger
+    .entries()
+    .map((e) => e.record)
+    .filter((r) => r.type !== "ledger-checkpoint");
+  const failure = records.find((r) => r.type === "model-call");
+  expect(failure).toMatchObject({ taskId: records[0]?.taskId, inputTokens: 7, outputTokens: 3 });
+  expect(failure?.taskId).toMatch(/^task-[a-f0-9]{64}$/);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });
 
 it("imports ACL first, deterministically triages, proposes, audits, checkpoints, and executes without listening", async () => {

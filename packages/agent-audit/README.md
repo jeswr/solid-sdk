@@ -193,6 +193,9 @@ the whole input, even when filtering one task. Checkpoints do not become task
 rows. A pruned ledger yields retained totals only. Missing labels are never
 inferred from unrelated records. Callers should persist task context for every
 event and use a unique label for each experiment. CSV repeats retention and
-assignment metadata on each row; an empty selection emits the header only.
+assignment metadata on each row. JSON's `unassigned` object applies the same counter
+and validation rules to events without task IDs. CSV appends that summary with an
+empty task ID when unassigned events exist, even for a named-task filter. An empty
+selection with no unassigned events emits the header only.
 Exports omit owner/agent identities, conversation IRIs and raw event records.
 The hash-chain limits described above also apply to these statistics.

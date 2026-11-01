@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { expect, it } from "vitest";
 import { capabilityToTurtle } from "../src/capability.js";
@@ -297,7 +298,7 @@ it.each(
   );
   s.queue.push(event("$sent", data.content));
   expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "found" });
-  expect(s.tokens.calls.map((call) => call.access)).toEqual(["read", "send", "read"]);
+  expect(s.tokens.calls.map((call) => call.access)).toEqual(["send", "send", "read"]);
   expect(s.send.finalAbsence).toBeUndefined();
 });
 
@@ -400,7 +401,7 @@ it.each([
     s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
   ).rejects.toThrow();
   expect(s.requests).toHaveLength(1);
-  expect(s.tokens.calls.map((call) => call.access)).toEqual(["read"]);
+  expect(s.tokens.calls.map((call) => call.access)).toEqual(["send"]);
 });
 
 it("refuses structured Matrix carriage when a previously native room becomes bridged", async () => {
@@ -426,6 +427,6 @@ it.each([
       s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow();
     expect(s.requests).toHaveLength(1);
-    expect(s.tokens.calls.map((call) => call.access)).toEqual(["read"]);
+    expect(s.tokens.calls.map((call) => call.access)).toEqual(["send"]);
   }
 });

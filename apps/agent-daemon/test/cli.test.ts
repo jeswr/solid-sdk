@@ -140,8 +140,12 @@ it("reports unassigned entries without counting them in task rows", async () => 
   for (const args of [["stats", "--ledger", "fixture"], ["stats"]]) {
     io.print.mockClear();
     expect(await runCli(args, host, io)).toBe(0);
-    expect(io.stderr).toHaveBeenCalledWith("Statistics exclude 1 entries without a task ID.\n");
-    expect(JSON.parse(io.print.mock.calls[0]?.[0] as string).unassignedEntries).toBe(1);
+    expect(io.stderr).toHaveBeenCalledWith(
+      "Statistics report 1 entries separately without a task ID.\n",
+    );
+    const report = JSON.parse(io.print.mock.calls[0]?.[0] as string);
+    expect(report.unassignedEntries).toBe(1);
+    expect(report.unassigned).toMatchObject({ modelCalls: 1, tokens: 50 });
   }
 });
 

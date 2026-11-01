@@ -31,6 +31,11 @@ only agent-executor and channel tests may import it. `./testing` exports
 permits that single internal test-factory composition edge and refuses production
 imports of `./testing`.
 
+`./provider/send` exports the shared `ProviderRejectedError` class without loading
+reader or provider implementations. Executor adapters may use this send-only surface
+to distinguish definitive pre-delivery refusals from uncertain errors. Preserve the
+class identity when adapting sends; a name or message string is not sufficient evidence.
+
 The test factory takes `{ tokens, verify, now? }`. `verify` must be a pure local
 signature verifier returning the protected Message after checking the pinned key
 and intended audience. Missing/unverifiable messages fail closed. Rendering is
@@ -436,11 +441,14 @@ capability metadata is never authorization. Validity is checked again after cred
 and approval awaits. Dry-run obtains no credentials and makes no requests.
 
 This task's explicit `PUT /rooms/{id}/send/m.room.message/{proposalId}` path sends
-plaintext content only. A bounded read-grant `GET /rooms/{id}/state` must confirm
+plaintext content only. A bounded `GET /rooms/{id}/state` using the executor-supplied
+send grant must confirm
 the absence of `m.room.encryption`; encrypted, unreadable or unknown room state
 refuses, so the binding never downgrades an encrypted room. Outbound E2EE key
 distribution is outside this binding's current
 send path, so its capability descriptor advertises `endToEndEncrypted: false`.
+Transmit never requests `options.tokens.read` or a construction-time send grant;
+both preflight and the send request use only `io.tokens.send`. Lookup remains read-only.
 The provider's transaction ID supplies idempotency; this binding never
 retries sends. Malformed acknowledgements and ambiguous HTTP failures remain uncertain.
 

@@ -228,12 +228,24 @@ corrupt evidence or invalid counters exit 1 with scrubbed diagnostics.
 
 The trusted composition selects the default ledger; offline exports select it explicitly.
 Pruned prefixes and entries without a task ID produce diagnostics; JSON carries
-these limits and CSV repeats them per row. See
+these limits and CSV repeats them per row. JSON's `unassigned` object also reports
+counters for events without task IDs; CSV includes a summary row with an empty
+task ID when such events exist, including when filtering a named task. See
 [`@jeswr/agent-audit`](../../packages/agent-audit/README.md#task-statistics-a-045)
 for counter definitions, nearest-rank latency percentiles, tool-call linking,
 approval-wait counting and integrity/completeness limits.
 
 ## Record a task
+
+Normal daemon runs derive a stable opaque `task-<sha256>` label from the configured
+account, imported message location and raw digest before invoking the Reader.
+The hashed account/thread context supplies the conversation IRI. Ingest, Reader
+and Proposer model calls (including failures), and generated proposal evidence carry
+this trusted `TaskContext`; model-returned task labels and conversation fields never
+choose it. Empty and multiple-proposal results retain the same inbound task label.
+Cursor retries and cached Proposer results reuse it across restarts. Both token
+breakdowns and scalar totals are recorded, with latency rounded to milliseconds.
+Trusted host compositions can also record explicit experimental tasks with `TaskRecorder`:
 
 ```ts
 import { TaskRecorder } from '@jeswr/app-agent-daemon';

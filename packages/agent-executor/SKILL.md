@@ -3,6 +3,7 @@ name: agent-executor
 description: Use when working on the single action enforcement point surface in @jeswr/agent-executor.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-executor
 
@@ -27,6 +28,10 @@ absence. Only positive exact-wire lookup reconciles delivery. Reattempt unresolv
 requests only with causal finalAbsence, or identical A2A receiver-deduplicated resend,
 max three attempts. A timeout does not cancel the original request. Preserve positive
 sent evidence against late failures. The host must hold a single-writer process lease.
+Recognize only the channel's actual ProviderRejectedError class (send-only provider/send
+export), never its name or message. Settle it as rejected without storing provider text;
+unresolved resends retain their earlier commitment. Bound and validate real binding
+reference shapes on both acknowledgement and positive lookup paths.
 
 Filesystem operations are injected to preserve the agent layer import boundary. Do not
 add raw provider/network/model access or expose a read token through the send projection.

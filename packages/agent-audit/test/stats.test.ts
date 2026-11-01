@@ -88,6 +88,51 @@ it("aggregates tasks in stable order without double-counting gateway tool summar
   expect(() => aggregateTaskStats([], "free text")).toThrow();
 });
 
+it("reports legacy unassigned calls with counters and tool links in JSON and CSV", () => {
+  const ledger = new MemoryLedger();
+  const { taskId: _taskId, ...unassigned } = base;
+  ledger.append(
+    {
+      ...unassigned,
+      type: "model-call",
+      id: "urn:legacy:model",
+      inputTokens: 20,
+      outputTokens: 5,
+      toolCalls: 2,
+      latencyMs: 12,
+      retries: 1,
+    },
+    AT,
+  );
+  ledger.append(
+    {
+      ...unassigned,
+      type: "tool-call",
+      id: "urn:legacy:tool",
+      modelCall: "urn:legacy:model",
+      latencyMs: 3,
+    },
+    AT,
+  );
+  const report = aggregateTaskStats(ledger.entries(), "missing");
+  expect(report.tasks).toEqual([]);
+  expect(report.unassignedEntries).toBe(2);
+  expect(report.unassigned).toMatchObject({
+    modelCalls: 1,
+    toolCalls: 2,
+    inputTokens: 20,
+    outputTokens: 5,
+    tokens: 25,
+    retries: 1,
+    modelLatencyMs: { samples: 1, p50: 12 },
+  });
+  expect(report.unassigned).not.toHaveProperty("taskId");
+  expect(JSON.parse(taskStatsJson(report)).unassigned).toEqual(report.unassigned);
+  expect(taskStatsCsv(report).split("\r\n")[1]).toMatch(/^"","1","2","20","5","25"/);
+  ledger.append({ ...unassigned, type: "model-call", id: "urn:invalid", inputTokens: 1 }, AT);
+  expect(() => aggregateTaskStats(ledger.entries(), "missing")).toThrow("Incomplete");
+});
+
 it("exports golden CSV and lossless JSON without prompts, identities or record references", async () => {
   const report = aggregateTaskStats(fixture().entries());
   await expect(taskStatsCsv(report)).toMatchFileSnapshot("fixtures/stats.csv");

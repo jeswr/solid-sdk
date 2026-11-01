@@ -79,7 +79,7 @@ it("renders a golden event, validates exact bytes, and keeps the proposal ID as 
   );
   expect(sends[0]?.body).toBe(canonicalJson(JSON.parse(repeatWire.bytes).content));
   expect(s.verifyApproval).toHaveBeenCalledWith(repeatWire, account);
-  expect(s.tokens.calls.map((c) => c.access)).toEqual(["read", "send", "read", "send"]);
+  expect(s.tokens.calls.map((c) => c.access)).toEqual(["send", "send", "send", "send"]);
   expect(s.send.finalAbsence).toBeUndefined();
 });
 
@@ -93,6 +93,34 @@ it("defaults to dry-run with no credentials, approval or network activity", asyn
   expect(s.tokens.calls).toEqual([]);
   expect(s.verifyApproval).not.toHaveBeenCalled();
   expect(s.requests).toEqual([]);
+});
+
+it.each([
+  { state: [], accepted: true },
+  { state: [{ type: "m.room.encryption", state_key: "", content: {} }], accepted: false },
+  { state: new Response(null, { status: 403 }), accepted: false },
+  { state: new Response("{"), accepted: false },
+])("uses only the executor send grant for room preflight, accepted=$accepted", async ({
+  state,
+  accepted,
+}) => {
+  const read = vi.fn(async (): Promise<never> => {
+    throw new Error("read grant unavailable");
+  });
+  const send = vi.fn(async (): Promise<never> => {
+    throw new Error("construction grant unavailable");
+  });
+  const s = sender([state, { event_id: "$approved" }], { tokens: { read, send } });
+  const wire = await render(s);
+  const sending = s.send.transmit(wire, live(s));
+  if (accepted) expect(await sending).toEqual({ outcome: "accepted", providerRef: "$approved" });
+  else await expect(sending).rejects.toThrow();
+  expect(read).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  expect(s.tokens.calls.map((c) => c.access)).toEqual(accepted ? ["send", "send"] : ["send"]);
+  expect(s.requests.filter((r) => r.method === "PUT")).toHaveLength(accepted ? 1 : 0);
+  for (const request of s.requests)
+    expect(request.headers.get("authorization")).toBe("Bearer test-send-token-0123456789");
 });
 
 it("rejects wrong sender account, bad signatures and proposal substitutions before network effects", async () => {
@@ -200,7 +228,7 @@ it("requires current mandate/approval and refuses plaintext downgrade of encrypt
   ]) {
     const s = sender([encryption]);
     await expect(s.send.transmit(await render(s), live(s))).rejects.toThrow("unencrypted");
-    expect(s.tokens.calls.map((c) => c.access)).toEqual(["read"]);
+    expect(s.tokens.calls.map((c) => c.access)).toEqual(["send"]);
   }
   for (const verifyApproval of [async () => false, undefined]) {
     const s = sender([unencrypted()], {
@@ -240,6 +268,7 @@ it("checks expiry before I/O and again after credential and approval awaits", as
   };
   await expect(s.send.transmit(wire, live(s))).rejects.toThrow("expired");
   expect(s.requests).toHaveLength(1);
+  expect(s.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
   time = at;
   const t = sender([unencrypted()], {
     now: () => time,

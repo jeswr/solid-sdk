@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { ChannelParseError, readEnvelope } from "@jeswr/agent-channels";
 import { proposalApprovalTerms } from "@jeswr/agent-executor";
 import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
@@ -8,6 +9,7 @@ import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
+import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
 import type { AuthenticatedComposition, Daemon, DaemonAccount, DaemonOptions } from "./types.js";
@@ -110,21 +112,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
     }
     await o.audit.append(evidence, new Date(now()).toISOString());
   };
-  async function calls(records: readonly ModelCall[], proposal?: string) {
+  async function calls(records: readonly ModelCall[], task: TaskContext, proposal?: string) {
     for (const call of records)
       await append({
         type: "model-call",
         id: call.id,
-        owner: o.ownerWebId,
-        agent: o.agentWebId,
         context: call.context,
         provider: call.provider,
         model: call.model,
         tokens: call.inputTokens + call.outputTokens,
+        inputTokens: call.inputTokens,
+        outputTokens: call.outputTokens,
         toolCalls: call.toolCalls,
         latencyMs: Math.round(call.latencyMs),
         retries: call.retries,
         ...(proposal ? { proposal } : {}),
+        ...task,
       });
   }
   async function accountPass(account: DaemonAccount) {
@@ -165,12 +168,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
     });
     for (const { message, id } of parsed) {
       const source = o.workspace.messageUrl(inbox, id);
+      const thread =
+        account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
+      const key = digestOf({ account: account.id, source, digest: message.rawSha256 });
+      // Identity precedes any model call and is stable across cursor replay/restart.
+      // Hash routing context so untrusted titles, labels and proposal IDs cannot select it.
+      const task: TaskContext = Object.freeze({
+        taskId: `task-${key.slice(8)}`,
+        conversation: `urn:sha256:${digestOf({ account: account.id, thread }).slice(8)}`,
+        agent: o.agentWebId,
+        owner: o.ownerWebId,
+      });
       await append({
         type: "ingest",
         id: `urn:sha256:${digestOf({ source, digest: message.rawSha256 }).slice(8)}`,
-        owner: o.ownerWebId,
-        agent: o.agentWebId,
         messageDigest: `sha-256:${message.rawSha256}`,
+        ...task,
       });
       let extraction: Awaited<
         ReturnType<typeof o.gateway.reader.extract<z.infer<typeof triageSchema>>>
@@ -178,15 +191,12 @@ export function createDaemon(o: DaemonOptions): Daemon {
       try {
         extraction = await o.gateway.reader.extract(message, triageSchema);
       } catch (error) {
-        if (error instanceof GatewayError) await calls(error.calls);
+        if (error instanceof GatewayError) await calls(error.calls, task);
         throw new Error("Reader extraction failed");
       }
-      await calls(extraction.calls);
+      await calls(extraction.calls, task);
       const triage = triageSchema.parse(extraction.data);
       await o.workspace.triage(source, triage);
-      const thread =
-        account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
-      const key = digestOf({ account: account.id, source, digest: message.rawSha256 });
       let result = await o.proposalResults.get(key);
       if (result) result = checkedProposalResult(result);
       else {
@@ -200,7 +210,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
             o.proposerContext,
           );
         } catch (error) {
-          if (error instanceof GatewayError) await calls(error.calls);
+          if (error instanceof GatewayError) await calls(error.calls, task);
           throw new Error("Proposer failed");
         }
         result = checkedProposalResult({
@@ -236,11 +246,11 @@ export function createDaemon(o: DaemonOptions): Daemon {
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      const task =
+      const proposalRef =
         result.proposals.length === 1 && result.proposals[0]
           ? o.workspace.proposalLocation(result.proposals[0].id)
           : undefined;
-      await calls(result.calls, task);
+      await calls(result.calls, task, proposalRef);
       for (const entry of entries) {
         const proposal = entry.proposal;
         await o.workspace.proposal(proposal);
@@ -249,10 +259,9 @@ export function createDaemon(o: DaemonOptions): Daemon {
           type: "proposal",
           id: proposal.id,
           proposal: proposal.id,
-          owner: o.ownerWebId,
-          agent: o.agentWebId,
           terms,
           termsDigest: digestOf(terms),
+          ...task,
         });
       }
     }

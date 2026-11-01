@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   assertJsonBounds,
   canonicalJson,
@@ -169,8 +170,8 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
       const responseState = await rest(
         `/rooms/${encodeURIComponent(roomId)}/state`,
         account,
-        lookupTokens,
-        "read",
+        io.tokens,
+        "send",
       );
       if (!responseState.ok)
         throw new ProviderRejectedError(

@@ -11,6 +11,9 @@ Read agent DESIGN §2 / §5 and README.md before changing this security-critical
 The root exports the bounded local ledger, PROV mirror, reader, auditor CLI and
 A-045 task statistics (verify retained evidence before exporting body-free counts);
 `./testing` contains the conditional anonymous in-memory resource fixture.
+Aggregate unassigned legacy records separately, including counter validation, instead
+of dropping their measurements. JSON exposes unassigned counters and CSV uses an
+empty-task summary row; never infer a task from model-selected proposal references.
 
 Use one FileLedger writer per path. Preserve fsync-before-prune checkpoints, canonical
 hashes, detached snapshots and integrity checks before append. Never accept arbitrary

@@ -2595,6 +2595,9 @@ importers:
 
   packages/agent-executor:
     dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
       '@jeswr/agent-mandate':
         specifier: workspace:*
         version: link:../agent-mandate

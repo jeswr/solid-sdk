@@ -28,6 +28,7 @@ export interface TaskStatsReport {
   readonly scope: string;
   readonly prunedThroughSeq: number | null;
   readonly unassignedEntries: number;
+  readonly unassigned: Omit<TaskStats, "taskId">;
   readonly tasks: readonly TaskStats[];
 }
 
@@ -122,11 +123,11 @@ export function aggregateTaskStats(
   const chain = verifyLedger(snapshot);
   if (!chain.ok) throw new Error("Ledger integrity failure");
   const tasks = new Map<string, AuditRecord[]>();
-  let unassignedEntries = 0;
+  const unassigned: AuditRecord[] = [];
   for (const { record } of snapshot) {
     if (record.type === "ledger-checkpoint") continue;
     if (record.taskId === undefined) {
-      unassignedEntries++;
+      unassigned.push(record);
       continue;
     }
     if (taskId !== undefined && record.taskId !== taskId) continue;
@@ -134,11 +135,13 @@ export function aggregateTaskStats(
     records.push(record);
     tasks.set(record.taskId, records);
   }
+  const { taskId: _unassignedId, ...unassignedStats } = aggregate("", unassigned);
   return {
     version: 1,
     scope: CHAIN_SCOPE,
     prunedThroughSeq: chain.prunedThroughSeq ?? null,
-    unassignedEntries,
+    unassignedEntries: unassigned.length,
+    unassigned: unassignedStats,
     tasks: [...tasks.keys()].sort().map((id) => aggregate(id, tasks.get(id) as AuditRecord[])),
   };
 }
@@ -169,7 +172,12 @@ export function taskStatsCsv(report: TaskStatsReport): string {
   ];
   const cell = (value: string | number | null) =>
     value === null ? "" : `"${String(value).replaceAll('"', '""')}"`;
-  const rows = report.tasks.map((t) =>
+  // An empty task label distinguishes the legacy/unassigned summary from task rows.
+  const groups = [
+    ...report.tasks,
+    ...(report.unassignedEntries > 0 ? [{ taskId: "", ...report.unassigned }] : []),
+  ];
+  const rows = groups.map((t) =>
     [
       t.taskId,
       t.modelCalls,

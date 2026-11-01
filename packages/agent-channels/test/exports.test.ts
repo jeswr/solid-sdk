@@ -27,6 +27,7 @@ import * as entry6 from "@jeswr/agent-channels/matrix";
 import * as entry22 from "@jeswr/agent-channels/matrix/send";
 import * as entry15 from "@jeswr/agent-channels/mcp";
 import * as entry30 from "@jeswr/agent-channels/mcp/send";
+import * as providerSend from "@jeswr/agent-channels/provider/send";
 import * as entry16 from "@jeswr/agent-channels/public-http";
 import * as entry31 from "@jeswr/agent-channels/public-http/send";
 import * as entry7 from "@jeswr/agent-channels/slack";
@@ -78,6 +79,7 @@ const modules: Record<string, object> = {
   "./mcp/send": entry30,
   "./public-http/send": entry31,
   "./direct/send": entry32,
+  "./provider/send": providerSend,
   "./testing/send": entry33,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
@@ -115,12 +117,14 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./discord/send",
       "./matrix",
       "./matrix/send",
+      "./provider/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
 });
 
 it("keeps send factories out of root and reader exports", () => {
+  expect(providerSend.ProviderRejectedError).toBe(entry0.ProviderRejectedError);
   expect(entry0).toHaveProperty("readEnvelope");
   expect(entry0).not.toHaveProperty("createDirectSend");
   expect(entry0).not.toHaveProperty("createInMemoryDirectBinding");

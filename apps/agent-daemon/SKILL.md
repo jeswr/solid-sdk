@@ -54,3 +54,7 @@ CLI failures. Keep task context runtime-owned; model output never chooses it.
 Stats verify retained evidence, report pruning and unassigned entries, and never
 authenticate, append, rotate, prune or contact a provider. `--ledger` works without
 a configured host; default stats use only the host's existing local ledger.
+The normal daemon derives stable task labels before model invocation from account,
+import location and raw digest, and stamps TaskContext on successful/failed model
+calls and proposal evidence. Preserve replay identities independently of model output.
+Unassigned legacy counters remain visible separately in JSON and CSV statistics.

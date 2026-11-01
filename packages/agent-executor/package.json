@@ -36,6 +36,7 @@
     "@vitest/coverage-v8": "^4.1.10"
   },
   "dependencies": {
+    "@jeswr/agent-channels": "workspace:*",
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/agent-mandate": "workspace:*"
   }

@@ -3,6 +3,7 @@ name: agent-channels
 description: Use when working on the channel bindings and carriage profiles surface in @jeswr/agent-channels.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-channels
 
@@ -20,6 +21,10 @@ exclusively in channel send subpaths, importable only by agent-executor and chan
 tests. The guard permits only testing.ts's direct/send factory re-export for
 test composition. Read credentials come only from TokenProvider.read; send
 credentials come only from TokenProvider.send. Sending defaults to dry-run.
+Matrix transmit's room-state preflight also uses only the executor's io.tokens.send;
+the construction-time read provider is exclusively for lookup. Refuse encrypted or
+unreadable rooms. Export typed provider refusals through ./provider/send so the executor
+can preserve definitive non-delivery without importing any reader.
 Exception: the read-only GitHub binding (A-033) delegates authentication entirely
 to `gh auth` and never consumes a TokenProvider. Keep its executable, host, GET
 method and endpoint families fixed; invoke with an argument array and no shell.

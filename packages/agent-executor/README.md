@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-executor
 
@@ -106,6 +107,19 @@ Rejected sends emit non-final `not-sent` transmission settlements while explicit
 available. At the three-attempt bound, a definitive non-send emits final `not-sent`;
 successful sends emit final `sent`, and unresolved sends remain non-final `uncertain`.
 This finality concerns delivery only: sending does not establish completed agreement performance.
+
+The executor recognizes the channel's actual `ProviderRejectedError` class through
+`@jeswr/agent-channels/provider/send`, including subclasses, as an explicit rejected
+outcome. Such a pre-delivery refusal releases a new attempt's commitment and permits
+an explicitly requested, freshly authorized retry within the attempt bound. Provider
+text is discarded. Other thrown errors remain uncertain; a refusal of an unresolved
+A2A resend cannot release the original commitment. Late typed refusals obey the same rules.
+
+Acknowledgements and positive lookups accept bounded provider reference shapes:
+Gmail IDs, Graph object IDs (up to 2048 characters, including base64 punctuation),
+Graph's deterministic `<awp-…@awp-pilot.invalid>` Message-ID, Matrix `$…` event IDs
+(up to 255 printable ASCII characters), numeric Discord/Mastodon IDs and existing
+direct/synthetic references. Whitespace, controls and unsupported shapes remain uncertain.
 
 Timeouts do not cancel the original call. Pending requests remain guarded across
 executor instances sharing a store, and late outcomes are persisted. Positive delivery

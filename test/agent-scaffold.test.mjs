@@ -70,6 +70,8 @@ it("exports every channel surface while keeping GitHub and X read-only", () => {
       ...bindings
         .filter((binding) => !["github", "x"].includes(binding))
         .map((binding) => `./${binding}/send`),
+      // Shared send-only refusal contract for the executor; not a binding.
+      "./provider/send",
     ].sort(),
   );
   for (const [subpath, target] of Object.entries(exports)) {

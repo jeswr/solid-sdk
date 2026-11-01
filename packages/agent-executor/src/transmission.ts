@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Ported from the pilot runtime/transmission.ts; provider errors never imply absence. */
+// AUTHORED-BY Codex GPT-6
+/** Ported from the pilot runtime/transmission.ts; unclassified errors never imply absence. */
 export const MAX_TRANSMISSION_ATTEMPTS = 3;
-const PROVIDER_REF = /^[A-Za-z0-9._:-]{1,256}$/;
+// Existing synthetic/direct refs; Gmail and Graph object IDs; Matrix event IDs;
+// and Graph sendMail's deterministic Internet Message-ID. Matrix's opaque suffix
+// is limited to printable ASCII here. Every alternative excludes whitespace and
+// controls, and the largest (Graph lookup) is bounded at 2048 characters.
+const PROVIDER_REF =
+  /^(?:[A-Za-z0-9._:-]{1,256}|[A-Za-z0-9_+/=-]{1,2048}|\$[\x21-\x7e]{1,254}|<awp-[a-f0-9]{40}@awp-pilot\.invalid>)(?![\s\S])/;
 export function providerResult(
   value: unknown,
   lookup: boolean,

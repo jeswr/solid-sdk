@@ -126,7 +126,9 @@ async function runStats(rest: readonly string[], host: CliHost | undefined, io: 
     if (report.prunedThroughSeq !== null)
       stderr("Statistics include retained entries only (ledger prefix pruned).\n");
     if (report.unassignedEntries > 0)
-      stderr(`Statistics exclude ${report.unassignedEntries} entries without a task ID.\n`);
+      stderr(
+        `Statistics report ${report.unassignedEntries} entries separately without a task ID.\n`,
+      );
     // Exporters project only validated task labels and counters. Preserve JSON/CSV
     // newlines; CliIo.print (and the executable) supplies the final newline.
     io.print(output.slice(0, -1));
