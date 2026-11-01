@@ -32,7 +32,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     container: string,
     sheets: ProjectedSheet[],
     derived: Record<string, string>,
-    written?: Set<string>,
+    written?: Map<string, string | undefined>,
   ): Promise<Record<string, string>> {
     for (const sheet of sheets) {
       const urls = workbookLayout(container).sheet(sheet.number);
@@ -43,10 +43,11 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       for (const [url, write] of writes) {
         const etag = await io.derived(url, async () => {
           const result = await write();
-          written?.add(url);
+          written?.set(url, undefined);
           return result;
         });
         if (etag !== undefined) derived[url] = etag;
+        written?.set(url, etag);
       }
     }
     return derived;
@@ -68,12 +69,13 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     for (let attempt = 1; attempt <= 50; attempt++) {
       const container = new URL(`${stem}${attempt === 1 ? "" : `-${attempt}`}/`, root).href;
       const layout = workbookLayout(container);
-      const written = new Set<string>();
+      const written = new Map<string, string | undefined>();
       let reservation: string;
       try {
         const etag = await storage.saveIndex(container, initial, { ifNoneMatch: "*" });
-        written.add(layout.index);
-        reservation = await io.etag(layout.index, etag);
+        written.set(layout.index, undefined);
+        reservation = await io.indexEtag(container, initial, etag);
+        written.set(layout.index, reservation);
       } catch (error) {
         if (hasStatus(error, 412)) continue;
         await rollback();
@@ -81,24 +83,26 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       }
       try {
         const etag = await storage.saveSnapshot(container, snapshot, { ifNoneMatch: "*" });
-        written.add(layout.snapshot);
-        const snapshotEtag = await io.etag(layout.snapshot, etag);
+        written.set(layout.snapshot, undefined);
+        const snapshotEtag = await io.snapshotEtag(container, snapshot, etag);
+        written.set(layout.snapshot, snapshotEtag);
         const derived = await writeSheets(container, sheets, {}, written);
         const metadata = {
           ...initial,
           sheets: sheets.map(({ number, name }) => ({ number, name })),
         };
-        const indexEtag = await io.etag(
-          layout.index,
-          await io.authoritative(container, () =>
-            storage.saveIndex(container, metadata, { ifMatch: reservation }),
-          ),
+        const published = await io.authoritative(container, () =>
+          storage.saveIndex(container, metadata, { ifMatch: reservation }),
         );
+        // Keep the reservation validator until publication is verified; a stale
+        // If-Match then stops rollback before touching the other resources.
+        const indexEtag = await io.indexEtag(container, metadata, published);
+        written.set(layout.index, indexEtag);
         await register();
         return { container, metadata, snapshot, version: { snapshotEtag, indexEtag, derived } };
       } catch (error) {
         if (!written.has(layout.snapshot) && hasStatus(error, 412)) {
-          await io.remove(layout.index).catch(() => {});
+          await storage.deleteResource(layout.index, { ifMatch: reservation }).catch(() => {});
           continue;
         }
         await rollback();
@@ -107,7 +111,14 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
       async function rollback() {
         // Reserving an index does not establish ownership of its container.
-        for (const url of written) await io.remove(url).catch(() => {});
+        for (const [url, etag] of written) {
+          if (etag === undefined) continue;
+          try {
+            await storage.deleteResource(url, { ifMatch: etag });
+          } catch (error) {
+            if (hasStatus(error, 412)) return;
+          }
+        }
         await io.remove(container).catch(() => {});
       }
     }
@@ -133,8 +144,10 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         },
       };
     } catch (error) {
-      if (hasStatus(error, 404) || hasStatus(error, 403))
-        throw new WorkbookNotFoundError(container);
+      if (hasStatus(error, 404) || hasStatus(error, 410))
+        throw new WorkbookNotFoundError(container, "missing");
+      if (hasStatus(error, 401) || hasStatus(error, 403))
+        throw new WorkbookNotFoundError(container, "forbidden");
       throw error;
     }
   }
@@ -147,6 +160,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   ): Promise<SaveResult> {
     container = checked(container);
     const layout = workbookLayout(container);
+    base = await io.verify(container, base);
     const previous = await storage.loadIndex(container);
     const previousIndexEtag = strongEtag(previous.etag, layout.index);
     if (!saveOptions.force && previousIndexEtag !== base.indexEtag)
@@ -156,12 +170,11 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     const snapshotMatch = saveOptions.force
       ? await io.etag(layout.snapshot, null)
       : base.snapshotEtag;
-    const snapshotEtag = await io.etag(
-      layout.snapshot,
-      await io.authoritative(container, () =>
-        storage.saveSnapshot(container, snapshot, { ifMatch: snapshotMatch }),
-      ),
+    const publishedSnapshot = await io.authoritative(container, () =>
+      storage.saveSnapshot(container, snapshot, { ifMatch: snapshotMatch }),
     );
+    let snapshotEtag = base.snapshotEtag;
+    let pendingVerification: WorkbookVersion["pendingVerification"] = { snapshot };
     const derived: Record<string, string> = {};
     let metadata: WorkbookMetadata = {
       ...previous.value,
@@ -173,15 +186,19 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     };
     let indexEtag = previousIndexEtag;
     try {
+      snapshotEtag = await io.snapshotEtag(container, snapshot, publishedSnapshot);
+      pendingVerification = undefined;
       await writeSheets(container, sheets, derived);
       for (let attempt = 0; ; attempt++) {
         let published: string | null;
         try {
           published = await storage.saveIndex(container, metadata, { ifMatch: indexEtag });
         } catch (error) {
-          if (!hasStatus(error, 412) || attempt === 3) throw error;
-          // Our snapshot is already stored. Reconcile a racing index-only rename
-          // instead of reporting a conflict whose "remote" snapshot is our own.
+          if (!hasStatus(error, 412)) throw error;
+          // Only index-only changes can be reconciled while our snapshot still owns the revision.
+          if ((await io.etag(layout.snapshot, null)) !== snapshotEtag)
+            throw new WorkbookConflictError(container);
+          if (attempt === 3) throw error;
           const fresh = await storage.loadIndex(container);
           indexEtag = strongEtag(fresh.etag, layout.index);
           metadata = {
@@ -192,11 +209,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
           };
           continue;
         }
-        indexEtag = await io.etag(layout.index, published);
+        pendingVerification = { index: metadata };
+        indexEtag = await io.indexEtag(container, metadata, published);
+        pendingVerification = undefined;
         break;
       }
     } catch (error) {
-      throw new WorkbookPartialSaveError({ snapshotEtag, indexEtag, derived }, error);
+      if (error instanceof WorkbookConflictError) throw error;
+      throw new WorkbookPartialSaveError(
+        {
+          snapshotEtag,
+          indexEtag,
+          derived,
+          ...(pendingVerification ? { pendingVerification } : {}),
+        },
+        error,
+      );
     }
     // Listing also finds leftovers from a previous save whose cleanup failed.
     // Cleanup is best effort and must never turn a published save into a failure.
@@ -231,15 +259,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     base: WorkbookVersion,
   ): Promise<SaveResult> {
     container = checked(container);
+    base = await io.verify(container, base);
     const index = await storage.loadIndex(container);
     const metadata = { ...index.value, title, modified: now() };
-    const indexEtag = await io.etag(
-      workbookLayout(container).index,
-      await io.authoritative(container, () =>
-        storage.saveIndex(container, metadata, { ifMatch: base.indexEtag }),
-      ),
+    const published = await io.authoritative(container, () =>
+      storage.saveIndex(container, metadata, { ifMatch: base.indexEtag }),
     );
-    return { metadata, version: { ...base, indexEtag } };
+    try {
+      const indexEtag = await io.indexEtag(container, metadata, published);
+      return { metadata, version: { ...base, indexEtag } };
+    } catch (error) {
+      if (error instanceof WorkbookConflictError) throw error;
+      throw new WorkbookPartialSaveError(
+        { ...base, pendingVerification: { index: metadata } },
+        error,
+      );
+    }
   }
 
   async function remove(container: string): Promise<void> {

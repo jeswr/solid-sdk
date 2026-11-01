@@ -14,13 +14,14 @@ describe("Sheets failure and scope handling", () => {
   ])("maps missing/forbidden %s to not-found", async (resource) => {
     const h = await harness();
     const book = await h.service.create({ title: "Open", snapshot: snapshot() });
-    for (const status of [404, 403]) {
+    for (const status of [404, 410, 401, 403]) {
       h.setHook((c) =>
         c.url === `${book.container}${resource}` ? new Response(null, { status }) : undefined,
       );
       await expect(h.service.open(book.container)).rejects.toMatchObject({
         name: "WorkbookNotFoundError",
         container: book.container,
+        reason: status === 401 || status === 403 ? "forbidden" : "missing",
       });
     }
     expect(new WorkbookNotFoundError(book.container)).toBeInstanceOf(Error);

@@ -38,7 +38,8 @@ export function useWorkbook(container: string) {
       },
       (failure: unknown) => {
         if (!live) return;
-        if (failure instanceof WorkbookNotFoundError) pendingSaves.drop(container);
+        if (failure instanceof WorkbookNotFoundError && failure.reason === "missing")
+          pendingSaves.drop(container);
         setError(failure);
       },
     );
@@ -68,7 +69,7 @@ export function useWorkbook(container: string) {
       return opened.snapshot;
     } catch (failure) {
       if (failure instanceof WorkbookNotFoundError) {
-        pendingSaves.drop(container);
+        if (failure.reason === "missing") pendingSaves.drop(container);
         setError(failure);
       }
       throw failure;

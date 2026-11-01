@@ -200,7 +200,7 @@ describe("Sheets create rollback ownership", () => {
   it.each([
     "index.ttl",
     "workbook.json",
-  ])("tracks a successful %s PUT before validator discovery fails", async (resource) => {
+  ])("leaves an unverified %s intact when create validator discovery fails", async (resource) => {
     const h = await harness();
     h.setHook(async (call) => {
       if (!call.url.endsWith(resource)) return;
@@ -212,7 +212,12 @@ describe("Sheets create rollback ownership", () => {
       }
     });
     await expect(h.service.create({ title: "Incomplete" })).rejects.toMatchObject({ status: 503 });
-    expect(h.pod.has(`${ROOT}incomplete/index.ttl`)).toBe(false);
-    expect(h.pod.has(`${ROOT}incomplete/workbook.json`)).toBe(false);
+    expect(h.pod.has(`${ROOT}incomplete/index.ttl`)).toBe(resource === "index.ttl");
+    expect(h.pod.has(`${ROOT}incomplete/workbook.json`)).toBe(resource === "workbook.json");
+    expect(
+      h.calls
+        .filter((c) => c.method === "DELETE" && !c.url.endsWith("/"))
+        .every((c) => c.headers.has("if-match")),
+    ).toBe(true);
   });
 });

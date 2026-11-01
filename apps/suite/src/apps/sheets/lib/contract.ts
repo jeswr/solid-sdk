@@ -43,6 +43,11 @@ export interface WorkbookVersion {
   readonly indexEtag: string;
   /** Best-effort ETags of derived CSVs/descriptors, keyed by URL; never used to guard writes. */
   readonly derived: Readonly<Record<string, string>>;
+  /** Successful authoritative writes whose validators still need content verification. */
+  readonly pendingVerification?: {
+    readonly snapshot?: Snapshot;
+    readonly index?: WorkbookMetadata;
+  };
 }
 
 export interface OpenedWorkbook {
@@ -69,7 +74,7 @@ export class WorkbookConflictError extends Error {
   }
 }
 
-/** The snapshot was saved; retry projections using this version, including partial ETags. */
+/** An authoritative write succeeded; retry using this version, including unverified validators. */
 export class WorkbookPartialSaveError extends Error {
   constructor(
     readonly version: WorkbookVersion,
@@ -82,7 +87,10 @@ export class WorkbookPartialSaveError extends Error {
 
 /** The workbook container or its `index.ttl`/`workbook.json` is missing or unreadable. */
 export class WorkbookNotFoundError extends Error {
-  constructor(readonly container: string) {
+  constructor(
+    readonly container: string,
+    readonly reason: "missing" | "forbidden" = "missing",
+  ) {
     super("This spreadsheet doesn't exist or can't be opened");
     this.name = "WorkbookNotFoundError";
   }
@@ -115,7 +123,9 @@ export interface WorkbookService {
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
    * descriptors are then PUT unconditionally, repairing missing projections. Finally
    * publishes `index.ttl` (modified date, `title` only for a local rename, sheet list),
-   * retrying racing index changes with the latest stored title up to three times.
+   * retrying index-only changes with the latest stored title up to three times
+   * while the snapshot revision is still ours. Unknown validators from earlier
+   * successful PUTs are verified against their written content before any write.
    * Checks the index version before writing. Stale cleanup requires this publication
    * to still be current and deletes with each resource's freshly read ETag.
    * A WorkbookPartialSaveError carries the retry version after a partial write.

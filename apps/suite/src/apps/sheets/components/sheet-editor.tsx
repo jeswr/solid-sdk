@@ -198,7 +198,8 @@ export function SheetEditor({ container }: { container: string }) {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
-  if (state.error instanceof WorkbookNotFoundError) return <SheetNotFound />;
+  if (state.error instanceof WorkbookNotFoundError && state.error.reason === "missing")
+    return <SheetNotFound />;
   if (state.error)
     return (
       <div className="sht-state" role="alert">

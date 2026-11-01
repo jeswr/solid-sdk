@@ -198,6 +198,64 @@ describe("workbook editor lifecycle", () => {
     pendingSaves.drop(book.container);
   });
 
+  it.each([
+    401, 403,
+  ])("keeps detached edits and the unload warning when reopen returns %s, then retries", async (status) => {
+    const { service, book, setHook } = await setup(false);
+    const first = await mount(h(Editor, { container: book.container }));
+    const local = snapshot("Offline\nedit");
+    await act(() => state.scheduleSave(() => local));
+    await first.unmount();
+    const pending = pendingSaves.get(book.container);
+    setHook((call) =>
+      call.method === "GET" && call.url.endsWith("workbook.json")
+        ? new Response(null, { status })
+        : undefined,
+    );
+    const reopened = await mount(h(Editor, { container: book.container }));
+    expect(state.error).toMatchObject({ name: "WorkbookNotFoundError", reason: "forbidden" });
+    expect(state.workbook).toBeNull();
+    expect(pendingSaves.get(book.container)).toBe(pending);
+    expect(pending?.workbook.snapshot).toEqual(local);
+    expect(pending?.dirty).toBe(true);
+    const closing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(true);
+    setHook(() => undefined);
+    await act(() => state.retryOpen());
+    expect(state.error).toBeUndefined();
+    expect(state.workbook?.snapshot).toEqual(local);
+    await reopened.unmount();
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+    window.dispatchEvent(new Event("online"));
+    await pending?.flush();
+    expect((await service.open(book.container)).snapshot).toEqual(local);
+    expect(pendingSaves.get(book.container)).toBeUndefined();
+  });
+
+  it("keeps pending edits when loading their version is forbidden", async () => {
+    const { book, setHook } = await setup(false);
+    const editor = await mount(h(Editor, { container: book.container }));
+    const local = snapshot("Unsaved\nedit");
+    await act(() => state.scheduleSave(() => local));
+    setHook((call) =>
+      call.method === "GET" && call.url.endsWith("index.ttl")
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await act(async () => {
+      await expect(state.reload()).rejects.toMatchObject({ reason: "forbidden" });
+    });
+    expect(state.error).toMatchObject({ reason: "forbidden" });
+    expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+    await editor.unmount();
+    expect(pendingSaves.get(book.container)?.workbook.snapshot).toEqual(local);
+    const closing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(true);
+    pendingSaves.drop(book.container);
+  });
+
   it("drops pending data if loading their version discovers deletion, while retaining other read failures", async () => {
     const { service, book } = await setup();
     const editor = await mount(h(Editor, { container: book.container }));

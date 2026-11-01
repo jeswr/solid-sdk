@@ -158,6 +158,39 @@ it("starts the grid from the new workbook's snapshot when navigating between con
 });
 
 it.each([
+  401, 403, 404, 410,
+])("renders the appropriate open error and pending-edit actions for %s", async (status) => {
+  const { service, book, setHook } = await setup(false);
+  const local = snapshot("Offline\nedit");
+  const entry = pendingSaves.acquire(service, book);
+  entry.setOnline(false);
+  entry.schedule(() => local);
+  await entry.flush();
+  setHook((call) =>
+    call.method === "GET" && call.url.endsWith("workbook.json")
+      ? new Response(null, { status })
+      : undefined,
+  );
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const forbidden = status === 401 || status === 403;
+  expect(editor.host.textContent).toContain(forbidden ? "Couldn't open" : "Can't open");
+  const closing = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(closing);
+  expect(closing.defaultPrevented).toBe(forbidden);
+  if (forbidden) {
+    expect(pendingSaves.get(book.container)).toBe(entry);
+    setHook(() => undefined);
+    await click(button(editor.host, "Retry"));
+    expect(mocks.mount.mock.calls.at(-1)?.[1].snapshot).toEqual(local);
+  } else {
+    expect(editor.host.querySelector("button")).toBeNull();
+    expect(pendingSaves.get(book.container)).toBeUndefined();
+  }
+  await editor.unmount();
+  pendingSaves.drop(book.container);
+});
+
+it.each([
   "list",
   "editor",
 ])("deletes from the %s and clears offline pending data before reconnect", async (view) => {
