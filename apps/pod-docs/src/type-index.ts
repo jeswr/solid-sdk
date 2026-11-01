@@ -152,6 +152,27 @@ function documentUrl(webId: string): string {
   return u.toString();
 }
 
+/** External profiles and indexes are RDF documents, independent of storage discovery. */
+async function writeExternalRdf(
+  url: string,
+  dataset: DatasetCore,
+  etag: string | null,
+  fetchImpl = globalThis.fetch,
+  prefixes?: Record<string, string>,
+): Promise<void> {
+  const response = await fetchImpl(url, {
+    method: "PUT",
+    redirect: "manual",
+    headers: {
+      "content-type": "text/turtle",
+      "if-match": requireEtag(etag, url),
+    },
+    body: await serializeTurtle(dataset, prefixes),
+  });
+  void response.body?.cancel();
+  if (!response.ok || response.redirected) throw toStorageError("PUT", url, response);
+}
+
 /** Deterministic fragment for a registration (FNV-1a over class|container). */
 function fragmentFor(reg: DesiredRegistration): string {
   const input = `${reg.forClass}|${reg.container}`;
@@ -234,27 +255,19 @@ export async function ensureTypeRegistrations(opts: {
     if (profileStorage) {
       await writeRdf(profileUrl, profileDs, { etag: profileEtag, storage: profileStorage });
     } else {
-      const response = await (fetchImpl ?? globalThis.fetch)(profileUrl, {
-        method: "PUT",
-        redirect: "manual",
-        headers: {
-          "content-type": "text/turtle",
-          "if-match": requireEtag(profileEtag, profileUrl),
-        },
-        body: await serializeTurtle(profileDs),
-      });
-      void response.body?.cancel();
-      if (!response.ok || response.redirected) throw toStorageError("PUT", profileUrl, response);
+      await writeExternalRdf(profileUrl, profileDs, profileEtag, fetchImpl);
     }
     bootstrapped = true;
   }
 
-  const indexStorage = await storageFor(
-    indexUrl,
-    fetchImpl,
-    storage.isWithinStorage(indexUrl) ? storage : undefined,
-  );
-  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl, indexStorage);
+  const indexStorage = storage.isWithinStorage(indexUrl) ? storage : undefined;
+  const indexDocument = documentUrl(indexUrl);
+  const { dataset: indexDs, etag: indexEtag } = indexStorage
+    ? await readRdf(indexUrl, fetchImpl, indexStorage)
+    : await fetchRdf(indexDocument, {
+        fetch: fetchImpl ?? globalThis.fetch,
+        headers: REVALIDATE_HEADERS,
+      });
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -276,12 +289,15 @@ export async function ensureTypeRegistrations(opts: {
   }
 
   if (added > 0) {
-    await writeRdf(indexUrl, indexDs, {
-      etag: indexEtag,
-      fetchImpl,
-      storage: indexStorage,
-      prefixes: INDEX_PREFIXES,
-    });
+    if (indexStorage) {
+      await writeRdf(indexUrl, indexDs, {
+        etag: indexEtag,
+        storage: indexStorage,
+        prefixes: INDEX_PREFIXES,
+      });
+    } else {
+      await writeExternalRdf(indexDocument, indexDs, indexEtag, fetchImpl, INDEX_PREFIXES);
+    }
   }
   return { indexUrl, added, bootstrapped };
 }

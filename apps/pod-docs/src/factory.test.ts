@@ -5,7 +5,12 @@ import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { createDocsStore } from "./store.js";
 import { turtleToStore } from "./test-helpers.js";
-import { discoverRegistrations, TypeIndexDataset, typeIndexLinks } from "./type-index.js";
+import {
+  discoverRegistrations,
+  ensureTypeRegistrations,
+  TypeIndexDataset,
+  typeIndexLinks,
+} from "./type-index.js";
 import { DOCUMENT_CLASS } from "./vocab.js";
 
 // Exercise real factory discovery separately from legacy HTTP-contract fixtures.
@@ -198,19 +203,11 @@ describe("separately hosted WebIDs", () => {
         return new Response(profile, {
           headers: { "content-type": "text/turtle", etag: '"profile"' },
         });
-      if (method === "HEAD")
-        return new Response(null, {
-          headers: {
-            "updates-via": "wss://docs-profile.example/updates",
-            ...(url === otherRoot
-              ? { link: '<http://www.w3.org/ns/pim/space#Storage>; rel="type"' }
-              : {}),
-          },
-        });
-      if (method === "OPTIONS") return new Response(null, { status: 204 });
       if (url === indexUrl && method === "GET")
         return new Response(index, { headers: { "content-type": "text/turtle", etag: '"index"' } });
       if (url === indexUrl && method === "PUT") {
+        expect(init?.redirect).toBe("manual");
+        expect(new Headers(init?.headers).get("content-type")).toBe("text/turtle");
         expect(new Headers(init?.headers).get("if-match")).toBe('"index"');
         index = String(init?.body);
         return new Response(null, { status: 205, headers: { etag: '"updated"' } });
@@ -229,10 +226,54 @@ describe("separately hosted WebIDs", () => {
       { forClass: DOCUMENT_CLASS, container: store.container, instance: undefined },
     ]);
     expect(
-      fetch.mock.calls.some(
-        ([url, init]) => String(url) === webId.split("#")[0] && init?.method === "HEAD",
-      ),
-    ).toBe(false);
+      fetch.mock.calls.every(([, init]) => ["GET", "PUT"].includes(init?.method ?? "GET")),
+    ).toBe(true);
+  });
+
+  it.each([
+    { etag: '"index"', status: 412, expectedStatus: 412 },
+    { etag: null, status: 205, expectedStatus: 428 },
+    { etag: "*", status: 205, expectedStatus: 428 },
+  ])("keeps external index writes conditional with ETag $etag (PUT $status)", async ({
+    etag,
+    status,
+    expectedStatus,
+  }) => {
+    const root = "https://docs-external-index.example/";
+    const webId = "https://identity.docs-external-index.example/card#me";
+    const indexUrl = "https://identity.docs-external-index.example/index.ttl";
+    const storage = createMemoryStorage({ root });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === webId.split("#")[0] && method === "GET")
+        return new Response(
+          `<${webId}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}>.`,
+          { headers: { "content-type": "text/turtle" } },
+        );
+      if (url === indexUrl && method === "GET")
+        return new Response("", {
+          headers: { "content-type": "text/turtle", ...(etag ? { etag } : {}) },
+        });
+      if (url === indexUrl && method === "PUT") {
+        expect(init?.redirect).toBe("manual");
+        expect(new Headers(init?.headers).get("if-match")).toBe(etag);
+        return new Response(null, { status });
+      }
+      throw new Error("Unexpected profile/index request");
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId,
+        podRoot: root,
+        registrations: [{ forClass: DOCUMENT_CLASS, container: `${root}docs/` }],
+        storage,
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ status: expectedStatus });
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(
+      etag === '"index"' ? 1 : 0,
+    );
   });
 
   it.each([
