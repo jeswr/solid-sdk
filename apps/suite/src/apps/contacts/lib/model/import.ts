@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { findComponents, parseComponents, vcardToContact } from "@jeswr/solid-dav-bridge";
+import { findComponents, parseComponents, vcardToContact } from "@jeswr/solid-dav-bridge/browser";
 import type { AddressBookData } from "@jeswr/solid-task-model/contacts";
 import type { ContactsModel } from "./book";
 import { validateContact } from "./data";

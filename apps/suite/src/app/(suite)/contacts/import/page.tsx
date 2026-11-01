@@ -1,15 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { EmptyState } from "@jeswr/suite-ui";
-import Link from "next/link";
-export default function ComingNext() {
-  return (
-    <>
-      <h1>Import contacts</h1>
-      <EmptyState
-        title="Coming next"
-        body="The contact form and import wizard arrive in the next lane."
-        primaryAction={<Link href="/contacts">Back to contacts</Link>}
-      />
-    </>
-  );
+import { ContactImport } from "@/apps/contacts/components/contact-import";
+export default function ImportContactsPage() {
+  return <ContactImport />;
 }
