@@ -14,6 +14,7 @@ describe("clearing saved copies", () => {
     const databaseFactory = {
       databases: async () => [
         { name: "suite-offline" },
+        { name: "suite-notifications-demo" },
         { name: "solid-suite-demo" },
         { name: "other" },
         {},

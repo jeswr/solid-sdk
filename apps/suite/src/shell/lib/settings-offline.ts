@@ -1,4 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+/**
+ * Databases that hold the only copy of their data, not a saved copy of storage. App-local
+ * notifications (read and dismissed state, device-only events) live here.
+ */
+const KEPT_DATABASES = ["suite-notifications-"];
+
 /** Delete only disposable suite copies. Account sessions and the demo's original data stay intact. */
 export async function clearSavedCopies({
   cacheStorage,
@@ -21,7 +27,8 @@ export async function clearSavedCopies({
     const databases = await databaseFactory.databases();
     await Promise.all(
       databases.map(async ({ name }) => {
-        if (!name?.startsWith("suite-")) return;
+        if (!name?.startsWith("suite-") || KEPT_DATABASES.some((prefix) => name.startsWith(prefix)))
+          return;
         await new Promise<void>((resolve, reject) => {
           let timer: ReturnType<typeof setTimeout> | undefined;
           const request = databaseFactory.deleteDatabase(name);
