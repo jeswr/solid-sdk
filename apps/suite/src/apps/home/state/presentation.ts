@@ -3,7 +3,7 @@ import type { TypedViewData } from "@jeswr/suite-ui";
 import { encodeRef } from "../../../lib/refs";
 import { type DomainItem, nameFromUrl, sortItems } from "../lib/model/discovery";
 import type { DataCategory } from "../lib/model/domains";
-import { CONNECTORS, provenanceOf } from "../lib/model/provenance";
+import { CONNECTORS, connectorForUrl, provenanceOf } from "../lib/model/provenance";
 import { httpUrl, subjectOf } from "../lib/model/rdf";
 
 export function greeting(date: Date, displayName: string): string {
@@ -170,10 +170,10 @@ export function itemActions(item: DomainItem, storage: string): ItemAction[] {
     return url && url.host !== new URL(storage).host;
   });
   if (source) {
-    const provenance = provenanceOf(item.dataset, item.subject, item.containerUrl, { storage });
+    const connector = connectorForUrl(source);
     actions.push({
       id: "source",
-      label: `Open in ${provenance.kind === "you" ? "source" : provenance.label}`,
+      label: `Open in ${connector?.label ?? "source"}`,
       href: source,
       external: true,
     });

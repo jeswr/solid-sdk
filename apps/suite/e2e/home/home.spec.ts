@@ -111,6 +111,16 @@ test("keys 1–9 navigate domains and ignore modifiers and text inputs", async (
   await accessible(page);
 });
 
+test("the shortcut preference disables and re-enables character navigation", async ({ page }) => {
+  await ready(page);
+  await page.evaluate(() => localStorage.setItem("suite.settings.shortcuts", "off"));
+  for (const key of "123456789") await page.keyboard.press(key);
+  await expect(page).toHaveURL("/home");
+  await page.evaluate(() => localStorage.removeItem("suite.settings.shortcuts"));
+  await page.keyboard.press("6");
+  await expect(page).toHaveURL("/home/media");
+});
+
 test("URL filters, card menus, source links and keyboard opening", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await ready(page, "/home/documents?types=notes");
@@ -158,6 +168,20 @@ test("offline keeps the last loaded cards", async ({ page, context }) => {
   ).toHaveCount(3);
   await context.setOffline(false);
   await expect(page.getByText("Showing saved copies", { exact: true })).toBeHidden();
+  await accessible(page);
+});
+
+test("an offline cold open reads the browser's saved demo pod", async ({ page }) => {
+  await ready(page, "/home/media");
+  // Reload the app with an offline signal while leaving navigation/assets available to the harness.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+  });
+  await ready(page, "/home/media");
+  await expect(page.getByText("Showing saved copies", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("list", { name: "Music items", exact: true }).getByRole("listitem"),
+  ).toHaveCount(3);
   await accessible(page);
 });
 

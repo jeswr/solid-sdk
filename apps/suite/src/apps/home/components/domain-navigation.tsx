@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import type { DataCategory } from "../lib/model/domains";
 import { DOMAINS } from "../lib/model/domains";
+import { shortcutsEnabled } from "../state/shortcuts";
 import { DomainIcon } from "./domain-icon";
 import { domainHref } from "./home-sidebar";
 
@@ -29,6 +30,7 @@ export function DomainNavigation({
     const keydown = (event: KeyboardEvent) => {
       const target = event.target;
       if (
+        !shortcutsEnabled() ||
         event.defaultPrevented ||
         event.altKey ||
         event.ctrlKey ||

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import {
   Button,
   ContextMenu,
@@ -53,7 +54,13 @@ export function HomeCard({
 }) {
   const session = useHomeSession();
   const resolveImage = useMemo(() => {
-    const resolve = createPreviewImageResolver(session.fetch);
+    const resolve = createPreviewImageResolver(async (input, init) => {
+      const url = assertWithinPodScope(
+        storage,
+        input instanceof Request ? input.url : String(input),
+      );
+      return session.fetch(url, { ...init, redirect: "error" });
+    });
     return (url: string, signal: AbortSignal) =>
       inStorage(url, storage) ? resolve(url, signal) : Promise.resolve(undefined);
   }, [session, storage]);

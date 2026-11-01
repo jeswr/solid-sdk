@@ -217,4 +217,34 @@ describe("Home presentation", () => {
     );
     expect(itemActions(item, ROOT)).toEqual(actions);
   });
+  it("labels source links from their selected destination despite conflicting URLs and container provenance", () => {
+    const item = fixture("music", "Conflicting sources", undefined, "https://attacker.example/");
+    item.containerUrl = `${ROOT}integrations/spotify/`;
+    item.dataset.add(
+      quad(
+        namedNode(item.subject.value),
+        namedNode(`${NS.SCHEMA}url`),
+        namedNode("https://open.spotify.com/track/legitimate"),
+      ),
+    );
+    expect(itemActions(item, ROOT).find((action) => action.id === "source")).toEqual({
+      id: "source",
+      label: "Open in source",
+      href: "https://attacker.example/",
+      external: true,
+    });
+    const youtube = fixture("music", "Different connector", undefined, "https://youtu.be/123");
+    youtube.containerUrl = `${ROOT}integrations/spotify/`;
+    youtube.dataset.add(
+      quad(
+        namedNode(youtube.subject.value),
+        namedNode(`${NS.SCHEMA}url`),
+        namedNode("https://spotify.com/track/1"),
+      ),
+    );
+    expect(itemActions(youtube, ROOT).find((action) => action.id === "source")).toMatchObject({
+      label: "Open in YouTube",
+      href: "https://youtu.be/123",
+    });
+  });
 });

@@ -10,7 +10,7 @@ export interface HomeHeaderProps {
   displayName: string;
   items: readonly DomainItem[];
   used: number;
-  status: "loading" | "ready" | "error";
+  status: "loading" | "ready" | "error" | "offline";
   now: number;
   quota?: number;
   access?: { apps: number; people: number; publicItems: number };
@@ -39,9 +39,13 @@ export function HomeHeader({
         ) : (
           <div className="hm-pod-columns">
             <div>
-              {status === "error" ? (
+              {status === "error" || status === "offline" ? (
                 <>
-                  <p>Couldn't read your storage</p>
+                  <p>
+                    {status === "offline"
+                      ? "Storage is unavailable offline"
+                      : "Couldn't read your storage"}
+                  </p>
                   <Button variant="outline" onClick={onRetry}>
                     Retry
                   </Button>

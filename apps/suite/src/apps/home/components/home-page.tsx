@@ -94,7 +94,7 @@ export function HomePage({ domain }: { domain: string }) {
           <DomainIcon name={entry.icon} size={24} />
           {entry.label}
         </h2>
-        {!online ? (
+        {!online && data.items.length ? (
           <p className="hm-notice" role="status">
             Showing saved copies
           </p>
@@ -133,7 +133,13 @@ export function HomePage({ domain }: { domain: string }) {
             </Button>
           </div>
         ) : null}
-        {data.status === "loading" ? (
+        {data.status === "offline" ? (
+          <EmptyState
+            variant="not-available-offline"
+            body="Reconnect to load your data."
+            onRetry={retry}
+          />
+        ) : data.status === "loading" ? (
           <LoadingSkeleton preset="grid" count={6} label="Loading your data" />
         ) : data.status === "error" ? (
           <ErrorState error="unreachable" actions={{ retry }} />

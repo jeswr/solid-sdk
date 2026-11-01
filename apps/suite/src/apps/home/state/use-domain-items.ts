@@ -1,18 +1,24 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { TypedViewData } from "@jeswr/suite-ui";
 import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
-import { type DomainItem, discoverDomainItems } from "../lib/model/discovery";
+import {
+  type DomainItem,
+  type DomainItems,
+  discoverDomainItems,
+  sortItems,
+} from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
 import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
-import { readResource, subjectOf } from "../lib/model/rdf";
+import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
 import { type DiscoveryFailure, readTypeIndexes } from "../lib/model/type-index";
 import { cardView } from "./presentation";
 
 interface Snapshot {
-  status: "loading" | "ready" | "error";
+  status: "loading" | "ready" | "error" | "offline";
   items: readonly DomainItem[];
   views: ReadonlyMap<DomainItem, TypedViewData>;
   failures: readonly DiscoveryFailure[];
@@ -33,8 +39,50 @@ const initial: Snapshot = {
   used: 0,
   updated: 0,
 };
-export interface HomeSession extends PodSession {
+export interface HomeSession extends Omit<PodSession, "mode"> {
+  readonly mode: "demo" | "solid";
   readonly caps?: { readonly liveUpdates: boolean };
+}
+
+function affectsItem(url: string, item: DomainItem): boolean {
+  return url === item.url || (url.endsWith("/") && inStorage(item.url, url));
+}
+
+function confirmedUnavailable(error: unknown): boolean {
+  return error instanceof RdfFetchError && [401, 403, 404, 410].includes(error.status ?? 0);
+}
+
+function countItems(items: readonly DomainItem[]) {
+  return new Map(
+    [...DOMAINS, UNCATEGORISED].map((domain) => [
+      domain.id,
+      items.filter((item) => item.domain.id === domain.id).length,
+    ]),
+  );
+}
+
+/** Fresh cards win; retain a saved card only where a transient failure prevented its read. */
+function reconcileItems(
+  previous: readonly DomainItem[],
+  result: DomainItems,
+  failures: readonly DiscoveryFailure[],
+  unavailable: readonly string[],
+  preserveUnvisited: boolean,
+): DomainItem[] {
+  const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
+  const items = new Map(result.items.map((item) => [key(item), item]));
+  for (const item of previous) {
+    const failedRead = failures.some((failure) => affectsItem(failure.url, item));
+    const unvisited =
+      preserveUnvisited && !result.etags.has(item.url) && !result.etags.has(item.containerUrl);
+    if (
+      !items.has(key(item)) &&
+      (failedRead || unvisited) &&
+      !unavailable.some((url) => affectsItem(url, item))
+    )
+      items.set(key(item), item);
+  }
+  return sortItems([...items.values()]);
 }
 
 const stores = new WeakMap<HomeSession, ReturnType<typeof createDomainStore>>();
@@ -53,7 +101,6 @@ function createDomainStore(session: HomeSession) {
   let snapshot = initial;
   const listeners = new Set<() => void>();
   let pending: Promise<void> | undefined;
-  let indexes: Awaited<ReturnType<typeof readTypeIndexes>> | undefined;
   let dirty = false;
   let lastFocus = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,25 +114,38 @@ function createDomainStore(session: HomeSession) {
       dirty = true;
       return pending;
     }
-    if (typeof navigator !== "undefined" && !navigator.onLine) return Promise.resolve();
+    if (typeof navigator !== "undefined" && !navigator.onLine && session.mode !== "demo") {
+      publish({
+        ...snapshot,
+        status: snapshot.items.length ? "ready" : "offline",
+        refreshing: false,
+      });
+      return Promise.resolve();
+    }
     const background = snapshot.status !== "loading";
     publish({ ...snapshot, refreshing: background });
+    const profileUrl = session.webId.split("#")[0] as string;
     pending = (async () => {
       try {
         const sizes = new Map<string, number>();
+        const unavailable: string[] = [];
         const fetch: typeof globalThis.fetch = async (input, init) => {
           const response = await session.fetch(input, init);
+          // Discovery omits expected 404s; retain their outcome for cache eviction.
+          if ([401, 403, 404, 410].includes(response.status)) unavailable.push(String(input));
           const length = response.headers.get("content-length");
           if (response.ok && length !== null) sizes.set(String(input), Number(length));
           return response;
         };
         const budget = new DiscoveryBudget();
-        const profileUrl = session.webId.split("#")[0] as string;
-        const profile = (await readResource(fetch, profileUrl, budget.signal)).dataset;
-        if (!indexes || indexes.failures.length || indexes.truncated)
-          indexes = await readTypeIndexes(fetch, session.webId, profile, session.storageUrl, {
-            budget,
-          });
+        const profileFetch: typeof globalThis.fetch = inStorage(profileUrl, session.storageUrl)
+          ? fetch
+          : (input, init) =>
+              globalThis.fetch(input, { ...init, credentials: "omit", redirect: "error" });
+        const profile = (await readResource(profileFetch, profileUrl, budget.signal)).dataset;
+        const indexes = await readTypeIndexes(fetch, session.webId, profile, session.storageUrl, {
+          budget,
+        });
         const result = await discoverDomainItems("all", {
           fetch,
           storage: session.storageUrl,
@@ -94,7 +154,18 @@ function createDomainStore(session: HomeSession) {
           typeIndex: indexes.locations,
           budget,
         });
-        for (const item of result.items) {
+        const failures = [...indexes.failures, ...result.failures];
+        const incompleteIndexes =
+          (indexes.truncated || indexes.failures.length > 0) &&
+          !indexes.failures.some((failure) => confirmedUnavailable(failure.error));
+        const items = reconcileItems(
+          snapshot.items,
+          result,
+          failures,
+          unavailable,
+          incompleteIndexes || result.truncated,
+        );
+        for (const item of items) {
           // Listing sizes include binaries that discovery deliberately does not download.
           for (const quad of item.dataset) {
             const node = subjectOf(item.dataset, quad.subject);
@@ -104,7 +175,7 @@ function createDomainStore(session: HomeSession) {
         }
         const views = new Map(
           await Promise.all(
-            result.items.map(
+            items.map(
               async (item) =>
                 [
                   item,
@@ -118,30 +189,30 @@ function createDomainStore(session: HomeSession) {
             ),
           ),
         );
-        const failures = [...indexes.failures, ...result.failures];
-        const counts = new Map(
-          [...DOMAINS, UNCATEGORISED].map((domain) => [
-            domain.id,
-            result.items.filter((item) => item.domain.id === domain.id).length,
-          ]),
-        );
         publish({
-          status: failures.length && !result.items.length ? "error" : "ready",
-          items: result.items,
+          status: failures.length && !items.length ? "error" : "ready",
+          items,
           views,
           failures,
-          counts,
+          counts: countItems(items),
           truncated: indexes.truncated || result.truncated,
           refreshing: false,
           used: [...sizes.values()].reduce((sum, size) => sum + size, 0),
           updated: background ? snapshot.updated + 1 : snapshot.updated,
         });
       } catch (error) {
+        const url = error instanceof RdfFetchError ? (error.url ?? profileUrl) : profileUrl;
+        const items = confirmedUnavailable(error)
+          ? snapshot.items.filter((item) => !affectsItem(url, item))
+          : snapshot.items;
         publish({
           ...snapshot,
-          status: snapshot.items.length ? "ready" : "error",
+          status: items.length ? "ready" : "error",
+          items,
+          views: new Map([...snapshot.views].filter(([item]) => items.includes(item))),
+          counts: countItems(items),
           refreshing: false,
-          failures: [{ url: session.storageUrl, error }],
+          failures: [{ url, error }],
         });
       } finally {
         pending = undefined;
