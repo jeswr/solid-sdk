@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-listening",
+  "kind": "sdk",
+  "name": "Solid Listening-History Model",
+  "repo": "https://github.com/jeswr/solid-listening",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "federation": {
+    "sectors": [
+      "media"
+    ],
+    "produces": [
+      "listening-history"
+    ],
+    "consumes": [
+      "media"
+    ],
+    "note": "The media-sector listening-history / scrobble RDF model — the data model a Web Scrobbler→Solid fork writes one-per-play to a pod. MINTS NOTHING: a scrobble is a media:PlaybackEvent (from @jeswr/solid-federation-vocab's media sector) referencing a media:Track credited to a media:Artist and optionally on a media:Album, with a reified played-at time:Instant (core:atTime) and the listener WebID (core:hadParticipant); it reuses media:/core:/dct:/foaf:/time: verbatim. As an ONTOLOGY TEST RIG, modelling real scrobble data surfaced media-sector gaps — per-event completion-fraction + in-progress-vs-completed status, source-service attribution (media:playedVia), loved/skipped flags, and an artist display-name term — written up as fedcon:Proposal CANDIDATES in listening.proposals.ttl / DECISIONS.md rather than edited into the sector. Ships a focused SHACL shape + an owner-only fail-closed WAC ACL helper (scrobbles are owner-private). GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration. The media:/core: IRIs are legacy w3id.org/jeswr identifiers that re-mint to the jeswr.org persistent-ID layer per the staged migration; fedcon: is already jeswr.org-rooted."
+  },
+  "status": {
+    "generatedAt": "2026-07-07T00:00:00.000Z",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "pending",
+      "typecheck": "pending",
+      "test": "pending",
+      "build": "pending"
+    }
+  }
+}

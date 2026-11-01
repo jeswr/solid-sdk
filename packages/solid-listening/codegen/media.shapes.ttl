@@ -1,0 +1,153 @@
+# AUTHORED-BY Claude Opus 4.8
+#
+# Generation INPUT (SHACL profile, L2) for @jeswr/solid-listening's generated model.
+#
+# The FIVE scrobble-relevant NodeShapes of the media sector
+# (solid-federation-vocab @ 3fba46e sectors/media/media.shacl.ttl) —
+# PlaybackEvent / Track / PlayedAtInstant (time:Instant) / Artist / Album —
+# copied VERBATIM (sh:path/nodeKind/class/datatype/cardinality/minInclusive/
+# maxInclusive/minLength/pattern/severity preserved). sh:message + rdfs:label are
+# dropped (they do not drive codegen). This is a faithful SUBSET of the sector
+# profile: only the shapes the scrobble composite spans, so the generator has a
+# codegen config for every compiled shape. A reproduce test regenerates from these
+# inputs and diffs the committed src/generated, guarding drift.
+@prefix mdsh:    <https://w3id.org/jeswr/sectors/media/shapes#> .
+@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix foaf:    <http://xmlns.com/foaf/0.1/> .
+
+mdsh:PlaybackEventShape
+    a sh:NodeShape ;
+    sh:targetClass media:PlaybackEvent ;
+    sh:property [
+        sh:path media:playedWork ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class media:CreativeWork ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path core:hadParticipant ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:class core:Agent ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path core:atTime ;
+        sh:nodeKind sh:IRI ;
+        sh:class time:Instant ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path media:onAccount ;
+        sh:class media:MediaAccount ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path media:playedVia ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:msPlayed ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:completionFraction ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:loved ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+mdsh:TrackShape
+    a sh:NodeShape ;
+    sh:targetClass media:Track ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:pattern "\\S" ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path media:performedByArtist ;
+        sh:nodeKind sh:IRI ;
+        sh:class media:Artist ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:inAlbum ;
+        sh:nodeKind sh:IRI ;
+        sh:class media:Album ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:durationSeconds ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path media:isrc ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" ;
+        sh:severity sh:Warning ;
+    ] .
+
+mdsh:PlayedAtInstantShape
+    a sh:NodeShape ;
+    sh:targetClass time:Instant ;
+    sh:property [
+        sh:path time:inXSDDateTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] .
+
+mdsh:ArtistShape
+    a sh:NodeShape ;
+    sh:targetClass media:Artist ;
+    sh:property [
+        sh:path foaf:name ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+mdsh:AlbumShape
+    a sh:NodeShape ;
+    sh:targetClass media:Album ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+    ] .
