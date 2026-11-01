@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -42,6 +42,70 @@ it("rejects semantic errors and reports the Markdown line instead of a generated
   expect(result.diagnostics).toHaveLength(1);
   expect(result.diagnostics[0]).toContain(`${file}:4:`);
   expect(result.diagnostics[0]).toContain("not assignable to type 'number'");
+});
+
+it.each([
+  ["list", "- Example\n\n  ```ts\n  const count: number = 'wrong';\n  ```", 8],
+  ["blockquote", "> Example\n>\n> ```typescript\n> const count: number = 'wrong';\n> ```", 8],
+  ["tilde", "~~~ts\nconst count: number = 'wrong';\n~~~", 6],
+  ["nested list and quote", "- Example\n  > ```ts\n  > const count: number = 'wrong';\n  > ```", 7],
+])("checks %s fences and reports their original Markdown lines", (_kind, invalid, line) => {
+  const file = fixture(["```ts", "const count: number = 1;", "```", "", invalid].join("\r\n"));
+  const result = checkExamples([file]);
+  expect(result.examples).toBe(2);
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0]).toContain(`${file}:${line}:`);
+  expect(result.diagnostics[0]).toContain("not assignable to type 'number'");
+});
+
+it("preserves lines across reference definitions, task lists and repeated nested fences", () => {
+  const file = fixture(
+    [
+      "[link]: https://example.org/",
+      "",
+      "- [x] Checked",
+      "",
+      "  [nested]: https://example.org/",
+      "",
+      "  ```ts",
+      "  const count: number = 'wrong';",
+      "  ```",
+      "- Second item",
+      "  ```ts",
+      "  const count: number = 'wrong';",
+      "  ```",
+      "",
+      "> - Quoted",
+      ">   ~~~typescript",
+      ">   const count: number = 'wrong';",
+      ">   ~~~",
+    ].join("\n"),
+  );
+  const result = checkExamples([file]);
+  expect(result.examples).toBe(3);
+  expect(result.diagnostics).toEqual(
+    [8, 12, 17].map((line) => expect.stringContaining(`${file}:${line}:`)),
+  );
+});
+
+it("checks only ts/typescript fences, leaving tsx and other languages unchecked", () => {
+  const file = fixture(
+    [
+      "```tsx",
+      "const bad: number = 'wrong';",
+      "```",
+      "",
+      "~~~typescript",
+      "const good: number = 1;",
+      "~~~",
+    ].join("\n"),
+  );
+  expect(checkExamples([file])).toEqual({ examples: 1, diagnostics: [] });
+});
+
+it("runs guide example tests from the root gate even for documentation-only changes", () => {
+  const config = JSON.parse(readFileSync(new URL("../turbo.json", import.meta.url), "utf8"));
+  expect(config.tasks["//#test:root"].dependsOn).toContain("@jeswr/guide-examples#test");
 });
 
 it("checks the new bookmark and RDF packages while skipping raw Turtle exports", () => {

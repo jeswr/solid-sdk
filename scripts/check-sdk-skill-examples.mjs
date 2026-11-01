@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Marked } from "marked";
 import ts from "typescript";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -48,6 +49,26 @@ function declaration(entry) {
   const path = typeof entry === "string" ? entry : entry?.types;
   // Raw artifacts (.ttl, package.json) and runtime-only entries have no declarations.
   return typeof path === "string" && /\.d\.[cm]?ts$/.test(path) ? path : undefined;
+}
+
+// Only ts/typescript fences are checked; tsx and other languages are intentionally excluded.
+function* codeFences(source, tokens, firstLine = 1) {
+  let offset = 0;
+  for (const token of tokens) {
+    // Locate raw blocks rather than summing their lengths: reference definitions can be omitted
+    // from the token stream. Marked normalises container prefixes but preserves their newlines.
+    const start = source.indexOf(token.raw, offset);
+    if (start === -1) continue; // Marked can rewrite task-list paragraphs (not code blocks).
+    const line = firstLine + source.slice(0, start).split("\n").length - 1;
+    offset = start + token.raw.length;
+    if (token.type === "code" && /^(ts|typescript)$/.test(token.lang ?? "")) {
+      yield { text: token.text, line: line + 1 };
+    } else if (token.type === "list") {
+      yield* codeFences(token.raw, token.items, line);
+    } else if (token.type === "list_item" || token.type === "blockquote") {
+      yield* codeFences(token.text, token.tokens, line);
+    }
+  }
 }
 
 /** Check independent TS fences against built public exports, without running examples. */
@@ -100,14 +121,12 @@ export function checkExamples(files = defaultFiles()) {
   try {
     const sources = new Map();
     for (const file of files) {
-      const markdown = readFileSync(file, "utf8");
-      const fences = /^```(?:ts|typescript)[^\S\r\n]*\r?\n([\s\S]*?)^```[^\S\r\n]*$/gm;
-      for (const match of markdown.matchAll(fences)) {
+      const markdown = readFileSync(file, "utf8").replace(/\r\n?/g, "\n");
+      for (const fence of codeFences(markdown, new Marked().lexer(markdown))) {
         const filename = join(temporary, `example-${sources.size}.mts`);
-        const line = markdown.slice(0, match.index).split("\n").length + 1;
-        sources.set(filename, { file, line });
+        sources.set(filename, { file, line: fence.line });
         // Each fence is a module, so identical identifiers in other examples cannot interfere.
-        writeFileSync(filename, `${match[1]}\nexport {};\n`);
+        writeFileSync(filename, `${fence.text}\nexport {};\n`);
       }
     }
     const program = ts.createProgram([...sources.keys()], {

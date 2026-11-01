@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type BookmarkData, parseBookmarkTtl, serializeBookmark } from "@jeswr/solid-bookmark";
-import type { StorageClient } from "@jeswr/storage-client";
+import {
+  type BookmarkData,
+  isHttpIri,
+  parseBookmarkTtl,
+  serializeBookmark,
+} from "@jeswr/solid-bookmark";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { retryOnConflict } from "@jeswr/storage-client/helpers";
 
 export interface ReadingItem {
@@ -11,6 +16,7 @@ export interface ReadingItem {
 
 export interface ReadingList {
   readonly container: string;
+  get(url: string, signal?: AbortSignal): Promise<ReadingItem | undefined>;
   list(signal?: AbortSignal): Promise<ReadingItem[]>;
   add(data: BookmarkData): Promise<ReadingItem>;
   update(item: ReadingItem, changes: Partial<BookmarkData>): Promise<ReadingItem>;
@@ -20,6 +26,10 @@ export interface ReadingList {
 function requireEtag(etag: string | null): string {
   if (!etag || etag === "*") throw new Error("Re-read before editing: no ETag supplied");
   return etag;
+}
+
+function validateUrl(url: string): void {
+  if (!isHttpIri(new URL(url).href)) throw new TypeError("Bookmark URL must be http(s)");
 }
 
 /** Open a remembered container, or create one and remember its returned URL. */
@@ -45,17 +55,21 @@ export async function openReadingList(
       await resource.body?.cancel();
       return undefined;
     }
-    const bookmark = await parseBookmarkTtl(url, await resource.text(), resource.contentType);
+    // Consume outside the parse catch: transport and abort failures must reach the caller.
+    const body = await resource.text();
+    const bookmark = await parseBookmarkTtl(url, body, resource.contentType).catch((error) => {
+      if (error instanceof StorageError || signal?.aborted) throw error;
+      return undefined; // Malformed RDF or an unusable domain projection is not a bookmark.
+    });
     return bookmark ? { url, etag: requireEtag(resource.etag), bookmark } : undefined;
   }
 
   async function save(url: string, bookmark: BookmarkData, ifMatch: string): Promise<ReadingItem> {
+    validateUrl(bookmark.url);
     // The serializer derives bookmarkSubject(url); never construct RDF by hand.
     const turtle = await serializeBookmark(url, bookmark);
     const written = await storage.write(url, turtle, { contentType: "text/turtle", ifMatch });
-    if (written.etag !== null)
-      return { url: written.url, etag: requireEtag(written.etag), bookmark };
-    // A write can commit without returning an ETag. Re-read bytes and validator together.
+    // The backend may get its ETag from a later HEAD. Read bytes and validator together.
     const current = await readItem(written.url);
     if (!current) throw new Error("The saved resource is no longer a bookmark");
     return current;
@@ -63,6 +77,12 @@ export async function openReadingList(
 
   return {
     container: location,
+    get(url, signal) {
+      return readItem(url, signal).catch((error) => {
+        if (error instanceof StorageError && error.code === "not-found") return undefined;
+        throw error;
+      });
+    },
     async list(signal) {
       const items: ReadingItem[] = [];
       // listAll follows opaque cursors; kind, rather than a URL suffix, identifies containers.
@@ -76,6 +96,7 @@ export async function openReadingList(
       );
     },
     async add(data) {
+      validateUrl(data.url);
       // Create first: the bookmark's subject depends on the URL the server assigns.
       const created = await storage.create(location, null, { contentType: "text/turtle" });
       const etag = requireEtag(created.etag ?? (await storage.head(created.url)).etag);
@@ -103,7 +124,7 @@ export function updateWithRetry(
     () => list.update(current, changes),
     async () => {
       // The helper reads before the first attempt and each retry; keep the content too.
-      const fresh = (await list.list()).find((entry) => entry.url === item.url);
+      const fresh = await list.get(item.url);
       if (!fresh) throw new Error("The bookmark was removed");
       current = fresh;
       return fresh;

@@ -12,5 +12,7 @@ const files = [
 ].filter((file) => existsSync(file));
 
 it.skipIf(files.length === 0)("typechecks every available guide TypeScript fence", () => {
-  expect(checkExamples(files).diagnostics).toEqual([]);
+  const result = checkExamples(files);
+  expect(result.examples).toBeGreaterThan(0);
+  expect(result.diagnostics).toEqual([]);
 });
