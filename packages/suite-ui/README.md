@@ -82,6 +82,30 @@ selection or missing custom date. Cancel asks for confirmation before calling `o
 offline content stays visible with sharing controls disabled. Retry/clear callbacks belong to the
 consumer. Dev examples live at `/dev/components/{people-picker,role-select,duration-chips,consent-sheet,permission-row}`.
 
+## Shared sign-in card
+
+Import `SignInCard` and its presentation types from `@jeswr/suite-ui/sign-in`, and
+load `@jeswr/suite-ui/styles/sign-in.css` after the token, theme, density and component
+styles. Tailwind consumers must scan this package's source, as for the primitives.
+
+Pass ordered `providers` (home provider first), optional `recentAccounts` and
+`recentProviders`, and `onWebId`, `onProvider`, `onCustomProvider`, and `onAccount`
+callbacks. Fields submit trimmed non-empty strings, including provider URLs pasted
+into the WebID field. The host resolves addresses and owns authentication, validation,
+remembered accounts and provider history; the card has no auth dependency or network
+transport. Images are only loaded when the host supplies `iconUrl` or `photoUrl`.
+
+`pending={{ kind, key }}` disables actions and marks the matching control with
+“Signing in…”. Use the provider ID (or issuer URL), account WebID, or submitted form
+input as the key. Supply `onCancel` to offer cancellation. `error` renders one alert
+associated with the last submitted input. Set `allowCustomProvider={false}` to hide
+custom entry. `webIdHelpHref` replaces the built-in WebID explanation sheet with a
+native link; `footer` adds host content and becomes inert while pending.
+
+The subpath also exports the pure `monogramFor`, `toneFor`, `hostOf`, and `signUpTarget`
+helpers. Interactive states are at `/dev/components/sign-in`, optionally filtered with
+`?state=default|recent|pending|error|custom`; the fixture includes a density selector.
+
 ## DS-02 primitives and atoms
 
 Import `@jeswr/suite-ui/styles/components.css` after the token, theme and density styles.
