@@ -108,21 +108,9 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
-      if (pod) return portOperation(() => pod.write(target, body, contentType, cond));
-      const headers = new Headers({ "content-type": contentType });
-      if (cond.ifMatch !== undefined) headers.set("if-match", cond.ifMatch);
-      if (cond.ifNoneMatch !== undefined) headers.set("if-none-match", cond.ifNoneMatch);
-      const response = await config.fetch(target, {
-        method: "PUT",
-        headers,
-        body: new Uint8Array(body),
-        redirect: "manual",
-      });
-      if (response.status >= 300 && response.status < 400)
-        throw new Error(`Refusing a redirect (${response.status}) on a chat write`);
-      check(response);
-      const etag = response.headers.get("etag");
-      return etag === null ? {} : { etag };
+      return portOperation(() =>
+        new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
+      );
     },
   };
 }

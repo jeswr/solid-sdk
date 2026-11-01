@@ -11,6 +11,7 @@ import { requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MemoryNode, status } from "./memory-context.js";
 import { PodOutput } from "./output.js";
+import { auditContainer } from "./personal-data.js";
 import { specialCategories } from "./personal-policy.js";
 import type { PodConditions, PodPort, PodReadResult } from "./pod-port.js";
 
@@ -33,9 +34,10 @@ export async function auditSpecialRead(
   const sensitive = specialCategories(categories);
   if (!sensitive.length) return;
   if (readOnly) throw new Error("write disabled: audit requires a writable server");
-  const output = new PodOutput(pod);
+  const output = new PodOutput(pod, true);
   const now = new Date().toISOString();
-  const url = new URL(`private/pkg/audit/${now.slice(0, 7)}.ttl`, pod.root).href;
+  const auditRoot = auditContainer(pod);
+  const url = new URL(`${now.slice(0, 7)}.ttl`, auditRoot).href;
   const id = `${url}#${crypto.randomUUID()}`;
   const entry = new Store();
   const activity = new MemoryNode(id, entry, df);
@@ -102,10 +104,13 @@ export async function auditSpecialRead(
   // Retry compare-and-swap conflicts with a fresh read; never overwrite another call's activity.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      for (const path of ["private/", "private/pkg/", "private/pkg/audit/"]) {
-        const container = new URL(path, pod.root).href;
+      for (const container of [
+        new URL("../../", auditRoot).href,
+        new URL("../", auditRoot).href,
+        auditRoot,
+      ]) {
         const existing = await optional(container);
-        if (existing && path !== "private/pkg/audit/") continue;
+        if (existing && container !== auditRoot) continue;
         await protect(container, true);
         if (!existing && !(await optional(container))) {
           const dataset = new Store();

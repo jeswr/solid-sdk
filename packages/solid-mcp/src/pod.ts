@@ -21,7 +21,8 @@ import {
 import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
 import { PodOutput } from "./output.js";
-import { withPodFetchLimits, withPodReadLimits } from "./pod-operation.js";
+import { requireGenericPodAccess } from "./personal-data.js";
+import { withPodDataAccess, withPodFetchLimits, withPodReadLimits } from "./pod-operation.js";
 import { asPodPort, type PodReadResult, type PodSource, podSearchLimits } from "./pod-port.js";
 
 import { SearchBudget, searchLimit } from "./search-budget.js";
@@ -136,16 +137,7 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
 
 /** Scope-filtered discovery candidates; callers must authorize before reporting them. */
 export async function containerCandidates(source: PodSource, url: string): Promise<PodChild[]> {
-  const pod = asPodPort(source);
-  const config = { podRoot: pod.root };
-  const target = requirePodScopedUrl(config, url);
-  return (await pod.list(target)).flatMap((child) => {
-    const scoped = podScopedUrlOrUndefined(config, child.url);
-    if (scoped === undefined) return [];
-    return [
-      { ...child, url: scoped, name: child.name ?? resourceName(scoped), type: child.type ?? [] },
-    ];
-  });
+  return new PodOutput(asPodPort(source)).candidates(url);
 }
 
 /**
@@ -418,6 +410,7 @@ export async function search(
     "maxTimeMs",
   );
   const scope = requirePodScopedUrl(config, options.scope ?? config.podRoot);
+  requireGenericPodAccess(pod, scope);
 
   const matches = new RankedMatches();
   if (maxResources === 0 || maxTimeMs === 0) return [];
@@ -529,16 +522,14 @@ async function typeIndexContainers(config: PodSource): Promise<string[]> {
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
+  const output = new PodOutput(asPodPort(config));
   const profile = await searchRdf(config, webId, true);
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {
       if (quad.object.termType === "NamedNode") {
         // Only fetch type-index documents that are within the pod (untrusted ref).
-        const scoped = podScopedUrlOrUndefined(
-          { podRoot: asPodPort(config).root },
-          quad.object.value,
-        );
+        const scoped = output.candidate(quad.object.value);
         if (scoped !== undefined) indexes.add(scoped);
       }
     }
@@ -552,10 +543,7 @@ async function typeIndexContainers(config: PodSource): Promise<string[]> {
         for (const quad of ti.getQuads(null, DataFactory.namedNode(p), null, null)) {
           if (quad.object.termType === "NamedNode") {
             // Only emit in-pod instance targets (the caller scope-checks again).
-            const scoped = podScopedUrlOrUndefined(
-              { podRoot: asPodPort(config).root },
-              quad.object.value,
-            );
+            const scoped = output.candidate(quad.object.value);
             if (scoped !== undefined) out.add(scoped);
           }
         }
@@ -580,21 +568,11 @@ export async function writeResource(
 ): Promise<{ url: string; etag?: string }> {
   const pod = asPodPort(source);
   const target = requirePodScopedWriteUrl({ podRoot: pod.root }, url);
-  const result = await pod.write(target, new TextEncoder().encode(content), contentType, {});
   const output = new PodOutput(pod);
+  const result = await output.write(target, new TextEncoder().encode(content), contentType, {});
   // Mutation permission does not grant permission to describe the stored data.
   await output.read(target);
   return { url: target, ...(result.etag ? { etag: result.etag } : {}) };
-}
-
-/** Derive a name when a portable backend only supplies URL and container status. */
-function resourceName(url: string): string {
-  const name = new URL(url).pathname.replace(/\/$/, "").split("/").pop() ?? url;
-  try {
-    return decodeURIComponent(name);
-  } catch {
-    return name;
-  }
 }
 
 /** Keep bounded parsing for portable reads as well as streaming fetch-backed reads. */
@@ -604,9 +582,11 @@ async function searchRdf(
   profile = false,
 ): Promise<import("n3").Store> {
   const pod = asPodPort(source);
-  const read = await pod.read(url, { accept: RDF_ACCEPT });
+  requireGenericPodAccess(pod, url);
+  const read = await withPodDataAccess(pod, false, () => pod.read(url, { accept: RDF_ACCEPT }));
   const { url: finalUrl } = read;
   const base = finalUrl ?? url;
+  requireGenericPodAccess(pod, base);
   // HTTP representation URLs omit WebID fragments; retain the configured-profile exception.
   const expectedProfile = profile ? new URL(pod.webId) : undefined;
   const finalDocument = new URL(base);

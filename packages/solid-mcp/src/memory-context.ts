@@ -57,7 +57,9 @@ export function status(error: unknown): number | undefined {
 export function memoryContext(pod: PodPort, readOnly: boolean, client?: MemoryClientInfo) {
   if (!client || safeIri(client.clientId) !== client.clientId || !client.clientId)
     throw new Error("Memory requires a configured client IRI");
-  const output = new PodOutput(pod);
+  // Only personal tool handlers receive this internal capability; policy and
+  // audit still gate all disclosure. Generic output always uses the default.
+  const output = new PodOutput(pod, true);
   const reads = new Map<string, { etag?: string }>();
   function mutationTarget(url: string) {
     if (readOnly) throw new Error("write disabled: server is read-only");

@@ -221,6 +221,18 @@ Lists, search descriptions, resource reads, tool results, chat results and write
 receipts share this boundary. A write receipt requires read authorization after
 the write; the write can succeed even if that receipt is denied.
 
+Generic access reserves the personal-data subtree `private/pkg/`, derived from
+`NanopubStore`'s storage layout. It includes nanopublications, policy, locks, audit
+logs and their local ACLs. Only the internal personal-tool and audit path can
+access this area; personal reads still require the current purpose policy and,
+for sensitive data, a verified audit append. Generic reads and mutations return
+the fixed diagnostic `Personal data requires a purpose-limited tool`, without
+echoing a URL. Generic writes/deletes also refuse ancestors of the reserved area.
+Listings, search candidates/results, Type Index hints, container projections and
+MCP resource enumeration omit protected children before reading them. Redirect
+hops and returned aliases receive the same checks, including slashless containers,
+query/fragment aliases, case variants, percent decoding and normalized `..` paths.
+
 Container representations are rebuilt from authorized children through typed
 RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,
 query/redirect aliases, LDP container type Link headers (including redirect hops),
@@ -235,8 +247,9 @@ decisions are never retained across operations or callers.
 Server-rendered container bodies, including plain text and HTML, are never returned.
 The listing requests RDF and fails closed when it cannot produce the filtered graph.
 Initial reads and container projection share a 5000 ms deadline and a 1 MiB
-per-response limit. Native authorization-only reads discard unused bodies;
-decorated reads receive complete bodies up to the input limit. Larger downloads
+per-response limit. Native authorization-only reads discard unused non-RDF bodies;
+RDF container identities are checked before authorizing resource descriptions.
+Decorated reads receive complete bodies up to the input limit. Larger downloads
 fail closed so a content-based authorization check cannot inspect a partial body.
 
 The existing fetch-based server configuration and exported pod operations remain
@@ -248,7 +261,8 @@ supported. Operations also accept a PodPort directly. The programmatic `search` 
 `search` accepts `{query}` and returns one MCP text block containing JSON:
 `{results:[{id,title,url}]}`. IDs are pod resource URLs. It searches Type Index
 registrations and container listings, matching names, URLs, and RDF literals
-(including memory notes and chat titles). Results are deduplicated and ranked.
+(including chat titles). Personal memory is available through `memory_recall`
+under its purpose policy. Results are deduplicated and ranked.
 The legacy `solid_search` tool retains its original array response.
 
 The shared discovery/scan limits default to depth 4, 500 distinct resources, and

@@ -35,9 +35,7 @@ export function createStoragePodPort(
     const request = new Request(url, init);
     let response: Response;
     if (podScopedUrlOrUndefined(config, request.url) !== undefined) {
-      response = await (["GET", "HEAD"].includes(request.method)
-        ? podOperationFetch(config.fetch)
-        : config.fetch)(request);
+      response = await podOperationFetch(config.fetch)(request);
     } else {
       // Description documents may sit outside the storage root. They remain
       // same-origin public discovery and never receive a pod credential.

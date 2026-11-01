@@ -26,6 +26,16 @@ operator-configured WebID outside the pod, for best-effort Type Index discovery;
 never let client-selected tool URLs use this exception. Refuse off-pod profile redirects
 and drop discovered off-pod URLs.
 Guard read redirects; refuse mutation redirects, root mutations and root aliases.
+Generic PodOutput access must refuse the personal-data prefix derived from
+NanopubStore's layout (`private/pkg/`, including policy, locks, audit and local
+ACLs). Audit must derive its container from the same layout. Deny generic reads,
+writes and deletes with `Personal data requires a purpose-limited tool`; never
+echo rejected URLs. Refuse ancestor mutations too. Filter protected listing/search
+candidates, Type Index hints, container projections and MCP resource enumeration.
+Check redirects and final aliases, slashless containers, case variants, repeated
+percent encoding and normalized dot segments at the shared output/operation
+boundary. Only memoryContext and audit may opt into internal personal access;
+all personal disclosure retains purpose checks and verified sensitive-read audits.
 Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
 reads; generic byte reads must retain the backend default representation.
 

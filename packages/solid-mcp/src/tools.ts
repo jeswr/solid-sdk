@@ -33,7 +33,7 @@ export function createPodToolRegistry(
         title: "Search the Solid pod",
         readOnly: true,
         description:
-          "Search by resource name, URL, or RDF literals, including memory notes and chat titles. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
+          "Search by resource name, URL, or RDF literals, including chat titles. Personal memory and audit storage is excluded. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
         inputSchema: z.object({ query: z.string().describe("Case-insensitive search term.") }),
         async handler({ query }) {
           const matches = await search(pod, query);

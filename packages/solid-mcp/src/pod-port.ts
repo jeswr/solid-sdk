@@ -271,7 +271,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
     if (contentType !== undefined) headers.set("content-type", contentType);
     if (cond.ifMatch !== undefined) headers.set("if-match", cond.ifMatch);
     if (cond.ifNoneMatch !== undefined) headers.set("if-none-match", cond.ifNoneMatch);
-    const response = await config.fetch(target, {
+    const response = await podOperationFetch(config.fetch)(target, {
       method,
       headers,
       ...(body === undefined ? {} : { body: Buffer.from(body) }),
