@@ -46,7 +46,7 @@ async function closeNavigation(page: Page) {
   await expect(async () => {
     await page.keyboard.press("Escape");
     await expect(navigation).toBeHidden({ timeout: 1000 });
-  }).toPass();
+  }).toPass({ timeout: 5000 });
 }
 // The demo seed has a Mon/Wed/Fri stand-up, so match the planning series by title.
 function planning(page: Page, day: string) {
