@@ -1,5 +1,8 @@
 <!-- AUTHORED-BY GPT-5.6 Codex -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Mobile native WebView fixture harness (MOB-07a / MOB-07b)
+
+iOS secure-store accepted residual (S4/S9): a commit after the final generation check but before Capacitor's queued JavaScript delivery may expose an already unlocked value to the allowed same-origin replacement document's `Capacitor.fromNative` wrapper; S9 cancels prompts and does not withdraw unlocked values.
 
 ## Android emulator
 
@@ -46,6 +49,13 @@ Checks require explicit evidence and exit nonzero on failure:
 - `crypto.subtle`, Web Locks, service worker API presence, and `isSecureContext`.
   This checks API availability, not registration or persistence of a service worker.
 - A successful top-frame `SuiteShareIntake.getPending` and share listener registration.
+- Real `SuiteSecureStore` calls through the trusted top frame's Capacitor bridge: `status`,
+  ungated set/get with exact value and version, stale rejection, a current-version update,
+  remove/get-null, and clear/get-null for two populated keys. A fresh plaintext marker remains
+  stored until the host lists and base64-reads every file under `no_backup/securestore/` with
+  `adb shell run-as org.jeswr.suite`. A non-empty state `.bin` must exist, and the decoded
+  bytes must contain neither the marker's UTF-8 nor UTF-16LE encoding. The host then clears
+  the retained item. This exercises AndroidKeyStore and native bridge serialization.
 - An unsandboxed cross-origin iframe tries the legacy bridge, cookie/HTTP interfaces,
   Capacitor plugin proxy and the WebMessage listener. Capacitor 8.5.3 names both bridge
   transports `androidBridge`. Exposed native surfaces fail even without a response.
@@ -53,6 +63,45 @@ Checks require explicit evidence and exit nonzero on failure:
   accepted only when all native transports are absent; unexpected probe exceptions fail;
   malformed, missing and timed-out iframe results fail. Parent messages check source,
   exact origin and a fresh nonce. There is no CSP masking native isolation failures.
+  The same frame also tries secure-store get/set through every Android probe channel. Every
+  call must remain without a native reply over at least two seconds; unexpected errors,
+  exposed native transports and replies delivered into the main document fail.
+- Two independent gated set/get attempts drive the real system authentication UI. The host
+  first inspects `locksettings get-disabled` and verifies with no old credential, refusing to
+  change an already secured emulator. It arms PIN cleanup **before** attempting to set disposable
+  PIN `1234`, then verifies that PIN, opens `android.settings.FINGERPRINT_ENROLL`, advances
+  recognized setup controls and sends repeated `adb emu finger touch 1` events. Fingerprint
+  enrollment must be confirmed by `dumpsys fingerprint` before that path is attempted.
+  One get is unlocked with a sensor touch; the other selects the device credential control
+  and enters the PIN with `input text 1234` and `input keyevent 66`. A pass requires an
+  observed prompt, authentication input and the exact decrypted value and committed version.
+  Returning before input, native errors and mismatched values fail. The complete native
+  `status()` response must have `available === true` and boolean `userPresence` / `hardwareBacked`
+  fields. Runner capability comes from verified PIN setup and confirmed enrollment, independently
+  of the plugin. A false `userPresence` despite a verified PIN, an unavailable store, or malformed
+  status fails; the plugin cannot suppress its own gated tests.
+  Before each gated read, the host also checks that the UI dump contains readable nodes.
+  Only independent capability failures collected **before starting the gated read** record
+  `not automatable`: `PIN setup failed`, `fingerprint enrollment failed`, or
+  `UI dump unreadable before gated read`. Each skip must include `evidence.phase` equal to
+  `before-gated-read`, the independent source (`runner setup` or `uiautomator`) and its failed
+  probe result; setup verdicts retain the runner's PIN/enrollment details and native status,
+  and UI verdicts retain the dump/error. `gatedReadStarted`, `authenticationAttempted`,
+  `authenticationSent` and `authenticationConfirmed` must all explicitly be false.
+  The verdict validator rejects missing evidence, evidence collected after the read or an
+  authentication attempt, contradictory results, and native read outcomes used as skip evidence.
+  The verdict is printed as `not automatable on this runner: ...`.
+  Once the read starts, missing prompts, unavailable controls, UI errors and timeouts fail.
+  A pending read with no prompt fails with `gated read pending but no system prompt appeared`,
+  even when no authentication input was sent. A UI dump showing the app again with the
+  authentication prompt dismissed confirms the sent input; if the native get still never
+  replies, the failure reason is
+  `native callback never resolved after confirmed authentication`.
+  Both paths are reported separately; a skip never counts as a passing unwrap. Pending prompts
+  are cancelled and the store cleared between attempts. In `finally`, every attempted PIN setup
+  triggers `locksettings clear --old 1234`, even if setup timed out or its reply was ambiguous.
+  Cleanup accepts an already absent credential, then verifies no old credential is needed;
+  other errors or a credential that remains installed fail the run.
 - A unique ACTION_SEND text (including quotes and shell metacharacters) must appear as exactly
   one item in one pending batch. A document identity token recorded before sending requires
   exactly one matching listener event when the original document survives; pending alone
@@ -69,10 +118,22 @@ Checks require explicit evidence and exit nonzero on failure:
   survive, including after foregrounding the app. An external browser may open as designed.
 
 `e2e/artifacts/report.json` records every step, fixture evidence, share results and the explicit
-real-suite deferral; `logcat.txt` is collected on driver failure. CI also uploads emulator
-logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
+real-suite deferral. Its `secureStore` member contains `ungated`, `disk` (file paths, byte counts
+and plaintext absence), `cleanup`, `setup`, post-setup native `status`, and independent
+`gated.fingerprint` / `gated.credential` verdicts (`passed`, `failed`, or `not automatable` with
+`reason` and setup/UI/prompt evidence). Only independently evidenced capability failures before
+the gated read may skip the gated step. CI uploads the report on success as well as failure,
+so runner limitations remain reviewable; `logcat.txt` is collected on driver failure.
+CI also uploads emulator logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
 the AVD using SDK tools directly. Native compilation, emulator/CDP behavior and actual bridge
 isolation are verified there; they cannot be verified in the cloud development container.
+
+Secure-store manual checks still include either authentication path reported as not automatable
+on that runner, physical-device biometric/PIN UX, hardware backing (an emulator may report false),
+enrollment changes/key invalidation, lockout, background/cancellation races, and backup/restore
+behavior. This Android lane does not claim iOS secure-store or real-session refresh coverage.
+All secure-store fixture code is served remotely from `e2e/fixture`; `prepare-www` never copies
+it into bundled assets or Release builds.
 
 For a host-only fixture smoke test (not evidence of native bridge isolation):
 
@@ -132,6 +193,19 @@ link and taps its foreign link (which calls `location.assign`). It reads the doc
 the attempt, after the two-second observation window, and after backgrounding/foregrounding.
 `e2e-navigation.json` preserves all three snapshots, including their document identity and URL.
 There are no test-only hooks in the application target.
+
+Result polling regains the foreground if the asynchronous external-browser handoff arrives after
+`activate()`. If the result disappears or WebContent accessibility stops responding, timeout
+diagnostics use the last cached value length without querying the vanished element. The
+`e2e-debug.txt` attachment records the expected page, done flag, exact navigation step, WebView
+presence and application hierarchy. The host retains these diagnostics through both bulk and
+legacy attachment export, including when navigation evidence is missing.
+
+Secure-store reads are cancelled through observations of the main WebView's URL and loading
+state (including reloads of the same URL). Capacitor retains its original navigation delegate,
+which owns bridge reset, navigation policy and WebContent-process reload. The secure-store
+fixture script is loaded only by the Android paths in both frames; iOS keeps its existing
+share-intake/prompt probes and does not wrap `toNative` for Android secure-store checks.
 
 The iOS checks require all four secure-context APIs and a successful top-frame
 `SuiteShareIntake.getPending`. On iOS, `addListener` returns a JS removal handle synchronously,
