@@ -91,7 +91,7 @@ export function createOriginScopedFetch(
     )
       throw new TypeError("invalid binding origin");
   }
-  function createGuard(beforeDispatch?: () => void) {
+  function createSingleHop(beforeDispatch?: () => void) {
     const transport = createTransport(
       Object.freeze({
         allowLoopback: allowLoopback ?? false,
@@ -99,7 +99,11 @@ export function createOriginScopedFetch(
         ...(beforeDispatch ? { beforeDispatch } : {}),
       }),
     );
-    const singleHop = refuseRedirects(transport);
+    return refuseRedirects(transport);
+  }
+  // The outer guard is cheap and per request, so a nested size refusal is recorded locally:
+  // guarded-fetch drops transport causes from its sanitised SsrfError.
+  function createGuard(singleHop: typeof guardedFetch, onSizeRefusal: () => void) {
     return createGuardedFetch({
       pinningFetch: async (input, init) => {
         // The guard always supplies init and its combined caller/deadline signal.
@@ -116,7 +120,10 @@ export function createOriginScopedFetch(
         try {
           return await singleHop(input, transportInit);
         } catch (error) {
-          if (isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
+          if (isResponseSizeRefusal(error)) {
+            onSizeRefusal();
+            throw new ResponseSizeRefusedError();
+          }
           // An inner guard may parse Location before refusal and retain it in its cause.
           // Replace the whole error rather than passing untrusted transport details outward.
           throw new TypeError("binding transport failed or refused redirect");
@@ -129,13 +136,14 @@ export function createOriginScopedFetch(
       maxRedirects: 0,
     });
   }
-  const defaultGuard = createGuard();
+  const defaultSingleHop = createSingleHop();
   return async (input, init) => {
     const beforeDispatch = init?.beforeDispatch;
     // Guard layers sanitize/wrap transport errors. Retain this request's exact fence refusal.
     let refusal: { error: unknown } | undefined;
-    const guarded = beforeDispatch
-      ? createGuard(() => {
+    let sizeRefused = false;
+    const singleHop = beforeDispatch
+      ? createSingleHop(() => {
           try {
             beforeDispatch();
           } catch (error) {
@@ -143,7 +151,10 @@ export function createOriginScopedFetch(
             throw error;
           }
         })
-      : defaultGuard;
+      : defaultSingleHop;
+    const guarded = createGuard(singleHop, () => {
+      sizeRefused = true;
+    });
     // Snapshot mutable URL/Request inputs before any asynchronous work.
     // Request construction resets inherited referrer settings unless supplied explicitly.
     const inherited = input instanceof Request ? input : undefined;
@@ -182,12 +193,8 @@ export function createOriginScopedFetch(
       });
     } catch (error) {
       if (refusal) throw refusal.error;
-      // The outer guard wraps transport refusals in SsrfError; preserve only the safe type.
-      if (
-        isResponseSizeRefusal(error) ||
-        (error instanceof SsrfError && error.cause instanceof ResponseSizeRefusedError)
-      )
-        throw new ResponseSizeRefusedError();
+      // Guard layers sanitise transport errors; keep only the request-local size refusal type.
+      if (sizeRefused || isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
       throw error;
     }
   };
