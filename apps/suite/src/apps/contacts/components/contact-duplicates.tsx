@@ -121,11 +121,12 @@ function MergeReview({
   ];
   const fixed = MERGE_FIELDS.filter((field) => choices[field].length === 1);
   // Like migration's lossless check: list what deleting the other documents would discard.
-  let losses: { name: string; items: string[] }[] | undefined;
+  let losses: { id: string; name: string; items: string[] }[] | undefined;
   try {
     const document = mergedDocument(primary, merged);
     losses = others
       .map((person) => ({
+        id: contactId(person),
         name: person.data.name,
         items: mergeLosses(document, contactId(primary), person),
       }))
@@ -263,7 +264,7 @@ function MergeReview({
           </p>
           <ul>
             {losses.map((loss) => (
-              <li key={loss.name}>
+              <li key={loss.id}>
                 {loss.name}: {loss.items.join(", ")}
               </li>
             ))}
