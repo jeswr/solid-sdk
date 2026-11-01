@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // @vitest-environment jsdom
 //
@@ -70,6 +71,29 @@ function stableFactory(stub: {
 }
 
 describe("useDocsListing — listing", () => {
+  it("restores the selected collection and resets the open document when it changes", async () => {
+    const first = `${POD}first-collection`;
+    const second = `${POD}second-collection`;
+    const createStore = vi.fn<typeof createDocsStore>((options) =>
+      stableFactory({
+        list: async () => [entry({ title: options.container })],
+        read: async () => stored(),
+      })(options),
+    );
+    const { result, rerender } = renderHook(
+      ({ container }) => useDocsListing(POD, WEBID, { container, createStore }),
+      { initialProps: { container: first } },
+    );
+    await waitFor(() => expect(result.current.entries[0]?.title).toBe(first));
+    act(() => result.current.open(DOC_URL));
+    await waitFor(() => expect(result.current.openDocument).not.toBeNull());
+    rerender({ container: second });
+    expect(result.current.openDocument).toBeNull();
+    await waitFor(() => expect(result.current.entries[0]?.title).toBe(second));
+    expect(createStore).toHaveBeenCalledTimes(2);
+    expect(createStore).toHaveBeenLastCalledWith(expect.objectContaining({ container: second }));
+  });
+
   it("loads the document listing on mount", async () => {
     const list = vi.fn(async () => [entry()]);
     const createStore = stableFactory({ list });

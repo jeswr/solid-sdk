@@ -11,11 +11,16 @@ and malformed-encoding refusals. Pre-encoded `%2F`/`%5C` segments (any case) mus
 clear `[unstorage-solid]` error in `keyToUrl`; `urlToKey` returns undefined for such member
 paths. Encoded colons and percent signs still round-trip.
 
-`listContainer(containerUrl, base, fetchImpl)` is a compatibility wrapper around
-`@jeswr/ldp-container`'s `readContainerMembers`; preserve its signature and null on 404/410.
+`listContainer(containerUrl, base, fetchImpl)` is a compatibility wrapper over the public
+`createPodClient` / `StorageClient.listAll` API; preserve its fetch signature and null on 404/410.
+It also accepts an injected StorageClient. SDK Solid listings are sorted by URL.
 Keep the existing scope delegate as an additional member filter, including its stricter
 root-alias rules. Malformed and unsafe entries are skipped individually. Keep recursion,
-request headers, key mapping, clear ordering, watch handling, and redirect wrappers local.
+request headers, key mapping, clear ordering, and redirect wrappers local.
+Watch maps normalized pod-notifications changes;
+do not restore local protocol discovery or socket parsing. Deletes use observed ETags.
+Do not invent an identity index: the existing fixed-name key layout refuses server-renamed
+LWS creates, and never deletes the unfamiliar returned URL.
 This package is security-critical: no guard may be loosened.
 
 Scope wrappers use guarded-fetch's `snapshotFetchInput(input, init, { metadataOnly: true })` to validate fresh

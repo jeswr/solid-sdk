@@ -95,7 +95,7 @@ export interface CreateOptions {
   contentType?: string;
   /** Default 'resource'. */
   kind?: ResourceKind;
-  /** Name hint. Honoured on Solid (PUT container+name, If-None-Match:*). Sent as Slug on LWS; server decides. */
+  /** Decoded name hint. Honoured on Solid (encoded PUT child, If-None-Match:*). Percent-encoded as Slug on LWS; server decides. */
   name?: string;
   /** Initial user metadata (LWS: Link headers on POST; Solid: ignored unless describedby is writable). */
   links?: readonly { rel: string; target: string }[];

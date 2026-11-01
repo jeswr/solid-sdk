@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The document-browser's data hook — the SINGLE place the view touches the data
@@ -112,6 +113,10 @@ export interface DocsListingState {
 
 /** Options for {@link useDocsListing}. */
 export interface UseDocsListingOptions {
+  /** Restore the collection saved for this WebID and storage root, preserving its identifier. */
+  container?: string;
+  /** Save the assigned collection under the supplied identity, including when a write finishes after navigation. */
+  onContainerChange?: (selection: { podRoot: string; webId: string; container: string }) => void;
   /**
    * The authenticated fetch. Omit to use the ambient global fetch (which
    * @solid/reactive-authentication patches in a real session). This is the
@@ -144,14 +149,54 @@ export function useDocsListing(
   webId: string,
   options: UseDocsListingOptions = {},
 ): DocsListingState {
-  const { fetch: authedFetch, createStore = createDocsStore } = options;
+  const {
+    fetch: authedFetch,
+    createStore = createDocsStore,
+    container,
+    onContainerChange,
+  } = options;
+  const containerCallback = useRef(onContainerChange);
+  useEffect(() => {
+    containerCallback.current = onContainerChange;
+  }, [onContainerChange]);
 
   // The store is rebuilt only when an identity input changes — so the load
   // effect's dependency is a stable reference across unrelated re-renders.
-  const store: DocsStore = useMemo(
-    () => createStore({ podRoot, webId, ...(authedFetch ? { fetchImpl: authedFetch } : {}) }),
-    [createStore, podRoot, webId, authedFetch],
+  const storeOptions = useMemo(
+    () => ({
+      podRoot,
+      webId,
+      onContainerChange: (assigned: string) =>
+        containerCallback.current?.({ podRoot, webId, container: assigned }),
+      ...(authedFetch ? { fetchImpl: authedFetch } : {}),
+    }),
+    [podRoot, webId, authedFetch],
   );
+  const [selection, setSelection] = useState(() => ({
+    storeOptions,
+    createStore,
+    container,
+    store: createStore({ ...storeOptions, container }),
+  }));
+  if (
+    selection.storeOptions !== storeOptions ||
+    selection.createStore !== createStore ||
+    selection.container !== container
+  ) {
+    // A host saving the just-assigned identifier acknowledges this store's
+    // collection; keep its open document and in-flight creation intact.
+    const acknowledged =
+      selection.storeOptions === storeOptions &&
+      selection.createStore === createStore &&
+      selection.store.container === container;
+    setSelection({
+      storeOptions,
+      createStore,
+      container,
+      store: acknowledged ? selection.store : createStore({ ...storeOptions, container }),
+    });
+  }
+  const store: DocsStore = selection.store;
 
   const [entries, setEntries] = useState<DocumentEntry[]>([]);
   const [openDocument, setOpenDocument] = useState<StoredDocument | null>(null);

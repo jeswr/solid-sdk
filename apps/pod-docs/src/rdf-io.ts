@@ -1,42 +1,65 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-/**
- * The Pod-Docs data layer's ONE way to touch pod RDF I/O: read (via
- * `@jeswr/fetch-rdf`, force-revalidated), serialise (via `n3.Writer`) and the
- * minimal write/delete primitives. App modules never call `fetch`/`fetchRdf`
- * directly and never parse or serialise RDF inline (house rule: go through
- * `@jeswr/fetch-rdf` + `n3.Writer`, never a bespoke parser).
- */
-import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Compatibility RDF helpers over the public storage client. */
+import {
+  createPodClient,
+  type RdfReadResult,
+  type StorageClient,
+  StorageError,
+} from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { Writer } from "n3";
-import { ResourceDeleteError, ResourceWriteError } from "./errors.js";
 
-/**
- * Force conditional revalidation through any HTTP cache. Solid servers (CSS
- * included) send `ETag`/`Last-Modified` but no `Cache-Control`, so a browser
- * may answer a GET from a heuristically-fresh cache — handing read-modify-write
- * paths a stale ETag (spurious 412 on `If-Match`). `no-cache` keeps the cache
- * but forces a cheap conditional GET (304 when unchanged).
- */
 export const REVALIDATE_HEADERS = { "cache-control": "no-cache" } as const;
 
-/**
- * Fetch + parse a pod RDF document, always revalidating any cached copy.
- *
- * Same contract as `fetchRdf` (errors propagate as `RdfFetchError`; keep the
- * returned `etag` for conditional writes).
- *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch (`@solid/reactive-authentication`) runs.
- */
-export function readRdf(url: string, fetchImpl?: typeof fetch): Promise<FetchedRdf> {
-  return fetchRdf(
-    url,
-    fetchImpl ? { fetch: fetchImpl, headers: REVALIDATE_HEADERS } : { headers: REVALIDATE_HEADERS },
-  );
+/** Resolve through the SDK; callers with a client reuse its discovery and scope. */
+export async function storageFor(
+  url: string,
+  fetchImpl = globalThis.fetch,
+  storage?: StorageClient,
+): Promise<StorageClient> {
+  if (storage) return storage;
+  let accessFailure: { status: 401 | 403; url: string; method: string } | undefined;
+  // Transport cache policy only; discovery, protocol requests and parsing stay in the SDK.
+  const revalidatingFetch: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set("cache-control", "no-cache");
+    const response = await fetchImpl(input, { ...init, headers, cache: "no-cache" });
+    if (response.status === 401 || response.status === 403) {
+      accessFailure = {
+        status: response.status,
+        url: String(input),
+        method: init?.method ?? "GET",
+      };
+    }
+    return response;
+  };
+  const target = new URL(url);
+  target.hash = "";
+  try {
+    return (await createPodClient({ storage: target.href, fetch: revalidatingFetch })).storage;
+  } catch (error) {
+    if (accessFailure) {
+      throw new StorageError(accessFailure.status === 401 ? "unauthenticated" : "forbidden", {
+        ...accessFailure,
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
 
-/** Serialise an in-memory dataset to Turtle (promisified n3.Writer). */
+/** Revalidate RDF using the authenticated SDK transport. Strip WebID fragments for HTTP. */
+export async function readRdf(
+  url: string,
+  fetchImpl?: typeof fetch,
+  storage?: StorageClient,
+): Promise<RdfReadResult> {
+  const target = new URL(url);
+  target.hash = "";
+  return (await storageFor(url, fetchImpl, storage)).readRdf(target.href);
+}
+
+/** n3.Writer preserves explicit relative fragments and absolute external references. */
 export function serializeTurtle(
   dataset: DatasetCore,
   prefixes?: Record<string, string>,
@@ -48,53 +71,59 @@ export function serializeTurtle(
   });
 }
 
-/** Options for {@link writeRdf}. */
 export interface WriteOptions {
-  /** Send `If-Match` so a concurrent edit fails with 412 instead of clobbering. */
   etag?: string | null;
-  /** Send `If-None-Match: *` — create only, never overwrite (412 if it exists). */
   createOnly?: boolean;
-  /** Test-only override; **omit in production** so the auth-patched global runs. */
   fetchImpl?: typeof fetch;
-  /** Optional Turtle prefix map for readable documents. */
+  storage?: StorageClient;
   prefixes?: Record<string, string>;
 }
 
-/**
- * Serialise the dataset and `PUT` it as Turtle. Always sends an explicit
- * `Content-Type`. Servers that support it create intermediate containers on
- * PUT, so a deep path needs no separate container creation.
- *
- * @throws ResourceWriteError on any non-2xx answer (412 = precondition failed:
- *   a concurrent edit under `etag`, or "already exists" under `createOnly`).
- */
+/** Refuse edits without the validator from the caller's read. Never silently overwrite. */
+export function requireEtag(etag: string | null | undefined, url: string): string {
+  if (!etag || etag === "*")
+    throw new StorageError("precondition-required", { url, method: "PUT", status: 428 });
+  return etag;
+}
+
+/** Exact-name creation is retained only for Solid Type Index bootstrap. */
 export async function writeRdf(
   url: string,
   dataset: DatasetCore,
   opts: WriteOptions = {},
 ): Promise<{ etag: string | null }> {
-  const body = await serializeTurtle(dataset, opts.prefixes);
-  const headers: Record<string, string> = { "content-type": "text/turtle" };
-  if (opts.etag) headers["if-match"] = opts.etag;
-  if (opts.createOnly) headers["if-none-match"] = "*";
-  const init: RequestInit = { method: "PUT", headers, body };
-  const res = opts.fetchImpl ? await opts.fetchImpl(url, init) : await fetch(url, init);
-  if (!res.ok) throw new ResourceWriteError(url, res.status);
-  return { etag: res.headers.get("etag") };
+  const storage = await storageFor(url, opts.fetchImpl, opts.storage);
+  if (opts.createOnly) {
+    if (storage.protocol !== "solid")
+      throw new StorageError("unsupported", { url, method: "POST" });
+    const parent = new URL(".", url).href;
+    const name = decodeURIComponent(new URL(url).pathname.split("/").at(-1) as string);
+    return storage.create(parent, await serializeTurtle(dataset, opts.prefixes), {
+      name,
+      contentType: "text/turtle",
+    });
+  }
+  return storage.writeRdf(url, dataset, {
+    ifMatch: requireEtag(opts.etag, url),
+    prefixes: opts.prefixes,
+  });
 }
 
-/**
- * Delete a resource. A `404`/`410` is treated as success (idempotent delete —
- * the resource is already gone, the caller's desired end state).
- *
- * @param fetchImpl - test-only override; **omit in production**.
- * @throws ResourceDeleteError on any other non-2xx answer.
- */
-export async function deleteRdf(url: string, fetchImpl?: typeof fetch): Promise<void> {
-  const init: RequestInit = { method: "DELETE" };
-  const res = fetchImpl ? await fetchImpl(url, init) : await fetch(url, init);
-  if (res.ok || res.status === 404 || res.status === 410) return;
-  throw new ResourceDeleteError(url, res.status);
+/** Idempotent removal; observe a validator when the caller has no prior read. */
+export async function deleteRdf(
+  url: string,
+  fetchImpl?: typeof fetch,
+  storage?: StorageClient,
+  etag?: string | null,
+): Promise<void> {
+  const client = await storageFor(url, fetchImpl, storage);
+  try {
+    const validator = etag ?? (await client.head(url, { revalidate: true })).etag;
+    await client.delete(url, { ifMatch: requireEtag(validator, url) });
+  } catch (error) {
+    if (error instanceof StorageError && error.code === "not-found") return;
+    throw error;
+  }
 }
 
 /** Derive a friendly name from a resource URL (last non-empty path segment). */

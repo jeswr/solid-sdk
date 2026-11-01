@@ -841,6 +841,12 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -1017,9 +1023,12 @@ importers:
 
   apps/pod-drive:
     dependencies:
-      '@jeswr/fetch-rdf':
+      '@jeswr/pod-access':
         specifier: workspace:*
-        version: link:../../packages/fetch-rdf
+        version: link:../../packages/pod-access
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -3702,6 +3711,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
@@ -5294,6 +5306,12 @@ importers:
       '@jeswr/ldp-container':
         specifier: workspace:*
         version: link:../ldp-container
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../pod-notifications
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

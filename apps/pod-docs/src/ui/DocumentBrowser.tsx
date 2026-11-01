@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The Pod Docs document-browser VIEW — a list of the documents in a pod's
@@ -24,7 +25,7 @@
 
 import { useState } from "react";
 import { displayTitle, formatModified } from "./format.js";
-import { type SaveStatus, useDocsListing } from "./useDocsListing.js";
+import { type SaveStatus, type UseDocsListingOptions, useDocsListing } from "./useDocsListing.js";
 
 /**
  * The "Saving…/Saved/failed" indicator shared by the create + save-edit flows.
@@ -56,8 +57,9 @@ function SaveIndicator({ status, error }: { status: SaveStatus; error: string | 
 }
 
 /** Props for {@link DocumentBrowser}. */
-export interface DocumentBrowserProps {
-  /** The pod root URL whose `pod-docs/` container is browsed. */
+export interface DocumentBrowserProps
+  extends Pick<UseDocsListingOptions, "container" | "onContainerChange"> {
+  /** The storage root; defaults to its `pod-docs/` collection unless `container` is supplied. */
   podRoot: string;
   /** The pod owner's WebID — needed by the data layer for type-index discovery. */
   webId: string;
@@ -77,7 +79,14 @@ export interface DocumentBrowserProps {
  * its title, metadata and body. All states — loading, empty, error, access
  * denied — are surfaced.
  */
-export function DocumentBrowser({ podRoot, webId, fetch, title }: DocumentBrowserProps) {
+export function DocumentBrowser({
+  podRoot,
+  webId,
+  fetch,
+  title,
+  container,
+  onContainerChange,
+}: DocumentBrowserProps) {
   const {
     entries,
     openDocument,
@@ -92,7 +101,7 @@ export function DocumentBrowser({ podRoot, webId, fetch, title }: DocumentBrowse
     saveError,
     createDocument,
     saveOpenDocument,
-  } = useDocsListing(podRoot, webId, fetch ? { fetch } : {});
+  } = useDocsListing(podRoot, webId, { fetch, container, onContainerChange });
 
   const heading = title ?? "Pod Docs";
 
