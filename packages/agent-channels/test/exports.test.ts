@@ -104,6 +104,7 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./gmail",
       "./gmail/send",
       "./graph-mail",
+      "./graph-mail/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -129,4 +130,5 @@ it("keeps Graph mail sending out of the root and reader surfaces", () => {
   expect(entry0).not.toHaveProperty("createGraphMailSend");
   expect(entry4).toHaveProperty("createGraphMailReader");
   expect(entry4).not.toHaveProperty("createGraphMailSend");
+  expect(entry20).toHaveProperty("createGraphMailSend");
 });

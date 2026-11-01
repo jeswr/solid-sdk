@@ -6,7 +6,7 @@ import { vi } from "vitest";
 
 export const raw = readFileSync(new URL("propose.eml", import.meta.url), "utf8");
 export const recipient = "receiver@example.test";
-export const mime = (text = raw) =>
+export const mime = (text = raw): Response =>
   new Response(text, { headers: { "content-type": "message/rfc822" } });
 export function fixtureTransport(replies: unknown[]) {
   const requests: Array<{ url: URL; headers: Headers; body: string; method: string | undefined }> =

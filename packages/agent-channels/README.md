@@ -2,11 +2,12 @@
 
 # @jeswr/agent-channels
 
-> Experimental — AI-agent-generated. Private workspace package; Gmail defaults to dry-run.
+> Experimental — AI-agent-generated. Private workspace package; mail sending defaults to dry-run.
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
 (A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez) and shared metadata carriage
-(A-014 / sst-wxu). The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
+(A-014 / sst-wxu), and Microsoft Graph mail (A-024 / sst-1zu).
+The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
 
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
@@ -52,7 +53,7 @@ their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
-Provider exports other than Gmail remain reserved for their own tasks. Packages
+Provider exports other than Gmail and Graph mail remain reserved for their own tasks. Packages
 remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
@@ -149,3 +150,56 @@ advertises carriage support; `List-Unsubscribe` is absent. The signed propose
 golden fixture in `test/fixtures/propose.eml` passes STRICT parity on its own output.
 Legacy-bridge's `detectBridgeCapability` consumes the parsed headers, JSON-LD
 blocks and text body to report unverified discovery hints; see its PROTOCOL.md.
+
+`./graph-mail` exports `ORIGINS` and `createGraphMailReader` with the same
+`{ tokens, parseEmail, recipient, ownAccounts, footer?, transport? }` options as Gmail.
+It reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows validated
+`@odata.nextLink` / `@odata.deltaLink` URLs, and retrieves each message's MIME via
+`/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
+Requests use immutable Graph IDs. Cursors bind the account and preserve pending
+IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
+tombstones are skipped; a MIME 404 skips a deleted item. Only HTTP 410 on a saved
+delta state restarts the initial inbox sync. Other errors preserve the previous
+cursor for retry. Pages cap at 512 rows and cursors at 64 KiB.
+
+Continuation URLs must stay on the exact inbox delta operation at
+`https://graph.microsoft.com`; credentials in URLs, fragments, duplicate query
+parameters, other operations and repeated next-page links are refused. The
+declared origins are `https://graph.microsoft.com` and
+`https://login.microsoftonline.com`. Origin sets cannot widen token destinations;
+redirects remain refused. OAuth is owned by agent-credentials. Composition adapts
+`StoreTokenProvider('microsoft', { store, transport, resource: 'mail' })`'s token
+strings to the channel's `{ access, accessToken }` grants, using its separate
+`read(account.id)` / `send(account.id)` methods (`Mail.Read` / `Mail.Send`). The
+channel never opens a credential store or acquires consent itself.
+
+`./graph-mail/send` exports `createGraphMailSend`, with the same options and owner
+approval contract as `createGmailSend`. It renders and validates the canonical
+§3.2 MIME, then projects those exact checked bodies, pinned mailboxes, subject and
+deterministic `internetMessageId` into Graph message JSON. `/me/sendMail` receives
+the HTML body with its inline JSON-LD, a matching `#microsoft.graph.fileAttachment`
+containing base64 JSON-LD, `internetMessageHeaders` containing `X-Agentic-Reply: 1`,
+and `saveToSentItems: true`. Graph's JSON API accepts one HTML body; Exchange
+generates the plain-text alternative. No weaker receiver parity mode is selected
+to accommodate provider rewriting.
+
+Real sends require `dryRun: false`, the configured account, verified current signed
+content, a send grant and approval bound to the reviewed MIME digest. Expiry is
+rechecked after token acquisition and approval. HTTP 202 is acceptance only and
+returns the deterministic Internet Message-ID as `providerRef` because Graph
+returns no object ID. HTTP 400 is a definitive rejection; other statuses and
+transport failures remain uncertain. The binding never retries sending.
+
+Lookup uses a read grant and an `internetMessageId eq '…'` filter on `/me/messages`,
+then verifies at most ten candidate MIME copies. Exchange-generated dates,
+boundaries and transfer encodings may differ. Sender, recipient, subject,
+Message-ID and carriage header must still match exactly; extra routing/reply
+destinations are refused. STRICT parity checks every human and structured MIME
+copy and requires the original signed carrier. Lookup works after expiry and
+returns `found` only with positive evidence. Misses, rewritten human content or
+stripped carriers return `unknown`; mail never advertises `finalAbsence`.
+
+Graph tests use synthetic recorded response shapes and injected transports,
+including 202 responses with empty bodies. No live provider or credentials are used.
+Provider contracts: [delta](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0),
+[sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
