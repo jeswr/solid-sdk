@@ -11,17 +11,18 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { CalendarDays, FileText, HardDrive, Menu, Search } from "lucide-react";
+import { CalendarDays, FileText, HardDrive, Menu, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar";
+export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
 ];
 
 export interface SuiteFrameProps {
@@ -33,7 +34,7 @@ export interface SuiteFrameProps {
   /** Top bar trailing actions. */
   actions?: ReactNode;
   /** Search placeholder and target (`?q=` is appended). */
-  search?: { placeholder: string; action: string; scopeLabel: string };
+  search?: { placeholder: string; action: string; scopeLabel: string; query?: string };
   /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
   onDetailsClose?: () => void;
@@ -70,14 +71,15 @@ function Rail({ app }: { app: SuiteAppId }) {
 
 function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
   const router = useRouter();
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(search.query ?? "");
+  useEffect(() => setValue(search.query ?? ""), [search.query]);
   return (
     <search className="ish-search">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           const q = value.trim();
-          if (q) router.push(`${search.action}?q=${encodeURIComponent(q)}`);
+          router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
         }}
       >
         <Search aria-hidden="true" size={18} strokeWidth={1.75} />
