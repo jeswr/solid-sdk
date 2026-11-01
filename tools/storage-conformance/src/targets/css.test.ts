@@ -144,12 +144,14 @@ test("starts file-backed in-process CSS, uses pod-auth credentials and removes d
   );
   expect(forClientCredentials).toHaveBeenCalledWith(
     expect.objectContaining({
+      issuer: input.shorthand.baseUrl,
       boundary: [running.root],
       allowInsecureLoopback: true,
       clientId: "fixture-id",
       clientSecret: "fixture-secret",
     }),
   );
+  expect(input.shorthand.baseUrl).toBe("http://localhost:31337/");
   expect(createPodClient).toHaveBeenCalledWith(
     expect.objectContaining({ fetch: running.fetch, storage: running.root }),
   );
@@ -191,4 +193,40 @@ test.each([
   const directory = mocks.create.mock.calls[0]?.[0].shorthand.rootFilePath;
   await expect(access(directory)).rejects.toThrow();
   expect(mocks.stop).toHaveBeenCalledTimes(phase === "create" ? 0 : 1);
+  expect(logout).toHaveBeenCalledTimes(["discovery", "logout", "stop"].includes(phase) ? 1 : 0);
+});
+
+test.each([
+  "success",
+  "logout",
+  "stop",
+])("shares concurrent and repeated cleanup after %s", async (phase) => {
+  const { logout } = await setup();
+  const running = await cssTarget.start();
+  const directory = mocks.create.mock.calls[0]?.[0].shorthand.rootFilePath;
+  const error = new Error("synthetic cleanup failure");
+  const pending = Promise.withResolvers<void>();
+  logout.mockReturnValue(pending.promise);
+  if (phase === "stop") mocks.stop.mockRejectedValue(error);
+
+  const first = running.stop();
+  const second = running.stop();
+  expect(second).toBe(first);
+  expect(logout).toHaveBeenCalledOnce();
+  expect(mocks.stop).not.toHaveBeenCalled();
+  if (phase === "logout") pending.reject(error);
+  else pending.resolve();
+
+  if (phase === "success") await Promise.all([first, second]);
+  else {
+    await expect(first).rejects.toThrow(error);
+    await expect(second).rejects.toThrow(error);
+  }
+  const repeated = running.stop();
+  expect(repeated).toBe(first);
+  if (phase === "success") await repeated;
+  else await expect(repeated).rejects.toThrow(error);
+  expect(logout).toHaveBeenCalledOnce();
+  expect(mocks.stop).toHaveBeenCalledOnce();
+  await expect(access(directory)).rejects.toThrow();
 });
