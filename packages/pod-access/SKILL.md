@@ -9,8 +9,8 @@ description: Use when working on @jeswr/pod-access, the pod sharing and permissi
 
 This package owns the offline WAC/ACP translation core extracted from `apps/pod-migrator`:
 readers/writers, neutral policy/report types, conservative translation, inheritance composition,
-and bounded access proofs. See `README.md` for exports. The broader sharing client from SDK core
-ADR-003 §9 is still unimplemented; the `./testing` entry point remains reserved.
+and bounded access proofs. See `README.md` for exports. The `./roles` subpath owns the injected-fetch Solid role client from SDK-APP-04; the broader
+AccessClient/LWS work remains separate. The `./testing` entry point remains reserved.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-003-storage-client.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
@@ -34,3 +34,30 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 
 Validate changes with this package's `lint`, dependency-first `build`, `typecheck`, and `test` scripts,
 plus the migrator's regression suite and the repository gate.
+
+<!-- AUTHORED-BY Codex -->
+
+The public `./roles` API is documented in README.md: role/mode mapping, neutral AgentRef and
+RoleGrant types, `grantsWithRoles`, `setGrants`, and branded `RoleError` classification via
+`isRoleError`. Export helpers through `src/roles/index.ts` only; no mutable reader/error
+classes may escape. New public API changes must update this skill and README together.
+
+Preserve the Drive sharing prior art credited in source: nearest WAC replacement versus
+additive ACP inheritance, separate ACR management, comments-container permissions, shared
+scope/principal splitting, copied inherited ACLs, owner lockout and conditional writes.
+Do not flatten denial/exclusion/conditional policies to unconditional role grants. Partial
+or odd grants never round up; edits refuse lossy projections. Groups remain symbolic WAC
+agents; ACP groups and WAC apps are unsupported. Never derive a server dialect from RDF.
+
+Before every batch, reject expiry/purpose and preflight every URL for caller lockout before
+any PUT. A batch is not atomic: report all per-URL failures, stop that URL's remaining writes,
+and retain successful results accurately. Re-read discovery and governing validators before
+conditional persistence; never retry a 412 silently. Copy WAC defaults through typed setters
+and preserve materializedFrom provenance across reapplication, including descendant defaults.
+Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
+redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+
+`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` and
+`movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
+its security and proof semantics must remain unchanged. `@jeswr/fetch-rdf` is an existing
+workspace runtime dependency for role HTTP parsing. Keep exactOptionalPropertyTypes enabled.

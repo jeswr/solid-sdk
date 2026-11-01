@@ -3352,6 +3352,9 @@ importers:
 
   packages/pod-access:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@rdfjs/types':
         specifier: 2.0.1
         version: 2.0.1
@@ -3368,9 +3371,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../fetch-rdf
       '@types/n3':
         specifier: 1.26.1
         version: 1.26.1
