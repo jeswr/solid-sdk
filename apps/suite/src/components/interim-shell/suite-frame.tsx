@@ -16,6 +16,7 @@ import {
   CalendarDays,
   FileText,
   HardDrive,
+  Images,
   Menu,
   Search,
   SquareCheckBig,
@@ -25,13 +26,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "tasks";
+export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "tasks";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
+  { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
 ];
 

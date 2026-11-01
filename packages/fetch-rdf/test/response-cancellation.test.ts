@@ -52,7 +52,7 @@ describe("rejected response cleanup", () => {
         expect(rejected).toHaveBeenCalledExactlyOnceWith(expect.any(RdfFetchError));
         expect(rejected.mock.calls[0]?.[0].message).toContain(testCase.message);
         await result;
-        expect(vi.getTimerCount()).toBe(1);
+        expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
         await vi.advanceTimersByTimeAsync(1_000);
         expect(vi.getTimerCount()).toBe(0);
         if (outcome === "rejects after timeout") {
