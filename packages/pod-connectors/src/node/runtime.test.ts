@@ -313,6 +313,43 @@ describe("owner-only checkpoint", () => {
 });
 
 describe("Pod client credentials", () => {
+  it.each(["discovery", "token"])("caps streamed %s JSON at 1 MiB before parsing", async (kind) => {
+    const cancel = vi.fn();
+    let pulls = 0;
+    const json =
+      kind === "discovery"
+        ? { issuer: config.oidcIssuer, token_endpoint: tokenUrl }
+        : { access_token: "synthetic-token", token_type: "DPoP" };
+    const response = new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (pulls === 0) controller.enqueue(new TextEncoder().encode(JSON.stringify(json)));
+            else if (pulls <= 32) controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+            else controller.close();
+            pulls++;
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { headers: { "content-length": "1" } },
+    );
+    const transport = vi.fn(async (_input, init) =>
+      kind === "discovery" && init?.method === "POST"
+        ? Response.json({ access_token: "synthetic-token", token_type: "DPoP" })
+        : response,
+    );
+    await expect(
+      createClientCredentialsFetch(
+        { ...config, ...(kind === "token" ? { tokenUrl } : {}) },
+        transport,
+      ),
+    ).rejects.toMatchObject({ kind: "auth", message: "Pod client-credentials login failed." });
+    expect(transport).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pulls).toBeLessThan(33);
+  });
   it("refuses the real target of a shadowed Request before Pod I/O", async () => {
     const { transport, requests } = fixturePod();
     const authenticated = await createClientCredentialsFetch(config, transport);

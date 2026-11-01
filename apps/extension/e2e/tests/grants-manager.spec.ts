@@ -67,5 +67,5 @@ test('revoking site access from the side panel denies the next captured window.s
     .poll(() =>
       site.evaluate(() => Object.keys((window as unknown as { solid: object }).solid).sort()),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
 });

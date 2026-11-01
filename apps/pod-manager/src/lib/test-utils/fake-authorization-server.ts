@@ -10,6 +10,8 @@
  */
 
 export interface FakeAuthorizationServerOptions {
+    /** Issuer URL for cross-provider ownership tests. */
+    issuer?: string
     /** `expires_in` reported on every token response. Default 3600. */
     expiresIn?: number
     /** Whether token responses include a refresh token. Default false. */
@@ -100,7 +102,7 @@ function dpopProofNonce(request: Request): string | undefined {
 }
 
 export async function createFakeAuthorizationServer(options: FakeAuthorizationServerOptions = {}): Promise<FakeAuthorizationServer> {
-    const issuer = "https://as.test"
+    const issuer = options.issuer ?? "https://as.test"
     const expiresIn = options.expiresIn ?? 3600
     const issueRefreshTokens = options.issueRefreshTokens ?? false
     const rotate = options.rotateRefreshTokens ?? true

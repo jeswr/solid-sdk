@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { PIM_STORAGE_CLASS } from './storage-class';
+
 /** Display copy only. Class identifiers and modes sent to the worker remain unchanged. */
 const CLASSES: Readonly<Record<string, { label: string; description: string }>> = {
+  [PIM_STORAGE_CLASS]: {
+    label: 'Full access to your pod',
+    description: 'Everything in the listed pod storage is included.',
+  },
   'https://schema.org/TextDigitalDocument': {
     label: 'Documents',
     description: 'Text documents and notes in your pod.',
