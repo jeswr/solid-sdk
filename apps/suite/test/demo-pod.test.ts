@@ -36,10 +36,10 @@ afterEach(() => {
 });
 
 describe("demo seed and binary fixtures", () => {
-  it("seeds a profile, owner-only ACL, agent type registration and the Drive acceptance tree", async () => {
+  it("seeds a profile, owner-only ACL, registered calendars, Contacts type index, agent type registration and the Drive acceptance tree", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
-    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(10);
+    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(74);
     expect(DRIVE_ROOT_CLASS).toBe("https://jeswr.org/ns/pod-drive#DriveRoot");
     for (const file of seed) {
       const url = new URL(file.path, DEMO_ROOT).href;
@@ -67,7 +67,7 @@ describe("demo seed and binary fixtures", () => {
     ).toEqual([`${DEMO_ROOT}settings/privateTypeIndex.ttl`]);
     const indexUrl = `${DEMO_ROOT}settings/privateTypeIndex.ttl`;
     const index = await graph(await pod.fetch(indexUrl), indexUrl);
-    expect(index.size).toBe(5);
+    expect(index.size).toBe(23);
     expect(
       objects(index, `${indexUrl}#agent-workspace`, "http://www.w3.org/ns/solid/terms#instance"),
     ).toEqual([`${DEMO_ROOT}agent/`]);
@@ -146,6 +146,9 @@ describe("demo pod HTTP contract", () => {
     expect(objects(rootGraph, DEMO_ROOT, `${LDP}contains`)).toEqual([
       `${DEMO_ROOT}.acl`,
       `${DEMO_ROOT}agent/`,
+      `${DEMO_ROOT}calendar/`,
+      `${DEMO_ROOT}contacts-pm/`,
+      `${DEMO_ROOT}contacts/`,
       `${DEMO_ROOT}drive/`,
       `${DEMO_ROOT}profile/`,
       `${DEMO_ROOT}settings/`,

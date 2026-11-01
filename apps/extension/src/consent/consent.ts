@@ -89,6 +89,7 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
         text: `${purpose}${scopeSummary(c.targets)} · Ends ${fmtExpiry(c.expiresAt)}`,
       }),
     );
+    if (c.truncated) item.appendChild(el('p', { text: 'Some data could not be checked' }));
     if (c.targets.length > 0) {
       const list = el('ul', { class: 'targets' });
       for (const target of c.targets) {

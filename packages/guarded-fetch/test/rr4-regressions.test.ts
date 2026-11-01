@@ -301,7 +301,8 @@ describe("node: cancellation of an inherited keepalive upload stream", () => {
       }
       const error = await within(outcome);
       expect(error).toBeInstanceOf(SsrfError);
-      expect(error).toMatchObject({ cause: { name: "AbortError" } });
+      expect(error).toMatchObject({ message: expect.stringContaining("timed out") });
+      expect((error as Error).cause).toBeUndefined();
       expect(caller.signal.aborted).toBe(mode === "caller abort");
     } finally {
       caller.abort();

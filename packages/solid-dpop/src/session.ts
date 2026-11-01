@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * Server-side Solid-OIDC session: the consumer custodies one DPoP keypair + access token
@@ -11,18 +12,15 @@
  * (`authedFetch`) is identical, only `acquireToken` differs.
  */
 import { createDpopProof, type DpopKeyPair, generateDpopKeyPair } from "./dpop.js";
+import { discardBody, discover, type HttpOptions, requestToken } from "./http.js";
 
-export interface ClientCredentials {
+export interface ClientCredentials extends HttpOptions {
   /** OIDC issuer base URL (the pod's IdP), e.g. http://localhost:3099/ */
   readonly issuer: string;
   /** CSS client-credentials token id. */
   readonly id: string;
   /** CSS client-credentials token secret. */
   readonly secret: string;
-}
-
-interface OidcConfig {
-  readonly token_endpoint: string;
 }
 
 interface TokenResponse {
@@ -51,6 +49,8 @@ export type FetchLike = (
     method?: string;
     headers?: Record<string, string>;
     body?: string | Uint8Array;
+    redirect?: NonNullable<RequestInit["redirect"]>;
+    signal?: AbortSignal;
   },
 ) => Promise<Response>;
 
@@ -75,17 +75,17 @@ export function discoveryUrl(issuer: string): string {
   return u.toString();
 }
 
-async function discoverTokenEndpoint(issuer: string, fetchImpl: FetchLike): Promise<string> {
+async function discoverTokenEndpoint(
+  issuer: string,
+  fetchImpl: FetchLike,
+  options: HttpOptions,
+): Promise<string> {
   const url = discoveryUrl(issuer);
-  const res = await fetchImpl(url);
-  if (!res.ok) {
-    throw new Error(`OIDC discovery failed (${res.status}) at ${url}`);
-  }
-  const cfg = (await res.json()) as OidcConfig;
+  const cfg = await discover(issuer, url, fetchImpl, options);
   if (!cfg.token_endpoint) {
     throw new Error(`No token_endpoint in OIDC config at ${url}`);
   }
-  return cfg.token_endpoint;
+  return cfg.token_endpoint as string;
 }
 
 /** Generate a fresh DPoP keypair for a new session. node:crypto/jose only — no hand-rolled keygen. */
@@ -103,7 +103,7 @@ export async function acquireToken(
   keyPair: DpopKeyPair,
   fetchImpl: FetchLike = defaultFetch,
 ): Promise<{ accessToken: string; expiresAt: number; nonce?: string }> {
-  const tokenEndpoint = await discoverTokenEndpoint(creds.issuer, fetchImpl);
+  const tokenEndpoint = await discoverTokenEndpoint(creds.issuer, fetchImpl, creds);
   const authHeader =
     "Basic " +
     Buffer.from(`${encodeURIComponent(creds.id)}:${encodeURIComponent(creds.secret)}`).toString(
@@ -115,14 +115,14 @@ export async function acquireToken(
     scope: "webid",
   }).toString();
 
-  const attempt = async (nonce?: string): Promise<Response> => {
+  const initFor = async (nonce?: string): Promise<NonNullable<Parameters<FetchLike>[1]>> => {
     const dpop = await createDpopProof({
       keyPair,
       htm: "POST",
       htu: tokenEndpoint,
       ...(nonce !== undefined ? { nonce } : {}),
     });
-    return fetchImpl(tokenEndpoint, {
+    return {
       method: "POST",
       headers: {
         authorization: authHeader,
@@ -130,22 +130,15 @@ export async function acquireToken(
         dpop,
       },
       body,
-    });
+    };
   };
 
-  let res = await attempt();
-  let nonce = res.headers.get("DPoP-Nonce") ?? undefined;
-  if (res.status === 400 && nonce) {
-    // RFC 9449 §8 nonce challenge — retry once with the nonce.
-    res = await attempt(nonce);
-    nonce = res.headers.get("DPoP-Nonce") ?? nonce;
-  }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Token request failed (${res.status}): ${text.slice(0, 300)}`);
-  }
-  const token = (await res.json()) as TokenResponse;
+  const { token, nonce } = await requestToken<TokenResponse>(
+    tokenEndpoint,
+    fetchImpl,
+    creds,
+    initFor,
+  );
   const expiresAt = Date.now() + (token.expires_in ?? 300) * 1000;
   return { accessToken: token.access_token, expiresAt, ...(nonce ? { nonce } : {}) };
 }
@@ -175,7 +168,11 @@ export async function authedFetch(
   creds: ClientCredentials | undefined,
   method: string,
   url: string,
-  init: { headers?: Record<string, string>; body?: string | Uint8Array } = {},
+  init: {
+    headers?: Record<string, string>;
+    body?: string | Uint8Array;
+    redirect?: NonNullable<RequestInit["redirect"]>;
+  } = {},
   fetchImpl: FetchLike = defaultFetch,
 ): Promise<Response> {
   if (creds && Date.now() >= session.expiresAt) {
@@ -198,11 +195,21 @@ export async function authedFetch(
       authorization: `DPoP ${session.accessToken}`,
       dpop,
     };
-    return fetchImpl(url, {
+    const response = await fetchImpl(url, {
       method,
       headers,
+      redirect: "manual",
       ...(init.body !== undefined ? { body: init.body } : {}),
     });
+    // 304 Not Modified is a 3xx but not a redirect: conditional requests must still see it.
+    if (
+      init.redirect === "error" &&
+      (response.type === "opaqueredirect" || [301, 302, 303, 307, 308].includes(response.status))
+    ) {
+      discardBody(response);
+      throw new TypeError("Authenticated request redirect refused.");
+    }
+    return response;
   };
 
   // Concurrent requests may update the cached nonce while this request is in flight.
@@ -210,6 +217,7 @@ export async function authedFetch(
   let res = await doRequest(sentNonce);
   const challenge = res.headers.get("DPoP-Nonce");
   if (res.status === 401 && challenge && challenge !== sentNonce) {
+    discardBody(res);
     session.nonce = challenge;
     res = await doRequest(challenge);
     const next = res.headers.get("DPoP-Nonce");
@@ -242,12 +250,13 @@ export function rdfFetchFor(
       });
     }
     const body = init?.body as string | Uint8Array | undefined;
+    const redirect = init?.redirect ?? (input instanceof Request ? input.redirect : undefined);
     return authedFetch(
       session,
       creds,
       method,
       url,
-      { headers, ...(body !== undefined ? { body } : {}) },
+      { headers, ...(body !== undefined ? { body } : {}), ...(redirect ? { redirect } : {}) },
       fetchImpl,
     );
   }) as typeof globalThis.fetch;

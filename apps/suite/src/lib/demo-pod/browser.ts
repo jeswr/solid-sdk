@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
- * Browser demo storage. Every mutation reads the latest durable pod and commits
+ * Browser demo storage. Requests arriving together share a snapshot commit,
  * with a revision compare-and-set in one IndexedDB transaction. A stale tab
- * retries against the winner instead of replacing its files with an old view.
+ * replays the batch against the winner, including HTTP preconditions. Responses
+ * and notifications are released only after the commit is durable.
  */
 
 import { createDemoPod, type DemoPod, type DemoPodSnapshot } from "./pod";
@@ -86,17 +88,25 @@ declare global {
 }
 
 /** The tab's stable demo pod facade (created on first use). */
+/** The demo pod behaves like a remote server: unreachable while the browser is offline. */
+function offline(pod: DemoPod): DemoPod {
+  return {
+    ...pod,
+    fetch: async (input, init) => {
+      if (navigator.onLine === false) throw new TypeError("Demo pod is offline");
+      return pod.fetch(input, init);
+    },
+  };
+}
+
 export function getDemoPod(): Promise<DemoPod> {
   current ??= (async () => {
     const db = await openDb();
     let stored = db ? await readStored(db) : undefined;
     const seed = stored ? undefined : await buildDemoSeed(Date.now());
-    // This facade already performs asynchronous IndexedDB IO. Adding simulated
-    // network latency to each request compounds across Drive's access rechecks
-    // and can delay a local restore beyond the UI's acceptance deadline.
     const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}) });
     let view = stored ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot }) : fresh();
-    if (!db) return view;
+    if (!db) return offline(view);
     if (!stored) {
       if (!(await commit(db, undefined, view.snapshot()))) {
         stored = await readStored(db);
@@ -138,54 +148,87 @@ export function getDemoPod(): Promise<DemoPod> {
       db.close();
     };
 
+    interface PendingRequest {
+      request: Request;
+      mutation: boolean;
+      durable: boolean;
+      body: Uint8Array<ArrayBuffer> | undefined;
+      resolve: (response: Response) => void;
+      reject: (error: unknown) => void;
+    }
+    let pending: PendingRequest[] = [];
+    const flush = () => {
+      const batch = pending;
+      pending = [];
+      void serial(async () => {
+        if (!active) throw new Error("Demo pod session was reset");
+        const durable = batch.some((request) => request.durable);
+        for (;;) {
+          // Plain read batches use the view refreshed by BroadcastChannel. A batch with
+          // a mutation or a conditional read starts from the latest durable revision.
+          const latest = durable ? await readStored(db) : undefined;
+          const trial = !durable
+            ? view
+            : latest
+              ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
+              : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+          const changed: string[] = [];
+          const unsubscribe = trial.subscribe((url) => changed.push(url));
+          const responses: Response[] = [];
+          let dirty = false;
+          try {
+            for (const { request, body, mutation } of batch) {
+              const response = await trial.fetch(request.url, {
+                method: request.method,
+                headers: request.headers,
+                signal: request.signal,
+                ...(body ? { body } : {}),
+              });
+              responses.push(response);
+              dirty ||= mutation && response.ok;
+            }
+          } finally {
+            unsubscribe();
+          }
+          if (!active) throw new Error("Demo pod session was reset");
+          if (dirty && !(await commit(db, latest?.revision, trial.snapshot()))) continue;
+          view = trial;
+          for (const url of new Set(changed)) {
+            notify(url);
+            channel?.postMessage(url);
+          }
+          batch.forEach(({ resolve }, index) => {
+            resolve(responses[index] as Response);
+          });
+          return;
+        }
+      }).catch((error: unknown) => {
+        for (const { reject } of batch) reject(error);
+      });
+    };
     const fetch: typeof globalThis.fetch = async (input, init) => {
       // Materialise once so retries also work for Requests and streaming bodies.
       const request = new Request(input, init);
-      const method = request.method;
-      const mutation = !["GET", "HEAD", "OPTIONS"].includes(method);
-      // A conditional read is a precondition check, so it must see the durable pod
-      // rather than this tab's view, which another tab's commit may not have refreshed yet.
-      const conditional = request.headers.has("if-match") || request.headers.has("if-none-match");
+      const mutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
-      return serial(async () => {
-        if (!active) throw new Error("Demo pod session was reset");
-        // Reads use this tab's view, which other tabs' commits refresh over the channel.
-        if (!mutation && !conditional)
-          return view.fetch(request.url, {
-            method,
-            headers: request.headers,
-            signal: request.signal,
-          });
-        for (;;) {
-          const latest = await readStored(db);
-          const trial = latest
-            ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
-            : createDemoPod({
-                root: DEMO_ROOT,
-                seed: await buildDemoSeed(Date.now()),
-              });
-          const changed: string[] = [];
-          trial.subscribe((url) => changed.push(url));
-          const response = await trial.fetch(request.url, {
-            method,
-            headers: request.headers,
-            signal: request.signal,
-            ...(body ? { body } : {}),
-          });
-          if (!active) throw new Error("Demo pod session was reset");
-          if (mutation && response.ok && !(await commit(db, latest?.revision, trial.snapshot())))
-            continue;
-          view = trial;
-          if (mutation && response.ok)
-            for (const url of changed) {
-              notify(url);
-              channel?.postMessage(url);
-            }
-          return response;
-        }
+      // Batch concurrent requests without artificial network latency. IndexedDB
+      // already yields; Drive access rechecks must not pay a delay per request.
+      return new Promise<Response>((resolve, reject) => {
+        if (!pending.length) queueMicrotask(flush);
+        pending.push({
+          request,
+          body,
+          mutation,
+          // A conditional read is a precondition check, so it must see the durable pod
+          // rather than this tab's view, which another tab's commit may not have refreshed yet.
+          durable:
+            mutation || request.headers.has("if-match") || request.headers.has("if-none-match"),
+          resolve,
+          reject,
+        });
       });
     };
-    return {
+    return offline({
       root: DEMO_ROOT,
       fetch,
       snapshot: () => view.snapshot(),
@@ -194,7 +237,7 @@ export function getDemoPod(): Promise<DemoPod> {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-    };
+    });
   })();
   // Fixture capability is compiled out of ordinary builds. It uses the same durable
   // facade and notifications as the app, including conditional writes.
