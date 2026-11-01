@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { taskDetails } from "../../src/apps/tasks/lib/model/task";
 import { planComplete } from "../../src/apps/tasks/lib/views/completion";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { webId } from "./pod";
@@ -34,6 +35,90 @@ async function retry(result: Awaited<ReturnType<typeof frameCache>>, failure = 0
 }
 
 describe("task creation retry identity", () => {
+  it.each([
+    "committed",
+    "uncommitted",
+  ])("retains composer fields and append ordering after a %s create failure", async (outcome) => {
+    const result = await frameCache();
+    const { cache, inbox, store, pod } = result;
+    await cache.addSection(inbox, "Doing");
+    const labelled = await cache.ensureLabels(inbox, ["bills"]);
+    const sectionId = labelled?.tracker.sections[0]?.id;
+    const labelId = labelled?.tracker.labels[0]?.id;
+    if (!labelled || !sectionId || !labelId) throw new Error("Missing categories");
+    const parent = await cache.createTask(inbox, { title: "Parent" });
+    if (!parent) throw new Error("Missing parent");
+    // A foreign task without a rank requires the append path to renumber siblings.
+    const sibling = await store.createTask(labelled, {
+      title: "Existing child",
+      state: "open",
+      parent: parent.task.id,
+      categoryTypes: [sectionId],
+    });
+    await cache.loadTasks(labelled, true);
+    const data = {
+      title: "Pay rent",
+      description: "Transfer before the first",
+      due: new Date("2026-11-02T00:00:00Z"),
+      allDay: "2026-11-02",
+      priority: "medium" as const,
+      recurrence: { frequency: "MONTHLY" as const, interval: 2 },
+      reminders: [{ offset: "-PT1H" }],
+      sectionId,
+      labelIds: [labelId],
+      parent: parent.task.id,
+    };
+    const creates = vi.spyOn(store, "createTask");
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
+        if (outcome === "committed") pod.seed(request.url, request.body);
+        throw new TypeError("Connection lost");
+      }
+      return undefined;
+    };
+    const creating = cache.createTask(labelled, data);
+    const optimistic = cache.getSnapshot().views.find((task) => task.title === data.title);
+    expect(optimistic).toMatchObject({
+      sectionId,
+      labelIds: [labelId],
+      parentId: parent.task.id,
+      position: 2,
+    });
+    expect(await creating).toBeUndefined();
+    const id = creates.mock.calls[0]?.[2];
+    pod.intercept = undefined;
+    // A committed task can have newer edits by the time Retry is clicked.
+    if (outcome === "committed" && optimistic)
+      await store.updateTask(await store.readTask(optimistic.url), (task) => {
+        task.description = "Newer description";
+      });
+    pod.requests.length = 0;
+    await retry(result);
+    expect(pod.requests[0]).toMatchObject({ method: "GET", url: optimistic?.url });
+    expect(creates.mock.calls.map((args) => args[2])).toEqual(
+      outcome === "committed" ? [id] : [id, id],
+    );
+    const tasks = await store.listTasks(inbox.tracker.stateStore as string);
+    expect(tasks).toHaveLength(3);
+    const created = tasks.find((task) => task.url === optimistic?.url);
+    if (!created) throw new Error("Missing created task");
+    expect(taskDetails(created.url, created.dataset)).toMatchObject({
+      title: data.title,
+      description: outcome === "committed" ? "Newer description" : data.description,
+      state: "open",
+      dueDate: data.due,
+      allDay: data.allDay,
+      priority: data.priority,
+      recurrence: data.recurrence,
+      reminders: data.reminders,
+      categoryTypes: [sectionId, labelId],
+      parent: parent.task.id,
+      rank: 2,
+    });
+    expect((await store.readTask(sibling.url)).task.rank).toBe(1);
+    expect(result.failures).toHaveBeenCalledOnce();
+  });
+
   it("reconciles a committed PUT with a lost response without creating a second task", async () => {
     const result = await frameCache();
     const { pod, cache, inbox, store } = result;

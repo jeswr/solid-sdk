@@ -180,6 +180,21 @@ describe("Tasks row deletion and focus", () => {
   });
 });
 
+it("opens the composer from Today's empty state over the current view", async () => {
+  const result = await frameCache();
+  cache = result.cache;
+  const open = vi.fn();
+  window.addEventListener("tasks:quick-add", open);
+  try {
+    const { host } = await mount(h("main", null, h(TodayView)));
+    expect(host.textContent).toContain("Nothing due today");
+    await click(button("Add task", host));
+    expect(open).toHaveBeenCalledOnce();
+  } finally {
+    window.removeEventListener("tasks:quick-add", open);
+  }
+});
+
 it("ticks without a task render and refreshes on visibility return, cleaning up its timer", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-01T23:59:40Z"));

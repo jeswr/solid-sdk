@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { toast } from "@jeswr/suite-ui";
@@ -75,13 +76,17 @@ function useTasksValue(session: PodSession) {
     () => ({
       ...snapshot,
       cache,
+      webId: session.webId,
       inboxUrl: cache.inboxUrl,
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
       updateTask: cache.updateTask.bind(cache),
+      updateProject: cache.updateProject.bind(cache),
+      moveTaskToProject: cache.moveTaskToProject.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),
       createProject: cache.createProject.bind(cache),
+      ensureLabels: cache.ensureLabels.bind(cache),
       renameProject: cache.renameProject,
       archiveProject: cache.archiveProject,
       deleteProject: cache.deleteProject.bind(cache),
@@ -91,7 +96,7 @@ function useTasksValue(session: PodSession) {
       moveSection: cache.moveSection.bind(cache),
       deleteSection: cache.deleteSection.bind(cache),
     }),
-    [snapshot, cache],
+    [snapshot, cache, session.webId],
   );
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.
