@@ -20,7 +20,9 @@ import {
   HeartPulse,
   Images,
   Menu,
+  Music,
   Search,
+  SquareCheckBig,
   Users,
   Wallet,
 } from "lucide-react";
@@ -36,6 +38,8 @@ export type SuiteAppId =
   | "photos"
   | "money"
   | "health"
+  | "tasks"
+  | "music"
   | "agent";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
@@ -46,6 +50,8 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
+  { id: "music", label: "Music", href: "/music", icon: Music },
   { id: "agent", label: "Agent", href: "/agent", icon: Bot },
 ];
 
