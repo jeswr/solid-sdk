@@ -152,6 +152,9 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
+  // Focus returns to the actions trigger, whose tooltip opens on focus; move focus
+  // back to the log so the scan sees the room rather than a transient tooltip.
+  await log.focus();
   await accessible(page);
   await capture(page, info, "room");
   await log.focus();
