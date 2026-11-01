@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * awp-dashboard: the owner's local settings dashboard.
  *
@@ -52,8 +53,8 @@ Common: --state DIR (default .awp-dashboard)  --agents-dir DIR (default <state>/
         --now ISO   fixed synthetic SCHEDULING clock (serve previews; demo-setup agents and busy
                     periods). History, audit times and status freshness always use the real clock.
 
-Optional hosted triage (TypeSafe): set TYPESAFE_API_KEY (and optionally TYPESAFE_MODEL, a pinned
-jev-X.Y.Z) in the environment of \`serve\` only. It is never read from a file, form or chat.`;
+Hosted pilot triage is retired (A-011). Legacy provider keys are ignored.
+`;
 
 const DEMO_OWNER = "demo-owner";
 const DEMO_PEER = "demo-peer";

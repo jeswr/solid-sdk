@@ -270,7 +270,7 @@ The owner dashboard (`npm run dashboard`) is a loopback-only settings UI. It cov
 - account inventory and status provenance;
 - calendar authority, which the agent applies at its next start;
 - per-account restrictions and the three-layer permissions view;
-- optional, off-by-default TypeSafe message triage.
+- deterministic local message triage (the TypeSafe adapter was retired in A-011).
 
 See [`docs/DASHBOARD.md`](docs/DASHBOARD.md).
 
