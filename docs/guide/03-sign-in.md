@@ -3,7 +3,7 @@
 # 3. Signing people in
 
 `@jeswr/pod-auth` handles sign-in for both Solid-OIDC and LWS. It gives you one thing to use
-everywhere: `auth.fetch`, a fetch that adds credentials only to the user's own storage.
+everywhere: `auth.fetch`, a fetch that adds credentials only inside storage roots it trusts.
 
 The package skill, [pod-auth](../../packages/pod-auth/SKILL.md), has the full contract. This
 chapter covers what an app author needs.
@@ -170,9 +170,37 @@ To switch accounts, call `logout()` first, then `login()` again. Several account
 ## The safe fetch
 
 Use `auth.fetch` for every pod request, and pass it to the other SDK packages. It attaches
-credentials only to URLs inside the user's verified storage, or roots you list in
-`boundary.roots`. A request to anywhere else goes out with no credentials. Never call
-`registerGlobally`, never patch `globalThis.fetch`, and never add `Authorization` or `DPoP`
+credentials only to URLs inside two kinds of storage root:
+
+- roots you list in `boundary.roots`, and
+- roots it learns automatically: when a server answers 401, `auth.fetch` reads the storage
+  metadata that server sends (for example a `pim:Storage` type link, or a storage description on
+  the same origin) and trusts that root until the entry expires.
+
+Automatic roots rest on the server's own claim. Any site can say it is a storage, and nothing
+checks who owns it, so a link to someone else's pod, or to any site that claims to be one, can
+receive the user's credentials. When your app should send credentials only to known pods, list
+them and turn automatic roots off:
+
+```ts
+import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
+
+declare const ui: PodAuthOptions['ui'];
+
+export const strictAuth = createPodAuth({
+  clientId: 'https://app.example/.well-known/solid-client-id.jsonld',
+  redirectUri: 'https://app.example/auth/callback.html',
+  ui,
+  boundary: { roots: ['https://pod.example/alice/'], automatic: false },
+});
+```
+
+To keep automatic roots but accept only some hosts, leave `automatic` out and pass
+`eligible: (url) => url.origin === 'https://pod.example'`. `eligible` filters listed roots as well
+as learned ones. These options only decide where credentials go; requests elsewhere still run,
+without them.
+
+Never call `registerGlobally`, never patch `globalThis.fetch`, and never add `Authorization` or `DPoP`
 headers yourself.
 
 `auth.identity()` tells you who is signed in without any network traffic. Do not treat a public

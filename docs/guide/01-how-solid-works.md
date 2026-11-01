@@ -70,7 +70,7 @@ your app (UI, state, business logic)
 Three objects make up an app's data layer:
 
 - **`auth`** from `createPodAuth` signs the user in and gives you `auth.fetch`. That fetch adds
-  credentials only to requests for the user's own storage, never to other sites.
+  credentials only inside storage roots it trusts (chapter 3 says which), never to other sites.
 - **`storage`** from `createPodClient` is one API over the user's pod, whatever protocol it
   speaks. It needs `auth.fetch`.
 - **`notifications`** from `createNotifications` tells you when something in the pod changed.

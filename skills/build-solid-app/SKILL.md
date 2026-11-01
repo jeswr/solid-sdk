@@ -192,4 +192,7 @@ feature check, until the package ships it.
 - `allow === null` means "unknown", not "denied". Handle 401 and 403 anyway.
 - `unknown` feature state means "no evidence". Enable optional features on `available` only.
 - A public profile read is not proof the user signed in. Use `auth.identity()`.
+- `auth.fetch` also trusts any root whose server claims, on a 401, to be a storage. That claim is
+  unchecked and says nothing about ownership. Apps that must send credentials only to known pods set
+  `boundary.roots` with `automatic: false`, or filter every root with `boundary.eligible`.
 - Notifications can be missed while offline. Reconcile by re-listing after reconnecting.
