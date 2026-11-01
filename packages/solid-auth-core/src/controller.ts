@@ -3370,18 +3370,30 @@ export function secureRedirectFetch(
   const assertSecure = (url: string): void => {
     try {
       validateWebId(url, allowInsecureLoopback);
+      const parsed = new URL(url);
+      if (parsed.username || parsed.password) throw new Error();
     } catch {
       // Generic on purpose: a redirect target may carry signed query parameters.
       throw new Error("Refusing a WebID profile read that is not over https.");
+    }
+  };
+  // A transport error can embed the whole hop URL; keep aborts (the generation
+  // fence relies on them) and replace everything else with a generic error.
+  const fetchHop = async (url: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await base(url, init);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new Error("The WebID profile read failed.");
     }
   };
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url = input instanceof Request ? input.url : String(input);
     for (let hop = 0; hop <= MAX_PROFILE_REDIRECTS; hop += 1) {
       assertSecure(url);
-      const response = await base(url, { ...init, redirect: "manual" });
+      const response = await fetchHop(url, { ...init, redirect: "manual" });
       if (response.type === "opaqueredirect") {
-        const followed = await base(url, { ...init, redirect: "follow" });
+        const followed = await fetchHop(url, { ...init, redirect: "follow" });
         if (followed.url) assertSecure(followed.url);
         return followed;
       }

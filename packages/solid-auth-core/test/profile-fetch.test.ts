@@ -36,6 +36,37 @@ describe("secureRedirectFetch", () => {
     );
   });
 
+  it("refuses a redirect hop carrying userinfo without requesting or echoing it", async () => {
+    const base = scripted({
+      "https://alice.example/card": redirect("https://user:pa55@cdn.example/card?signature=s3cret"),
+    });
+    const fetch = secureRedirectFetch(base as unknown as typeof globalThis.fetch, false);
+    const error = await fetch("https://alice.example/card").catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toMatch(/pa55|s3cret/);
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces a transport error (which can embed the hop URL) with a generic one", async () => {
+    const base = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "https://alice.example/card")
+        return redirect("https://cdn.example/card?signature=s3cret");
+      throw new TypeError(`fetch failed for ${String(input)}`);
+    });
+    const fetch = secureRedirectFetch(base as unknown as typeof globalThis.fetch, false);
+    await expect(fetch("https://alice.example/card")).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining("s3cret") }),
+    );
+  });
+
+  it("keeps an abort as an AbortError", async () => {
+    const base = vi.fn(async () => {
+      throw new DOMException("aborted", "AbortError");
+    });
+    const fetch = secureRedirectFetch(base as unknown as typeof globalThis.fetch, false);
+    await expect(fetch("https://alice.example/card")).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("follows https redirects (303 for a slash WebID, cross-origin permanent ids)", async () => {
     const base = scripted({
       "https://w3id.example/alice": redirect("https://alice.example/card", 303),
