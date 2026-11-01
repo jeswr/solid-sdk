@@ -40,7 +40,7 @@ export interface GatewayOptions {
   /** Provider-specific TokenProvider; only read(account) is used. */
   readonly tokens: Pick<TokenProvider, "read">;
   readonly account: string;
-  readonly baseUrl?: string;
+  readonly baseURL?: string;
   readonly fetch?: NonNullable<GuardOptions["fetch"]>;
   readonly now?: () => number;
   readonly maxRetries?: number;

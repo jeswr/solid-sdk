@@ -17,9 +17,11 @@ const { proposals, calls: proposalCalls } = await gateway.proposer.propose(turns
 
 Keys come exclusively from the injected agent-credentials `TokenProvider.read(account)`;
 use a provider-specific instance. No environment API key or default credential store is read.
-The only accepted base URLs are the selected provider's HTTPS origin, with an optional trailing
-slash: `https://api.anthropic.com` or `https://api.openai.com`. The default HTTP transport uses guarded-fetch with no redirects, a response size limit
-and a deadline; injected transports must honor the same contract. Optional fetch, clock, retry budget, timeout and turn limit support deterministic tests.
+The only accepted `baseURL` values are the selected provider's HTTPS origin, with an optional
+trailing slash: `https://api.anthropic.com` or `https://api.openai.com`. The default HTTP transport
+uses guarded-fetch with no redirects, a response size limit and a deadline; injected transports
+must honor the same contract. Optional fetch, clock, retry budget, timeout and turn limit
+support deterministic tests.
 Retries default to zero; HTTP retries cover only 429 and 5xx responses, at most three times.
 
 Reader has no tools. It runs legacy-bridge structured metadata extraction, then the pilot's
@@ -38,10 +40,11 @@ It exposes exactly `pod_read`, `pod_search` (the Solid MCP registry's read-only 
 built-in tools, external MCP configuration, inherited credentials, project settings or persisted
 session. Its home and working directory are temporary and removed after the run.
 `propose` validates an agent-model ActionProposal with state `proposed` and returns it locally.
-The runtime must stamp provenance, persist proposals, and enforce mandates and approvals.
+The gateway replaces `wasGeneratedBy` with the producing model-call UUID IRI. The runtime
+must persist that provenance and the proposals, and enforce mandates and approvals.
 The gateway has no send tool, pod mutation tool or audit writer.
 
-Both contexts return call records with local UUID, context, configured provider/model,
+Both contexts return call records with local UUID IRI, context, configured provider/model,
 `tokens: { input, output }` (also `inputTokens`/`outputTokens`), tool-call count, latency and
 retry count. SDK fragments sharing a provider message ID produce one record; its aggregate
 result is not counted again. HTTP retries share one record. `GatewayError.calls` preserves

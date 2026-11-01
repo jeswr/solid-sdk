@@ -30,6 +30,7 @@ export async function openaiPropose(
   instructions: string,
   tools: Tool[],
   calls: ModelCall[],
+  provenance: Map<string, string>,
 ) {
   const request = transport(options, config);
   const input: unknown[] = [{ role: "user", content: prompt }];
@@ -58,12 +59,20 @@ export async function openaiPropose(
     const toolCalls = response.output.filter((item) => item.type === "function_call");
     if (toolCalls.length === 0) return;
     input.push(...response.output);
-    for (const call of toolCalls)
+    for (const call of toolCalls) {
+      const args: unknown = JSON.parse(call.arguments);
+      const result = await executeTool(tools, call.name, args);
+      if (call.name === "propose") {
+        const { action } = z.object({ action: z.object({ id: z.string() }) }).parse(args);
+        if (provenance.has(action.id)) throw new Error("Duplicate proposal id");
+        provenance.set(action.id, (calls.at(-1) as ModelCall).id);
+      }
       input.push({
         type: "function_call_output",
         call_id: call.call_id,
-        output: await executeTool(tools, call.name, JSON.parse(call.arguments)),
+        output: result,
       });
+    }
   }
   throw new Error("Model turn limit exceeded");
 }

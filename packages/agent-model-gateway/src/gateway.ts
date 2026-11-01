@@ -105,14 +105,31 @@ export function createGateway(options: GatewayOptions): Gateway {
       async propose(conversation, ctx) {
         const calls: ModelCall[] = [];
         const proposals: ActionProposal[] = [];
+        const provenance = new Map<string, string>();
         try {
           const tools = proposerTools(ctx, proposals);
           const prompt = dataBlock(conversation);
           const instructions = `${PROPOSER_INSTRUCTIONS}\n${ctx.instructions}`;
           if (config.provider === "anthropic")
-            await anthropicPropose(settings, config, prompt, instructions, tools, calls);
-          else await openaiPropose(settings, config, prompt, instructions, tools, calls);
-          return { proposals, calls };
+            await anthropicPropose(
+              settings,
+              config,
+              prompt,
+              instructions,
+              tools,
+              calls,
+              provenance,
+            );
+          else
+            await openaiPropose(settings, config, prompt, instructions, tools, calls, provenance);
+          return {
+            proposals: proposals.map((proposal) => {
+              const source = provenance.get(proposal.id);
+              if (!source) throw new Error("Proposal has no producing model call");
+              return { ...proposal, wasGeneratedBy: source };
+            }),
+            calls,
+          };
         } catch {
           throw new GatewayError(calls);
         }

@@ -13,7 +13,14 @@ import type { GatewayOptions, ModelCall } from "./types.js";
 const assistant = z.object({
   id: z.string(),
   usage: usageSchema,
-  content: z.array(z.object({ type: z.string(), id: z.string().optional() })),
+  content: z.array(
+    z.object({
+      type: z.string(),
+      id: z.string().optional(),
+      name: z.string().optional(),
+      input: z.unknown().optional(),
+    }),
+  ),
 });
 
 export async function anthropicPropose(
@@ -23,6 +30,7 @@ export async function anthropicPropose(
   instructions: string,
   tools: Tool[],
   calls: ModelCall[],
+  provenance: Map<string, string>,
 ) {
   const now = options.now ?? Date.now;
   const start = now();
@@ -110,8 +118,21 @@ export async function anthropicPropose(
             callStart = now();
             retries = 0;
           }
-          for (const block of message.content)
-            if (block.type === "tool_use") entry.tools.add(z.string().parse(block.id));
+          for (const block of message.content) {
+            if (block.type !== "tool_use") continue;
+            const toolId = z.string().parse(block.id);
+            if (entry.tools.has(toolId)) continue;
+            entry.tools.add(toolId);
+            if (block.name === "mcp__gateway__propose") {
+              const parsed = z
+                .object({ action: z.object({ id: z.string() }) })
+                .safeParse(block.input);
+              if (parsed.success) {
+                if (provenance.has(parsed.data.action.id)) throw new Error("Duplicate proposal id");
+                provenance.set(parsed.data.action.id, (calls[entry.index] as ModelCall).id);
+              }
+            }
+          }
           const previous = calls[entry.index] as ModelCall;
           calls[entry.index] = {
             ...previous,

@@ -23,7 +23,7 @@ export const limitsSchema = z.object({
 export function configuration(options: GatewayOptions) {
   const limits = limitsSchema.parse(options);
   const origin = origins[limits.provider];
-  const url = new URL(options.baseUrl ?? origin);
+  const url = new URL(options.baseURL ?? origin);
   if (
     url.origin !== origin ||
     url.username ||
@@ -46,7 +46,7 @@ export function record(
   retries: number,
 ): ModelCall {
   return {
-    id: crypto.randomUUID(),
+    id: `urn:uuid:${crypto.randomUUID()}`,
     context,
     provider: config.provider,
     model: config.model,
