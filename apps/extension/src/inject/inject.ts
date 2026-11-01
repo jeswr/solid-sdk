@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every
@@ -100,6 +101,23 @@ type PendingFetch = Pending<Response> & {
   readonly init?: RequestInit;
 };
 
+/** Preserve the worker's final URL metadata through native body cloning. */
+function withResponseMetadata(response: Response, url: string, redirected: boolean): Response {
+  const clone = response.clone;
+  Object.defineProperties(response, {
+    url: { value: url },
+    redirected: { value: redirected },
+    clone: {
+      value(this: Response): Response {
+        return withResponseMetadata(clone.call(this), this.url, this.redirected);
+      },
+      writable: true,
+      configurable: true,
+    },
+  });
+  return response;
+}
+
 // Install exactly once, even if inject.js runs twice (Medium #2). The marker covers a re-run
 // after our own install; the `'solid' in window` check covers a prior install from a different
 // code path. A double-run is then an inert no-op, NOT a throw on the `configurable:false`
@@ -170,13 +188,14 @@ function installSolidInjection(): void {
         } else if (data.error) {
           pending.reject(new Error(data.error));
         } else {
-          pending.resolve(
-            new Response(data.body ?? null, {
-              status: data.status,
-              statusText: data.statusText,
-              headers: new Headers(data.headers ?? {}),
-            }),
-          );
+          const response = new Response(data.body ?? null, {
+            status: data.status,
+            statusText: data.statusText,
+            headers: new Headers(data.headers ?? {}),
+          });
+          // ResponseInit cannot carry these read-only properties. Preserve the worker's
+          // final URL so apps resolve relative RDF references against the served resource.
+          pending.resolve(withResponseMetadata(response, data.url ?? '', data.redirected === true));
         }
         break;
       }

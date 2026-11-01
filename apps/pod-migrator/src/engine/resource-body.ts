@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { extractMediaType, parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
+import type { Store } from "n3";
 import { isomorphic } from "./isomorphism.js";
 import type { PodHttp } from "./types.js";
 
@@ -36,7 +37,7 @@ async function independentGraph(
   url: string,
   accept: string,
   signal?: AbortSignal,
-): Promise<Awaited<ReturnType<typeof parseRdf>>> {
+): Promise<Store> {
   const response = await http.get(url, { accept, signal });
   if (
     extractMediaType(response.headers.get("content-type")) !== accept ||
@@ -47,9 +48,7 @@ async function independentGraph(
   }
   // Strict UTF-8, full JSON syntax and the default refusing context loader are shared
   // with original reads. No transport is passed, so conversion cannot negotiate again.
-  return (await readBody(response, url, { semantic: true })).dataset as Awaited<
-    ReturnType<typeof parseRdf>
-  >;
+  return (await readBody(response, url, { semantic: true })).dataset as Store;
 }
 
 /** All network RDF readers share byte validation, strict decoding and completeness proof. */
@@ -92,7 +91,7 @@ export async function readBody(response: Response, url: string, options: ReadOpt
     throw new ResourceReadError(url, "Content verification failed");
   const contentType = response.headers.get("content-type");
   const type = extractMediaType(contentType);
-  let dataset: Awaited<ReturnType<typeof parseRdf>> | undefined;
+  let dataset: Store | undefined;
   let graphProofOnly = false;
   if (options.semantic || SUPPORTED_RDF_MEDIA_TYPES.some((supported) => supported === type)) {
     let text: string;
@@ -125,7 +124,7 @@ export async function readBody(response: Response, url: string, options: ReadOpt
       let failClosed = options.securityRelevant || length !== null;
       try {
         if (!options.http) throw new Error("No independent representation transport");
-        let other: Awaited<ReturnType<typeof parseRdf>>;
+        let other: Store;
         try {
           other = await independentGraph(options.http, url, "application/ld+json", options.signal);
         } catch {

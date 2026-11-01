@@ -20,6 +20,7 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+export { type FetchResult, fetchDocument } from "./fetch.js";
 export {
   listContainer,
   type PodChild,

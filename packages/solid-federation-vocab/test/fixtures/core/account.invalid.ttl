@@ -1,0 +1,10 @@
+# expect: https://jeswr.org/ns/core#hasAccountHolder
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#AccountShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/Account-11> a core:Account;
+    core:hasAccountProvider <https://example.org/fixtures/core/support-13>.
+<https://example.org/fixtures/core/support-12> a core:AccountHolder.
+<https://example.org/fixtures/core/support-13> a core:AccountProvider.

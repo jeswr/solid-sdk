@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/contacts#identifies
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/contacts/shapes#PersonContactShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/PersonContact-11> a contact:PersonContact.
+<https://example.org/fixtures/contacts/support-12> a core:Person.

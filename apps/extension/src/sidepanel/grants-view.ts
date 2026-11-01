@@ -201,7 +201,8 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
     header.append(avatar, identity);
     const profile = state.profiles.find((p) => p.id === grant.profileId);
     const bound = element('div', undefined, 'grants-bound-account');
-    const accountAvatar = element('span', initials(profile?.label ?? ''), 'grants-avatar');
+    const accountInitials = initials(profile?.label ?? '');
+    const accountAvatar = element('span', accountInitials, 'grants-avatar');
     accountAvatar.setAttribute('aria-hidden', 'true');
     if (profile?.avatar) {
       try {
@@ -210,9 +211,12 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
           const image = element('img');
           image.alt = '';
           image.referrerPolicy = 'no-referrer';
-          image.addEventListener('error', () => image.remove(), { once: true });
+          // Initials hidden under a loaded photo would be unmeasurable text (axe bgOverlap).
+          image.addEventListener('error', () => accountAvatar.replaceChildren(accountInitials), {
+            once: true,
+          });
           image.src = url.href;
-          accountAvatar.append(image);
+          accountAvatar.replaceChildren(image);
         }
       } catch {
         /* Initials remain when an account image is unavailable. */

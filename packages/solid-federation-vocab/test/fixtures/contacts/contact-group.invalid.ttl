@@ -1,0 +1,8 @@
+# expect: https://jeswr.org/ns/sectors/contacts#hasMemberContact
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/contacts/shapes#ContactGroupShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/ContactGroup-10> a contact:ContactGroup;
+    contact:hasMemberContact ex:untyped.

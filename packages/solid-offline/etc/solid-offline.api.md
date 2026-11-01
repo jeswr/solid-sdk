@@ -9,15 +9,15 @@
 > Parsed from each entry `.d.ts` `export { … }` set (alias/`type`-modifier resolved). A
 > removed or renamed export shows as a diff here, independent of the chunk bodies below.
 
-- `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClient`, `NotificationsClientConfig`, `NotificationsConfig`, `NotificationsDeps`, `OfflineClient`, `OfflineClientConfig`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `SocketFactory`, `SocketLike`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `backoffDelay`, `cacheNameForWebId`, `cleanupOldShellCaches`, `containerChildren`, `createNotificationsClient`, `createOfflineClient`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `discoverSubscriptionUrl`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseFrame`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `storageDescriptionFromLink`, `subscribe`, `typeIndexTargets`, `userCanRead`, `warm`
+- `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClient`, `NotificationsClientConfig`, `NotificationsConfig`, `NotificationsDeps`, `OfflineClient`, `OfflineClientConfig`, `OfflineEvent`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `RevalidationEvent`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `SocketFactory`, `SocketLike`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `backoffDelay`, `cacheNameForWebId`, `cleanupOldShellCaches`, `containerChildren`, `createNotificationsClient`, `createOfflineClient`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `discoverSubscriptionUrl`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseFrame`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `storageDescriptionFromLink`, `subscribe`, `typeIndexTargets`, `userCanRead`, `warm`
 - `./worker` (`dist/worker.d.ts`): _(no named exports)_
-- `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `useOfflineResource`, `useOfflineStatus`
+- `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `UseOfflineStatusResult`, `useOfflineResource`, `useOfflineStatus`
 
 ### `dist/index.d.ts`
 
 ```ts
-import { O as OfflineStatusSurface } from './status-<chunk>.js';
-export { a as OfflineStatusSnapshot, R as ResourceFreshness, b as StatusListener, S as StatusSurfaceOptions, c as createStatusSurface } from './status-<chunk>.js';
+import { a as OfflineStatusSurface } from './status-<chunk>.js';
+export { O as OfflineStatusSnapshot, R as ResourceFreshness, b as StatusListener, S as StatusSurfaceOptions, c as createStatusSurface } from './status-<chunk>.js';
 
 /**
  * MANDATORY LOGOUT-PURGE (§7).
@@ -423,7 +423,7 @@ interface OfflineClientConfig {
     workerUrl?: string;
     /** Service-worker registration scope. Default: '/'. */
     scope?: string;
-    /** BroadcastChannel name for 'updated' events. Default: 'solid-offline'. */
+    /** BroadcastChannel name for revalidation events. Default: 'solid-offline'. */
     channelName?: string;
 }
 /** The handle returned by `createOfflineClient`. */
@@ -495,9 +495,20 @@ type AclStatus = 'ok' | 'forbidden' | 'not-found';
 interface UpdatedEvent {
     url: string;
     event: 'updated';
-    /** The new ETag after revalidation. */
+    /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+    attemptId?: string;
+    /** Optional legacy field; current worker messages omit response metadata. */
     etag?: string;
 }
+/** Progress messages; never include response bytes, headers or credentials. */
+interface RevalidationEvent {
+    url: string;
+    event: 'revalidating' | 'revalidated' | 'revalidate-failed';
+    /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+    attemptId?: string;
+}
+/** All messages on the offline BroadcastChannel. UpdatedEvent remains source-compatible. */
+type OfflineEvent = UpdatedEvent | RevalidationEvent;
 /**
  * The Solid Notifications Protocol change types we react to. They mirror the
  * server's ActivityStreams activity types (prod-solid-server
@@ -763,6 +774,203 @@ declare function handleNavigation(request: Request, deps: ShellDeps): Promise<Sh
  */
 declare function handlePrecachedAsset(request: Request, deps: ShellDeps): Promise<ShellResult>;
 
+/** Prefix for the IndexedDB metadata DB name (generation-scoped). */
+declare const DB_PREFIX = "solid-offline-v2:";
+/** Prefix for the Cache API cache name (generation-scoped). */
+declare const CACHE_PREFIX = "solid-offline-cache-v2:";
+/** The discriminator used for anonymous (no-WebID) reads. */
+declare const ANONYMOUS_SCOPE = "anonymous";
+/** Default (un-scoped) DB name when no WebID is supplied (e.g. anonymous reads). */
+declare const DEFAULT_DB_NAME = "solid-offline-v2:anonymous";
+/** Default (un-scoped) Cache name when no WebID is supplied. */
+declare const DEFAULT_CACHE_NAME = "solid-offline-cache-v2:anonymous";
+/**
+ * Short, stable, NON-cryptographic hash of a WebID (FNV-1a 32-bit). Deterministic
+ * and dependency-free; collision-tolerant for this use. NOT a security primitive
+ * — see the module note: origin isolation is the boundary, this is namespacing.
+ */
+declare function scopeHash(webId: string): string;
+/** The per-identity scope discriminator (`anonymous` or the WebID hash). */
+declare function scopeFor(webId: string | undefined): string;
+/** The per-identity IndexedDB metadata DB name (`solid-offline:<hash>`). */
+declare function dbNameForWebId(webId: string | undefined): string;
+/** The per-identity Cache API cache name (`solid-offline-cache:<hash>`). */
+declare function cacheNameForWebId(webId: string | undefined): string;
+/**
+ * Decide whether an incoming config webId is a SCOPE CHANGE the SW must act on
+ * (#4). Crucially, `undefined` is a VALID scope (the anonymous scope): after a
+ * logged-in user, an anonymous client (`webId === undefined`) MUST be able to
+ * clear the previous identity. So the very first config message is always a
+ * change, and thereafter ANY difference — including a transition TO `undefined` —
+ * is a change. (The old worker only reacted to a truthy webId, so an anonymous
+ * client kept reading/writing the departed user's scoped cache.)
+ *
+ * @param configured  whether a config message has been applied before.
+ * @param current     the currently-configured webId (meaningful only if `configured`).
+ * @param next        the webId from the new config (may be undefined).
+ */
+declare function isScopeChange(configured: boolean, current: string | undefined, next: string | undefined): boolean;
+
+/**
+ * IndexedDB metadata store — the client analogue of QLever: it makes the cache
+ * queryable + revalidatable offline. Holds {@link CacheMetadata} records keyed
+ * by the composite (url, varyKey). Response *bytes* live in the Cache API, not
+ * here.
+ *
+ * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) via the
+ * shared {@link dbNameForWebId} (see `scope.ts`) so logout-purge (P5) can drop
+ * exactly one identity's DB.
+ */
+
+/** A thin, promise-based handle over the metadata object store. */
+declare class MetadataStore {
+    private readonly db;
+    private constructor();
+    static open(webId: string | undefined, factory?: IDBFactory): Promise<MetadataStore>;
+    /** For tests / advanced callers: open against an explicit DB name. */
+    static openNamed(dbName: string, factory?: IDBFactory): Promise<MetadataStore>;
+    get(key: string): Promise<CacheMetadata | undefined>;
+    put(record: CacheMetadata): Promise<void>;
+    delete(key: string): Promise<void>;
+    /** All metadata entries for a given URL (across varyKeys). */
+    getByUrl(url: string): Promise<CacheMetadata[]>;
+    /**
+     * All metadata entries (every (url, varyKey)). Used by P3's reconnect
+     * ETag-resync sweep and disconnected `If-None-Match` polling to enumerate the
+     * warmed set. Cheap relative to the network it saves; the warm budget bounds it.
+     */
+    getAll(): Promise<CacheMetadata[]>;
+    /**
+     * Record the last notification `state` (ETag carried in a change frame) for a
+     * resource, across every cached variant of that URL. Lets the SW short-circuit
+     * a self-caused change (`frame.state === lastState`) without a network round-trip.
+     */
+    setLastState(url: string, state: string): Promise<void>;
+    /** Touch fetchedAt (used on a 304 — confirms provisional bytes are still fresh). */
+    touch(key: string, at?: number): Promise<void>;
+    clear(): Promise<void>;
+    close(): void;
+}
+
+/**
+ * Stale-while-revalidate engine for §2.
+ *
+ * This is the heart of P1 and is written against small injected interfaces
+ * (a Cache-API-like store, a fetch function, a clock, an online flag and a
+ * BroadcastChannel-like notifier) so the full decision tree is unit-testable
+ * with mocks — no real ServiceWorker, no real browser.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * NEVER-AUTHORITATIVE INVARIANT (mirrors prod-solid-server `CLAUDE.md`):
+ *   A value served from cache is ALWAYS provisional. We only treat it as
+ *   confirmed once a conditional revalidation (`If-None-Match: <etag>`) returns
+ *   304 (ETag matches → touch fetchedAt) or 200 (replace entry + broadcast).
+ *   On a cache hit we therefore ALWAYS kick a revalidation (online) and we tag
+ *   offline hits with `X-Offline: stale` so the consumer knows the value is
+ *   unconfirmed. The cache is never the source of truth.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
+/** Minimal Cache-API surface we depend on (Cache stores Response bytes by Request). */
+interface ByteCache {
+    match(request: Request, options?: CacheQueryOptions): Promise<Response | undefined>;
+    put(request: Request, response: Response): Promise<void>;
+    delete(request: Request, options?: CacheQueryOptions): Promise<boolean>;
+}
+/** Minimal BroadcastChannel surface. */
+interface Broadcaster {
+    postMessage(message: OfflineEvent): void;
+}
+
+/**
+ * Notification-driven invalidation pipeline (P3, §5).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * WHERE THIS RUNS — the SW side (decision 1 & 5):
+ *   The WebSocket lives in the PAGE (`notifications.ts`); the page `postMessage`s
+ *   each change frame here, into the (unauthenticated) service worker. This
+ *   module owns the *invalidation* half: look the resource up in the P1 metadata
+ *   store, decide whether anything changed, revalidate (or re-fetch a container
+ *   listing) and broadcast `{url, event:'updated'}` to every tab. It NEVER signs
+ *   or authenticates — for a private resource its conditional GET will simply
+ *   404/401 and the page's own warm/read re-populates the cache; the SW only
+ *   ever issues unauthenticated conditional GETs (consistent with P1/P2).
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * THE ETAG SHORT-CIRCUIT (the join with the server, §5):
+ *   The server's change frame carries the resource's new ETag in `state`
+ *   (prod-solid-server `src/notifications/notification.ts`). If that equals the
+ *   ETag we already hold, the change is one WE caused (our own write, already
+ *   reflected in the cache) — so it is a free no-op: no fetch, no broadcast.
+ *   This is what makes a self-caused change cost nothing.
+ *
+ * The pipeline is written against the same small injected interfaces as `swr.ts`
+ * (a Cache-API-like store, a `fetch`, a clock, a BroadcastChannel-like notifier)
+ * plus the P1 {@link MetadataStore}, so the whole decision tree is unit-testable
+ * with mocks — no real ServiceWorker, no real WebSocket, no real network.
+ */
+
+/** Dependencies for the invalidation pipeline (all mockable). */
+interface InvalidateDeps {
+    cache: ByteCache;
+    meta: MetadataStore;
+    /** Unauthenticated conditional GET (the SW's own fetch). See module note. */
+    fetch: typeof fetch;
+    broadcast: Broadcaster;
+    now(): number;
+}
+/** Outcome of handling a single notification frame — returned for tests + observability. */
+type InvalidateOutcome = {
+    kind: 'short-circuit';
+} | {
+    kind: 'not-cached';
+} | {
+    kind: '304-confirmed';
+} | {
+    kind: 'updated';
+    etag?: string;
+} | {
+    kind: 'deleted';
+} | {
+    kind: 'listing-refreshed';
+} | {
+    kind: 'skipped';
+} | {
+    kind: 'error';
+    error: unknown;
+};
+/**
+ * Handle one change notification frame. The single entry point the SW message
+ * handler calls; tests call it directly with mocked deps.
+ *
+ *  - `Create`/`Update`/`Delete` → look up the `object`; ETag short-circuit, else
+ *    revalidate (`If-None-Match`) and update Cache+metadata, then broadcast.
+ *  - `Add`/`Remove` → re-fetch the `target` *container listing* (membership
+ *    changed; a bare ETag can't tell us the new member set), then broadcast.
+ */
+declare function handleNotification(frame: NotificationFrame, deps: InvalidateDeps): Promise<InvalidateOutcome>;
+/**
+ * The reconnect ETag-resync sweep (§5). After the socket reconnects (we missed
+ * frames while down) revalidate the ENTIRE warmed set with conditional GETs —
+ * mostly cheap 304s. This REPLACES P2's "re-issue the full BFS" re-warm: it does
+ * no discovery/traversal, just a flat conditional revalidation of what we hold.
+ *
+ * Also used as the body of the disconnected slow-poll (one pass at a time).
+ */
+interface SweepResult {
+    /** Entries examined. */
+    checked: number;
+    /** Entries the server confirmed unchanged (304). */
+    confirmed: number;
+    /** Entries whose bytes were replaced (200). */
+    replaced: number;
+    /** Entries purged (403/404). */
+    purged: number;
+    /** Entries with no ETag to revalidate against (skipped). */
+    skipped: number;
+}
+declare function resyncSweep(deps: InvalidateDeps): Promise<SweepResult>;
+
 /**
  * Page-side notifications client (P3, §5).
  *
@@ -870,203 +1078,6 @@ interface NotificationsClient {
  */
 declare function createNotificationsClient(deps: NotificationsDeps, config: NotificationsConfig): NotificationsClient;
 
-/** Prefix for the IndexedDB metadata DB name (generation-scoped). */
-declare const DB_PREFIX = "solid-offline-v2:";
-/** Prefix for the Cache API cache name (generation-scoped). */
-declare const CACHE_PREFIX = "solid-offline-cache-v2:";
-/** The discriminator used for anonymous (no-WebID) reads. */
-declare const ANONYMOUS_SCOPE = "anonymous";
-/** Default (un-scoped) DB name when no WebID is supplied (e.g. anonymous reads). */
-declare const DEFAULT_DB_NAME = "solid-offline-v2:anonymous";
-/** Default (un-scoped) Cache name when no WebID is supplied. */
-declare const DEFAULT_CACHE_NAME = "solid-offline-cache-v2:anonymous";
-/**
- * Short, stable, NON-cryptographic hash of a WebID (FNV-1a 32-bit). Deterministic
- * and dependency-free; collision-tolerant for this use. NOT a security primitive
- * — see the module note: origin isolation is the boundary, this is namespacing.
- */
-declare function scopeHash(webId: string): string;
-/** The per-identity scope discriminator (`anonymous` or the WebID hash). */
-declare function scopeFor(webId: string | undefined): string;
-/** The per-identity IndexedDB metadata DB name (`solid-offline:<hash>`). */
-declare function dbNameForWebId(webId: string | undefined): string;
-/** The per-identity Cache API cache name (`solid-offline-cache:<hash>`). */
-declare function cacheNameForWebId(webId: string | undefined): string;
-/**
- * Decide whether an incoming config webId is a SCOPE CHANGE the SW must act on
- * (#4). Crucially, `undefined` is a VALID scope (the anonymous scope): after a
- * logged-in user, an anonymous client (`webId === undefined`) MUST be able to
- * clear the previous identity. So the very first config message is always a
- * change, and thereafter ANY difference — including a transition TO `undefined` —
- * is a change. (The old worker only reacted to a truthy webId, so an anonymous
- * client kept reading/writing the departed user's scoped cache.)
- *
- * @param configured  whether a config message has been applied before.
- * @param current     the currently-configured webId (meaningful only if `configured`).
- * @param next        the webId from the new config (may be undefined).
- */
-declare function isScopeChange(configured: boolean, current: string | undefined, next: string | undefined): boolean;
-
-/**
- * IndexedDB metadata store — the client analogue of QLever: it makes the cache
- * queryable + revalidatable offline. Holds {@link CacheMetadata} records keyed
- * by the composite (url, varyKey). Response *bytes* live in the Cache API, not
- * here.
- *
- * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) via the
- * shared {@link dbNameForWebId} (see `scope.ts`) so logout-purge (P5) can drop
- * exactly one identity's DB.
- */
-
-/** A thin, promise-based handle over the metadata object store. */
-declare class MetadataStore {
-    private readonly db;
-    private constructor();
-    static open(webId: string | undefined, factory?: IDBFactory): Promise<MetadataStore>;
-    /** For tests / advanced callers: open against an explicit DB name. */
-    static openNamed(dbName: string, factory?: IDBFactory): Promise<MetadataStore>;
-    get(key: string): Promise<CacheMetadata | undefined>;
-    put(record: CacheMetadata): Promise<void>;
-    delete(key: string): Promise<void>;
-    /** All metadata entries for a given URL (across varyKeys). */
-    getByUrl(url: string): Promise<CacheMetadata[]>;
-    /**
-     * All metadata entries (every (url, varyKey)). Used by P3's reconnect
-     * ETag-resync sweep and disconnected `If-None-Match` polling to enumerate the
-     * warmed set. Cheap relative to the network it saves; the warm budget bounds it.
-     */
-    getAll(): Promise<CacheMetadata[]>;
-    /**
-     * Record the last notification `state` (ETag carried in a change frame) for a
-     * resource, across every cached variant of that URL. Lets the SW short-circuit
-     * a self-caused change (`frame.state === lastState`) without a network round-trip.
-     */
-    setLastState(url: string, state: string): Promise<void>;
-    /** Touch fetchedAt (used on a 304 — confirms provisional bytes are still fresh). */
-    touch(key: string, at?: number): Promise<void>;
-    clear(): Promise<void>;
-    close(): void;
-}
-
-/**
- * Stale-while-revalidate engine for §2.
- *
- * This is the heart of P1 and is written against small injected interfaces
- * (a Cache-API-like store, a fetch function, a clock, an online flag and a
- * BroadcastChannel-like notifier) so the full decision tree is unit-testable
- * with mocks — no real ServiceWorker, no real browser.
- *
- * ────────────────────────────────────────────────────────────────────────────
- * NEVER-AUTHORITATIVE INVARIANT (mirrors prod-solid-server `CLAUDE.md`):
- *   A value served from cache is ALWAYS provisional. We only treat it as
- *   confirmed once a conditional revalidation (`If-None-Match: <etag>`) returns
- *   304 (ETag matches → touch fetchedAt) or 200 (replace entry + broadcast).
- *   On a cache hit we therefore ALWAYS kick a revalidation (online) and we tag
- *   offline hits with `X-Offline: stale` so the consumer knows the value is
- *   unconfirmed. The cache is never the source of truth.
- * ────────────────────────────────────────────────────────────────────────────
- */
-
-/** Minimal Cache-API surface we depend on (Cache stores Response bytes by Request). */
-interface ByteCache {
-    match(request: Request, options?: CacheQueryOptions): Promise<Response | undefined>;
-    put(request: Request, response: Response): Promise<void>;
-    delete(request: Request, options?: CacheQueryOptions): Promise<boolean>;
-}
-/** Minimal BroadcastChannel surface. */
-interface Broadcaster {
-    postMessage(message: UpdatedEvent): void;
-}
-
-/**
- * Notification-driven invalidation pipeline (P3, §5).
- *
- * ────────────────────────────────────────────────────────────────────────────
- * WHERE THIS RUNS — the SW side (decision 1 & 5):
- *   The WebSocket lives in the PAGE (`notifications.ts`); the page `postMessage`s
- *   each change frame here, into the (unauthenticated) service worker. This
- *   module owns the *invalidation* half: look the resource up in the P1 metadata
- *   store, decide whether anything changed, revalidate (or re-fetch a container
- *   listing) and broadcast `{url, event:'updated'}` to every tab. It NEVER signs
- *   or authenticates — for a private resource its conditional GET will simply
- *   404/401 and the page's own warm/read re-populates the cache; the SW only
- *   ever issues unauthenticated conditional GETs (consistent with P1/P2).
- * ────────────────────────────────────────────────────────────────────────────
- *
- * THE ETAG SHORT-CIRCUIT (the join with the server, §5):
- *   The server's change frame carries the resource's new ETag in `state`
- *   (prod-solid-server `src/notifications/notification.ts`). If that equals the
- *   ETag we already hold, the change is one WE caused (our own write, already
- *   reflected in the cache) — so it is a free no-op: no fetch, no broadcast.
- *   This is what makes a self-caused change cost nothing.
- *
- * The pipeline is written against the same small injected interfaces as `swr.ts`
- * (a Cache-API-like store, a `fetch`, a clock, a BroadcastChannel-like notifier)
- * plus the P1 {@link MetadataStore}, so the whole decision tree is unit-testable
- * with mocks — no real ServiceWorker, no real WebSocket, no real network.
- */
-
-/** Dependencies for the invalidation pipeline (all mockable). */
-interface InvalidateDeps {
-    cache: ByteCache;
-    meta: MetadataStore;
-    /** Unauthenticated conditional GET (the SW's own fetch). See module note. */
-    fetch: typeof fetch;
-    broadcast: Broadcaster;
-    now(): number;
-}
-/** Outcome of handling a single notification frame — returned for tests + observability. */
-type InvalidateOutcome = {
-    kind: 'short-circuit';
-} | {
-    kind: 'not-cached';
-} | {
-    kind: '304-confirmed';
-} | {
-    kind: 'updated';
-    etag?: string;
-} | {
-    kind: 'deleted';
-} | {
-    kind: 'listing-refreshed';
-} | {
-    kind: 'skipped';
-} | {
-    kind: 'error';
-    error: unknown;
-};
-/**
- * Handle one change notification frame. The single entry point the SW message
- * handler calls; tests call it directly with mocked deps.
- *
- *  - `Create`/`Update`/`Delete` → look up the `object`; ETag short-circuit, else
- *    revalidate (`If-None-Match`) and update Cache+metadata, then broadcast.
- *  - `Add`/`Remove` → re-fetch the `target` *container listing* (membership
- *    changed; a bare ETag can't tell us the new member set), then broadcast.
- */
-declare function handleNotification(frame: NotificationFrame, deps: InvalidateDeps): Promise<InvalidateOutcome>;
-/**
- * The reconnect ETag-resync sweep (§5). After the socket reconnects (we missed
- * frames while down) revalidate the ENTIRE warmed set with conditional GETs —
- * mostly cheap 304s. This REPLACES P2's "re-issue the full BFS" re-warm: it does
- * no discovery/traversal, just a flat conditional revalidation of what we hold.
- *
- * Also used as the body of the disconnected slow-poll (one pass at a time).
- */
-interface SweepResult {
-    /** Entries examined. */
-    checked: number;
-    /** Entries the server confirmed unchanged (304). */
-    confirmed: number;
-    /** Entries whose bytes were replaced (200). */
-    replaced: number;
-    /** Entries purged (403/404). */
-    purged: number;
-    /** Entries with no ETag to revalidate against (skipped). */
-    skipped: number;
-}
-declare function resyncSweep(deps: InvalidateDeps): Promise<SweepResult>;
-
 /**
  * `solid-offline` — framework-agnostic page client (P0–P2).
  *
@@ -1096,7 +1107,7 @@ declare function createOfflineClient(config?: OfflineClientConfig): OfflineClien
     readonly status: OfflineStatusSurface;
 };
 
-export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, assetConfigCandidates, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClient, type NotificationsClientConfig, type NotificationsConfig, type NotificationsDeps, type OfflineClient, type OfflineClientConfig, type OfflineEvent, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type RevalidationEvent, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SocketFactory, type SocketLike, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, assetConfigCandidates, backoffDelay, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createNotificationsClient, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, discoverSubscriptionUrl, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseFrame, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, storageDescriptionFromLink, subscribe, typeIndexTargets, userCanRead, warm };
 ```
 
 ### `dist/worker.d.ts`
@@ -1109,7 +1120,7 @@ export {  }
 ### `dist/react.d.ts`
 
 ```ts
-import { O as OfflineStatusSurface, S as StatusSurfaceOptions, a as OfflineStatusSnapshot } from './status-<chunk>.js';
+import { O as OfflineStatusSnapshot, a as OfflineStatusSurface, S as StatusSurfaceOptions } from './status-<chunk>.js';
 export { R as ResourceFreshness } from './status-<chunk>.js';
 
 /**
@@ -1143,6 +1154,11 @@ export { R as ResourceFreshness } from './status-<chunk>.js';
  * which is what a BroadcastChannel-backed status store is.
  */
 
+/** Status snapshot plus a convenience flag for rendering a syncing indicator. */
+interface UseOfflineStatusResult extends OfflineStatusSnapshot {
+    /** True while at least one tracked resource is pending. */
+    syncing: boolean;
+}
 /**
  * Subscribe a component to the offline status surface. Pass a surface you already
  * created (recommended — share ONE across the app, e.g. from your offline
@@ -1151,7 +1167,7 @@ export { R as ResourceFreshness } from './status-<chunk>.js';
  * Re-renders when: connectivity flips, or any tracked resource's freshness
  * changes (a revalidation, an `updated` broadcast, a mark*).
  */
-declare function useOfflineStatus(surfaceOrOptions?: OfflineStatusSurface | StatusSurfaceOptions): OfflineStatusSnapshot;
+declare function useOfflineStatus(surfaceOrOptions?: OfflineStatusSurface | StatusSurfaceOptions): UseOfflineStatusResult;
 /** Per-resource lifecycle state surfaced by {@link useOfflineResource}. */
 type ResourceState = 'idle' | 'loading' | 'success' | 'error';
 interface UseOfflineResourceOptions {
@@ -1195,7 +1211,7 @@ interface UseOfflineResourceResult<T> {
  */
 declare function useOfflineResource<T = Response>(url: string | undefined, options?: UseOfflineResourceOptions): UseOfflineResourceResult<T>;
 
-export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type UseOfflineResourceOptions, type UseOfflineResourceResult, useOfflineResource, useOfflineStatus };
+export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type UseOfflineResourceOptions, type UseOfflineResourceResult, type UseOfflineStatusResult, useOfflineResource, useOfflineStatus };
 ```
 
 ### `dist/status-<chunk>.d.ts`
@@ -1210,7 +1226,7 @@ export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type U
  *   - CONNECTIVITY  — online vs offline, from `navigator.onLine` + the `online` /
  *     `offline` window events.
  *   - PER-RESOURCE FRESHNESS — for each URL the consumer cares about:
- *       'pending'  a (re)validation is in flight (the consumer marked it),
+ *       'pending'  a (re)validation is in flight (worker event or consumer mark),
  *       'stale'    the last read was served from cache while offline / unconfirmed
  *                  (the SWR engine tagged it `X-Offline: stale`),
  *       'fresh'    a revalidation confirmed it (304) or the consumer marked a 200,
@@ -1220,7 +1236,7 @@ export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type U
  * It is deliberately a *plain* `subscribe`/`getSnapshot` store (no framework) so
  * the React hooks (`react.ts`) can wrap it with `useSyncExternalStore` and a
  * vanilla app can use it directly. It listens to the same `BroadcastChannel` the
- * SWR engine broadcasts `updated` events on, so any tab's revalidation flips the
+ * SWR engine broadcasts revalidation events on, so any tab's revalidation flips the
  * status for every tab.
  *
  * It holds NO bytes and is NOT authoritative — it only reflects events. Tearing
@@ -1255,7 +1271,7 @@ interface ConnectivityTarget {
     removeEventListener(type: 'online' | 'offline', listener: () => void): void;
 }
 interface StatusSurfaceOptions {
-    /** BroadcastChannel name the SW broadcasts `updated` events on. Default: 'solid-offline'. */
+    /** BroadcastChannel name the SW broadcasts revalidation events on. Default: 'solid-offline'. */
     channelName?: string;
     /** Inject a channel (tests). Falls back to a real `BroadcastChannel` when available. */
     channel?: StatusChannel;
@@ -1288,5 +1304,5 @@ interface OfflineStatusSurface {
  */
 declare function createStatusSurface(options?: StatusSurfaceOptions): OfflineStatusSurface;
 
-export { type OfflineStatusSurface as O, type ResourceFreshness as R, type StatusSurfaceOptions as S, type OfflineStatusSnapshot as a, type StatusListener as b, createStatusSurface as c };
+export { type OfflineStatusSnapshot as O, type ResourceFreshness as R, type StatusSurfaceOptions as S, type OfflineStatusSurface as a, type StatusListener as b, createStatusSurface as c };
 ```

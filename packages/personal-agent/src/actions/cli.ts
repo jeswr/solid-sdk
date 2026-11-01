@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Operator commands for the action catalogue (`awp-dashboard actions …`) and the fixture
  * calendars demo (`awp-dashboard demo-provider-fixtures`). Inputs come from an operator file or
@@ -106,7 +107,7 @@ export async function actionsCommand(
     }
     default:
       throw new Error(
-        "actions list | describe --id ID | prepare --id ID --input FILE|- | execute --token T | mcp",
+        "actions list | describe --id ID | prepare --id ID --input FILE|- | execute --token=T | mcp",
       );
   }
 }

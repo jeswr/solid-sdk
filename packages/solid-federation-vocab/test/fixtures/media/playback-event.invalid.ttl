@@ -1,0 +1,20 @@
+# expect: https://jeswr.org/ns/sectors/media#playedWork
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/media/shapes#PlaybackEventShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix media: <https://jeswr.org/ns/sectors/media#>.
+@prefix time: <http://www.w3.org/2006/time#>.
+
+<https://example.org/fixtures/media/PlaybackEvent-4> a media:PlaybackEvent;
+    core:hadParticipant <https://example.org/fixtures/media/support-7>;
+    core:atTime <https://example.org/fixtures/media/support-8>.
+<https://example.org/fixtures/media/support-5> a media:CreativeWork;
+    dcterms:title "Fixture";
+    media:performedByArtist <https://example.org/fixtures/media/support-6>.
+<https://example.org/fixtures/media/support-7> a core:Agent.
+<https://example.org/fixtures/media/support-8> a time:Instant;
+    time:inXSDDateTime "2026-11-01T09:00:00Z"^^xsd:dateTime.
+<https://example.org/fixtures/media/support-6> a media:Artist.

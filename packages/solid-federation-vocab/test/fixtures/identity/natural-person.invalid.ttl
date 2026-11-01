@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/identity#hasLegalName
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#NaturalPersonShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/NaturalPerson-1> a id:NaturalPerson;
+    id:dateOfBirth "2026-11-01"^^xsd:date;
+    id:nationality <https://example.org/fixtures/identity/support-3>.
+<https://example.org/fixtures/identity/support-2> a id:LegalName;
+    id:familyName "Fixture".
+<https://example.org/fixtures/identity/support-3> a id:Country.

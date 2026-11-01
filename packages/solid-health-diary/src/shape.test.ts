@@ -3,8 +3,7 @@
 //
 // SHACL conformance against the LANDED diet: profile (vendored verbatim from
 // solid-federation-vocab @ Brief 1B). The build* outputs must produce no
-// sh:Violation; a malformed entity must. Uses rdf-validate-shacl over a
-// @zazuko/env-node dataset (the suite pattern).
+// sh:Violation; a malformed entity must. Uses rdf-engine with real Node WASM.
 //
 // The vocabulary is loaded INTO THE DATA GRAPH alongside the instance data,
 // because several MUST constraints are sh:class checks over the coded-value
@@ -13,10 +12,10 @@
 // grading: MUST=Violation, SHOULD=Warning), so a legitimately-omitted SHOULD
 // field does not fail a fixture.
 
-import env from "@zazuko/env-node";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import type { Quad } from "@rdfjs/types";
 import { Parser } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { buildDietPlan, buildToleranceConclusion } from "./conclusion.js";
 import { deriveExposures } from "./derive.js";
 import { buildGeneticSummary } from "./genetics.js";
@@ -29,25 +28,20 @@ import { buildTriggerScheme } from "./trigger.js";
 const URL_ = "https://alice.pod.example/health/diary/meals/2026/07/01.ttl";
 const ME = "https://alice.pod.example/profile/card#me";
 
-type Quad = Parameters<ReturnType<typeof env.dataset>["add"]>[0];
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-function toDataset(quads: Iterable<Quad>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
-
-const shapes = toDataset(new Parser().parse(dietShaclTtl()));
+const shapes = dietShaclTtl();
 // The vocab (concept-class typing) is mixed into every data graph so sh:class
 // checks over the coded-value IRIs resolve.
-const vocabQuads = [...toDataset(new Parser().parse(dietVocabTtl()))];
+const vocabQuads = new Parser().parse(dietVocabTtl());
 
 async function violations(quads: Iterable<Quad>): Promise<string[]> {
-  const data = toDataset([...quads, ...vocabQuads]);
-  const report = await new SHACLValidator(shapes, { factory: env }).validate(data);
+  const data = [...quads, ...vocabQuads];
+  const report = await engine.validate(data, shapes);
   return report.results
-    .filter((r) => String(r.severity?.value).endsWith("Violation"))
-    .map((r) => `${String(r.path?.value)}: ${String(r.message?.[0]?.value ?? r.message)}`);
+    .filter((r) => String(r.severity).endsWith("Violation"))
+    .map((r) => `${String(r.path)}: ${String(r.message)}`);
 }
 
 describe("SHACL — the build* outputs produce NO violation", () => {

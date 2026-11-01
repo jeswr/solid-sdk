@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#hasAccountHolder
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/media/shapes#MediaAccountShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix media: <https://jeswr.org/ns/sectors/media#>.
+
+<https://example.org/fixtures/media/MediaAccount-22> a media:MediaAccount;
+    core:hasAccountHolder ex:untyped.

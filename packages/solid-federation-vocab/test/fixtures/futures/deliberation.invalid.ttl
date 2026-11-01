@@ -1,0 +1,7 @@
+# expect: http://purl.org/dc/terms/title
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#DeliberationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/Deliberation-18> a fut:Deliberation.

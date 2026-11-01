@@ -1,0 +1,12 @@
+{
+  "entryPoints": [
+    "./src/mod.ts",
+    "./src/elements.ts",
+    "./src/registerElements.ts",
+    "./src/service-worker.ts"
+  ],
+  "projectDocuments": ["./docs/*.md"],
+  "out": "./_site",
+  "highlightLanguages": ["ts", "javascript", "html", "css", "batch"],
+  "plugin": ["typedoc-plugin-mdn-links"]
+}

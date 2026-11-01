@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY GPT-6.1-Sol (Codex)
 //
 // <jeswr-theme-toggle> — a framework-agnostic light/dark/system switcher.
 //
@@ -193,7 +194,7 @@ export class JeswrThemeToggle extends LitElement {
         part="button"
         type="button"
         @click=${this.onClick}
-        aria-label=${`Change colour theme (currently ${label})`}
+        aria-label=${`${label}: change colour theme`}
         title=${`Theme: ${label}`}
       >
         ${unsafeIcon(icon)}

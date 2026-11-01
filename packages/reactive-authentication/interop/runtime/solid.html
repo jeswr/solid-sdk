@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: real-browser Solid run</title>
+<script src="./.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<script type="module">
+// The library runs in this page exactly as an application would; the harness only calls window.step(name) and
+// acts as the user in the provider's popup. Results are statuses, booleans and counts — never tokens.
+const q = new URLSearchParams(location.search)
+const storage = q.get("storage"), webId = q.get("webId"), otherProtected = q.get("otherProtected")
+const insecure = q.get("insecure") === "true"
+const container = new URL(`ra-interop-${q.get("run")}/`, q.get("scratch")).href
+const resource = `${container}data.txt`
+const body = `reactive-authentication browser interop ${q.get("run")}`
+const {CredentialBoundary, DPoPTokenProvider, DynamicRegistrationClientProvider, CachingClientProvider, CachingAuthorizationServerProvider,
+    ReactiveFetchManager, WebIdIssuerProvider, XASProvider, isWithin} = RA
+
+// What went over the wire, as schemes and booleans only.
+const wire = []
+const base = globalThis.fetch.bind(globalThis)
+const recording = async (input, init) => {
+    const request = new Request(input, init)
+    const entry = {url: request.url.split("?")[0], method: request.method, scheme: request.headers.get("authorization")?.split(" ", 1)[0], dpop: request.headers.has("dpop")}
+    wire.push(entry)
+    const response = await base(request)
+    entry.status = response.status
+    return response
+}
+const http = {fetch: recording, allowInsecureRequests: insecure}
+const flow = document.querySelector("authorization-code-flow")
+let flows = 0
+const codes = {getCode: (url, signal) => (flows++, flow.getCode(url, signal))}
+const provider = new DPoPTokenProvider(new URL("./callback.html", location.href).href, codes,
+    new CachingAuthorizationServerProvider(new XASProvider(new WebIdIssuerProvider(async () => new URL(webId), http), http)),
+    new CachingClientProvider(new DynamicRegistrationClientProvider(http)), undefined,
+    {http, verifyWebId: true, context: async request => isWithin(request.url, storage) ? storage : request.url})
+const manager = new ReactiveFetchManager({providers: [provider], boundary: new CredentialBoundary([storage], {allowInsecureHttp: insecure}), fetch: recording})
+const status = async promise => { const r = await promise; await r.body?.cancel(); return r.status }
+const credentialed = prefix => wire.filter(e => e.url.startsWith(prefix) && (e.scheme !== undefined || e.dpop)).length
+
+// Every 201 Created is reported to the harness at once (window.__owned, a Playwright binding), so ownership is
+// known outside the page even if this page is closed mid-step. Cleanup deletes exactly the URLs it is given.
+const create = async (url, contentType, content) => {
+    const created = await status(manager.fetch(url, {method: "PUT", headers: {"content-type": contentType, "if-none-match": "*"}, body: content}))
+    if (created === 201) await window.__owned(url)
+    return created
+}
+
+const steps = {
+    async "login-write"() {
+        const made = await create(container, "text/turtle", "")
+        const created = made === 201 ? await create(resource, "text/plain", body) : undefined
+        const writes = wire.filter(e => e.url === container && e.method === "PUT")
+        const identity = await provider.identity(new Request(resource))
+        return {made, created, flows, firstUnauthenticated: writes[0]?.scheme === undefined && writes[0]?.status === 401,
+            replayScheme: writes.at(-1)?.scheme, replayDpop: writes.at(-1)?.dpop === true,
+            webIdMatches: identity?.webId === webId, webIdVerified: identity?.webIdVerified === true}
+    },
+    async "private-read"() {
+        const anonymous = await status(base(resource))
+        const response = await manager.fetch(resource)
+        return {anonymous, status: response.status, matches: (await response.text()) === body, flows}
+    },
+    async "boundary"() {
+        const outside = otherProtected === null ? undefined : await status(manager.fetch(otherProtected))
+        return {outside, credentialed: otherProtected === null ? 0 : credentialed(otherProtected)}
+    },
+    async "logout"() {
+        const before = flows
+        await manager.logout()
+        const after = await status(manager.fetch(resource))
+        return {after, newFlows: flows - before}
+    },
+    async cleanup(urls) {
+        const deleted = []
+        for (const url of urls) deleted.push(await status(manager.fetch(url, {method: "DELETE"})))
+        return {deleted, gone: await status(manager.fetch(container))}
+    },
+    /** Harness self-test only (interop/runtime/selftest.js): an operation that never settles, after owning a URL. */
+    async "own-then-hang"(url) {
+        await window.__owned(url)
+        window.__mutations = (window.__mutations ?? 0) + 1
+        await new Promise(() => {})
+    },
+    /** Harness self-test only: whether this page instance saw earlier mutations. */
+    async fresh() {
+        return {mutations: window.__mutations ?? 0}
+    },
+}
+window.step = async (name, argument) => {
+    try {
+        return await steps[name](argument)
+    } catch (error) {
+        return {error: error?.name ?? "Error"}
+    }
+}
+window.__ready = true
+</script>
+</html>

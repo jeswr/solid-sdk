@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/scheduling#summary
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/scheduling/shapes#TaskShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/Task-3> a sched:Task.

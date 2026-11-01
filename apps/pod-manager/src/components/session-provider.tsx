@@ -1,4 +1,5 @@
 "use client";
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 /**
  * The Solid session bridge for React. `@solid/reactive-authentication` has no
@@ -46,6 +47,8 @@ import {
 import { fetchProfile, type PodProfile } from "@/lib/profile";
 import { sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
+import { IssueAssignmentAnnouncer } from "@/lib/issues";
+import { toast } from "sonner";
 
 type Status = "loading" | "logged-out" | "authenticating" | "logged-in";
 
@@ -65,6 +68,8 @@ export interface Session {
   podFetch: typeof fetch;
   status: Status;
   webId?: string;
+  /** Assignment de-duplication survives route changes and ends with this login. */
+  issueAssignments?: IssueAssignmentAnnouncer;
   profile?: PodProfile;
   /** The storage the user is browsing (chosen when several exist). */
   activeStorage?: string;
@@ -446,12 +451,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveStorage = useCallback((storage: string) => setActive(storage), []);
 
+  const issueAssignments = useMemo(
+    () => status === "logged-in" && webId
+      ? new IssueAssignmentAnnouncer({
+          actorWebId: webId,
+          onError: (message) => { toast.error(message); },
+        })
+      : undefined,
+    [status, webId],
+  );
+
   const session = useMemo<Session>(
     () => ({
       sourceFetch,
       podFetch,
       status,
       webId,
+      issueAssignments,
       profile,
       activeStorage,
       recentAccounts,
@@ -465,6 +481,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       podFetch,
       status,
       webId,
+      issueAssignments,
       profile,
       activeStorage,
       recentAccounts,

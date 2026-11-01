@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/identity#familyName
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#LegalNameShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/LegalName-4> a id:LegalName.

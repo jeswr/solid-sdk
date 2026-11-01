@@ -1,0 +1,272 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+/* Interim suite frame (02-suite-shell §2). Replaced by DS-03/DS-04 + SH-01. */
+.ish-frame {
+  display: grid;
+  grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  grid-template-areas:
+    "rail sidebar topbar"
+    "rail sidebar main";
+  height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+}
+.ish-frame[data-has-details] {
+  grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr) 360px;
+  grid-template-areas:
+    "rail sidebar topbar topbar"
+    "rail sidebar main details";
+}
+.ish-rail {
+  grid-area: rail;
+  background: var(--rail);
+  color: var(--rail-foreground);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+}
+.ish-rail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ish-brand {
+  color: var(--primary);
+  min-height: 40px;
+}
+.ish-brand polygon {
+  fill: currentColor;
+}
+.ish-rail-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  color: var(--rail-foreground);
+  opacity: 0.8;
+}
+.ish-rail-item:hover {
+  opacity: 1;
+  background: color-mix(in oklch, var(--rail-foreground) 12%, transparent);
+}
+.ish-rail-item[aria-current="page"] {
+  opacity: 1;
+  background: color-mix(in oklch, var(--rail-foreground) 18%, transparent);
+}
+.ish-rail-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rail-foreground);
+}
+.ish-rail-label,
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ish-sidebar {
+  grid-area: sidebar;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.ish-drawer {
+  padding-top: var(--space-10);
+}
+.ish-topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-inline: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  min-width: 0;
+}
+.ish-menu-button {
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--foreground);
+}
+.ish-menu-button:hover {
+  background: var(--surface-2);
+}
+.ish-context {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+}
+.ish-spacer {
+  flex: 1;
+}
+.ish-search {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.ish-search form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: min(560px, 100%);
+  min-width: 0;
+  height: 40px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--foreground-muted);
+}
+.ish-search form:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+.ish-scope {
+  flex: none;
+  font-size: var(--text-sm);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.ish-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+}
+.ish-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+.ish-main {
+  grid-area: main;
+  overflow: auto;
+  min-width: 0;
+  outline: none;
+}
+.ish-details {
+  grid-area: details;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+}
+/* AUTHORED-BY Codex */
+.ish-details-sheet {
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+@media (max-width: 639px) {
+  .ish-details-sheet {
+    max-height: 85dvh;
+  }
+}
+.ish-tabbar {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .ish-frame,
+  .ish-frame[data-has-details] {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-areas:
+      "rail topbar"
+      "rail main";
+  }
+  .ish-sidebar,
+  .ish-details {
+    display: none;
+  }
+  .ish-menu-button {
+    display: inline-grid;
+  }
+}
+@media (max-width: 767px) {
+  .ish-frame,
+  .ish-frame[data-has-details] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--topbar-h-mobile) minmax(0, 1fr) 56px;
+    grid-template-areas:
+      "topbar"
+      "main"
+      "tabbar";
+  }
+  .ish-rail {
+    display: none;
+  }
+  .ish-topbar {
+    padding-inline: var(--space-2);
+    gap: var(--space-2);
+  }
+  .ish-scope {
+    display: none;
+  }
+  .ish-search form {
+    height: 36px;
+  }
+  .ish-tabbar {
+    grid-area: tabbar;
+    display: flex;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .ish-tabbar a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-size: var(--text-xs);
+    color: var(--foreground-muted);
+    text-decoration: none;
+  }
+  .ish-tabbar a[aria-current="page"] {
+    color: var(--primary);
+    font-weight: 600;
+  }
+}
+@media print {
+  .ish-rail,
+  .ish-sidebar,
+  .ish-topbar,
+  .ish-tabbar,
+  .ish-details {
+    display: none;
+  }
+  .ish-frame {
+    display: block;
+    height: auto;
+  }
+  .ish-main {
+    overflow: visible;
+  }
+}

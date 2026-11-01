@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `importInbound` — the (thin) orchestration that pulls inbound messages from a
@@ -25,6 +26,7 @@
  */
 
 import { buildOwnerOnlyAclTurtle } from "./acl.js";
+import { discoverWacAcl } from "./acl-discovery.js";
 import { serializeCanonical } from "./canonical.js";
 import type { ChannelAdapter, InboundRawMessage } from "./channel.js";
 import { ChannelParseError } from "./errors.js";
@@ -196,7 +198,7 @@ export async function importInbound(options: ImportInboundOptions): Promise<Impo
 
   // Lock the container BEFORE any content lands in it.
   if (writeAcl) {
-    const aclUrl = `${container}.acl`;
+    const aclUrl = await discoverWacAcl(options.writeFetch, container);
     const aclTurtle = await buildOwnerOnlyAclTurtle(container, options.ownerWebId);
     await put(options.writeFetch, aclUrl, "text/turtle", aclTurtle);
   }

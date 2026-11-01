@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The ACL-FIRST invariant (§7): "no resource ever exists without its owner-only ACL."
@@ -9,12 +10,13 @@
  * + typed quads, never hand-concatenated) and written through the redirect-refusing
  * scope-guarded {@link putResource}.
  */
-import { buildOwnerOnlyAclTurtle } from "@jeswr/agentic-legacy-bridge";
+import { buildOwnerOnlyAclTurtle, discoverWacAcl } from "@jeswr/agentic-legacy-bridge";
 import type { PodFetch } from "../config.js";
 import { isSafeContainer } from "../config.js";
 import { putResource, throwIfNotWritten } from "./write.js";
 
-/** The ACL resource URL for a container (the CSS `<container>.acl` convention). */
+/** Legacy CSS URL convention. Never use this as proof of an ACL association.
+ * @deprecated Discover the container's ACL with discoverWacAcl instead. */
 export function aclUrlFor(container: string): string {
   return `${container}.acl`;
 }
@@ -36,7 +38,7 @@ export async function writeOwnerOnlyAcl(
   // buildOwnerOnlyAclTurtle re-validates BOTH inputs and throws before building a
   // single quad if either is not a canonical, injection-safe IRI.
   const turtle = await buildOwnerOnlyAclTurtle(container, ownerWebId);
-  const aclUrl = aclUrlFor(container);
+  const aclUrl = await discoverWacAcl(fetchFn, container);
   const res = await putResource(fetchFn, aclUrl, turtle, {
     contentType: "text/turtle",
     base: container,

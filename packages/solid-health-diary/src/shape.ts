@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Access to the canonical SHACL profile + vocabulary.
@@ -36,7 +37,7 @@ let cachedVocab: string | undefined;
 /**
  * The canonical health-diary SHACL profile, as a Turtle string. Cached after the
  * first read. Pass it (with the data graph + {@link dietVocabTtl}) to a SHACL
- * validator — see `src/shape.test.ts` for the `rdf-validate-shacl` pattern.
+ * validator — see `src/shape.test.ts` for the `rdf-engine.validate` pattern.
  */
 export function dietShaclTtl(): string {
   if (cachedShacl === undefined) cachedShacl = readFileSync(DIET_SHACL_PATH, "utf8");

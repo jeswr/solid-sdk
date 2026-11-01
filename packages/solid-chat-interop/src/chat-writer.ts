@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -166,23 +168,7 @@ export class ChatWriter {
     // Existing documents must be recognizable WAC, never ACP or another model.
     try {
       const existing = await this.dataset(acl);
-      const authorizations = [...new AclResource(existing, DataFactory).authorizations];
-      if (existing.size > 0 && authorizations.length === 0)
-        throw new Error("Unsupported chat access-control model");
-      // Replacing a shared ACL would remove grants for other resources. Inspect
-      // every scope value: Authorization's optional getters are single-valued.
-      for (const authorization of authorizations) {
-        for (const predicate of ["accessTo", "default"]) {
-          const targets = SetFrom.subjectPredicate(
-            authorization,
-            `http://www.w3.org/ns/auth/acl#${predicate}`,
-            NamedNodeAs.string,
-            NamedNodeFrom.string,
-          );
-          if ([...targets].some((target) => target !== url))
-            throw new Error("Shared chat ACL documents cannot be replaced");
-        }
-      }
+      validateWacAcl(existing, url);
     } catch (error) {
       if (chatPortStatus(error) !== 404) throw error;
     }
@@ -372,5 +358,36 @@ export class ChatWriter {
       });
     }
     return { conversations };
+  }
+}
+
+/** Validate that an ACL can be replaced for this resource without changing another's grants. */
+export function validateWacAcl(existing: DatasetCore, url: string): void {
+  // Reject ACP even when a document also happens to contain WAC authorizations.
+  if (
+    [...existing].some((quad) =>
+      [quad.subject, quad.predicate, quad.object].some(
+        (term) =>
+          term.termType === "NamedNode" && term.value.startsWith("http://www.w3.org/ns/solid/acp#"),
+      ),
+    )
+  )
+    throw new Error("Unsupported access-control model: ACP");
+  const authorizations = [...new AclResource(existing, DataFactory).authorizations];
+  if (existing.size > 0 && authorizations.length === 0)
+    throw new Error("Unsupported chat access-control model");
+  // Replacing a shared ACL would remove grants for other resources. Inspect
+  // every scope value: Authorization's optional getters are single-valued.
+  for (const authorization of authorizations) {
+    for (const predicate of ["accessTo", "default"]) {
+      const targets = SetFrom.subjectPredicate(
+        authorization,
+        `http://www.w3.org/ns/auth/acl#${predicate}`,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      );
+      if ([...targets].some((target) => target !== url))
+        throw new Error("Shared chat ACL documents cannot be replaced");
+    }
   }
 }

@@ -7,6 +7,7 @@ description: Use when fetching or parsing RDF with @jeswr/fetch-rdf, handling Rd
 
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 **Read RDF with `@jeswr/fetch-rdf`**
 
@@ -40,6 +41,16 @@ Remote JSON-LD contexts are refused by default. For a trusted remote context, pa
 to `fetchRdf` or `parseRdf`. The helper refuses redirects and checks nested contexts too.
 For offline ActivityStreams contexts, supply an explicit `{ load }` loader returning
 only bundled allowlisted contexts; this package does not bundle contexts itself.
+
+Pass `engine` to opt into `RdfEngine.parse`; fetch-rdf buffers stream input on this
+path and returns the engine dataset as `DatasetCore`. The default path still returns
+an N3 Store and streams input. The caller owns and disposes the engine; fetch-rdf
+uses its own structural `RdfParser` interface and has no production or type
+dependency on rdf-engine. `documentLoader` applies only to the default JSON-LD parser:
+Sparq 0.1.5 rejects remote contexts. Use real Node WASM in parser parity tests.
+Those tests live in `tools/fetch-rdf-engine-tests`, a private workspace that
+depends on both packages; keep the engine dependency out of fetch-rdf's manifest
+to avoid the `fetch-rdf → rdf-engine → solid-odrl → fetch-rdf` workspace cycle.
 
 ### Agent persona
 

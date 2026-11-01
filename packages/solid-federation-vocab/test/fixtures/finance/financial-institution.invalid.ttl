@@ -1,0 +1,15 @@
+# expect: https://jeswr.org/ns/core#identifiedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#FinancialInstitutionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/FinancialInstitution-51> a fin:FinancialInstitution.
+<https://example.org/fixtures/finance/support-52> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/finance/support-53>.
+<https://example.org/fixtures/finance/support-53> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/finance/support-54>.
+<https://example.org/fixtures/finance/support-54> a core:Agent.

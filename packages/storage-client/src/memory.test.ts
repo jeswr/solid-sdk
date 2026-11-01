@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Quad } from "@jeswr/fetch-rdf";
 import fc from "fast-check";
 import { DataFactory, Store } from "n3";
@@ -1068,7 +1069,7 @@ describe("properties (ADR-003 §10)", () => {
 });
 
 describe("writeRdf", () => {
-  test("serialises Turtle (default) and N-Triples; JSON-LD is unsupported", async () => {
+  test("serialises Turtle (default) and N-Triples; unknown formats are unsupported", async () => {
     const storage = solid();
     const dataset = new Store([quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("o"))]);
     const written = await storage.writeRdf(`${ROOT}d.ttl`, dataset, {
@@ -1085,7 +1086,7 @@ describe("writeRdf", () => {
     const error = await rejects(
       storage.writeRdf(`${ROOT}d.jsonld`, dataset, {
         ifMatch: "*",
-        contentType: "application/ld+json",
+        contentType: "application/rdf+xml" as "text/turtle",
       }),
       "unsupported",
     );
@@ -1093,6 +1094,88 @@ describe("writeRdf", () => {
     await expect(storage.writeRdf(`${ROOT}x.ttl`, dataset, undefined as never)).rejects.toThrow(
       TypeError,
     );
+  });
+
+  test.each([
+    "solid",
+    "lws",
+  ] as const)("%s writes JSON-LD with graphs and the correct content type", async (protocol) => {
+    const storage = createMemoryStorage({ protocol });
+    const url =
+      protocol === "solid"
+        ? `${ROOT}d.jsonld`
+        : (await storage.create(ROOT, "[]", { contentType: "application/ld+json" })).url;
+    const s = namedNode(`${EX}s`);
+    const p = namedNode(`${EX}p`);
+    const blank = blankNode("unsafe . label");
+    const dataset = new Store([
+      quad(s, p, literal("https://example.org/literal 日本語 😀")),
+      quad(s, p, blank),
+      quad(blank, p, literal("bonjour", "fr"), namedNode(`${EX}graph`)),
+    ]);
+    const written = await storage.writeRdf(url, dataset, {
+      ifMatch: protocol === "solid" ? "*" : ((await storage.head(url)).etag as string),
+      contentType: "application/ld+json",
+      prefixes: { ex: EX },
+    });
+    const read = await storage.read(url);
+    expect(read.contentType).toBe("application/ld+json");
+    expect(read.etag).toBe(written.etag);
+    const body = await read.text();
+    expect(JSON.parse(body)).toEqual([
+      {
+        "@id": s.value,
+        [p.value]: [{ "@value": "https://example.org/literal 日本語 😀" }, { "@id": "_:b0" }],
+      },
+      {
+        "@id": `${EX}graph`,
+        "@graph": [{ "@id": "_:b0", [p.value]: [{ "@value": "bonjour", "@language": "fr" }] }],
+      },
+    ]);
+    const parsed = (await storage.readRdf(url)).dataset;
+    expect(parsed.size).toBe(3);
+    const blankObject = [...parsed].find((q) => q.object.termType === "BlankNode")?.object;
+    const namedGraphQuad = [...parsed].find((q) => q.graph.value === `${EX}graph`);
+    expect(namedGraphQuad?.subject.equals(blankObject as Quad["object"])).toBe(true);
+    expect(namedGraphQuad?.object.value).toBe("bonjour");
+
+    await rejects(
+      storage.writeRdf(url, [], { ifMatch: '"stale"', contentType: "application/ld+json" }),
+      "precondition-failed",
+      412,
+    );
+    expect((await storage.head(url)).etag).toBe(written.etag);
+    await storage.writeRdf(url, [], {
+      ifMatch: written.etag as string,
+      contentType: "application/ld+json",
+    });
+    expect(await (await storage.read(url)).text()).toBe("[]");
+    expect((await storage.readRdf(url)).dataset.size).toBe(0);
+  });
+
+  test("JSON-LD validation failures never commit a partial write", async () => {
+    const storage = solid();
+    const url = `${ROOT}d.jsonld`;
+    const { etag } = await storage.writeRdf(url, [], {
+      ifMatch: "*",
+      contentType: "application/ld+json",
+    });
+    const directed = quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("مرحبا", "ar--rtl"));
+    await expect(
+      storage.writeRdf(url, [directed], {
+        ifMatch: etag as string,
+        contentType: "application/ld+json",
+      }),
+    ).rejects.toThrow(TypeError);
+    expect((await storage.head(url)).etag).toBe(etag);
+    expect(await (await storage.read(url)).text()).toBe("[]");
+    await expect(
+      storage.writeRdf(`${ROOT}missing.jsonld`, [directed], {
+        ifMatch: "*",
+        contentType: "application/ld+json",
+      }),
+    ).rejects.toThrow(TypeError);
+    await rejects(storage.head(`${ROOT}missing.jsonld`), "not-found");
   });
 });
 

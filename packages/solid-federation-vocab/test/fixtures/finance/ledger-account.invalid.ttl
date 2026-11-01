@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/finance#accountClass
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#LedgerAccountShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/LedgerAccount-64> a fin:LedgerAccount;
+    fin:accountCode "Fixture".

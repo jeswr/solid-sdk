@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/agentic-legacy-bridge` — the path FROM today's channels (email first) TO
@@ -34,6 +35,7 @@ export {
   buildBridgeAclTurtle,
   buildOwnerOnlyAclTurtle,
 } from "./acl.js";
+export { discoverWacAcl } from "./acl-discovery.js";
 // --- canonical message (solid-chat-interop) ---
 export { emailToCanonical, serializeCanonical, toCanonicalMessage } from "./canonical.js";
 // --- channels + orchestration ---

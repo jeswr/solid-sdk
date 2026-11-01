@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/social#content
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/social/shapes#NoteShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix social: <https://jeswr.org/ns/sectors/social#>.
+
+<https://example.org/fixtures/social/Note-1> a social:Note.

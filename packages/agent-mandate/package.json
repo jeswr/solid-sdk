@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-mandate",
   "version": "0.1.0",
   "private": true,
-  "description": "Signed mandates and policy evaluation (experimental scaffold).",
+  "description": "VC-wrapped ODRL mandates, fail-closed policy evaluation and owner approvals.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -19,6 +19,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./sparq": {
+      "types": "./dist/sparq.d.ts",
+      "default": "./dist/sparq.js"
     }
   },
   "files": [
@@ -33,6 +37,17 @@
     "test": "pnpm -w exec vitest run --root packages/agent-mandate --coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10"
+    "@vitest/coverage-v8": "^4.1.10",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.16.0"
+  },
+  "dependencies": {
+    "@jeswr/agent-authz-verifier": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "jose": "^6.0.0",
+    "n3": "^2.0.3"
   }
 }

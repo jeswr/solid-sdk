@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, it, expect } from "vitest";
-import { isOwnPodUrl, isOwnPodWebSocketUrl } from "./own-pod";
+import { isOwnPodUrl, isOwnPodServiceUrl, isOwnPodWebSocketUrl } from "./own-pod";
 
 const STORAGE = ["https://pod.example/alice/"];
 
@@ -51,6 +52,30 @@ describe("isOwnPodUrl", () => {
     const roots = ["https://a.example/me/", "https://b.example/me/"];
     expect(isOwnPodUrl("https://b.example/me/x.ttl", roots)).toBe(true);
     expect(isOwnPodUrl("https://c.example/me/x.ttl", roots)).toBe(false);
+  });
+});
+
+describe("isOwnPodServiceUrl", () => {
+  it("accepts a discovered HTTP service on the storage origin outside the pod path", () => {
+    expect(isOwnPodServiceUrl("https://pod.example/.notifications/WebSocketChannel2023/", STORAGE)).toBe(true);
+    expect(isOwnPodServiceUrl("http://localhost:3000/.notifications/WebSocketChannel2023/", ["http://localhost:3000/alice/"])).toBe(true);
+  });
+
+  it.each([
+    "https://evil.example/.notifications/WebSocketChannel2023/",
+    "https://pod.example:444/.notifications/WebSocketChannel2023/",
+    "http://pod.example/.notifications/WebSocketChannel2023/",
+    "wss://pod.example/socket",
+    "javascript:alert(1)",
+    "https://user:password@pod.example/service",
+    "not a url",
+    undefined,
+  ])("rejects untrusted service %s", (service) => {
+    expect(isOwnPodServiceUrl(service, STORAGE)).toBe(false);
+  });
+
+  it("fails closed without storage roots", () => {
+    expect(isOwnPodServiceUrl("https://pod.example/service", [])).toBe(false);
   });
 });
 

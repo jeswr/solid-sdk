@@ -1,0 +1,46 @@
+name: Merge Dependabot PRs after CI
+
+# Replaces the removed `gh pr merge --auto` workflow (#32), which merged immediately because the repository
+# has no required status checks. This workflow does not rely on branch protection: it runs only after the CI
+# workflow completed successfully, and merges only the exact commit CI tested, only for Dependabot PRs, and
+# never semver-major updates. Repository settings it needs (Actions allowed to create/approve PRs, merge
+# permissions for GITHUB_TOKEN) are external and must be enabled by a maintainer; required status checks
+# on `main` remain recommended as a second line of defence.
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration (CI)"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # No checkout: PR code is never executed with this token.
+      - name: Merge the tested commit of a non-major Dependabot update
+        run: |
+          pr=$(gh pr list --head "$BRANCH" --state open --json number,author,headRefOid,title --jq '.[0]')
+          [ -n "$pr" ] || { echo "No open PR for $BRANCH"; exit 0; }
+          [ "$(jq -r .author.login <<<"$pr")" = "app/dependabot" ] || { echo "Not a Dependabot PR"; exit 0; }
+          [ "$(jq -r .headRefOid <<<"$pr")" = "$TESTED_SHA" ] || { echo "PR moved on since CI ran"; exit 0; }
+          title=$(jq -r .title <<<"$pr")
+          from=$(sed -nE 's/.* from v?([0-9]+)\..* to v?[0-9]+.*/\1/p' <<<"$title")
+          to=$(sed -nE 's/.* to v?([0-9]+)\..*/\1/p' <<<"$title")
+          if [ -z "$from" ] || [ -z "$to" ] || [ "$from" != "$to" ]; then
+            echo "Major, grouped or unparseable update ($title): leaving for review"; exit 0
+          fi
+          gh pr merge "$(jq -r .number <<<"$pr")" --squash --match-head-commit "$TESTED_SHA"

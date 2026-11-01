@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * fetchRdf — GET an RDF resource and parse the body in one call.
@@ -10,6 +11,7 @@
  * @packageDocumentation
  */
 
+import type { DatasetCore } from "@rdfjs/types";
 import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
 import { extractMediaType, parseRdf } from "./parse.js";
@@ -38,7 +40,15 @@ const ACCEPT = "text/turtle, application/ld+json;q=0.9";
  *   `contentType` fields are populated where known so callers can
  *   branch without string-matching the message.
  */
-export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Promise<FetchedRdf> {
+export function fetchRdf(
+  url: string,
+  options?: FetchRdfOptions & { engine?: undefined },
+): Promise<FetchedRdf>;
+export function fetchRdf(url: string, options?: FetchRdfOptions): Promise<FetchedRdf<DatasetCore>>;
+export async function fetchRdf(
+  url: string,
+  options: FetchRdfOptions = {},
+): Promise<FetchedRdf<DatasetCore>> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
 
   const headers = new Headers(options.headers);
@@ -75,6 +85,7 @@ export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Prom
     // to an empty string so parseRdf still returns an (empty) dataset.
     const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
       baseIRI: response.url || url,
+      ...(options.engine !== undefined && { engine: options.engine }),
       ...(options.documentLoader !== undefined && { documentLoader: options.documentLoader }),
     });
     return {
