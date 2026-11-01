@@ -51,7 +51,7 @@ import {
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
-import { loadSharing } from "../lib/sharing/apply";
+import { loadSharing } from "../lib/sharing/adapter";
 import { sharingSummary } from "./access";
 import { useDrive } from "./drive-context";
 import { pruneDeleted } from "./prefs";

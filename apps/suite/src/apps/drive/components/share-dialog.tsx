@@ -21,7 +21,7 @@ import {
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
-} from "../lib/sharing/apply";
+} from "../lib/sharing/adapter";
 import type { SharingRole, SharingSelection, SharingState } from "../lib/sharing/types";
 
 const profile = () => ({ loading: false });
@@ -186,7 +186,8 @@ export function ShareDialog({
           <div className="su-stack" aria-busy={saving}>
             {!snapshot.canManage && (
               <p className="su-muted" role="status">
-                You can view access. Only an owner with Control can change sharing.
+                {snapshot.readOnly ??
+                  "You can view access. Only an owner with Control can change sharing."}
               </p>
             )}
             <p className="su-muted" id={lockId}>

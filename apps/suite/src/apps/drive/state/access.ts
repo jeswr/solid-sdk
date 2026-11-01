@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadSharing } from "../lib/sharing/apply";
+import { loadSharing } from "../lib/sharing/adapter";
 import type { SharingState } from "../lib/sharing/types";
 import { useDrive } from "./drive-context";
 import { useResourceVersion } from "./resource";
