@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, IconButton, Popover, PopoverContent, PopoverTrigger } from "@jeswr/suite-ui";
 import {
@@ -26,7 +27,7 @@ import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls
 export function NoteCard({ note }: { note: StoredNote }) {
   const { prefs, openNote, pin, colour, attempt, mutations, move, create } = useNotesContext();
   const id = useId();
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] = useState<StoredNote>();
   const pending = note.etag === null && note.url.includes("/pending-");
   const [busy, setBusy] = useState(false);
   const items = checklistItems(note.body);
@@ -103,7 +104,7 @@ export function NoteCard({ note }: { note: StoredNote }) {
               label="Delete forever"
               variant="ghost"
               disabled={busy || pending}
-              onClick={() => setDeleting(true)}
+              onClick={() => setDeleting(note)}
             >
               <Trash2 size={17} aria-hidden="true" />
             </IconButton>
@@ -188,8 +189,8 @@ export function NoteCard({ note }: { note: StoredNote }) {
         <ConfirmDialog
           title="Delete forever"
           description="This note will be permanently deleted from your pod."
-          close={() => setDeleting(false)}
-          confirm={() => mutations.deleteForever(note)}
+          close={() => setDeleting(undefined)}
+          confirm={() => mutations.deleteForever(deleting)}
         />
       )}
     </article>

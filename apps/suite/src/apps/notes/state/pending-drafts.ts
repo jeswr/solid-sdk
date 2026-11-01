@@ -18,6 +18,7 @@ type Listener = (url: string, saved?: StoredNote) => void;
 export function createPendingDrafts(seams: {
   initial: readonly PendingDraft[];
   persist: (drafts: readonly PendingDraft[]) => void;
+  saved?: (url: string) => void;
 }) {
   const entries = new Map(seams.initial.map((entry) => [entry.note.url, entry]));
   const writers = new Map<string, Save>();
@@ -44,8 +45,10 @@ export function createPendingDrafts(seams: {
           changed(note.url);
           saved = await save(snapshot.note, snapshot.draft, snapshot.note.etag);
           const latest = entries.get(note.url) as PendingDraft;
-          if (latest.draft === snapshot.draft) entries.delete(note.url);
-          else entries.set(note.url, { ...latest, note: saved });
+          if (latest.draft === snapshot.draft) {
+            entries.delete(note.url);
+            seams.saved?.(note.url);
+          } else entries.set(note.url, { ...latest, note: saved });
           changed(note.url, saved);
         }
         return saved;
@@ -68,6 +71,10 @@ export function createPendingDrafts(seams: {
     get: (url: string) => entries.get(url),
     all: () => [...entries.values()],
     bind,
+    restore(entry: PendingDraft) {
+      entries.set(entry.note.url, entry);
+      changed(entry.note.url);
+    },
     subscribe(listener: Listener) {
       listeners.add(listener);
       return () => {

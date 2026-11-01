@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
+import { toast } from "@jeswr/suite-ui";
 import { useEffect, useRef, useState } from "react";
+import { NoteConflictError } from "../lib/model/errors";
 import type { NoteChanges, NotesStore, StoredNote } from "../lib/model/store";
 
 type Projection = (notes: readonly StoredNote[]) => StoredNote[];
@@ -30,6 +33,10 @@ export function useNotesMutations(store: NotesStore, refresh: () => Promise<unkn
       return result;
     } catch (error) {
       if (owner.current === store) setFailure({ store, error });
+      if (owner.current === store && error instanceof NoteConflictError) {
+        toast.error("This note changed somewhere else. The list has been refreshed.");
+        await refresh();
+      }
       throw error;
     } finally {
       setPending((items) => items.filter((item) => item.id !== id));
@@ -78,6 +85,7 @@ export function useNotesMutations(store: NotesStore, refresh: () => Promise<unkn
     unarchive: (note: StoredNote) => run(remove(note), () => store.unarchive(note)),
     trash: (note: StoredNote) => run(remove(note), () => store.trash(note)),
     restore: (note: StoredNote) => run(remove(note), () => store.restore(note)),
-    deleteForever: (note: StoredNote) => run(remove(note), () => store.deleteForever(note.url)),
+    deleteForever: (note: StoredNote) =>
+      run(remove(note), () => store.deleteForever(note.url, note.etag)),
   };
 }

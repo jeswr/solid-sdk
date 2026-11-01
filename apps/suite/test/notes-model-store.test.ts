@@ -364,7 +364,7 @@ describe("notes store", () => {
         ? new Response(null, { status: 412 })
         : undefined,
     );
-    await expect(s.store.archive(note)).rejects.toBeInstanceOf(ResourceDeleteError);
+    await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteConflictError);
     expect(s.pod.has(note.url)).toBe(true);
     expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
     expect(
@@ -528,11 +528,15 @@ describe("notes store", () => {
     expect(await s.store.purgeTrash(32)).toEqual({ deleted: [], failed: [] });
     for (const days of [-1, Number.NaN, Infinity])
       await expect(s.store.purgeTrash(days)).rejects.toThrow(RangeError);
-    await s.store.deleteForever(urls[1] as string);
+    const recent = await s.store.read(urls[1] as string);
+    assert(recent);
+    await s.store.deleteForever(recent.url, recent.etag);
     expect(s.pod.has(urls[1] as string)).toBe(false);
     const foreign = `${ROOT}.trash/foreign.ttl`;
     await writeRdf(foreign, new Store(), { createOnly: true, fetchImpl: s.pod.fetch });
-    await s.store.deleteForever(foreign);
+    await expect(s.store.deleteForever(foreign, null)).rejects.toBeInstanceOf(
+      ConcurrencyValidatorError,
+    );
     expect(s.pod.has(foreign)).toBe(true);
   });
 
@@ -607,12 +611,14 @@ describe("notes store", () => {
         OutOfScopeError,
       );
       await expect(s.store.trash({ ...note, url })).rejects.toBeInstanceOf(OutOfScopeError);
-      await expect(s.store.deleteForever(url)).rejects.toBeInstanceOf(OutOfScopeError);
+      await expect(s.store.deleteForever(url, note.etag)).rejects.toBeInstanceOf(OutOfScopeError);
     }
     await expect(
       s.store.save({ ...note, location: "archived" }, {}, note.etag),
     ).rejects.toBeInstanceOf(OutOfScopeError);
-    await expect(s.store.deleteForever(note.url)).rejects.toBeInstanceOf(OutOfScopeError);
+    await expect(s.store.deleteForever(note.url, note.etag)).rejects.toBeInstanceOf(
+      OutOfScopeError,
+    );
     expect(s.calls).toEqual([]);
     s.intercept(
       async () =>
@@ -627,3 +633,99 @@ describe("notes store", () => {
 function noteWithoutEtag({ etag: _etag, ...note }: StoredNote) {
   return note;
 }
+
+it("never deletes a replacement at the confirmed trash URL", async () => {
+  const s = await fixture();
+  const confirmed = await s.store.trash(
+    await s.store.create({ title: "Same title", body: "Original" }),
+  );
+  const restored = await s.store.restore(confirmed);
+  await s.store.archive(restored);
+  const replacement = await s.store.trash(
+    await s.store.create({ title: "Same title", body: "Replacement" }),
+  );
+  expect(replacement.url).toBe(confirmed.url);
+  expect(replacement.etag).not.toBe(confirmed.etag);
+  s.calls.length = 0;
+  await expect(s.store.deleteForever(confirmed.url, confirmed.etag)).rejects.toBeInstanceOf(
+    NoteConflictError,
+  );
+  expect(s.calls).toEqual([{ url: confirmed.url, method: "DELETE", headers: expect.any(Headers) }]);
+  expect(s.calls[0]?.headers.get("if-match")).toBe(confirmed.etag);
+  expect(await s.store.read(replacement.url)).toEqual(replacement);
+});
+
+it("reports a typed purge conflict if trash is replaced after listing", async () => {
+  const s = await fixture();
+  s.clock(new Date(NOW.getTime() - 31 * 86_400_000));
+  const old = await s.store.trash(await s.store.create({ title: "Expired" }));
+  s.clock(NOW);
+  let replace = true;
+  s.intercept(async (url, init) => {
+    if (url !== old.url || init?.method !== "DELETE" || !replace) return;
+    replace = false;
+    await s.pod.fetch(url, { method: "DELETE" });
+    await writeRdf(url, buildNote(url, { title: "Unrelated", body: "Keep" }), {
+      createOnly: true,
+      fetchImpl: s.pod.fetch,
+    });
+  });
+  expect(await s.store.purgeTrash()).toEqual({
+    deleted: [],
+    failed: [{ url: old.url, error: expect.any(NoteConflictError) }],
+  });
+  expect((await s.store.read(old.url))?.body).toBe("Keep");
+});
+
+it("rolls back the stale destination on a concurrent source edit without a verification read", async () => {
+  const s = await fixture();
+  const original = await s.store.create({ title: "Concurrent", body: "Old content" });
+  const edited = await s.store.save(original, { body: "New content" }, original.etag);
+  s.calls.length = 0;
+  await expect(s.store.archive(original)).rejects.toBeInstanceOf(NoteConflictError);
+  expect(s.calls.filter((call) => call.method === "GET")).toEqual([]);
+  expect(await s.store.read(original.url)).toEqual(edited);
+  expect(s.pod.has(`${ROOT}archive/concurrent.ttl`)).toBe(false);
+});
+
+it.each([
+  "transport",
+  "http",
+  "redirect",
+])("rolls back a failed, uncommitted source delete (%s)", async (failure) => {
+  const s = await fixture();
+  const original = await s.store.create();
+  s.calls.length = 0;
+  s.intercept(async (url, init) => {
+    if (url !== original.url || init?.method !== "DELETE") return;
+    if (failure === "transport") throw new TypeError("Offline");
+    if (failure === "redirect")
+      return new Response(null, { status: 302, headers: { location: "https://evil.example/" } });
+    return new Response(null, { status: 403 });
+  });
+  await expect(s.store.archive(original)).rejects.toBeInstanceOf(
+    failure === "transport"
+      ? TypeError
+      : failure === "redirect"
+        ? RedirectRefusedError
+        : ResourceDeleteError,
+  );
+  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(
+    failure === "transport" ? 1 : 0,
+  );
+  expect(s.pod.has(original.url)).toBe(true);
+  expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
+});
+
+it("verifies a transport that rejects without an Error and rolls back its uncommitted copy", async () => {
+  const s = await fixture();
+  const original = await s.store.create();
+  s.calls.length = 0;
+  s.intercept(async (url, init) => {
+    if (url === original.url && init?.method === "DELETE") return Promise.reject();
+  });
+  await expect(s.store.archive(original)).rejects.toBeUndefined();
+  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(1);
+  expect(s.pod.has(original.url)).toBe(true);
+  expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
+});

@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import "./drive-ui-dom";
+import { toast } from "@jeswr/suite-ui";
 import { afterEach, expect, it, vi } from "vitest";
+import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
 import { notesPreferencesSchema, togglePinned } from "../src/apps/notes/lib/model/prefs";
 import { NotesStore, type StoredNote } from "../src/apps/notes/lib/model/store";
 import { useNotesMutations } from "../src/apps/notes/state/mutations";
@@ -184,4 +187,25 @@ it("replays pending optimistic patches and removes only failed intents before re
   await act(() => mutations.save(note, { labels: ["home"] }));
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(mutations.error).toBeUndefined();
+});
+
+it("passes the confirmed ETag through permanent deletion, refreshes on conflict, and shows the change", async () => {
+  const model = store();
+  const conflict = new NoteConflictError(note.url);
+  const deletion = vi.spyOn(model, "deleteForever").mockRejectedValue(conflict);
+  const refresh = vi.fn(async () => {});
+  const message = vi.spyOn(toast, "error").mockReturnValue("conflict");
+  let mutations!: ReturnType<typeof useNotesMutations>;
+  function Harness() {
+    mutations = useNotesMutations(model, refresh);
+    return null;
+  }
+  await mount(h(Harness));
+  await act(async () => {
+    await expect(mutations.deleteForever(note)).rejects.toBe(conflict);
+  });
+  expect(deletion).toHaveBeenCalledExactlyOnceWith(note.url, note.etag);
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(message).toHaveBeenCalledWith(expect.stringContaining("changed somewhere else"));
+  expect(mutations.project([note])).toEqual([note]);
 });

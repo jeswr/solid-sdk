@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
 import type { NotesStore, StoredNote } from "../src/apps/notes/lib/model/store";
+import { createDraftRegistry } from "../src/apps/notes/state/draft-registry";
 import { createPendingDrafts, type PendingDrafts } from "../src/apps/notes/state/pending-drafts";
 import { useNoteDraft } from "../src/apps/notes/state/use-note-draft";
 import { act, deferred, h, mount } from "./drive-ui-dom";
@@ -196,4 +197,43 @@ describe("Notes autosave", () => {
     expect(reopened.draft.status).toBe("saved");
     expect(save).toHaveBeenCalledTimes(1);
   });
+});
+
+it("opens a note with the newest orphan draft and saves the other orphan through the store", async () => {
+  localStorage.clear();
+  let clock = 1_000;
+  const registry = (id: string) =>
+    createDraftRegistry("https://pod.example/#me", {
+      storage: localStorage,
+      tabStorage: { getItem: () => id, setItem: vi.fn() },
+      now: () => clock,
+    });
+  const a = registry("a");
+  a.change(original, { title: "Older", body: "<p>A</p>", labels: ["Keep"] }, vi.fn());
+  clock++;
+  const b = registry("b");
+  b.change(original, { title: "Newest", body: "<p>B</p>", labels: [] }, vi.fn());
+  clock = 31_002;
+  const receiver = registry("receiver");
+  const create = vi.fn(async () => ({
+    ...original,
+    url: "https://pod.example/notes/recovered.ttl",
+  }));
+  const store = { save: vi.fn(), create } as unknown as NotesStore;
+  const refresh = vi.fn(async () => {});
+  let draft!: ReturnType<typeof useNoteDraft>;
+  function Harness() {
+    draft = useNoteDraft(original, store, refresh, receiver);
+    return null;
+  }
+  const ui = await mount(h(Harness));
+  expect(draft.draft).toEqual({ title: "Newest", body: "<p>B</p>", labels: [] });
+  expect(create).toHaveBeenCalledExactlyOnceWith({
+    title: "Older (recovered)",
+    body: "<p>A</p>",
+    labels: ["Keep"],
+  });
+  expect(refresh).toHaveBeenCalled();
+  (store.save as ReturnType<typeof vi.fn>).mockResolvedValue({ ...original, ...draft.draft });
+  await ui.unmount();
 });

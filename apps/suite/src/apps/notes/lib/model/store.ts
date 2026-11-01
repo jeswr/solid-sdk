@@ -8,6 +8,7 @@ import { documentSubject, type Revision } from "../../../docs/lib/model/document
 import {
   ConcurrencyValidatorError,
   OutOfScopeError,
+  ResourceDeleteError,
   ResourceWriteError,
 } from "../../../docs/lib/model/errors";
 import { isDirectChild, toSlug } from "../../../docs/lib/model/layout";
@@ -236,11 +237,17 @@ export class NotesStore {
 
   private async remove(url: string, etag: string | null): Promise<void> {
     this.validator(url, etag);
-    await deleteRdf(url, (input, init) => {
-      const headers = new Headers(init?.headers);
-      headers.set("if-match", etag as string);
-      return this.fetchImpl(input, { ...init, headers });
-    });
+    try {
+      await deleteRdf(url, (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set("if-match", etag as string);
+        return this.fetchImpl(input, { ...init, headers });
+      });
+    } catch (error) {
+      if (error instanceof ResourceDeleteError && error.status === 412)
+        throw new NoteConflictError(url, { cause: error });
+      throw error;
+    }
   }
 
   private async move(note: StoredNote, action: NoteAction): Promise<StoredNote> {
@@ -280,26 +287,29 @@ export class NotesStore {
     try {
       await this.remove(note.url, sourceEtag);
     } catch (error) {
-      // A lost DELETE response does not establish whether the server committed it.
-      // A different validator belongs to a replacement at the same slug. Keep
-      // the original's destination; existence alone cannot justify rollback.
-      try {
-        const source = await readRdf(note.url, this.fetchImpl);
-        if (
-          (source.etag !== null && source.etag !== sourceEtag) ||
-          new NoteDoc(documentSubject(note.url), source.dataset, DataFactory).body !== note.body
-        )
-          return moved;
-        this.validator(note.url, source.etag);
-      } catch (verification) {
-        if (
-          verification instanceof RdfFetchError &&
-          (verification.status === 404 || verification.status === 410)
-        )
-          return moved;
-        throw new NoteMoveUncertainError(note.url, moved.url, {
-          cause: new AggregateError([error, verification]),
-        });
+      // An HTTP failure is definitive. Only a lost response needs verification.
+      if (typeof (error as { status?: unknown } | null)?.status !== "number") {
+        // A lost DELETE response does not establish whether the server committed it.
+        // A different validator belongs to a replacement at the same slug. Keep
+        // the original's destination; existence alone cannot justify rollback.
+        try {
+          const source = await readRdf(note.url, this.fetchImpl);
+          if (
+            (source.etag !== null && source.etag !== sourceEtag) ||
+            new NoteDoc(documentSubject(note.url), source.dataset, DataFactory).body !== note.body
+          )
+            return moved;
+          this.validator(note.url, source.etag);
+        } catch (verification) {
+          if (
+            verification instanceof RdfFetchError &&
+            (verification.status === 404 || verification.status === 410)
+          )
+            return moved;
+          throw new NoteMoveUncertainError(note.url, moved.url, {
+            cause: new AggregateError([error, verification]),
+          });
+        }
       }
       try {
         await this.remove(moved.url, moved.etag);
@@ -328,10 +338,9 @@ export class NotesStore {
     return this.move(note, { type: "restore" });
   }
 
-  async deleteForever(url: string): Promise<void> {
+  async deleteForever(url: string, etag: string | null): Promise<void> {
     this.scope(url, "trashed");
-    const note = await this.read(url);
-    if (note) await this.remove(url, note.etag);
+    await this.remove(url, etag);
   }
 
   async purgeTrash(olderThanDays = 30): Promise<{ deleted: string[]; failed: NoteFailure[] }> {
@@ -343,7 +352,7 @@ export class NotesStore {
     for (const note of await this.list("trashed")) {
       if (note.trashedAt === undefined || !(Date.parse(note.trashedAt) < cutoff)) continue;
       try {
-        await this.remove(note.url, note.etag);
+        await this.deleteForever(note.url, note.etag);
         deleted.push(note.url);
       } catch (error) {
         failed.push({ url: note.url, error });

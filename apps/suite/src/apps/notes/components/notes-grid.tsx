@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, ErrorState, Skeleton } from "@jeswr/suite-ui";
 import { Search, StickyNote } from "lucide-react";
 import { useState } from "react";
+import { NoteConflictError } from "../lib/model/errors";
 import { selectNotes } from "../lib/model/query";
+import type { StoredNote } from "../lib/model/store";
 import { useNotesContext } from "../state/notes-context";
 import { CaptureBar } from "./capture-bar";
 import { ConfirmDialog } from "./controls";
@@ -19,7 +22,7 @@ export function NotesGrid({
   query?: string;
 }) {
   const { notes, prefs, active, archived, trashed, refresh, store } = useNotesContext();
-  const [emptying, setEmptying] = useState(false);
+  const [emptying, setEmptying] = useState<StoredNote[]>();
   const location = view === "archived" || view === "trashed" ? view : "active";
   const resource = location === "archived" ? archived : location === "trashed" ? trashed : active;
   const searching = view === "search";
@@ -70,7 +73,10 @@ export function NotesGrid({
         <div className="notes-trash-banner">
           <p>Notes in Trash are deleted after 30 days.</p>
           {count > 0 && (
-            <Button variant="outline" onClick={() => setEmptying(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setEmptying(notes.filter((note) => note.location === "trashed"))}
+            >
               Empty trash
             </Button>
           )}
@@ -130,14 +136,17 @@ export function NotesGrid({
         <ConfirmDialog
           title="Empty trash"
           description="Permanently delete all notes in Trash? This cannot be undone."
-          close={() => setEmptying(false)}
+          close={() => setEmptying(undefined)}
           confirm={async () => {
             const results = await Promise.allSettled(
-              notes
-                .filter((note) => note.location === "trashed")
-                .map((note) => store.deleteForever(note.url)),
+              emptying.map((note) => store.deleteForever(note.url, note.etag)),
             );
             await refresh();
+            const conflict = results.find(
+              (result) =>
+                result.status === "rejected" && result.reason instanceof NoteConflictError,
+            );
+            if (conflict?.status === "rejected") throw conflict.reason;
             if (results.some((result) => result.status === "rejected"))
               throw new Error("Some notes could not be deleted");
           }}

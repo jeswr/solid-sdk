@@ -17,6 +17,7 @@ import {
 import { Palette, Tag } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
+import { NoteConflictError } from "../lib/model/errors";
 import { NoteColour } from "../lib/model/prefs";
 import { useNotesContext } from "../state/notes-context";
 
@@ -158,7 +159,7 @@ export function ConfirmDialog({
   close: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string>();
   return (
     <Dialog
       open
@@ -175,7 +176,7 @@ export function ConfirmDialog({
       >
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
-        {failed && <p role="alert">Couldn't complete this action. Please try again.</p>}
+        {failed && <p role="alert">{failed}</p>}
         <div className="notes-confirm-actions">
           <Button id="notes-cancel-delete" variant="outline" disabled={busy} onClick={close}>
             Cancel
@@ -185,9 +186,15 @@ export function ConfirmDialog({
             disabled={busy}
             onClick={() => {
               setBusy(true);
-              setFailed(false);
+              setFailed(undefined);
               void confirm()
-                .then(close, () => setFailed(true))
+                .then(close, (error) =>
+                  setFailed(
+                    error instanceof NoteConflictError
+                      ? "This note changed somewhere else. The list has been refreshed."
+                      : "Couldn't complete this action. Please try again.",
+                  ),
+                )
                 .finally(() => setBusy(false));
             }}
           >

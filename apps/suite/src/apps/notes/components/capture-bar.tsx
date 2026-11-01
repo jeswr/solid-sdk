@@ -20,7 +20,7 @@ const captureDraft = z.object({
   labels: z.array(z.string()),
   pinned: z.boolean(),
   colour: NoteColour,
-  error: z.string(),
+  error: z.string().optional(),
 });
 
 export function CaptureBar({ label }: { label?: string }) {
@@ -35,6 +35,23 @@ export function CaptureBar({ label }: { label?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const recovery = useRef<string | null>(null);
+  const captureSnapshot = useRef<string | null>(null);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const captureText = expanded
+    ? JSON.stringify({ webId: session.webId, title, body, items, labels, pinned, colour, error })
+    : null;
+  captureSnapshot.current = captureText;
+  const persistCapture = useCallback(() => {
+    clearTimeout(persistTimer.current);
+    const text = captureSnapshot.current;
+    if (text === null) return;
+    try {
+      localStorage.setItem(captureKey, text);
+      recovery.current = text;
+    } catch {
+      // The mounted form still retains its text if browser storage is full.
+    }
+  }, []);
   const submitted = useRef(false);
   const mounted = useRef(false);
   const root = useRef<HTMLDivElement>(null);
@@ -64,6 +81,7 @@ export function CaptureBar({ label }: { label?: string }) {
     if (input) {
       const saved = { ...input, labels };
       submitted.current = true;
+      persistCapture();
       if (mounted.current) setBusy(true);
       try {
         await create(saved, pinned, colour);
@@ -95,6 +113,8 @@ export function CaptureBar({ label }: { label?: string }) {
         });
         return;
       }
+      captureSnapshot.current = null;
+      clearTimeout(persistTimer.current);
       try {
         if (recovery.current !== null && localStorage.getItem(captureKey) === recovery.current)
           localStorage.removeItem(captureKey);
@@ -134,6 +154,26 @@ export function CaptureBar({ label }: { label?: string }) {
       // Empty, invalid or unavailable storage leaves a fresh capture form.
     }
   }, [session.webId]);
+  useEffect(() => {
+    if (captureText === null) return;
+    persistTimer.current = setTimeout(persistCapture, 200);
+    return () => clearTimeout(persistTimer.current);
+  }, [captureText, persistCapture]);
+  const latestPersist = useRef(persistCapture);
+  latestPersist.current = persistCapture;
+  useEffect(() => {
+    const flush = () => latestPersist.current();
+    const hidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      flush();
+      removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, []);
   useEffect(() => {
     mounted.current = true;
     return () => {

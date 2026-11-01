@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NoteConflictError } from "../lib/model/errors";
 import type { NoteChanges, NotesStore, StoredNote } from "../lib/model/store";
+import type { DraftRegistry } from "./draft-registry";
 import type { NoteDraft, PendingDrafts } from "./pending-drafts";
 
 /** The shared registry owns the writer; this hook only owns the visible draft and debounce. */
@@ -11,7 +12,7 @@ export function useNoteDraft(
   note: StoredNote,
   store: NotesStore,
   onSaved: () => Promise<unknown>,
-  pending: PendingDrafts,
+  pending: PendingDrafts & Partial<Pick<DraftRegistry, "recover">>,
 ) {
   const baseline = useRef(pending.get(note.url)?.note ?? note);
   const [draft, setDraft] = useState<NoteDraft>(
@@ -46,13 +47,18 @@ export function useNoteDraft(
       setDraft(value);
       setStatus(entry?.status ?? "saved");
     });
+    void pending.recover?.(baseline.current, async (input) => {
+      const recovered = await store.create(input);
+      void callback.current();
+      return recovered;
+    });
     return () => {
       unsubscribe();
       // change() already handed off and durably recorded the latest snapshot synchronously.
       // This writer stays alive after unmount and uses each acknowledged ETag in order.
       void flush().catch(() => {});
     };
-  }, [pending, save, flush, note.url]);
+  }, [pending, save, flush, note.url, store]);
   const change = (patch: NoteChanges) => {
     pending.change(
       baseline.current,
