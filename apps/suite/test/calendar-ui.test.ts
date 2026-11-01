@@ -385,10 +385,17 @@ it("exposes optimistic mutation hooks and refreshes subscriptions without leakin
   expect(latest?.status).toBe("error");
 });
 
-it("reconciles open details after subscription renames and closes them after deletion", async () => {
-  const mounted = await mount(screen());
+it.each([
+  "week",
+  "month",
+] as const)("reconciles open %s details after remote edits and restores focus after deletion", async (view) => {
+  mocks.path = `/calendar/${view}`;
+  const mounted = await mount(screen(view));
   await settle();
-  await click(buttons(mounted.host, "Team stand-up,")[0] as HTMLElement);
+  const trigger = buttons(mounted.host, "Team stand-up,")[0] as HTMLElement;
+  const day = trigger.closest<HTMLElement>("[data-day]");
+  const fallback = day ?? mounted.host.querySelector("#main-content");
+  await click(trigger);
   const account = mocks.session as PodSession;
   const io = calendarIO(account.fetch, account.storageUrl);
   const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
@@ -403,12 +410,50 @@ it("reconciles open details after subscription renames and closes them after del
   });
   await settle();
   expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe("Renamed remotely");
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close event details");
   await act(async () => {
     const current = await io.loadEvent(url);
     await io.removeEvent(url, current?.etag as string);
   });
   await settle();
   expect(mounted.host.querySelector(".cal-details")).toBeNull();
+  expect(fallback?.isConnected).toBe(true);
+  expect(document.activeElement).toBe(fallback);
+});
+
+it("places adjacent 15-minute events in separate columns for their full 24px targets", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  for (const [name, start, end] of [
+    ["First short event", "13:00", "13:15"],
+    ["Second short event", "13:15", "13:30"],
+  ] as const) {
+    await io.saveEvent(
+      `${DEMO_ROOT}calendar/work/${start}.ttl`,
+      {
+        name,
+        start: new Date(`2026-11-01T${start}:00Z`),
+        end: new Date(`2026-11-01T${end}:00Z`),
+        inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+      },
+      { create: true },
+    );
+  }
+  const mounted = await mount(screen("day"));
+  await settle();
+  const first = buttons(mounted.host, "First short event,")[0] as HTMLButtonElement;
+  const second = buttons(mounted.host, "Second short event,")[0] as HTMLButtonElement;
+  expect(first.style.height).toBe("24px");
+  expect(second.style.height).toBe("24px");
+  expect(parseFloat(second.style.top) - parseFloat(first.style.top)).toBe(12);
+  expect(first.style.left).not.toBe(second.style.left);
+  for (const button of [first, second]) {
+    await click(button);
+    expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe(
+      button.textContent?.split(",")[0],
+    );
+    await click(mounted.host.querySelector('[aria-label="Close event details"]') as HTMLElement);
+  }
 });
 
 it.each([

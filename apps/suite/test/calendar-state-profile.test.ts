@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { podScopedUrl } from "@jeswr/guarded-fetch";
 import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,14 +8,21 @@ import {
   buildCalendar,
   buildEvent,
   CALENDAR_CLASS,
+  calendarIO,
+  EVENT_CLASS,
   serializeDataset,
 } from "../src/apps/calendar/lib/model";
 import {
   type CalendarAccount,
+  createCalendar,
   discoverCalendars,
   loadRange,
 } from "../src/apps/calendar/state/repository";
-import { ProfileTypeIndexAnchor, TypeRegistration } from "../src/apps/docs/lib/model/type-index";
+import {
+  ProfileTypeIndexAnchor,
+  TypeIndexDataset,
+  TypeRegistration,
+} from "../src/apps/docs/lib/model/type-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
 // The production default captures the pristine global before an authenticated fetch can replace it.
@@ -115,6 +123,63 @@ it.each([
   expect(range.events.map((event) => event.data.name)).toEqual(["Legacy event"]);
   expect(publicRead).toHaveBeenCalledOnce();
   expect(authenticated.mock.calls.every(([input]) => String(input).startsWith(root))).toBe(true);
+});
+
+it.each([
+  false,
+  true,
+])("creates and registers a calendar with a separate-origin WebID (injected public fetch: %s)", async (injected) => {
+  const { account, authenticated, pod } = await setup();
+  if (injected) account.publicFetch = publicRead;
+  const { namedNode, quad } = DataFactory;
+  const acl = "http://www.w3.org/ns/auth/acl#";
+  const owner = namedNode(`${root}.acl#owner`);
+  const permissions = new Store([
+    quad(
+      owner,
+      namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+      namedNode(`${acl}Authorization`),
+    ),
+    quad(owner, namedNode(`${acl}agent`), namedNode(account.webId)),
+    quad(owner, namedNode(`${acl}default`), namedNode(root)),
+    ...["Read", "Write", "Control"].map((mode) =>
+      quad(owner, namedNode(`${acl}mode`), namedNode(`${acl}${mode}`)),
+    ),
+  ]);
+  await pod.fetch(`${root}.acl`, {
+    method: "PUT",
+    body: await serializeDataset(permissions),
+    headers: { "Content-Type": "text/turtle" },
+  });
+  await createCalendar(account, "New Calendar", "#123abc");
+  expect(publicRead).toHaveBeenCalledOnce();
+  expect(authenticated.mock.calls.every(([input]) => podScopedUrl(root, String(input)))).toBe(true);
+  const writes = authenticated.mock.calls.filter(([, init]) => init?.method === "PUT");
+  expect(writes.map(([input]) => String(input))).toEqual([
+    `${root}calendar/new-calendar.ttl`,
+    `${root}calendar/new-calendar/`,
+    `${root}settings/index.ttl`,
+  ]);
+  expect(new Headers(writes[0]?.[1]?.headers).get("If-None-Match")).toBe("*");
+  expect(new Headers(writes[1]?.[1]?.headers).get("If-None-Match")).toBe("*");
+  expect(new Headers(writes[2]?.[1]?.headers).get("If-Match")).toMatch(/^".+"$/);
+  const io = calendarIO(account.fetch, root);
+  expect((await io.loadCalendar(`${root}calendar/new-calendar.ttl`))?.data.title).toBe(
+    "New Calendar",
+  );
+  expect(await io.listResources(`${root}calendar/new-calendar/`)).toEqual([]);
+  const { dataset } = await fetchRdf(`${root}settings/index.ttl`, { fetch: pod.fetch });
+  const index = new TypeIndexDataset(dataset, DataFactory);
+  expect(index.locate(CALENDAR_CLASS)).toContainEqual({
+    forClass: CALENDAR_CLASS,
+    instance: `${root}calendar/new-calendar.ttl#it`,
+    container: undefined,
+  });
+  expect(index.locate(EVENT_CLASS)).toContainEqual({
+    forClass: EVENT_CLASS,
+    instance: undefined,
+    container: `${root}calendar/new-calendar/`,
+  });
 });
 
 it("refuses a public profile redirect without calling the session fetch or following the destination", async () => {

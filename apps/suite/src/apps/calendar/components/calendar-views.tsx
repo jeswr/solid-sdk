@@ -236,7 +236,14 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
   const count = view === "week" ? 7 : 1;
   const days = Array.from({ length: count }, (_, i) => addDays(range.from, i));
   const projected = projectTimed(events, range.from, count);
-  const placements = layoutTimeGrid(projected, count);
+  // Collision intervals include the 24px target at 0.8px per minute.
+  const placements = layoutTimeGrid(
+    projected.map((event) => ({
+      ...event,
+      endMinute: Math.min(1440, Math.max(event.endMinute, event.startMinute + 30)),
+    })),
+    count,
+  );
   const allDay = events.filter((e) => typeof e.data.start === "string");
   const bars = layoutAllDayEvents(
     allDay.map((event) => ({

@@ -44,18 +44,29 @@ export function calendarSlug(title: string): string {
   if (!slug) throw new TypeError("Enter a calendar name containing letters or numbers");
   return slug;
 }
+/** Public profile GETs are the only requests allowed outside storage. */
+function calendarFetch(account: CalendarAccount): typeof globalThis.fetch {
+  const fetch = createPodScopedFetch(account.storageUrl, { fetch: account.fetch });
+  const profileUrl = calendarDocument(account.webId);
+  const profileFetch = refuseRedirects((input, init) =>
+    (account.publicFetch ?? publicFetch)(input, { ...init, credentials: "omit" }),
+  );
+  return (input, init) => {
+    const request = new Request(input, init);
+    return request.method === "GET" &&
+      calendarDocument(request.url) === profileUrl &&
+      !podScopedUrl(account.storageUrl, profileUrl)
+      ? profileFetch(profileUrl, init)
+      : fetch(input, init);
+  };
+}
 export async function discoverCalendars(
   account: CalendarAccount,
 ): Promise<{ calendars: CalendarInfo[]; warnings: CalendarWarning[] }> {
   const fetch = createPodScopedFetch(account.storageUrl, { fetch: account.fetch });
   const io = calendarIO(account.fetch, account.storageUrl);
   const profileUrl = calendarDocument(account.webId);
-  const profileFetch = podScopedUrl(account.storageUrl, profileUrl)
-    ? fetch
-    : refuseRedirects((input, init) =>
-        (account.publicFetch ?? publicFetch)(input, { ...init, credentials: "omit" }),
-      );
-  const { dataset } = await fetchRdf(profileUrl, { fetch: profileFetch });
+  const { dataset } = await fetchRdf(profileUrl, { fetch: calendarFetch(account) });
   const anchor = new ProfileTypeIndexAnchor(account.webId, dataset, DataFactory);
   const indexes = new Set(anchor.privateIndexes);
   for (const prefs of anchor.preferencesFiles) {
@@ -148,7 +159,7 @@ export async function createCalendar(
     webId: account.webId,
     podRoot: account.storageUrl,
     registrations: [],
-    fetchImpl: account.fetch,
+    fetchImpl: calendarFetch(account),
   });
   await io.registerCalendar(indexUrl, url, container);
   attempts.delete(attempt);

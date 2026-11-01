@@ -153,12 +153,6 @@ function SessionCalendarProvider({
     },
     [session, reload],
   );
-  const reconcile = useCallback(
-    (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => {
-      setSelected((current) => reconcileOccurrence(current, events, from, to, failedCalendars));
-    },
-    [],
-  );
   const openEvent = useCallback((event: Occurrence, element: HTMLElement, day?: HTMLElement) => {
     trigger.current = element;
     returnDay.current = day ?? element.closest<HTMLElement>("[data-day]");
@@ -179,6 +173,14 @@ function SessionCalendarProvider({
       target?.focus();
     });
   }, []);
+  const reconcile = useCallback(
+    (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => {
+      const next = reconcileOccurrence(selected, events, from, to, failedCalendars);
+      if (selected && !next) closeEvent();
+      else setSelected(next);
+    },
+    [selected, closeEvent],
+  );
   return (
     <Context
       value={{

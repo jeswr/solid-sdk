@@ -341,6 +341,50 @@ test("short timed chips keep one uncut line and full accessible details", async 
   }
 });
 
+test("adjacent 15-minute events have disjoint 24px click targets", async ({ page }) => {
+  await open(page, "day");
+  const edits = await Promise.all(
+    [
+      ["First short event", "13:00", "13:15"],
+      ["Second short event", "13:15", "13:30"],
+    ].map(async ([name, start, end], index) => {
+      const path = `calendar/personal/busy-${index}.ttl`;
+      return {
+        path,
+        body: await serializeDataset(
+          buildEvent(`${ROOT}${path}`, {
+            name: name as string,
+            start: new Date(`${DATE}T${start}:00Z`),
+            end: new Date(`${DATE}T${end}:00Z`),
+            inCalendar: `${ROOT}calendar/personal.ttl#it`,
+          }),
+        ),
+      };
+    }),
+  );
+  await editDemo(page, edits);
+  const first = page.getByRole("button", { name: /^First short event,/ });
+  const second = page.getByRole("button", { name: /^Second short event,/ });
+  await expect(first).toBeAttached();
+  await expect(second).toBeAttached();
+  await first.scrollIntoViewIfNeeded();
+  const a = await first.boundingBox();
+  const b = await second.boundingBox();
+  if (!a || !b) throw new Error("Missing short event targets");
+  expect(a.height).toBeGreaterThanOrEqual(24);
+  expect(b.height).toBeGreaterThanOrEqual(24);
+  expect(b.y - a.y).toBe(12);
+  expect(a.x + a.width <= b.x || b.x + b.width <= a.x).toBe(true);
+  for (const [chip, name] of [
+    [first, "First short event"],
+    [second, "Second short event"],
+  ] as const) {
+    await chip.click();
+    await expect(page.locator(".cal-details h2")).toHaveText(name);
+    await page.getByRole("button", { name: "Close event details", exact: true }).click();
+  }
+});
+
 test("the Sunday seed shows the trip in the default week and month", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("button", { name: /^Three-day trip,/ })).toBeVisible();
@@ -377,10 +421,14 @@ test("open details follow a remote rename and close after remote deletion", asyn
   await expect(
     page.getByRole("heading", { name: "Renamed in another tab", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Close event details", exact: true }),
+  ).toBeFocused();
   await editDemo(page, [{ path, body: null }]);
   await expect(
     page.getByRole("heading", { name: "Renamed in another tab", exact: true }),
   ).toHaveCount(0);
+  await expect(page.locator("#main-content")).toBeFocused();
 });
 
 for (const path of ["profile/card", "settings/privateTypeIndex.ttl"]) {
