@@ -153,12 +153,25 @@ describe("Music library on the demo pod", () => {
     const extensionless = new Store();
     new Track(`${base}tracks/source#it`, extensionless).stampType().title = "No extension";
     await createDocument(pod.fetch, root, `${base}tracks/source`, extensionless);
+    const binary = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2, 0xff, 0xd9]);
+    await pod.fetch(`${base}artwork/cover.jpg`, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: binary,
+    });
+    await pod.fetch(`${base}tracks/not-rdf.ttl`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: binary,
+    });
     const library = await loadLibrary(pod.fetch, root);
     expect(library.albums.find((a) => a.title === "An upcoming album")?.tracks).toEqual([]);
     expect(library.artists.find((a) => a.name === "A followed artist")?.albumIds).toEqual([
       emptyAlbum.value,
     ]);
     expect(library.tracks.some((t) => t.title === "No extension")).toBe(true);
+    expect(library.documents.has(`${base}artwork/cover.jpg`)).toBe(false);
+    expect(library.documents.has(`${base}tracks/not-rdf.ttl`)).toBe(false);
     expect(library.tracks.find((t) => t.title === "Unknown")).toMatchObject({
       artist: "Unknown artist",
       albumTitle: "Unknown album",
@@ -168,6 +181,63 @@ describe("Music library on the demo pod", () => {
       artist: "A Person",
       albumTitle: "Literal album",
     });
+  });
+  it("keeps same-name artist identities and literal-only credits separate in joins and statistics", async () => {
+    const { pod, artist, tracks } = await fixture();
+    const dataset = new Store();
+    const other = new Artist(`${base}artists/other.ttl#it`, dataset).stampType();
+    other.title = artist.title;
+    const album = new Album(`${base}albums/other.ttl#it`, dataset).stampType();
+    album.title = "Another World";
+    album.setArtist(other.value);
+    const named = new Track(`${base}tracks/other.ttl#named`, dataset).stampType();
+    named.title = "Other identity";
+    named.setArtist(other.value);
+    named.setAlbum(album.value);
+    const literal = new Track(`${base}tracks/other.ttl#literal`, dataset).stampType();
+    literal.title = "Literal credit";
+    literal.writeString(`${S}byArtist`, artist.title);
+    await createDocument(pod.fetch, root, `${base}tracks/other.ttl`, dataset);
+    const library = await loadLibrary(pod.fetch, root);
+    expect(library.artists).toHaveLength(3);
+    expect(
+      library.artists
+        .find((a) => a.id === artist.value)
+        ?.tracks.map((t) => t.id)
+        .sort(),
+    ).toEqual(tracks.map((t) => t.value).sort());
+    expect(library.artists.find((a) => a.id === other.value)).toMatchObject({
+      key: other.value,
+      albumIds: [album.value],
+      tracks: [{ id: named.value }],
+    });
+    const inferred = library.artists.find((a) => a.key === artist.title);
+    expect(inferred?.tracks.map((t) => t.id)).toEqual([literal.value]);
+    expect(inferred?.id).not.toBe(artist.value);
+    const history = [tracks[0]?.value, named.value, named.value, literal.value].map(
+      (trackIri, index) => ({ iri: `play-${index}`, trackIri: trackIri as string, startTime: now }),
+    );
+    expect(computeTopArtists(history, library.models.tracks, "Today", now)).toEqual([
+      { key: other.value, name: artist.title, plays: 2 },
+      ...[
+        { key: artist.value, name: artist.title, plays: 1 },
+        { key: artist.title, name: artist.title, plays: 1 },
+      ].sort((a, b) => a.key.localeCompare(b.key)),
+    ]);
+    expect(
+      mostPlayedTracks(library, history, "Today", now)
+        .filter((entry) => entry.track.artistId === other.value)
+        .map((entry) => entry.track.id),
+    ).toEqual([named.value]);
+  });
+  it("retains the model's Turtle fallback when a server omits Content-Type", async () => {
+    const { pod } = await fixture();
+    const missingContentType: typeof fetch = async (input, init) => {
+      const response = await pod.fetch(input, init);
+      response.headers.delete("content-type");
+      return response;
+    };
+    expect((await loadLibrary(missingContentType, root)).tracks).toHaveLength(3);
   });
   it("rejects failures and missing ETags, enforces scope and create-only writes", async () => {
     const { pod } = await fixture();
@@ -249,6 +319,11 @@ describe("Playlists and likes", () => {
     });
     playlist = await current();
     expect(playlist.name).toBe("Renamed");
+    playlist = await editPlaylist(pod.fetch, root, playlist, { kind: "rename", name: "Name only" });
+    expect(playlist.description).toBe("New description");
+    playlist = await editPlaylist(pod.fetch, root, playlist, { kind: "rename", description: "" });
+    expect(playlist.name).toBe("Name only");
+    expect(playlist.description).toBe("");
     expect(
       new Playlist(playlist.id, (await loadMusic(pod.fetch, `${base}playlists/a.ttl`)).dataset)
         .tracks,

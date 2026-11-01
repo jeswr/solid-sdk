@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { extractMediaType, RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import {
   assertWithinPodScope,
   createPodScopedFetch,
@@ -7,7 +7,7 @@ import {
   podScopedUrl,
 } from "@jeswr/guarded-fetch";
 import { Container } from "@solid/object";
-import { createNameComparator, groupAlbums, groupArtists, type LibraryTrack } from "../library";
+import { createNameComparator, groupAlbums, type LibraryTrack, totalDuration } from "../library";
 import {
   DataFactory,
   InvalidMusicError,
@@ -20,6 +20,8 @@ import {
 } from "../model";
 import { S } from "../model/vocab";
 
+const rdfMediaTypes = new Set<string>(SUPPORTED_RDF_MEDIA_TYPES);
+
 export interface MusicTrack extends LibraryTrack {
   artistId: string;
   loved: boolean;
@@ -30,7 +32,15 @@ export interface MusicTrack extends LibraryTrack {
 export interface Library {
   tracks: MusicTrack[];
   albums: ReturnType<typeof groupAlbums>;
-  artists: (ReturnType<typeof groupArtists>[number] & { id: string })[];
+  artists: {
+    id: string;
+    /** The model's statistics key: an IRI, or a literal-only credit. */
+    key: string;
+    name: string;
+    albumIds: string[];
+    tracks: MusicTrack[];
+    durationSeconds: number | undefined;
+  }[];
   models: ReturnType<typeof readLibrary>;
   documents: Map<string, MusicDocument>;
 }
@@ -74,7 +84,18 @@ export async function loadLibrary(
   async function walk(url: string): Promise<void> {
     let doc: MusicDocument;
     try {
-      doc = await loadMusic(scoped, url);
+      const response = await scoped(url, {
+        headers: { Accept: "text/turtle, application/ld+json;q=0.9" },
+      });
+      if (
+        response.ok &&
+        !rdfMediaTypes.has(extractMediaType(response.headers.get("content-type")) ?? "text/turtle")
+      ) {
+        await response.body?.cancel();
+        return;
+      }
+      // Reuse the response; the model still owns parsing and blank-node scoping.
+      doc = await loadMusic(async () => response, url);
     } catch (error) {
       if (error instanceof RdfFetchError && error.status === 404) return;
       throw error;
@@ -94,19 +115,20 @@ export async function loadLibrary(
   await walk(musicRoot(root));
   await walk(new URL("integrations/spotify/music/", root).href);
   const models = readLibrary(dataset);
+  const artistKeys = new Map<string, string>();
   const tracks: MusicTrack[] = models.tracks.map((track) => {
     const artist = track.artists[0];
     const album = track.album;
+    const artistId =
+      artist?.iri ??
+      new URL(`artists/inferred-${encodeURIComponent(artist?.name ?? "unknown")}`, musicRoot(root))
+        .href;
+    artistKeys.set(artistId, artist?.iri ?? artist?.name ?? "Unknown artist");
     return {
       id: track.value,
       title: track.title,
       artist: artist?.name ?? "Unknown artist",
-      artistId:
-        artist?.iri ??
-        new URL(
-          `artists/inferred-${encodeURIComponent(artist?.name ?? "unknown")}`,
-          musicRoot(root),
-        ).href,
+      artistId,
       albumId:
         album?.iri ??
         new URL(`albums/inferred-${encodeURIComponent(album?.name ?? "unknown")}`, musicRoot(root))
@@ -138,14 +160,29 @@ export async function loadLibrary(
         durationSeconds: 0,
       });
   }
-  const artists = groupArtists(tracks).map((artist) => ({
-    ...artist,
-    id: (tracks.find((track) => track.artist === artist.name) as MusicTrack).artistId,
+  const groups = new Map<string, MusicTrack[]>();
+  const byId = new Map(tracks.map((track) => [track.id, track]));
+  // Keep album/disc/track order, grouping on identity rather than the display name.
+  for (const album of albums)
+    for (const member of album.tracks) {
+      const track = byId.get(member.id) as MusicTrack;
+      const group = groups.get(track.artistId);
+      if (group) group.push(track);
+      else groups.set(track.artistId, [track]);
+    }
+  const artists: Library["artists"] = [...groups].map(([id, members]) => ({
+    id,
+    key: artistKeys.get(id) as string,
+    name: (members[0] as MusicTrack).artist,
+    tracks: members,
+    albumIds: [...new Set(members.map((track) => track.albumId))],
+    durationSeconds: totalDuration(members),
   }));
   for (const artist of models.artists) {
     if (!artists.some((group) => group.id === artist.value))
       artists.push({
         id: artist.value,
+        key: artist.value,
         name: artist.title,
         albumIds: models.albums
           .filter((album) => album.artists.some((ref) => ref.iri === artist.value))

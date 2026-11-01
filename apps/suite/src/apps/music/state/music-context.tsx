@@ -25,7 +25,7 @@ import {
   type PlaylistEdit,
 } from "../lib/data/playlists";
 import { type PreferencesSnapshot, preferencesStore } from "../lib/data/preferences";
-import { MusicWriteError, type Playback } from "../lib/model";
+import { type MusicDocument, MusicWriteError, type Playback } from "../lib/model";
 
 export interface MusicSnapshot {
   library: Library;
@@ -34,6 +34,7 @@ export interface MusicSnapshot {
   preferences: PreferencesSnapshot;
 }
 type Patch = (snapshot: MusicSnapshot) => MusicSnapshot;
+type ConfirmedWrite = { apply: Patch; document?: Pick<MusicDocument, "url" | "etag"> };
 type State = {
   status: "loading" | "ready" | "empty" | "error";
   snapshot?: MusicSnapshot;
@@ -64,7 +65,11 @@ export function optimisticPlaylist(
     playlists: snapshot.playlists.map((playlist) => {
       if (playlist.id !== id) return playlist;
       if (edit.kind === "rename")
-        return { ...playlist, name: edit.name.trim(), description: edit.description.trim() };
+        return {
+          ...playlist,
+          ...(edit.name !== undefined ? { name: edit.name.trim() } : {}),
+          ...(edit.description !== undefined ? { description: edit.description.trim() } : {}),
+        };
       const tracks = [...playlist.tracks];
       if (edit.kind === "add") tracks.push(...edit.tracks);
       else if (edit.kind === "remove") tracks.splice(edit.position, 1);
@@ -90,6 +95,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
   const mounted = useRef(false);
   const counter = useRef(0);
   const months = useRef(13);
+  const olderRequest = useRef<Promise<void> | undefined>(undefined);
   const dirty = useRef(false);
   const reconciliationPending = useRef(false);
   const publish = useCallback(() => {
@@ -98,14 +104,24 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     setState({ status: snapshot.library.tracks.length ? "ready" : "empty", snapshot });
     setSaving(patches.current.length > 0);
   }, []);
-  const read = useCallback(async (): Promise<MusicSnapshot> => {
-    const [library, history, preferences] = await Promise.all([
-      loadLibrary(session.fetch, session.storageUrl),
-      loadHistory(session.fetch, session.storageUrl, new Date(), months.current),
-      preferencesStore(session.fetch, session.storageUrl).load(),
-    ]);
-    return { library, playlists: listPlaylists(library), history, preferences };
-  }, [session]);
+  const read = useCallback(
+    async function read(): Promise<{ snapshot: MusicSnapshot; months: number }> {
+      const range = months.current;
+      const [library, history, preferences] = await Promise.all([
+        loadLibrary(session.fetch, session.storageUrl),
+        loadHistory(session.fetch, session.storageUrl, new Date(), range),
+        preferencesStore(session.fetch, session.storageUrl).load(),
+      ]);
+      // A pagination request may have extended the range while this read was in flight.
+      // Retry the complete snapshot so neither refresh nor write reconciliation drops it.
+      if (range !== months.current) return read();
+      return {
+        snapshot: { library, playlists: listPlaylists(library), history, preferences },
+        months: range,
+      };
+    },
+    [session],
+  );
   const refresh = useCallback(async () => {
     if (patches.current.length) {
       dirty.current = true;
@@ -115,17 +131,18 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     const request = ++generation.current;
     try {
       await ensureSample(session);
-      let snapshot = await read();
+      let loaded = await read();
       try {
-        if (await retryLikedSync(session.fetch, session.storageUrl, snapshot.library)) {
-          snapshot = await read();
+        if (await retryLikedSync(session.fetch, session.storageUrl, loaded.snapshot.library)) {
+          loaded = await read();
           setNotice("Liked songs playlist synchronized.");
         }
       } catch {
         setNotice("Liked songs are saved. Playlist synchronization is pending; refresh to retry.");
       }
+      while (loaded.months !== months.current) loaded = await read();
       if (mounted.current && request === generation.current && !patches.current.length) {
-        baseline.current = snapshot;
+        baseline.current = loaded.snapshot;
         reconciliationPending.current = false;
         publish();
       }
@@ -176,9 +193,29 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     };
   }, [session, refresh]);
 
+  function confirm({ apply, document }: ConfirmedWrite) {
+    // Every writer installs its returned snapshot/ETag before any fallible refresh.
+    // Queued writes always start from this confirmed baseline.
+    ++generation.current;
+    if (!baseline.current) return;
+    const next = { ...apply(baseline.current) };
+    if (document) {
+      const documents = new Map(next.library.documents);
+      const previous = documents.get(document.url);
+      if (previous) documents.set(document.url, { ...previous, ...document });
+      next.library = { ...next.library, documents };
+      next.playlists = next.playlists.map((playlist) =>
+        playlist.id.split("#")[0] === document.url
+          ? { ...playlist, etag: document.etag }
+          : playlist,
+      );
+    }
+    baseline.current = next;
+  }
+
   function mutate(
     apply: Patch,
-    work: (current: MusicSnapshot) => Promise<Patch> | Promise<void>,
+    work: (current: MusicSnapshot) => Promise<ConfirmedWrite> | Promise<void>,
     success: string,
     playlistId?: string,
     positional = false,
@@ -196,11 +233,11 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       try {
         if (!baseline.current) throw new Error("Music is unavailable");
         const committed = await work(baseline.current);
-        baseline.current = (committed ?? apply)(baseline.current);
+        confirm(committed ?? { apply });
         ok = true;
       } catch (error) {
         if (error instanceof LikedSyncPendingError) {
-          if (baseline.current) baseline.current = apply(baseline.current);
+          confirm({ apply, document: error.document });
           ok = true;
           message = "Liked songs are saved. Playlist synchronization is pending; refresh to retry.";
         } else {
@@ -218,7 +255,9 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       // Reconciliation cannot turn a committed write into a failed save. Keep its
       // result (including fresh playlist ETags) and retry reads on refresh/focus.
       try {
-        baseline.current = await read();
+        let loaded = await read();
+        while (loaded.months !== months.current) loaded = await read();
+        baseline.current = loaded.snapshot;
         reconciliationPending.current = false;
       } catch {
         if (ok) {
@@ -241,17 +280,27 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     notice,
     refresh,
     like(id, loved) {
+      const apply: Patch = (snapshot) => ({
+        ...snapshot,
+        library: {
+          ...snapshot.library,
+          tracks: snapshot.library.tracks.map((track) =>
+            track.id === id ? { ...track, loved } : track,
+          ),
+        },
+      });
       void mutate(
-        (snapshot) => ({
-          ...snapshot,
-          library: {
-            ...snapshot.library,
-            tracks: snapshot.library.tracks.map((track) =>
-              track.id === id ? { ...track, loved } : track,
-            ),
-          },
-        }),
-        (snapshot) => setLiked(session.fetch, session.storageUrl, snapshot.library, id, loved),
+        apply,
+        async (snapshot) => {
+          const document = await setLiked(
+            session.fetch,
+            session.storageUrl,
+            snapshot.library,
+            id,
+            loved,
+          );
+          return { document, apply };
+        },
         loved ? "Added to Liked songs" : "Removed from Liked songs",
       );
     },
@@ -268,25 +317,43 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
             description,
           );
           id = playlist.id;
-          return (snapshot) => ({ ...snapshot, playlists: [...snapshot.playlists, playlist] });
+          return {
+            apply: (snapshot) => ({ ...snapshot, playlists: [...snapshot.playlists, playlist] }),
+            document: { url: playlist.id.split("#")[0] as string, etag: playlist.etag },
+          };
         },
         "Playlist created",
       );
       return created ? id : undefined;
     },
     edit(playlist, edit) {
+      // Retain only fields changed from the caller's opening snapshot.
+      if (edit.kind === "rename")
+        edit = {
+          kind: "rename",
+          ...(edit.name !== undefined && edit.name.trim() !== playlist.name
+            ? { name: edit.name.trim() }
+            : {}),
+          ...(edit.description !== undefined && edit.description.trim() !== playlist.description
+            ? { description: edit.description.trim() }
+            : {}),
+        };
       if (
         (edit.kind === "move" && edit.from === edit.to) ||
         (edit.kind === "add" && !edit.tracks.length) ||
-        (edit.kind === "rename" &&
-          edit.name.trim() === playlist.name &&
-          edit.description.trim() === playlist.description)
+        (edit.kind === "rename" && edit.name === undefined && edit.description === undefined)
       )
         return;
       void mutate(
         (snapshot) => optimisticPlaylist(snapshot, playlist.id, edit),
         async (snapshot) => {
           const current = snapshot.playlists.find((p) => p.id === playlist.id) ?? playlist;
+          if (
+            edit.kind === "rename" &&
+            ((edit.name !== undefined && current.name !== playlist.name) ||
+              (edit.description !== undefined && current.description !== playlist.description))
+          )
+            throw new MusicWriteError(412, current.etag);
           // Also fence edits enqueued while a failed write is still reconciling:
           // their displayed positions may belong to the discarded optimistic order.
           if (
@@ -296,10 +363,13 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
           )
             throw new MusicWriteError(412, current.etag);
           const saved = await editPlaylist(session.fetch, session.storageUrl, current, edit);
-          return (current) => ({
-            ...current,
-            playlists: current.playlists.map((p) => (p.id === saved.id ? saved : p)),
-          });
+          return {
+            apply: (current) => ({
+              ...current,
+              playlists: current.playlists.map((p) => (p.id === saved.id ? saved : p)),
+            }),
+            document: { url: saved.id.split("#")[0] as string, etag: saved.etag },
+          };
         },
         edit.kind === "move" ? `Moved song to position ${edit.to + 1}` : "Playlist saved",
         playlist.id,
@@ -330,10 +400,11 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
           preferences: { ...snapshot.preferences, value: preference },
         }),
         async (snapshot) => {
-          await preferencesStore(session.fetch, session.storageUrl).save(
+          const preferences = await preferencesStore(session.fetch, session.storageUrl).save(
             snapshot.preferences,
             preference,
           );
+          return { apply: (current) => ({ ...current, preferences }) };
         },
         "Artwork preference saved",
       );
@@ -347,38 +418,46 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     },
     olderLoading,
     olderError,
-    async older() {
-      setOlderLoading(true);
-      setOlderError(false);
-      setNotice("Loading older history…");
-      try {
-        const history = await loadHistory(
-          session.fetch,
-          session.storageUrl,
-          new Date(),
-          12,
-          months.current,
-        );
-        months.current += 12;
-        setNotice(
-          history.length
-            ? `Loaded ${history.length} older plays`
-            : "No older plays found in this period",
-        );
-        if (baseline.current) {
-          baseline.current = {
-            ...baseline.current,
-            history: [...baseline.current.history, ...history].sort(
-              (a, b) => b.startTime.getTime() - a.startTime.getTime(),
-            ),
-          };
-          publish();
+    older() {
+      if (olderRequest.current) return olderRequest.current;
+      const task = (async () => {
+        setOlderLoading(true);
+        setOlderError(false);
+        setNotice("Loading older history…");
+        try {
+          const history = await loadHistory(
+            session.fetch,
+            session.storageUrl,
+            new Date(),
+            12,
+            months.current,
+          );
+          months.current += 12;
+          setNotice(
+            history.length
+              ? `Loaded ${history.length} older plays`
+              : "No older plays found in this period",
+          );
+          if (baseline.current) {
+            baseline.current = {
+              ...baseline.current,
+              history: [
+                ...new Map(
+                  [...baseline.current.history, ...history].map((play) => [play.iri, play]),
+                ).values(),
+              ].sort((a, b) => b.startTime.getTime() - a.startTime.getTime()),
+            };
+            publish();
+          }
+        } catch {
+          setOlderError(true);
+        } finally {
+          setOlderLoading(false);
+          olderRequest.current = undefined;
         }
-      } catch {
-        setOlderError(true);
-      } finally {
-        setOlderLoading(false);
-      }
+      })();
+      olderRequest.current = task;
+      return task;
     },
   };
   return <Context value={value}>{children}</Context>;

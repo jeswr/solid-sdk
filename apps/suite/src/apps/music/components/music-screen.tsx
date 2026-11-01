@@ -17,7 +17,7 @@ import {
 import { ArrowRight, Disc3, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
@@ -175,7 +175,7 @@ function Home() {
           {top.length ? (
             <ol className="mus-ranking" aria-label="Your top artists">
               {top.map((artist, i) => {
-                const id = snapshot.library.artists.find((group) => group.name === artist.name)?.id;
+                const id = snapshot.library.artists.find((group) => group.key === artist.key)?.id;
                 return (
                   <li key={artist.key}>
                     <span className="mus-rank mus-number">{i + 1}</span>
@@ -354,6 +354,7 @@ function HistoryView() {
   );
 }
 function Content({ view, id, query }: { view: MusicView; id?: string | undefined; query: string }) {
+  const addSongs = useRef<HTMLButtonElement>(null);
   const music = useMusic();
   const snapshot = music.snapshot;
   const [importing, setImporting] = useState(false);
@@ -485,7 +486,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
     const artist = library.artists.find((a) => a.id === id);
     if (artist) {
       const top = mostPlayedTracks(library, snapshot.history, "1Y", new Date())
-        .filter((entry) => entry.track.artist === artist.name)
+        .filter((entry) => entry.track.artistId === artist.id)
         .slice(0, 5);
       return (
         <>
@@ -534,13 +535,12 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
             </div>
           </div>
           <div className="mus-playlist-toolbar">
-            <AddSongs playlist={playlist} />
+            <AddSongs playlist={playlist} triggerRef={addSongs} />
             <EditPlaylistDetails playlist={playlist} />
             <DeletePlaylist playlist={playlist} />
           </div>
-          {playlist.tracks.length ? (
-            <PlaylistTracks playlist={playlist} />
-          ) : (
+          <PlaylistTracks playlist={playlist} emptyFocus={addSongs} />
+          {!playlist.tracks.length && (
             <EmptyState
               title="Find your playlist’s first song"
               body="Choose songs from your library to start this collection."

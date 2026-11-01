@@ -3,6 +3,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import {
   loadMusic,
+  type MusicDocument,
   Store,
   saveMusic,
   syncLikedPlaylist,
@@ -14,7 +15,10 @@ import { documentUrl, type Library, loadLibrary, musicRoot, requireEtag } from "
 // Retain failed mirror work independently of the track mutation, until a refresh repairs it.
 const pending = new WeakMap<typeof globalThis.fetch, Set<string>>();
 export class LikedSyncPendingError extends Error {
-  constructor(cause: unknown) {
+  constructor(
+    cause: unknown,
+    readonly document: MusicDocument,
+  ) {
     super("Liked flag saved; playlist synchronization is pending", { cause });
   }
 }
@@ -26,12 +30,12 @@ export async function setLiked(
   library: Library,
   iri: string,
   loved: boolean,
-): Promise<void> {
+): Promise<MusicDocument> {
   const url = documentUrl(storage, iri);
   const scoped = createPodScopedFetch(storage, { fetch });
   const doc = await loadMusic(scoped, url);
   new Track(iri, doc.dataset).loved = loved;
-  await saveMusic(fetch, storage, url, doc.dataset, {
+  doc.etag = await saveMusic(fetch, storage, url, doc.dataset, {
     ifMatch: requireEtag(library.documents.get(url)?.etag ?? null),
   });
   const roots = pending.get(fetch) ?? new Set<string>();
@@ -40,8 +44,9 @@ export async function setLiked(
   try {
     await retryLikedSync(fetch, storage);
   } catch (cause) {
-    throw new LikedSyncPendingError(cause);
+    throw new LikedSyncPendingError(cause, doc);
   }
+  return doc;
 }
 
 /** Re-read both the authoritative flags and mirror ETag on every retry, including after a 412. */

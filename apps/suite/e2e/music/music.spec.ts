@@ -236,6 +236,27 @@ test("create playlist, add three songs, reorder by keyboard and persist", async 
   await expect(page.locator(".mus-content").getByRole("textbox")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit details", exact: true })).toBeFocused();
   await accessible(page);
+  for (const [title, focus] of [
+    ["Morning Glass", "Reorder Wildflower, position 2"],
+    ["Blue Hour", "Reorder Wildflower, position 1"],
+    ["Wildflower", "Add songs"],
+  ] as const) {
+    await page.getByRole("button", { name: `More actions for ${title}`, exact: true }).focus();
+    await page.keyboard.press("ArrowDown");
+    await page.getByRole("menuitem", { name: "Remove from playlist", exact: true }).press("Enter");
+    const target =
+      focus === "Add songs"
+        ? page.locator(".mus-playlist-toolbar").getByRole("button", { name: focus, exact: true })
+        : page.getByRole("button", { name: focus, exact: true });
+    await expect(target).toBeFocused();
+    await expect(page.locator(".mus-save")).toBeHidden();
+    await expect(target).toBeFocused();
+  }
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Find your playlist’s first song", exact: true }),
+  ).toBeVisible();
+  await accessible(page);
 });
 
 test("imports the offline Spotify fixture and finds its tracks", async ({ page }) => {

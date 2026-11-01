@@ -46,7 +46,7 @@ export async function createPlaylist(
   return { id: p.value, name: p.title, description: description.trim(), tracks: [], etag };
 }
 export type PlaylistEdit =
-  | { kind: "rename"; name: string; description: string }
+  | { kind: "rename"; name?: string; description?: string }
   | { kind: "add"; tracks: string[] }
   | { kind: "remove"; position: number }
   | { kind: "move"; from: number; to: number };
@@ -60,8 +60,8 @@ export async function editPlaylist(
   const doc = await loadMusic(createPodScopedFetch(storage, { fetch }), url);
   const p = new Playlist(current.id, doc.dataset);
   if (edit.kind === "rename") {
-    p.title = edit.name.trim();
-    p.writeString(`${S}description`, edit.description.trim());
+    if (edit.name !== undefined) p.title = edit.name.trim();
+    if (edit.description !== undefined) p.writeString(`${S}description`, edit.description.trim());
   } else if (edit.kind === "add") p.setTracks([...p.tracks, ...edit.tracks]);
   else if (edit.kind === "remove") p.removeAt(edit.position);
   else p.reorder(edit.from, edit.to);

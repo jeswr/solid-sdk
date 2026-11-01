@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { type MusicTrack, sortTracks } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
@@ -59,13 +59,14 @@ export function TrackMenu({
   playlist,
   position,
   onMove,
+  onRemove,
 }: {
   track: MusicTrack;
   playlist?: MusicPlaylist;
   position?: number;
   onMove?: (from: number, to: number) => void;
+  onRemove?: (position: number) => void;
 }) {
-  const music = useMusic();
   const source = safeSource(track.sourceUrl);
   const [adding, setAdding] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -148,7 +149,12 @@ export function TrackMenu({
                 <ArrowDown size={16} aria-hidden="true" />
                 Move down
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => music.edit(playlist, { kind: "remove", position })}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  reordering.current = true;
+                  onRemove?.(position);
+                }}
+              >
                 <Trash2 size={16} aria-hidden="true" />
                 Remove from playlist
               </DropdownMenuItem>
@@ -298,7 +304,13 @@ export function TrackList({
     </div>
   );
 }
-export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
+export function PlaylistTracks({
+  playlist,
+  emptyFocus,
+}: {
+  playlist: MusicPlaylist;
+  emptyFocus?: RefObject<HTMLButtonElement | null>;
+}) {
   const music = useMusic();
   const dragged = useRef<number | undefined>(undefined);
   const [announcement, setAnnouncement] = useState("");
@@ -307,13 +319,14 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
   useEffect(() => {
     if (focusPosition === undefined) return;
     const frame = requestAnimationFrame(() => {
-      list.current
-        ?.querySelector<HTMLButtonElement>(`[data-mus-handle="${focusPosition}"]`)
-        ?.focus();
+      const target =
+        list.current?.querySelector<HTMLButtonElement>(`[data-mus-handle="${focusPosition}"]`) ??
+        emptyFocus?.current;
+      target?.focus();
       setFocusPosition(undefined);
     });
     return () => cancelAnimationFrame(frame);
-  }, [focusPosition]);
+  }, [focusPosition, emptyFocus]);
   const tracks = new Map(music.snapshot?.library.tracks.map((track) => [track.id, track]));
   function move(from: number, to: number) {
     if (from === to || to < 0 || to >= playlist.tracks.length) return;
@@ -321,6 +334,18 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
     setAnnouncement(`Moved song from position ${from + 1} to ${to + 1}`);
     setFocusPosition(to);
   }
+  function remove(position: number) {
+    music.edit(playlist, { kind: "remove", position });
+    setAnnouncement(`Removed song at position ${position + 1}`);
+    setFocusPosition(Math.max(0, Math.min(position, playlist.tracks.length - 2)));
+  }
+  // Keep the focus owner mounted when the final occurrence disappears.
+  if (!playlist.tracks.length)
+    return (
+      <p role="status" className="mus-sr-only">
+        {announcement}
+      </p>
+    );
   return (
     <>
       <p className="mus-hint">Drag the handle to reorder, or focus it and press Alt + ↑ / ↓.</p>
@@ -377,15 +402,18 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
                     {formatDuration(track.durationSeconds)}
                   </span>
                   <Like track={track} />
-                  <TrackMenu track={track} playlist={playlist} position={position} onMove={move} />
+                  <TrackMenu
+                    track={track}
+                    playlist={playlist}
+                    position={position}
+                    onMove={move}
+                    onRemove={remove}
+                  />
                 </>
               ) : (
                 <>
                   <span>Unavailable song</span>
-                  <Button
-                    variant="ghost"
-                    onClick={() => music.edit(playlist, { kind: "remove", position })}
-                  >
+                  <Button variant="ghost" onClick={() => remove(position)}>
                     Remove
                   </Button>
                 </>

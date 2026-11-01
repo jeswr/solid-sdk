@@ -2,9 +2,10 @@
 // biome-ignore-all assist/source/organizeImports: Establish the DOM before Radix computes browser capability flags.
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { expect, it, vi } from "vitest";
-import { EditPlaylistDetails } from "../src/apps/music/components/playlist-dialogs";
+import { AddSongs, EditPlaylistDetails } from "../src/apps/music/components/playlist-dialogs";
+import { recordPlay } from "../src/apps/music/lib/data/history";
 import { PlaylistTracks, TrackMenu } from "../src/apps/music/components/track-list";
 import {
   createDocument,
@@ -14,10 +15,11 @@ import {
 } from "../src/apps/music/lib/data/library";
 import {
   createPlaylist,
+  editPlaylist,
   listPlaylists,
   type MusicPlaylist,
 } from "../src/apps/music/lib/data/playlists";
-import { Store, Track } from "../src/apps/music/lib/model";
+import { historyShard, Store, Track } from "../src/apps/music/lib/model";
 import { MusicProvider, useMusic } from "../src/apps/music/state/music-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -38,6 +40,7 @@ async function fixture(
   wrap: (fetch: typeof globalThis.fetch) => typeof globalThis.fetch = (fetch) => fetch,
   child: ReactNode = h(Probe),
   names = ["First", "Second"],
+  notifications = true,
 ) {
   const pod = createDemoPod({ root });
   await provision(pod.fetch, root);
@@ -55,7 +58,7 @@ async function fixture(
     storageUrl: root,
     displayName: "Listener",
     fetch: wrap(pod.fetch),
-    subscribe: pod.subscribe,
+    subscribe: notifications ? pod.subscribe : () => () => {},
     reset: async () => {},
   };
   const view = await mount(h(MusicProvider, { session, children: child }));
@@ -411,4 +414,246 @@ it("edits playlist details in a dialog and returns focus to the action after sav
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+});
+
+async function fillDetails(field: "Name" | "Description", value: string) {
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+  const input = dialog.querySelector(field === "Name" ? "input" : "textarea") as
+    | HTMLInputElement
+    | HTMLTextAreaElement;
+  await act(async () => {
+    const prototype =
+      field === "Name" ? HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+async function submitDetails() {
+  await act(async () => {
+    document
+      .querySelector('[role="dialog"] form')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await settled();
+}
+function DetailsProbe() {
+  music = useMusic();
+  const playlist = music.snapshot?.playlists[0];
+  return playlist ? h(EditPlaylistDetails, { playlist }) : null;
+}
+
+it.each([
+  "Name",
+  "Description",
+] as const)("merges only the changed %s field against the dialog opening snapshot", async (field) => {
+  const { pod, view } = await fixture(undefined, h(DetailsProbe));
+  await ready();
+  await click(view.host.querySelector("button") as HTMLElement);
+  await fillDetails(field, "My edit");
+  await editPlaylist(pod.fetch, root, music.snapshot?.playlists[0] as MusicPlaylist, {
+    kind: "rename",
+    ...(field === "Name"
+      ? { description: "Another tab's description" }
+      : { name: "Another tab's name" }),
+  });
+  await act(async () => music.refresh());
+  await submitDetails();
+  const expected =
+    field === "Name"
+      ? { name: "My edit", description: "Another tab's description" }
+      : { name: "Another tab's name", description: "My edit" };
+  expect(music.snapshot?.playlists[0]).toMatchObject(expected);
+  expect(listPlaylists(await loadLibrary(pod.fetch, root))[0]).toMatchObject(expected);
+});
+
+it.each([
+  "Name",
+  "Description",
+] as const)("reports a conflict when the dialog's %s field changed in another tab", async (field) => {
+  const { pod, view } = await fixture(undefined, h(DetailsProbe));
+  await ready();
+  await click(view.host.querySelector("button") as HTMLElement);
+  await fillDetails(field, "My edit");
+  await editPlaylist(pod.fetch, root, music.snapshot?.playlists[0] as MusicPlaylist, {
+    kind: "rename",
+    ...(field === "Name" ? { name: "Other edit" } : { description: "Other edit" }),
+  });
+  await act(async () => music.refresh());
+  mocks.error.mockClear();
+  await submitDetails();
+  expect(music.notice).toContain("changed elsewhere");
+  expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining("changed elsewhere"));
+  expect(
+    listPlaylists(await loadLibrary(pod.fetch, root))[0]?.[
+      field === "Name" ? "name" : "description"
+    ],
+  ).toBe("Other edit");
+});
+
+it("uses the confirmed artwork snapshot for a second save after reconciliation GETs fail", async () => {
+  let failedReads = false;
+  const preconditions: (string | null)[] = [];
+  const { pod } = await fixture((fetch) => async (input, init) => {
+    if (failedReads && !init?.method) return new Response(null, { status: 500 });
+    const response = await fetch(input, init);
+    if (init?.method === "PUT" && String(input).endsWith("preferences.json")) {
+      preconditions.push(new Headers(init.headers).get("If-Match"));
+      failedReads = true;
+    }
+    return response;
+  });
+  await ready();
+  mocks.error.mockClear();
+  await act(async () => music.artwork(true));
+  await settled();
+  expect(music.snapshot?.preferences.value.artwork).toBe("hot-link");
+  const confirmed = music.snapshot?.preferences.etag;
+  expect(confirmed).toBeTruthy();
+  await act(async () => music.artwork(false));
+  await settled();
+  expect(preconditions).toEqual([null, confirmed]);
+  expect(music.snapshot?.preferences.value.artwork).toBe("none");
+  expect(music.snapshot?.preferences.etag).not.toBe(confirmed);
+  expect(await (await pod.fetch(`${musicRoot(root)}preferences.json`)).json()).toEqual({
+    artwork: "none",
+  });
+  expect(mocks.error).not.toHaveBeenCalled();
+});
+
+it("retains confirmed track ETags for queued likes when reconciliation and mirror reads fail", async () => {
+  let failedReads = false;
+  const preconditions: string[] = [];
+  const { pod, tracks } = await fixture((fetch) => async (input, init) => {
+    if (failedReads && !init?.method && !String(input).endsWith("tracks/a.ttl"))
+      return new Response(null, { status: 500 });
+    const response = await fetch(input, init);
+    if (init?.method === "PUT" && String(input).endsWith("tracks/a.ttl")) {
+      preconditions.push(new Headers(init.headers).get("If-Match") as string);
+      failedReads = true;
+    }
+    return response;
+  });
+  await ready();
+  await act(async () => {
+    music.like(tracks[0] as string, true);
+    music.like(tracks[1] as string, true);
+  });
+  await settled();
+  expect(preconditions).toHaveLength(2);
+  expect(preconditions[1]).not.toBe(preconditions[0]);
+  expect((await loadLibrary(pod.fetch, root)).tracks.map((track) => track.loved)).toEqual([
+    true,
+    true,
+  ]);
+  expect(music.snapshot?.library.tracks.map((track) => track.loved)).toEqual([true, true]);
+});
+
+it.each([
+  "refresh",
+  "write reconciliation",
+])("keeps paginated history when an earlier %s completes after the older load", async (operation) => {
+  const read = deferred<void>();
+  let delay = false;
+  let reading = false;
+  const { pod, tracks } = await fixture(
+    (fetch) => async (input, init) => {
+      const response = await fetch(input, init);
+      if (delay && !init?.method && String(input) === musicRoot(root)) {
+        delay = false;
+        reading = true;
+        await read.promise;
+      }
+      return response;
+    },
+    h(Probe),
+    ["First", "Second"],
+    false,
+  );
+  await ready();
+  const date = new Date();
+  const older = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 13, 10));
+  const play = {
+    iri: `${historyShard(musicRoot(root), older)}#older`,
+    trackIri: tracks[0] as string,
+    startTime: older,
+  };
+  await recordPlay(pod.fetch, root, play);
+  delay = true;
+  let refresh!: Promise<unknown>;
+  await act(async () => {
+    refresh =
+      operation === "refresh" ? music.refresh() : music.create("Created during pagination", "");
+  });
+  await vi.waitFor(() => expect(reading).toBe(true));
+  await act(async () => {
+    const first = music.older();
+    expect(music.older()).toBe(first);
+    await first;
+  });
+  expect(music.snapshot?.history.map((item) => item.iri)).toContain(play.iri);
+  await act(async () => {
+    read.resolve();
+    await refresh;
+  });
+  expect(music.snapshot?.history.map((item) => item.iri)).toContain(play.iri);
+  await act(async () => music.older());
+  await act(async () => music.refresh());
+  expect(music.snapshot?.history.filter((item) => item.iri === play.iri)).toHaveLength(1);
+});
+
+it.each([
+  { remove: 0, repeat: true, expected: "Reorder Second, position 1" },
+  { remove: 2, repeat: true, expected: "Reorder Second, position 2" },
+  { remove: 0, repeat: false, expected: "Add songs" },
+])("restores keyboard focus after removing occurrence $remove (repeated: $repeat)", async ({
+  remove,
+  repeat,
+  expected,
+}) => {
+  function PlaylistProbe() {
+    music = useMusic();
+    const add = useRef<HTMLButtonElement>(null);
+    const playlist = music.snapshot?.playlists[0];
+    return playlist
+      ? h(
+          "div",
+          {},
+          h(AddSongs, { playlist, triggerRef: add }),
+          h(PlaylistTracks, { playlist, emptyFocus: add }),
+        )
+      : null;
+  }
+  const { pod, tracks, view } = await fixture(undefined, h(PlaylistProbe));
+  await ready();
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, {
+      kind: "add",
+      tracks: repeat
+        ? [tracks[0] as string, tracks[1] as string, tracks[0] as string]
+        : [tracks[0] as string],
+    }),
+  );
+  await settled();
+  const trigger = view.host.querySelectorAll(
+    '.mus-playlist-row button[aria-label="More actions for First"]',
+  )[remove === 2 ? 1 : 0] as HTMLButtonElement;
+  await act(async () => trigger.focus());
+  await key(trigger, "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (element) => element.textContent?.trim() === "Remove from playlist",
+  ) as HTMLElement;
+  await act(async () => item.focus());
+  await key(item, "Enter");
+  const focusLabel = () =>
+    document.activeElement?.getAttribute("aria-label") ??
+    document.activeElement?.textContent?.trim();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(focusLabel()).toBe(expected);
+  });
+  await settled();
+  expect(focusLabel()).toBe(expected);
+  expect(listPlaylists(await loadLibrary(pod.fetch, root))[0]?.tracks).toEqual(
+    music.snapshot?.playlists[0]?.tracks,
+  );
 });

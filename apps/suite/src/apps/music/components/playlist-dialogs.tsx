@@ -18,7 +18,7 @@ import {
 } from "@jeswr/suite-ui";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, type Ref, useId, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { useMusic } from "../state/music-context";
@@ -122,6 +122,7 @@ export function EditPlaylistDetails({ playlist }: { playlist: MusicPlaylist }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(playlist.name);
   const [description, setDescription] = useState(playlist.description);
+  const [opening, setOpening] = useState(playlist);
   const [error, setError] = useState("");
   return (
     <Dialog
@@ -129,6 +130,7 @@ export function EditPlaylistDetails({ playlist }: { playlist: MusicPlaylist }) {
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {
+          setOpening(playlist);
           setName(playlist.name);
           setDescription(playlist.description);
           setError("");
@@ -151,7 +153,11 @@ export function EditPlaylistDetails({ playlist }: { playlist: MusicPlaylist }) {
               setError("Enter a playlist name.");
               return;
             }
-            music.edit(playlist, { kind: "rename", name, description });
+            music.edit(opening, {
+              kind: "rename",
+              ...(name.trim() !== opening.name ? { name } : {}),
+              ...(description.trim() !== opening.description ? { description } : {}),
+            });
             setOpen(false);
           }}
         >
@@ -188,7 +194,13 @@ export function EditPlaylistDetails({ playlist }: { playlist: MusicPlaylist }) {
   );
 }
 
-export function AddSongs({ playlist }: { playlist: MusicPlaylist }) {
+export function AddSongs({
+  playlist,
+  triggerRef,
+}: {
+  playlist: MusicPlaylist;
+  triggerRef?: Ref<HTMLButtonElement>;
+}) {
   const music = useMusic();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -212,7 +224,7 @@ export function AddSongs({ playlist }: { playlist: MusicPlaylist }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button ref={triggerRef}>
           <Plus size={16} aria-hidden="true" />
           Add songs
         </Button>
