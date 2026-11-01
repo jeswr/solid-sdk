@@ -38,6 +38,7 @@ export default defineConfig({
         "src/apps/contacts/lib/phone/**/*.ts",
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
+        "src/apps/contacts/state/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/money/lib/model/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
@@ -114,6 +115,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
+      exclude: ["src/apps/contacts/state/**/*.tsx"],
       reporter: ["text", "json", "json-summary"],
       thresholds: {
         perFile: true,
