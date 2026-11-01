@@ -13,6 +13,7 @@
  */
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
+  assertSafeUrl,
   createGuardedFetch,
   isLoopbackAddress,
   isWithinPodScope,
@@ -272,11 +273,11 @@ async function readIdentityRdf(
     try {
       return await readRdf(target, fetchImpl, storage);
     } catch (error) {
-      // Storage deliberately refuses redirects. Re-read only a visible redirect
-      // through the shared bounded guard; never reinterpret another failure as absence.
+      // Storage refuses redirects, including browser-filtered status 0. Re-probe
+      // these through the guard, which detects opaqueredirect before allowing follow.
       if (
         !(error instanceof StorageError) ||
-        ![301, 302, 303, 307, 308].includes(error.status ?? 0)
+        ![0, 301, 302, 303, 307, 308].includes(error.status ?? -1)
       )
         throw error;
     }
@@ -287,12 +288,40 @@ async function readIdentityRdf(
       const hop = identityDocumentUrl(String(input), options);
       validateTarget?.(hop);
       const response = await fetchImpl(hop, { ...init, redirect: "manual" });
-      // Hidden/native redirects cannot prove which intermediate URLs were visited.
-      if (
-        response.type === "opaqueredirect" ||
-        response.redirected ||
-        (response.url && response.url !== hop)
-      ) {
+      if (response.type === "opaqueredirect") {
+        void response.body?.cancel();
+        // Browsers hide Location on manual redirects. Retry anonymously, retaining
+        // the guard's deadline/body cap, then validate the observable final target.
+        // Intermediate hops are opaque; never send cookies or token headers on them.
+        const headers = new Headers(init?.headers);
+        for (const name of ["authorization", "dpop", "cookie", "proxy-authorization"])
+          headers.delete(name);
+        const followed = await fetchImpl(hop, {
+          ...init,
+          headers,
+          redirect: "follow",
+          credentials: "omit",
+        });
+        try {
+          if (
+            !followed.url ||
+            followed.status === 0 ||
+            followed.redirected !== (followed.url !== hop)
+          )
+            throw new StorageError("scope", { url: hop, method: "GET" });
+          const final = identityDocumentUrl(followed.url, options);
+          if (new URL(hop).protocol === "https:" && new URL(final).protocol !== "https:")
+            throw new StorageError("scope", { url: final, method: "GET" });
+          validateTarget?.(final);
+          await assertSafeUrl(final, { allowLoopback: options.allowInsecureLoopback === true });
+          return followed;
+        } catch (error) {
+          void followed.body?.cancel();
+          throw error;
+        }
+      }
+      // A transport ignoring manual mode must not bypass visible-hop validation.
+      if (response.status === 0 || response.redirected || (response.url && response.url !== hop)) {
         void response.body?.cancel();
         throw new StorageError("scope", { url: hop, method: "GET" });
       }

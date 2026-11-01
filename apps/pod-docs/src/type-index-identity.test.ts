@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it, vi } from "vitest";
+
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { DataFactory } from "n3";
+import { describe, expect, it, vi } from "vitest";
 import { createDocsStore } from "./store.js";
 import { mockFetch, turtleToStore } from "./test-helpers.js";
 import { discoverRegistrations, ensureTypeRegistrations, TypeIndexDataset } from "./type-index.js";
@@ -168,8 +169,8 @@ describe("identity document resolution regressions", () => {
     "https://127.0.0.1/card",
   ])("refuses an unsafe profile redirect to %s before fetching it", async (destination) => {
     const storage = createMemoryStorage({ root: "https://pod.example/" });
-    const transport = vi.fn<typeof globalThis.fetch>(async (): Promise<Response> =>
-      Response.redirect(destination, 303),
+    const transport = vi.fn<typeof globalThis.fetch>(
+      async (): Promise<Response> => Response.redirect(destination, 303),
     );
     await expect(
       ensureTypeRegistrations({
@@ -203,11 +204,12 @@ describe("identity document resolution regressions", () => {
 
   it.each(["loop", "overflow"])("bounds profile redirects on %s", async (mode) => {
     const storage = createMemoryStorage({ root: "https://pod.example/" });
-    const transport = vi.fn<typeof globalThis.fetch>(async (): Promise<Response> =>
-      Response.redirect(
-        `https://id.example/${mode === "loop" ? "id" : `hop-${transport.mock.calls.length}`}`,
-        302,
-      ),
+    const transport = vi.fn<typeof globalThis.fetch>(
+      async (): Promise<Response> =>
+        Response.redirect(
+          `https://id.example/${mode === "loop" ? "id" : `hop-${transport.mock.calls.length}`}`,
+          302,
+        ),
     );
     await expect(
       ensureTypeRegistrations({
@@ -352,14 +354,13 @@ describe("identity document resolution regressions", () => {
   it.each([
     "native",
     "unreported",
-    "opaque",
   ])("refuses a %s profile redirect that bypasses visible hop validation", async (mode) => {
     const storage = createMemoryStorage({ root: "https://pod.example/" });
     const response = new Response("", { headers: { "content-type": "text/turtle" } });
     Object.defineProperties(response, {
       redirected: { value: mode === "native" },
-      url: { value: mode === "opaque" ? "" : "https://id.example/other" },
-      type: { value: mode === "opaque" ? "opaqueredirect" : "basic" },
+      url: { value: "https://id.example/other" },
+      type: { value: "basic" },
     });
     const transport = vi.fn<typeof globalThis.fetch>(async () => response);
     await expect(

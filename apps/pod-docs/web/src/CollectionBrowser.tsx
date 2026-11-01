@@ -59,7 +59,7 @@ export function CollectionBrowser({ webId, podRoot }: Pick<Selection, "webId" | 
       title="Your documents"
       container={selection.container}
       onContainerChange={remember}
-      allowInsecureLoopback={isLoopbackOrigin(window.location.origin)}
+      allowInsecureLoopback={import.meta.env.DEV && isLoopbackOrigin(window.location.origin)}
     />
   );
 }

@@ -38,13 +38,22 @@ it.each([
   false,
   true,
 ])("threads the host's explicit auth loopback opt-in (%s) into the document browser", (loopback) => {
+  vi.stubEnv("DEV", true);
   fixtures.loopback = loopback;
   render(<App />);
   expect(fixtures.browser?.allowInsecureLoopback).toBe(loopback);
 });
+
+it("keeps loopback HTTP disabled in production even when hosted on localhost", () => {
+  vi.stubEnv("DEV", false);
+  fixtures.loopback = true;
+  render(<App />);
+  expect(fixtures.browser?.allowInsecureLoopback).toBe(false);
+});
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 it("restores the assigned opaque collection on host remount and isolates WebIDs and roots", () => {
