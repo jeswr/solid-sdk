@@ -3,6 +3,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DatasetWrapper } from "@rdfjs/wrapper";
+import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import {
@@ -81,6 +82,19 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     return response.headers.get("etag");
   }
   return {
+    async listContainer(url: string) {
+      const result = await read(url, "text/turtle");
+      const dataset = await parseRdf(result.value, "text/turtle", { baseIRI: url });
+      return [...(new ContainerDataset(dataset, DataFactory).container?.contains ?? [])];
+    },
+    async deleteResource(url: string): Promise<void> {
+      const response = await scopedFetch(url, { method: "DELETE" });
+      if (!response.ok && response.status !== 404)
+        throw new SheetStorageError(response.status, response.headers.get("etag"));
+    },
+    async loadEtag(url: string): Promise<string | null> {
+      return (await read(url, "*/*")).etag;
+    },
     async loadIndex(container: string): Promise<Stored<WorkbookMetadata>> {
       const result = await read(workbookLayout(container).index, "text/turtle");
       return { ...result, value: await parseWorkbook(container, result.value) };
@@ -97,10 +111,10 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
       const result = await read(workbookLayout(container).sheet(number).csv, "text/csv");
       return { ...result, value: csvToGrid(result.value, columns) };
     },
-    async saveCsv(container: string, number: number, grid: Grid, condition: Precondition) {
+    async saveCsv(container: string, number: number, grid: Grid | string, condition: Precondition) {
       return write(
         workbookLayout(container).sheet(number).csv,
-        gridToCsv(grid),
+        typeof grid === "string" ? grid : gridToCsv(grid),
         "text/csv",
         condition,
       );

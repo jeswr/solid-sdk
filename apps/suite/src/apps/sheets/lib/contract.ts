@@ -99,10 +99,10 @@ export interface WorkbookService {
   createFromCsv(input: CreateFromCsvInput): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
   /**
-   * Writes `workbook.json` with If-Match `base.snapshotEtag` (unconditionally
+   * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`), then the derived CSVs/descriptors (deleting ones for sheets
-   * that no longer exist), then `index.ttl` (modified date, title from
-   * `title` or the snapshot's `name`, sheet list). Throws
+   * that no longer exist), then `index.ttl` (modified date, `title` when given
+   * else the stored title, sheet list). Throws
    * `WorkbookConflictError` on a 412 for `workbook.json` or `index.ttl`.
    */
   save(
@@ -124,6 +124,8 @@ export interface WorkbookServiceOptions {
   /** Storage root (ends in `/`). */
   readonly podRoot: string;
   readonly webId: string;
+  /** Injectable clock for workbook creation and modification dates. */
+  readonly now?: () => Date;
 }
 
 /** The sheet the user is looking at. */
@@ -155,4 +157,7 @@ export interface MountEngineOptions {
   readonly compact: boolean;
 }
 
-export type MountEngine = (container: HTMLElement, options: MountEngineOptions) => Promise<SheetEngine>;
+export type MountEngine = (
+  container: HTMLElement,
+  options: MountEngineOptions,
+) => Promise<SheetEngine>;
