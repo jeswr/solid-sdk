@@ -1148,6 +1148,8 @@ describe('inject — binary bodies and Request inputs', () => {
     const request = new Request('https://pod.example/data', { method: 'POST', body: 'original' });
     const clone = vi.spyOn(request, 'clone');
     const read = body instanceof Blob ? vi.spyOn(body, 'arrayBuffer') : undefined;
+    // A bodyless native response keeps the mock's own string encoding out of the spy.
+    nativeFetch.mockImplementation(async () => new Response(null, { status: 200 }));
     const encode = vi.spyOn(TextEncoder.prototype, 'encode');
     const construct = vi.fn();
     setGlobal(
