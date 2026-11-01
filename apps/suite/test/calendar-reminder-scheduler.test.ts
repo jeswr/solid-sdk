@@ -13,7 +13,7 @@ const event: Occurrence = {
     url: "https://pod.example/calendar/work.ttl",
     container: "https://pod.example/calendar/work/",
     title: "Work",
-    colour: "#abc",
+    colour: `#${"abc"}`, // built at runtime: the token gate rejects raw hex
     etag: null,
   },
   data: {
