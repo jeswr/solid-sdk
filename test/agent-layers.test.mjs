@@ -118,6 +118,24 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     }
   });
 
+  it("allows A-011 gateway integrations while preserving audit and send exclusions", () => {
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        'import type { TokenProvider } from "@jeswr/agent-credentials"; import "@jeswr/agentic-legacy-bridge/metadata"; import "@jeswr/solid-mcp"; import "zod"; import "@anthropic-ai/claude-agent-sdk";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan("packages/agent-model-gateway/src/index.ts", 'import "@jeswr/agent-audit";').join("\n"),
+    ).toContain("gateway must not import agent-audit");
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        'import "@jeswr/agent-channels/gmail/send";',
+      ).join("\n"),
+    ).toContain("executor-only");
+  });
+
   it("parses JSX text before a restricted re-export", () => {
     expect(
       scan(

@@ -25,7 +25,20 @@ const modelSdks = ["openai", "@anthropic-ai/sdk"];
 const agent = (name) => `@jeswr/agent-${name}`;
 const allowed = {
   "agent-executor": new Set(["model", "mandate", "audit", "credentials", "channels"].map(agent)),
-  "agent-model-gateway": new Set([agent("model"), agent("channels"), ...modelSdks]),
+  "agent-model-gateway": new Set([
+    agent("model"),
+    agent("channels"),
+    agent("credentials"),
+    "@jeswr/agentic-legacy-bridge",
+    "@jeswr/solid-mcp",
+    "@jeswr/guarded-fetch",
+    "zod",
+    "@anthropic-ai/claude-agent-sdk",
+    "fs",
+    "os",
+    "path",
+    ...modelSdks,
+  ]),
   "agent-channels": new Set([
     agent("model"),
     "@jeswr/guarded-fetch",

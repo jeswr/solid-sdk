@@ -2279,6 +2279,31 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/agent-model-gateway:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.3.201
+        version: 0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
+      '@jeswr/agent-credentials':
+        specifier: workspace:*
+        version: link:../agent-credentials
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/agentic-legacy-bridge':
+        specifier: workspace:*
+        version: link:../agentic-legacy-bridge
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../solid-mcp
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
