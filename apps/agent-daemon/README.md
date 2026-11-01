@@ -75,12 +75,14 @@ Retain proposal results across cursor retries and process restarts. Use a dedica
 private credential-store directory whose parent already exists.
 
 The `awp` executable dispatches `run`, `once`, `halt`, `status`, `accounts`,
-`login <profile>`, `stats [--task <proposal-id>]`, `audit <artifact> [--at <instant>]`
+`login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
+`audit <artifact> [--at <instant>]`
 and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
 local state, credential helper and ledger. Prefer a lazy factory: local commands never
-authenticate, and run/once close the pod session after draining. Task statistics filter proposal-associated
-model calls; Reader calls and calls producing several proposals remain in global
-counts. Audit delegates to agent-audit's independent anonymous verifier.
+authenticate, and run/once close the pod session after draining. Task statistics verify
+retained evidence and group records by explicit runtime-assigned task labels.
+Unassigned records are reported separately; task IDs are never inferred from proposals.
+Audit delegates to agent-audit's independent anonymous verifier.
 Both `run` and `once` receive the CLI shutdown signal. Cancellation during ingestion
 prevents a new outbox execution pass, while watcher cleanup and executor drain
 finish under the process lease. A signal passed to `once` still runs only one pass.
@@ -94,8 +96,9 @@ node --import /absolute/private/compose.mjs apps/agent-daemon/bin/awp.mjs halt
 ```
 
 This explicit composition is required because the stacked registry remains a
-scaffold, and channel send factories are executor-only. An unconfigured CLI fails
-closed; it does not guess credentials or install a default sending host. Preloads
+scaffold, and channel send factories are executor-only. Commands requiring a host
+fail closed when unconfigured. Help and offline `stats --ledger <path>` need no
+composition; they never authenticate or send. Preloads
 must be inert until a command needs their capabilities; keep secrets out of argv,
 logs, plist arguments and source control. No deployment module is downloaded or
 loaded from pod data.
@@ -200,3 +203,69 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges a
 The [D-2 spending-limit demo](demos/README.md) exercises hostile email and A2A
 fixtures, Transfer prohibition, cumulative GBP 30/day soft caps and printed audit
 evidence against local CSS. Run it with `pnpm --filter @jeswr/app-agent-daemon run demo:d2`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+> Experimental — AI-agent-generated. Task instrumentation and offline statistics are implemented (A-045 / sst-v2c).
+
+## Export task statistics
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/app-agent-daemon...
+node apps/agent-daemon/bin/awp.mjs stats --ledger /private/runtime/ledger/events.jsonl
+node apps/agent-daemon/bin/awp.mjs stats --ledger /private/runtime/ledger/events.jsonl --task paper-run-1 --format csv
+```
+
+The installed binary is `awp`. `stats` uses the configured host ledger by default.
+`--ledger` selects an explicit local ledger path without requiring a host,
+including any sibling `.seg-<sequence>` archives retained by `FileLedger`.
+It reads and verifies the evidence without appending, rotating, pruning or
+contacting a provider. The default format is JSON; CSV has a stable header and
+one row per task, sorted by task ID. A valid empty selection succeeds with no
+task rows. Output goes to stdout; diagnostics go to stderr. Exit 0 means the
+export succeeded; malformed arguments exit 2. Invalid task labels, absent storage,
+corrupt evidence or invalid counters exit 1 with scrubbed diagnostics.
+
+The trusted composition selects the default ledger; offline exports select it explicitly.
+Pruned prefixes and entries without a task ID produce diagnostics; JSON carries
+these limits and CSV repeats them per row. See
+[`@jeswr/agent-audit`](../../packages/agent-audit/README.md#task-statistics-a-045)
+for counter definitions, nearest-rank latency percentiles, tool-call linking,
+approval-wait counting and integrity/completeness limits.
+
+## Record a task
+
+```ts
+import { TaskRecorder } from '@jeswr/app-agent-daemon';
+
+// writer is the runtime's existing AuditWriter, with its scoped pod mirror.
+const task = new TaskRecorder({
+  taskId: 'paper-run-1',
+  conversation: 'urn:conversation:1',
+  agent: 'https://pod.example/agent#me',
+  owner: 'https://pod.example/profile#me',
+}, writer);
+await task.append({ type: 'conversation', id: 'urn:conversation:1' }, at);
+await task.append({ type: 'proposal', id: 'urn:proposal:1' }, at);
+await task.append({
+  type: 'transmission', id: 'urn:transmission:1', proposal: 'urn:proposal:1', status: 'sent',
+}, at);
+```
+
+Construct one recorder from trusted conversation context and retain its task ID
+through proposals and transmissions. It snapshots and stamps that context on
+every record; event data cannot override it. `task.modelCall(call, at)` accepts
+the gateway's returned counters, including `GatewayError.calls`, and explicitly
+projects allowed identifiers and counts. Record failures as well as successes.
+For individual tool measurements use `task.append({ type: 'tool-call', id,
+modelCall, tool, latencyMs, retries }, at)`; the producing `modelCall` link avoids
+double-counting a gateway summary. Arguments, results and prompts are excluded.
+Append the runtime's `confirm-required` decision when awaiting owner approval.
+
+Await each append. Validation and mirror failures propagate exactly as with
+`AuditWriter`; a failed mirror can leave durable local evidence, so retry its
+mirror sync instead of repeating the append. This helper records observations;
+the executor remains responsible for authorization, approvals and transmission.
+New packages remain private per ADR-001 D5.
+
+Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.

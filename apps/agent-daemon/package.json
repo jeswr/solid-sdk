@@ -2,7 +2,7 @@
   "name": "@jeswr/app-agent-daemon",
   "version": "0.1.0",
   "private": true,
-  "description": "Host-neutral agent daemon, control watcher, scheduler and awp CLI.",
+  "description": "Host-neutral agent daemon, control watcher, scheduler, awp CLI and task statistics.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { Writer } from "n3";
 import { expect, it, vi } from "vitest";
@@ -34,6 +35,32 @@ function ledger(count = 1) {
   for (let i = 0; i < count; i++) l.append(record, AT);
   return l;
 }
+it("mirrors task context and tool provenance without free-form call data", async () => {
+  const l = new MemoryLedger();
+  const entry = l.append(
+    {
+      ...record,
+      type: "tool-call",
+      taskId: "paper-run-1",
+      conversation: "urn:conversation:1",
+      modelCall: "urn:model-call:1",
+      tool: "pod_read",
+      inputTokens: 3,
+      outputTokens: 2,
+    },
+    AT,
+  );
+  const graph = entryGraph(`${BASE}1.ttl`, entry);
+  const activity = node(graph, `${BASE}1.ttl`);
+  expect(activity.text(`${AGENT}taskId`)).toBe("paper-run-1");
+  expect(activity.values(`${AGENT}conversation`).map((n) => n.value)).toEqual([
+    "urn:conversation:1",
+  ]);
+  expect(activity.values(`${PROV}used`).map((n) => n.value)).toContain("urn:model-call:1");
+  const pod = createMemoryAuditPod();
+  await new PodMirror(pod.fetch, ROOT).sync(l.entries());
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
+});
 it.each([
   ...ENTRY_KINDS,
   "ledger-checkpoint",

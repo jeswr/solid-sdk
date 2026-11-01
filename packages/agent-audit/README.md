@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-audit
 
@@ -40,9 +41,10 @@ open and before every append. Retention policy and archival are deployment
 decisions; mirror before pruning to preserve the complete pod prefix.
 `MemoryLedger` returns detached snapshots and is intended for ephemeral use.
 
-Records accept only the DESIGN §5 kinds: `ingest`, `proposal`, `decision`,
+Records accept the DESIGN §5 kinds: `ingest`, `proposal`, `decision`,
 `approval-seen`, `transmission`, `receipt`, `control`, `mandate-change`,
-`model-call`, `tamper-suspected`, plus internal `ledger-checkpoint` records.
+`model-call`, `tamper-suspected`, the A-045 `conversation` and `tool-call` kinds,
+plus internal `ledger-checkpoint` records.
 Unknown fields, bodies, prompt text, raw recipient arrays, malformed timestamps,
 non-JSON values and oversized records are rejected. Records are capped at 64 KiB.
 `model-call` accepts identifiers, provider/context and numeric counts only.
@@ -148,3 +150,49 @@ access grants and evidence limits.
 Run this package's `lint`, `build`, `typecheck` and `test` scripts. CSS and
 Components.js are development-only fixtures; production dependencies reuse
 existing workspace verification, canonical JSON and RDF libraries.
+
+## Task statistics (A-045)
+
+`aggregateTaskStats(ledger.entries(), taskId?)` verifies the retained hash chain
+before grouping records by the optional `taskId` label. `taskStatsCsv(report)`
+and `taskStatsJson(report)` export the same sorted task rows; the daemon exposes
+these through `awp stats`. This is measurement of supplied evidence, with no
+authorization or completeness verdict.
+
+Use an opaque runtime-assigned label (1–128 ASCII letters, digits, `_`, `-`, `.`),
+never a task title, prompt, recipient or credential. Records may also carry the
+conversation IRI. Both fields survive canonical hashing and the verified PROV
+mirror. The daemon's `TaskRecorder` stamps trusted context on conversation,
+proposal, decision and transmission events, and projects gateway counters into
+body-free `model-call` records. `tool-call` records may carry a bounded `tool`
+label and the producing `modelCall` IRI, but never arguments or results.
+
+The aggregation rules are:
+
+- `modelCalls` counts model-call records, including failed calls recorded by the
+  runtime. `tokens` sums legacy scalar totals or `inputTokens + outputTokens`.
+  The split counters sum only measured breakdowns; `tokenBreakdownCalls` reports
+  how many calls supplied both. Missing counters contribute zero; inconsistent
+  or partial breakdowns, duplicate call IDs and unsafe integer sums reject.
+- `toolCalls` takes the larger of each model's summary and its linked tool-call
+  count, then adds standalone tool-call records. Link details with `modelCall`
+  to avoid counting the same tools twice. A detail without a retained model call
+  still contributes; tools without a link are treated as standalone.
+- Model and tool latency percentiles are calculated separately using nearest
+  rank (p50, p95, p99). Missing measurements are excluded; no samples yields
+  `null` in JSON and an empty CSV cell. Zero is a measured latency.
+- `humanInterrupts` counts distinct proposals with a `confirm-required` decision
+  (or the event ID when no proposal is supplied). Repeated pending decisions for
+  one proposal count once; `approval-seen` does not count another interrupt.
+- `retries` sums model and tool retry counters. `refusals` counts events with
+  `status: refused` or decisions `prohibited` / `refuse-all`, once per event.
+  Separate refused events remain separate observations.
+
+The report includes the pruning sequence and the count of unassigned events in
+the whole input, even when filtering one task. Checkpoints do not become task
+rows. A pruned ledger yields retained totals only. Missing labels are never
+inferred from unrelated records. Callers should persist task context for every
+event and use a unique label for each experiment. CSV repeats retention and
+assignment metadata on each row; an empty selection emits the header only.
+Exports omit owner/agent identities, conversation IRIs and raw event records.
+The hash-chain limits described above also apply to these statistics.

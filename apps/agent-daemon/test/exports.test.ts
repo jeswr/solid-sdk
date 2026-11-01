@@ -29,5 +29,29 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  expect(Object.keys(modules[subpath] ?? {})).not.toHaveLength(0);
+  expect(Object.keys(modules[subpath] as object).sort()).toEqual(
+    subpath === "."
+      ? [
+          "HEARTBEAT_MS",
+          "POLL_MS",
+          "PodWorkspace",
+          "TaskRecorder",
+          "composeDaemon",
+          "configureCli",
+          "configureCloud",
+          "createCliHost",
+          "createDaemon",
+          "createLocalState",
+          "createProcessLease",
+          "installLaunchd",
+          "launchdPlist",
+          "pollInterval",
+          "runCli",
+          "runCloud",
+          "runConfiguredCli",
+          "runConfiguredCloud",
+          "scrubLog",
+        ]
+      : ["createMemoryPod", "createMemoryState"],
+  );
 });

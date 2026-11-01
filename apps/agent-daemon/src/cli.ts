@@ -1,6 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type EvidenceLedger, runAuditCli } from "@jeswr/agent-audit";
+// AUTHORED-BY Codex GPT-6
+import {
+  aggregateTaskStats,
+  type EvidenceLedger,
+  FileLedger,
+  type LedgerEntry,
+  runAuditCli,
+  type TaskStatsReport,
+  taskStatsCsv,
+  taskStatsJson,
+} from "@jeswr/agent-audit";
 import { type Deps, login } from "@jeswr/agent-credentials";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { existsSync } from "fs";
 import { installLaunchd } from "./launchd.js";
 import type { createLocalState } from "./local.js";
 import { scrubLog } from "./logging.js";
@@ -8,6 +20,10 @@ import type { AuthenticatedComposition, Daemon } from "./types.js";
 
 export interface CliIo {
   print(line: string): void;
+  /** Stats diagnostics, separate from the machine-readable export on stdout. */
+  stderr?(text: string): void;
+  /** Read-only local evidence seam; the default reads FileLedger and its archives. */
+  readLedger?(path: string): readonly LedgerEntry[];
   confirm(prompt: string): Promise<boolean>;
   signal: AbortSignal;
 }
@@ -18,7 +34,7 @@ export interface CliHost {
   status(): Promise<unknown>;
   accounts(): Promise<readonly { id: string; binding: string; enabled: boolean }[]>;
   login(profile: string): Promise<void>;
-  stats(task?: string): Promise<unknown>;
+  stats(task?: string): Promise<TaskStatsReport>;
   audit(args: readonly string[], print: (line: string) => void): Promise<number>;
   install(confirm: CliIo["confirm"]): Promise<boolean>;
 }
@@ -54,33 +70,89 @@ export function createCliHost(o: CliHostOptions): CliHost {
       await login(o.credentials, profile, { onUrl: o.openLoginUrl });
     },
     async stats(task) {
-      const calls = o.ledger
-        .entries()
-        .filter(
-          (entry) =>
-            entry.record.type === "model-call" && (!task || entry.record.proposal === task),
-        );
-      return {
-        calls: calls.length,
-        tokens: calls.reduce(
-          (n, entry) => n + ("tokens" in entry.record ? (entry.record.tokens ?? 0) : 0),
-          0,
-        ),
-      };
+      return aggregateTaskStats(o.ledger.entries(), task);
     },
     audit: (args, print) => runAuditCli(args, print),
     install: (confirm) => installLaunchd({ command: o.launchCommand, confirm }),
   };
 }
 const usage =
-  "Usage: awp run | once | halt | status | accounts | login <profile> | stats [--task <id>] | audit <artifact> [--at <instant>] | install-launchd";
+  "Usage: awp run | once | halt | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
+const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
+const compositionRequired = "awp requires a trusted composition module (Node --import)";
+function readLedger(path: string): readonly LedgerEntry[] {
+  const ledger = new FileLedger(path);
+  if (!existsSync(path) && ledger.segments().length === 0) throw new Error("Missing ledger");
+  return ledger.entries();
+}
+async function runStats(rest: readonly string[], host: CliHost | undefined, io: CliIo) {
+  if (rest.length === 1 && rest[0] === "--help") {
+    io.print(statsUsage);
+    return 0;
+  }
+  const stderr = io.stderr ?? ((text: string) => process.stderr.write(text));
+  const options = new Map<string, string>();
+  for (let i = 0; i < rest.length; i += 2) {
+    const key = rest[i] as string;
+    const value = rest[i + 1];
+    if (
+      !["--ledger", "--task", "--format"].includes(key) ||
+      options.has(key) ||
+      value === undefined ||
+      value.length === 0 ||
+      value.startsWith("--")
+    ) {
+      stderr(`${statsUsage}\n`);
+      return 2;
+    }
+    options.set(key, value);
+  }
+  const path = options.get("--ledger");
+  const format = options.get("--format") ?? "json";
+  if (!["json", "csv"].includes(format)) {
+    stderr(`${statsUsage}\n`);
+    return 2;
+  }
+  try {
+    const task = options.get("--task");
+    let report: TaskStatsReport;
+    if (path !== undefined) report = aggregateTaskStats((io.readLedger ?? readLedger)(path), task);
+    else if (host) report = await host.stats(task);
+    else {
+      stderr(`${compositionRequired}\n`);
+      return 1;
+    }
+    const output = format === "csv" ? taskStatsCsv(report) : taskStatsJson(report);
+    if (report.prunedThroughSeq !== null)
+      stderr("Statistics include retained entries only (ledger prefix pruned).\n");
+    if (report.unassignedEntries > 0)
+      stderr(`Statistics exclude ${report.unassignedEntries} entries without a task ID.\n`);
+    // Exporters project only validated task labels and counters. Preserve JSON/CSV
+    // newlines; CliIo.print (and the executable) supplies the final newline.
+    io.print(output.slice(0, -1));
+    return 0;
+  } catch {
+    // Storage/provider exceptions can contain paths, WebIDs or credentials.
+    stderr("Unable to export task statistics.\n");
+    return 1;
+  }
+}
 /** Dispatch never opens a listener; only explicit login may use its PKCE loopback helper. */
-export async function runCli(args: readonly string[], host: CliHost, io: CliIo): Promise<number> {
+export async function runCli(
+  args: readonly string[],
+  host: CliHost | undefined,
+  io: CliIo,
+): Promise<number> {
   const [command, ...rest] = args;
   try {
     if (command === "--help" && !rest.length) {
       io.print(usage);
       return 0;
+    }
+    if (command === "stats") return await runStats(rest, host, io);
+    if (!host) {
+      io.print(compositionRequired);
+      return 1;
     }
     if (rest.length && !["login", "stats", "audit"].includes(command ?? "")) {
       io.print(usage);
@@ -118,13 +190,6 @@ export async function runCli(args: readonly string[], host: CliHost, io: CliIo):
         await host.login(rest[0] as string);
         io.print("login complete");
         break;
-      case "stats":
-        if (rest.length && !(rest.length === 2 && rest[0] === "--task" && rest[1])) {
-          io.print(usage);
-          return 2;
-        }
-        io.print(scrubLog(JSON.stringify(await host.stats(rest[1]))));
-        break;
       case "audit":
         return await host.audit(rest, (line) => io.print(scrubLog(line)));
       case "install-launchd":
@@ -148,13 +213,5 @@ export function configureCli(host: CliHost): void {
   configured = host;
 }
 export async function runConfiguredCli(args: readonly string[], io: CliIo): Promise<number> {
-  if (args.length === 1 && args[0] === "--help") {
-    io.print(usage);
-    return 0;
-  }
-  if (!configured) {
-    io.print("awp requires a trusted composition module (Node --import)");
-    return 1;
-  }
   return runCli(args, configured, io);
 }

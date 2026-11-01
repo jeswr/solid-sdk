@@ -1,12 +1,12 @@
 ---
 name: agent-daemon
-description: Use when working on the host-neutral daemon composition, scheduler, control watcher, awp CLI or launchd installer in @jeswr/app-agent-daemon.
+description: Use when working on the host-neutral daemon composition, scheduler, control watcher, awp CLI, task instrumentation, offline statistics or launchd installer in @jeswr/app-agent-daemon.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/app-agent-daemon
 
-A-012 implements the host-neutral daemon and CLI. Read agent DESIGN §2 / §9.1 and
+A-012 implements the host-neutral daemon and CLI. Read agent DESIGN §2 / §6 / §9.1 and
 README.md before changing behavior. Root exports the runtime, pod workspace,
 local state, process lease, CLI composition and installer. `./testing` contains
 only ephemeral synthetic state and a conditional pod transport.
@@ -46,3 +46,11 @@ Follow ADR-001 D4: Node >=24, ESM, workspace dependencies, strict TypeScript, Bi
 and Vitest. Never use live providers or real credentials in tests. Preserve the
 loopback-only memory CSS fixture with synthetic identities and real WAC checks.
 Run app lint/build/typecheck/tests and the repository gate before the last commit.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+A-045 adds TaskRecorder and offline awp stats exports to the implemented daemon.
+Preserve body-free projection, trusted task context, read-only stats and scrubbed
+CLI failures. Keep task context runtime-owned; model output never chooses it.
+Stats verify retained evidence, report pruning and unassigned entries, and never
+authenticate, append, rotate, prune or contact a provider. `--ledger` works without
+a configured host; default stats use only the host's existing local ledger.

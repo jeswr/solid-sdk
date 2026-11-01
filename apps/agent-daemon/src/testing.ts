@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { PodAuth } from "@jeswr/pod-auth";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
@@ -63,7 +64,14 @@ export function createMemoryPod() {
     }
     return new Response(method === "HEAD" ? null : (current?.body ?? null), {
       status: current ? 200 : 404,
-      headers: current ? { "content-type": current.type, etag: current.etag } : {},
+      headers: current
+        ? {
+            "content-type": current.type,
+            etag: current.etag,
+            // The importer discovers a container's WAC ACL before private writes.
+            ...(url.endsWith("/") ? { link: '<.acl>; rel="acl"' } : {}),
+          }
+        : {},
     });
   };
   return { io, requests, resources };

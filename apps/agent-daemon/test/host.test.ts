@@ -1,7 +1,8 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
-import { MemoryLedger } from "@jeswr/agent-audit";
+import { aggregateTaskStats, MemoryLedger } from "@jeswr/agent-audit";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { digestOf } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
@@ -156,6 +157,7 @@ it("keeps local commands independent of authentication and closes lazy compositi
     owner: "https://owner.example/#me",
     agent: "https://agent.example/#me",
     proposal: "urn:proposal:fixture",
+    taskId: "fixture-task",
     tokens: 4,
   } as const;
   ledger.append(record, "2026-11-01T12:00:00.000Z");
@@ -175,8 +177,11 @@ it("keeps local commands independent of authentication and closes lazy compositi
   await h.halt();
   await h.status();
   await h.accounts();
-  expect(await h.stats("urn:proposal:fixture")).toEqual({ calls: 1, tokens: 4 });
-  expect(await h.stats("urn:proposal:other")).toEqual({ calls: 0, tokens: 0 });
+  expect((await h.stats("fixture-task")).tasks).toMatchObject([
+    { taskId: "fixture-task", modelCalls: 1, tokens: 4 },
+  ]);
+  expect((await h.stats("other-task")).tasks).toEqual([]);
+  expect(await h.stats()).toEqual(aggregateTaskStats(ledger.entries()));
   expect(compose).not.toHaveBeenCalled();
   const signal = new AbortController().signal;
   await h.once(signal);
@@ -194,7 +199,7 @@ function host(): CliHost {
     status: vi.fn(async () => ({ halted: true })),
     accounts: vi.fn(async () => [{ id: "fixture", binding: "direct", enabled: false }]),
     login: vi.fn(async () => undefined),
-    stats: vi.fn(async () => ({ calls: 2 })),
+    stats: vi.fn(async () => aggregateTaskStats([])),
     audit: vi.fn(async (_args, print) => {
       print("PASS https://pod.example/profile#me");
       return 0;
@@ -210,7 +215,7 @@ it.each([
   ["accounts"],
   ["login", "fixture"],
   ["stats"],
-  ["stats", "--task", "urn:task:1"],
+  ["stats", "--task", "fixture-task"],
   ["audit", "https://pod.example/agent/proposals/1"],
   ["install-launchd"],
 ])("dispatches awp %j", async (...args) => {
@@ -241,6 +246,7 @@ it.each([
     await runCli(args, h, {
       signal: new AbortController().signal,
       print: vi.fn(),
+      stderr: vi.fn(),
       confirm: vi.fn(),
     }),
   ).toBe(2);
