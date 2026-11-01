@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-scheduling",
+  "kind": "sdk",
+  "name": "Solid Scheduling Model",
+  "repo": "https://github.com/jeswr/solid-scheduling",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=20",
+    "rdf": "n3 ^2.x",
+    "rdf-wrapper": "@rdfjs/wrapper ^0.34.x",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1",
+    "task-model": "@jeswr/solid-task-model (git#9d9c2ae)",
+    "shacl": "rdf-validate-shacl ^0.6, @zazuko/env-node ^3 (dev)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=20"
+  },
+  "federation": {
+    "sectors": [
+      "scheduling"
+    ],
+    "produces": [
+      "scheduling-task",
+      "task"
+    ],
+    "consumes": [
+      "scheduling",
+      "task"
+    ],
+    "note": "The scheduling-sector RDF model — the data model a Vikunja→Solid fork writes to a pod. MINTS NOTHING: a task is a sched:Task (a core:Activity), a calendar a sched:Calendar, repeats via sched:RecurrenceRule, alarms via sched:Reminder, from @jeswr/solid-federation-vocab's scheduling sector; RSVP status reuses the sector's AttendanceScheme. CROSS-SECTOR (load-bearing): a sched:Task ALSO carries the published @jeswr/solid-task-model wf:Task shape on the SAME subject, so a Vikunja task surfaces 'assigned to me' in Pod Manager / solid-issues — the first external app on the shared task model (the federation-vision demo). As an ONTOLOGY TEST RIG, modelling real Vikunja/kanban task data surfaced scheduling-sector gaps — kanban board/bucket/position (ordering), first-class labels (reuse dct:subject vs mint), the full task-relation set incl. precedes/follows, percent-done, and the sched:CalendarEvent-vs-dav-bridge-schema:Event canonicalisation — written up as fedcon:Proposal CANDIDATES in scheduling.proposals.ttl / DECISIONS.md rather than edited into the sector. Ships a focused SHACL shape + an owner-only fail-closed WAC ACL helper (schedules are owner-private). GitHub-installable now (committed dist/, ignore-scripts=true); npm publish is a deferred migration. The sched:/core: IRIs are legacy w3id.org/jeswr identifiers that re-mint to the jeswr.org persistent-ID layer per the staged migration; fedcon: is already jeswr.org-rooted."
+  },
+  "status": {
+    "generatedAt": "2026-07-07T00:00:00.000Z",
+    "version": "0.1.0",
+    "gate": {
+      "lint": "pass",
+      "typecheck": "pass",
+      "test": "pass",
+      "build": "pass"
+    }
+  }
+}
