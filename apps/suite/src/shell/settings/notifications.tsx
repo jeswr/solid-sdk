@@ -20,11 +20,32 @@ export function NotificationSettings() {
   const [permission, setPermission] = useState("Checking…");
   const [error, setError] = useState("");
   useEffect(() => {
-    const sync = () =>
-      setPermission("Notification" in window ? Notification.permission : "unavailable");
+    let status: PermissionStatus | undefined;
+    let live = true;
+    // The Permissions API tracks grants made outside the page (and in headless Chromium,
+    // where Notification.permission lags); Notification.permission is the fallback.
+    const sync = () => {
+      if (!("Notification" in window)) return setPermission("unavailable");
+      setPermission(
+        status ? (status.state === "prompt" ? "default" : status.state) : Notification.permission,
+      );
+    };
     sync();
+    navigator.permissions
+      ?.query({ name: "notifications" })
+      .then((result) => {
+        if (!live) return;
+        status = result;
+        status.addEventListener("change", sync);
+        sync();
+      })
+      .catch(() => {});
     addEventListener("focus", sync);
-    return () => removeEventListener("focus", sync);
+    return () => {
+      live = false;
+      status?.removeEventListener("change", sync);
+      removeEventListener("focus", sync);
+    };
   }, []);
   return (
     <>
