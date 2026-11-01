@@ -65,7 +65,7 @@ final class PushStore {
         guard PushPolicy.identifier(registration), topics.count <= 16, Set(topics.map { $0.index }).count == topics.count else { throw PushCrypto.Failure.invalid }
         try topics.forEach { try $0.validate() }
         try transaction { state in
-            if topics.isEmpty() {
+            if topics.isEmpty {
                 state.registrations.removeValue(forKey: registration)
                 for index in 0..<16 { state.counts.removeValue(forKey: PushPolicy.group(registration, index)) }
                 return
