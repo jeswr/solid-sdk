@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex
-import { colour, fontFamily, fontSize, lineHeight, paragraphSpace } from "../editor/styles";
+import {
+  colour,
+  fontFamily,
+  fontSize,
+  lineHeight,
+  paragraphSpace,
+  textColour,
+} from "../editor/styles";
 import { WORD } from "./docx-xml";
 
 const direct = (element: Element | null | undefined, name: string) =>
@@ -54,7 +61,12 @@ export function docxStyles(document: Document, definitions: Document) {
         const size = value(direct(props, "sz"));
         if (size) set("font-size", fontSize(`${Number(size) / 2}pt`));
         const ink = value(direct(props, "color"));
-        if (ink) set("color", colour(`#${ink}`));
+        // Explicit black or "auto" resets an inherited colour to the default ink.
+        if (ink) {
+          const safe = textColour(`#${ink}`);
+          if (safe) result.set("color", safe);
+          else if (ink === "auto" || colour(`#${ink}`)) result.delete("color");
+        }
         const fill = value(direct(props, "shd"), "fill");
         if (fill) set("background-color", colour(`#${fill}`));
       }

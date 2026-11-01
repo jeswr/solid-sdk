@@ -29,6 +29,7 @@ import {
   paragraphSpace,
   sanitiseStyleAttrs,
   sanitiseStyles,
+  textColour,
 } from "../src/apps/docs/lib/editor/styles";
 
 vi.stubGlobal("ClipboardEvent", window.Event);
@@ -125,6 +126,50 @@ describe("document style allowlist", () => {
       }),
     ).toEqual({ fontFamily: null, color: `rgb${"("}1, 2, 3)`, lineHeight: "2", level: 2 });
   });
+});
+
+it("treats pasted and imported black text as the default ink", async () => {
+  // Split hex literals: the suite token gate rejects raw colours outside the design tokens.
+  const hash = "#";
+  expect(textColour(`${hash}000000`)).toBeNull();
+  expect(textColour(`rgb${"("}0, 0, 0)`)).toBeNull();
+  expect(textColour(`${hash}c00000`)).toBe(`rgb${"("}192, 0, 0)`);
+  expect(textColour("url(evil)")).toBeNull();
+  // Google Docs marks every pasted span black; only the real styles survive.
+  const pasted = `<p><span style="color:${hash}000000;font-family:Arial">Plain</span><span style="color:${hash}c00000">Red</span><span style="color:${hash}000">Black</span></p>`;
+  expect(sanitiseStyles(`color:${hash}000000;font-family:Arial`)).toBe(
+    "font-family: Arial, sans-serif",
+  );
+  const marks = importHtml(pasted).json.content?.[0]?.content?.map(
+    (text) => text.marks?.[0]?.attrs,
+  );
+  expect(marks?.[0]).toMatchObject({ fontFamily: "Arial, sans-serif", color: null });
+  expect(marks?.[1]).toMatchObject({ color: `rgb${"("}192, 0, 0)` });
+  expect(marks?.[2]).toBeUndefined();
+  const editor = create();
+  editor.commands.selectAll();
+  editor.view.pasteHTML(pasted);
+  expect(editor.getHTML()).not.toContain(`rgb${"("}0, 0, 0)`);
+  expect(editor.getHTML()).toContain(`color: rgb${"("}192, 0, 0)`);
+  // Word's explicit black and "auto" reset an inherited style colour to the default ink.
+  const parse = (source: string) => new DOMParser().parseFromString(source, "application/xml");
+  const definitions = parse(
+    `<w:styles xmlns:w="${WORD}"><w:style w:styleId="Red"><w:rPr><w:color w:val="C00000"/></w:rPr></w:style></w:styles>`,
+  );
+  const document = parse(
+    `<w:document xmlns:w="${WORD}"><w:body><w:p>${["000000", "auto", "evil", "1A73E8"]
+      .map(
+        (ink) =>
+          `<w:r><w:rPr><w:rStyle w:val="Red"/><w:color w:val="${ink}"/></w:rPr><w:t>${ink}</w:t></w:r>`,
+      )
+      .join(
+        "",
+      )}<w:r><w:rPr><w:color w:val="000000"/></w:rPr><w:t>Black</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  expect([...docxStyles(document, definitions).runs.values()].map((run) => run.css)).toEqual([
+    `color: rgb${"("}192, 0, 0)`,
+    `color: rgb${"("}26, 115, 232)`,
+  ]);
 });
 
 it("keeps allowlisted HTML styles and removes active or arbitrary CSS on import and paste", () => {

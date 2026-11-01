@@ -5,7 +5,13 @@ import type { Editor } from "@tiptap/react";
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { focusDocument } from "../editor/focus";
-import { colour, DOCUMENT_COLOURS, FONT_FAMILIES, fontSize } from "../lib/editor/styles";
+import {
+  colour,
+  DOCUMENT_COLOURS,
+  FONT_FAMILIES,
+  fontSize,
+  textColour,
+} from "../lib/editor/styles";
 
 export function FontSelect({ editor }: { editor: Editor }) {
   return (
@@ -189,7 +195,9 @@ export function ColourPopover({
           choose={(value) => {
             const chain = editor.chain().focus();
             if (kind === "color") {
-              if (value) chain.setColor(value);
+              // Black is the default ink, so choosing it resets to default text.
+              const ink = textColour(value);
+              if (ink) chain.setColor(ink);
               else chain.unsetColor();
             } else {
               chain.unsetHighlight();

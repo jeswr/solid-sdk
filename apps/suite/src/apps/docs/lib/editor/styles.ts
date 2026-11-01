@@ -72,6 +72,18 @@ export function colour(value: unknown): string | null {
   return channels.every((channel) => channel <= 255) ? documentRgb(channels) : null;
 }
 
+/** The page's default ink. Word "auto" and pasted black text both mean "default text". */
+export const DEFAULT_INK = documentRgb([0, 0, 0]);
+
+/**
+ * A text colour other than the default ink. Google Docs pastes and Word runs mark every
+ * span black; storing that would pin text to black instead of following the page's ink.
+ */
+export function textColour(value: unknown): string | null {
+  const safe = colour(value);
+  return safe === DEFAULT_INK ? null : safe;
+}
+
 export function colourHex(value: unknown): string | null {
   const safe = colour(value);
   return safe
@@ -106,7 +118,7 @@ export function indentLevel(value: unknown): number | null {
 export const STYLE_RULES = {
   fontFamily: { css: "font-family", sanitise: fontFamily },
   fontSize: { css: "font-size", sanitise: fontSize },
-  color: { css: "color", sanitise: colour },
+  color: { css: "color", sanitise: textColour },
   backgroundColor: { css: "background-color", sanitise: colour },
   lineHeight: { css: "line-height", sanitise: lineHeight },
   spaceBefore: { css: "margin-top", sanitise: paragraphSpace },
