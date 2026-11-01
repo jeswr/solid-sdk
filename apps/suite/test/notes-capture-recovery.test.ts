@@ -358,10 +358,17 @@ it("never auto-creates a capture that was in flight when its page closed, and wa
     "may already have been saved",
   );
   expect(create).toHaveBeenCalledTimes(1);
-  // Closing, clicking outside, Escape and unmounting keep it stored instead of creating it.
+  // Close, an outside click, Escape and unmount keep it stored and the bar
+  // open instead of creating it; a collapsed bar never holds its text.
   await close(ui.host);
-  expect(ui.host.querySelector("textarea")).toBeNull();
+  expect(ui.host.querySelector("textarea")?.value).toBe("Maybe saved");
   await act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  expect(ui.host.querySelector("textarea")?.value).toBe("Maybe saved");
+  await act(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  expect(ui.host.querySelector("textarea")?.value).toBe("Maybe saved");
+  expect(ui.host.querySelector('[aria-label="New list"]')).toBeNull();
   await ui.unmount();
   expect(create).toHaveBeenCalledTimes(1);
   const stored = JSON.parse(localStorage.getItem(key) as string);
@@ -417,4 +424,51 @@ it("offers Save anyway and Discard for a capture that may already have been save
   expect(second.host.querySelector("textarea")).toBeNull();
   await second.unmount();
   expect(create).toHaveBeenCalledTimes(1);
+  // Save anyway on emptied text removes the flagged record instead of keeping it.
+  localStorage.setItem("notes-capture-draft:gone", JSON.stringify(record));
+  const third = await mount(h(CaptureBar));
+  const textarea = third.host.querySelector("textarea");
+  await act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set?.call(
+      textarea,
+      "",
+    );
+    textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await click(
+    [...third.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save anyway",
+    ) as HTMLButtonElement,
+  );
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(create).toHaveBeenCalledTimes(1);
+  await third.unmount();
+});
+
+it("retries a failed Save anyway from the toast after the bar unmounts", async () => {
+  const base = { webId, title: "", labels: [], pinned: false, colour: "default" };
+  localStorage.setItem(
+    "notes-capture-draft:gone",
+    JSON.stringify({ ...base, body: "Flagged", tabId: "gone", updatedAt: 1, maybeSaved: true }),
+  );
+  const create = vi.fn().mockRejectedValue(new Error("Offline"));
+  mocks.context.create = create;
+  const { CaptureBar } = await page();
+  const ui = await mount(h(CaptureBar));
+  const writing = deferred<StoredNote>();
+  create.mockReturnValueOnce(writing.promise);
+  await click(
+    [...ui.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save anyway",
+    ) as HTMLButtonElement,
+  );
+  await ui.unmount();
+  await act(() => writing.reject(new Error("Offline")));
+  create.mockResolvedValue({} as StoredNote);
+  await act(() => mocks.toast.error.mock.lastCall?.[1].action.onClick());
+  expect(create).toHaveBeenLastCalledWith(
+    { title: "Flagged", body: "<p>Flagged</p>", labels: [] },
+    false,
+    "default",
+  );
 });

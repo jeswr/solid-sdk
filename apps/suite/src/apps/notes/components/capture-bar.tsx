@@ -95,9 +95,9 @@ export function CaptureBar({ label }: { label?: string }) {
     if (submitted.current || submitting.has(captureKey)) return;
     if (maybeSaved && !confirmed) {
       // Closing must not create a capture that may already exist: keep it
-      // stored and offered until the user picks Save anyway or Discard.
+      // stored and the bar open (a collapsed bar never holds text) until the
+      // user picks Save anyway or Discard.
       persistCapture();
-      if (mounted.current) setExpanded(false);
       return;
     }
     let input: ReturnType<typeof captureToNote>;
@@ -162,7 +162,7 @@ export function CaptureBar({ label }: { label?: string }) {
               const detail = { key: captureKey, webId: session.webId, handled: false };
               window.dispatchEvent(new CustomEvent(captureRetry, { detail }));
               // No capture bar is mounted for this key: retry from this closure.
-              if (!detail.handled) void finish();
+              if (!detail.handled) void finish(confirmed);
             },
           },
         });
@@ -179,6 +179,15 @@ export function CaptureBar({ label }: { label?: string }) {
       }
       submitting.delete(captureKey);
       settled = true;
+    } else if (confirmed) {
+      // "Save anyway" on an emptied capture: nothing to create, nothing to keep.
+      clearTimeout(persistTimer.current);
+      captureSnapshot.current = null;
+      try {
+        localStorage.removeItem(captureKey);
+      } catch {
+        // Nothing stored to remove.
+      }
     }
     // Announce settlement only after this form has reset, so a capture that
     // restore() recovers into the bar is not wiped by the reset below.
