@@ -1,0 +1,130 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+.hm-requests-page {
+  max-width: 1040px;
+}
+.hm-requests-page h1 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.hm-requests-page :is(a, button),
+.hm-request-sheet :is(button, select, input) {
+  min-height: 40px;
+}
+.hm-request-back {
+  display: inline-flex;
+  align-items: center;
+  color: var(--foreground-muted);
+  font-weight: 500;
+}
+.hm-request-back::before {
+  content: "← ";
+  white-space: pre;
+}
+.hm-request-back:hover,
+.hm-request-back:focus-visible {
+  color: var(--foreground);
+}
+.hm-request-muted {
+  color: var(--foreground-muted);
+}
+.hm-requests-page [data-slot="tabs-trigger"] {
+  gap: var(--space-2);
+}
+.hm-request-list {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.hm-request-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+@media (min-width: 768px) {
+  .hm-request-row {
+    grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr) auto;
+    align-items: center;
+  }
+}
+.hm-request-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.hm-request-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.hm-request-details {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hm-request-types {
+  font-weight: 500;
+}
+.hm-request-sheet {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.hm-request-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+}
+.hm-request-check label {
+  cursor: pointer;
+  font-weight: 600;
+}
+.hm-request-all label {
+  font-weight: 500;
+}
+.hm-request-cards {
+  display: grid;
+  gap: var(--space-3);
+}
+.hm-request-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.hm-request-card-about {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--foreground-muted);
+}
+.hm-request-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.hm-request-account {
+  display: grid;
+  gap: var(--space-1);
+}
+.hm-request-account select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  padding-inline: var(--space-2);
+}
+.hm-request-error {
+  overflow-wrap: anywhere;
+}
+/* Cancel and Share carry equal weight: same variant, same size, side by side. */
+.hm-request-actions[data-equal-weight] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}

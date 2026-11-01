@@ -15,12 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  accessRequestsEnabled,
-  failureNotice,
-  type PermissionsView,
-  visibleRows,
-} from "../../lib/permissions/view";
+import { failureNotice, type PermissionsView, visibleRows } from "../../lib/permissions/view";
 import {
   type PermissionsBinding,
   readPermissionsView,
@@ -28,6 +23,7 @@ import {
   usePermissions,
   writePermissionsView,
 } from "../../state/permissions";
+import { useRequestCaps, useRequests } from "../../state/requests";
 import { useHomeSession } from "../home-app";
 import { PermissionAccessRow } from "./permission-access";
 
@@ -116,8 +112,14 @@ export function RequestsLink({ pending = 0 }: { pending?: number }) {
   );
 }
 
+/** The Requests link with the live pending count; mounted only when requests are available. */
+function PendingRequestsLink() {
+  return <RequestsLink pending={useRequests().pending.length} />;
+}
+
 export function PermissionsPage() {
   const binding = usePermissions();
+  const caps = useRequestCaps();
   const session = useHomeSession();
   const preferences = usePermissionPreferences();
   const [tab, setTab] = useState("people");
@@ -134,7 +136,7 @@ export function PermissionsPage() {
             <TabsTrigger value="people">People</TabsTrigger>
             <TabsTrigger value="apps">Apps</TabsTrigger>
           </TabsList>
-          {accessRequestsEnabled(process.env.NEXT_PUBLIC_SUITE_CAPS) && <RequestsLink />}
+          {caps.accessRequests && <PendingRequestsLink />}
           <Input
             className="hm-permission-search"
             aria-label="Search permissions"

@@ -1,0 +1,162 @@
+// AUTHORED-BY Claude Opus 5.5
+"use client";
+/** `/permissions/requests` (03-home-permissions §2.5): pending requests and 30 days of decisions. */
+
+import {
+  Avatar,
+  AvatarFallback,
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingSkeleton,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@jeswr/suite-ui";
+import Link from "next/link";
+import { useRef, useState } from "react";
+import { permissionDate } from "../../lib/permissions/view";
+import { requestedDurationText } from "../../lib/requests/duration";
+import {
+  cardLabels,
+  decidedText,
+  initials,
+  purposeLine,
+  type ReadableRequest,
+  requestCards,
+  requesterHost,
+  requesterName,
+  unreadableNotice,
+} from "../../lib/requests/model";
+import { useRequests } from "../../state/requests";
+import { RequestReview } from "./request-review";
+
+export const EMPTY_PENDING =
+  "No requests waiting — when an app or person asks for access, it appears here.";
+export const EMPTY_DECIDED = "No requests decided in the last 30 days.";
+
+function Requester({ entry }: { entry: ReadableRequest }) {
+  const name = requesterName(entry);
+  const host = requesterHost(entry);
+  return (
+    <div className="hm-request-who">
+      <Avatar aria-hidden="true">
+        <AvatarFallback>{initials(name)}</AvatarFallback>
+      </Avatar>
+      <div>
+        <h3 className="hm-request-name">{name}</h3>
+        {host && host !== name && <p className="hm-request-muted">{host}</p>}
+      </div>
+    </div>
+  );
+}
+
+export function RequestRow({
+  entry,
+  onReview,
+}: {
+  entry: ReadableRequest;
+  onReview?: ((entry: ReadableRequest, trigger: HTMLElement) => void) | undefined;
+}) {
+  const purpose = purposeLine(entry.purpose);
+  return (
+    <li className="hm-request-row" aria-label={`Request from ${requesterName(entry)}`}>
+      <Requester entry={entry} />
+      <div className="hm-request-details">
+        <p className="hm-request-types">{cardLabels(requestCards(entry)).join(", ")}</p>
+        {purpose && <p>{purpose}</p>}
+        <p className="hm-request-muted">
+          {onReview
+            ? requestedDurationText(entry, permissionDate)
+            : decidedText(entry, permissionDate)}
+        </p>
+      </div>
+      {onReview && (
+        <Button variant="outline" onClick={(event) => onReview(entry, event.currentTarget)}>
+          Review
+        </Button>
+      )}
+    </li>
+  );
+}
+
+export function RequestsPage() {
+  const requests = useRequests();
+  const [tab, setTab] = useState("pending");
+  const [reviewing, setReviewing] = useState<ReadableRequest>();
+  const trigger = useRef<HTMLElement | null>(null);
+  const list = (entries: readonly ReadableRequest[], pending: boolean) =>
+    requests.status === "loading" ? (
+      <LoadingSkeleton preset="list" count={3} label="Loading requests" />
+    ) : requests.status === "error" ? (
+      <ErrorState error="unreachable" actions={{ retry: () => void requests.refresh() }} />
+    ) : entries.length ? (
+      <ul className="hm-request-list">
+        {entries.map((entry) => (
+          <RequestRow
+            key={entry.id}
+            entry={entry}
+            onReview={
+              pending
+                ? (next, button) => {
+                    trigger.current = button;
+                    setReviewing(next);
+                  }
+                : undefined
+            }
+          />
+        ))}
+      </ul>
+    ) : (
+      <EmptyState title={pending ? EMPTY_PENDING : EMPTY_DECIDED} body="" />
+    );
+  return (
+    <div className="hm-page hm-requests-page">
+      <header>
+        <Link className="hm-request-back" href="/permissions">
+          Permissions
+        </Link>
+        <h1>Requests</h1>
+        <p className="hm-request-muted">Apps and people asking to use data in your pod.</p>
+      </header>
+      {requests.unreadable > 0 && (
+        <p role="status" className="hm-request-muted">
+          {unreadableNotice(requests.unreadable)}
+        </p>
+      )}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList aria-label="Requests" variant="line">
+          <TabsTrigger value="pending">
+            Pending
+            {requests.pending.length > 0 && (
+              <span className="hm-permission-count">
+                {requests.pending.length}
+                <span className="sr-only"> waiting</span>
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="decided">Decided</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pending">{list(requests.pending, true)}</TabsContent>
+        <TabsContent value="decided">{list(requests.decided, false)}</TabsContent>
+      </Tabs>
+      {reviewing && (
+        <RequestReview
+          key={reviewing.id}
+          entry={reviewing}
+          onDone={() => {
+            setReviewing(undefined);
+            // The row may be gone once decided; fall back to the tab list.
+            const target = trigger.current?.isConnected
+              ? trigger.current
+              : document.querySelector<HTMLElement>(
+                  ".hm-requests-page [role=tab][data-state=active]",
+                );
+            requestAnimationFrame(() => target?.focus());
+          }}
+        />
+      )}
+    </div>
+  );
+}
