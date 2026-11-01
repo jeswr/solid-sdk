@@ -13,6 +13,8 @@ export interface PrivateAclSession {
   fetch: typeof fetch;
 }
 export class PrivateAccessError extends Error {}
+/** The server would not create an ACL for a resource that does not exist yet. */
+class AclRefusedError extends PrivateAccessError {}
 const OWNER_MODES = ["read", "write", "control"] as const;
 
 function parentOf(url: string, storage: string): string | undefined {
@@ -111,6 +113,8 @@ export async function ensurePrivateAcl(
       headers: { "content-type": "text/turtle", "if-none-match": "*" },
       body: await serializeTurtle(dataset),
     });
+    if ([404, 405, 409].includes(created.status))
+      throw new AclRefusedError("Couldn't protect your settings.");
     // 412: another writer created it first; the read-back below verifies whatever won.
     if (!created.ok && created.status !== 412)
       throw new PrivateAccessError("Couldn't protect your settings.");
@@ -118,6 +122,61 @@ export async function ensurePrivateAcl(
   }
   verifyOwnerOnly(session, target, endpoint, read, head.headers);
   return endpoint;
+}
+
+/**
+ * Prepare a private settings document that does not exist yet for its first write.
+ * The default protects it ACL-first, so the document never exists without its own ACL.
+ * A server that refuses an ACL for a missing resource (404, 405 or 409) gets the
+ * fallback: create the document EMPTY (If-None-Match: *), so nothing is exposed while
+ * it inherits the parent's access, then install and verify the owner-only ACL. The
+ * returned ETag is the empty document's, for an If-Match content write. If the ACL step
+ * fails, the empty document is deleted (If-Match) and the error is rethrown; a
+ * concurrent creator (412) stops without touching the other writer's document.
+ */
+export async function preparePrivateDocument(
+  session: PrivateAclSession,
+  target: string,
+): Promise<{ acl: string; etag?: string }> {
+  try {
+    return { acl: await ensurePrivateAcl(session, target) };
+  } catch (error) {
+    if (!(error instanceof AclRefusedError)) throw error;
+  }
+  const created = await session.fetch(target, {
+    method: "PUT",
+    redirect: "error",
+    headers: { "content-type": "text/turtle", "if-none-match": "*" },
+    body: "",
+  });
+  if (created.status === 412)
+    throw new PrivateAccessError("Your settings changed while Home set them up. Try again.");
+  if (!created.ok) throw new PrivateAccessError("Couldn't set up private access to your settings.");
+  const etag =
+    created.headers.get("etag") ??
+    (await session.fetch(target, { method: "HEAD", redirect: "error" })).headers.get("etag");
+  try {
+    if (!etag) throw new PrivateAccessError("Couldn't set up private access to your settings.");
+    return { acl: await ensurePrivateAcl(session, target), etag };
+  } catch (error) {
+    await discardEmptyDocument(session, target, etag);
+    throw error;
+  }
+}
+
+/** Best-effort removal of a document this flow created, never someone else's newer version. */
+export async function discardEmptyDocument(
+  session: PrivateAclSession,
+  target: string,
+  etag: string | null,
+): Promise<void> {
+  await session
+    .fetch(target, {
+      method: "DELETE",
+      redirect: "error",
+      ...(etag ? { headers: { "if-match": etag } } : {}),
+    })
+    .catch(() => undefined);
 }
 
 /**

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createManualItem,
   manualUrl,
@@ -484,4 +484,127 @@ it.each([
   expect(
     fetch.mock.calls.some(([input, init]) => init?.method === "PUT" && String(input) === index),
   ).toBe(false);
+});
+
+describe("empty-document fallback when a server refuses an ACL for a missing resource", () => {
+  const index = `${root}settings/privateTypeIndex.ttl`;
+  const prefs = `${root}settings/prefs.ttl`;
+  function refusingPod(
+    refuse: (target: string, pod: ReturnType<typeof createDemoPod>) => number | undefined,
+  ) {
+    const pod = createDemoPod({
+      root,
+      seed: [
+        {
+          path: "profile/card",
+          contentType: "text/turtle",
+          body: '<#me> <http://xmlns.com/foaf/0.1/name> "Alice".',
+        },
+      ],
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const target = String(input);
+      if (init?.method === "PUT" && target.endsWith(".acl")) {
+        const status = refuse(target, pod);
+        if (status) return new Response(null, { status });
+      }
+      return pod.fetch(input, init);
+    });
+    return { pod, fetch };
+  }
+  const register = (fetch: typeof globalThis.fetch) =>
+    registerManualType(
+      { storageUrl: root, webId, fetch },
+      types[0]?.manualForm as string,
+      `${root}personal/`,
+    );
+  const writes = (fetch: ReturnType<typeof vi.fn<typeof globalThis.fetch>>, target: string) =>
+    fetch.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input) === target && ["PUT", "DELETE"].includes(init?.method ?? ""),
+      )
+      .map(([, init]) => ({
+        method: init?.method,
+        headers: Object.fromEntries(new Headers(init?.headers)),
+        body: init?.body,
+      }));
+
+  it.each([
+    404, 405, 409,
+  ])("creates the document empty, protects it, then writes content with If-Match after a %i", async (status) => {
+    // Like servers that need the subject resource first: refuse while it is missing.
+    const { pod, fetch } = refusingPod((target, pod) =>
+      pod.has(target.slice(0, -4)) ? undefined : status,
+    );
+    await register(fetch);
+    for (const target of [index, prefs]) {
+      const [empty, content, ...rest] = writes(fetch, target);
+      expect(rest).toEqual([]);
+      expect(empty).toMatchObject({ method: "PUT", body: "", headers: { "if-none-match": "*" } });
+      expect(content?.headers["if-match"]).toBeTruthy();
+      expect(content?.headers["if-none-match"]).toBeUndefined();
+      // The ACL was installed between the empty create and the content write.
+      const order = fetch.mock.calls.map(
+        ([input, init]) => `${init?.method ?? "GET"} ${String(input)}`,
+      );
+      const aclWrite = order.lastIndexOf(`PUT ${target}.acl`);
+      expect(aclWrite).toBeGreaterThan(order.indexOf(`PUT ${target}`));
+      expect(aclWrite).toBeLessThan(order.lastIndexOf(`PUT ${target}`));
+      expect(await (await pod.fetch(`${target}.acl`)).text()).toContain(webId);
+    }
+    expect(registrationsFrom((await readResource(pod.fetch, index)).dataset)).toHaveLength(1);
+    expect(await (await pod.fetch(`${root}profile/card`)).text()).toContain("preferencesFile");
+  });
+
+  it("deletes the empty document and links nothing when the fallback ACL also fails", async () => {
+    const { pod, fetch } = refusingPod(() => 409);
+    await expect(register(fetch)).rejects.toThrow("Couldn't protect your settings.");
+    const [empty, removal, ...rest] = writes(fetch, index);
+    expect(rest).toEqual([]);
+    expect(empty).toMatchObject({ method: "PUT", body: "" });
+    expect(removal?.method).toBe("DELETE");
+    expect(removal?.headers["if-match"]).toBeTruthy();
+    expect(pod.has(index)).toBe(false);
+    expect(pod.has(prefs)).toBe(false);
+    expect(await (await pod.fetch(`${root}profile/card`)).text()).not.toContain("preferencesFile");
+  });
+
+  it("stops without touching a concurrent creator's document", async () => {
+    const other = `<> a <${SOLID}TypeIndex>; <https://schema.org/name> "Another app".`;
+    const { pod, fetch } = refusingPod(() => 409);
+    fetch.mockImplementation(async (input, init) => {
+      const target = String(input);
+      if (init?.method === "PUT" && target.endsWith(".acl"))
+        return new Response(null, { status: 409 });
+      // Another writer creates the index just before the empty-document create.
+      if (init?.method === "PUT" && target === index && !pod.has(index))
+        await pod.fetch(index, {
+          method: "PUT",
+          headers: { "content-type": "text/turtle" },
+          body: other,
+        });
+      return pod.fetch(input, init);
+    });
+    await expect(register(fetch)).rejects.toThrow("Your settings changed while Home set them up.");
+    expect(writes(fetch, index)).toHaveLength(1);
+    expect(await (await pod.fetch(index)).text()).toBe(other);
+    expect(pod.has(prefs)).toBe(false);
+    expect(await (await pod.fetch(`${root}profile/card`)).text()).not.toContain("preferencesFile");
+  });
+
+  it("removes the empty placeholder when its content write fails", async () => {
+    const { pod, fetch } = refusingPod((target, pod) =>
+      pod.has(target.slice(0, -4)) ? undefined : 409,
+    );
+    const base = fetch.getMockImplementation() as typeof globalThis.fetch;
+    fetch.mockImplementation(async (input, init) =>
+      init?.method === "PUT" && String(input) === index && new Headers(init.headers).has("if-match")
+        ? new Response(null, { status: 500 })
+        : base(input, init),
+    );
+    await expect(register(fetch)).rejects.toThrow("Couldn't finish saving.");
+    expect(pod.has(index)).toBe(false);
+    expect(pod.has(prefs)).toBe(false);
+  });
 });

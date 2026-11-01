@@ -9,7 +9,7 @@ import { applyFieldEdits } from "../../lib/forms/subject-edit";
 import type { DataType } from "../../lib/model/domains";
 import { inStorage, readResource, serializeTurtle, subjectOf } from "../../lib/model/rdf";
 import { registrationsFrom } from "../../lib/model/type-index";
-import { ensurePrivateAcl, verifyPrivateDocument } from "./private-acl";
+import { discardEmptyDocument, preparePrivateDocument, verifyPrivateDocument } from "./private-acl";
 
 export interface ManualSession {
   storageUrl: string;
@@ -51,7 +51,8 @@ export function manualUrl(
 /**
  * Re-read and reapply a small graph change on 412, preserving all unrelated statements.
  * A private document that does not exist yet gets a verified owner-only ACL before its
- * first write; if that or the post-write check fails, nothing is left behind to link.
+ * content is written (ACL-first, or the empty-document fallback); if that or the
+ * post-write check fails, nothing is left behind to link.
  */
 async function update(
   session: ManualSession,
@@ -75,33 +76,34 @@ async function update(
     }
     if (!edit(dataset)) return;
     if (!missing && !etag) throw new Error("Reload and try saving again");
-    const acl = privateDocument && missing ? await ensurePrivateAcl(session, target) : undefined;
+    const prepared =
+      privateDocument && missing ? await preparePrivateDocument(session, target) : undefined;
+    // After the empty-document fallback, content replaces exactly that empty document.
+    const condition = prepared?.etag
+      ? { "if-match": prepared.etag }
+      : missing
+        ? { "if-none-match": "*" }
+        : { "if-match": etag as string };
     const response = await session.fetch(target, {
       method: "PUT",
       redirect: "error",
-      headers: {
-        "content-type": "text/turtle",
-        ...(missing ? { "if-none-match": "*" } : { "if-match": etag as string }),
-      },
+      headers: { "content-type": "text/turtle", ...condition },
       body: await serializeTurtle(dataset),
     });
     if (response.ok) {
-      if (acl === undefined) return;
+      if (prepared === undefined) return;
       try {
-        await verifyPrivateDocument(session, target, acl);
+        await verifyPrivateDocument(session, target, prepared.acl);
         return;
       } catch (error) {
-        const created = response.headers.get("etag");
-        await session
-          .fetch(target, {
-            method: "DELETE",
-            redirect: "error",
-            ...(created ? { headers: { "if-match": created } } : {}),
-          })
-          .catch(() => undefined);
+        await discardEmptyDocument(session, target, response.headers.get("etag"));
         throw error;
       }
     }
+    // A failed first write leaves no empty placeholder behind. On 412 another writer
+    // replaced it; the retry then reads and edits their version.
+    if (prepared?.etag && response.status !== 412)
+      await discardEmptyDocument(session, target, prepared.etag);
     if (response.status !== 412) throw new Error("Couldn't finish saving. Please try again.");
   }
   throw new Error("This item keeps changing. Please try again.");
