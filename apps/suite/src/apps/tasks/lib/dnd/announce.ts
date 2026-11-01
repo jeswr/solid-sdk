@@ -69,11 +69,26 @@ export function overMessage(
   }
 }
 
+/** Announced on drop while the write is in flight; the outcome follows when it settles. */
+export function movingMessage(task: TaskView): string {
+  return `Moving ${quoted(task.title)}…`;
+}
+
+/** The outcome when a planned move rolled back or could not be written. */
+export function failedMessage(task: TaskView): string {
+  return `Couldn't move ${quoted(task.title)}.`;
+}
+
+/**
+ * The outcome of a written plan. A sorted list (`manual` false) shows no
+ * manual order, so its section moves name no position.
+ */
 export function dropMessage(
   task: TaskView,
   plan: DropPlan,
   views: readonly TaskView[],
   projects: readonly ProjectName[],
+  manual = true,
 ): string {
   const name = quoted(task.title);
   switch (plan.kind) {
@@ -90,7 +105,10 @@ export function dropMessage(
           ? `Made ${name} a sub-task of ${parent}.`
           : `Moved ${name} to position ${plan.index} under ${parent}.`;
       }
-      return `Moved ${name} to ${sectionLabel(projects, plan.projectUrl, plan.sectionId)}, position ${plan.index}.`;
+      const section = sectionLabel(projects, plan.projectUrl, plan.sectionId);
+      return manual
+        ? `Moved ${name} to ${section}, position ${plan.index}.`
+        : `Moved ${name} to ${section}.`;
     }
   }
 }

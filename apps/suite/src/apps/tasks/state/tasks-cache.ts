@@ -124,6 +124,11 @@ export class TasksCache {
   private projectFailures = new Map<string, unknown>();
   /** Keep the original URL reserved across failures and repeated completion actions. */
   private unresolvedCompletions = new Map<string, () => Promise<CompletionPlan | undefined>>();
+  /** A project move keeps one TaskMove per task until it succeeds, so every Retry reuses it. */
+  private unresolvedMoves = new Map<
+    string,
+    { target: string; run: () => Promise<StoredTask | undefined> }
+  >();
   private hiddenTasks = new Set<string>();
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
@@ -610,7 +615,96 @@ export class TasksCache {
       [item.url],
     );
   }
+  /**
+   * Several task edits as ONE optimistic patch and one serialized write, so a
+   * renumbering drop never shows, or persists, a half-applied order. Writes go
+   * in order, each conditional; a lost response counts once the read-back holds
+   * the change. On failure the confirmed writes are reverted newest first (each
+   * conditional on our own revision) before the error surfaces, and `onRetry`
+   * replays the whole intent.
+   */
+  updateTasks(
+    edits: readonly { item: StoredTask; change: (task: TaskItem) => void }[],
+    onRetry: () => void,
+  ): Promise<StoredTask[] | undefined> {
+    const owned = edits.map((edit) => ({
+      ...edit,
+      project: this.snapshot.projects.find((project) =>
+        this.snapshot.tasks[project.url]?.items.some((task) => task.url === edit.item.url),
+      ),
+    }));
+    if (!owned.length || owned.some((edit) => !edit.project)) return Promise.resolve(undefined);
+    const apply: Patch = (state) => {
+      let next = state;
+      for (const { item, change, project } of owned) {
+        const url = (project as StoredProject).url;
+        const current = next.tasks[url]?.items.find((task) => task.url === item.url);
+        if (current) next = replaceTask(next, url, item.url, changeTask(current, change));
+      }
+      return next;
+    };
+    return this.mutate(
+      apply,
+      async () => {
+        const written: { before: StoredTask; after: StoredTask; projectUrl: string }[] = [];
+        try {
+          for (const { item, change, project } of owned) {
+            const projectUrl = (project as StoredProject).url;
+            const before = this.task(projectUrl, item.url);
+            written.push({ before, after: await this.writeChange(before, change), projectUrl });
+          }
+        } catch (error) {
+          await this.revertWrites(written);
+          throw error;
+        }
+        for (const { after } of written) this.undoRepairs.get(after.url)?.supersede(after);
+        return {
+          result: written.map(({ after }) => after),
+          commit: (state) =>
+            written.reduce(
+              (next, { after, projectUrl }) => replaceTask(next, projectUrl, after.url, after),
+              state,
+            ),
+        };
+      },
+      onRetry,
+      owned.map((edit) => edit.item.url),
+    );
+  }
+  /** One conditional write; without a response, the read-back decides whether it landed. */
+  private async writeChange(
+    before: StoredTask,
+    change: (task: TaskItem) => void,
+  ): Promise<StoredTask> {
+    try {
+      return await this.store.updateTask(before, change);
+    } catch (error) {
+      // A 4xx is a definite rejection; only a lost or failed response may have landed.
+      if (error instanceof ModelError && error.status >= 400 && error.status < 500) throw error;
+      const current = await this.optionalTask(before.url).catch(() => undefined);
+      if (
+        !current ||
+        current.etag === before.etag ||
+        !isomorphic([...current.dataset], [...changeTask(current, change).dataset])
+      )
+        throw error;
+      return current;
+    }
+  }
+  /** Restore each confirmed write over our own revision only; a failure leaves it to Retry. */
+  private async revertWrites(written: readonly { before: StoredTask; after: StoredTask }[]) {
+    for (const { before, after } of written.toReversed()) {
+      try {
+        await this.store.updateTask({ ...before, etag: after.etag }, () => {});
+      } catch {
+        /* The failure refresh shows what remains; Retry re-plans from it. */
+      }
+    }
+  }
   moveTaskToProject(item: StoredTask, target: StoredProject): Promise<StoredTask | undefined> {
+    // A retained move (destination possibly written) must not become a second copy.
+    const retained = this.unresolvedMoves.get(item.url);
+    if (retained?.target === target.url) return retained.run();
     const source = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -669,7 +763,7 @@ export class TasksCache {
           return { result: moved, commit: (state) => relocate(state, moved, true) };
         },
         () => {
-          void attempt();
+          void run();
         },
         [item.url, url],
       ).then((moved) => {
@@ -679,7 +773,14 @@ export class TasksCache {
         }
         return moved;
       });
-    return attempt();
+    const run = (): Promise<StoredTask | undefined> =>
+      attempt().then((moved) => {
+        if (moved && this.unresolvedMoves.get(item.url)?.run === run)
+          this.unresolvedMoves.delete(item.url);
+        return moved;
+      });
+    this.unresolvedMoves.set(item.url, { target: target.url, run });
+    return run();
   }
   deleteTask(item: StoredTask): Promise<boolean | undefined> {
     const project = this.baseline.projects.find((project) =>

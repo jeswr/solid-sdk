@@ -8,7 +8,7 @@ import {
   planToSection,
 } from "../../src/apps/tasks/lib/dnd/plan";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
-import { applyDropPlan } from "../../src/apps/tasks/state/drop-actions";
+import { applyDropPlan, replanner } from "../../src/apps/tasks/state/drop-actions";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { frameCache } from "./tasks-frame-fixtures";
 
@@ -28,6 +28,44 @@ const viewOf = (cache: TasksCache, title: string) => {
 };
 const projectOf = (cache: TasksCache, url: string) =>
   cache.getSnapshot().projects.find((project) => project.url === url) as StoredProject;
+const order = (cache: TasksCache) =>
+  cache
+    .getSnapshot()
+    .views.toSorted((x, y) => (x.position ?? 0) - (y.position ?? 0))
+    .map((task) => task.title);
+/** Siblings a, b (1e-9 apart: a drop between them renumbers) and c. */
+async function cramped() {
+  const result = await frameCache();
+  for (const [title, rank] of [
+    ["a", 0.5],
+    ["b", 0.5 + 1e-9],
+    ["c", 3],
+  ] as const)
+    await result.store.createTask(result.inbox, { title, state: "open", rank });
+  await result.cache.loadTasks(result.inbox, true);
+  const target = {
+    kind: "task",
+    url: viewOf(result.cache, "a").url,
+    container: { kind: "section", projectUrl: result.inbox.url },
+    placement: "after",
+  } as const;
+  const replan = replanner(result.cache, viewOf(result.cache, "c").url, (task, project) =>
+    planDrop(task, target, project),
+  );
+  return { ...result, replan };
+}
+const storedOrder = async (
+  store: Awaited<ReturnType<typeof frameCache>>["store"],
+  urls: string[],
+) => {
+  const ranked = await Promise.all(
+    urls.map(async (url) => {
+      const { task } = await store.readTask(url);
+      return { title: task.title, rank: task.rank ?? 0 };
+    }),
+  );
+  return ranked.toSorted((x, y) => x.rank - y.rank).map((task) => task.title);
+};
 
 describe("applyDropPlan", () => {
   it("writes renumber patches before the moved row, every write conditional", async () => {
@@ -53,8 +91,9 @@ describe("applyDropPlan", () => {
     pod.requests.length = 0;
     expect(await applyDropPlan(plan, writer(cache))).toBe(true);
     const puts = pod.mutations();
+    // a already holds rank 1; b is renumbered, then the moved row is written.
     expect(puts.map((request) => request.url)).toEqual(
-      ["a", "b", "c"].map((title) => viewOf(cache, title).url),
+      ["b", "c"].map((title) => viewOf(cache, title).url),
     );
     expect(puts.every((request) => request.headers.has("If-Match"))).toBe(true);
     for (const [title, rank] of [
@@ -69,6 +108,119 @@ describe("applyDropPlan", () => {
         .views.sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
         .map((task) => task.title),
     ).toEqual(["a", "c", "b"]);
+  });
+
+  it("shows the whole renumbered order at once, as one pending mutation", async () => {
+    const { cache, pod, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    pod.intercept = async (request) => {
+      if (request.method === "PUT") await gate;
+      return undefined;
+    };
+    const applying = applyDropPlan(replan(), writer(cache), replan);
+    // Nothing has been written, yet the moved row and its siblings are already in place.
+    expect(order(cache)).toEqual(["a", "c", "b"]);
+    expect([...cache.getSnapshot().saving].sort()).toEqual([...urls].sort());
+    release();
+    expect(await applying).toBe(true);
+    pod.intercept = undefined;
+    expect(order(cache)).toEqual(["a", "c", "b"]);
+  });
+
+  it("writes rising ranks from the end, so a first failure writes nothing", async () => {
+    const { cache, pod, store, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url === urls[1]
+        ? new Response(null, { status: 412 })
+        : undefined;
+    pod.requests.length = 0;
+    expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(false);
+    // Not "a saved as 1, then b fails": b (→ 2) goes first, and its failure ends the drop.
+    expect(pod.mutations().map((request) => request.url)).toEqual([urls[1]]);
+    expect(await storedOrder(store, urls)).toEqual(["a", "b", "c"]);
+  });
+
+  it("reverts confirmed sibling writes when one fails midway, and Retry re-plans the drop", async () => {
+    const { cache, pod, store, failures, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    const [a, b] = urls;
+    let rejected = false;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === a && !rejected) {
+        rejected = true;
+        return new Response(null, { status: 412 });
+      }
+    };
+    pod.requests.length = 0;
+    expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(false);
+    // b was saved as 2, a failed: b is restored, over its own revision only.
+    expect(pod.mutations().map((request) => request.url)).toEqual([b, a, b]);
+    expect(pod.mutations()[2]?.headers.has("If-Match")).toBe(true);
+    expect(await storedOrder(store, urls)).toEqual(["a", "b", "c"]);
+    expect((await store.readTask(b as string)).task.rank).toBe(0.5 + 1e-9);
+    expect(order(cache)).toEqual(["a", "b", "c"]);
+    expect(failures).toHaveBeenCalledOnce();
+    // Retry plans the whole drop again (renumber included) rather than one sibling's rank.
+    const retry = failures.mock.calls[0]?.[1] as () => void;
+    retry();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(await storedOrder(store, urls)).toEqual(["a", "c", "b"]);
+    expect(order(cache)).toEqual(["a", "c", "b"]);
+    expect(failures).toHaveBeenCalledOnce();
+  });
+
+  it("counts a lost response whose write landed, and keeps going", async () => {
+    const { cache, pod, store, failures, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    let lost = false;
+    pod.intercept = async (request) => {
+      if (request.method === "PUT" && request.url === urls[0] && !lost) {
+        lost = true;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Response lost");
+      }
+    };
+    expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(true);
+    expect(failures).not.toHaveBeenCalled();
+    expect(await storedOrder(store, urls)).toEqual(["a", "c", "b"]);
+  });
+
+  it("surfaces a lost response that did not land; a failed revert still leaves the order", async () => {
+    const { cache, pod, store, failures, replan } = await cramped();
+    const urls = ["a", "b", "c"].map((title) => viewOf(cache, title).url);
+    const [a, b] = urls;
+    let wrote = false;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === b) {
+        if (wrote) return new Response(null, { status: 503 });
+        wrote = true;
+      }
+      if (request.method === "PUT" && request.url === a) throw new TypeError("Disconnected");
+    };
+    expect(await applyDropPlan(replan(), writer(cache), replan)).toBe(false);
+    expect(failures).toHaveBeenCalledOnce();
+    const [failure, retry] = failures.mock.calls[0] as [{ code?: string }, () => void];
+    expect(failure.code).toBe("network");
+    // b keeps rank 2 (its revert failed), yet the stored order is still a, b, c.
+    expect((await store.readTask(b as string)).task.rank).toBe(2);
+    expect(await storedOrder(store, urls)).toEqual(["a", "b", "c"]);
+    pod.intercept = undefined;
+    retry();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(order(cache)).toEqual(["a", "c", "b"]);
+  });
+
+  it("re-plans nothing for a vanished task, and skips drops of tasks outside the cache", async () => {
+    const { cache } = await cramped();
+    expect(replanner(cache, "https://pod.test/missing.ttl", () => ({ kind: "none" }))()).toEqual({
+      kind: "none",
+    });
+    expect(await cache.updateTasks([], () => {})).toBeUndefined();
   });
 
   it("changes the section class, moves back to No section, and reorders with Move up", async () => {

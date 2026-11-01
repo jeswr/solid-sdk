@@ -69,6 +69,12 @@ const liveRegion = () =>
   [...document.querySelectorAll('[aria-live="assertive"]')]
     .map((node) => node.textContent)
     .join("");
+/** The drop outcome, announced once the write settles. */
+const dropStatus = () => document.querySelector("[data-tsk-drop-status]")?.textContent ?? "";
+const settle = () =>
+  act(async () => {
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+  });
 
 beforeEach(() => {
   localStorage.clear();
@@ -115,9 +121,85 @@ describe("keyboard drag and drop", () => {
     expect(moved?.position).toBeLessThan(
       cache.getSnapshot().views.find((task) => task.title === "Water plants")?.position ?? 0,
     );
-    expect(liveRegion()).toContain("Moved 'Pay rent' to Doing, position 1.");
+    // Dropping says "Moving…"; success is announced only once the write has settled.
+    expect(liveRegion()).toContain("Moving 'Pay rent'…");
+    expect(liveRegion()).not.toContain("Moved 'Pay rent'");
+    expect(dropStatus()).toBe("Moved 'Pay rent' to Doing, position 1.");
     expect(toast.success).toHaveBeenCalledWith("Moved to Doing");
     expect((await result.store.readTask(moved?.url as string)).task.types.has(doing)).toBe(true);
+  });
+
+  it("announces a rolled-back drop as a failure, never as moved", async () => {
+    const result = await frameCache();
+    cache = result.cache;
+    await cache.createTask(result.inbox, { title: "First" });
+    await cache.createTask(result.inbox, { title: "Second" });
+    layout();
+    const { host } = await mount(
+      h(TasksDnd, null, h("main", null, h(ProjectView, { inbox: true }))),
+    );
+    result.pod.intercept = (request) =>
+      request.method === "PUT" ? new Response(null, { status: 500 }) : undefined;
+    await act(() =>
+      host.querySelector<HTMLElement>("button[aria-label=\"Move 'First'\"]")?.focus(),
+    );
+    await code("Space");
+    await code("ArrowDown");
+    await code("Space");
+    await settle();
+    expect(liveRegion()).toContain("Moving 'First'…");
+    expect(dropStatus()).toBe("Couldn't move 'First'.");
+    expect(liveRegion()).not.toContain("Moved 'First'");
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["First", "Second"]);
+  });
+
+  it("in a sorted list, rows stand for their section: no reordering, no position", async () => {
+    localStorage.setItem("suite.tasks.prefs", JSON.stringify({ sort: { "/tasks/inbox": "name" } }));
+    const result = await frameCache();
+    cache = result.cache;
+    await cache.addSection(result.inbox, "Doing");
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    const doing = inbox.tracker.sections[0]?.id as string;
+    // Manual order is Zebra, Apple; the name sort shows Apple first.
+    await cache.createTask(inbox, { title: "Zebra" });
+    await cache.createTask(inbox, { title: "Apple" });
+    await cache.createTask(inbox, { title: "Water plants", sectionId: doing });
+    layout();
+    const { host } = await mount(
+      h(TasksDnd, null, h("main", null, h(ProjectView, { inbox: true }))),
+    );
+    const rows = () => [...host.querySelectorAll<HTMLElement>("[data-tsk-row]")];
+    expect(rows().map((row) => row.textContent?.match(/Apple|Zebra|Water plants/)?.[0])).toEqual([
+      "Apple",
+      "Zebra",
+      "Water plants",
+    ]);
+    result.pod.requests.length = 0;
+    await act(() =>
+      host.querySelector<HTMLElement>("button[aria-label=\"Move 'Apple'\"]")?.focus(),
+    );
+    await code("Space");
+    await code("ArrowDown");
+    // A row of its own section is no target in a sorted list.
+    expect(liveRegion()).toContain("'Apple' is over No section.");
+    expect(rows()[1]?.dataset.drop).toBeUndefined();
+    await code("Space");
+    expect(liveRegion()).toContain("'Apple' was dropped in its original place.");
+    expect(result.pod.mutations()).toEqual([]);
+    // A row in another section moves the task into that section, announced without a position.
+    await act(() =>
+      host.querySelector<HTMLElement>("button[aria-label=\"Move 'Zebra'\"]")?.focus(),
+    );
+    await code("Space");
+    for (let step = 0; step < 4; step++) await code("ArrowDown");
+    expect(liveRegion()).toContain("'Zebra' is over Doing.");
+    expect(rows().find((row) => row.textContent?.includes("Water plants"))?.dataset.drop).toBe(
+      "inside",
+    );
+    await code("Space");
+    await settle();
+    expect(dropStatus()).toBe("Moved 'Zebra' to Doing.");
+    expect(cache.getSnapshot().views.find((task) => task.title === "Zebra")?.sectionId).toBe(doing);
   });
 
   it("cancels with Escape without writing", async () => {

@@ -3,7 +3,7 @@ import { positionForDrop } from "../views/positions";
 import { compareTasks } from "../views/project-groups";
 import { taskDayKey } from "../views/today";
 import type { TaskView } from "../views/types";
-import type { DropPlan, DropTarget } from "./types";
+import type { DropPlan, DropTarget, PlanOptions, PositionPatch } from "./types";
 
 const NONE: DropPlan = { kind: "none" };
 
@@ -53,25 +53,47 @@ function members(level: Level, views: readonly TaskView[]): TaskView[] {
     .sort(compareTasks("manual"));
 }
 
-const hasChildren = (task: TaskView, views: readonly TaskView[]) =>
-  views.some((view) => view.parentId === task.id);
+/** Pass every task of the project: completed sub-tasks still make their parent a parent. */
+const hasChildren = (task: TaskView, all: readonly TaskView[]) =>
+  all.some((view) => view.parentId === task.id);
 
-/** One nesting level (06-tasks §4.6): a parent is open and top-level; a parent cannot nest. */
-export function canNest(active: TaskView, parent: TaskView, views: readonly TaskView[]): boolean {
+/**
+ * One nesting level (06-tasks §4.6): a parent is open and top-level; a parent
+ * cannot nest. `all` is every task of the project, closed ones included.
+ */
+export function canNest(active: TaskView, parent: TaskView, all: readonly TaskView[]): boolean {
   return (
     parent.url !== active.url &&
     parent.projectUrl === active.projectUrl &&
     parent.state === "open" &&
     !parent.parentId &&
-    !hasChildren(active, views)
+    !hasChildren(active, all)
   );
 }
 
-/** "Make sub-task of…" choices: every valid parent except the current one. */
-export function nestCandidates(active: TaskView, views: readonly TaskView[]): TaskView[] {
+/** "Make sub-task of…" choices: every visible valid parent except the current one. */
+export function nestCandidates(
+  active: TaskView,
+  views: readonly TaskView[],
+  all: readonly TaskView[] = views,
+): TaskView[] {
   return views
-    .filter((view) => view.id !== active.parentId && canNest(active, view, views))
+    .filter((view) => view.id !== active.parentId && canNest(active, view, all))
     .sort(compareTasks("manual"));
+}
+
+/**
+ * A sorted list shows no manual order, so a drop on a row means "into the
+ * section that row renders in" (appended in manual order); day rows keep theirs.
+ */
+export function sortedTarget(target: DropTarget): DropTarget {
+  if (target.kind !== "task" || target.container.kind !== "section") return target;
+  return {
+    kind: "section",
+    projectUrl: target.container.projectUrl,
+    sectionId: target.container.sectionId,
+    at: "end",
+  };
 }
 
 /** Index addresses the destination level after removing the moving row. */
@@ -109,13 +131,16 @@ function dayPlan(active: TaskView, dayKey: string): DropPlan {
 /**
  * Map one drop onto a write (06-tasks §4.4). `views` are the visible tasks
  * of the listing (see `visibleTasks`); the active task must be among them for
- * reorder/section drops.
+ * reorder/section drops. In a sorted list (`manual: false`) only section,
+ * project and day moves apply.
  */
 export function planDrop(
   active: TaskView,
-  target: DropTarget,
+  dropTarget: DropTarget,
   views: readonly TaskView[],
+  { all = views, manual = true }: PlanOptions = {},
 ): DropPlan {
+  const target = manual ? dropTarget : sortedTarget(dropTarget);
   switch (target.kind) {
     case "project":
       return target.projectUrl === active.projectUrl
@@ -125,6 +150,8 @@ export function planDrop(
       return dayPlan(active, target.dayKey);
     case "section": {
       if (target.projectUrl !== active.projectUrl) return NONE;
+      // Re-ranking within its own section would change nothing a sorted list shows.
+      if (!manual && levelOf(active, views).sectionId === target.sectionId) return NONE;
       const level = {
         projectUrl: target.projectUrl,
         sectionId: target.sectionId,
@@ -139,7 +166,7 @@ export function planDrop(
         return target.container.dayKey ? dayPlan(active, target.container.dayKey) : NONE;
       const over = views.find((view) => view.url === target.url);
       if (!over || over.projectUrl !== active.projectUrl) return NONE;
-      if (target.placement === "child" && canNest(active, over, views)) {
+      if (target.placement === "child" && canNest(active, over, all)) {
         const level = { projectUrl: over.projectUrl, sectionId: over.sectionId, parent: over };
         const count = members(level, views).filter((view) => view.url !== active.url).length;
         return planAt(active, level, count, views);
@@ -150,7 +177,7 @@ export function planDrop(
       if (level.parent) {
         // A row cannot land among its own children; a parent stays top-level.
         if (level.parent.id === active.id) return NONE;
-        if (hasChildren(active, views)) {
+        if (hasChildren(active, all)) {
           anchor = level.parent;
           after = true;
           level = levelOf(anchor, views);
@@ -163,12 +190,14 @@ export function planDrop(
   }
 }
 
-/** Keyboard "Move up/down" (and Alt+↑/↓) within the rendered level. */
+/** Keyboard "Move up/down" (and Alt+↑/↓) within the rendered level; manual order only. */
 export function planMove(
   active: TaskView,
   direction: -1 | 1,
   views: readonly TaskView[],
+  { manual = true }: PlanOptions = {},
 ): DropPlan {
+  if (!manual) return NONE;
   const level = levelOf(active, views);
   const all = members(level, views);
   const destination = all.findIndex((view) => view.url === active.url) + direction;
@@ -181,17 +210,24 @@ export function planToSection(
   active: TaskView,
   sectionId: string | undefined,
   views: readonly TaskView[],
+  options: PlanOptions = {},
 ): DropPlan {
   return planDrop(
     active,
     { kind: "section", projectUrl: active.projectUrl, sectionId, at: "end" },
     views,
+    options,
   );
 }
 
 /** "Make sub-task of…": the last child of `parent`. */
-export function planNest(active: TaskView, parent: TaskView, views: readonly TaskView[]): DropPlan {
-  if (!canNest(active, parent, views)) return NONE;
+export function planNest(
+  active: TaskView,
+  parent: TaskView,
+  views: readonly TaskView[],
+  options: PlanOptions = {},
+): DropPlan {
+  if (!canNest(active, parent, options.all ?? views)) return NONE;
   return planDrop(
     active,
     {
@@ -201,6 +237,7 @@ export function planNest(active: TaskView, parent: TaskView, views: readonly Tas
       placement: "child",
     },
     views,
+    { ...options, manual: true },
   );
 }
 
@@ -211,4 +248,26 @@ export function planPromote(active: TaskView, views: readonly TaskView[]): DropP
   const level = levelOf(parent, views);
   const siblings = members(level, views).filter((view) => view.url !== active.url);
   return planAt(active, level, siblings.findIndex((view) => view.url === parent.url) + 1, views);
+}
+
+/**
+ * The order to write renumber patches so that every intermediate stored state
+ * keeps the siblings' order, even if a write fails or the tab closes midway:
+ * rows whose rank falls (or that had none) in ascending order, then the rest
+ * in descending order. Patches come from siblings in manual order, numbered 1…n;
+ * a row already at its number needs no write.
+ */
+export function renumberWriteOrder(
+  patches: readonly PositionPatch[],
+  rankOf: (url: string) => number | undefined,
+): PositionPatch[] {
+  const falls = (patch: PositionPatch) => {
+    const rank = rankOf(patch.url);
+    return rank === undefined || !Number.isFinite(rank) || patch.position < rank;
+  };
+  const pending = patches.filter((patch) => rankOf(patch.url) !== patch.position);
+  return [
+    ...pending.filter(falls).toSorted((a, b) => a.position - b.position),
+    ...pending.filter((patch) => !falls(patch)).toSorted((a, b) => b.position - a.position),
+  ];
 }

@@ -206,6 +206,29 @@ describe("keyboard reorder and multi-select", () => {
     expect(status(host)).toBe("Moved 'Third' to No section, position 2.");
   });
 
+  it("offers no reordering in a sorted list: no Move up/down, Alt+↓ writes nothing", async () => {
+    localStorage.setItem(PREFS, JSON.stringify({ sort: { "/tasks/p/board": "name" } }));
+    const { pod } = await project(["Second", "First"], ["Doing"]);
+    const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));
+    expect([...host.querySelectorAll(".tsk-task-title")].map((title) => title.textContent)).toEqual(
+      ["First", "Second"],
+    );
+    const first = row(host, "First");
+    await act(() => first.focus());
+    pod.requests.length = 0;
+    await press(first, { key: "ArrowDown", altKey: true });
+    await settle();
+    expect(pod.mutations()).toEqual([]);
+    await key(first, "F10", true);
+    const items = [...document.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    );
+    expect(items).not.toContain("Move up");
+    expect(items).not.toContain("Move down");
+    expect(items).toContain("Move to section…");
+    expect(items).toContain("Move to project…");
+  });
+
   it("extends with Shift+↓, selects all with Ctrl+A and sets priority for the whole selection", async () => {
     const { store } = await project(["a", "b", "c", "d"]);
     const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));

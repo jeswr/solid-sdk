@@ -1,5 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
+import { renumberWriteOrder } from "../lib/dnd/plan";
 import type { DropPlan } from "../lib/dnd/types";
+import type { StoredTask } from "../lib/model/store";
+import type { TaskItem } from "../lib/model/task";
+import type { TaskView } from "../lib/views/types";
 import { rescheduleToDay } from "../lib/views/upcoming";
 import type { TasksCache } from "./tasks-cache";
 
@@ -11,12 +15,40 @@ export interface DropWriter {
 }
 
 /**
- * Write one planned drop through the undo-aware cache (optimistic patch,
- * conditional If-Match write, read-back reconcile on retry). Renumber patches
- * go first so the moved row's position lands in a clean sequence. Resolves
- * false when nothing was written or a write rolled back.
+ * Plans a drop again from the latest snapshot, for Retry: `plan` receives the
+ * task's fresh view and every task of its project. A vanished task plans nothing.
  */
-export async function applyDropPlan(plan: DropPlan, tasks: DropWriter): Promise<boolean> {
+export function replanner(
+  cache: TasksCache,
+  url: string,
+  plan: (task: TaskView, project: readonly TaskView[]) => DropPlan,
+): () => DropPlan {
+  return () => {
+    const { views } = cache.getSnapshot();
+    const task = views.find((view) => view.url === url);
+    return task
+      ? plan(
+          task,
+          views.filter((view) => view.projectUrl === task.projectUrl),
+        )
+      : { kind: "none" };
+  };
+}
+
+/**
+ * Write one planned drop through the undo-aware cache (optimistic patch,
+ * conditional If-Match writes, read-back reconcile). A position drop is ONE
+ * cache mutation: renumber patches and the moved row patch together, write
+ * siblings first (in an order that never scrambles them), and revert
+ * confirmed writes if any write fails. Retry runs
+ * `replan` so the whole drop is planned again from what the pod now holds.
+ * Resolves false when nothing was written or a write rolled back.
+ */
+export async function applyDropPlan(
+  plan: DropPlan,
+  tasks: DropWriter,
+  replan: () => DropPlan = () => plan,
+): Promise<boolean> {
   if (plan.kind === "none") return false;
   const snapshot = () => tasks.cache.getSnapshot();
   const find = (url: string) => {
@@ -42,27 +74,34 @@ export async function applyDropPlan(plan: DropPlan, tasks: DropWriter): Promise<
       }),
     );
   }
-  for (const patch of plan.renumber) {
+  const edits: { item: StoredTask; change: (task: TaskItem) => void }[] = [];
+  // Ordered so no prefix of the writes scrambles the siblings, should a revert be impossible.
+  for (const patch of renumberWriteOrder(plan.renumber, (url) => find(url)?.task.rank)) {
     const sibling = find(patch.url);
-    if (
-      !sibling ||
-      !(await tasks.updateTask(sibling, (task) => {
+    if (!sibling) return false;
+    edits.push({
+      item: sibling,
+      change: (task) => {
         task.rank = patch.position;
-      }))
-    )
-      return false;
+      },
+    });
   }
   const sections =
     snapshot().projects.find((project) => project.url === plan.projectUrl)?.tracker.sections ?? [];
-  const moved = find(plan.url) ?? stored;
-  return Boolean(
-    await tasks.updateTask(moved, (task) => {
+  edits.push({
+    item: stored,
+    change: (task) => {
       if (plan.sectionChanged) {
         for (const section of sections) task.types.delete(section.id);
         if (plan.sectionId) task.types.add(plan.sectionId);
       }
       if (plan.parentChanged) task.parent = plan.parentId;
       task.rank = plan.position;
+    },
+  });
+  return Boolean(
+    await tasks.cache.updateTasks(edits, () => {
+      void applyDropPlan(replan(), tasks, replan);
     }),
   );
 }

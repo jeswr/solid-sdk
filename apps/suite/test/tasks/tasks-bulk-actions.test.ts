@@ -115,6 +115,42 @@ describe("bulk writes", () => {
     expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(0);
   });
 
+  it("retries a move whose child update lost the network through the retained move", async () => {
+    const { cache, pod, store, inbox, failures, views } = await seeded(["Garden", "Buy soil"]);
+    const home = (await cache.createProject("Home")) as StoredProject;
+    await cache.loadTasks(home);
+    const [garden, soil] = views() as [TaskView, TaskView];
+    const child = cache.getSnapshot().tasks[inbox.url]?.items.find((t) => t.url === soil.url);
+    if (!child) throw new Error("Missing child");
+    await cache.updateTask(child, (task) => {
+      task.parent = garden.id;
+    });
+    // The destination PUT commits, then the connection drops: the child update and
+    // the source read fail, so the destination copy is retained for Retry.
+    let offline = false;
+    pod.intercept = (request) => {
+      if (offline) throw new TypeError("Offline");
+      if (request.method === "PUT" && request.url.startsWith(home.tracker.stateStore as string))
+        offline = true;
+    };
+    await moveTasksToProject([garden], home, context(cache));
+    pod.intercept = undefined;
+    expect(await store.listTasks(home.tracker.stateStore as string)).toHaveLength(1);
+    expect(error).toHaveBeenCalledWith("Moved 0 of 1 — 1 failed", expect.anything());
+    // Both Retry buttons (the summary's and the task's own) reuse the one move operation.
+    lastOptions(error).action?.onClick();
+    const cacheRetry = failures.mock.calls[0]?.[1] as () => void;
+    cacheRetry();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    await vi.waitFor(() => expect(success).toHaveBeenLastCalledWith("Moved 1 task", undefined));
+    const copies = await store.listTasks(home.tracker.stateStore as string);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]?.task.title).toBe("Garden");
+    expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(1);
+    expect((await store.readTask(soil.url)).task.parent).toBe(copies[0]?.task.id);
+    expect(cache.getSnapshot().views.filter((task) => task.title === "Garden")).toHaveLength(1);
+  });
+
   it("adds a union label, materialising the class once per tracker, and removes it", async () => {
     const { cache, store, inbox, views } = await seeded(["a", "b"]);
     await labelTasks(views(), "Bills", true, context(cache));

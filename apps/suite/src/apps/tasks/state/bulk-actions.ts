@@ -113,6 +113,11 @@ export function rescheduleMany(views: readonly TaskView[], dayKey: string, tasks
   });
 }
 
+/**
+ * Retry (the summary toast's or a task's own) is safe: the cache keeps one
+ * move operation per task until it succeeds, so a retried move reuses its
+ * destination copy instead of writing a second one.
+ */
 export function moveTasksToProject(
   views: readonly TaskView[],
   target: StoredProject,
