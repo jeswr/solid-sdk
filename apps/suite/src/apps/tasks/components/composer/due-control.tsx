@@ -17,13 +17,20 @@ export function DueControl({
   onChange: (due: ComposeDue | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(context.now);
   const dateValue: DateTimeValue | null = !value
     ? null
     : value.allDay
       ? { kind: "date", date: value.allDay }
       : { kind: "dateTime", dateTime: value.date.toISOString() };
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setNow(new Date());
+        setOpen(next);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           {label}
@@ -42,7 +49,11 @@ export function DueControl({
               variant="ghost"
               onClick={() => {
                 onChange(
-                  parseQuickAdd(`Task ${phrase}`, { ...context, keepText: new Set() }).due ?? null,
+                  parseQuickAdd(`Task ${phrase}`, {
+                    ...context,
+                    now: new Date(),
+                    keepText: new Set(),
+                  }).due ?? null,
                 );
                 setOpen(false);
               }}
@@ -54,7 +65,7 @@ export function DueControl({
         <DatePickerPopover
           label="Pick date"
           locale={context.locale ?? "en-GB"}
-          today={context.now}
+          today={now}
           value={dateValue}
           onChange={(next) => {
             onChange(
