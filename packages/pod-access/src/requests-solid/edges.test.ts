@@ -12,7 +12,7 @@ import {
   PREFIXES,
   REQUESTER,
 } from "../../test/requests/fixtures.js";
-import { applyGrant } from "./acl.js";
+import { applyGrant, roleFor } from "./acl.js";
 import { httpUrl, put, read, transport } from "./http.js";
 import { project } from "./inbox.js";
 import {
@@ -304,100 +304,65 @@ describe("Type Index resolution boundaries", () => {
   });
 });
 
-describe("conditional ACL grant port", () => {
-  it("preserves unrelated grants, avoids widening multi-scope nodes and reuses exact grants", async () => {
+describe("role grant seam", () => {
+  const modesOf = async (pod: ReturnType<typeof buildPod>, url: string, agent: string) => {
+    const dataset = await graph(pod.body(url) as string);
+    return [...dataset.match(null, DataFactory.namedNode(ACL.agent), DataFactory.namedNode(agent))]
+      .flatMap((q) => [...dataset.match(q.subject, DataFactory.namedNode(ACL.mode))])
+      .map((q) => q.object.value)
+      .sort();
+  };
+
+  it("maps requested modes to the matching role and refuses append-only requests", () => {
+    expect(roleFor(["read"])).toBe("viewer");
+    expect(roleFor(["read", "append"])).toBe("viewer");
+    expect(roleFor(["write"])).toBe("editor");
+    expect(roleFor(["append", "read", "write"])).toBe("editor");
+    expect(() => roleFor(["append"])).toThrow("only asks to add data");
+  });
+
+  it("grants additively through the role layer, keeps owner control and never downgrades", async () => {
+    const pod = buildPod();
+    const url = `${ALICE}.acl`;
+    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
+    expect(await modesOf(pod, url, REQUESTER)).toEqual([ACL.Read]);
+    expect(await modesOf(pod, url, OWNER)).toContain(ACL.Control);
+    const before = pod.log.length;
+    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
+    expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
+    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read", "write"], pod.fetch);
+    expect(await modesOf(pod, url, REQUESTER)).toEqual(
+      expect.arrayContaining([ACL.Read, ACL.Write]),
+    );
+    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
+    expect(await modesOf(pod, url, REQUESTER)).toContain(ACL.Write);
+    // Folders are granted as folders: the rule covers their contents.
+    await applyGrant(`${POD}contacts/`, POD, OWNER, REQUESTER, ["read"], pod.fetch);
+    expect(pod.body(`${POD}contacts/.acl`)).toContain("default");
+  });
+
+  it("rethrows role-layer refusals unchanged and never retries them", async () => {
     const pod = buildPod();
     const url = `${ALICE}.acl`;
     pod.seed(
       url,
-      `${PREFIXES}
-<${url}#multi> a acl:Authorization; acl:accessTo <${ALICE}>, <${POD}other>; acl:agent <${OWNER}>; acl:mode acl:Read.
-<${url}#default> a acl:Authorization; acl:accessTo <${ALICE}>; acl:default <${POD}>; acl:agent <${OWNER}>; acl:mode acl:Read.
-<${url}#group> a acl:Authorization; acl:accessTo <${ALICE}>; acl:agentGroup <https://group.example/>; acl:mode acl:Read.
-<${url}#origin> a acl:Authorization; acl:accessTo <${ALICE}>; acl:origin <https://origin.example/>; acl:mode acl:Read.
-<${url}#public> a acl:Authorization; acl:accessTo <${ALICE}>; acl:agentClass foaf:Agent; acl:mode acl:Read.
-<${url}#none> a acl:Authorization; acl:mode acl:Read.`,
+      `${PREFIXES}<${url}#bob> a acl:Authorization; acl:accessTo <${ALICE}>; acl:agent <https://bob.example/#me>; acl:mode acl:Read, acl:Write, acl:Control.`,
     );
-    let conflict = true;
-    pod.intercept = (method, target, init) => {
-      if (method === "PUT" && target === url) {
-        expect(new Headers(init?.headers).get("if-match")).not.toBeNull();
-        if (conflict) {
-          conflict = false;
-          return new Response(null, { status: 412 });
-        }
-      }
-    };
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
-    const dataset = await graph(pod.body(url) as string);
-    expect(values(dataset, `${url}#multi`, ACL.agent)).toEqual([OWNER]);
-    expect(values(dataset, `${url}#grant-0`, ACL.agent)).toEqual([REQUESTER]);
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["append"], pod.fetch);
-    expect(pod.body(url)).toContain("grant-1");
-  });
-
-  it("materializes inherited container ACLs, preserving group/origin/default semantics", async () => {
-    const pod = buildPod();
-    const target = `${POD}contacts/`;
-    pod.seed(
-      `${POD}.acl`,
-      `${pod.body(`${POD}.acl`)} ${PREFIXES}<${POD}.acl#group> a acl:Authorization; acl:agentGroup <https://group.example/>; acl:origin <https://origin.example/>; acl:default <${POD}>; acl:mode acl:Read. <${POD}.acl#unrelated> a acl:Authorization; acl:accessTo <${POD}>; acl:mode acl:Read.`,
-    );
-    await applyGrant(target, POD, OWNER, REQUESTER, ["append"], pod.fetch);
-    expect(pod.body(`${target}.acl`)).toContain("group.example");
-    expect(pod.body(`${target}.acl`)).toContain("origin.example");
-    expect(pod.body(`${target}.acl`)).toContain("default");
-    const blankPod = buildPod();
-    blankPod.seed(
-      `${POD}.acl`,
-      `${PREFIXES}[] a acl:Authorization; acl:agent <${REQUESTER}>; acl:default <${POD}>; acl:mode acl:Read.`,
-    );
-    await applyGrant(target, POD, OWNER, "https://another.example/", ["append"], blankPod.fetch);
-    expect(blankPod.body(`${target}.acl`)).toContain(REQUESTER);
-    pod.delete(`${POD}.acl`);
+    const before = pod.log.length;
     await expect(
-      applyGrant(`${POD}other/x`, POD, OWNER, REQUESTER, ["read"], pod.fetch),
-    ).rejects.toThrow("No effective ACL");
-  });
-
-  it("reconciles a create race, refuses ACP/foreign ACL links, and fails after bounded races", async () => {
-    const pod = buildPod();
-    const url = `${ALICE}.acl`;
-    let race = true;
-    pod.intercept = (method, target, init) => {
-      if (
-        race &&
-        method === "PUT" &&
-        target === url &&
-        new Headers(init?.headers).has("if-none-match")
-      ) {
-        race = false;
-        pod.seed(url, String(init?.body));
-      }
-    };
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
-    pod.intercept = (method) =>
+      applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch),
+    ).rejects.toMatchObject({ code: "owner-lockout" });
+    expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
+    const racing = buildPod();
+    racing.intercept = (method) =>
       method === "PUT" ? new Response(null, { status: 412 }) : undefined;
-    await expect(applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch)).rejects.toThrow(
-      "three",
-    );
-    for (const link of [
-      '<x>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
-      "<https://evil.example/x>; rel=acl",
-    ]) {
-      pod.intercept = (method) =>
-        method === "HEAD" ? new Response(null, { headers: { link } }) : undefined;
-      await expect(applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch)).rejects.toThrow();
-    }
-    pod.intercept = (method) => (method === "HEAD" ? new Response(null) : undefined);
-    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
-    pod.delete(url);
-    pod.intercept = (method) =>
-      method === "PUT" ? new Response(null, { status: 412 }) : undefined;
-    await expect(applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch)).rejects.toThrow(
-      "three",
-    );
+    await expect(
+      applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], racing.fetch),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(racing.log.filter(({ method }) => method === "PUT")).toHaveLength(1);
+    await expect(
+      applyGrant("https://evil.example/x", POD, OWNER, REQUESTER, ["read"], pod.fetch),
+    ).rejects.toThrow();
   });
 });
 
@@ -573,8 +538,13 @@ describe("forward-only approval reconciliation", () => {
     await expect(decide({ id: ID }, { approve: true, role: "viewer" }, opts(pod))).rejects.toThrow(
       "no requested modes",
     );
+    pod.seed(ID, accessRequestTurtle(ID).replace("odrl:read", `<${ACL.Append}>`));
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "only asks to add data",
+    );
+    expect(pod.log.some(({ method }) => method === "PUT")).toBe(false);
     const label = accessRequestTurtle(ID)
-      .replace("odrl:read", `<${ACL.Append}>`)
+      .replace("odrl:read", "odrl:modify")
       .replace("<https://w3id.org/dpv#ServiceProvision>", '"Research"');
     pod.seed(ID, label);
     const result = await decide(

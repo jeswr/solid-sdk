@@ -2,9 +2,9 @@
 // Port of access-manager's own/nearest-ancestor ACL, create-only materialisation,
 // set-semantics grants and bounded If-Match retry logic.
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
-import type { DatasetCore } from "@rdfjs/types";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { addGrant } from "../roles/client.js";
 import { put, read, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { turtle, values } from "./rdf.js";
@@ -48,57 +48,38 @@ async function aclUrl(resource: string, storage: string, fetchFn: typeof fetch):
   return scoped(storage, target === undefined ? `${resource}.acl` : new URL(target, resource).href);
 }
 
-const MODE_IRI: Readonly<Record<RequestMode, string>> = Object.freeze({
-  read: ACL.Read,
-  write: ACL.Write,
-  append: ACL.Append,
-});
-
 function authSubject(auth: Authorization) {
   return auth.termType === "BlankNode"
     ? DataFactory.blankNode(auth.value)
     : DataFactory.namedNode(auth.value);
 }
 
-function addGrant(
-  dataset: DatasetCore,
-  url: string,
-  resource: string,
-  agent: string,
-  modes: readonly RequestMode[],
-): void {
-  const acl = new AclResource(dataset, DataFactory);
-  for (const auth of acl.authorizations) {
-    // Reusing a multi-scope/group/origin node could widen this new agent's access.
-    const subject = authSubject(auth);
-    const scopes = values(dataset, subject, ACL.accessTo);
-    if (
-      scopes.length === 1 &&
-      scopes[0] === resource &&
-      values(dataset, subject, ACL.default).length === 0 &&
-      values(dataset, subject, ACL.agentClass).length === 0 &&
-      values(dataset, subject, ACL.agentGroup).length === 0 &&
-      values(dataset, subject, ACL.origin).length === 0 &&
-      [...auth.mode].sort().join() ===
-        modes
-          .map((mode) => MODE_IRI[mode])
-          .sort()
-          .join()
-    ) {
-      auth.agent.add(agent);
-      return;
-    }
-  }
-  let n = 0;
-  while (dataset.match(DataFactory.namedNode(`${url}#grant-${n}`)).size) n++;
-  const auth = new Authorization(`${url}#grant-${n}`, dataset, DataFactory);
-  auth.type.add(ACL.Authorization);
-  auth.accessTo = resource;
-  auth.agent.add(agent);
-  for (const mode of modes) auth.mode.add(MODE_IRI[mode]);
+/** The modes each sharing role grants on a WAC resource or folder. */
+export const ROLE_MODES: Readonly<Record<"viewer" | "editor", readonly RequestMode[]>> =
+  Object.freeze({
+    viewer: Object.freeze(["read"] as const),
+    editor: Object.freeze(["append", "read", "write"] as const),
+  });
+
+/**
+ * The sharing role an approval grants for requested `modes`. Grants are roles, the suite's sharing
+ * vocabulary: a request to change data is approved as Editor (which also lets the requester view
+ * it), a read request as Viewer. Append-only requests have no matching role and are refused.
+ */
+export function roleFor(modes: readonly RequestMode[]): "viewer" | "editor" {
+  if (modes.includes("write")) return "editor";
+  if (modes.includes("read")) return "viewer";
+  throw new Error(
+    "This request only asks to add data, which no sharing role allows on its own, so it can't be approved",
+  );
 }
 
-/** SDK-APP-04 seam: replace this one function with setGrants when that API lands. */
+/**
+ * Grant `agent` the role matching `modes` on `target` through the `./roles` layer (SDK-APP-04):
+ * additive (never downgrades), conditional on every write, materialising a missing own ACL with
+ * the owner's access kept. Refusals (for example `unsupported` or `owner-lockout`) are rethrown
+ * unchanged for the caller to show; they are never retried here.
+ */
 export async function applyGrant(
   target: string,
   storage: string,
@@ -107,63 +88,20 @@ export async function applyGrant(
   modes: readonly RequestMode[],
   fetchFn: typeof fetch,
 ): Promise<void> {
-  const ownUrl = await aclUrl(target, storage, fetchFn);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const own = await read(ownUrl, fetchFn);
-    if (own) {
-      addGrant(own.dataset, ownUrl, target, agent, modes);
-      if (await put(ownUrl, await turtle(own.dataset), fetchFn, own.etag)) return;
-      continue;
-    }
-    // Missing own ACL: nearest ancestor only, copying every predicate of applicable nodes.
-    const dataset = new Store();
-    let current = new URL(".", target.endsWith("/") ? new URL("..", target) : target).href;
-    let found = false;
-    while (true) {
-      scoped(storage, current);
-      const parentUrl = await aclUrl(current, storage, fetchFn);
-      const parent = await read(parentUrl, fetchFn);
-      if (parent) {
-        found = true;
-        const acl = new AclResource(parent.dataset, DataFactory);
-        for (const auth of acl.authorizations) {
-          const subject = authSubject(auth);
-          // CSS ignores the legacy acl:defaultForNew while NSS honours it; neither copying nor
-          // dropping such a rule is safe without knowing the server, so refuse to guess.
-          if (values(parent.dataset, subject, ACL.defaultForNew).includes(current))
-            throw new Error(
-              "This folder's sharing uses the legacy acl:defaultForNew rule; update it in your pod first",
-            );
-          if (!values(parent.dataset, subject, ACL.default).includes(current)) continue;
-          const copy = new Authorization(
-            `${ownUrl}#inherited-${dataset.size}`,
-            dataset,
-            DataFactory,
-          );
-          for (const q of parent.dataset.match(subject)) {
-            if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
-            dataset.add(DataFactory.quad(DataFactory.namedNode(copy.value), q.predicate, q.object));
-          }
-          copy.accessTo = target;
-          if (target.endsWith("/")) copy.default = target;
-        }
-        break;
-      }
-      if (current === new URL(storage).href) break;
-      current = new URL("..", current).href;
-    }
-    if (!found) throw new Error("No effective ACL found");
-    // Preserve owner control even when the inherited rules provide no direct path.
-    const ownerAuth = new Authorization(`${ownUrl}#owner`, dataset, DataFactory);
-    ownerAuth.type.add(ACL.Authorization);
-    ownerAuth.agent.add(owner);
-    ownerAuth.accessTo = target;
-    ownerAuth.mode.add(ACL.Control);
-    if (target.endsWith("/")) ownerAuth.default = target;
-    addGrant(dataset, ownUrl, target, agent, modes);
-    if (await put(ownUrl, await turtle(dataset), fetchFn, null, true)) return;
-  }
-  throw new Error("ACL kept changing after three conditional attempts");
+  scoped(storage, target);
+  const result = await addGrant(
+    [target],
+    { agent: { type: "webid", id: agent }, role: roleFor(modes), inherited: false, source: target },
+    {
+      fetch: fetchFn,
+      webId: owner,
+      root: storage,
+      model: "wac",
+      kind: target.endsWith("/") ? "folder" : "resource",
+    },
+  );
+  const failure = result.failed[0];
+  if (failure) throw failure.error;
 }
 
 /**

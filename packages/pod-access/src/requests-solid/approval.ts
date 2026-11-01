@@ -12,6 +12,8 @@ import {
   accessModel,
   applyGrant,
   ensureOwnerOnlyContainer,
+  ROLE_MODES,
+  roleFor,
   UnsupportedAccessModelError,
 } from "./acl.js";
 import {
@@ -445,8 +447,13 @@ export async function decide(
     if (perTarget.size === 0) throw new Error("Decision grants no requested modes");
     if (perTarget.size > MAX_MEMBERS) throw new RangeError("Invalid resolved target count");
     const targets = [...perTarget.keys()].sort();
+    // Grants are roles: pin the modes of the role each target's requested modes map to (this
+    // refuses append-only requests before any write).
     const targetModes = Object.fromEntries(
-      targets.map((target) => [target, [...(perTarget.get(target) as Set<RequestMode>)].sort()]),
+      targets.map((target) => [
+        target,
+        [...ROLE_MODES[roleFor([...(perTarget.get(target) as Set<RequestMode>)])]],
+      ]),
     ) as Record<string, RequestMode[]>;
     const modes = [...new Set(Object.values(targetModes).flat())].sort();
     for (const target of targets) {

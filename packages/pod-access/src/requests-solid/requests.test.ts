@@ -440,6 +440,7 @@ describe("decision state machine", () => {
       calls.push({ url: String(input), init: init as RequestInit });
       return new Response(profile, { headers: { "content-type": "text/turtle" } });
     };
+    pod.seed(`${POD}.acl`, (pod.body(`${POD}.acl`) as string).replace(OWNER, webId));
     const base = { ...options(pod), webId };
     expect(await listRequests({ ...base, publicFetch: undefined })).toEqual([]);
     const listed = await listRequests({ ...base, publicFetch });
@@ -512,7 +513,8 @@ describe("decision state machine", () => {
       eventRules.flatMap((subject) =>
         [...event.match(subject, DataFactory.namedNode(ACL.mode))].map((q) => q.object.value),
       ),
-    ).toEqual([ACL.Write]);
+      // A change request is approved as Editor, which also lets the requester view.
+    ).toEqual(expect.arrayContaining([ACL.Read, ACL.Write]));
     const viewer = buildPod();
     seed(viewer);
     await expect(

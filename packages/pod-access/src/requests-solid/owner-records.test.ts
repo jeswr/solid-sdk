@@ -117,7 +117,7 @@ describe("owner-controlled approval records", () => {
     inert.seed(RECORDS, "");
     inert.seed(
       `${RECORDS}.acl`,
-      `${pod.body(`${RECORDS}.acl`)}\n${PREFIXES}<#inert> a acl:Authorization; acl:origin <https://app.example>; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
+      `${pod.body(`${RECORDS}.acl`)}\n${PREFIXES}[] a acl:Authorization; acl:origin <https://app.example>; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
     );
     expect((await decide({ id: ID }, { approve: true }, opts(inert))).status).toBe("approved");
     // A server that answers HEAD but cannot list the new folder yet still gets it made private.
@@ -274,5 +274,26 @@ describe("owner-controlled approval records", () => {
     const result = await decide({ id: ID }, { approve: true }, opts(pod));
     expect(result.status).toBe("approved");
     expect(pod.body(`${ALICE}.acl`)).toContain(REQUESTER);
+  });
+
+  it("finds the records folder ACL from its own Link header only", async () => {
+    const refuse = async (link: string | null, message: RegExp | string) => {
+      const pod = buildPod();
+      pod.seed(RECORDS, "");
+      pod.intercept = (method, url) =>
+        method === "HEAD" && url === RECORDS
+          ? new Response(null, { headers: link === null ? {} : { link } })
+          : undefined;
+      await expect(decide({ id: ID }, { approve: false }, opts(pod))).rejects.toThrow(message);
+      expect(puts(pod)).toEqual([]);
+    };
+    await refuse('<x>; rel="http://www.w3.org/ns/solid/acp#accessControl"', "acp");
+    await refuse("<https://evil.example/records.acl>; rel=acl", /.+/);
+    // Without a Link header the conventional sibling is used.
+    const plain = buildPod();
+    plain.intercept = (method, url) =>
+      method === "HEAD" && url === RECORDS && plain.has(RECORDS) ? new Response(null) : undefined;
+    await decide({ id: ID }, { approve: false }, opts(plain));
+    expect(plain.body(`${RECORDS}.acl`)).toContain(OWNER);
   });
 });

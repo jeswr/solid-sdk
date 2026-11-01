@@ -93,7 +93,11 @@ export function scoped(storage: string, url: string): string {
 export function transport(fetchFn: typeof fetch, signal?: AbortSignal): typeof fetch {
   return async (input, init) => {
     signal?.throwIfAborted();
-    const response = await fetchFn(input, { ...init, signal, redirect: "error" });
+    const response = await fetchFn(input, {
+      ...init,
+      ...(signal && { signal }),
+      redirect: "error",
+    });
     if (response.status >= 300 && response.status < 400) throw new Error("Redirect refused");
     if (!response.ok || !response.body || init?.method === "HEAD") return response;
     const reader = response.body.getReader();
