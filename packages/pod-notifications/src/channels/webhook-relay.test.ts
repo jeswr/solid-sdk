@@ -26,9 +26,14 @@ function fixture() {
     streamToken: "b".repeat(43),
   };
   const relayFetch = vi.fn<typeof fetch>(async () => Response.json(registration, { status: 201 }));
+  let expires: unknown;
   const podFetch = vi.fn<typeof fetch>(async (input, init) => {
     const url = String(input);
-    if (init?.method === "POST") return Response.json({ subscription: `${root}subscription` });
+    if (init?.method === "POST")
+      return Response.json({
+        subscription: `${root}subscription`,
+        ...(expires === undefined ? {} : { expires }),
+      });
     if (init?.method === "DELETE") return new Response(null, { status: 204 });
     if (init?.method === "OPTIONS") return new Response(null);
     if (init?.method === "HEAD")
@@ -85,10 +90,14 @@ function fixture() {
     relayFetch,
     podFetch,
     getIdToken,
+    expiry: (value: unknown) => {
+      expires = value;
+    },
     client: createNotifications(deps),
     posts: () => podFetch.mock.calls.filter(([, init]) => init?.method === "POST"),
   };
 }
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -113,7 +122,7 @@ test("registers canonical storage with an ID token, batches topics and opens a r
   expect(f.posts()[0]?.[0]).toBe(f.endpoint);
   expect(JSON.parse(f.posts()[0]?.[1]?.body as string)).toEqual({
     "@context": ["https://www.w3.org/ns/lws/v1"],
-    type: "https://www.w3.org/ns/lws#WebhookSubscription",
+    type: "WebhookSubscription",
     topic: [f.root, `${f.root}note`],
     inbox: f.registration.inbox,
     expires: new Date(86_400_000).toISOString(),
@@ -174,6 +183,139 @@ test("terminal SSE failure rediscovers, registers again, and cleans up LWS subsc
   f.sources[1]!.open();
   expect(sub.state).toBe("live");
   await sub.close();
+});
+
+test("renews a shorter webhook lifetime while relay SSE stays healthy and resyncs", async () => {
+  const f = fixture();
+  f.expiry(new Date(10_000).toISOString());
+  const sub = await f.client.subscribe([f.root]);
+  const resync = vi.fn();
+  sub.on("resync", resync);
+  await f.timers.advanceBy(0);
+  f.sources[0]!.open();
+  await f.timers.advanceBy(2000);
+  f.sources[0]!.message("{}", "heartbeat");
+  await f.timers.advanceBy(6999);
+  expect(sub.state).toBe("live");
+  expect(f.posts()).toHaveLength(1);
+  f.expiry(new Date(20_000).toISOString());
+  await f.timers.advanceBy(1);
+  expect(f.posts()).toHaveLength(2);
+  expect(f.relayFetch).toHaveBeenCalledTimes(2);
+  expect(f.sources[0]!.readyState).toBe(2);
+  expect(f.sources[0]!.listenerCount).toBe(0);
+  expect(f.podFetch).toHaveBeenCalledWith(`${f.root}subscription`, {
+    method: "DELETE",
+    redirect: "error",
+  });
+  expect(sub.state).toBe("degraded");
+  f.sources[1]!.open();
+  expect(sub.state).toBe("live");
+  expect(resync).toHaveBeenCalledWith(new Date(2000));
+  await f.timers.advanceBy(9899);
+  expect(f.posts()).toHaveLength(2);
+  f.expiry(new Date(30_000).toISOString());
+  await f.timers.advanceBy(1);
+  expect(f.posts()).toHaveLength(3);
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
+});
+
+test("close clears renewal and ignores an already queued stale renewal callback", async () => {
+  const f = fixture();
+  f.expiry(new Date(10_000).toISOString());
+  const setTimeout = vi.spyOn(f.timers, "setTimeout");
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  f.sources[0]!.open();
+  const renewal = setTimeout.mock.calls.find(([, delay]) => delay === 9000)![0];
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
+  await renewal();
+  await f.timers.advanceBy(20_000);
+  expect(sub.state).toBe("closed");
+  expect(f.posts()).toHaveLength(1);
+});
+
+test("offline clears renewal and online establishes a fresh deadline", async () => {
+  const f = fixture();
+  const events = new EventTarget();
+  const navigator = { onLine: true };
+  vi.stubGlobal("navigator", navigator);
+  vi.stubGlobal("addEventListener", events.addEventListener.bind(events));
+  vi.stubGlobal("removeEventListener", events.removeEventListener.bind(events));
+  f.expiry(new Date(10_000).toISOString());
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  f.sources[0]!.open();
+  navigator.onLine = false;
+  events.dispatchEvent(new Event("offline"));
+  expect(f.timers.pending).toBe(0);
+  await f.timers.advanceBy(20_000);
+  expect(f.posts()).toHaveLength(1);
+  f.expiry(new Date(30_000).toISOString());
+  navigator.onLine = true;
+  events.dispatchEvent(new Event("online"));
+  await f.timers.advanceBy(0);
+  expect(f.posts()).toHaveLength(2);
+  expect(f.timers.pending).toBe(1);
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
+});
+
+test("terminal SSE failure cancels the old deadline before retrying", async () => {
+  const f = fixture();
+  f.expiry(new Date(10_000).toISOString());
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  f.sources[0]!.open();
+  f.sources[0]!.readyState = 2;
+  f.sources[0]!.error();
+  f.expiry(new Date(60_000).toISOString());
+  await f.timers.advanceBy(1000);
+  f.sources[1]!.open();
+  await f.timers.advanceBy(9000);
+  expect(f.posts()).toHaveLength(2);
+  expect(sub.state).toBe("live");
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
+});
+
+test.each([
+  null,
+  42,
+  "bad",
+  new Date(-1).toISOString(),
+  new Date(0).toISOString(),
+])("rejects invalid or expired webhook expiry %s and retries without a live stream", async (expires) => {
+  const f = fixture();
+  f.expiry(expires);
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(sub.state).toBe("degraded");
+  expect(f.sources).toHaveLength(0);
+  expect(f.timers.pending).toBe(1);
+  expect(f.podFetch).toHaveBeenCalledWith(`${f.root}subscription`, {
+    method: "DELETE",
+    redirect: "error",
+  });
+  f.expiry(new Date(60_000).toISOString());
+  await f.timers.advanceBy(1000);
+  f.sources[0]!.open();
+  expect(sub.state).toBe("live");
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
+});
+
+test("bounds long expiry timers to the native timeout range", async () => {
+  const f = fixture();
+  f.expiry("9999-01-01T00:00:00Z");
+  const setTimeout = vi.spyOn(f.timers, "setTimeout");
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647);
+  await sub.close();
+  expect(f.timers.pending).toBe(0);
 });
 
 test("registration 403 closes forbidden; transient errors retry and aborted ID-token callbacks cannot register", async () => {

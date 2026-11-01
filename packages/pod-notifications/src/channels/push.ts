@@ -72,6 +72,7 @@ export function createPushChannel(
     validateChannelUrl(url, storage.root, service, socket, insecure);
   let stopped = false;
   let retry: unknown;
+  let renewal: unknown;
   let active: AbortController | undefined;
   let attempt = 0;
   let interrupted = false;
@@ -108,6 +109,8 @@ export function createPushChannel(
       lastFrame = new Date(earliest);
     }
     frameTimes.clear();
+    if (renewal !== undefined) timers.clearTimeout(renewal);
+    renewal = undefined;
     active?.abort();
     active = undefined;
     for (const cleanup of sockets.values()) cleanup();
@@ -250,7 +253,7 @@ export function createPushChannel(
             ? {
                 "@context": ["https://www.w3.org/ns/lws/v1"],
                 type: relay
-                  ? "https://www.w3.org/ns/lws#WebhookSubscription"
+                  ? "WebhookSubscription"
                   : `https://jeswr.org/ns/solid-sd#${transport === "sse" ? "Sse" : "WebSocket"}Subscription`,
                 ...(relay ? { inbox: relay.inbox } : {}),
                 topic: topics,
@@ -281,6 +284,24 @@ export function createPushChannel(
             else removeSubscription(url);
           }
           if (!current()) return;
+          if (relay && "expires" in channel) {
+            const expires = typeof channel.expires === "string" ? Date.parse(channel.expires) : NaN;
+            const remaining = expires - now();
+            if (!Number.isFinite(remaining) || remaining <= 0)
+              throw new Error("Invalid notification expiry");
+            // Renew before the server's deadline even while relay SSE remains healthy.
+            // Bound the delay to avoid overflowing native 32-bit timeout implementations.
+            renewal = timers.setTimeout(
+              () => {
+                if (!current()) return;
+                disconnect();
+                interrupted = true;
+                subscription.transition("degraded", "reconnecting");
+                return connect();
+              },
+              Math.min(2_147_483_647, remaining * 0.9),
+            );
+          }
           receiveFrom =
             relay?.stream ??
             validate(
