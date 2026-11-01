@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, vi } from "vitest";
 import { createDriveStore, DriveAccessError, listContainer } from "../src/drive.js";
 
@@ -99,15 +100,25 @@ describe("cold discovery", () => {
   });
 
   it.each([
-    false,
-    true,
-  ])("resolves only the Solid slash redirect before listing (store=%s)", async (factory) => {
-    const root = `https://slash-${factory}.pod-drive.example/`;
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])("discovers Solid before normalising a redirect (store=%s, browser=%s)", async (factory, browser) => {
+    const root = `https://slash-${factory}-${browser}.pod-drive.example/`;
     const container = `${root}drive/`;
+    const controller = new AbortController();
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       const url = String(input);
-      if (url === container.slice(0, -1))
+      if (url === container.slice(0, -1)) {
+        if (browser) {
+          // Browser manual redirects expose neither status nor Location.
+          const response = Response.error();
+          Object.defineProperty(response, "type", { value: "opaqueredirect" });
+          return response;
+        }
         return new Response(null, { status: 301, headers: { location: "/drive/" } });
+      }
       if (init?.method === "HEAD")
         return new Response(null, {
           headers: {
@@ -124,13 +135,92 @@ describe("cold discovery", () => {
     });
     const listing = factory
       ? await createDriveStore({ root: container.slice(0, -1), fetch }).list()
-      : await listContainer(container.slice(0, -1), { fetch });
+      : await listContainer(container.slice(0, -1), { fetch, signal: controller.signal });
     expect(listing.url).toBe(container);
     expect(listing.container.entries).toEqual([]);
     expect(fetch.mock.calls.filter(([url]) => String(url) === container.slice(0, -1))).toHaveLength(
       1,
     );
     expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+    const requested = fetch.mock.calls.map(([url]) => String(url));
+    expect(requested.indexOf(root)).toBeLessThan(requested.indexOf(container));
+    if (!factory)
+      expect(fetch.mock.calls.every(([, init]) => init?.signal === controller.signal)).toBe(true);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("preserves a cold target's 404 without discovery links (store=%s)", async (factory) => {
+    const root = `https://missing-${factory}.pod-drive.example/missing/`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 404 }));
+    const result = factory
+      ? createDriveStore({ root, fetch }).list()
+      : listContainer(root, { fetch });
+    const error = await result.catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).not.toBeInstanceOf(DriveAccessError);
+    expect(error).toMatchObject({
+      code: "not-found",
+      status: 404,
+      method: "HEAD",
+      url: root,
+      cause: { code: "no-storage-link" },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mistake a missing description for a missing container", async () => {
+    const root = "https://missing-description.pod-drive.example/";
+    const description = `${root}storage`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) =>
+      String(input) === root
+        ? new Response(null, {
+            headers: {
+              link: `<${description}>; rel="http://www.w3.org/ns/solid/terms#storageDescription", <http://www.w3.org/ns/pim/space#Storage>; rel="type"`,
+            },
+          })
+        : new Response(null, { status: 404 }),
+    );
+    await expect(listContainer(root, { fetch })).rejects.toMatchObject({
+      code: "description-unreachable",
+      status: 404,
+      url: description,
+    });
+  });
+
+  it("does not normalise an opaque redirect when parent discovery identifies LWS", async () => {
+    const root = "https://lws-redirect.pod-drive.example/";
+    const container = `${root}opaque`;
+    const description = `${root}storage`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url === container) {
+        const response = Response.error();
+        Object.defineProperty(response, "type", { value: "opaqueredirect" });
+        return response;
+      }
+      if (url === root)
+        return new Response(null, {
+          headers: { link: `<${description}>; rel="https://www.w3.org/ns/lws#storage"` },
+        });
+      expect(url).toBe(description);
+      return new Response(
+        JSON.stringify({
+          id: description,
+          type: "Storage",
+          service: [{ type: "StorageRoot", serviceEndpoint: root }],
+        }),
+        { headers: { "content-type": "application/lws+cid" } },
+      );
+    });
+    await expect(listContainer(container, { fetch })).rejects.toMatchObject({
+      code: "description-unreachable",
+      status: 0,
+      url: container,
+    });
+    expect(fetch.mock.calls.some(([url]) => String(url) === root)).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => String(url) === `${container}/`)).toBe(false);
   });
 
   it("keeps a slashless opaque LWS container unchanged", async () => {

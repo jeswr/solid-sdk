@@ -66,31 +66,39 @@ function displayEntry(entry: Entry): DriveEntry {
   };
 }
 
-/** Keep access status and accept only the exact trailing-slash container redirect. */
+/** Keep target status and discover Solid before recovering a container redirect. */
 async function discoverStorage(
   url: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
 ): Promise<StorageClient> {
   let accessFailure: { status: 401 | 403; url: string } | undefined;
+  let targetNotFound = false;
   let slashRedirect = false;
   const transport: typeof fetch = async (input, init) => {
     const response = await fetchImpl(input, init);
     if (response.status === 401 || response.status === 403) {
       accessFailure = { status: response.status, url: String(input) };
     }
+    if (String(input) === url && init?.method === "HEAD" && response.status === 404) {
+      targetNotFound = true;
+    }
     if (
       String(input) === url &&
       init?.method === "HEAD" &&
       !url.endsWith("/") &&
-      [301, 302, 303, 307, 308].includes(response.status)
+      (response.type === "opaqueredirect" || [301, 302, 303, 307, 308].includes(response.status))
     ) {
-      const location = response.headers.get("location");
-      if (location) {
-        try {
-          slashRedirect = new URL(location, url).href === `${url}/`;
-        } catch {
-          // Malformed and unrelated redirects keep the SDK's refusal.
+      if (response.type === "opaqueredirect") {
+        slashRedirect = true;
+      } else {
+        const location = response.headers.get("location");
+        if (location) {
+          try {
+            slashRedirect = new URL(location, url).href === `${url}/`;
+          } catch {
+            // Malformed and unrelated redirects keep the SDK's refusal.
+          }
         }
       }
     }
@@ -106,7 +114,14 @@ async function discoverStorage(
     ).storage;
   } catch (error) {
     if (accessFailure) throw new DriveAccessError(accessFailure.status, accessFailure.url, error);
-    if (slashRedirect) return discoverStorage(`${url}/`, fetchImpl, signal);
+    if (targetNotFound)
+      throw new StorageError("not-found", { status: 404, url, method: "HEAD", cause: error });
+    if (slashRedirect) {
+      // Browsers hide Location. Discover through the parent instead of following the
+      // redirect or guessing that a slashless identifier belongs to Solid.
+      const storage = await discoverStorage(new URL("./", url).href, fetchImpl, signal);
+      if (storage.protocol === "solid") return storage;
+    }
     throw error;
   }
 }
