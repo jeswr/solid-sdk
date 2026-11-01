@@ -284,6 +284,8 @@ it.each([
   [`${AGENT}SendMessage`, `${AGENT}Transfer`, false],
   ["use", "https://example.org/Action", false],
 ] as const)("filters %s rules for %s before backend matching (match: %s)", async (action, requested, matches) => {
+  // A prohibition also covers a broader request that includes the prohibited act.
+  const prohibits = matches || (action === "append" && requested === "write");
   for (const type of ["permission", "prohibition"] as const) {
     let input = "";
     const rule: Rule = {
@@ -309,7 +311,7 @@ it.each([
       .one("https://www.w3.org/2018/credentials#credentialSubject")
       .one(`${AGENT}policy`)
       .values(`${ODRL}${type}`);
-    expect(serialized).toHaveLength(matches ? 1 : 0);
+    expect(serialized).toHaveLength((type === "prohibition" ? prohibits : matches) ? 1 : 0);
     expect(doc.request.action).toBe(`${ODRL}use`);
     for (const lowered of serialized) {
       expect(lowered.iri(`${ODRL}action`)).toBe(`${ODRL}use`);

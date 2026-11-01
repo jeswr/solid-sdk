@@ -149,14 +149,31 @@ export function knownOperand(c: Constraint, value: unknown): boolean {
   });
 }
 
-/** Match action, target and effective assignee before lowering for either backend. */
+const isOdrlAction = (action: string): action is OdrlActionName =>
+  (ODRL_ACTIONS as readonly string[]).includes(action);
+
+/** Whether a rule on `broad` covers a request for `narrow` (the shared ODRL implications). */
+function covers(policyId: string, broad: string, narrow: OdrlActionName): boolean {
+  return (
+    matchingPermissions(
+      { id: policyId, permissions: [{ type: "permission", action: broad as OdrlActionName }] },
+      { action: narrow },
+    ).length > 0
+  );
+}
+
+/**
+ * Match action, target and effective assignee before lowering for either backend.
+ * A prohibition also matches a request for a BROADER action that covers the
+ * prohibited one (a `write` request covers a prohibited `append`), so "any
+ * prohibition wins" cannot be sidestepped by asking for the umbrella action.
+ */
 export function candidate(r: Rule, p: Policy, q: Intent): boolean {
+  const prohibition = (p.prohibitions ?? []).includes(r);
   // Use the shared matcher for standard action implications before validating context.
-  const actionMatches = (ODRL_ACTIONS as readonly string[]).includes(q.action)
-    ? matchingPermissions(
-        { id: p.id, permissions: [{ type: "permission", action: r.action as OdrlActionName }] },
-        { action: q.action as OdrlActionName },
-      ).length > 0
+  const actionMatches = isOdrlAction(q.action)
+    ? covers(p.id, r.action, q.action) ||
+      (prohibition && isOdrlAction(r.action) && covers(p.id, q.action, r.action))
     : r.action === q.action;
   return (
     actionMatches &&
@@ -177,6 +194,17 @@ export const solidOdrlEngine: PolicyEngine = {
     const missing = rules.some((r) =>
       (r.constraints ?? []).some((c) => !knownOperand(c, attributes[c.leftOperand])),
     );
+    // A set-valued request operand satisfies isAnyOf when ANY element matches, so
+    // one allowed recipient would carry unlisted ones through a permission
+    // allowlist. Leave such permissions to confirmation (the sparq adapter
+    // refuses set-valued operands outright).
+    const setValued = (p.permissions ?? [])
+      .filter((r) => candidate(r, p, q))
+      .some((r) =>
+        (r.constraints ?? []).some(
+          (c) => c.operator === "isAnyOf" && Array.isArray(attributes[c.leftOperand]),
+        ),
+      );
     const lower = (rs: readonly Rule[] = []): OdrlRule[] =>
       rs
         .filter(
@@ -224,7 +252,7 @@ export const solidOdrlEngine: PolicyEngine = {
         )
       );
     });
-    if (!supported || missing || unmetDuty) return { effect: "indeterminate" };
+    if (!supported || missing || setValued || unmetDuty) return { effect: "indeterminate" };
     return { effect: result.decision === "permit" ? "permit" : "not-applicable" };
   },
 };
