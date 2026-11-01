@@ -2,6 +2,7 @@
 name: solid-dpop
 description: Use when generating RFC 9449 DPoP proofs with @jeswr/solid-dpop, creating client-credentials sessions, driving authorization-code plus PKCE login, making ath-bound resource requests, refreshing tokens, or persisting CLI sessions and their bound keypair.
 ---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # Work with `@jeswr/solid-dpop`
@@ -33,6 +34,9 @@ await refreshSession(session);
 - Persist the original DPoP private key with a refresh token. Refresh tokens are bound to that key's `jkt`; a new key cannot redeem them.
 - Treat serialized sessions like private keys. Keep file permissions restrictive and never log tokens or JWKs.
 - Require HTTPS except for explicit loopback development. Validate discovered issuer equality and every contacted endpoint through the existing transport guards.
+- Set `allowInsecureLoopback: true` explicitly for HTTP loopback issuers/endpoints. Discovery compares issuer strings exactly, including trailing slashes, and validates JWKS URLs too. DNS/SSRF pinning belongs to the injected transport.
+- Discovery/token responses default to 1 MiB and 30 seconds (`maxResponseBytes`, `requestTimeoutMs`). Token types must be DPoP. Credential-bearing requests use manual redirects; resource redirects are returned, or rejected for caller `redirect: "error"`.
+- Compose loopback login using `startLoopbackListener(path, expectedState)` or the generated `listener.state`. Invalid callback state must not terminate login. Reapply development transport options when refreshing a session loaded from disk.
 - Keep PKCE S256, OAuth state, and OIDC nonce mandatory on authorization-code flows.
 
 Use the root exports for production and the testing subpath only in tests. Run unit tests and the full workspace gate; use the package's live test when changing interoperability with a real Community Solid Server.

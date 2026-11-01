@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * The Solid-OIDC engine — wraps panva's `openid-client` v6 to perform the authorization-code +
@@ -490,7 +491,9 @@ export async function createSolidOidcClient(
   // loopback dev OP, allow insecure requests. openid-client's `CustomFetch` has a narrower
   // options shape (`CustomFetchOptions`) than DOM `fetch`; `adaptCustomFetch` bridges them.
   const discoveryOptions: oidc.DiscoveryRequestOptions = {
-    [oidc.customFetch]: adaptCustomFetch(userFetch),
+    [oidc.customFetch]: adaptCustomFetch(userFetch, opts),
+    // Upstream uses seconds; the transport enforces the precise millisecond deadline.
+    timeout: Math.ceil((opts.requestTimeoutMs ?? 30_000) / 1000),
     ...(allowInsecure ? { execute: [oidc.allowInsecureRequests] } : {}),
   };
 
@@ -612,21 +615,15 @@ export async function createSolidOidcClient(
       // A Request body is a stream; read it (abort-aware, cancellable, size-capped) so we can send
       // it more than once across the original + nonce retry.
       bufferedBody = await readStreamWithSignal(
-        reqInput.clone().body as ReadableStream<Uint8Array>,
+        reqInput.body as ReadableStream<Uint8Array>,
         effectiveSignal,
         maxReplayBodyBytes,
       );
     }
 
-    // Merge headers from the Request then the init (init overrides), so a Request's content-type
-    // etc. is preserved while an explicit init header still wins.
+    // Native fetch semantics: an explicit header set replaces the Request's entire header set.
     const buildHeaders = (proof: string): Headers => {
-      const headers = new Headers(reqInput?.headers ?? undefined);
-      if (init?.headers) {
-        new Headers(init.headers).forEach((v, k) => {
-          headers.set(k, v);
-        });
-      }
+      const headers = new Headers(init?.headers ?? reqInput?.headers);
       headers.set("authorization", `DPoP ${accessToken}`);
       headers.set("dpop", proof);
       return headers;
@@ -636,10 +633,16 @@ export async function createSolidOidcClient(
       const proof = await resourceDpopProof(dpopKeyPair, method, url, accessToken, nonce);
       const req: RequestInit = {
         ...baseInit,
+        redirect: "manual",
         headers: buildHeaders(proof),
         ...(bufferedBody !== undefined ? { body: bufferedBody } : {}),
       };
-      return userFetch(url, req);
+      const response = await userFetch(url, req);
+      if (baseInit.redirect === "error" && response.status >= 300 && response.status < 400) {
+        cancelResponse(response);
+        throw new TypeError("Authenticated request redirect refused.");
+      }
+      return response;
     };
 
     const res = await doFetch();
@@ -647,9 +650,8 @@ export async function createSolidOidcClient(
     if (res.status === 401) {
       const serverNonce = res.headers.get("dpop-nonce");
       if (serverNonce) {
-        // Drain the challenge response body before retrying so its connection/body resources are
-        // released (we discard it — only the retry's response is returned). Best-effort.
-        await res.body?.cancel().catch(() => {});
+        // Start releasing the discarded challenge body; cancellation must not delay the retry.
+        cancelResponse(res);
         return doFetch(serverNonce);
       }
     }
@@ -864,6 +866,7 @@ async function readStreamWithSignal(
   stream: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
   maxBytes: number,
+  responseBody = false,
 ): Promise<ArrayBuffer> {
   const reader = stream.getReader();
 
@@ -902,6 +905,7 @@ async function readStreamWithSignal(
       // Bounded buffering: a body larger than the cap is rejected (cancels the reader) rather than
       // buffered, so a large/unbounded upload cannot exhaust memory.
       if (total > maxBytes) {
+        if (responseBody) throw new Error("OIDC response exceeds byte limit.");
         throw new Error(
           `authedFetch: request stream body exceeds the ${maxBytes}-byte replay buffer cap. ` +
             "Raise `maxReplayBodyBytes` to upload a larger body (it is buffered so the §8 DPoP-nonce " +
@@ -912,7 +916,7 @@ async function readStreamWithSignal(
     }
   } catch (err) {
     // On abort (or any read error) cancel the reader so the source stops producing, then rethrow.
-    await reader.cancel(err).catch(() => {});
+    void reader.cancel(err).catch(() => {});
     throw err;
   } finally {
     removeAbortListener?.();
@@ -929,6 +933,15 @@ async function readStreamWithSignal(
   return out.buffer.slice(0, total);
 }
 
+/** Start advisory cancellation without letting a stream's cancel hook delay rejection or retry. */
+function cancelResponse(response: Response): void {
+  try {
+    void response.body?.cancel().catch(() => {});
+  } catch {
+    /* best effort */
+  }
+}
+
 /** The abort reason if the signal supplies one, else a standard `AbortError`. */
 function abortReason(signal: AbortSignal): unknown {
   const reason = (signal as { reason?: unknown }).reason;
@@ -942,18 +955,70 @@ function abortReason(signal: AbortSignal): unknown {
  * Adapt a DOM-shaped {@link FetchLike} into openid-client's `CustomFetch`
  * (`(url, CustomFetchOptions) => Promise<Response>`). `CustomFetchOptions` is structurally a
  * subset of `RequestInit` (`body`/`headers`/`method`/`redirect`/`signal`), so it forwards
- * directly. We preserve openid-client's `redirect: "manual"` (it relies on inspecting redirects
- * itself, not following them) and pass through the abort `signal`.
+ * directly, with manual redirects and a bounded body/deadline before upstream parsing.
  */
-function adaptCustomFetch(userFetch: FetchLike): oidc.CustomFetch {
-  return (url, options) => {
+function adaptCustomFetch(
+  userFetch: FetchLike,
+  budgets: CreateSolidOidcClientOptions,
+): oidc.CustomFetch {
+  const timeoutMs = budgets.requestTimeoutMs ?? 30_000;
+  const maxBytes = budgets.maxResponseBytes ?? 1024 * 1024;
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > 2_147_483_647 ||
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes <= 0
+  ) {
+    throw new Error("Invalid HTTP response budget.");
+  }
+  return async (url, options) => {
+    const controller = new AbortController();
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
+    const timer = setTimeout(
+      () => controller.abort(new Error("OIDC exchange deadline exceeded.")),
+      timeoutMs,
+    );
+    let removeAbortListener = () => {};
+    const aborted = new Promise<never>((_resolve, reject) => {
+      const onAbort = () => reject(abortReason(signal));
+      signal.addEventListener("abort", onAbort, { once: true });
+      removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+      if (signal.aborted) onAbort();
+    });
+    void aborted.catch(() => {});
     const init: RequestInit = {
       method: options.method,
       headers: options.headers,
-      redirect: options.redirect,
+      redirect: "manual",
       ...(options.body !== undefined ? { body: options.body as BodyInit } : {}),
-      ...(options.signal !== undefined ? { signal: options.signal } : {}),
+      signal,
     };
-    return userFetch(url, init);
+    try {
+      signal.throwIfAborted();
+      const response = await Promise.race([
+        aborted,
+        userFetch(url, init).then((response) => {
+          if (signal.aborted) {
+            cancelResponse(response);
+            throw abortReason(signal);
+          }
+          return response;
+        }),
+      ]);
+      if (!response.body) return response;
+      // Buffer under a cap before upstream can clone or parse an attacker-controlled response.
+      const body = await readStreamWithSignal(response.body, signal, maxBytes, true);
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    } finally {
+      clearTimeout(timer);
+      removeAbortListener();
+    }
   };
 }

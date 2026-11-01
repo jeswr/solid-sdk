@@ -76,7 +76,7 @@ export async function createClientCredentialsFetch(
         if (metadata.issuer !== config.oidcIssuer) throw new Error("Issuer mismatch");
         tokenEndpoint = httpsUrl(metadata.token_endpoint);
       }
-      return Response.json({ token_endpoint: tokenEndpoint });
+      return Response.json({ issuer: config.oidcIssuer, token_endpoint: tokenEndpoint });
     }
     if (url !== tokenEndpoint) throw new Error("Unexpected authorization endpoint");
     const response = await fetchSafe(url, init as RequestInit);

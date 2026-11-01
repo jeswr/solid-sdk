@@ -89,6 +89,8 @@ export async function createCliFetch(
     id: config.clientId,
     secret: config.clientSecret as string,
     issuer: config.oidcIssuer ?? new URL(config.tokenUrl as string).origin,
+    // loadCliConfig already limits HTTP to loopback development endpoints.
+    allowInsecureLoopback: true,
   };
   const discovery = discoveryUrl(creds.issuer);
   let endpoint = config.tokenUrl;
@@ -105,10 +107,12 @@ export async function createCliFetch(
             throw new Error();
           endpoint = metadata.token_endpoint;
         }
-        assertEndpointTransport(endpoint as string, "token_endpoint");
+        assertEndpointTransport(endpoint as string, "token_endpoint", true);
         const target = new URL(endpoint as string);
         if (target.username || target.password || target.hash) throw new Error();
-        return Response.json({ token_endpoint: endpoint });
+        // solid-dpop requires discovery's issuer to equal the configured one (OIDC
+        // Discovery 4.3); this synthetic document vouches for the endpoint checked above.
+        return Response.json({ issuer: creds.issuer, token_endpoint: endpoint });
       }
       const response = await fetchImpl(url, {
         ...init,
