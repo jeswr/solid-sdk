@@ -180,9 +180,16 @@ describe("exportRange", () => {
     expect(() => exportRange("2026-02-30", "2026-03-01", "UTC")).toThrow(RangeError);
     expect(() => exportRange("2026-03-01", "", "UTC")).toThrow(RangeError);
     expect(() => exportRange("2026-03-02", "2026-03-01", "UTC")).toThrow(RangeError);
-    expect(() => exportRange("1999-03-02", "2026-03-01", "UTC")).toThrow(
+    expect(() => exportRange("2000-01-01", "2026-03-01", "Pacific/Auckland")).toThrow(
       "Choose dates between 2000 and 2099",
     );
+    expect(() => exportRange("2026-03-01", "2099-12-31", "UTC")).toThrow(
+      "Choose dates between 2000 and 2099",
+    );
+    expect(exportRange("2000-01-02", "2099-12-30", "Pacific/Kiritimati").start).toEqual(
+      at("2000-01-01T10:00:00Z"),
+    );
+    expect(() => exportRange("2026-03-01", "2026-03-02", "Not/A_Zone")).toThrow();
   });
   it("reads today's date in the chosen zone", () => {
     expect(civilToday(at("2026-10-31T20:15:00Z"), "Pacific/Auckland")).toBe("2026-11-01");

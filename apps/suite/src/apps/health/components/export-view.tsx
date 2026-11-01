@@ -5,6 +5,7 @@ import { FileJson, LockKeyhole } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import {
   civilToday,
+  EARLIEST_EXPORT_DATE,
   type ExportCounts,
   type ExportSkips,
   exportHealth,
@@ -55,6 +56,7 @@ export function ExportView() {
       const exported = await exportHealth(store, range, {
         clock: () => new Date(),
         uuid: () => crypto.randomUUID(),
+        // Includes readings still saving; if one then fails, the file still has the user's entry.
         unsaved: pending,
       });
       const url = URL.createObjectURL(new Blob([exported.json], { type: "application/fhir+json" }));
@@ -73,7 +75,7 @@ export function ExportView() {
         fail("That's too many readings for one file. Choose a shorter date range.", RANGE_ERROR);
       else if (cause instanceof FhirExportError)
         fail(
-          "Some of your health data couldn't be converted to FHIR, so no file was made. Try a different date range.",
+          "Some of your health data couldn't be converted to FHIR, so no file was made. A reading, medication or condition may be missing a name or have an unusual value.",
         );
       else fail("Couldn't export your health data. Check your connection and try again.");
     }
@@ -117,7 +119,7 @@ export function ExportView() {
               id={fromId}
               type="date"
               value={from}
-              min="2000-01-01"
+              min={EARLIEST_EXPORT_DATE}
               max={to}
               aria-invalid={error?.kind === RANGE_ERROR || undefined}
               aria-describedby={error?.kind === RANGE_ERROR ? errorId : undefined}

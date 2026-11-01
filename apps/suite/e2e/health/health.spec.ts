@@ -281,7 +281,7 @@ test("exports a FHIR bundle for a date range and refuses a reversed range", asyn
     ["Readings", "Observation"],
     ["Medications", "MedicationStatement"],
     ["Conditions", "Condition"],
-  ]) {
+  ] as const) {
     const count = kinds.filter((kind) => kind === type).length;
     expect(count).toBeGreaterThan(0);
     await expect(summary.locator("div", { hasText: label }).locator("dd")).toHaveText(

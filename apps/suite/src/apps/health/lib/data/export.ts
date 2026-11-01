@@ -1,6 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
 
-import { instantToWallClock, wallClockToInstant } from "../../../calendar/lib/tz";
+import {
+  CalendarTimeError,
+  instantToWallClock,
+  wallClockToInstant,
+} from "../../../calendar/lib/tz";
 import {
   type ConditionInput,
   type HealthRecords,
@@ -155,23 +159,27 @@ const nextDay = (date: string) => {
 };
 /** The first instant of a civil day in `zone`, even where DST skips midnight. */
 function startOfDay(date: string, zone: string) {
-  for (const time of ["00:00:00", "01:00:00"]) {
-    try {
-      return new Date(wallClockToInstant(`${date}T${time}`, zone, "earlier"));
-    } catch {
-      // Midnight doesn't exist on some DST change days; the next hour does.
-    }
+  try {
+    return new Date(wallClockToInstant(`${date}T00:00:00`, zone, "earlier"));
+  } catch (error) {
+    if (!(error instanceof CalendarTimeError && error.code === "nonexistent-time")) throw error;
+    // Midnight doesn't exist on some DST change days; the next hour does.
+    return new Date(wallClockToInstant(`${date}T01:00:00`, zone, "earlier"));
   }
-  throw new RangeError("Choose dates between 2000 and 2099");
 }
 /** Today's civil date (YYYY-MM-DD) in `zone`. */
 export function civilToday(now: Date, zone: string) {
   return instantToWallClock(now.getTime(), zone).wallTime.slice(0, 10);
 }
+export const EARLIEST_EXPORT_DATE = "2000-01-02";
+export const LATEST_EXPORT_DATE = "2099-12-30";
 /** Inclusive civil dates (YYYY-MM-DD) in `zone` to a half-open instant range. */
 export function exportRange(from: string, to: string, zone: string): Range {
   if (!isRecordDate(from) || !isRecordDate(to) || to < from)
     throw new RangeError("Choose a start date on or before the end date");
+  // Every zone's day stays inside the time helpers' 2000–2099 instant range.
+  if (from < EARLIEST_EXPORT_DATE || to > LATEST_EXPORT_DATE)
+    throw new RangeError("Choose dates between 2000 and 2099");
   return { start: startOfDay(from, zone), end: startOfDay(nextDay(to), zone) };
 }
 
