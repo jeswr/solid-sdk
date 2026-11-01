@@ -62,8 +62,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Ignore the client-supplied update payload; use only the encrypted JWT state.
         const state = token[SOLID_JWT_KEY] as SolidJwtState | undefined;
         // expiresAt is epoch seconds. Refresh when expiry is unknown or within 60 seconds.
+        // Sessions without a refresh token cannot refresh; send them back through sign-in.
         if (
-          state &&
+          state?.refreshToken &&
           (state.expiresAt === undefined || Date.now() >= (state.expiresAt - 60) * 1000)
         ) {
           token[SOLID_JWT_KEY] = await refreshSolidSession(state, {

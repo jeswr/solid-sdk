@@ -43,8 +43,9 @@ async function jwt({ token, account, trigger }) {
   // Ignore the client-supplied update payload; use only the encrypted JWT state.
   if (trigger !== "update") return token;
   const state = token[SOLID_JWT_KEY] as SolidJwtState | undefined;
+  // No refresh token means no refresh: send that session back through sign-in.
   if (
-    state &&
+    state?.refreshToken &&
     (state.expiresAt === undefined || Date.now() >= (state.expiresAt - 60) * 1000)
   ) {
     token[SOLID_JWT_KEY] = await refreshSolidSession(state, {
