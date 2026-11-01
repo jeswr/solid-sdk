@@ -204,8 +204,9 @@ it("bounds all inbox account listings and caps messages across accounts with an 
     return [];
   });
   const rows = await readers.readInbox(client, "direct");
-  expect(isTruncated(rows)).toBe(false);
-  expect(list).toHaveBeenCalledTimes(1001);
+  // 1,000 account containers: only the 500 selected ones are listed, and the result says so.
+  expect(isTruncated(rows)).toBe(true);
+  expect(list).toHaveBeenCalledTimes(501);
   expect(peak).toBe(6);
   list.mockImplementation(async (url) =>
     url === `${BASE}inbox/direct/`

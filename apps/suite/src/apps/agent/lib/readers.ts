@@ -207,14 +207,23 @@ export async function readInbox(
   binding: string,
 ): Promise<Collection<InboxMessage>> {
   const root = `${client.paths.inbox}${guardSlug(binding)}/`;
-  const accounts = (await client.list(root)).filter((m) => m.container);
+  // Bound traversal as well as the final sample: at most MEMBER_LIMIT account listings, each
+  // contributing at most MEMBER_LIMIT messages, so fan-out never scales with the pod's size.
+  const accounts = selectMembers((await client.list(root)).filter((m) => m.container));
   const errors: Row<InboxMessage>[] = [];
+  let truncated = accounts.truncated;
+  let total = 0;
   // Finish the listing phase before reading messages: nested worker pools would multiply fanout.
-  const groups = await mapBounded(accounts, async (member) => {
+  const groups = await mapBounded(accounts.members, async (member) => {
     try {
-      return (await client.list(member.url)).filter(
-        (m) => !m.container && !m.url.endsWith(".triage.ttl"),
+      const selected = selectMembers(
+        (await client.list(member.url)).filter(
+          (m) => !m.container && !m.url.endsWith(".triage.ttl"),
+        ),
       );
+      truncated ||= selected.truncated;
+      total += selected.total;
+      return selected.members;
     } catch (error) {
       errors.push({ url: member.url, error });
       return [];
@@ -249,7 +258,12 @@ export async function readInbox(
       return { ...loaded, record: { ...loaded.record, triage, triageError } };
     }),
   );
-  return collection(newest([...errors, ...rows]), messages);
+  return collection(newest([...errors, ...rows]), {
+    ...messages,
+    total,
+    truncated: truncated || messages.truncated,
+    newest: false,
+  });
 }
 export interface Conversation {
   id: string;
