@@ -22,8 +22,8 @@ import type { OriginFetchOptions } from "./origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "./profiles.js";
 import type { TokenProvider } from "./types.js";
 
-export { triageLinkedInNotification } from "./gmail/triage.js";
 export { GmailSetupRequiredError, type GmailTenant, mapGmailError } from "./gmail/errors.js";
+export { triageLinkedInNotification } from "./gmail/triage.js";
 
 export const ORIGINS: ReadonlySet<string> = gmailOrigins();
 export interface GmailReaderOptions extends EmailConfig {

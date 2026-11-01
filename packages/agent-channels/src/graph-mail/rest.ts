@@ -59,11 +59,11 @@ export function deltaLink(
 }
 export function graphMailRest(options: OriginFetchOptions = {}) {
   const scoped = createOriginScopedFetch(graphMailOrigins(), options);
-  return async (
+  return async <Access extends "read" | "send">(
     path: string,
     account: AccountRef,
-    tokens: TokenProvider,
-    access: "read" | "send",
+    tokens: Pick<TokenProvider, Access>,
+    access: Access,
     body?: string,
     beforeRequest?: () => Promise<void>,
   ) => {
@@ -74,7 +74,7 @@ export function graphMailRest(options: OriginFetchOptions = {}) {
           ? `${BASE}${path}`
           : deltaLink(path, undefined);
     const ref = Object.freeze({ id: accountId(account) });
-    const grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
+    const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await beforeRequest?.();
     return scoped(target, {

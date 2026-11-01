@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { BridgeMessage } from "@jeswr/agent-channels";
 import { type ActionProposal, canonicalJson, digestOf } from "@jeswr/agent-model";
@@ -496,7 +497,7 @@ describe("OpenAI Proposer tool boundary", () => {
     expect(r.calls.map((c) => c.toolCalls)).toEqual([1, 1, 1, 1, 0]);
     expect(r.calls.every((c) => c.context === "proposer")).toBe(true);
     expect(new Set(r.calls.map((c) => c.id)).size).toBe(5);
-    expect(ctx.pod.read).toHaveBeenCalledWith(`${ctx.pod.root}note`);
+    expect(ctx.pod.read).toHaveBeenCalledWith(`${ctx.pod.root}note`, undefined);
     expect(ctx.pod.list).toHaveBeenCalled();
     expect(ctx.memoryRecall).toHaveBeenCalledWith("fixture");
     expect(ctx.pod.write).not.toHaveBeenCalled();
@@ -509,6 +510,11 @@ describe("OpenAI Proposer tool boundary", () => {
       "memory_recall",
       "propose",
     ]);
+    const searchTool = bodies[0].tools.find((tool: { name: string }) => tool.name === "pod_search");
+    expect(searchTool.parameters.properties.scope.type).toBe("string");
+    const searchResult = bodies[2].input.at(-1);
+    expect(searchResult.call_id).toBe("call-pod_search");
+    expect(JSON.parse(searchResult.output)).toEqual({ content: [{ type: "text", text: "[]" }] });
     expect(
       bodies[4].input.filter((i: { type: string }) => i.type === "function_call_output"),
     ).toHaveLength(4);
@@ -601,6 +607,10 @@ describe("OpenAI Proposer tool boundary", () => {
       content: [{ type: "text", text: "Tool request failed" }],
     });
     expect(JSON.stringify(result)).not.toContain(KEY);
+    if (name === "pod_search") {
+      expect(ctx.pod.read).not.toHaveBeenCalled();
+      expect(ctx.pod.list).not.toHaveBeenCalled();
+    }
   });
   it.each([
     { action: { ...proposal, state: "approved" } },
@@ -1119,6 +1129,10 @@ describe("Anthropic Proposer SDK isolation", () => {
         content: [{ type: "text", text: "Tool request failed" }],
       });
       expect(JSON.stringify(result)).not.toContain(KEY);
+      if (name === "pod_search") {
+        expect(ctx.pod.read).not.toHaveBeenCalled();
+        expect(ctx.pod.list).not.toHaveBeenCalled();
+      }
       yield assistant();
       yield success;
     });

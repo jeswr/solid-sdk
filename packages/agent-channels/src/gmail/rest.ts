@@ -59,18 +59,18 @@ export function rawMessage(
 }
 export function gmailRest(options: OriginFetchOptions = {}, tenant?: GmailTenant) {
   const scoped = createOriginScopedFetch(gmailOrigins(), options);
-  return async (
+  return async <Access extends "read" | "send">(
     path: string,
     account: AccountRef,
-    tokens: TokenProvider,
-    access: "read" | "send",
+    tokens: Pick<TokenProvider, Access>,
+    access: Access,
     body?: string,
     beforeRequest?: () => Promise<void>,
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
     let grant: ReadGrant | SendGrant;
     try {
-      grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
+      grant = await tokens[access](ref);
     } catch (error) {
       throw mapGmailError(error, tenant) ?? error;
     }

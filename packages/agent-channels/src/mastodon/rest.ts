@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DEFAULT_LIMITS, parseBoundedJson } from "@jeswr/agent-model";
 import { accountId, assertGrant } from "../direct/shared.js";
 import { ChannelParseError } from "../errors.js";
@@ -79,15 +80,15 @@ export async function responseJson(response: Response): Promise<unknown> {
 export function mastodonRest(instance: string, options: OriginFetchOptions = {}) {
   const origin = instanceOrigin(instance);
   const scoped = createOriginScopedFetch(new Set([origin]), options);
-  return async (
+  return async <Access extends "read" | "send">(
     path: string,
     account: AccountRef,
-    tokens: TokenProvider,
-    access: "read" | "send",
+    tokens: Pick<TokenProvider, Access>,
+    access: Access,
     send?: { body: string; key: string; beforeRequest: () => Promise<void> },
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
-    const grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
+    const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await send?.beforeRequest();
     try {

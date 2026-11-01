@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { readFileSync } from "fs";
@@ -33,7 +34,11 @@ function sender(replies: unknown[] = [], patch: Partial<MatrixSendOptions> = {})
   return { ...fake, tokens, verifyApproval, eventIdFor, options, send: createMatrixSend(options) };
 }
 const render = (s: ReturnType<typeof sender>) => s.send.render(signed(), MATRIX_CONTENT);
-const live = (s: ReturnType<typeof sender>) => ({ account, tokens: s.tokens, dryRun: false });
+const live = (s: ReturnType<typeof sender>) => ({
+  account,
+  tokens: { send: s.tokens.send.bind(s.tokens) },
+  dryRun: false,
+});
 const altered = (wire: Wire, change: Record<string, unknown>): Wire => {
   const bytes = canonicalJson({ ...JSON.parse(wire.bytes), ...change });
   return { ...wire, bytes, digest: digestBytes(bytes) };
@@ -210,7 +215,6 @@ it("requires current mandate/approval and refuses plaintext downgrade of encrypt
     s.send.transmit(wire, {
       ...live(s),
       tokens: {
-        read: s.tokens.read,
         send: async () => ({ access: "read" as "send", accessToken: "synthetic" }),
       },
     }),

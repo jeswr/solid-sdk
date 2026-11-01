@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import type { guardedFetch } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
@@ -470,7 +471,8 @@ it("renders an exact direct-only request with footer and keeps signed evidence l
   expect(s.tokens.calls).toEqual([]);
   expect(s.verifyApproval).not.toHaveBeenCalled();
   expect(s.requests).toEqual([]);
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  const io = { account, tokens: { send: s.tokens.send.bind(s.tokens) }, dryRun: false };
+  expect(await s.send.transmit(wire, io)).toEqual({
     outcome: "accepted",
     providerRef: "600",
   });

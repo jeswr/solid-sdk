@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type ActionProposal, podRecordSchema } from "@jeswr/agent-model";
 import { createPodToolRegistry } from "@jeswr/solid-mcp";
 import { z } from "zod";
@@ -37,9 +38,11 @@ const proposalInput = proposal.extend({
 
 export function proposerTools(ctx: ProposerContext, proposals: ProposalDraft[]): Tool[] {
   const podTools = createPodToolRegistry(ctx.pod, true)
-    .filter((tool) => tool.name === "pod_read" || tool.name === "search")
+    // Keep the scoped search contract and tool order independent of registry additions.
+    .filter((tool) => tool.name === "pod_read" || tool.name === "solid_search")
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map((tool) => ({
-      name: tool.name === "search" ? "pod_search" : tool.name,
+      name: tool.name === "solid_search" ? "pod_search" : tool.name,
       description: tool.description,
       schema: tool.inputSchema,
       async run(input: unknown) {

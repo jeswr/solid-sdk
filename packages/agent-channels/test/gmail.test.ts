@@ -477,7 +477,7 @@ it("uses dry-run by default and requires approved exact MIME, account, signature
   const s = sender([fixtures.accepted]);
   const proposal = signed();
   const wire = await s.send.render(proposal, EMAIL_MIME);
-  const io = { account, tokens: s.tokens };
+  const io = { account, tokens: { send: s.tokens.send.bind(s.tokens) } };
   expect(await s.send.transmit(wire, io)).toEqual({ outcome: "rejected", detail: "dry-run" });
   expect(await s.send.transmit(wire, { ...io, dryRun: true })).toEqual({
     outcome: "rejected",

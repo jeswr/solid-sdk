@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { expect, it, vi } from "vitest";
 import * as fixtures from "../../matrix-chat-to-pod/test/fixtures/events.js";
@@ -564,7 +565,6 @@ it("bounds shared parsing, origin configuration, scope separation and response h
       {
         ...tokens,
         read: vi.fn(async () => ({ access: "send" as "read", accessToken: "synthetic" })),
-        send: tokens.send,
       },
       "read",
     ),
