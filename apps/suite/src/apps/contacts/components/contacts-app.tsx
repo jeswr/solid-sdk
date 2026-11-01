@@ -233,6 +233,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     let frame = 0;
     let attempts = 0;
     let settled = 0;
+    let focused: HTMLElement | undefined;
     const observer = new MutationObserver(() => {
       settled = 0;
       schedule();
@@ -250,7 +251,9 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     }
     function movedElsewhere() {
       const active = document.activeElement as HTMLElement | null;
-      if (!active || active === document.body || host?.contains(active)) return false;
+      if (!active || active === document.body || active === focused) return false;
+      // Inside the list, only a different element than the one we focused is a user move.
+      if (host?.contains(active)) return focused !== undefined;
       return active.isConnected && (active.checkVisibility?.() ?? true);
     }
     function stop() {
@@ -263,11 +266,14 @@ function ContactsChrome({ children }: { children: ReactNode }) {
       frame = 0;
       if (movedElsewhere()) return stop();
       const target = find();
-      if (target && document.activeElement !== target) {
+      // No row yet: wait for the list to render (the observer reschedules on mutation).
+      if (!target) return;
+      if (document.activeElement !== target) {
         settled = 0;
         target.focus({ preventScroll: true });
+        focused = target;
       }
-      if (target && document.activeElement === target) settled += 1;
+      if (document.activeElement === target) settled += 1;
       attempts += 1;
       if (settled >= 3 || attempts > 120) return stop();
       schedule();
