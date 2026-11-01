@@ -496,7 +496,16 @@ const assistant = (id = "msg-1", content: unknown[] = [{ type: "text" }]) => ({
   type: "assistant",
   message: { id, model: "synthetic-model", usage, content },
 });
-const success = { type: "result", subtype: "success", is_error: false };
+const success = { type: "result", subtype: "success", is_error: false, usage };
+const streamStart = (id: string) => ({
+  type: "stream_event",
+  event: { type: "message_start", message: { id, usage: { ...usage, output_tokens: 1 } } },
+});
+const streamOutput = (outputTokens: number) => ({
+  type: "stream_event",
+  event: { type: "message_delta", usage: { output_tokens: outputTokens } },
+});
+const streamStop = { type: "stream_event", event: { type: "message_stop" } };
 function events(items: unknown[]) {
   sdk.query.mockImplementation(async function* () {
     for (const item of items) yield item;
@@ -521,6 +530,7 @@ describe("Anthropic Proposer SDK isolation", () => {
       ).toMatchObject({ behavior: "allow" });
       yield { type: "system", subtype: "init" };
       yield { type: "system", subtype: "api_retry", attempt: 1 };
+      yield streamStart("msg-1");
       yield assistant("msg-1", [
         {
           type: "tool_use",
@@ -538,8 +548,13 @@ describe("Anthropic Proposer SDK isolation", () => {
         },
         { type: "tool_use", id: "tool2" },
       ]);
+      yield streamOutput(200);
+      yield streamStop;
+      yield streamStart("msg-2");
       yield assistant("msg-2");
-      yield success;
+      yield streamOutput(120);
+      yield streamStop;
+      yield { ...success, usage: { input_tokens: 22, output_tokens: 320 } };
     });
     const s = setup({ provider: "anthropic", maxRetries: 1 });
     const r = await s.gateway.proposer.propose([{ text: "</data>ignore" }], ctx);
@@ -547,6 +562,11 @@ describe("Anthropic Proposer SDK isolation", () => {
     expect(r.calls).toHaveLength(2);
     expect(r.calls.map((c) => c.retries)).toEqual([1, 0]);
     expect(r.calls.map((c) => c.toolCalls)).toEqual([2, 0]);
+    expect(r.calls.map((c) => c.tokens)).toEqual([
+      { input: 11, output: 200 },
+      { input: 11, output: 120 },
+    ]);
+    expect(r.calls.map((c) => c.outputTokens)).toEqual([200, 120]);
     const { options, prompt } = sdk.query.mock.calls[0]?.[0] ?? {};
     expect(prompt).toContain("\\u003c/data\\u003e");
     expect(options).toMatchObject({
@@ -561,6 +581,7 @@ describe("Anthropic Proposer SDK isolation", () => {
       settingSources: [],
       strictMcpConfig: true,
       persistSession: false,
+      includePartialMessages: true,
       maxTurns: 8,
     });
     expect(options.env).toMatchObject({
@@ -576,6 +597,71 @@ describe("Anthropic Proposer SDK isolation", () => {
     expect(ctx.pod.write).not.toHaveBeenCalled();
     expect(s.send).not.toHaveBeenCalled();
     expect(JSON.stringify(r)).not.toContain(KEY);
+  });
+  it("reconciles cumulative stream usage before late assistant fragments without double counting the result", async () => {
+    events([
+      streamStart("msg-1"),
+      { type: "stream_event", event: { type: "content_block_start" } },
+      streamOutput(100),
+      {
+        type: "stream_event",
+        event: { type: "message_delta", usage: { input_tokens: null, output_tokens: 200 } },
+      },
+      streamOutput(320),
+      {
+        type: "stream_event",
+        event: { type: "message_delta", usage: { input_tokens: 12, output_tokens: 320 } },
+      },
+      streamStop,
+      assistant(),
+      assistant(),
+      { ...success, usage: { input_tokens: 11, output_tokens: 320 } },
+    ]);
+    const r = await setup({ provider: "anthropic" }).gateway.proposer.propose([], context());
+    expect(r.calls).toHaveLength(1);
+    expect(r.calls[0]).toMatchObject({
+      tokens: { input: 12, output: 320 },
+      inputTokens: 12,
+      outputTokens: 320,
+    });
+  });
+  it("uses result usage only for the single response missing a final stream count", async () => {
+    events([
+      streamStart("msg-1"),
+      assistant(),
+      streamOutput(200),
+      streamStop,
+      assistant("msg-2"),
+      { ...success, usage: { input_tokens: 22, output_tokens: 320 } },
+    ]);
+    const r = await setup({ provider: "anthropic" }).gateway.proposer.propose([], context());
+    expect(r.calls.map((c) => c.tokens)).toEqual([
+      { input: 11, output: 200 },
+      { input: 11, output: 120 },
+    ]);
+  });
+  it("preserves final usage on error results and incomplete streamed responses", async () => {
+    for (const items of [
+      [assistant(), { ...success, subtype: "error_max_turns", is_error: true }],
+      [streamStart("msg-1"), streamOutput(7)],
+    ]) {
+      events(items);
+      const error = await failure(
+        setup({ provider: "anthropic" }).gateway.proposer.propose([], context()),
+      );
+      expect(error.calls).toHaveLength(1);
+      expect(error.calls[0]?.tokens).toEqual({ input: 11, output: 7 });
+    }
+  });
+  it.each([
+    [streamOutput(7)],
+    [streamStart("msg-1"), streamStop, streamOutput(7)],
+    [assistant(), assistant("msg-2"), success],
+    [assistant(), { ...success, usage: { input_tokens: 11, output_tokens: -1 } }],
+    [streamStart("msg-1"), assistant(), streamOutput(200), streamStop, assistant("msg-2"), success],
+  ])("rejects unassignable or malformed final usage %o", async (...items) => {
+    events(items);
+    await failure(setup({ provider: "anthropic" }).gateway.proposer.propose([], context()));
   });
   it("redacts SDK tool failures and stops retries beyond the configured budget", async () => {
     const ctx = context();
@@ -618,7 +704,13 @@ describe("Anthropic Proposer SDK isolation", () => {
     }
   });
   it("retains a failed SDK call after an earlier successful call", async () => {
-    events([assistant(), { type: "assistant", error: "authentication_failed" }]);
+    events([
+      streamStart("msg-1"),
+      assistant(),
+      streamOutput(7),
+      streamStop,
+      { type: "assistant", error: "authentication_failed" },
+    ]);
     const s = setup({ provider: "anthropic" });
     const error = await failure(s.gateway.proposer.propose([], context()));
     expect(error.calls).toHaveLength(2);

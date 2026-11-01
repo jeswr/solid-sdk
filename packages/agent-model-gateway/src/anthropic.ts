@@ -7,7 +7,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { z } from "zod";
 import type { Tool } from "./tools.js";
-import { type Configuration, record, usageSchema } from "./transport.js";
+import { type Configuration, record, type Usage, usageSchema } from "./transport.js";
 import type { GatewayOptions, ModelCall } from "./types.js";
 
 const assistant = z.object({
@@ -64,7 +64,39 @@ export async function anthropicPropose(
     let retries = 0;
     let unrecordedAssistant = false;
     let callStart = start;
-    const seen = new Map<string, { index: number; tools: Set<string>; start: number }>();
+    type Entry = { index: number; tools: Set<string>; start: number; outputFinal: boolean };
+    const seen = new Map<string, Entry>();
+    let streaming: Entry | undefined;
+    function entryFor(id: string, usage: Usage): Entry {
+      let entry = seen.get(id);
+      if (!entry) {
+        entry = { index: calls.length, tools: new Set(), start: callStart, outputFinal: false };
+        seen.set(id, entry);
+        // Assistant/message_start output counts are placeholders until message_delta arrives.
+        calls.push(
+          record(config, "proposer", { ...usage, output_tokens: 0 }, 0, now() - callStart, retries),
+        );
+        callStart = now();
+        retries = 0;
+      }
+      return entry;
+    }
+    function update(
+      entry: Entry,
+      usage: { input_tokens?: number | null; output_tokens?: number } = {},
+    ) {
+      const previous = calls[entry.index] as ModelCall;
+      const input = usage.input_tokens ?? previous.inputTokens;
+      const output = usage.output_tokens ?? previous.outputTokens;
+      calls[entry.index] = {
+        ...previous,
+        tokens: { input, output },
+        inputTokens: input,
+        outputTokens: output,
+        toolCalls: entry.tools.size,
+        latencyMs: Math.max(0, now() - entry.start),
+      };
+    }
     try {
       for await (const event of sdk.query({
         prompt,
@@ -77,6 +109,7 @@ export async function anthropicPropose(
           settingSources: [],
           strictMcpConfig: true,
           persistSession: false,
+          includePartialMessages: true,
           cwd: directory,
           mcpServers: { gateway: server },
           maxTurns: config.maxTurns,
@@ -108,18 +141,28 @@ export async function anthropicPropose(
             throw new Error("Provider retry budget exceeded");
           }
         }
+        if (event.type === "stream_event") {
+          if (event.event.type === "message_start") {
+            const message = assistant.pick({ id: true, usage: true }).parse(event.event.message);
+            streaming = entryFor(message.id, message.usage);
+          } else if (event.event.type === "message_delta") {
+            if (!streaming) throw new Error("Usage has no provider message");
+            update(
+              streaming,
+              usageSchema
+                .extend({ input_tokens: usageSchema.shape.input_tokens.nullish() })
+                .parse(event.event.usage),
+            );
+            streaming.outputFinal = true;
+          } else if (event.event.type === "message_stop") {
+            streaming = undefined;
+          }
+        }
         if (event.type === "assistant") {
           unrecordedAssistant = true;
           if (event.error) throw new Error("Provider failed");
           const message = assistant.parse(event.message);
-          let entry = seen.get(message.id);
-          if (!entry) {
-            entry = { index: calls.length, tools: new Set(), start: callStart };
-            seen.set(message.id, entry);
-            calls.push(record(config, "proposer", message.usage, 0, now() - callStart, retries));
-            callStart = now();
-            retries = 0;
-          }
+          const entry = entryFor(message.id, message.usage);
           unrecordedAssistant = false;
           for (const block of message.content) {
             if (block.type !== "tool_use") continue;
@@ -136,17 +179,24 @@ export async function anthropicPropose(
               }
             }
           }
-          const previous = calls[entry.index] as ModelCall;
-          calls[entry.index] = {
-            ...previous,
-            tokens: { input: message.usage.input_tokens, output: message.usage.output_tokens },
-            inputTokens: message.usage.input_tokens,
-            outputTokens: message.usage.output_tokens,
-            toolCalls: entry.tools.size,
-            latencyMs: Math.max(0, now() - entry.start),
-          };
+          update(entry);
         }
         if (event.type === "result") {
+          const pending = [...seen.values()].filter((entry) => !entry.outputFinal);
+          if (pending.length > 0) {
+            // A result is an aggregate, never an extra call. Only one missing count can be
+            // assigned unambiguously; multiple missing responses must not invent a split.
+            if (pending.length !== 1) throw new Error("Incomplete per-message usage");
+            const output =
+              usageSchema.parse(event.usage).output_tokens -
+              [...seen.values()].reduce(
+                (sum, entry) => sum + (calls[entry.index] as ModelCall).outputTokens,
+                0,
+              );
+            if (output < 0) throw new Error("Inconsistent provider usage");
+            update(pending[0] as Entry, { output_tokens: output });
+            (pending[0] as Entry).outputFinal = true;
+          }
           if (event.subtype !== "success" || event.is_error) throw new Error("Provider failed");
           succeeded = true;
         }

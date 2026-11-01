@@ -47,7 +47,10 @@ The gateway has no send tool, pod mutation tool or audit writer.
 Both contexts return call records with local UUID IRI, context, configured provider/model,
 `tokens: { input, output }` (also `inputTokens`/`outputTokens`), tool-call count, latency and
 retry count. SDK fragments sharing a provider message ID produce one record; its aggregate
-result is not counted again. HTTP retries share one record. `GatewayError.calls` preserves
+result is not counted again. Partial SDK events supply final output counts per message ID,
+replacing assistant-message placeholders. A result total can fill one missing output count;
+multiple missing counts fail closed rather than guessing their distribution.
+HTTP retries share one record. `GatewayError.calls` preserves
 completed/failed-request counters without provider error text, prompts or secrets. The caller
 owns audit persistence. Latency includes transport and local tool time between SDK responses;
 SDK retry counts come from `api_retry` events; the gateway aborts when that budget is exceeded.
