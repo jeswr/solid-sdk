@@ -145,6 +145,8 @@ test("sheet: a long queue with no buttons scrolls from the keyboard", async ({ p
   const sheet = page.getByRole("dialog", { name: "Sync status" });
   await expect(sheet).toBeVisible();
   const region = sheet.getByRole("region", { name: "Sync items" });
+  // Chromium focuses scroll containers on its own; other engines need the tabindex.
+  await expect(region).toHaveAttribute("tabindex", "0");
   const scrollTop = () => region.evaluate((node) => node.scrollTop);
   expect(await scrollTop()).toBe(0);
   // Tab reaches the scroll region; the arrow and End keys then scroll it.
