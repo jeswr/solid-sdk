@@ -1,0 +1,201 @@
+// AUTHORED-BY Claude Opus 5.5
+"use client";
+import { Button, EmptyState, ErrorState, formatBytes, LoadingSkeleton } from "@jeswr/suite-ui";
+import { HardDrive, RefreshCw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { encodeRef } from "@/lib/refs";
+import type { LibraryPhoto } from "../lib/data/library";
+import {
+  createBinarySizer,
+  measureUsage,
+  type UsageReport,
+  type UsageSource,
+} from "../lib/data/usage";
+import { usePhotos } from "../state/photos-context";
+import { PhotoImage } from "./photo-image";
+
+/** Rows shown before "Show more"; the list is largest first. */
+const PAGE = 25;
+type Measured =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; library: UsageReport; trash: UsageReport };
+
+export function StorageScreen() {
+  const state = usePhotos();
+  const [attempt, setAttempt] = useState(0);
+  const [measured, setMeasured] = useState<Measured>({ status: "loading" });
+  const [shown, setShown] = useState(PAGE);
+  const sizer = useMemo(
+    () => createBinarySizer(state.session.fetch, state.io.root),
+    [state.session, state.io],
+  );
+  const byRef = useMemo(
+    () => new Map(state.photos.map((photo) => [photo.ref, photo])),
+    [state.photos],
+  );
+  const librarySources = useMemo<UsageSource[]>(
+    () =>
+      state.photos.map((photo) => ({
+        key: photo.ref,
+        photo,
+        external: photo.source === "google-photos",
+      })),
+    [state.photos],
+  );
+  const trashSources = useMemo<UsageSource[]>(
+    () => state.trash.map((item) => ({ key: item.url, photo: item.photo })),
+    [state.trash],
+  );
+  const ready = state.status === "ready";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly recalculates
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    setMeasured((current) => (current.status === "ready" ? current : { status: "loading" }));
+    Promise.all([
+      measureUsage(sizer, librarySources, { signal: controller.signal }),
+      measureUsage(sizer, trashSources, { signal: controller.signal }),
+    ])
+      .then(([library, trash]) => {
+        if (!controller.signal.aborted) setMeasured({ status: "ready", library, trash });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setMeasured({ status: "error" });
+      });
+    return () => controller.abort();
+  }, [ready, sizer, librarySources, trashSources, attempt]);
+
+  if (state.status === "loading" || (ready && measured.status === "loading"))
+    return <LoadingSkeleton preset="list" label="Calculating storage…" />;
+  if (state.status === "error" || measured.status === "error")
+    return (
+      <div className="pho-page">
+        <h1>Storage</h1>
+        <ErrorState error="unreachable" actions={{ retry: () => setAttempt((n) => n + 1) }} />
+      </div>
+    );
+  if (measured.status !== "ready") return null;
+  const { library, trash } = measured;
+  const stored = library.items.filter((item) => item.location === "stored");
+  const total = library.totalBytes + trash.totalBytes;
+  return (
+    <div className="pho-page pho-storage">
+      <header className="pho-page-header">
+        <div className="pho-header-text">
+          <h1>Storage</h1>
+          <p>See what takes up space in your pod and free some up.</p>
+        </div>
+        <div className="pho-header-actions">
+          <Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+            <RefreshCw size={18} aria-hidden="true" />
+            Recalculate
+          </Button>
+        </div>
+      </header>
+      <section className="pho-storage-summary" aria-label="Storage summary">
+        <div className="pho-storage-total">
+          <HardDrive size={24} aria-hidden="true" />
+          <div>
+            <p className="pho-storage-figure">{formatBytes(total)}</p>
+            <p>used by Photos in your pod</p>
+          </div>
+        </div>
+        <dl className="pho-storage-breakdown">
+          <div>
+            <dt>Library</dt>
+            <dd>
+              {formatBytes(library.totalBytes)} · {plural(library.storedCount, "photo")}
+            </dd>
+          </div>
+          <div>
+            <dt>Trash</dt>
+            <dd>
+              {formatBytes(trash.totalBytes)} · {plural(trash.storedCount, "photo")}
+              {trash.storedCount > 0 && (
+                <>
+                  {" · "}
+                  <Link href="/photos/trash">Review trash</Link>
+                </>
+              )}
+            </dd>
+          </div>
+        </dl>
+        {library.externalCount > 0 && (
+          <p className="pho-storage-note">
+            {plural(library.externalCount, "imported photo")}{" "}
+            {library.externalCount === 1 ? "is" : "are"} stored with Google Photos and{" "}
+            {library.externalCount === 1 ? "doesn't" : "don't"} use space in your pod.
+          </p>
+        )}
+        {library.incompleteCount + trash.incompleteCount > 0 && (
+          <p className="pho-storage-note" role="status">
+            Couldn't measure {plural(library.incompleteCount + trash.incompleteCount, "photo")}.
+            Totals may be low.
+          </p>
+        )}
+      </section>
+      <section aria-labelledby="pho-largest">
+        <h2 id="pho-largest">Largest photos</h2>
+        {stored.length === 0 ? (
+          <EmptyState
+            title="No photos in your pod yet"
+            body="Photos you upload appear here, largest first."
+          />
+        ) : (
+          <>
+            <ol className="pho-storage-list">
+              {stored.slice(0, shown).map((item) => {
+                const photo = byRef.get(item.key);
+                if (!photo) return null;
+                return (
+                  <li key={item.key} className="pho-storage-row">
+                    <Link
+                      className="pho-storage-thumb"
+                      href={`/photos/p/${encodeRef(photo.ref)}?from=%2Fphotos`}
+                      aria-label={`Open ${photo.name}`}
+                    >
+                      <PhotoImage url={photo.thumbnailUrl ?? photo.contentUrl} name={photo.name} />
+                    </Link>
+                    <div className="pho-storage-name">
+                      <span>{photo.name}</span>
+                      <span className="pho-storage-meta">
+                        {dimensions(photo)}
+                        {item.incomplete ? " · size partly unknown" : ""}
+                      </span>
+                    </div>
+                    <span className="pho-storage-size">{formatBytes(item.bytes)}</span>
+                    {!photo.readOnly && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Move ${photo.name} to trash`}
+                        title="Move to trash"
+                        onClick={() => void state.moveToTrash([photo])}
+                      >
+                        <Trash2 size={18} aria-hidden="true" />
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+            {stored.length > shown && (
+              <Button variant="outline" onClick={() => setShown((n) => n + PAGE)}>
+                Show more
+              </Button>
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+function dimensions(photo: LibraryPhoto) {
+  const { pixelWidth, pixelHeight } = photo.exif;
+  return pixelWidth && pixelHeight ? `${pixelWidth} × ${pixelHeight}` : "Unknown size";
+}

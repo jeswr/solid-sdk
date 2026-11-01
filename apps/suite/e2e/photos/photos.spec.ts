@@ -340,3 +340,36 @@ test("search, selection, direct lightbox reload and album deletion keep original
   await navigate(page, "Photos");
   await expect(opens(page)).toHaveCount(12);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+test("storage lists the largest photos and moving one to trash moves its space", async ({
+  page,
+}, info) => {
+  await page.goto("/photos");
+  await expect(opens(page)).toHaveCount(12);
+  await navigate(page, "Storage");
+  const largest = page.getByRole("region", { name: "Largest photos", exact: true });
+  const rows = largest.getByRole("listitem");
+  await expect(rows).toHaveCount(12);
+  const summary = page.getByRole("region", { name: "Storage summary", exact: true });
+  await expect(summary.getByText(/· 12 photos$/)).toBeVisible();
+  await expect(summary.getByText(/· 0 photos$/)).toBeVisible();
+  await expect(page.getByText(/Couldn't measure/)).toHaveCount(0);
+  const sizes = await largest.locator(".pho-storage-size").allTextContents();
+  const bytes = (text: string) => {
+    const [value = "0", unit = "B"] = text.split(/\s+/);
+    return Number(value) * ({ B: 1, KB: 1e3, MB: 1e6 }[unit] ?? 1);
+  };
+  expect(sizes.every((size) => bytes(size) > 0)).toBe(true);
+  expect(sizes.map(bytes)).toEqual([...sizes.map(bytes)].sort((a, b) => b - a));
+  await capture(page, info, "storage");
+  const first = rows.first();
+  const name = (await first.locator(".pho-storage-name > span").first().textContent()) ?? "";
+  await first.getByRole("button", { name: `Move ${name} to trash`, exact: true }).click();
+  await saved(page);
+  await expect(rows).toHaveCount(11);
+  await expect(summary.getByText(/· 1 photo · Review trash$/)).toBeVisible();
+  await summary.getByRole("link", { name: "Review trash", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Trash", exact: true })).toBeVisible();
+  await expect(opens(page)).toHaveCount(1);
+});
