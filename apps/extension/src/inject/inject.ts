@@ -8,7 +8,12 @@
  * proxied fetch Response. The credential boundary is enforced in the worker, not here.
  */
 
-export {};
+import {
+  assertBodySize,
+  base64ToBytes,
+  bytesToBase64,
+  validateBodyFields,
+} from '../shared/body-codec';
 
 const CHANNEL = 'solid-browser-ext';
 
@@ -188,14 +193,22 @@ function installSolidInjection(): void {
         } else if (data.error) {
           pending.reject(new Error(data.error));
         } else {
-          const response = new Response(data.body ?? null, {
-            status: data.status,
-            statusText: data.statusText,
-            headers: new Headers(data.headers ?? {}),
-          });
-          // ResponseInit cannot carry these read-only properties. Preserve the worker's
-          // final URL so apps resolve relative RDF references against the served resource.
-          pending.resolve(withResponseMetadata(response, data.url ?? '', data.redirected === true));
+          try {
+            validateBodyFields(data.body, data.bodyBase64);
+            const response = new Response(
+              data.bodyBase64 !== undefined ? base64ToBytes(data.bodyBase64) : (data.body ?? null),
+              {
+                status: data.status,
+                statusText: data.statusText,
+                headers: new Headers(data.headers ?? {}),
+              },
+            );
+            pending.resolve(
+              withResponseMetadata(response, data.url ?? '', data.redirected === true),
+            );
+          } catch (error) {
+            pending.reject(error as Error);
+          }
         }
         break;
       }
@@ -243,47 +256,91 @@ function installSolidInjection(): void {
    * best-effort global-fetch patch (NOT an explicit `window.solid.fetch` call) so the SW can
    * native-passthrough a non-pod / un-granted request instead of hard-failing the page (High #1).
    */
-  function solidFetch(
+  async function solidFetch(
     input: RequestInfo | URL,
     init?: RequestInit,
     autoDivert = false,
   ): Promise<Response> {
+    const request = typeof input === 'object' && !urlLike(input) ? (input as Request) : null;
+    if (request && ((init?.mode ?? request.mode) === 'navigate' || !/^https?:/.test(request.url)))
+      return PRISTINE_FETCH(input, init);
+
+    // Snapshot mutable fields synchronously, BEFORE Blob/Request body reads yield.
+    const snapInit = init
+      ? { ...init, ...(init.headers !== undefined ? { headers: new Headers(init.headers) } : {}) }
+      : undefined;
+    const source = snapInit?.body;
+    // Reject structured/one-shot init bodies before constructing a Request can lock them.
+    if (source instanceof FormData || source instanceof ReadableStream) {
+      if (autoDivert) return PRISTINE_FETCH(input, snapInit);
+      throw new Error(
+        'window.solid.fetch does not support FormData or ReadableStream request bodies',
+      );
+    }
+    const snapInput = request
+      ? source != null
+        ? new Request(request, snapInit)
+        : request.clone()
+      : urlLike(input)
+        ? input.href
+        : input;
+    const method = snapInit?.method ?? request?.method ?? 'GET';
+    const headers = new Headers(snapInit?.headers ?? request?.headers);
+    let body: string | undefined;
+    let bodyBase64: string | undefined;
+    if (source != null) {
+      if (typeof source === 'string') {
+        validateBodyFields(source, undefined);
+        body = source;
+      } else if (
+        ArrayBuffer.isView(source) ||
+        Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+      ) {
+        const view = ArrayBuffer.isView(source)
+          ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+          : new Uint8Array(source as ArrayBuffer);
+        assertBodySize(view.byteLength);
+        const copy = new Uint8Array(view);
+        if (snapInit) snapInit.body = copy;
+        bodyBase64 = bytesToBase64(copy);
+      } else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
+        body = source.toString();
+        validateBodyFields(body, undefined);
+        if (snapInit) snapInit.body = new URLSearchParams(body);
+        if (!headers.has('content-type'))
+          headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+      } else if (source instanceof Blob) {
+        assertBodySize(source.size);
+        if (!headers.has('content-type') && source.type) headers.set('content-type', source.type);
+        bodyBase64 = bytesToBase64(new Uint8Array(await source.arrayBuffer()));
+      } else {
+        // One-shot/structured bodies retain native semantics on the transparency path.
+        if (autoDivert) return PRISTINE_FETCH(input, snapInit);
+        throw new Error(
+          'window.solid.fetch does not support FormData or ReadableStream request bodies',
+        );
+      }
+    } else if (
+      request &&
+      !['GET', 'HEAD'].includes(method.toUpperCase()) &&
+      request.body !== null
+    ) {
+      bodyBase64 = bytesToBase64(
+        new Uint8Array(await (snapInput as Request).clone().arrayBuffer()),
+      );
+    }
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      // Retain the input/init so a passthrough sentinel can be completed with the page's own
-      // native fetch verbatim (round-2 High #1). SNAPSHOT them at CALL TIME (round-3 Medium):
-      // native `fetch` reads the URL/init synchronously, but a passthrough fetch happens only
-      // AFTER the async SW round-trip — so without a snapshot, a page that mutates the `URL`,
-      // the `Headers`, or `init.credentials` between the call and the sentinel would change the
-      // eventual request. Copy the URL (a mutable `URL` object), the init object, and the
-      // headers into fresh values so a later mutation of the caller's objects cannot leak in. A
-      // string input + string body are immutable, so they need no copy. A `URL` is detected by
-      // duck-typing (`urlLike`, cross-realm-safe) and snapshotted to its `href` STRING: a WHATWG
-      // URL is fully specified by `href`, native fetch accepts a string URL identically, and a
-      // string can't be mutated — so a later `url.pathname = …` on the caller's object cannot leak
-      // into the deferred passthrough. (Snapshotting to a fresh `URL` would also work but only if
-      // `URL` is the same realm; a string is robust in both browser and JSDOM.)
-      const snapInput: RequestInfo | URL = urlLike(input) ? input.href : input;
-      const snapInit: RequestInit | undefined = init
-        ? { ...init, ...(init.headers ? { headers: new Headers(init.headers) } : {}) }
-        : undefined;
+      // Deferred native fallback keeps Request metadata and a separate, unread body.
       pendingFetches.set(requestId, { resolve, reject, input: snapInput, init: snapInit });
-      let body: string | null = null;
-      if (init?.body != null) {
-        if (typeof init.body !== 'string') {
-          pendingFetches.delete(requestId);
-          reject(new Error('window.solid.fetch currently supports only string request bodies.'));
-          return;
-        }
-        body = init.body;
-      }
       postToContent({
         type: 'SOLID_FETCH_REQUEST',
         requestId,
-        url: input.toString(),
-        method: init?.method ?? 'GET',
-        headers: init?.headers ? Object.fromEntries(new Headers(init.headers).entries()) : {},
+        url: request?.url ?? snapInput.toString(),
+        method,
+        headers: Object.fromEntries(headers.entries()),
         body,
+        bodyBase64,
         autoDivert,
       });
     });
@@ -449,15 +506,7 @@ function installSolidInjection(): void {
 
   const patchedFetch: typeof fetch = (input, init) => {
     if (shouldDivert(input)) {
-      // A Request object (not a plain URL/string) carries a body/headers the bridge can't
-      // currently serialise structurally — pass it through solidFetch via its URL + init only
-      // for the simple (string/URL) case; a complex Request falls back to native fetch (the SW
-      // gate still governs the eventual pod read if the app re-issues it through window.solid).
-      if (typeof input === 'string' || urlLike(input)) {
-        // autoDivert=true: this is the transparency patch, NOT an explicit window.solid.fetch —
-        // the SW native-passes-through (no 403) when the request is non-pod / un-granted (High #1).
-        return solidFetch(input, init, true);
-      }
+      return solidFetch(input, init, true);
     }
     return PRISTINE_FETCH(input as RequestInfo, init);
   };

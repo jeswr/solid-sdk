@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { type BrowserContext, expect, type Page } from '@playwright/test';
 
 /** The seeded CSS test WebID (see e2e/setup/seed.json). */
@@ -82,13 +83,18 @@ export async function grantOrigin(
   context: BrowserContext,
   page: Page,
   profile?: ConsentProfile,
+  access = {
+    classIRI: 'https://schema.org/TextDigitalDocument',
+    modes: ['read'],
+    targetUrl: '/private/notes',
+  },
 ): Promise<void> {
   await page.waitForFunction(
     () =>
       typeof (window as unknown as { solid?: { requestAccess?: unknown } }).solid?.requestAccess ===
       'function',
   );
-  await page.evaluate(() => {
+  await page.evaluate(({ classIRI, modes }) => {
     const button = document.createElement('button');
     button.id = 'grant-origin-fixture';
     button.textContent = 'Grant origin access';
@@ -100,8 +106,8 @@ export async function grantOrigin(
       ).solid;
       void solid
         .requestAccess({
-          classes: ['https://schema.org/TextDigitalDocument'],
-          modes: ['read'],
+          classes: [classIRI],
+          modes,
           duration: 'P1D',
         })
         .then((result) => {
@@ -109,7 +115,7 @@ export async function grantOrigin(
         });
     });
     document.body.appendChild(button);
-  });
+  }, access);
   const consentPromise = context.waitForEvent('page');
   await page.getByRole('button', { name: 'Grant origin access' }).click();
   const consent = await consentPromise;
@@ -122,7 +128,7 @@ export async function grantOrigin(
     await expect(consent.locator('#webid')).toHaveText(profile.label);
     await expect(consent.locator('.targets')).toHaveText(profile.targetUrl);
   } else {
-    await expect(consent.locator('.targets')).toContainText('/private/notes');
+    await expect(consent.locator('.targets')).toContainText(access.targetUrl);
   }
   await consent.getByRole('button', { name: 'Share', exact: true }).click();
   await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');

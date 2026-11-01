@@ -4,8 +4,7 @@
  * The message protocol shared across the four contexts (MAIN-world inject, ISOLATED
  * content script, service worker, popup). All payloads MUST be JSON-serialisable —
  * `window.postMessage` (page ↔ content) and `chrome.runtime` (content/popup ↔ worker)
- * both structured-clone, and Response bodies are serialised as text (Solid resources are
- * predominantly text/RDF; binary support is a documented future extension).
+ * carry text directly and binary bodies as bounded standard base64 strings.
  *
  * The injected `window.solid` NEVER receives a token — only the WebID + a proxied fetch
  * result. The credential boundary is enforced entirely in the service worker.
@@ -25,7 +24,10 @@ export interface FetchRequest {
   readonly url: string;
   readonly method: string;
   readonly headers: Record<string, string>;
-  readonly body: string | null;
+  /** Text request body, absent when bodyBase64 is present or there is no body. */
+  readonly body?: string;
+  /** Binary request bytes as standard base64 (at most 25 MiB raw), exclusive with body. */
+  readonly bodyBase64?: string;
   /**
    * The page-supplied requesting origin (`window.location.origin`), stamped by the content
    * script. ADVISORY ONLY — the worker cross-checks it against the browser-attested
@@ -293,7 +295,10 @@ export interface FetchResponse {
   /** Whether the worker followed a resource redirect before serving this response. */
   readonly redirected?: boolean;
   readonly headers?: Record<string, string>;
+  /** Valid UTF-8 textual response body, exclusive with bodyBase64. */
   readonly body?: string;
+  /** Binary or invalid-UTF-8 response bytes as standard base64 (at most 25 MiB raw). */
+  readonly bodyBase64?: string;
   readonly error?: string;
   /**
    * A PASSTHROUGH SENTINEL: `true` ⇒ the SW declined this `autoDivert` request WITHOUT

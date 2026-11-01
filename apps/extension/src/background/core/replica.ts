@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The single, extension-owned SHARED REPLICA (design §2, §5.2).
  *
@@ -79,7 +80,7 @@ export interface EgressPort {
     url: string,
     method: string,
     headers: Record<string, string>,
-    body: string | null,
+    body: string | Uint8Array<ArrayBuffer> | null,
     nonce: string | undefined,
   ): Promise<{ response: Response; nonce?: string; url?: string }>;
 }
@@ -291,7 +292,7 @@ export class SharedReplica {
     url: string,
     method: string,
     headers: Record<string, string>,
-    body: string | null,
+    body: string | Uint8Array<ArrayBuffer> | null,
     nonce: string | undefined,
   ): Promise<ReplicaResult | { deny: Response }> {
     const decision = await this.cfg.gate(url, method);

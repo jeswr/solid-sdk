@@ -230,7 +230,6 @@ function sendFetch(
           requestId: 'r1',
           method: 'GET',
           headers: {},
-          body: null,
           ...message,
         },
         sender,
@@ -1613,7 +1612,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     };
     const pending = profileFetch(PROFILE_APP_A, {
       method,
-      body: method === 'PUT' ? 'fixture write' : null,
+      body: method === 'PUT' ? 'fixture write' : undefined,
     });
     await started;
     expect((await profileMessage(lifecycle, { profileId: '1' })).ok).toBe(true);

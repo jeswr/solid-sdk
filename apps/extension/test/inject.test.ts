@@ -429,3 +429,292 @@ it('keeps an ungranted origin stub-only, preserving native fetch; removes capabi
   expect(Object.keys(stub).sort()).toEqual(['login', 'requestAccess']);
   expect(dom.window.fetch).toBe(nativeFetch);
 });
+
+// Binary transport and Request inputs (sst-bwc.2).
+function solidApi(): { fetch: typeof fetch } {
+  return (dom.window as unknown as { solid: { fetch: typeof fetch } }).solid;
+}
+
+async function fetchMessage(): Promise<Record<string, unknown>> {
+  await vi.waitFor(() => expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(true));
+  return posted.find((m) => m.type === 'SOLID_FETCH_REQUEST')!;
+}
+
+function finishFetch(message: Record<string, unknown>): void {
+  deliverToPage({ type: 'SOLID_FETCH_RESPONSE', requestId: message.requestId, status: 204 });
+}
+
+describe('inject — binary bodies and Request inputs', () => {
+  it.each([
+    ['string', (): string => 'héllo', { body: 'héllo' }],
+    ['ArrayBuffer', () => new Uint8Array([0, 128, 255]).buffer, { bodyBase64: 'AID/' }],
+    [
+      'Uint8Array slice',
+      () => new Uint8Array([9, 0, 128, 255, 9]).subarray(1, 4),
+      { bodyBase64: 'AID/' },
+    ],
+    [
+      'DataView slice',
+      () => new DataView(new Uint8Array([9, 0, 128, 255, 9]).buffer, 1, 3),
+      { bodyBase64: 'AID/' },
+    ],
+    ['Uint16Array', () => new Uint16Array(new Uint8Array([0, 128]).buffer), { bodyBase64: 'AIA=' }],
+    ['empty bytes', () => new Uint8Array(0), { bodyBase64: '' }],
+    [
+      'Blob',
+      () => new Blob([new Uint8Array([0, 128, 255])], { type: 'image/png' }),
+      { bodyBase64: 'AID/', contentType: 'image/png' },
+    ],
+    [
+      'File',
+      () => new File([new Uint8Array([0, 128, 255])], 'test.pdf', { type: 'application/pdf' }),
+      { bodyBase64: 'AID/', contentType: 'application/pdf' },
+    ],
+    ['untyped Blob', () => new Blob(['abc']), { bodyBase64: 'YWJj' }],
+    [
+      'URLSearchParams',
+      () => new URLSearchParams({ a: 'hello world' }),
+      { body: 'a=hello+world', contentType: 'application/x-www-form-urlencoded;charset=UTF-8' },
+    ],
+  ] as const)('serializes %s with the appropriate wire field and default MIME', async (_name, makeBody, expected) => {
+    await importInject();
+    posted.length = 0;
+    const promise = solidApi().fetch('https://pod.example/data', {
+      method: 'PUT',
+      body: makeBody(),
+    });
+    const message = await fetchMessage();
+    expect(message.body).toBe('body' in expected ? expected.body : undefined);
+    expect(message.bodyBase64).toBe('bodyBase64' in expected ? expected.bodyBase64 : undefined);
+    expect(new Headers(message.headers as HeadersInit).get('content-type')).toBe(
+      'contentType' in expected ? expected.contentType : null,
+    );
+    finishFetch(message);
+    await promise;
+  });
+
+  it.each([
+    () => new Blob(['a'], { type: 'image/png' }),
+    () => new URLSearchParams('a=b'),
+  ])('preserves an explicit Content-Type', async (makeBody) => {
+    await importInject();
+    posted.length = 0;
+    const promise = dom.window.fetch('https://pod.example/data', {
+      method: 'PUT',
+      body: makeBody(),
+      headers: { 'Content-Type': 'application/custom' },
+    });
+    const message = await fetchMessage();
+    expect(message.headers).toEqual({ 'content-type': 'application/custom' });
+    finishFetch(message);
+    await promise;
+  });
+
+  it('snapshots bytes, headers, URL and init before any asynchronous relay or native fallback', async () => {
+    await importInject();
+    posted.length = 0;
+    const bytes = new Uint8Array([9, 0, 128, 255, 9]);
+    const headers = new Headers({ 'X-App': 'original' });
+    const url = new URL('https://pod.example/data');
+    const init: RequestInit = { method: 'PUT', headers, body: bytes.subarray(1, 4) };
+    const promise = dom.window.fetch(url, init);
+    bytes.fill(42);
+    headers.set('X-App', 'mutated');
+    url.pathname = '/mutated';
+    init.method = 'DELETE';
+    const message = await fetchMessage();
+    expect(message).toMatchObject({
+      url: 'https://pod.example/data',
+      method: 'PUT',
+      bodyBase64: 'AID/',
+      headers: { 'x-app': 'original' },
+    });
+    deliverToPage({
+      type: 'SOLID_FETCH_RESPONSE',
+      requestId: message.requestId,
+      passthrough: true,
+    });
+    await promise;
+    const [nativeUrl, nativeInit] = nativeFetch.mock.calls[0] as [string, RequestInit];
+    expect(nativeUrl).toBe('https://pod.example/data');
+    expect(nativeInit.method).toBe('PUT');
+    expect(nativeInit.body).toEqual(new Uint8Array([0, 128, 255]));
+    expect(new Headers(nativeInit.headers).get('x-app')).toBe('original');
+  });
+
+  it.each([
+    () => new FormData(),
+    () => new ReadableStream(),
+  ])('rejects unsupported explicit bodies and keeps autoDivert on pristine native fetch', async (makeBody) => {
+    await importInject();
+    posted.length = 0;
+    const body = makeBody();
+    const init = { method: 'POST', body };
+    await expect(solidApi().fetch('https://pod.example/data', init)).rejects.toThrow(
+      'does not support FormData or ReadableStream',
+    );
+    // Replacing the global later cannot poison the captured fallback.
+    const patch = dom.window.fetch;
+    dom.window.fetch = vi.fn();
+    await patch('https://pod.example/data', init);
+    expect(nativeFetch).toHaveBeenCalledWith(
+      'https://pod.example/data',
+      expect.objectContaining({ body }),
+    );
+    expect(posted).toHaveLength(0);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('routes Request fields and byte-exact bodies (patched=%s)', async (patched) => {
+    await importInject();
+    posted.length = 0;
+    const request = new Request('https://pod.example/data', {
+      method: 'PUT',
+      headers: { 'X-App': 'request' },
+      body: new Uint8Array([0, 128, 255]),
+    });
+    const promise = (patched ? dom.window.fetch : solidApi().fetch)(request);
+    const message = await fetchMessage();
+    expect(message).toMatchObject({
+      url: request.url,
+      method: 'PUT',
+      headers: { 'x-app': 'request' },
+      bodyBase64: 'AID/',
+      autoDivert: patched,
+    });
+    expect(message.body).toBeUndefined();
+    expect(request.bodyUsed).toBe(false);
+    finishFetch(message);
+    await promise;
+  });
+
+  it('init replaces Request method, headers and body, snapshotting overrides', async () => {
+    await importInject();
+    posted.length = 0;
+    const request = new Request('https://pod.example/data', {
+      method: 'PUT',
+      headers: { 'X-Old': 'old' },
+      body: 'original',
+    });
+    const bytes = new Uint8Array([0, 128, 255]);
+    const headers = new Headers({ 'X-New': 'new' });
+    const promise = solidApi().fetch(request, { method: 'PATCH', headers, body: bytes });
+    bytes.fill(42);
+    headers.set('X-New', 'mutated');
+    const message = await fetchMessage();
+    expect(message).toMatchObject({
+      method: 'PATCH',
+      headers: { 'x-new': 'new' },
+      bodyBase64: 'AID/',
+    });
+    expect(message.body).toBeUndefined();
+    finishFetch(message);
+    await promise;
+  });
+
+  it('inherits the Request body with a null init body, and preserves the native fallback clone', async () => {
+    await importInject();
+    posted.length = 0;
+    const request = new Request('https://pod.example/data', {
+      method: 'POST',
+      headers: { 'X-App': 'original' },
+      body: new Uint8Array([0, 128, 255]),
+    });
+    const promise = dom.window.fetch(request, { body: null });
+    request.headers.set('X-App', 'mutated');
+    await request.arrayBuffer();
+    const message = await fetchMessage();
+    expect(message).toMatchObject({
+      method: 'POST',
+      bodyBase64: 'AID/',
+      headers: { 'x-app': 'original' },
+    });
+    deliverToPage({
+      type: 'SOLID_FETCH_RESPONSE',
+      requestId: message.requestId,
+      passthrough: true,
+    });
+    await promise;
+    const [copy] = nativeFetch.mock.calls[0] as [Request];
+    expect(copy).not.toBe(request);
+    expect(copy.headers.get('x-app')).toBe('original');
+    expect(new Uint8Array(await copy.arrayBuffer())).toEqual(new Uint8Array([0, 128, 255]));
+  });
+
+  it('allows an init body to replace an already consumed Request body, as native fetch does', async () => {
+    await importInject();
+    posted.length = 0;
+    const request = new Request('https://pod.example/data', { method: 'POST', body: 'original' });
+    await request.text();
+    const promise = solidApi().fetch(request, { body: new Uint8Array([0, 128, 255]) });
+    const message = await fetchMessage();
+    expect(message).toMatchObject({ method: 'POST', bodyBase64: 'AID/' });
+    finishFetch(message);
+    await promise;
+  });
+
+  it.each(['GET', 'HEAD'])('routes a bodyless %s Request', async (method) => {
+    await importInject();
+    posted.length = 0;
+    const promise = solidApi().fetch(new Request('https://pod.example/data', { method }));
+    const message = await fetchMessage();
+    expect(message).toMatchObject({ method });
+    expect(message.body).toBeUndefined();
+    expect(message.bodyBase64).toBeUndefined();
+    finishFetch(message);
+    await promise;
+  });
+
+  it.each(['navigate', 'data:'])('keeps %s Request input on native fetch', async (kind) => {
+    await importInject();
+    posted.length = 0;
+    const request = new Request(
+      kind === 'data:' ? 'data:text/plain,hello' : 'https://pod.example/data',
+    );
+    if (kind === 'navigate') Object.defineProperty(request, 'mode', { value: 'navigate' });
+    await dom.window.fetch(request);
+    await solidApi().fetch(request);
+    expect(nativeFetch).toHaveBeenCalledTimes(2);
+    expect(posted).toHaveLength(0);
+  });
+
+  it('reconstructs binary response bytes with metadata preserved through cloning', async () => {
+    await importInject();
+    posted.length = 0;
+    const promise = dom.window.fetch('https://pod.example/image');
+    const message = await fetchMessage();
+    deliverToPage({
+      type: 'SOLID_FETCH_RESPONSE',
+      requestId: message.requestId,
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'image/png' },
+      bodyBase64: 'AID/',
+      url: 'https://pod.example/final',
+      redirected: true,
+    });
+    const response = await promise;
+    for (const copy of [response, response.clone(), response.clone().clone()]) {
+      expect(copy.url).toBe('https://pod.example/final');
+      expect(copy.redirected).toBe(true);
+      expect(copy.status).toBe(200);
+      expect(copy.statusText).toBe('OK');
+      expect(copy.headers.get('content-type')).toBe('image/png');
+      expect(new Uint8Array(await copy.arrayBuffer())).toEqual(new Uint8Array([0, 128, 255]));
+    }
+  });
+
+  it('rejects oversized raw bodies before posting, including on autoDivert', async () => {
+    await importInject();
+    posted.length = 0;
+    const bytes = new Uint8Array(26_214_401);
+    for (const run of [solidApi().fetch, dom.window.fetch])
+      await expect(run('https://pod.example/data', { method: 'PUT', body: bytes })).rejects.toThrow(
+        'Request body exceeds the 25 MiB limit for extension fetches',
+      );
+    expect(posted).toHaveLength(0);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+});

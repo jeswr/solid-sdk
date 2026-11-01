@@ -88,3 +88,91 @@ it('drops identity broadcasts for another origin or without an origin, including
     'https://ungranted.example',
   );
 });
+
+async function bodyBridge(response: Record<string, unknown> = { status: 204 }) {
+  dom = new JSDOM('', { url: 'https://granted.example/app' });
+  const sendMessage = vi.fn((_message: unknown, callback?: (value: unknown) => void) =>
+    callback?.(response),
+  );
+  vi.stubGlobal('window', dom.window);
+  vi.stubGlobal('chrome', { runtime: { sendMessage, onMessage: { addListener: vi.fn() } } });
+  vi.resetModules();
+  await import('../src/content/content-script');
+  const posted = vi.spyOn(dom.window, 'postMessage');
+  const post = (fields: Record<string, unknown>) =>
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent('message', {
+        source: dom.window,
+        data: {
+          channel: 'solid-browser-ext',
+          dir: 'to-content',
+          type: 'SOLID_FETCH_REQUEST',
+          requestId: 'binary',
+          url: 'https://pod.example/data',
+          method: 'PUT',
+          ...fields,
+        },
+      }),
+    );
+  return { sendMessage, posted, post };
+}
+
+it.each([
+  { body: '', bodyBase64: '' },
+  { body: 42 },
+  { body: null },
+  { bodyBase64: 42 },
+  { bodyBase64: null },
+  { bodyBase64: 'AA A' },
+  { bodyBase64: 'A'.repeat(Math.ceil(26_214_400 / 3) * 4 + 4) },
+])('rejects invalid page body fields before runtime forwarding (case %#)', async (fields) => {
+  const { sendMessage, posted, post } = await bodyBridge();
+  post(fields);
+  expect(sendMessage).not.toHaveBeenCalled();
+  expect(posted).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'SOLID_FETCH_RESPONSE',
+      requestId: 'binary',
+      status: 400,
+      error: expect.any(String),
+    }),
+    'https://granted.example',
+  );
+});
+
+it.each([
+  { body: 'hello' },
+  { bodyBase64: 'AID/' },
+  { bodyBase64: '' },
+])('relays valid wire bodies unchanged in both directions (case %#)', async (fields) => {
+  const { sendMessage, posted, post } = await bodyBridge({
+    requestId: 'binary',
+    status: 200,
+    ...fields,
+  });
+  post(fields);
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({ ...fields, stampedOrigin: 'https://granted.example' }),
+    expect.any(Function),
+  );
+  expect(posted).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'SOLID_FETCH_RESPONSE', requestId: 'binary', ...fields }),
+    'https://granted.example',
+  );
+});
+
+it.each([
+  { body: '', bodyBase64: '' },
+  { body: 42 },
+  { bodyBase64: 42 },
+])('rejects invalid worker body fields (case %#)', async (fields) => {
+  const { posted, post } = await bodyBridge({ status: 200, ...fields });
+  post({});
+  expect(posted).toHaveBeenCalledWith(
+    expect.objectContaining({
+      requestId: 'binary',
+      error: expect.stringContaining('mutually exclusive strings'),
+    }),
+    'https://granted.example',
+  );
+});
