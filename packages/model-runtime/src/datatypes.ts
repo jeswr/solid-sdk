@@ -319,7 +319,7 @@ function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
       const tz = m?.[4];
       if (
         m === null ||
-        (tz !== undefined && tz !== "Z") ||
+        (tz !== undefined && tz !== "Z" && tz !== "+00:00" && tz !== "-00:00") ||
         d.getUTCFullYear() !== Number(m[1]) ||
         d.getUTCMonth() + 1 !== Number(m[2]) ||
         d.getUTCDate() !== Number(m[3])
@@ -476,10 +476,8 @@ function booleanAs(term: TermWrapper): boolean {
 
 /**
  * Resolve a full datatype IRI (or an `xsd:` shorthand) to a mapper pair for a
- * LITERAL field. Unknown datatypes fall back to the safe string mapping (the
- * value is carried as an opaque string literal) rather than throwing, so an
- * ontology using an exotic-but-string-shaped datatype still round-trips its
- * lexical value; callers that need strictness gate on {@link isKnownDatatype}.
+ * LITERAL field. Unknown datatypes fail closed: an opaque string mapping cannot
+ * validate their lexical or value spaces.
  */
 export function literalMapper(datatypeIri: string): DatatypeMapper {
   const iri = expandDatatype(datatypeIri);
@@ -579,12 +577,7 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
         lexicalValid: isXsdDuration,
       };
     default:
-      // Fall back to opaque string — carry the lexical value, never throw.
-      return {
-        as: (term) => literalLexical(term, iri),
-        from: typedStringFrom(iri) as DatatypeMapper["from"],
-        jsType: "string",
-      };
+      throw new TypeError(`unsupported datatype: ${iri}`);
   }
 }
 
@@ -623,7 +616,8 @@ export function isKnownDatatype(datatypeIri: string): boolean {
   return KNOWN_DATATYPES.has(iri);
 }
 
-const KNOWN_DATATYPES = new Set<string>([
+/** Immutable inventory of datatypes with reviewed lexical and value-space validation. */
+export const VALIDATED_DATATYPES: readonly string[] = Object.freeze([
   ...Object.keys(STRING_LEXICAL).map((local) => XSD + local),
   `${XSD}string`,
   `${XSD}normalizedString`,
@@ -651,6 +645,8 @@ const KNOWN_DATATYPES = new Set<string>([
   `${XSD}float`,
   `${XSD}duration`,
 ]);
+
+const KNOWN_DATATYPES = new Set(VALIDATED_DATATYPES);
 
 /** Expand an `xsd:local` shorthand to a full IRI; pass a full IRI through. */
 export function expandDatatype(datatype: string): string {

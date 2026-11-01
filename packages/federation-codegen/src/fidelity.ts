@@ -259,6 +259,12 @@ function guardIsShapeDerived(
       constraint.kind === "iri" &&
       isHttpPattern(constraint.pattern)
     );
+  if (guard === "iriPattern")
+    return (
+      constraint.kind === "iri" &&
+      isHttpPattern(constraint.pattern) &&
+      guards.iriPattern === iriSchemeForPattern(constraint.pattern)
+    );
   // Severity-aware (G1): a required guard is shape-derived only when the minCount ≥ 1
   // constraint is Violation-graded (or severity absent) AND the guard fails closed.
   if (guard === "requiredFailClosed")
@@ -274,15 +280,7 @@ function guardIsShapeDerived(
     return constraint.maxInclusive !== undefined && guards.maxInclusive === constraint.maxInclusive;
   if (guard === "minLength")
     return constraint.minLength !== undefined && guards.minLength === constraint.minLength;
-  if (guard === "nonBlank")
-    return (
-      guards.nonBlank === true &&
-      (constraint.pattern === "\\S" ||
-        (constraint.minLength !== undefined &&
-          constraint.minLength >= 1 &&
-          constraint.maxCount === 1 &&
-          constraint.kind === "literal"))
-    );
+  if (guard === "nonBlank") return guards.nonBlank === true && constraint.pattern === "\\S";
   return false;
 }
 
@@ -290,17 +288,16 @@ function guardIsShapeDerived(
 function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
   const required: ManifestFieldGuards = {};
   if (isPresenceMust(c)) required.requiredFailClosed = true;
-  if (c.kind === "iri" && isHttpPattern(c.pattern))
+  if (c.kind === "iri" && isHttpPattern(c.pattern)) {
     required.iriScheme = iriSchemeForPattern(c.pattern);
+    required.iriPattern = iriSchemeForPattern(c.pattern);
+  }
   if (c.minInclusive !== undefined) required.minInclusive = c.minInclusive;
   if (c.maxInclusive !== undefined) required.maxInclusive = c.maxInclusive;
   const stringValue =
     c.kind === "iri" || (c.datatype !== undefined && literalMapper(c.datatype).jsType === "string");
   if (c.minLength !== undefined && stringValue) required.minLength = c.minLength;
-  if (
-    stringValue &&
-    (c.pattern === "\\S" || (c.kind === "literal" && c.maxCount === 1 && (c.minLength ?? 0) >= 1))
-  ) {
+  if (stringValue && c.pattern === "\\S") {
     required.nonBlank = true;
   }
   return required;

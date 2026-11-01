@@ -44,6 +44,8 @@ const CAP = {
 export interface ManifestFieldGuards {
   /** Filter + canonicalise IRI values through the http(s)-only lexical filter. */
   iriScheme?: "http-https" | "https";
+  /** Closed SHACL prefix pattern, checked on the original RDF IRI before normalization. */
+  iriPattern?: "http-https" | "https";
   /** `parse` fails closed (returns undefined) when this field is absent. */
   requiredFailClosed?: boolean;
   /** `build` drops an empty-string value (the historical `|| undefined`). */
@@ -257,6 +259,7 @@ function assertKnownKeys(obj: Record<string, unknown>, allowed: Set<string>, wha
 
 const GUARD_KEYS = new Set<string>([
   "iriScheme",
+  "iriPattern",
   "requiredFailClosed",
   "emptyStringDrop",
   "sanitizeText",
@@ -327,6 +330,12 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
       fail('field.guards.iriScheme must be "http-https" or "https"');
     }
     g.iriScheme = raw.iriScheme;
+  }
+  if (raw.iriPattern !== undefined) {
+    if (raw.iriPattern !== "http-https" && raw.iriPattern !== "https") {
+      fail('field.guards.iriPattern must be "http-https" or "https"');
+    }
+    g.iriPattern = raw.iriPattern;
   }
   if (raw.requiredFailClosed !== undefined)
     g.requiredFailClosed = checkBoolean(raw.requiredFailClosed, "field.guards.requiredFailClosed");
@@ -480,6 +489,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";
   if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");
+  if (g.iriPattern !== undefined && kind !== "iri") fail("iriPattern requires an IRI field");
   for (const key of ["minLength", "nonBlank", "trim", "dropBlank"] as const) {
     if (g[key] !== undefined && jsType !== "string") fail(`${key} requires string values`);
   }

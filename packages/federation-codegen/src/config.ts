@@ -16,6 +16,8 @@ import { isSafeAbsoluteIri, type ManifestScalar } from "@jeswr/model-runtime";
 
 /** Per-field guard configuration (only the flags SHACL cannot express live here). */
 export interface FieldConfig {
+  /** Explicit whitespace-only string policy (never inferred from minimum length). */
+  nonBlank?: boolean;
   /** `build` drops an empty-string value. */
   emptyStringDrop?: boolean;
   /** A literal default value applied on read/build. */
@@ -127,6 +129,7 @@ export function entityConfigFor(
 
 /** The guard keys a FieldConfig may set (used by the fidelity traceability check). */
 export const FIELD_CONFIG_GUARD_KEYS = [
+  "nonBlank",
   "emptyStringDrop",
   "default",
   "defaultNow",

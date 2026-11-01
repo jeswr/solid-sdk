@@ -17,7 +17,7 @@
  *      surfaces a present-but-malformed list as an empty value set.
  */
 
-import { literalMapper } from "@jeswr/model-runtime";
+import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
@@ -184,6 +184,9 @@ export function admit(
         unsupported("only direct IRI or admitted alternative paths are supported");
       if (component === "nodeKind" && ![`${SH}IRI`, `${SH}Literal`].includes(q.object.value))
         unsupported("only IRI and Literal node kinds are projected");
+      if (component === "datatype" && !VALIDATED_DATATYPES.includes(q.object.value)) {
+        unsupported("datatype has no validated runtime mapping");
+      }
       if (component === "pattern") {
         const isString =
           c?.kind === "iri" ||

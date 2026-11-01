@@ -22,6 +22,7 @@ const HEADER = `
 const ONTOLOGY = `${HEADER}
   ex:Root a owl:Class ; rdfs:label "Root" ; rdfs:comment "Root" .
   ex:Child a owl:Class ; rdfs:label "Child" ; rdfs:comment "Child" ; rdfs:subClassOf <urn:Base> .
+  old:Child rdfs:subClassOf ex:Child .
   ex:link a owl:ObjectProperty ; rdfs:label "link" ; rdfs:comment "link" ; rdfs:domain ex:Root ; rdfs:range ex:Child .
   ex:label a owl:DatatypeProperty ; rdfs:label "label" ; rdfs:comment "label" ; rdfs:domain ex:Child ; rdfs:range xsd:string .`;
 const SHAPES = `${HEADER}

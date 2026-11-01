@@ -267,7 +267,7 @@ describe("M5: fidelity requires every shape-derived guard in flat and composite 
     ["numeric minimum", "sh:datatype xsd:integer; sh:minInclusive 1", "minInclusive"],
     ["numeric maximum", "sh:datatype xsd:integer; sh:maxInclusive 10", "maxInclusive"],
     ["length minimum", "sh:datatype xsd:string; sh:minLength 2", "minLength"],
-    ["length nonBlank", "sh:datatype xsd:string; sh:minLength 1", "nonBlank"],
+    ["http lexical pattern", 'sh:nodeKind sh:IRI; sh:pattern "^https?://"', "iriPattern"],
     ["pattern nonBlank", 'sh:datatype xsd:string; sh:pattern "\\\\S"', "nonBlank"],
     ["http scheme", 'sh:nodeKind sh:IRI; sh:pattern "^https?://"', "iriScheme"],
     ["https scheme", 'sh:nodeKind sh:IRI; sh:pattern "^https://"', "iriScheme"],
