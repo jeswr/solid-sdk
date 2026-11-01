@@ -838,6 +838,60 @@ export class TasksCache {
       },
     );
   }
+  /** The caller preflights all trackers before enqueueing. Retry re-reads every member before writing. */
+  deleteLabel(project: StoredProject, labelIds: readonly string[], listed: StoredTask[]) {
+    let attempted = false;
+    const clearTypes = (task: TaskItem) => {
+      for (const id of labelIds) task.types.delete(id);
+    };
+    const attempt = (): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => state,
+        async () => {
+          // Always read back the tracker, including after a lost class-removal response.
+          const current = await this.store.readProject(project.url);
+          if (current.tracker.stateStore !== project.tracker.stateStore)
+            throw new ModelError(409, project.url);
+          const items = attempted
+            ? await this.store.listTasks(current.tracker.stateStore as string, { strict: true })
+            : listed;
+          attempted = true;
+          const confirmed: StoredTask[] = [];
+          for (const item of items)
+            confirmed.push(
+              labelIds.some((id) => item.task.types.has(id))
+                ? await this.store.updateTask(item, clearTypes)
+                : item,
+            );
+          // Conditional task writes must all succeed before the conditional tracker write.
+          const hasClass = labelIds.some(
+            (id) => current.dataset.match(DataFactory.namedNode(id)).size > 0,
+          );
+          const result = hasClass
+            ? await this.store.updateProject(current, (tracker) => {
+                for (const id of labelIds)
+                  for (const quad of tracker.dataset.match(DataFactory.namedNode(id)))
+                    tracker.dataset.delete(quad);
+              })
+            : current;
+          return {
+            result,
+            commit: (state) => {
+              let next = replaceProject(state, result);
+              for (const item of confirmed) next = replaceTask(next, project.url, item.url, item);
+              return next;
+            },
+          };
+        },
+        () => {
+          void attempt();
+        },
+        listed
+          .filter((item) => labelIds.some((id) => item.task.types.has(id)))
+          .map((item) => item.url),
+      );
+    return attempt();
+  }
   renameProject = (project: StoredProject, title: string) =>
     this.updateProject(project, (tracker) => {
       tracker.title = title.trim();

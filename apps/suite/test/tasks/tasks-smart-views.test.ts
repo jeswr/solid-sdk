@@ -466,6 +466,157 @@ describe("Completed", () => {
 });
 
 describe("Label view", () => {
+  it("aborts deletion after a failed load followed by a create makes the cache look ready", async () => {
+    const { home } = await labels();
+    pod.intercept = (request) =>
+      request.method === "GET" && request.url === home.tracker.stateStore
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await cache.loadTasks(home, true);
+    expect(cache.getSnapshot().tasks[home.url]?.status).toBe("error");
+    await cache.createTask(home, { title: "Created after failure" });
+    expect(cache.getSnapshot().tasks[home.url]).toMatchObject({
+      status: "ready",
+      warningCount: 0,
+    });
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+    expect((await cache.store.readProject(home.url)).tracker.labels).toHaveLength(1);
+    pod.intercept = undefined;
+    const serverTasks = await cache.store.listTasks(home.tracker.stateStore as string);
+    const homeLabel = labelTargets("bills", cache.getSnapshot().projects).find(
+      ({ project }) => project.url === home.url,
+    )?.labelIds[0];
+    expect(homeLabel).toBeDefined();
+    expect(
+      serverTasks
+        .find((item) => item.task.title === "Home rent")
+        ?.task.types.has(homeLabel as string),
+    ).toBe(true);
+  });
+
+  it("removes labels from server-only tasks using fresh validators before removing the class", async () => {
+    await labels();
+    const target = labelTargets("bills", cache.getSnapshot().projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const other = await cache.ensureLabels(target.project, ["keep"]);
+    if (!other) throw new Error("Missing other label");
+    const keep = other.tracker.labels.find((label) => label.name === "keep");
+    if (!keep) throw new Error("Missing keep label");
+    const external = await cache.store.createTask(other, {
+      title: "Server only",
+      state: "closed",
+      endedAt: now,
+      categoryTypes: [...target.labelIds, keep.id],
+    });
+    const cached = cache.getSnapshot().tasks[other.url]?.items[0];
+    if (!cached) throw new Error("Missing cached task");
+    const fresh = await cache.store.updateTask(cached, (task) => {
+      task.title = "Edited elsewhere";
+    });
+    expect(cache.getSnapshot().views.some((task) => task.url === external.url)).toBe(false);
+    const start = pod.requests.length;
+    const result = await deleteLabel("bills", api());
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(2);
+    const requests = pod.requests.slice(start);
+    const externalWrite = requests.findIndex((r) => r.method === "PUT" && r.url === external.url);
+    const classWrite = requests.findIndex((r) => r.method === "PUT" && r.url === other.url);
+    expect(externalWrite).toBeGreaterThan(-1);
+    expect(classWrite).toBeGreaterThan(externalWrite);
+    expect(requests[externalWrite]?.headers.get("If-Match")).toBe(external.etag);
+    expect(
+      requests.find((r) => r.method === "PUT" && r.url === fresh.url)?.headers.get("If-Match"),
+    ).toBe(fresh.etag);
+    expect(requests[classWrite]?.headers.get("If-Match")).toBe(other.etag);
+    const persisted = await cache.store.readTask(external.url);
+    expect(target.labelIds.some((id) => persisted.task.types.has(id))).toBe(false);
+    expect(persisted.task.types.has(keep.id)).toBe(true);
+    expect((await cache.store.readTask(cached.url)).task.title).toBe("Edited elsewhere");
+    expect(
+      (await cache.store.readProject(other.url)).tracker.labels.map((label) => label.name),
+    ).toEqual(["keep"]);
+    expect(cache.getSnapshot().views.find((task) => task.url === external.url)?.labelIds).toEqual([
+      keep.id,
+    ]);
+    expect(
+      requests
+        .filter((r) => r.method === "GET")
+        .every((r) => r.headers.get("Cache-Control") === "no-cache"),
+    ).toBe(true);
+  });
+
+  it.each([
+    404,
+    410,
+    "RDF",
+    "container",
+  ] as const)("writes nothing when the fresh task listing fails with %s", async (failure) => {
+    const { home } = await labels();
+    const container = home.tracker.stateStore as string;
+    if (failure === "RDF") pod.seed(container, "invalid RDF {");
+    else if (failure === "container") {
+      const dataset = await pod.dataset(container);
+      node(container, dataset).types.clear();
+      pod.seed(container, await serialize(dataset));
+    } else
+      pod.intercept = (request) =>
+        request.method === "GET" && request.url === container
+          ? new Response(null, { status: failure })
+          : undefined;
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+  });
+
+  it.each([
+    503,
+    404,
+    410,
+    "RDF",
+    "task",
+    "recurrence",
+  ] as const)("writes nothing in any tracker when a fresh member read fails with %s", async (failure) => {
+    await labels();
+    const target = labelTargets("bills", cache.getSnapshot().projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const external = await cache.store.createTask(target.project, {
+      title: "Unreadable server task",
+      state: "open",
+      categoryTypes: target.labelIds,
+    });
+    if (failure === "RDF") pod.seed(external.url, "invalid RDF {");
+    else if (failure === "task" || failure === "recurrence") {
+      const dataset = await pod.dataset(external.url);
+      const subject = node(external.task.id, dataset);
+      if (failure === "task") subject.types.delete(`${NS.WF}Task`);
+      else {
+        const rule = `${external.url}#recurrence`;
+        subject.iris(`${NS.SCHEDULING}recurrence`).add(rule);
+        node(rule, dataset).setText(`${NS.SCHEDULING}frequency`, "FORTNIGHTISH");
+      }
+      pod.seed(external.url, await serialize(dataset));
+    } else
+      pod.intercept = (request) =>
+        request.method === "GET" && request.url === external.url
+          ? new Response(null, { status: failure })
+          : undefined;
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", api());
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+    expect((await cache.store.readProject(target.project.url)).tracker.labels).toHaveLength(1);
+  });
+
   it("shares focus across project groups and skips rows in collapsed groups", async () => {
     await labels();
     const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
@@ -695,7 +846,7 @@ describe("Label view", () => {
       endedAt: now,
       labelIds: updated.tracker.labels.map((label) => label.id),
     });
-    const updates = vi.spyOn(cache, "updateTask");
+    const updates = vi.spyOn(cache.store, "updateTask");
     const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
     await click(button("Delete", host));
     expect(updates).not.toHaveBeenCalled();
@@ -720,10 +871,11 @@ describe("Label view", () => {
     const target = labelTargets("bills", tasks.projects)[0];
     if (!target) throw new Error("Missing label target");
     const oldIds = target.labelIds;
-    const update = tasks.updateTask;
-    tasks.updateTask = vi.fn((item, change) =>
-      item.task.title === "Inbox rent" ? Promise.resolve(undefined) : update(item, change),
-    );
+    pod.intercept = (request) =>
+      request.method === "PUT" &&
+      request.url.startsWith(target.project.tracker.stateStore as string)
+        ? new Response(null, { status: 503 })
+        : undefined;
     const result = await deleteLabel("bills", tasks);
     expect(result.done).toHaveLength(1);
     expect(result.failed).toHaveLength(1);

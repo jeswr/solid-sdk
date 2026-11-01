@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
@@ -298,12 +297,18 @@ export class TaskStore {
     if (!task.isTask) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task };
   }
-  async listTasks(stateStore: string): Promise<StoredTask[]> {
+  /** Strict listings are mutation gates: no missing, unreadable or invalid task may be skipped. */
+  async listTasks(stateStore: string, { strict = false } = {}): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
-    for (const url of await this.io.list(stateStore)) {
+    for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
-      const resource = await this.readListedResource(url);
+      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
       if (!resource) continue;
+      if (strict) {
+        const data = taskDetails(resource.url, resource.dataset);
+        if (!data) throw new TypeError("Expected a wf:Task.");
+        validateTask(data);
+      }
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }
