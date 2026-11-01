@@ -381,7 +381,8 @@ async function validateSnapshot(
  * queries, fragments, empty path segments, percent-encodings a server may decode into another
  * name (unreserved characters, `%`, `/`, `\`, control characters), the storage root (with or
  * without its trailing slash), and the owner's settings (type indexes, preferences, records),
- * compared case-insensitively. Ordinary encoded names (spaces, non-ASCII) stay grantable. The
+ * compared case-insensitively, and path segments ending in a dot or space or containing `::`
+ * (Windows aliases). Ordinary encoded names (spaces, non-ASCII) stay grantable. The
  * target is compared by its decoded path, never as a raw string.
  */
 function assertGrantable(target: string, storage: string): void {
@@ -392,18 +393,15 @@ function assertGrantable(target: string, storage: string): void {
     const code = Number.parseInt(hex as string, 16);
     return code < 0x20 || code === 0x7f || /[A-Za-z0-9\-._~%/\\]/.test(String.fromCharCode(code));
   });
-  if (
-    target.includes("?") ||
-    target.includes("#") ||
-    pathname.includes("//") ||
-    ambiguous
-  )
+  if (target.includes("?") || target.includes("#") || pathname.includes("//") || ambiguous)
     throw new Error(`${target} can't be shared through an access request`);
   const path = decoded(pathname);
   const base = decoded(root) as string;
   if (
     path === undefined ||
     /\.(acl|acr)$/.test(path) ||
+    // Windows backends drop a trailing dot or space and expose `name::$DATA` streams.
+    /[. ](?:\/|$)|::/.test(path) ||
     path === base ||
     path === base.slice(0, -1) ||
     path === `${base}settings` ||
@@ -415,7 +413,9 @@ function assertGrantable(target: string, storage: string): void {
 /** The lower-cased decoded path, or undefined when its encoding is not valid UTF-8. */
 function decoded(path: string): string | undefined {
   try {
-    return decodeURIComponent(path).toLowerCase();
+    // Upper then lower case folds letters such as the long s into ASCII, as case-insensitive
+    // filesystems do.
+    return decodeURIComponent(path).toUpperCase().toLowerCase();
   } catch {
     return undefined;
   }

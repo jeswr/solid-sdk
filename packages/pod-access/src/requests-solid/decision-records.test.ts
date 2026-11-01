@@ -259,6 +259,12 @@ describe("refused targets", () => {
       `${POD}contacts/a%00.ttl`,
       `${POD}contacts/a%C3.ttl`,
       `${POD}contacts/alice.ttl.ACL`,
+      `${POD}contacts/x.ACR`,
+      `${POD}%C5%BFettings/prefs.ttl`,
+      `${POD}contacts/alice.ttl.acl.`,
+      `${POD}settings%20/prefs.ttl`,
+      `${POD}contacts/alice.ttl::$DATA`,
+      `${POD}contacts/100%25.ttl`,
     ]) {
       const pod = buildPod();
       await pinOnly(pod);
@@ -300,11 +306,14 @@ describe("refused targets", () => {
     const pod = buildPod();
     const spaced = `${POD}contacts/John%20Smith.ttl`;
     const accented = `${POD}contacts/caf%C3%A9.ttl`;
+    const reserved = `${POD}contacts/a:b@c.ttl`;
+    pod.seed(reserved, `<${reserved}#me> a <${CONTACTS_CLASS}>.`);
     pod.seed(spaced, `<${spaced}#me> a <${CONTACTS_CLASS}>.`);
     pod.seed(accented, `<${accented}#me> a <${CONTACTS_CLASS}>.`);
     const result = await decide({ id: ID }, { approve: true }, opts(pod));
     expect(result.status).toBe("approved");
-    for (const target of [spaced, accented]) expect(pod.body(`${target}.acl`)).toContain(REQUESTER);
+    for (const target of [spaced, accented, reserved])
+      expect(pod.body(`${target}.acl`)).toContain(REQUESTER);
   });
 
   it("compares normalised targets against storage below the origin root", async () => {

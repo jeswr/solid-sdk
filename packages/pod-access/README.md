@@ -295,7 +295,8 @@ share: the storage root itself (with or without its trailing slash) and anything
 decoded path, case-insensitively, never as raw strings, so dot segments, case or encoding cannot
 hide a refused path. A target with a query, a fragment, an empty path segment (`//`), or a
 percent-encoding a server may decode into another name (an unreserved character, `%`, `/`, `\`, a
-control character, or invalid UTF-8) is refused outright; ordinary encoded names such as
+control character, or invalid UTF-8), or a segment ending in a dot or space or containing `::`
+(names Windows backends alias to another file), is refused outright; ordinary encoded names such as
 `John%20Smith.ttl` or `caf%C3%A9.ttl` stay shareable. A requested type that grants no mode (it has no permission of its own, or
 `role: "viewer"` drops its only mode) is left out of the approval rather than blocking it. `options.typeIndex` accepts an owner-controlled
 dataset or in-storage index URL; otherwise discovery reads profile public/private links and
