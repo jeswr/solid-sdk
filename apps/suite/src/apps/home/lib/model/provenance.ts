@@ -102,6 +102,18 @@ const PERSON_TYPES = [
 function isPerson(dataset: DatasetCore, iri: string): boolean {
   return subjectOf(dataset, iri).types.some((type) => PERSON_TYPES.includes(type));
 }
+const SOFTWARE_TYPES = [`${NS.PROV}SoftwareAgent`, `${NS.SCHEMA}SoftwareApplication`];
+/**
+ * Whether an attributed agent reads as a person without fetching its profile: typed as one
+ * in the loaded data, or an http(s) IRI with a fragment, the usual shape of a WebID
+ * (`…/card#me`), unless the loaded data says it is software.
+ */
+function looksLikePerson(dataset: DatasetCore, iri: string): boolean {
+  if (isPerson(dataset, iri)) return true;
+  if (subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))) return false;
+  const url = httpUrl(iri);
+  return url !== undefined && url.hash.length > 1;
+}
 
 /** Home §5.3, in precedence order; labels contain names, never raw identifiers. */
 export function provenanceOf(
@@ -125,7 +137,15 @@ export function provenanceOf(
       // A person's WebID is labelled with that profile's name, never as an app.
       if (identity?.label.trim() && !/http/i.test(identity.label))
         return { kind: identity.kind, label: identity.label.trim() };
-      if (identity?.kind === "person" || isPerson(dataset, iri)) attributedToPerson = true;
+      if (
+        identity?.kind === "person" ||
+        isPerson(dataset, iri) ||
+        // An activity (wasGeneratedBy) is no person, whatever its IRI looks like.
+        (predicate === "wasAttributedTo" &&
+          identity?.kind !== "app" &&
+          looksLikePerson(dataset, iri))
+      )
+        attributedToPerson = true;
     }
   }
   const url = httpUrl(containerUrl);

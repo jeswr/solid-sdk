@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { HomeSession } from "../src/apps/home/state/use-domain-items";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -169,4 +171,50 @@ it("keeps local edits through a real 412 dialog and rebases changed fields on th
   });
   expect(view.host.textContent).toContain("new@example.org");
   await view.unmount();
+});
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 3 (finding 4)
+it("validates only changed fields, so a legacy email doesn't block saving the name", async () => {
+  const subject = `${url}#it`;
+  const dataset = await parseRdf(
+    '<#it> <http://www.w3.org/2006/vcard/ns#fn> "Ada"; <http://www.w3.org/2006/vcard/ns#hasEmail> <mailto:ada@localhost>.',
+    "text/turtle",
+    { baseIRI: url },
+  );
+  const save = vi.fn();
+  const form = await mount(
+    h(ItemForm, {
+      fields: CONTACT_FIELDS,
+      dataset,
+      subject,
+      online: true,
+      busy: false,
+      onSave: save,
+      onCancel: vi.fn(),
+    }),
+  );
+  const input = (label: string) =>
+    [...form.host.querySelectorAll<HTMLInputElement>("input")].find((element) =>
+      element.labels?.[0]?.textContent?.startsWith(label),
+    ) as HTMLInputElement;
+  const type = (element: HTMLInputElement, value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        element,
+        value,
+      );
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  expect(input("Email").value).toBe("ada@localhost");
+  await type(input("Name"), "Ada L");
+  await click(form.host.querySelector('button[type="submit"]') as HTMLButtonElement);
+  expect(form.host.querySelector('[aria-invalid="true"]')).toBeNull();
+  expect(save).toHaveBeenCalledWith({ [(CONTACT_FIELDS[0] as { id: string }).id]: "Ada L" });
+  // Once the email itself is edited, it is checked as before.
+  save.mockClear();
+  await type(input("Email"), "still@localhost");
+  await click(form.host.querySelector('button[type="submit"]') as HTMLButtonElement);
+  expect(save).not.toHaveBeenCalled();
+  expect(form.host.querySelector('[aria-invalid="true"]')).toBe(input("Email"));
+  await form.unmount();
 });

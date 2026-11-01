@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
   CONNECTORS,
@@ -117,6 +118,46 @@ describe("Home §5.3 provenance", () => {
       kind: "person",
       label: "another person",
     });
+  });
+
+  // AUTHORED-BY Claude Opus 5.5 — fix round 3 (finding 7)
+  it("labels a bare WebID-shaped agent as another person without fetching its profile", async () => {
+    const bare = await rdf(`<#it> prov:wasAttributedTo <${person}> .`);
+    expect(provenanceOf(bare, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+      kind: "person",
+      label: "another person",
+    });
+    // A known name still wins.
+    expect(provenanceOf(bare, subject, STORAGE, context)).toEqual({ kind: "person", label: "Bob" });
+    // Typed as a person in the loaded data, even without a fragment.
+    const typed = await rdf(
+      `<#it> prov:wasAttributedTo <https://bob.example/profile> . <https://bob.example/profile> a <http://xmlns.com/foaf/0.1/Person> .`,
+    );
+    expect(provenanceOf(typed, subject, STORAGE, { userWebId: WEB_ID }).label).toBe(
+      "another person",
+    );
+  });
+
+  it("keeps apps, software agents and generating activities as another app", async () => {
+    for (const triples of [
+      `<#it> prov:wasAttributedTo <${app}> .`,
+      `<#it> prov:wasAttributedTo <https://app.example/id#app> . <https://app.example/id#app> a prov:SoftwareAgent .`,
+      `<#it> prov:wasGeneratedBy <https://app.example/runs#1> .`,
+    ]) {
+      const dataset = await rdf(triples);
+      expect(provenanceOf(dataset, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
+    // An identity resolved as an app but nameless is not relabelled as a person.
+    const appWebId = "https://app.example/id#app";
+    const nameless = await rdf(`<#it> prov:wasAttributedTo <${appWebId}> .`);
+    expect(
+      provenanceOf(nameless, subject, STORAGE, {
+        identities: new Map([[appWebId, { kind: "app", label: "" }]]),
+      }),
+    ).toEqual({ kind: "app", label: "another app" });
   });
 
   it("ports all connector host patterns and protects host boundaries", () => {

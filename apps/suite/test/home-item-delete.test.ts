@@ -447,3 +447,79 @@ it("treats a 412 for an item that is now missing as done (a changed item still f
   expect(refresh).toHaveBeenCalledOnce();
   expect(pod.has(url)).toBe(false);
 });
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 3 (findings 1, 2)
+it("says it is too late to undo a resumed deletion another tab already finished", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  const otherRefresh = vi.fn(async () => {});
+  const otherTab = createDeleteController({ ...session }, otherRefresh);
+  expect(otherTab.pendingDeletes()).toEqual([{ url, deleteAt: expect.any(Number), resumed: true }]);
+  // Tab A's toast closes: its DELETE runs and removes the shared tombstone.
+  controller.hold(url);
+  controller.release(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(pod.has(url)).toBe(false);
+  expect(saved.size).toBe(0);
+  fetch.mockClear();
+  // Undo in tab B can't bring it back, so it must not claim it did.
+  expect(await otherTab.undo(url)).toBe(false);
+  expect(otherRefresh).toHaveBeenCalledOnce();
+  expect(otherTab.getSnapshot().size).toBe(0);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+});
+it("says it is too late to undo a resumed deletion whose DELETE finished before a reload", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  // The DELETE completed, but the page unloaded before it could clear its tombstone.
+  await pod.fetch(url, { method: "DELETE" });
+  controller.dispose();
+  expect(saved.size).toBe(1);
+  const refresh = vi.fn(async () => {});
+  const reloaded = createDeleteController({ ...session }, refresh);
+  expect(reloaded.getSnapshot().has(url)).toBe(true);
+  fetch.mockClear();
+  expect(await reloaded.undo(url)).toBe(false);
+  expect(fetch).toHaveBeenCalledWith(url, expect.objectContaining({ method: "HEAD" }));
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(reloaded.getSnapshot().size).toBe(0);
+  expect(saved.size).toBe(0);
+  expect(pod.has(url)).toBe(false);
+});
+it("still undoes a resumed deletion when the server can't be asked whether it is gone", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  controller.dispose();
+  const reloaded = createDeleteController(
+    { ...session },
+    vi.fn(async () => {}),
+  );
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "HEAD") throw new TypeError("offline");
+    return pod.fetch(input, init);
+  });
+  expect(await reloaded.undo(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(pod.has(url)).toBe(true);
+  expect(saved.size).toBe(0);
+});
+it("refreshes when a resumed commit finds another tab already removed its tombstone", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, fetch } = await setup();
+  await controller.remove(item, vi.fn());
+  const otherRefresh = vi.fn(async () => {});
+  const otherTab = createDeleteController({ ...session }, otherRefresh);
+  controller.hold(url);
+  controller.release(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(pod.has(url)).toBe(false);
+  fetch.mockClear();
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  // Tab B never sends its own DELETE, and refreshes so the card doesn't reappear.
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  expect(otherRefresh).toHaveBeenCalledOnce();
+  expect(otherTab.getSnapshot().size).toBe(0);
+});

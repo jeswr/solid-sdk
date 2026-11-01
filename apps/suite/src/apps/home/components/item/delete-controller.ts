@@ -102,11 +102,19 @@ export function createDeleteController(
   /** The item is already gone (e.g. another tab finished this deletion). */
   const gone = async (url: string) =>
     (await session.fetch(url, { method: "HEAD", redirect: "error" })).status === 404;
+  /** False once another tab undid or finished this deletion and removed its shared tombstone. */
+  const stillQueued = (entry: PendingDelete) => {
+    const queued = entry.durable ? queue.entries() : undefined;
+    return !queued || queued.some((other) => same(other, entry.tombstone));
+  };
   const commit = async (entry: PendingDelete, resumed: boolean) => {
     const { url, etag } = entry.tombstone;
     // Undo in another tab removes the shared tombstone; respect it.
-    const queued = entry.durable ? queue.entries() : undefined;
-    if (queued && !queued.some((other) => same(other, entry.tombstone))) return;
+    // Refresh so the card doesn't reappear when it was deleted (or restored) elsewhere.
+    if (!stillQueued(entry)) {
+      await refresh();
+      return;
+    }
     if (resumed) {
       // Re-check protection: browser storage is not a trusted source of targets.
       let read: Awaited<ReturnType<typeof readItem>>;
@@ -256,7 +264,18 @@ export function createDeleteController(
       entry.undoing = true;
       clearTimeout(entry.timer);
       try {
-        // A resumed entry was never removed: cancelling its tombstone is the undo.
+        // A resumed entry has no copy, so cancelling its tombstone is the undo, but only while
+        // the deletion is still pending. Another tab removes the shared tombstone once its
+        // DELETE finished (or once it undid it, when saying "too late" is the safe answer), and
+        // a DELETE that finished just before a reload leaves the tombstone behind.
+        if (
+          !entry.restore &&
+          // An unreachable server can't show the item is gone; cancelling is then still safe.
+          (!stillQueued(entry) || (await gone(url).catch(() => false)))
+        ) {
+          await refresh();
+          return false;
+        }
         if (entry.restore) {
           const { body, contentType } = entry.restore;
           // Normally the delayed DELETE has not run. The create-only PUT also safely restores

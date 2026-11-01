@@ -76,7 +76,25 @@ function displayValue(spec: FieldSpec, term: Term): string {
   if (spec.mode !== "mailto" && spec.mode !== "tel") return term.value;
   // A contact field shows an address or number, never an unrelated link.
   if (term.termType !== "Literal" && !/^(?:mailto|tel):/i.test(term.value)) return "";
-  return stripScheme(term.value);
+  return /^mailto:/i.test(term.value) ? displayAddress(term.value) : stripScheme(term.value);
+}
+
+/** A run of valid `%XX` escapes, which {@link toMailto} keeps as they are. */
+const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/;
+
+/**
+ * Show a stored address decoded (`jörg@…`, not `j%C3%B6rg@…`) so an edit re-encodes it to
+ * the same IRI. When decoding fails, or would yield text that itself looks escaped (from a
+ * literal `%25`), the raw form is shown: {@link toMailto} keeps its escapes unchanged.
+ */
+function displayAddress(value: string): string {
+  const raw = value.slice("mailto:".length);
+  try {
+    const decoded = decodeURIComponent(raw);
+    return PERCENT_ESCAPE.test(decoded) ? raw : decoded;
+  } catch {
+    return raw;
+  }
 }
 
 /**
@@ -107,13 +125,17 @@ export function fieldState(
     const nested = innerValues(dataset, object);
     if (nested.length) {
       structured = true;
-      for (const value of nested) values.push(displayValue(spec, value.object));
-      if (nested.length === 1)
+      // An inner value that is itself a nested node is shown as nothing, never its label.
+      const plain = nested.filter((value) => value.object.termType !== "BlankNode");
+      for (const value of plain) values.push(displayValue(spec, value.object));
+      if (nested.length === 1 && plain.length === 1)
         inner = { node: object, predicate: (nested[0] as { predicate: string }).predicate };
     } else if (object.termType === "BlankNode") structured = true;
     else values.push(displayValue(spec, object));
   }
-  if (values.length > 1) return { values, lockedReason: MULTIPLE_VALUES_HINT };
+  // Any second value (even a nested one with nothing to show) would be lost by an edit.
+  if (values.length > 1 || objects.length > 1)
+    return { values, lockedReason: MULTIPLE_VALUES_HINT };
   if (structured && !inner) return { values, lockedReason: STRUCTURED_VALUE_HINT };
   return inner ? { values, inner } : { values };
 }
@@ -186,13 +208,21 @@ export function isEmailAddress(value: string): boolean {
 
 /**
  * Wrap a bare email in a `mailto:` IRI; empty or unsafe → undefined. The address is
- * percent-encoded (`?` and `#` too, so it can't add headers or a fragment).
+ * percent-encoded (`?` and `#` too, so it can't add headers or a fragment). Valid `%XX`
+ * escapes are kept as they are, so a stored address shown undecoded doesn't gain another
+ * `%25` on every edit; any other `%` is encoded.
  */
 export function toMailto(email: string): string | undefined {
   const v = email.trim();
   if (!v || !isEmailAddress(v)) return undefined;
   try {
-    return `mailto:${encodeURI(v).replace(/[?#]/g, (ch) => encodeURIComponent(ch))}`;
+    const encoded = v
+      .split(/(%[0-9A-Fa-f]{2})/)
+      .map((part, index) =>
+        index % 2 ? part : encodeURI(part).replace(/[?#]/g, (ch) => encodeURIComponent(ch)),
+      )
+      .join("");
+    return `mailto:${encoded}`;
   } catch {
     return undefined; // a lone surrogate can't be encoded
   }

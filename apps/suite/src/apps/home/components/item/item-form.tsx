@@ -50,8 +50,13 @@ export function ItemForm({
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
+        // Only changed fields are written, so only they are checked: an unusual value saved
+        // by another app must not block saving a different field.
+        const changed = fields.filter(
+          (field) => blank || values[field.id] !== inputValue(dataset, subject, field),
+        );
         const invalid: Record<string, string> = {};
-        for (const field of fields) {
+        for (const field of changed) {
           if (field.readOnly) continue;
           const value = values[field.id] ?? "";
           if (field.required && !value.trim())
@@ -71,9 +76,7 @@ export function ItemForm({
           return;
         }
         const edits = Object.fromEntries(
-          fields
-            .filter((field) => blank || values[field.id] !== inputValue(dataset, subject, field))
-            .map((field) => [field.id, values[field.id] ?? ""]),
+          changed.map((field) => [field.id, values[field.id] ?? ""]),
         );
         onSave(edits);
       }}

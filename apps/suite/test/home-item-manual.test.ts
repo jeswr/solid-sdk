@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -682,5 +683,52 @@ describe("manual items never land in a public folder", () => {
     ).rejects.toThrow("Anyone with the link can see this folder");
     expect(pod.has(url)).toBe(false);
     expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
+  });
+
+  // AUTHORED-BY Claude Opus 5.5 — fix round 3 (finding 6)
+  const create = async (fetch: typeof globalThis.fetch, url: string) => {
+    const template = await loadTemplate(address().manualForm as string, url, fetchTemplate);
+    return createManualItem(
+      { storageUrl: root, webId, fetch },
+      address(),
+      url,
+      template,
+      autoFormFor(template, `${url}#it`),
+      {},
+    );
+  };
+
+  it("says a public item may still be visible when its clean-up DELETE fails", async () => {
+    const pod = makePod();
+    const url = manualUrl(root, address(), "Home", "pub999");
+    const second = manualUrl(root, address(), "Home", "pub998");
+    const reporting = publicOn(pod, (target) => target === url || target === second);
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+      init?.method === "DELETE" ? new Response(null, { status: 403 }) : reporting(input, init),
+    );
+    await expect(create(fetch, url)).rejects.toThrow(
+      "This item may still be visible to anyone; make the folder private.",
+    );
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
+    // A network failure on the clean-up is reported the same way.
+    const offline = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "DELETE") throw new TypeError("offline");
+      return reporting(input, init);
+    });
+    await expect(create(offline, second)).rejects.toThrow(
+      "This item may still be visible to anyone",
+    );
+  });
+
+  it("removes an item whose access can't be checked after writing it", async () => {
+    const pod = makePod();
+    const url = manualUrl(root, address(), "Home", "head500");
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+      init?.method === "HEAD" && String(input) === url
+        ? new Response(null, { status: 500 })
+        : pod.fetch(input, init),
+    );
+    await expect(create(fetch, url)).rejects.toThrow("Couldn't check who can see this item");
+    expect(pod.has(url)).toBe(false);
   });
 });

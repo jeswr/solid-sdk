@@ -250,13 +250,23 @@ export async function createManualItem(
   });
   if (!response.ok) throw new Error("Couldn't save this item. Please try again.");
   const created = await session.fetch(target, { method: "HEAD", redirect: "error" });
-  if (publiclyAccessible(created.headers)) {
-    await discardEmptyDocument(
-      session,
-      target,
-      created.headers.get("etag") ?? response.headers.get("etag"),
-    );
-    throw new PublicFolderError();
+  // Fail closed: an item whose access can't be confirmed is removed like a public one.
+  if (!created.ok || publiclyAccessible(created.headers)) {
+    const etag = (created.ok && created.headers.get("etag")) || response.headers.get("etag");
+    const removed = await session
+      .fetch(target, {
+        method: "DELETE",
+        redirect: "error",
+        ...(etag ? { headers: { "if-match": etag } } : {}),
+      })
+      .then(
+        (deleted) => deleted.ok || deleted.status === 404,
+        () => false,
+      );
+    if (!removed) throw new ExposedItemError();
+    throw created.ok
+      ? new PublicFolderError()
+      : new Error("Couldn't check who can see this item, so it wasn't saved. Please try again.");
   }
   try {
     await registerManualType(
@@ -269,6 +279,12 @@ export async function createManualItem(
     throw new ManualRegistrationError(target, error);
   }
   return target;
+}
+/** A new item was found public (or unverifiable) and couldn't be removed again. */
+export class ExposedItemError extends Error {
+  constructor() {
+    super("This item may still be visible to anyone; make the folder private.");
+  }
 }
 export class ManualRegistrationError extends Error {
   constructor(

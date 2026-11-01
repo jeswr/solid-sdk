@@ -310,3 +310,68 @@ describe("finding 11: the profile editor's field allowlist", () => {
     ]);
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 3 (findings 3, 5)
+describe("fix round 3: stored addresses and nested inner values", () => {
+  const emailIri = (dataset: DatasetCore) =>
+    quads(dataset).find((q) => q.predicate.value === `${VCARD}hasEmail`)?.object.value;
+
+  it.each([
+    ["non-ASCII characters", "mailto:j%C3%B6rg@example.de", "jörg@example.de"],
+    ["? and #", "mailto:ada%3Fcc=x%23y@example.org", "ada?cc=x#y@example.org"],
+    ["a literal %", "mailto:50%25off@example.org", "50%off@example.org"],
+    ["an escaped escape", "mailto:a%2541@example.org", "a%2541@example.org"],
+    ["an undecodable escape", "mailto:j%F6rg@example.de", "j%F6rg@example.de"],
+  ])("shows a stored address with %s decoded and keeps its IRI through edits", async (_, iri, shown) => {
+    const dataset = await parse(`<#me> <${VCARD}fn> "Ada"; <${VCARD}hasEmail> <${iri}>.`);
+    expect(readFieldValue(dataset, subject, EMAIL)).toBe(shown);
+    // Saving the shown value (and saving again) writes the very same IRI.
+    const { result, written } = await saveAndReadBack(dataset, [EMAIL], { [EMAIL.id]: shown });
+    expect(result.ok).toBe(true);
+    expect(emailIri(written as DatasetCore)).toBe(iri);
+    const again = applyFieldEdits(written as DatasetCore, subject, [EMAIL], {
+      [EMAIL.id]: readFieldValue(written as DatasetCore, subject, EMAIL),
+    });
+    expect(emailIri(again)).toBe(iri);
+  });
+
+  it("keeps valid escapes in a typed address and encodes any other %", () => {
+    expect(toMailto("j%C3%B6rg@example.de")).toBe("mailto:j%C3%B6rg@example.de");
+    expect(toMailto("jörg@example.de")).toBe("mailto:j%C3%B6rg@example.de");
+    expect(toMailto("50%off@example.org")).toBe("mailto:50%25off@example.org");
+    expect(toMailto("a%3F?b@example.org")).toBe("mailto:a%3F%3Fb@example.org");
+  });
+
+  it("locks a structured value whose single inner value is a nested node and shows no label", async () => {
+    const dataset = await parse(
+      `<#me> <${VCARD}hasEmail> [ a <${VCARD}Work>; <${VCARD}value> [ <${VCARD}fn> "x" ] ].`,
+    );
+    const state = fieldState(dataset, subject, EMAIL);
+    expect(state).toEqual({ values: [], lockedReason: STRUCTURED_VALUE_HINT });
+    expect(readFieldValue(dataset, subject, EMAIL)).toBe("");
+    expect(() => applyFieldEdits(dataset, subject, [EMAIL], { [EMAIL.id]: "a@x.org" })).toThrow(
+      STRUCTURED_VALUE_HINT,
+    );
+    const text = normaliseField({
+      label: "Note",
+      predicate: `${VCARD}note`,
+      kind: "text",
+      mode: "literal",
+    });
+    const note = await parse(`<#me> <${VCARD}note> [ <${VCARD}value> [ <${VCARD}fn> "x" ] ].`);
+    expect(fieldState(note, subject, text)).toEqual({
+      values: [],
+      lockedReason: STRUCTURED_VALUE_HINT,
+    });
+  });
+
+  it("locks a field with a second, nested value an edit would drop", async () => {
+    const dataset = await parse(
+      `<#me> <${VCARD}hasEmail> [ <${VCARD}value> <mailto:a@x.org> ], [ a <${VCARD}Home> ].`,
+    );
+    expect(fieldState(dataset, subject, EMAIL)).toEqual({
+      values: ["a@x.org"],
+      lockedReason: MULTIPLE_VALUES_HINT,
+    });
+  });
+});
