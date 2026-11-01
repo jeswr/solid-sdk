@@ -94,22 +94,24 @@ shapes, malformed RDF, dialect-specific denials, symbolic proof limits, and writ
 The migrator retains its end-to-end engine regression and dialect matrix tests.
 
 <!-- AUTHORED-BY Codex -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`setGrants`, `isRoleError`, and their documented types (`Role`, `ResourceKind`, `AgentRef`,
-`RoleGrant`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`, `SetGrantsOptions`,
-`SetGrantsResult`). It does not change the offline root API.
+`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `isRoleError`, and their documented types
+(`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
+`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
+It does not change the offline root API.
 
 ```ts
-import { grantsWithRoles, setGrants } from "@jeswr/pod-access/roles";
+import { readGrants, setGrants } from "@jeswr/pod-access/roles";
 
 const options = { fetch: authFetch, webId, root: "https://pod.example/" };
-const current = await grantsWithRoles(resourceUrl, options);
+const snapshot = await readGrants(resourceUrl, options);
 const result = await setGrants([resourceUrl], [
-  ...current,
+  ...snapshot.grants,
   { agent: { type: "webid", id: friendWebId }, role: "viewer",
     inherited: false, source: "" },
-], { ...options, notify: true, message: "Shared with you" });
+], { ...options, expected: snapshot, notify: true, message: "Shared with you" });
 // Check result.failed; applied includes only URLs that completed all their writes.
 ```
 
@@ -152,6 +154,51 @@ preserves these copied grants across repeated applications even when omitted fro
 explicit selection. Explicitly selecting that agent can change the local copy. Ancestors
 are never edited. Unchanged documents receive no PUT. Comment changes preserve unrelated
 container permissions and refuse to discard Write as if it were only Append.
+
+`readGrants(url, options)` returns a JSON-serialisable `GrantSnapshot` with `{ url, grants,
+version }`. `grantsWithRoles(url, options)` keeps returning the plain array and is exactly
+`(await readGrants(url, options)).grants`. The opaque version token records the own ACL/ACR
+ETag or its absence, every governing inherited document's URL and ETag, and the same state
+for the comments container. It also binds the resource kind and trusted implementation.
+Store or JSON round-trip the token verbatim; its encoding is private. Missing ETags remain
+readable but prevent changes that need those validators.
+
+For read-modify-write, pass `expected: snapshot` to `setGrants`, or use a per-resource map
+`expected: { [snapshot.url]: snapshot.version, [second.url]: second.version }`. Every selected
+URL needs its own token. Planning re-reads raw RDF and requires its validators to match the
+snapshot before diffing: the baseline is the state captured by the snapshot, and untouched
+RDF retains its full detail. The token is authoritative; editing `snapshot.grants` does not
+change the baseline. A stale token, different discovery, or changed governing source reports
+a typed `conflict` naming the selected URL, including when an absent own document has since
+been created. Conditional PUTs retain that baseline's ETag or absence precondition. Without
+`expected`, `setGrants` reads a fresh baseline as before. Reapplying an unchanged selection
+against a current snapshot sends no write. A successful changed write consumes its old token;
+read another snapshot before the next full-set edit. Stale tokens also fail for no-op selections.
+
+Access-request approvals can use the single-agent operations directly:
+
+```ts
+import { addGrant, removeGrant } from "@jeswr/pod-access/roles";
+
+const grant = { agent: { type: "webid" as const, id: requesterWebId },
+  role: "viewer" as const, inherited: false, source: "" };
+const approval = await addGrant([resourceUrl], grant, { fetch: authFetch, webId });
+// Inspect approval.failed before marking the access request approved.
+const revocation = await removeGrant([resourceUrl], grant.agent, { fetch: authFetch, webId });
+```
+
+`addGrant(urls, grant, options)` reads each URL and adds or raises only that agent's direct
+role, preserving all other agents' authorization semantics, shared scopes and annotations.
+It never performs a full-set replacement or lowers an existing higher role. An equal or
+higher effective role is a successful no-op, including inherited roles; crash-recovery replays
+therefore converge. `removeGrant(urls, agent, options)` removes that agent's direct resource
+role and its direct commenter Append where applicable; an absent direct grant is a no-op.
+Inherited resource grants must be removed at their source (`inherited-grant`); inherited
+comments remain intact, and comments Write cannot be discarded as Append. Both operations
+use `GrantMutationOptions` (injected fetch, caller WebID and the usual role context), return
+the same per-URL `SetGrantsResult` as `setGrants`, preflight caller lockout, and write with
+If-Match or If-None-Match: *. Neither retries conflicts. `addGrant` rejects expiry/purpose
+before any I/O, just like `setGrants`.
 
 Every replacement uses the fetched ETag verbatim in If-Match (weak tags are passed through);
 creation uses If-None-Match: *. Wildcard or malformed response validators are refused.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import type { Mode, PodImplementation } from "../types.js";
 
 /** Application roles, ordered by the permissions they require. */
@@ -21,6 +22,13 @@ export interface RoleGrant {
   inherited: boolean;
   source: string;
 }
+declare const grantVersion: unique symbol;
+/** Opaque JSON-serialisable read token. Preserve it verbatim; do not construct or parse it. */
+export interface GrantSnapshot {
+  readonly url: string;
+  grants: RoleGrant[];
+  readonly version: string & { readonly [grantVersion]: true };
+}
 /** Separate permission targets: resource body, comments container, and own ACR. */
 export interface RoleModes {
   resource: readonly Mode[];
@@ -42,10 +50,14 @@ export interface RolesOptions extends RoleContext {
   implementation?: PodImplementation;
 }
 /** Notification delivery is deferred to SDK-APP-07; these values are only recorded. */
-export interface SetGrantsOptions extends RolesOptions {
+export interface GrantMutationOptions extends RolesOptions {
   webId: string;
   notify?: boolean;
   message?: string;
+}
+/** Optional read-modify-write baseline; a version map must cover every selected URL. */
+export interface SetGrantsOptions extends GrantMutationOptions {
+  expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */
 export interface SetGrantsResult {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 // Adapted from Drive sharing/{rdf,sharing,apply}.ts (Codex GPT-6.1-Sol / Codex),
 // origin/main and claude/project-thread-okz5l7. No dependency on the application.
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -316,6 +317,61 @@ export function detachAcp(dataset: Store, resource: string, url: string): void {
     if (targets.length && !targets.includes(resource) && !targets.includes(url)) continue;
     node.values(`${ACP}accessControl`).clear();
     node.values(`${ACP}access`).clear();
+  }
+}
+/** Split only the selected principal's resource/management paths, retaining shared scopes. */
+export function removeAcpAgent(
+  dataset: Store,
+  resource: string,
+  url: string,
+  agent: AgentRef,
+): void {
+  const key = agentKey(agent);
+  function withoutAgent(term: Term): Term {
+    if (
+      !policySubjects(new Policy(term, dataset, DataFactory)).some(
+        (clause) => agentKey(subjectAgent(clause[0] as Subject)) === key,
+      )
+    )
+      return term;
+    const copy = clone(term, dataset, dataset, [`${ACP}allOf`, `${ACP}anyOf`]);
+    for (const name of ["allOf", "anyOf"])
+      for (const matcher of properties(term, dataset).nodes(ACP + name)) {
+        const original = properties(matcher as Term, dataset);
+        const subject = agentSubject(agent);
+        const selector = subject.kind === "client" ? `${ACP}client` : `${ACP}agent`;
+        const principal =
+          "id" in agent
+            ? agent.id
+            : `${ACP}${agent.type === "public" ? "PublicAgent" : "AuthenticatedAgent"}`;
+        let next: Term = matcher as Term;
+        if (original.values(selector).has(principal)) {
+          const split = clone(matcher as Term, dataset, dataset, []);
+          split.values(selector).delete(principal);
+          next = split as Term;
+        }
+        copy.terms(ACP + name).add(next);
+      }
+    return copy as Term;
+  }
+  for (const root of roots(dataset)) {
+    const node = properties(root as Term, dataset);
+    const targets = node.iris(`${ACP}resource`);
+    if (targets.length && !targets.includes(resource) && !targets.includes(url)) continue;
+    for (const policy of [...node.nodes(`${ACP}access`)]) {
+      const next = withoutAgent(policy as Term);
+      node.terms(`${ACP}access`).delete(policy as Term);
+      node.terms(`${ACP}access`).add(next);
+    }
+    for (const control of [...node.nodes(`${ACP}accessControl`)]) {
+      const policies = properties(control as Term, dataset).nodes(`${ACP}apply`);
+      const next = policies.map((policy) => withoutAgent(policy as Term));
+      if (next.every((policy, index) => policy === policies[index])) continue;
+      const split = clone(control as Term, dataset, dataset, [`${ACP}apply`]);
+      for (const policy of next) split.terms(`${ACP}apply`).add(policy);
+      node.terms(`${ACP}accessControl`).delete(control as Term);
+      node.terms(`${ACP}accessControl`).add(split as Term);
+    }
   }
 }
 /** Write the unconditional ACP subset with separate ACR Read+Write management. */

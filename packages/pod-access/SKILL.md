@@ -38,7 +38,7 @@ plus the migrator's regression suite and the repository gate.
 <!-- AUTHORED-BY Codex -->
 
 The public `./roles` API is documented in README.md: role/mode mapping, neutral AgentRef and
-RoleGrant types, `grantsWithRoles`, `setGrants`, and branded `RoleError` classification via
+RoleGrant types, `grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`, and branded `RoleError` classification via
 `isRoleError`. Export helpers through `src/roles/index.ts` only; no mutable reader/error
 classes may escape. New public API changes must update this skill and README together.
 
@@ -56,6 +56,28 @@ conditional persistence; never retry a 412 silently. Copy WAC defaults through t
 and preserve materializedFrom provenance across reapplication, including descendant defaults.
 Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
 redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+`readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
+`grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token
+verbatim: it binds own-document presence/absence, own and inherited ETags, discovery, comments,
+resource kind and trusted implementation. `setGrants` accepts `expected: snapshot` or a complete
+per-resource map of snapshot version tokens. Compare the re-read validators with the token before
+diffing raw RDF against that baseline; never silently switch a stale caller to a newer baseline.
+Keep the matching snapshot's If-Match / absent If-None-Match: * preconditions through persistence.
+Stale tokens fail even for no-op selections. A changed write consumes its old token; unchanged
+reapplication with a current snapshot sends no PUT. Without expected, retain fresh-read behavior.
+
+Single-agent operations must never route through full-set replacement. Add/raise only the selected
+agent, keeping every other agent's modes, shared scopes, policy semantics and metadata intact;
+an equal/higher effective role sends no write. Removal is idempotent for absent direct grants and
+refuses inherited resource removal; retain inherited comments and refuse lossy comments Write
+revocation. WAC splits shared principals; ACP splits only that principal's policy/matcher/control
+paths while preserving member and foreign references. Both operations use the existing batch
+preflight/results and conditional conflict contract, with no automatic 412 retry. Reject addGrant
+expiry/purpose before any I/O. Test snapshots after JSON round trips, stale own/source validators,
+absence races, preservation of unrelated RDF, creation/replacement preconditions and replay no-ops.
 
 `notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` and
 `movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
