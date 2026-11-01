@@ -658,6 +658,36 @@ describe("composite parse — optional link constraints under class-only (sh:cla
     expect(S.parse(RES, untyped)).toBeUndefined();
   });
 
+  it("a class-only child under a strict sh:node parent still fails the parent on a required MUST", () => {
+    // event -(sh:node)-> track -(classOnly)-> artist, with the artist name required.
+    const m = scrobbleManifest();
+    Object.assign(fieldOf(m, 1, 1), { hasClass: `${MEDIA}Artist`, classOnly: true });
+    fieldOf(m, 3, 0).guards = { requiredFailClosed: true };
+    const S = defineModel(m).entities.Scrobble;
+    if (!S) throw new Error("expected the Scrobble composite");
+    const store = S.build(RES, FULL);
+    expect(S.parse(RES, store)).toEqual(FULL);
+    store.removeQuads(store.getQuads(ARTIST, `${FOAF}name`, null, null));
+    expect(S.parse(RES, store)).toBeUndefined();
+  });
+
+  it("an sh:node grandchild under a class-only child stays strict and drops its optional edge", () => {
+    // event -(classOnly)-> track -(sh:node)-> artist: an ambiguous artist name makes the
+    // artist non-conforming, so the optional track→artist edge drops; the scrobble stays.
+    const m = scrobbleManifest();
+    Object.assign(fieldOf(m, 0, 2), { hasClass: `${MEDIA}Track`, classOnly: true });
+    const S = defineModel(m).entities.Scrobble;
+    if (!S) throw new Error("expected the Scrobble composite");
+    const store = S.build(RES, FULL);
+    store.addQuad(
+      DataFactory.namedNode(ARTIST),
+      DataFactory.namedNode(`${FOAF}name`),
+      DataFactory.literal("Imposter"),
+    );
+    const { artistName: _dropped, ...rest } = FULL;
+    expect(S.parse(RES, store)).toEqual(rest);
+  });
+
   it("keeps the sh:node behaviour: the same ambiguous optional link rejects without classOnly", () => {
     const store = Scrobble.build(RES, FULL);
     store.addQuad(
