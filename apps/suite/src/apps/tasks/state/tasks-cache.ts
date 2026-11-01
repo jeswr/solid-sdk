@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+import { isomorphic } from "rdf-isomorphic";
 import { ModelError } from "../lib/model/errors";
 import { DataFactory } from "../lib/model/rdf";
-import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
+import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { type CompletionPlan, planComplete } from "../lib/views/completion";
@@ -481,7 +482,8 @@ export class TasksCache {
     let plan: CompletionPlan = initial;
     const now = initial.copy.endedAt as Date;
     let copyPending = false;
-    let updateAttempted = false;
+    let compensating = false;
+    let replan = false;
     let settled: { result: CompletionPlan; commit: Patch } | undefined;
     const finish = (original: StoredTask, copy?: StoredTask) => {
       settled = {
@@ -491,13 +493,10 @@ export class TasksCache {
       };
       return settled;
     };
-    const wasAdvanced = (original: StoredTask) =>
-      updateAttempted &&
-      plan.kind === "advance" &&
-      original.task.state === "open" &&
-      original.task.dueDate?.getTime() === plan.next.getTime() &&
-      original.task.allDay === plan.original.allDay;
-    const dataset = createTask(url, initial.copy);
+    const wasAdvanced = (original: StoredTask) => original.task.completionOperations.has(url);
+    const ownsCopy = (copy: StoredTask) =>
+      copy.task.clonedFrom === item.task.id && copy.task.completionOperations.has(url);
+    const dataset = createTask(url, { ...initial.copy, completionOperations: [url] });
     const copy = {
       url,
       dataset,
@@ -508,6 +507,9 @@ export class TasksCache {
       task.dueDate = completion.original.dueDate;
       task.allDay = completion.original.allDay;
       task.reminders = completion.original.reminders ?? [];
+      // Only the latest completion can be in flight; keep one marker, not one per occurrence.
+      task.completionOperations.clear();
+      task.completionOperations.add(url);
     };
     const attempt = (retry = false): Promise<CompletionPlan | undefined> =>
       this.mutate(
@@ -529,24 +531,32 @@ export class TasksCache {
           let current = retry
             ? await this.store.readTask(item.url)
             : this.task(project.url, item.url);
+          let existingCopy: StoredTask | undefined;
           if (copyPending) {
             const existing = await this.optionalTask(url);
-            if (existing) {
-              if (wasAdvanced(current)) return finish(current, existing);
-              // Never create another occurrence until the old reservation is gone.
-              await this.store.deleteTask(existing);
+            if (wasAdvanced(current)) {
+              if (existing && !ownsCopy(existing)) throw new ModelError(409, url);
+              return finish(current, existing);
             }
-            copyPending = false;
-            updateAttempted = false;
+            if (existing) {
+              if (!ownsCopy(existing)) throw new ModelError(409, url);
+              if (compensating) {
+                // Only a definite rejection authorizes compensation, never a lost response.
+                await this.store.deleteTask(existing);
+              } else existingCopy = existing;
+            }
+            copyPending = !!existingCopy;
+            compensating = false;
           }
           if (`${currentProject.tracker.stateStore}${id}.ttl` !== url)
             throw new ModelError(409, url);
-          if (retry) {
+          if (retry && replan) {
             const siblings = await this.store.listTasks(
               currentProject.tracker.stateStore as string,
             );
             plan = planComplete(current, projectTasks(currentProject, siblings).views, now);
-          } else if (current.etag !== item.etag) {
+            replan = false;
+          } else if (!retry && current.etag !== item.etag) {
             // A queued edit changed the scheduling inputs before this write started.
             plan = planComplete(
               current,
@@ -564,24 +574,32 @@ export class TasksCache {
           }
           plan.copyUrl = url;
           copyPending = true; // The PUT can commit even when its response is lost.
-          const copy = await this.store.createTask(currentProject, plan.copy, id);
+          const copy =
+            existingCopy ??
+            (await this.store.createTask(
+              currentProject,
+              { ...plan.copy, completionOperations: [url] },
+              id,
+            ));
           const completion = plan;
           try {
-            updateAttempted = true;
             const original = await this.store.updateTask(current, (task) =>
               advance(task, completion),
             );
             return finish(original, copy);
           } catch (error) {
             // A rejected precondition proves this update did not commit.
-            if (error instanceof ModelError && error.status >= 400 && error.status < 500)
-              updateAttempted = false;
+            if (error instanceof ModelError && error.status >= 400 && error.status < 500) {
+              compensating = true;
+              replan = true;
+            }
             // Reconcile an ambiguous update before deleting its occurrence.
             const original = await this.store.readTask(item.url);
             if (wasAdvanced(original)) return finish(original, copy);
+            if (!compensating) throw error;
             await this.store.deleteTask(copy);
             copyPending = false;
-            updateAttempted = false;
+            compensating = false;
             throw error;
           }
         },
@@ -597,23 +615,26 @@ export class TasksCache {
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
     const optimistic = { url, tracker, dataset, etag: null };
     let created: StoredProject | undefined;
-    let position: number | undefined;
-    const attempt = (): Promise<StoredProject | undefined> =>
+    const operation: ProjectCreation = { owner: crypto.randomUUID() };
+    const position = this.snapshot.projects.length;
+    const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
         (state) => replaceProject(state, created ?? optimistic),
         async () => {
-          created ??= await this.store.createProject(title);
-          position ??= this.baseline.projects.length;
-          const current =
-            this.baseline.projects.find((project) => project.url === created?.url) ?? created;
-          const project = await this.store.updateProject(current, (tracker) => {
-            tracker.position = position;
-          });
+          created ??= await this.store.createProject(title, false, operation);
+          const current = retry ? await this.store.readProject(created.url) : created;
+          const project =
+            current.tracker.position === position
+              ? current
+              : await this.store.updateProject(current, (tracker) => {
+                  tracker.position = position;
+                });
           return { result: project, commit: (state) => replaceProject(state, project) };
         },
         () => {
-          void attempt();
+          void attempt(true);
         },
+        [url],
       );
     return attempt();
   }
@@ -621,28 +642,39 @@ export class TasksCache {
     project: StoredProject,
     change: (tracker: TaskTracker) => void,
   ): Promise<StoredProject | undefined> {
-    return this.mutate(
-      (state) => {
-        const current = state.projects.find((item) => item.url === project.url);
-        return current ? replaceProject(state, changeProject(current, change)) : state;
-      },
-      async () => {
-        const result = await this.store.updateProject(this.project(project.url), change);
-        return { result, commit: (state) => replaceProject(state, result) };
-      },
-      () => {
-        void this.updateProject(project, change);
-      },
-    );
+    const attempt = (retry = false): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => {
+          const current = state.projects.find((item) => item.url === project.url);
+          return current ? replaceProject(state, changeProject(current, change)) : state;
+        },
+        async () => {
+          const current = retry
+            ? await this.store.readProject(project.url)
+            : this.project(project.url);
+          const intended = changeProject(current, change);
+          const result = isomorphic([...current.dataset], [...intended.dataset])
+            ? current
+            : await this.store.updateProject(current, change);
+          return { result, commit: (state) => replaceProject(state, result) };
+        },
+        () => {
+          void attempt(true);
+        },
+        [project.url],
+      );
+    return attempt();
   }
   renameProject = (project: StoredProject, title: string) =>
     this.updateProject(project, (tracker) => {
       tracker.title = title.trim();
     });
-  archiveProject = (project: StoredProject) =>
-    this.updateProject(project, (tracker) => {
-      tracker.archivedAt = new Date();
+  archiveProject = (project: StoredProject) => {
+    const archivedAt = new Date();
+    return this.updateProject(project, (tracker) => {
+      tracker.archivedAt = archivedAt;
     });
+  };
   moveProject(project: StoredProject, direction: "up" | "down") {
     const projects = this.snapshot.projects.filter((item) => item.url !== this.inboxUrl);
     const ordered = moveItem(
@@ -658,21 +690,26 @@ export class TasksCache {
       ),
     );
   }
-  addSection = (project: StoredProject, name: string) =>
-    this.updateProject(project, (tracker) => {
-      tracker.defineCategory("Section", name.trim(), tracker.sections.length + 1);
+  addSection = (project: StoredProject, name: string) => {
+    const current = this.snapshot.projects.find((item) => item.url === project.url) ?? project;
+    const position = current.tracker.sections.length + 1;
+    return this.updateProject(project, (tracker) => {
+      tracker.defineCategory("Section", name.trim(), position);
     });
+  };
   renameSection = (project: StoredProject, id: string, name: string) =>
     this.updateProject(project, (tracker) => tracker.updateSection(id, { name: name.trim() }));
   moveSection(project: StoredProject, id: string, direction: "up" | "down") {
+    const current = this.snapshot.projects.find((item) => item.url === project.url) ?? project;
+    const sections = current.tracker.sections;
+    const positions = moveItem(
+      sections,
+      sections.findIndex((item) => item.id === id),
+      direction,
+    ).map((section, index) => ({ id: section.id, position: index + 1 }));
     return this.updateProject(project, (tracker) => {
-      const sections = tracker.sections;
-      for (const [index, section] of moveItem(
-        sections,
-        sections.findIndex((item) => item.id === id),
-        direction,
-      ).entries())
-        tracker.updateSection(section.id, { position: index + 1 });
+      for (const section of positions)
+        tracker.updateSection(section.id, { position: section.position });
     });
   }
   deleteSection(project: StoredProject, id: string) {

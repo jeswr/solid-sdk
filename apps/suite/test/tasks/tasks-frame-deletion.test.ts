@@ -5,6 +5,28 @@ import { Pod } from "./pod";
 import { frameStore } from "./tasks-frame-fixtures";
 
 describe("project deletion boundaries and recovery", () => {
+  it("rejects a Home member redirected to a Work task before deleting anything", async () => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    const home = await store.createProject("Home");
+    const work = await store.createProject("Work");
+    const alias = await store.createTask(home, { title: "Alias", state: "open" });
+    const target = await store.createTask(work, { title: "Keep", state: "open" });
+    pod.intercept = (request) => {
+      if (request.method !== "GET" || request.url !== alias.url) return undefined;
+      const response = new Response(pod.files.get(target.url)?.body, {
+        headers: { "Content-Type": "text/turtle", ETag: target.etag as string },
+      });
+      Object.defineProperty(response, "url", { value: target.url });
+      return response;
+    };
+    pod.requests.length = 0;
+    await expect(store.deleteProject(home)).rejects.toThrow();
+    expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+    expect(pod.files.has(target.url)).toBe(true);
+    expect(pod.files.has(work.url)).toBe(true);
+  });
+
   it("never reads or deletes forged members outside the exact task container", async () => {
     const pod = new Pod();
     const store = frameStore(pod);
