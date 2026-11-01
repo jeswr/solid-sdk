@@ -63,6 +63,7 @@ const variations: Record<RecordType, fc.Arbitrary<unknown>> = {
     carriage: nonempty,
     structuredPayload: fc.boolean(),
     endToEndEncrypted: fc.boolean(),
+    federated: optional(fc.boolean()),
     deliveryReceipts: fc.boolean(),
     maxMessageBytes: fc.nat(),
     sendSupported: fc.boolean(),
@@ -562,4 +563,15 @@ it("documents every canonical term and every emitted minted term", async () => {
       }
     }
   }
+});
+
+it("preserves optional federation capability booleans without changing existing descriptors", async () => {
+  const original = exampleRecords["channel-capability"];
+  expect(fromRdf(toRdf(original), original.id)).not.toHaveProperty("federated");
+  for (const federated of [true, false]) {
+    const record = { ...original, federated };
+    expect(await recordFromTurtle(await recordToTurtle(record), record.id)).toEqual(record);
+  }
+  for (const federated of ["true", 1, null])
+    expect(podRecordSchema.safeParse({ ...original, federated }).success).toBe(false);
 });

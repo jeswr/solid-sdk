@@ -109,6 +109,8 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./github",
       "./graph-mail",
       "./graph-mail/send",
+      "./mastodon",
+      "./mastodon/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -143,4 +145,11 @@ it("keeps Graph mail sending out of the root and reader surfaces", () => {
   expect(entry4).toHaveProperty("createGraphMailReader");
   expect(entry4).not.toHaveProperty("createGraphMailSend");
   expect(entry20).toHaveProperty("createGraphMailSend");
+});
+
+it("keeps Mastodon sending out of root and reader exports", () => {
+  expect(entry0).not.toHaveProperty("createMastodonSend");
+  expect(entry10).toHaveProperty("createMastodonReader");
+  expect(entry10).not.toHaveProperty("createMastodonSend");
+  expect(entry26).toHaveProperty("createMastodonSend");
 });

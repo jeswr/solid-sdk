@@ -272,3 +272,60 @@ Graph tests use synthetic recorded response shapes and injected transports,
 including 202 responses with empty bodies. No live provider or credentials are used.
 Provider contracts: [delta](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0),
 [sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
+
+`./mastodon` exports `createMastodonReader({ instance?, accountDomain?, tokens, transport? })`,
+`MASTODON_SCOPES` and default-instance `ORIGINS`. Register the OAuth app on the
+configured HTTPS instance (default `https://mastodon.social`), with
+`read:notifications read:statuses write:statuses`; provision separate read and
+send grants through `TokenProvider`. The binding snapshots the instance and exposes
+its effective `origins`. DNS pinning, single-hop transport and redirect refusal
+apply to all requests. No remote status, account, media or footer URL is fetched.
+The API contracts are documented by Mastodon for
+[notifications](https://docs.joinmastodon.org/methods/notifications/),
+[conversations](https://docs.joinmastodon.org/methods/conversations/) and
+[statuses](https://docs.joinmastodon.org/methods/statuses/).
+
+Ingest polls notifications and conversation snapshots with read grants only.
+Account- and instance-scoped cursors retain the current endpoint and validated
+provider `Link` pagination URL. Each request asks for one record; a call makes at
+most 80 requests and respects aggregate item/byte bounds. An item that cannot fit
+remains at the cursor for the next call; if it cannot fit alone, the call refuses.
+Completed scans restart on the next poll. Stable IDs allow the importer to deduplicate
+repeated notifications and conversation last-status snapshots. This conservative
+poller does not reconstruct all historical turns from a conversation snapshot.
+Deleted last statuses are skipped. Local acct handles are qualified by the trusted,
+snapshotted `accountDomain` (a bare domain, defaulting to the instance host). Set it to
+the server's `LOCAL_DOMAIN` when its API is served on a separate `WEB_DOMAIN`, as in
+[Mastodon's split-domain configuration](https://docs.joinmastodon.org/admin/config/#web_domain).
+Fully qualified remote accts retain their own domain; account domains never change
+the allowed API origin or trigger requests. Parsing ignores `native`, projects HTML to plain
+text, strips controls and retains raw-byte provenance. Sender claims and footer
+links remain unverified observations; no structured proposal is extracted.
+
+`./mastodon/send` exports executor-only `createMastodonSend({ instance?, account,
+recipients, verify, verifyApproval, now?, transport? })`. Actor-to-acct pins are
+snapshotted and must round-trip through Mastodon's outbound mention grammar after
+domain normalization. Pins with ports (including explicit `:443`) are rejected at
+construction because the mention parser consumes only the account before the port.
+Rendering builds one recipient mention, a deterministic kind/body
+summary and `AGENT_FOOTER`, refusing statuses over the existing 256-byte local
+ceiling. Body `@` characters become `＠` so they cannot add recipients. Visibility
+is always `direct`. Longer logical messages must use another carriage; the binding
+does not truncate signed terms or raise the profile limit.
+
+The local wire is a canonical JSON send plan (`application/vnd.jeswr.mastodon-status+json`)
+containing the instance, account, compact JWS and exact `{ status, visibility }`
+request. Its digest binds all those fields to owner approval. The signed evidence
+stays local; Mastodon receives only the request object, so carriage remains
+footer-only. Transmit re-verifies the signed payload, re-renders the plan, checks
+account and validity, obtains only a send grant and requires strict owner approval.
+Validity is checked again after credential and approval awaits. Sending defaults
+to dry-run, with no credentials or network activity. The request uses its wire
+digest as `Idempotency-Key`; there are no automatic retries. Definitive 400/401/403/404/422
+responses are rejections; other failures and malformed or non-direct acknowledgements
+remain uncertain. There is no lookup or final-absence claim.
+
+The Mastodon capability descriptor advertises `federated: true`,
+`endToEndEncrypted: false`, footer-only carriage, no delivery receipts, no promised
+history window, and zero owner rate limits. Direct visibility still permits
+federation between instances and provides no end-to-end encryption.

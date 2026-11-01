@@ -74,6 +74,7 @@ export const RECORD_MAPPINGS: Readonly<
       carriage: f("carriage"),
       structuredPayload: f("structuredPayload", "boolean"),
       endToEndEncrypted: f("endToEndEncrypted", "boolean"),
+      federated: f("federated", "boolean"),
       deliveryReceipts: f("deliveryReceipts", "boolean"),
       historyWindow: f("historyWindow", "duration"),
       maxMessageBytes: f("maxMessageBytes", "integer"),
