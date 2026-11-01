@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from 'vitest';
 import { type ResolveOptions, resolveClassTargets } from '../src/background/core/class-resolve';
 import { memoiseResolveFetch } from '../src/background/core/class-resolve-sai';
@@ -17,6 +18,20 @@ const I = 'http://www.w3.org/ns/solid/interop#';
 const ST = 'http://www.w3.org/ns/shapetrees#';
 const SH = 'http://www.w3.org/ns/shacl#';
 const SOLID = 'http://www.w3.org/ns/solid/terms#';
+const UNSAFE_PATHS = [
+  '/data/..%2foutside/',
+  '/data/..%2Foutside/',
+  '/data/%2foutside/',
+  '/data/%2Foutside/',
+  '/data/%252foutside/',
+  '/data/%252Foutside/',
+  '/data/%2e%2e/',
+  '/data/%2E%2e/contacts/',
+  '/data/%5coutside/',
+  '/data/%5Coutside/',
+  '/data/./contacts/',
+  '/data/contacts/../other/',
+];
 
 function links(subject: string, predicate: string, objects: string[]) {
   return objects.map((object) => `<${subject}> <${predicate}> <${object}> .`).join('\n');
@@ -90,6 +105,40 @@ describe('SAI resolution', () => {
     });
     expect((await resolveClassTargets(CLASS, f.options)).targets).toEqual([]);
     expect(f.fetch.mock.calls.map(([url]) => url)).toEqual([WEBID, SET, REGISTRY]);
+  });
+
+  it.each(UNSAFE_PATHS)('rejects unsafe discovery paths before fetching (%s)', async (path) => {
+    const unsafe = `${POD}${path}`;
+    for (const [parent, predicate, fetched] of [
+      [WEBID, `${I}hasRegistrySet`, [WEBID]],
+      [SET, `${I}hasDataRegistry`, [WEBID, SET]],
+      [REGISTRY, `${I}hasDataRegistration`, [WEBID, SET, REGISTRY]],
+    ] as const) {
+      const f = fixture({ [parent]: links(parent, predicate, [unsafe]) });
+      expect(await resolveClassTargets(CLASS, f.options)).toEqual({
+        targets: [],
+        truncated: false,
+      });
+      expect(f.fetch.mock.calls.map(([url]) => url)).toEqual(fetched);
+    }
+  });
+
+  it.each([
+    ...UNSAFE_PATHS,
+    '/data/\\contacts/',
+  ])('rejects unsafe final URLs from every authenticated discovery document (%s)', async (path) => {
+    for (const redirected of [SET, REGISTRY, CONTACTS]) {
+      const f = fixture();
+      const result = await resolveClassTargets(CLASS, {
+        ...f.options,
+        fetch: async (url, authenticated) => ({
+          ...(await f.fetch(url, authenticated)),
+          url: url === redirected ? `${POD}${path}` : url,
+        }),
+      });
+      expect(result.targets).toEqual([]);
+      expect(f.fetch.mock.calls.at(-1)).toEqual([redirected, true]);
+    }
   });
 
   it('does not authenticate or read a foreign registry set or registry', async () => {
@@ -237,7 +286,7 @@ describe('shape-tree class matching', () => {
 });
 
 describe('the merged resolution ladder', () => {
-  it('memoises final redirect URLs and fails closed rather than reusing private bytes for public shapes', async () => {
+  it('memoises final redirect URLs within each credential mode', async () => {
     const f = fixture();
     const fetch = memoiseResolveFetch(async (url, authenticated) => ({
       ...(await f.fetch(url, authenticated)),
@@ -246,7 +295,93 @@ describe('the merged resolution ladder', () => {
     await fetch(SET, true);
     expect((await fetch(`${POD}/final#shape`, false)).ok).toBe(false);
     expect((await fetch(`${POD}/final`, true)).ok).toBe(true);
-    expect(f.fetch).toHaveBeenCalledTimes(1);
+    expect(f.fetch.mock.calls).toEqual([
+      [SET, true],
+      [`${POD}/final#shape`, false],
+    ]);
+  });
+
+  it('an anonymous SAI shape failure cannot suppress an authenticated Type Index read', async () => {
+    const index = `${POD}/private-index`;
+    const tree = `${index}#tree`;
+    const indexed = `${POD}/indexed/`;
+    const f = fixture({
+      [CONTACTS]: links(CONTACTS, `${I}registeredShapeTree`, [tree]),
+      [index]: `<#r> <${SOLID}forClass> <${CLASS}>; <${SOLID}instanceContainer> <${indexed}> .`,
+    });
+    f.docs[WEBID] += links(WEBID, `${SOLID}privateTypeIndex`, [index]);
+    // The shape read gets an anonymous 401; the same document is readable with credentials.
+    f.fetch.mockImplementation(async (url, authenticated) => ({
+      ok: url.split('#')[0] !== index || authenticated,
+      text: f.docs[url] ?? '',
+      url,
+    }));
+    expect(await resolveClassTargets(CLASS, f.options)).toEqual({
+      targets: [{ ...saiTarget(indexed), source: 'type-index', sources: ['type-index'] }],
+      truncated: false,
+    });
+    expect(f.fetch.mock.calls.slice(-2)).toEqual([
+      [tree, false],
+      [index, true],
+    ]);
+  });
+
+  it('reads a shared SAI registry and public Type Index separately, without using private bytes', async () => {
+    const publicTarget = `${POD}/public/`;
+    const privateTarget = `${POD}/private/`;
+    const f = fixture();
+    f.docs[WEBID] += links(WEBID, `${SOLID}publicTypeIndex`, [REGISTRY]);
+    f.docs[REGISTRY] +=
+      `<#private> <${SOLID}forClass> <${CLASS}>; <${SOLID}instanceContainer> <${privateTarget}> .`;
+    f.fetch.mockImplementation(async (url, authenticated) => ({
+      ok: true,
+      text:
+        url === REGISTRY && !authenticated
+          ? `<#public> <${SOLID}forClass> <${CLASS}>; <${SOLID}instanceContainer> <${publicTarget}> .`
+          : (f.docs[url] ?? ''),
+      url,
+    }));
+    expect(await resolveClassTargets(CLASS, f.options)).toEqual({
+      targets: [
+        saiTarget(),
+        { ...saiTarget(publicTarget), source: 'type-index', sources: ['type-index'] },
+      ],
+      truncated: false,
+    });
+    expect(f.fetch.mock.calls.filter(([url]) => url === REGISTRY)).toEqual([
+      [REGISTRY, true],
+      [REGISTRY, false],
+    ]);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('memoises concurrent reads, fragments and failures per credential mode (first: %s)', async (firstMode) => {
+    const url = `${POD}/document`;
+    const read = vi.fn(async (url: string, authenticated: boolean) => ({
+      ok: authenticated,
+      text: authenticated ? 'private bytes' : '',
+      url,
+    }));
+    const fetch = memoiseResolveFetch(read);
+    for (const mode of [firstMode, !firstMode]) {
+      const bodies = await Promise.all([
+        fetch(`${url}#one`, mode),
+        fetch(`${url}#two`, mode),
+        fetch(url, mode),
+      ]);
+      expect(bodies.map(({ ok, text }) => ({ ok, text }))).toEqual(
+        Array.from({ length: 3 }, () => ({
+          ok: mode,
+          text: mode ? 'private bytes' : '',
+        })),
+      );
+    }
+    expect(read.mock.calls).toEqual([
+      [`${url}#one`, firstMode],
+      [`${url}#one`, !firstMode],
+    ]);
   });
 
   it('memoises a shared SHACL tree across registrations and never matches a different class', async () => {
@@ -356,7 +491,7 @@ describe('the merged resolution ladder', () => {
     }
   });
 
-  it('memoises documents across fragments, duplicate refs, rungs, and failed reads', async () => {
+  it('memoises documents per credential mode across fragments, duplicate refs, rungs, and failed reads', async () => {
     const f = fixture();
     const tree2 = 'https://trees.example/contact#other';
     f.docs[WEBID] += links(WEBID, `${SOLID}publicTypeIndex`, [REGISTRY]);
@@ -366,8 +501,12 @@ describe('the merged resolution ladder', () => {
     f.docs[`${REGISTRY}other/`] = links(`${REGISTRY}other/`, `${I}registeredShapeTree`, [TREE]);
     const result = await resolveClassTargets(CLASS, f.options);
     expect(result.targets).toEqual([]);
-    const documentUrls = f.fetch.mock.calls.map(([url]) => url.split('#')[0]);
-    expect(new Set(documentUrls).size).toBe(documentUrls.length);
+    const documentModes = f.fetch.mock.calls.map(([url, mode]) => `${mode} ${url.split('#')[0]}`);
+    expect(new Set(documentModes).size).toBe(documentModes.length);
+    expect(f.fetch.mock.calls.filter(([url]) => url === REGISTRY)).toEqual([
+      [REGISTRY, true],
+      [REGISTRY, false],
+    ]);
     expect(
       f.fetch.mock.calls.filter(([url]) => url.startsWith('https://trees.example')),
     ).toHaveLength(1);

@@ -2,6 +2,7 @@ import type { OriginGrant } from '../src/background/core/origin-grant';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,
@@ -1674,7 +1675,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
 
   it.each([
     'https://alice.pod.example/finance/x.ttl?view=1#me',
-    'https://ALICE.POD.EXAMPLE:443/finance/./x.ttl?view=1#me',
+    'https://ALICE.POD.EXAMPLE:443/finance/x.ttl?view=1#me',
     'https://alice.pod.example/finance/x.ttl?view=1#',
   ])('reports a canonical document URL without a fragment for direct responses (%s)', async (url) => {
     await boot();
@@ -1686,6 +1687,25 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       body: 'document bytes',
     });
     expect(fetchCalls.map((call) => call.url)).toEqual([url]);
+  });
+
+  it.each([
+    '..%2foutside/x.ttl',
+    '%2Foutside/x.ttl',
+    '%252foutside/x.ttl',
+    '%2E%2e/x.ttl',
+    '%5Coutside/x.ttl',
+    '\\x.ttl',
+    './x.ttl',
+    'contacts/../x.ttl',
+  ])('denies ambiguous descendant requests before egress (%s)', async (path) => {
+    await boot();
+    expect(await fetchFinance({ url: `https://alice.pod.example/finance/${path}` })).toMatchObject({
+      status: 403,
+      error: 'Out of grant scope',
+    });
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
   });
 
   it('does not count a DPoP nonce retry as a redirect', async () => {
@@ -1863,6 +1883,59 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     expect(denied.error).toBe('Out of grant scope');
     expect(denied.body).toBeUndefined();
     expect(cacheStore.size).toBe(0);
+  });
+
+  it.each([
+    '/data/..%2foutside/',
+    '/data/%2Foutside/',
+    '/data/%252foutside/',
+    '/data/%2E%2e/contacts/',
+    '/data/%5Coutside/',
+    '/data/\\contacts/',
+    '/data/contacts/../other/',
+  ])('refuses an unsafe SAI redirect before a credentialed resend (%s)', async (path) => {
+    const pod = 'https://alice.pod.example';
+    const set = `${pod}/registries`;
+    const registry = `${pod}/data/`;
+    const registration = `${registry}contacts/`;
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const unsafe = `${pod}${path}`;
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <${interop}hasRegistrySet> <${set}> .`,
+      [set]: `<${set}> <${interop}hasDataRegistry> <${registry}> .`,
+      [registry]: `<${registry}> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<${registration}> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    for (const redirected of [set, registry, registration]) {
+      await boot([parent({ scope: { pods: [pod] } })]);
+      fetchCalls.length = 0;
+      fetchImpl = async (url, init) =>
+        init?.redirect === 'follow'
+          ? redirectProbe(unsafe)
+          : url === redirected
+            ? opaqueRedirect()
+            : new Response(docs[url === unsafe ? redirected : url] ?? '');
+      const result = await send(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: 'unsafe-sai-redirect',
+          classIRI: dataClass,
+          stampedOrigin: APPX.origin,
+        },
+        APPX,
+      );
+      expect(result.targets).toEqual([]);
+      expect(fetchCalls.map(({ url }) => url)).not.toContain(unsafe);
+      const probe = fetchCalls.at(-1);
+      expect(probe?.url).toBe(redirected);
+      expect(probe?.init).toMatchObject({
+        method: 'HEAD',
+        redirect: 'follow',
+        credentials: 'omit',
+      });
+      expect(new Headers(probe?.init?.headers).has('Authorization')).toBe(false);
+    }
   });
 
   it.each([

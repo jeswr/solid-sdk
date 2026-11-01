@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Bounded SAI discovery and class matching only; no member sampling or grant enforcement. */
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
+import { safePathUrl } from './class-path';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
 
@@ -44,17 +46,16 @@ function documentUrl(value: string): string {
   return value.split('#')[0];
 }
 
-/** One cache for the entire ladder, including failures and fragment aliases. No auth upgrade. */
+/** Cache successes/failures and fragment/redirect aliases once per (document, credential mode). */
 export function memoiseResolveFetch(fetch: ResolveFetch): ResolveFetch {
-  const documents = new Map<string, { authenticated: boolean; read: Promise<Document> }>();
+  const publicDocuments = new Map<string, Promise<Document>>();
+  const authenticatedDocuments = new Map<string, Promise<Document>>();
   return (url, authenticated) => {
+    // Neither anonymous failures nor authenticated bytes can satisfy the other mode.
+    const documents = authenticated ? authenticatedDocuments : publicDocuments;
     const key = documentUrl(httpUrl(url)?.href ?? url);
     const cached = documents.get(key);
-    // Do not interpret authenticated bytes as a public shape/index, or retry with credentials.
-    if (cached)
-      return !authenticated && cached.authenticated
-        ? Promise.resolve({ ok: false, text: '', url })
-        : cached.read;
+    if (cached) return cached;
     const read = (async () => {
       try {
         if (!httpUrl(url)) return { ok: false, text: '', url };
@@ -65,10 +66,10 @@ export function memoiseResolveFetch(fetch: ResolveFetch): ResolveFetch {
         return { ok: false, text: '', url };
       }
     })();
-    documents.set(key, { authenticated, read });
+    documents.set(key, read);
     void read.then((body) => {
       const finalKey = documentUrl(httpUrl(body.url)?.href ?? body.url);
-      if (!documents.has(finalKey)) documents.set(finalKey, { authenticated, read });
+      if (!documents.has(finalKey)) documents.set(finalKey, read);
     });
     return read;
   };
@@ -104,7 +105,7 @@ function refs(doc: ParsedDocument, subject: string, predicate: string): string[]
 }
 
 function isAuthenticated(url: string, opts: ResolveOptions): boolean {
-  const parsed = httpUrl(url);
+  const parsed = safePathUrl(url);
   return parsed !== null && opts.authenticatedOrigins?.has(parsed.origin) === true;
 }
 
@@ -114,8 +115,8 @@ function registrationTarget(
   registration: string,
   opts: ResolveOptions,
 ): string | null {
-  const parent = httpUrl(registry);
-  const child = httpUrl(registration);
+  const parent = safePathUrl(registry);
+  const child = safePathUrl(registration);
   if (!parent || !child || !parent.pathname.endsWith('/') || !child.pathname.endsWith('/'))
     return null;
   // Queries/fragments must not turn a metadata document into a broader pinned container.
@@ -123,6 +124,7 @@ function registrationTarget(
   if (
     parent.origin !== child.origin ||
     parent.pathname === child.pathname ||
+    // The parent's trailing slash makes this a whole-segment comparison of normalised paths.
     !child.pathname.startsWith(parent.pathname)
   )
     return null;

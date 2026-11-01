@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * DATA-CLASS → CONCRETE TARGET resolution — the compile step (design §2.3, resolution ladder).
  *
@@ -25,6 +26,7 @@
 
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
+import { safePathUrl } from './class-path';
 import {
   type ClassResolution,
   memoiseResolveFetch,
@@ -68,13 +70,8 @@ function parse(baseUrl: string, turtle: string): Store {
 
 /** Normalise an IRI to its `origin + pathname`, keeping only http(s); else `null`. */
 function normaliseTargetUrl(value: string): { url: string; origin: string } | null {
-  let u: URL;
-  try {
-    u = new URL(value);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const u = safePathUrl(value);
+  if (!u) return null;
   return { url: `${u.origin}${u.pathname}`, origin: u.origin };
 }
 

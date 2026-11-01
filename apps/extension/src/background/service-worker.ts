@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -52,6 +53,7 @@ import {
   type PinnedTarget,
   pruneExpiredGrants,
 } from './core/class-grant';
+import { safePathUrl } from './core/class-path';
 import { normaliseAccessRequest } from './core/class-request';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
@@ -1197,6 +1199,8 @@ function makeResolveFetch(
       const authenticated = useCredentials && url !== webId;
       const fetchImpl: typeof fetch = (input, init) =>
         cancellable(signal, async () => {
+          // Validate every direct send, including the destination exposed by a redirect probe.
+          if (!safePathUrl(input.toString())) throw new Error('Ambiguous discovery path denied');
           await beforeRequest(input.toString(), authenticated);
           signal.throwIfAborted();
           if (isTokenEndpoint(input.toString(), session.tokenEndpoint))
