@@ -116,6 +116,11 @@ import {
 | **Mandate** | `evaluateAutonomy(policy, proposal)` / `createSolidVcMandateVerifier(…)` | ODRL evaluation + the signed-mandate loader. |
 | **Outbox executor** | `runOutboxOnce({ verifier, senders, proposals, outbox, ownerWebId, … })` | Deterministic, no-LLM; the enforcement point + the send. `senders` is the credential seam. |
 
+`runOutboxOnce` counts transmission outcomes in `sent` and `failed`, and final receipt-write
+failures separately in `receiptErrors`. Once a sender succeeds, the message stays counted as
+sent even if its receipt cannot be finalized. The existing claim remains an at-most-once
+marker, so a later pass skips the proposal rather than sending it again.
+
 ## What runs today vs. what needs credentials / deploy
 
 The live Actor's injected authenticated fetch must use credentials that lack `acl:Control`
