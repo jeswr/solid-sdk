@@ -58,6 +58,8 @@ export type DocsStoreOptions = {
   fetchImpl?: typeof fetch;
   storage?: StorageClient;
   container?: string;
+  /** Called as soon as storage assigns a new collection, even if document creation later fails. */
+  onContainerChange?: (container: string) => void;
 };
 
 export class DocsStore {
@@ -71,6 +73,7 @@ export class DocsStore {
     private readonly fetchImpl?: typeof fetch,
     private readonly storage?: StorageClient,
     container?: string,
+    private readonly onContainerChange?: (container: string) => void,
   ) {
     this.explicitContainer = container !== undefined;
     this.containerUrl = container ?? new URL(DOCS_SLUG, podRoot).href;
@@ -191,6 +194,7 @@ export class DocsStore {
       this.containerUrl = (
         await storage.create(this.podRoot, null, { kind: "container", name: "pod-docs" })
       ).url;
+      this.onContainerChange?.(this.containerUrl);
     }
     return storage;
   }
@@ -252,6 +256,13 @@ export class DocsStore {
 }
 
 export function createDocsStore(opts: DocsStoreOptions): DocsStore {
-  return new DocsStore(opts.podRoot, opts.webId, opts.fetchImpl, opts.storage, opts.container);
+  return new DocsStore(
+    opts.podRoot,
+    opts.webId,
+    opts.fetchImpl,
+    opts.storage,
+    opts.container,
+    opts.onContainerChange,
+  );
 }
 export { nameFromUrl };

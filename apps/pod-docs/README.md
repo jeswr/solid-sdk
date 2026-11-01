@@ -22,11 +22,13 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 
 ## Storage client API
 
-`createDocsStore({ podRoot, webId, fetchImpl?, storage?, container? })` uses the
+`createDocsStore({ podRoot, webId, fetchImpl?, storage?, container?, onContainerChange? })` uses the
 public PodClient storage surface. Inject either memory protocol with `storage`.
 Supply `container` to reopen a server-assigned LWS collection; otherwise the first
 create prepares the default collection and retains its returned identifier in
 `store.container`. Explicit missing collections fail without creating elsewhere.
+`onContainerChange(container)` reports a newly assigned collection immediately,
+including when the subsequent document write fails.
 Document creation uses relative RDF fragments so server-assigned URLs retain valid
 revision subjects. `save` requires the ETag from the prior read; `remove` accepts
 that ETag or obtains a fresh one. `share` delegates to `@jeswr/pod-access`.
@@ -102,6 +104,13 @@ import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 // In production pass NO fetch — the auth-patched global runs. Tests inject one.
 <DocumentBrowser podRoot="https://alice.pod/" webId={webId} />;
 ```
+
+For server-assigned collections, pass `container` to restore the saved identifier.
+Use `onContainerChange({ podRoot, webId, container })` to save it, keyed by both
+WebID and storage root, then supply it on remount. The host owns persistence;
+the browser does not save collection selections itself. Updating `container`
+to the just-assigned URL keeps the open document; selecting another collection
+reloads its listing.
 
 It lists the documents in the pod's `pod-docs/` container (title + modified), opens any document
 (title, format, author, modified, body), and surfaces loading / empty / error / access-denied
