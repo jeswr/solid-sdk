@@ -6,7 +6,7 @@ import {
   type StorageClient,
   StorageError,
 } from "@jeswr/storage-client";
-import { isOnline, platform } from "../runtime.js";
+import { isOnline, platform, runCleanups } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { ChangeEvent, Timers } from "../types.js";
 
@@ -169,12 +169,14 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
   };
   subscription.cleanup = () => {
     stopped = true;
-    clear();
-    active?.abort();
-    snapshots.clear();
-    platform.removeEventListener?.("offline", offline);
-    platform.removeEventListener?.("online", online);
-    options.signal?.removeEventListener("abort", abort);
+    runCleanups([
+      clear,
+      () => active?.abort(),
+      () => snapshots.clear(),
+      () => platform.removeEventListener?.("offline", offline),
+      () => platform.removeEventListener?.("online", online),
+      () => options.signal?.removeEventListener("abort", abort),
+    ]);
   };
   platform.addEventListener?.("offline", offline);
   platform.addEventListener?.("online", online);

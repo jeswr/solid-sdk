@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createPodClient, type PodClientOptions } from "@jeswr/storage-client";
 import { createChangeNormalizer } from "../normalise.js";
-import { isOnline, platform, systemTimers } from "../runtime.js";
+import { isOnline, platform, runCleanups, systemTimers } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { EventSourceLike, NotificationsDependencies, WebSocketLike } from "../types.js";
 import { channelUrl, validateChannelUrl } from "./channel-url.js";
@@ -109,16 +110,23 @@ export function createPushChannel(
       lastFrame = new Date(earliest);
     }
     frameTimes.clear();
-    if (renewal !== undefined) timers.clearTimeout(renewal);
-    renewal = undefined;
-    active?.abort();
-    active = undefined;
-    for (const cleanup of sockets.values()) cleanup();
-    sockets.clear();
-    for (const stream of streams) stream.close();
-    streams.clear();
-    for (const url of subscriptions) removeSubscription(url);
-    subscriptions.clear();
+    try {
+      runCleanups([
+        () => {
+          if (renewal !== undefined) timers.clearTimeout(renewal);
+        },
+        () => active?.abort(),
+        ...sockets.values(),
+        ...Array.from(streams, (stream) => () => stream.close()),
+        ...Array.from(subscriptions, (url) => () => removeSubscription(url)),
+      ]);
+    } finally {
+      renewal = undefined;
+      active = undefined;
+      sockets.clear();
+      streams.clear();
+      subscriptions.clear();
+    }
   };
   const schedule = (delay: number) => {
     if (stopped) return;
@@ -321,7 +329,11 @@ export function createPushChannel(
           // Register cancellation before publishing live; observers may close synchronously.
           const stream = {
             close: () => {
-              void reader.cancel().catch(() => {});
+              try {
+                void reader.cancel().catch(() => {});
+              } catch {
+                // Cancellation is best effort, including synchronous reader failures.
+              }
             },
           };
           streams.add(stream);
@@ -416,17 +428,23 @@ export function createPushChannel(
         socket.addEventListener("error", onError);
         socket.addEventListener("close", onFailure);
         sockets.set(socket, () => {
-          clearHeartbeat();
-          socket.removeEventListener("open", onOpen);
-          socket.removeEventListener("message", onMessage);
-          if (eventStream) socket.removeEventListener("notification", onMessage);
-          socket.removeEventListener("error", onError);
-          socket.removeEventListener("close", onFailure);
-          try {
-            socket.close();
-          } catch {
-            /* Detached first: close errors cannot prevent cleanup. */
-          }
+          runCleanups([
+            clearHeartbeat,
+            () => socket.removeEventListener("open", onOpen),
+            () => socket.removeEventListener("message", onMessage),
+            () => {
+              if (eventStream) socket.removeEventListener("notification", onMessage);
+            },
+            () => socket.removeEventListener("error", onError),
+            () => socket.removeEventListener("close", onFailure),
+            () => {
+              try {
+                socket.close();
+              } catch {
+                /* Detached first: close errors cannot prevent cleanup. */
+              }
+            },
+          ]);
         });
         armHeartbeat();
       }
@@ -446,14 +464,19 @@ export function createPushChannel(
   const abort = () => {
     void subscription.close();
   };
-  subscription.cleanup = () => {
+  subscription.cleanup = async () => {
     stopped = true;
-    clearRetry();
-    disconnect();
-    platform.removeEventListener?.("offline", offline);
-    platform.removeEventListener?.("online", online);
-    options.signal?.removeEventListener("abort", abort);
-    return Promise.all(deletions).then(() => {});
+    try {
+      runCleanups([
+        clearRetry,
+        disconnect,
+        () => platform.removeEventListener?.("offline", offline),
+        () => platform.removeEventListener?.("online", online),
+        () => options.signal?.removeEventListener("abort", abort),
+      ]);
+    } finally {
+      await Promise.all(deletions);
+    }
   };
   platform.addEventListener?.("offline", offline);
   platform.addEventListener?.("online", online);

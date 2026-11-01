@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChangeEvent, Subscription, SubscriptionState } from "./types.js";
 
 type Listeners = {
@@ -73,10 +74,14 @@ export class SubscriptionController implements Subscription {
         rejectClose = reject;
       });
       this.transition("closed");
-      const cleanup = this.cleanup();
-      for (const finish of this.finish) finish();
-      for (const listeners of Object.values(this.listeners)) listeners.clear();
-      void Promise.resolve(cleanup).then(resolveClose, rejectClose);
+      try {
+        void Promise.resolve(this.cleanup()).then(resolveClose, rejectClose);
+      } catch (error) {
+        rejectClose(error);
+      } finally {
+        for (const finish of this.finish) finish();
+        for (const listeners of Object.values(this.listeners)) listeners.clear();
+      }
     }
     return this.closing;
   }

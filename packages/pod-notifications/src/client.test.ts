@@ -648,6 +648,78 @@ test("queued callbacks cannot restart a closed or silently offline subscription"
   await offline.close();
 });
 
+test("poll cleanup releases listeners after timer cancellation throws", async () => {
+  const net = network();
+  const { client, timers } = fixture();
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await client.subscribe([root], { signal: abort.signal });
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const error = new Error("timer cleanup failed");
+  const clearTimeout = timers.clearTimeout.bind(timers);
+  vi.spyOn(timers, "clearTimeout").mockImplementation((handle) => {
+    clearTimeout(handle);
+    throw error;
+  });
+  const close = sub.close();
+  await expect(close).rejects.toBe(error);
+  expect(sub.close()).toBe(close);
+  expect(sub.state).toBe("closed");
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  expect(timers.pending).toBe(0);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  net.set(false);
+  net.set(true);
+  await timers.advanceBy(100_000);
+  expect(timers.pending).toBe(0);
+});
+
+test("poll cleanup aborts in-flight work and removes remaining listeners after a removal throws", async () => {
+  const net = network();
+  const { storage, client, timers } = fixture();
+  const head = await storage.head(root);
+  const gate = Promise.withResolvers<typeof head>();
+  const request = vi.spyOn(storage, "head").mockReturnValueOnce(gate.promise);
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await client.subscribe([root], { signal: abort.signal });
+  const tick = timers.advanceBy(0);
+  const error = new Error("listener cleanup failed");
+  const removeListener = globalThis.removeEventListener;
+  vi.stubGlobal("removeEventListener", (type: string, handler: () => void) => {
+    removeListener(type, handler);
+    if (type === "offline") throw error;
+  });
+  await expect(sub.close()).rejects.toBe(error);
+  expect(request.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  gate.resolve(head);
+  await tick;
+  expect(timers.pending).toBe(0);
+});
+
+test("disabled polling close rejects a throwing abort-listener cleanup without hanging", async () => {
+  const { client } = fixture();
+  const abort = new AbortController();
+  const sub = await client.subscribe([root], { signal: abort.signal, pollIntervalMs: 0 });
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const error = new Error("abort listener cleanup failed");
+  const removeListener = abort.signal.removeEventListener.bind(abort.signal);
+  const removeAbort = vi
+    .spyOn(abort.signal, "removeEventListener")
+    .mockImplementation((...args) => {
+      removeListener(...args);
+      throw error;
+    });
+  const close = sub.close();
+  await expect(close).rejects.toBe(error);
+  expect(sub.close()).toBe(close);
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  expect(removeAbort).toHaveBeenCalledTimes(1);
+});
+
 test("closing from resync cannot leave a timer behind; failed reconciliation postpones resync", async () => {
   const net = network(false);
   const { storage, client, timers } = fixture();
