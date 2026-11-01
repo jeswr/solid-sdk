@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
 import { type EmailRenderOptions, emailRenderer } from "../email/render.js";
@@ -12,6 +13,7 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import type { AccountRef, TokenProvider, Wire } from "../types.js";
+import type { GmailTenant } from "./errors.js";
 import { gmailRest, messageId, rawMessage, record, responseBody } from "./rest.js";
 
 export interface GmailSendOptions extends EmailRenderOptions {
@@ -20,6 +22,8 @@ export interface GmailSendOptions extends EmailRenderOptions {
   readonly tokens: TokenProvider;
   readonly parseEmail: EmailParser;
   readonly transport?: OriginFetchOptions;
+  /** Workspace account context for setup guidance; omit for personal Gmail. */
+  readonly tenant?: GmailTenant;
   /** Executor verifies a current owner approval bound to these bytes and account. */
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
 }
@@ -32,7 +36,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
   const recipients = new Map(options.recipients);
   const parseEmail = options.parseEmail;
   const footer = options.footer ?? AGENT_FOOTER;
-  const rest = gmailRest(options.transport);
+  const rest = gmailRest(options.transport, options.tenant);
   async function checked(wire: Wire) {
     const snapshot = renderer.assertWire(wire);
     // Strict parity here always: a local outbound entry may never be lenient.

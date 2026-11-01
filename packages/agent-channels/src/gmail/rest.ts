@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { accountId, assertGrant } from "../direct/shared.js";
 import { MAX_EMAIL_BYTES } from "../email-mime.js";
 import { ChannelParseError } from "../errors.js";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../origins.js";
-import type { AccountRef, TokenProvider } from "../types.js";
+import type { AccountRef, ReadGrant, SendGrant, TokenProvider } from "../types.js";
+import { type GmailTenant, mapGmailError } from "./errors.js";
 
 // Private immutable source; exported sets are copies and cannot widen credential destinations.
 const ORIGIN_LIST = ["https://gmail.googleapis.com", "https://www.googleapis.com"];
@@ -55,7 +57,7 @@ export function rawMessage(
     historyId: body.historyId === undefined ? undefined : historyId(body.historyId),
   };
 }
-export function gmailRest(options: OriginFetchOptions = {}) {
+export function gmailRest(options: OriginFetchOptions = {}, tenant?: GmailTenant) {
   const scoped = createOriginScopedFetch(gmailOrigins(), options);
   return async (
     path: string,
@@ -66,10 +68,15 @@ export function gmailRest(options: OriginFetchOptions = {}) {
     beforeRequest?: () => Promise<void>,
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
-    const grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
+    let grant: ReadGrant | SendGrant;
+    try {
+      grant = access === "read" ? await tokens.read(ref) : await tokens.send(ref);
+    } catch (error) {
+      throw mapGmailError(error, tenant) ?? error;
+    }
     assertGrant(grant, access);
     await beforeRequest?.();
-    return scoped(`${BASE}${path}`, {
+    const response = await scoped(`${BASE}${path}`, {
       method: body === undefined ? "GET" : "POST",
       redirect: "manual",
       headers: {
@@ -78,6 +85,19 @@ export function gmailRest(options: OriginFetchOptions = {}) {
       },
       ...(body === undefined ? {} : { body }),
     });
+    // Only explicit OAuth refusals on authentication/client-error statuses are definitive.
+    // The origin guard bounds response bytes and applies its deadline while reading.
+    if ([400, 401, 403].includes(response.status)) {
+      let error: unknown;
+      try {
+        error = await response.json();
+      } catch {
+        // Empty or malformed bodies retain the existing HTTP failure semantics.
+      }
+      const setup = mapGmailError(error, tenant);
+      if (setup) throw setup;
+    }
+    return response;
   };
 }
 export async function responseBody(response: Response): Promise<Record<string, unknown>> {

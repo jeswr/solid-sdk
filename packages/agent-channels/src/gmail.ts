@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DEFAULT_LIMITS, parseBoundedJson } from "@jeswr/agent-model";
 import type { ChannelBinding } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { assertEmailAddress, assertFooter, type EmailConfig, inspectEmail } from "./email-mime.js";
 import { ChannelParseError } from "./errors.js";
+import type { GmailTenant } from "./gmail/errors.js";
 import {
   gmailOrigins,
   gmailRest,
@@ -21,11 +23,14 @@ import { AGENT_FOOTER, EMAIL_MIME } from "./profiles.js";
 import type { TokenProvider } from "./types.js";
 
 export { triageLinkedInNotification } from "./gmail/triage.js";
+export { GmailSetupRequiredError, type GmailTenant, mapGmailError } from "./gmail/errors.js";
 
 export const ORIGINS: ReadonlySet<string> = gmailOrigins();
 export interface GmailReaderOptions extends EmailConfig {
   readonly tokens: TokenProvider;
   readonly transport?: OriginFetchOptions;
+  /** Workspace account context for setup guidance; omit for personal Gmail. */
+  readonly tenant?: GmailTenant;
 }
 interface State {
   account: string;
@@ -66,7 +71,7 @@ export function createGmailReader(options: GmailReaderOptions): ChannelBinding {
   };
   assertEmailAddress(config.recipient);
   assertFooter(footer);
-  const rest = gmailRest(options.transport);
+  const rest = gmailRest(options.transport, options.tenant);
   return {
     id: "gmail",
     carriage: EMAIL_MIME,

@@ -1,16 +1,14 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-channels
 
 > Experimental — AI-agent-generated. Private workspace package; sends default to dry-run.
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
-(A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez) and shared metadata carriage
-(A-014 / sst-wxu), and Microsoft Graph mail (A-024 / sst-1zu).
+(A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez), shared metadata carriage
+(A-014 / sst-wxu), Microsoft Graph mail (A-024 / sst-1zu) and Discord (A-030 / sst-r57).
 The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
-
-(A-014 / sst-wxu) and Discord (A-030 / sst-r57). The `ChannelBinding` and `CarriageProfile`
-declarations follow §3.1.
 
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
@@ -186,8 +184,9 @@ Validity is rechecked after credentials and approval await. Dry-run requests no
 credentials and makes no network call.
 
 Transmit uses `users.messages.send` with the reviewed MIME as canonical base64url.
-HTTP 400 is a definitive `ProviderRejectedError`; other failures or a malformed
-acknowledgement remain uncertain. This binding performs no send retries. Lookup
+HTTP 400 is a definitive `ProviderRejectedError`; explicit OAuth refusals described
+below also fail definitively. Other failures or a malformed acknowledgement remain
+uncertain. This binding performs no send retries. Lookup
 preserves the pilot Message-ID derivation and uses read credentials to search
 `rfc822msgid:` across all labels and inspects at
 most ten raw candidates with `verifyProviderCopy`. Added provider headers are
@@ -492,3 +491,25 @@ not remote Signal/WhatsApp delivery. Encrypted portal sends remain unsupported.
 See the [hosted bridge device-linking runbook](docs/hosted-matrix-bridges.md) for A-028
 setup and revocation. Tests use sanitized event-shape fixtures and fake transports;
 they never link accounts or contact live messaging providers.
+
+Google Workspace accounts reuse these Gmail factories and the `gmail` binding id.
+Both factories accept `tenant: "ODI"` for ODI or `tenant: "google_workspace"` for
+other managed accounts; omit it for personal Gmail. Tenant context is captured
+at construction and affects setup guidance only.
+
+`./gmail` exports `mapGmailError(error, tenant?)` and `GmailSetupRequiredError`.
+An exact `admin_policy_enforced` code maps to `state: "setup-required"` and
+`detail: "ask ODI admin to allow-list client id"` for ODI (otherwise Google
+Workspace admin). `access_denied` maps to the same state with a consent-review
+detail; it does not by itself identify an admin policy block. The mapper accepts
+an exact code string or `{ error: code }`, discards provider descriptions, and
+returns `undefined` for unrelated errors. A credential/OAuth integration can use
+this pure mapper after validating its callback; it adds no OAuth network origins.
+
+Read and send credential failures and HTTP 400/401/403 OAuth error bodies use the
+same mapping automatically. `GmailSetupRequiredError` extends `ProviderRejectedError`
+and exposes `state`, `code`, and `detail`; callers can persist the state separately
+from the explanatory detail. Lookup still returns `unknown` on setup failures.
+The A-036 registry importer already corrects ODI email's provider to
+`google_workspace`, preserving the Microsoft provider for Teams. See the
+[Workspace allow-list runbook](../../docs/runbooks/workspace-allowlist.md) for admin setup.
