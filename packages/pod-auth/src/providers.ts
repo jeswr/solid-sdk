@@ -34,7 +34,9 @@ import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
 import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
 
-export type AgentPolicy = Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback" | "clock">;
+export type AgentPolicy = Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback" | "clock"> & {
+  fetch?: typeof fetch;
+};
 export type AgentConfiguration =
   | { kind: "cid"; cid: CidSubject }
   | { kind: "client-credentials"; issuer: string; clientId: string; clientSecret: string };
@@ -45,7 +47,7 @@ export function createAgentProviders(
   config: AgentConfiguration,
   hooks: { challenge(url: string): void; session(signal: AbortSignal): void },
 ) {
-  const transport = nonReactiveFetch();
+  const transport = policy.fetch ?? nonReactiveFetch();
   const http: HttpOptions = {
     allowInsecureRequests: policy.allowInsecureLoopback === true,
     fetch: (input, init) => {

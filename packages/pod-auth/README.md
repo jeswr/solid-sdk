@@ -105,6 +105,18 @@ const agent = await forCid({
 });
 ```
 
+Node factories accept an optional trusted `fetch`, captured at construction without changing
+`globalThis.fetch`. Protocol endpoint and loopback checks still apply on every hop.
+
+The same Node entry exports `createNodeOidcClient`, `ServerAuthorizationState`,
+`exportServerDpopKey`, `importServerDpopKey` and `SERVER_MAX_REPLAY_BODY_BYTES` for trusted
+server login brokers. This split callback protocol delegates to reactive-authentication's
+server OIDC client, with S256, state, nonce, ID-token signatures and bounded DPoP nonce retries.
+Its caller must encrypt pending state and the private JWK envelope, consume callbacks once,
+claim refresh ownership atomically, persist rotation before use, and scope every resource fetch.
+The envelope retains the original private JWK for JSON-only encrypted server vaults; signing
+keys are imported as non-extractable. Browser persistence continues to store CryptoKeys only.
+
 Both factories establish an identity before returning. Client credentials use a DPoP grant and report
 the configured client identifier as the subject, with no inferred WebID. CID mode signs short-lived,
 AS-audience JWTs with `sub = iss = client_id = documentUrl`, exchanged for storage Bearer tokens.

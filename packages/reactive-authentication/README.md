@@ -317,3 +317,12 @@ The paradigm originates in [@langsamu](https://github.com/langsamu)'s research p
 [.NET ReactiveAuthentication](https://github.com/ReactiveAuthentication/ReactiveAuthentication). This version
 builds on [solid-contrib/reactive-authentication](https://github.com/solid-contrib/reactive-authentication).
 MIT licensed; see [LICENSE](LICENSE).
+
+## Server login brokers
+
+`createServerOidcClient` supplies a split authorization/callback/refresh flow to `pod-auth/node`.
+It uses oauth4webapi for discovery, S256, state/nonce, signed ID-token validation and DPoP.
+The broker owns encrypted pending-state and private-JWK envelopes, single-use callback consumption,
+refresh CAS, durable retirement and URL scope. A server signing key is exported once for its encrypted
+JSON vault, then imported non-extractably; browser sessions retain CryptoKey persistence.
+Resource bodies have an abortable 10 MiB replay cap and nonce challenges retry once.

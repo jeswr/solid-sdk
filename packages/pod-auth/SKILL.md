@@ -9,6 +9,10 @@ description: Work on @jeswr/pod-auth, the suite client authentication and sessio
 `createPodAuth` supplies injected UI hooks, provider composition, `fetch`, `login`, `identity`,
 `restore`, `logout`, `remembered` and lifecycle event subscriptions. Read `README.md` for the API.
 `./node` supplies `forClientCredentials` and `forCid` with explicit static roots and memory-only credentials.
+Its optional trusted fetch injection never replaces global fetch or relaxes protocol endpoint checks.
+`createNodeOidcClient` delegates split server authorization to reactive-authentication. Its sensitive
+state and original private JWK envelope belong only in an encrypted server vault with callback consume,
+refresh CAS and durable retirement. Signing keys are non-extractable; browser key storage is unchanged.
 CID mode (`lws.subject.cid`) requires a caller-provided non-extractable ES256 key; resolve and authorize
 its exact same-document authentication method and prove key possession before releasing a credential.
 Never infer a WebID from an opaque client-credentials token or fall back to OIDC for a failed CID identity.

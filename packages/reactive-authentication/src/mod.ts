@@ -56,6 +56,7 @@ export * from "./ReactiveAuthenticationClient.js";
 export * from "./ReactiveAuthenticationError.js";
 export * from "./ReactiveFetchManager.js";
 export * from "./ReactiveFetchWorkerManager.js";
+export * from "./ServerOidcClient.js";
 export * from "./SessionFence.js";
 export * from "./SessionSupersededError.js";
 export * from "./SolidUmaTokenProvider.js";
