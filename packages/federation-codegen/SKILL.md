@@ -3,6 +3,7 @@ name: federation-codegen
 description: Use when generating a typed domain model from a sector ontology plus SHACL profile, writing a codegen.config.json, running admission or the fidelity assertion, migrating a hand-written model package to generated code, or changing @jeswr/federation-codegen.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Domain-model code generation
 
@@ -33,7 +34,14 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   waiver, every literal datatyped, every class covered by a NodeShape. Do not pass
   `--allow-unadmitted` in committed generation scripts.
 - Requiredness comes from SHACL severity (G1): only `sh:Violation` `minCount >= 1` is
-  fail-closed. SHOULD constraints are `sh:Warning`.
+  fail-closed. SHOULD constraints are `sh:Warning`. Config cannot disable a MUST.
+- `iriScheme: "https"` is the HTTPS-only guard compiled from `sh:pattern "^https://"`;
+  `"http-https"` permits both schemes. Fidelity rejects widening an HTTPS-only shape.
+- SHACL admission is closed: unsupported property/node constraint components and unknown
+  patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
+  for string-valued nonblank fields. Advisory flat class/node hints may only be omitted with
+  a warning, because they cannot weaken a Violation MUST. Composite link targets must satisfy
+  their class (explicit ontology subclass ancestry allowed) and referenced node shape.
 - Config may add guards (defaults, trims, sort, http(s) scheme) but never contradict the
   shape; the fidelity assertion fails if a guard value disagrees with SHACL or a MUST is dropped.
 - `skos:closeMatch`/`exactMatch` are not substitutions. Generate the exact IRIs in the profile.

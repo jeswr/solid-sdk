@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * Compile a normalized SHACL shape model + the per-domain codegen config into a
  * {@link ModelManifest} (model.json) — the VERIFIED PROJECTION of shapes.ttl
@@ -63,11 +64,43 @@ export interface CompileResult {
   provenance: FieldProvenance[];
 }
 
-/** True for a `sh:pattern` that restricts values to http(s) schemes. */
+/** Closed patterns whose semantics have a reviewed runtime projection. */
+export function iriSchemeForPattern(pattern: string | undefined): ManifestFieldGuards["iriScheme"] {
+  if (pattern === "^https?://") return "http-https";
+  if (pattern === "^https://") return "https";
+  return undefined;
+}
+
 export function isHttpPattern(pattern: string | undefined): boolean {
-  if (pattern === undefined) return false;
-  const p = pattern.replace(/\s+/g, "");
-  return p === "^https?://" || p === "^https://" || p === "^http://";
+  return iriSchemeForPattern(pattern) !== undefined;
+}
+
+/** Class compatibility uses ONLY explicit rdfs:subClassOf edges from the input ontology. */
+export function classConforms(shapes: NormalizedShapes, actual: string, required: string): boolean {
+  const stack = [actual];
+  const seen = new Set<string>();
+  while (stack.length) {
+    const current = stack.pop() as string;
+    if (current === required) return true;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    stack.push(...(shapes.superClasses?.[current] ?? []));
+  }
+  return false;
+}
+
+/** A link's configured target must satisfy BOTH its class and its referenced shape. */
+export function linkTargetConforms(
+  shapes: NormalizedShapes,
+  c: ShapeConstraint,
+  targetClass: string,
+): boolean {
+  if (c.hasClass !== undefined && !classConforms(shapes, targetClass, c.hasClass)) return false;
+  if (c.node !== undefined) {
+    const target = shapes.nodeShapes.find((shape) => shape.iri === c.node);
+    if (target === undefined || target.targetClass !== targetClass) return false;
+  }
+  return true;
 }
 
 function collectionOf(constraint: ShapeConstraint): "set" | undefined {
@@ -115,7 +148,7 @@ function compileField(
 
   // Shape-derived: http(s) scheme guard from an ^https?:// pattern on an IRI field.
   if (constraint.kind === "iri" && isHttpPattern(constraint.pattern)) {
-    guards.iriScheme = "http-https";
+    guards.iriScheme = iriSchemeForPattern(constraint.pattern);
   }
   // G1 — SEVERITY-AWARE requiredness: fail-closed on absence only when the required
   // constraint is Violation-graded (or severity absent, SHACL's default). A
@@ -149,14 +182,23 @@ function compileField(
     guards.nonBlank = true;
   }
 
+  if (constraint.pattern === "\\S" && hasStringRuntimeValue(constraint)) guards.nonBlank = true;
+
   // Config-supplied guards (recorded as provenance so fidelity can trace them).
   if (fieldConfig) {
     const record = (key: string) => provenance.configGuards.push(key);
     if (fieldConfig.iriScheme !== undefined) {
+      const requiredScheme = iriSchemeForPattern(constraint.pattern);
+      if (requiredScheme === "https" && fieldConfig.iriScheme !== "https") {
+        throw new Error(`field ${name} config widens the https-only pattern scheme`);
+      }
       guards.iriScheme = fieldConfig.iriScheme;
       record("iriScheme");
     }
     if (fieldConfig.requiredFailClosed !== undefined) {
+      if (guards.requiredFailClosed === true && fieldConfig.requiredFailClosed !== true) {
+        throw new Error(`field ${name} config cannot disable requiredFailClosed on a MUST`);
+      }
       guards.requiredFailClosed = fieldConfig.requiredFailClosed;
       record("requiredFailClosed");
     }
@@ -259,6 +301,7 @@ function compileEntity(
 function compileCompositeEntity(
   compConfig: CompositeEntityConfig,
   shapeByTarget: Map<string, NodeShapeModel>,
+  shapes: NormalizedShapes,
   provenance: FieldProvenance[],
 ): CompositeManifestEntity {
   assertIdentifier(compConfig.name, "codegen composite entity name");
@@ -352,6 +395,12 @@ function compileCompositeEntity(
             `composite ${compConfig.name} node "${nodeName}" links the multi-valued property "${shapeFieldName}" (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1) — set-valued nested links are a documented future feature`,
           );
         }
+        const targetClass = compConfig.nodes[targetNode]?.targetClass;
+        if (!targetClass || !linkTargetConforms(shapes, constraint, targetClass)) {
+          throw new Error(
+            `composite ${compConfig.name} link ${shapeFieldName} target class does not conform to sh:class / sh:node`,
+          );
+        }
         claimName(shapeFieldName, nodeName);
         const nested: ManifestField = {
           name: shapeFieldName,
@@ -434,7 +483,7 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
     .map((shape) => compileEntity(shape, config, provenance));
   const compositeEntities: AnyManifestEntity[] = config.entities
     .filter(isCompositeConfig)
-    .map((c) => compileCompositeEntity(c, shapeByTarget, provenance));
+    .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, provenance));
 
   const manifest: ModelManifest = validateManifest({
     manifestVersion: 1,

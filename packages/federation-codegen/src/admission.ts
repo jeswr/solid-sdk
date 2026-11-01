@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * L1 (tier-a) — the STRUCTURAL admission validator (design §4). Pure JS,
  * FAIL-CLOSED, run on every generation: it refuses to generate from an ontology /
@@ -16,7 +17,11 @@
  *      surfaces a present-but-malformed list as an empty value set.
  */
 
+import { literalMapper } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
+import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
+import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { Graph, RDF, SH } from "./rdf.js";
 import type { NormalizedShapes } from "./shapes.js";
 
 export type AdmissionSeverity = "error" | "warning";
@@ -61,10 +66,116 @@ export function admit(
   ontology: NormalizedOntology,
   shapes: NormalizedShapes,
   namespace: string,
+  config?: CodegenConfig,
 ): AdmissionReport {
   const violations: AdmissionViolation[] = [];
   const add = (code: string, severity: AdmissionSeverity, subject: string, message: string) =>
     violations.push({ code, severity, subject, message });
+
+  // Inspect the ORIGINAL constraint graph, not just the lossy normalized projection.
+  // Metadata never constrains accepted instance data. Every other sh:* predicate
+  // must have an effective runtime projection; unknown components fail even at
+  // advisory severity. This also covers external / orphan / nested shape subjects.
+  const graph = new Graph(shapes.quads);
+  const metadata = new Set(["name", "description", "message", "order", "group", "severity"]);
+  const propertyComponents = new Set([
+    "path",
+    "datatype",
+    "nodeKind",
+    "minCount",
+    "maxCount",
+    "in",
+    "minInclusive",
+    "maxInclusive",
+    "minLength",
+    "pattern",
+    "class",
+    "node",
+  ]);
+  const nodeComponents = new Set(["targetClass", "property"]);
+  const subjects = new Map(
+    shapes.quads
+      .filter(
+        (q) =>
+          q.predicate.value.startsWith(SH) ||
+          (q.predicate.value === `${RDF}type` &&
+            [`${SH}NodeShape`, `${SH}PropertyShape`].includes(q.object.value)),
+      )
+      .map((q) => [q.subject.value, q.subject]),
+  );
+  for (const subject of subjects.values()) {
+    const isProperty =
+      graph.objects(subject, `${SH}path`).length > 0 ||
+      graph.has(subject, `${RDF}type`, `${SH}PropertyShape`);
+    const path = graph.object(subject, `${SH}path`);
+    const parent = graph.subjects(`${SH}property`, subject)[0];
+    const tc = parent === undefined ? undefined : graph.value(parent, `${SH}targetClass`);
+    const shape = shapes.nodeShapes.find((candidate) => candidate.targetClass === tc);
+    const c = shape?.properties.find((candidate) => candidate.pathIri === path?.value);
+    const name = c?.name ?? path?.value.split(/[/#]/).pop() ?? "";
+    const isNested =
+      config?.entities.some(
+        (entity) =>
+          isCompositeConfig(entity) &&
+          Object.values(entity.nodes).some(
+            (node) => node.targetClass === tc && node.links?.[name] !== undefined,
+          ),
+      ) ?? false;
+    for (const q of graph.store.getQuads(subject, null, null, null)) {
+      if (!q.predicate.value.startsWith(SH)) continue;
+      const component = q.predicate.value.slice(SH.length);
+      if (metadata.has(component)) continue;
+      const unsupported = (reason: string, severity: AdmissionSeverity = "error") =>
+        add("unsupported-constraint", severity, subject.value, `${q.predicate.value}: ${reason}`);
+      if (!(isProperty ? propertyComponents : nodeComponents).has(component)) {
+        unsupported("no runtime projection");
+        continue;
+      }
+      if (component !== "property" && graph.objects(subject, q.predicate.value).length !== 1) {
+        unsupported("multiple constraint parameters cannot be projected");
+      }
+      if (component === "path" && q.object.termType !== "NamedNode")
+        unsupported("only direct IRI paths are supported");
+      if (component === "nodeKind" && ![`${SH}IRI`, `${SH}Literal`].includes(q.object.value))
+        unsupported("only IRI and Literal node kinds are projected");
+      if (component === "pattern") {
+        const isString =
+          c?.kind === "iri" ||
+          (c?.datatype !== undefined && literalMapper(c.datatype).jsType === "string");
+        if (
+          !c ||
+          (!(c.kind === "iri" && isHttpPattern(c.pattern)) && !(isString && c.pattern === "\\S"))
+        )
+          unsupported("unknown pattern; no reviewed closed guard");
+      }
+      if (
+        component === "minLength" &&
+        c?.kind !== "iri" &&
+        (!c?.datatype || literalMapper(c.datatype).jsType !== "string")
+      )
+        unsupported("minLength requires a string-valued projection");
+      if (
+        ["minInclusive", "maxInclusive"].includes(component) &&
+        (!c?.datatype || literalMapper(c.datatype).jsType !== "number")
+      )
+        unsupported("numeric bounds require a numeric projection");
+      if (
+        isNested &&
+        ["pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(component)
+      )
+        unsupported("nested links cannot carry scalar guards");
+      if (["class", "node"].includes(component) && !isNested && config !== undefined) {
+        // A Warning/Info class hint on a flat IRI does not control admission.
+        // Dropping that advisory check cannot admit a record forbidden by a MUST.
+        // Its IRI term kind is still checked; the warning remains in the report.
+        const advisory = !isFailClosedSeverity(c?.severity);
+        unsupported(
+          "class/node conformance requires a composite link; advisory flat hints are omitted",
+          advisory ? "warning" : "error",
+        );
+      }
+    }
+  }
 
   // 1. Labels + definitions on every sector class + property.
   for (const c of ontology.classes) {

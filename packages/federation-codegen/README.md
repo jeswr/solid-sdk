@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -43,7 +44,13 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
 
 - **Admission (tier-a)** refuses to generate from an ontology/profile that would produce a
   silently-incomplete model (missing labels, un-domained/ranged properties, a literal without a
-  datatype, a class without a NodeShape). `error` violations block; an unbounded-set `missing-cardinality`
+  datatype, a class without a NodeShape). SHACL components are allowlisted: direct property paths,
+  datatype/IRI term kinds, cardinality, enums, numeric bounds, string minimum length, and composite
+  `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
+  the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
+  are admission errors, including on node shapes. Flat Warning/Info class/node hints may be
+  omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
+  `error` violations block; an unbounded-set `missing-cardinality`
   is an advisory `warning`.
 - **The fidelity assertion** re-derives an order-independent projection of the merged shapes and
   asserts, field-for-field and constraint-for-constraint, that `model.json` covers it exactly — and
@@ -99,7 +106,9 @@ generates a single composite entity over the runtime's composite kind:
   FLAT fields (with an optional `rename`, since the composite is ONE flat object — `dct:title` on a
   Track and an Album need distinct names); its `links` project **IRI-link** properties as `nested`
   links to a sub-node (the shape parser reads `sh:class` / `sh:node` / `sh:nodeKind sh:IRI`). The
-  cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
+  target must conform to both `sh:class` and the exact referenced `sh:node` shape. Class checks
+  accept only identity or explicit input-ontology `rdfs:subClassOf` ancestry (cycle-bounded);
+  no inferred similarity or alignment is used. The cross-node MUST (`requiredFailClosed`) derives from a link's Violation-graded `sh:minCount ≥ 1` (G1).
 - The **fidelity assertion** extends to the composite: every projected field traces to a shape
   property; a nested link maps an IRI-link property and a Violation link carries the required guard;
   and **every presence-MUST (`minCount ≥ 1`, Violation) of a node MUST be covered** — a
@@ -107,7 +116,7 @@ generates a single composite entity over the runtime's composite kind:
 - A property that is neither a `field` nor a `link` is omitted (only Warning/Info properties may be —
   a MUST omission fails fidelity). A composite claims its node target classes exclusively (they are not
   also emitted as flat entities); each node has a distinct target class; composite documents are
-  http(s)-scoped (the runtime filters/canonicalises link targets through the http(s) IRI filter).
+  http(s)-scoped; linked RDF terms must already equal their safe canonical form.
 
 ### Composite per-node wrappers (`nodes`)
 

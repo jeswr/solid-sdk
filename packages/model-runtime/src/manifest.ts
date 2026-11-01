@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The compiled shape-manifest — the runtime's ONLY input schema, and the
  * data-not-code boundary (design §7.1/§7.2). A manifest is pure data: flag / enum
@@ -11,6 +12,9 @@
  * The schema is versioned and bound to the runtime MAJOR: a manifest built for a
  * different runtime major is rejected rather than mis-interpreted.
  */
+
+import { literalMapper } from "./datatypes.js";
+import { isSafeAbsoluteIri } from "./guards.js";
 
 /** The manifest schema version this runtime interprets. */
 export const MANIFEST_VERSION = 1 as const;
@@ -37,7 +41,7 @@ const CAP = {
 /** Per-field guard flags — all pure data (enums / booleans), no computation. */
 export interface ManifestFieldGuards {
   /** Filter + canonicalise IRI values through the http(s)-only lexical filter. */
-  iriScheme?: "http-https";
+  iriScheme?: "http-https" | "https";
   /** `parse` fails closed (returns undefined) when this field is absent. */
   requiredFailClosed?: boolean;
   /** `build` drops an empty-string value (the historical `|| undefined`). */
@@ -92,7 +96,7 @@ export interface ManifestField {
   defaultNow?: boolean;
   /** `build` always materialises `default` when the value is absent. */
   materializeDefault?: boolean;
-  /** Closed enumeration (`sh:in`) — carried for typed unions; validated for caps. */
+  /** Closed enumeration (`sh:in`) — enforced on reads and writes; emitted as a typed union. */
   in?: ManifestScalar[];
   guards?: ManifestFieldGuards;
 }
@@ -213,6 +217,12 @@ function checkString(value: unknown, what: string): string {
   return value;
 }
 
+function checkIri(value: unknown, what: string): string {
+  const iri = checkString(value, what);
+  if (!isSafeAbsoluteIri(iri)) fail(`${what} must be an absolute, Turtle-safe IRI`);
+  return iri;
+}
+
 function checkScalar(value: unknown, what: string): ManifestScalar {
   if (typeof value === "string") return checkString(value, what);
   if (typeof value === "boolean") return value;
@@ -289,8 +299,10 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
   assertKnownKeys(raw, GUARD_KEYS, "field.guards");
   const g: ManifestFieldGuards = {};
   if (raw.iriScheme !== undefined) {
-    if (raw.iriScheme !== "http-https") fail('field.guards.iriScheme must be "http-https"');
-    g.iriScheme = "http-https";
+    if (raw.iriScheme !== "http-https" && raw.iriScheme !== "https") {
+      fail('field.guards.iriScheme must be "http-https" or "https"');
+    }
+    g.iriScheme = raw.iriScheme;
   }
   if (raw.requiredFailClosed !== undefined)
     g.requiredFailClosed = checkBoolean(raw.requiredFailClosed, "field.guards.requiredFailClosed");
@@ -377,7 +389,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   if (seenNames.has(name)) fail(`duplicate field.name "${name}"`);
   seenNames.add(name);
 
-  const predicate = checkString(raw.predicate, "field.predicate");
+  const predicate = checkIri(raw.predicate, "field.predicate");
 
   if (raw.kind === "nested") {
     if (!allowNested) fail('field.kind "nested" is only allowed inside a composite entity');
@@ -397,7 +409,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
 
   let datatype: string | undefined;
   if (kind === "literal") {
-    datatype = checkString(raw.datatype, "field.datatype (required for a literal field)");
+    datatype = checkIri(raw.datatype, "field.datatype (required for a literal field)");
   } else if (raw.datatype !== undefined) {
     fail("field.datatype is not allowed on an IRI field");
   }
@@ -432,6 +444,44 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
 
   field.guards = validateGuards(raw.guards);
+  const g = field.guards;
+  const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
+  const jsType = datatypeMapper?.jsType ?? "string";
+  if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");
+  for (const key of ["minLength", "nonBlank", "trim", "dropBlank"] as const) {
+    if (g[key] !== undefined && jsType !== "string") fail(`${key} requires string values`);
+  }
+  for (const key of ["minInclusive", "maxInclusive"] as const) {
+    if (g[key] !== undefined && jsType !== "number") fail(`${key} requires numeric values`);
+  }
+  for (const key of ["trim", "dropBlank", "sortOnRead"] as const) {
+    if (g[key] !== undefined && collection !== "set") fail(`${key} requires a set field`);
+  }
+  for (const key of ["emptyStringDrop", "sanitizeText"] as const) {
+    if (g[key] !== undefined && (kind !== "literal" || jsType !== "string")) {
+      fail(`${key} requires literal string values`);
+    }
+  }
+  if (g.sanitizeText !== undefined && datatypeMapper?.lexicalValid !== undefined) {
+    fail("sanitizeText is not applied to a datatype with strict lexical validation");
+  }
+  if (g.emptyStringDrop !== undefined && collection === "set")
+    fail("emptyStringDrop requires a singleton");
+  if (field.defaultNow !== undefined && (jsType !== "date" || collection === "set")) {
+    fail("defaultNow requires a singleton date field");
+  }
+  if (
+    collection === "set" &&
+    (field.default !== undefined || field.materializeDefault !== undefined)
+  ) {
+    fail("set fields cannot carry scalar defaults");
+  }
+  if (kind === "iri") {
+    field.in?.forEach((v, i) => {
+      checkIri(v, `field.in[${i}]`);
+    });
+    if (field.default !== undefined) checkIri(field.default, "field.default");
+  }
   return field;
 }
 
@@ -441,7 +491,7 @@ function validateTypeIris(raw: unknown, what: string): string[] {
   if (raw.length > CAP.type_iris_per_entity) {
     fail(`${what} exceeds the ${CAP.type_iris_per_entity} cap`);
   }
-  return raw.map((t, i) => checkString(t, `${what}[${i}]`));
+  return raw.map((t, i) => checkIri(t, `${what}[${i}]`));
 }
 
 function validateEntity(raw: Record<string, unknown>): ManifestEntity {
@@ -617,7 +667,7 @@ export function validateManifest(input: unknown): ModelManifest {
   const prefixes: Record<string, string> = {};
   for (const key of prefixKeys) {
     if (key === "__proto__") fail('manifest.prefixes may not use the key "__proto__"');
-    prefixes[key] = checkString(input.prefixes[key], `manifest.prefixes["${key}"]`);
+    prefixes[key] = checkIri(input.prefixes[key], `manifest.prefixes["${key}"]`);
   }
 
   if (!Array.isArray(input.entities) || input.entities.length === 0) {

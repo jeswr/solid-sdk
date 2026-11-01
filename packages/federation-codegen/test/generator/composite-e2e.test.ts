@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 //
 // Phase-M END-TO-END — generate a listening model from the RATCHETED MEDIA SECTOR
@@ -23,6 +24,7 @@ import {
   FidelityError,
   generateModel,
   parseShapes,
+  parseTurtle,
 } from "../../src/index.js";
 
 const MEDIA = "https://w3id.org/jeswr/sectors/media#";
@@ -44,7 +46,7 @@ const ONTOLOGY = `
 
 media:PlaybackEvent a owl:Class ; rdfs:label "Playback Event"@en ;
     skos:definition "A single datable play occurrence."@en .
-media:Track a owl:Class ; rdfs:label "Track"@en ;
+media:Track a owl:Class ; rdfs:subClassOf media:CreativeWork ; rdfs:label "Track"@en ;
     skos:definition "A playable track on a service."@en .
 media:Artist a owl:Class ; rdfs:label "Artist"@en ;
     skos:definition "A credited performing agent."@en .
@@ -205,7 +207,7 @@ describe("generate a listening model from the ratcheted media sector (bc54846)",
   });
 
   it("fidelity PASSES for the generated composite (the P0 exit criterion)", () => {
-    const shapes = parseShapes(SHAPES, SHAPES_BASE);
+    const shapes = parseShapes(SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
     expect(() => assertFidelity(shapes, compileManifest(shapes, CONFIG))).not.toThrow();
   });
 });
@@ -280,7 +282,7 @@ describe("cross-node MUSTs enforced on an untrusted scrobble document", () => {
 });
 
 describe("composite fidelity — the P0 exit criterion FAILS on a tampered composite", () => {
-  const shapes = parseShapes(SHAPES, SHAPES_BASE);
+  const shapes = parseShapes(SHAPES, SHAPES_BASE, parseTurtle(ONTOLOGY));
 
   it("FAILS when a node drops a Violation-graded MUST (title) from its projection", () => {
     const compiled = compileManifest(shapes, CONFIG);

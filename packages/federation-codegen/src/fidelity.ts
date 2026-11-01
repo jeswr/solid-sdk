@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * THE P0 EXIT CRITERION — the build-time FIDELITY ASSERTION (design §7.2). model.json
  * is a VERIFIED PROJECTION of shapes.ttl, not a bespoke schema: at generation time
@@ -27,8 +28,10 @@ import {
 import {
   type CompileResult,
   type FieldProvenance,
+  iriSchemeForPattern,
   isFailClosedSeverity,
   isHttpPattern,
+  linkTargetConforms,
 } from "./compile.js";
 import {
   localName,
@@ -193,8 +196,8 @@ function assertPatternCoverage(shapes: NormalizedShapes, compiled: CompileResult
         const c = constraintByPred.get(field.predicate);
         if (!c) continue;
         const hasPattern = c.kind === "iri" && isHttpPattern(c.pattern);
-        const hasGuard = field.guards?.iriScheme === "http-https";
-        if (hasPattern && !hasGuard) {
+        const hasGuard = field.guards?.iriScheme !== undefined;
+        if (hasPattern && field.guards?.iriScheme !== iriSchemeForPattern(c.pattern)) {
           throw new FidelityError(
             `shape ${shape.iri} path ${c.pathIri} has an http(s) pattern but the manifest field has no iriScheme guard`,
           );
@@ -228,7 +231,7 @@ function guardIsShapeDerived(
   if (constraint === undefined) return false;
   if (guard === "iriScheme")
     return (
-      guards.iriScheme === "http-https" &&
+      guards.iriScheme === iriSchemeForPattern(constraint.pattern) &&
       constraint.kind === "iri" &&
       isHttpPattern(constraint.pattern)
     );
@@ -250,10 +253,11 @@ function guardIsShapeDerived(
   if (guard === "nonBlank")
     return (
       guards.nonBlank === true &&
-      constraint.minLength !== undefined &&
-      constraint.minLength >= 1 &&
-      constraint.maxCount === 1 &&
-      constraint.kind === "literal"
+      (constraint.pattern === "\\S" ||
+        (constraint.minLength !== undefined &&
+          constraint.minLength >= 1 &&
+          constraint.maxCount === 1 &&
+          constraint.kind === "literal"))
     );
   return false;
 }
@@ -266,6 +270,22 @@ function assertFieldGuardsTraceable(
   where: string,
 ): void {
   const guards = field.guards;
+  if (
+    constraint !== undefined &&
+    isPresenceMust(constraint) &&
+    guards?.requiredFailClosed !== true
+  ) {
+    throw new FidelityError(`${where} field ${field.name} drops a MUST (requiredFailClosed)`);
+  }
+  if (
+    constraint?.kind === "iri" &&
+    isHttpPattern(constraint.pattern) &&
+    guards?.iriScheme !== iriSchemeForPattern(constraint.pattern)
+  ) {
+    throw new FidelityError(
+      `${where} field ${field.name} widens or drops the shape pattern scheme`,
+    );
+  }
   if (guards) {
     for (const key of Object.keys(guards)) {
       if (!guardIsShapeDerived(guards, constraint, key) && !configGuards.has(key)) {
@@ -302,18 +322,6 @@ function assertTraceability(compiled: CompileResult, shapes: NormalizedShapes): 
     );
     const targetClass = entity.typeIris[0] ?? "";
     for (const field of entity.fields) {
-      // Validate any field carrying a config-sourced attribute — guards OR a default OR a
-      // build-time default flag (defaultNow / materializeDefault). A field with ONLY a
-      // defaultNow/materializeDefault (no guards, no `default`) must NOT be skipped, else a
-      // tampered manifest could add an un-sourced build-time default unchecked.
-      if (
-        field.guards === undefined &&
-        field.default === undefined &&
-        field.defaultNow === undefined &&
-        field.materializeDefault === undefined
-      ) {
-        continue;
-      }
       const prov = provByKey.get(provKey(targetClass, field.name));
       const config = new Set(prov?.configGuards ?? []);
       const constraint = constraintByPred.get(field.predicate);
@@ -383,6 +391,15 @@ function assertCompositeFidelity(
         if (constraint.maxCount !== 1) {
           throw new FidelityError(
             `composite ${composite.name} node "${node.name}" nested link ${field.name} maps the multi-valued shape property ${field.predicate} (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1)`,
+          );
+        }
+        const target = composite.nodes.find((candidate) => candidate.name === field.node);
+        if (
+          target?.typeIris.length !== 1 ||
+          !linkTargetConforms(shapes, constraint, target.typeIris[0] as string)
+        ) {
+          throw new FidelityError(
+            `composite ${composite.name} link ${field.name} target class does not conform to sh:class / sh:node`,
           );
         }
         const required = field.guards?.requiredFailClosed === true;

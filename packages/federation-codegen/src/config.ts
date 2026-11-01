@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * The per-domain CODEGEN CONFIG — the committed, hashed input that supplies the
@@ -34,7 +35,7 @@ export interface FieldConfig {
   /** Force fail-closed on absence (usually derived from minCount ≥ 1). */
   requiredFailClosed?: boolean;
   /** Force the http(s) scheme filter (usually derived from an `^https?://` pattern). */
-  iriScheme?: "http-https";
+  iriScheme?: "http-https" | "https";
 }
 
 export interface EntityConfig {

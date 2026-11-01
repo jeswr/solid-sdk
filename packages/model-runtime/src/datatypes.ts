@@ -1,21 +1,18 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * Datatype → `@rdfjs/wrapper` mapper resolution. The manifest names a field's RDF
- * datatype (or IRI term kind); this module resolves it to the vetted
- * `LiteralAs`/`LiteralFrom` (and `NamedNodeAs`/`NamedNodeFrom`) mapper pair — the
+ * datatype (or IRI term kind); this module resolves it to a strict term reader and
+ * a datatype-preserving writer (plus `NamedNodeAs`/`NamedNodeFrom` for IRIs) — the
  * only place the runtime binds a datatype to a conversion, so the mapping is
  * reviewed once. No datatype resolves to executable manifest content: the manifest
  * carries the datatype IRI (data), this table maps it to a library function.
  */
 
 import type { DataFactory, Term } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  type TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralFrom, NamedNodeAs, NamedNodeFrom, type TermWrapper } from "@rdfjs/wrapper";
+
+import { isSafeAbsoluteIri } from "./guards.js";
 
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 
@@ -97,8 +94,7 @@ function integerSubtypeValid(datatypeIri: string): (value: number) => boolean {
  * A datatype-CHECKED reader for `xsd:duration`: the term must be a `Literal` typed
  * `xsd:duration` (not a plain `xsd:string` that merely LOOKS like a duration) — else
  * it throws, so the read drops it fail-closed. Enforces the declared RDF datatype on
- * read the way `LiteralAs.number`/`boolean`/`date` do (which `LiteralAs.string`
- * does not), closing the type-confusion where a `"PT30M"^^xsd:string` surfaces.
+ * read, closing the type-confusion where a `"PT30M"^^xsd:string` surfaces.
  */
 function durationAs(term: TermWrapper): string {
   const t = term as unknown as { termType: string; value: string; datatype?: { value: string } };
@@ -149,8 +145,8 @@ function typedStringFrom(datatypeIri: string): (value: string, factory: DataFact
  * Format a finite JS number as a NON-EXPONENT decimal string (a valid `xsd:decimal`
  * lexical). `Number.toString()` emits exponent form for small/large magnitudes
  * (`1e-7`, `1e+21`), which is invalid for `xsd:decimal`; this expands it. Trailing
- * fractional zeros are trimmed. Read acceptance stays lenient (any finite number);
- * only the WRITE lexical is made safe here.
+ * fractional zeros are trimmed. Reads separately validate the XSD decimal lexical
+ * form; this function protects the write boundary.
  */
 export function toPlainDecimalString(value: number): string {
   const s = value.toString();
@@ -401,6 +397,35 @@ function floatingFrom(datatypeIri: string): (value: number, factory: DataFactory
   };
 }
 
+/** All literal readers check RDF term kind and the declared datatype before conversion. */
+function literalLexical(term: TermWrapper, datatype: string): string {
+  const t = term as unknown as { termType: string; value: string; datatype?: { value: string } };
+  if (t.termType !== "Literal" || t.datatype?.value !== datatype) {
+    throw new Error("literal term or datatype mismatch");
+  }
+  return t.value;
+}
+
+function numericAs(datatype: string, integer: boolean): (term: TermWrapper) => number {
+  return (term) => {
+    const lex = literalLexical(term, datatype);
+    const valid = integer
+      ? /^[+-]?[0-9]+$/.test(lex)
+      : /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(lex);
+    if (!valid) throw new Error("invalid XSD numeric lexical");
+    const value = Number(lex);
+    if (!Number.isFinite(value)) throw new Error("numeric value is not finite");
+    return value;
+  };
+}
+
+function booleanAs(term: TermWrapper): boolean {
+  const lex = literalLexical(term, `${XSD}boolean`);
+  if (lex === "true" || lex === "1") return true;
+  if (lex === "false" || lex === "0") return false;
+  throw new Error("invalid XSD boolean lexical");
+}
+
 /**
  * Resolve a full datatype IRI (or an `xsd:` shorthand) to a mapper pair for a
  * LITERAL field. Unknown datatypes fall back to the safe string mapping (the
@@ -416,9 +441,13 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
     case `${XSD}token`:
     case `${XSD}anyURI`:
     case `${XSD}language`:
-      return { as: LiteralAs.string, from: LiteralFrom.string, jsType: "string" };
+      return {
+        as: (term) => literalLexical(term, iri),
+        from: typedStringFrom(iri) as DatatypeMapper["from"],
+        jsType: "string",
+      };
     case `${XSD}boolean`:
-      return { as: LiteralAs.boolean, from: LiteralFrom.boolean, jsType: "boolean" };
+      return { as: booleanAs, from: LiteralFrom.boolean, jsType: "boolean" };
     case `${XSD}dateTime`:
       // Datatype-CHECKED + XSD-lexically-validated read (a malformed literal DROPS
       // fail-closed via tryRead — never an `Invalid Date`); the write emits a valid
@@ -454,7 +483,7 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
       // Datatype-PRESERVING: serialize with the DECLARED integer subtype IRI, and
       // enforce the subtype's value space so an invalid value is dropped (not tagged).
       return {
-        as: LiteralAs.number,
+        as: numericAs(iri, true),
         from: integerFrom(iri) as DatatypeMapper["from"],
         jsType: "number",
         numericValid: integerSubtypeValid(iri),
@@ -464,7 +493,7 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
       // space forbids EXPONENT notation, so the write serialiser (`decimalFrom`)
       // expands to plain decimal — a small/large finite decimal round-trips validly.
       return {
-        as: LiteralAs.number,
+        as: numericAs(iri, false),
         from: decimalFrom(iri) as DatatypeMapper["from"],
         jsType: "number",
         numericValid: Number.isFinite,
@@ -496,13 +525,22 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
       };
     default:
       // Fall back to opaque string — carry the lexical value, never throw.
-      return { as: LiteralAs.string, from: LiteralFrom.string, jsType: "string" };
+      return {
+        as: (term) => literalLexical(term, iri),
+        from: typedStringFrom(iri) as DatatypeMapper["from"],
+        jsType: "string",
+      };
   }
 }
 
 /** The mapper pair for an IRI-valued (named node) field. */
 export function iriMapper(): DatatypeMapper {
-  return { as: NamedNodeAs.string, from: NamedNodeFrom.string, jsType: "string" };
+  return {
+    as: NamedNodeAs.string,
+    lexicalValid: isSafeAbsoluteIri,
+    from: NamedNodeFrom.string,
+    jsType: "string",
+  };
 }
 
 /** True for a datatype IRI this runtime has an explicit, non-fallback mapping for. */

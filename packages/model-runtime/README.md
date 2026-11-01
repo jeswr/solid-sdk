@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -30,11 +31,16 @@ invariant, design §7.1).
 Every read/write goes through, in the load-bearing order:
 
 - **http(s)-only, injection-safe LEXICAL IRI filter** (`httpIriOrUndefined` / `isHttpIri`) — canonicalises
-  via `URL.href` so no whitespace/control char can ride into an emitted `NamedNode`; carried verbatim
-  from the reviewed `@jeswr/solid-bookmark` reference. Applied to every IRI field with `iriScheme:
-  "http-https"`, fail-closed (drops a non-http(s) value on both read and write).
+  via `URL.href`, then rejects any remaining Turtle IRIREF-forbidden character. Applied to IRI
+  fields with `iriScheme: "http-https"` or the HTTPS-only `iriScheme: "https"` on read and write.
+  Canonicalisation retains the imported bookmark contract; unlike `rdf-serialize`, this helper
+  rejects surviving forbidden characters rather than escaping the lexical input.
 - **`tryRead` fail-closed field drops** — a malformed literal in untrusted pod data drops the field
-  rather than aborting the parse.
+  rather than aborting the parse. Literal term kind, datatype, and XSD lexical forms are checked;
+  malformed values cannot satisfy a required field.
+- **Cardinality and enums** — ambiguous singletons drop; sets enforce `minCount`/`maxCount`.
+  A `requiredFailClosed` failure rejects the record; an optional failure drops the field.
+  Closed `in` enums filter reads and writes, including live-set additions; invalid writes drop.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
 - **Fail-closed manifest validation** — unknown keys rejected, hard caps on bytes / field count /
@@ -58,6 +64,10 @@ await bookmark.parseDocument(resourceUrl, body, contentType); // via @jeswr/fetc
 
 new bookmark.Wrapper(subjectIri, store, factory); // direct typed accessor (extends TermWrapper)
 ```
+
+`build` preserves the facade's non-validating write contract: missing/invalid required values
+are dropped and may leave a typed shell. Call `parse(resourceUrl, builtStore)` and require a defined
+result before publishing when MUST validation is needed. `serialize` uses the same build contract.
 
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
@@ -91,9 +101,9 @@ field names are **globally unique** across the composite (the projection is one 
 - **`build`** writes every node at `${resourceUrl}#${fragment}` and links them (an optional sub-node
   is materialised only when its subtree carries data — no bare typed shells).
 - **`parse`** GRAPH-WALKS from the root: it follows the ACTUAL link triple (never assumes the fragment
-  — an untrusted document may link anywhere), canonicalising each target IRI through the http(s) filter
-  and bounding the candidate scan. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
-  failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct canonical target), or an
+  — an untrusted document may link anywhere), requiring each lexical target to already equal its
+  safe http(s) canonical form and bounding the candidate scan. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
+  failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), a noncanonical IRI, or an
   over-budget fan-out — is graded by the link: a `requiredFailClosed` cross-node link **rejects the
   WHOLE composite** (a titled `Track` + a valid `Instant` MUST be reachable); a Warning/Info (optional)
   link simply drops its sub-node's fields and admits (an otherwise-usable document is never rejected

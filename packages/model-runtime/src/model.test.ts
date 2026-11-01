@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -275,8 +276,8 @@ describe("typed accessor (Wrapper)", () => {
     `);
     const back = bm.parse(RES, store);
     expect(back?.url).toBe(URL_);
-    // archived reads back as its default false (malformed value dropped).
-    expect(back?.archived).toBe(false);
+    // A present malformed literal drops; the default applies only to an absent predicate.
+    expect(back?.archived).toBeUndefined();
   });
 
   it("a non-string value on a string field is dropped, not coerced or thrown (fail-closed)", () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 //
 // The composite (document-projection) entity kind — a ROOT node + named SUB-NODES
@@ -552,10 +553,9 @@ describe("composite parse — GRAPH-WALK follows the actual link, not the fragme
     expect(Scrobble.parse(RES, toStore(ttl))).toBeUndefined();
   });
 
-  it("admits two lexical forms of the SAME canonical link target (not ambiguous)", () => {
-    // The link is written twice with distinct lexical IRIs that CANONICALISE to the same
-    // http(s) target (an explicit :443 is stripped for https), so there is only ONE
-    // distinct canonical target — not ambiguous — and the scrobble round-trips.
+  it("rejects a non-canonical lexical link even alongside its canonical form", () => {
+    // URL equivalence does not equate RDF terms: the :443 form is a distinct subject.
+    // Reject it even when the canonical target is also linked and conforms.
     const alt = "https://alice.pod.example:443/listening/2020-01-01#track";
     const ttl = `
       @prefix media: <${MEDIA}> . @prefix core: <${CORE}> .
@@ -565,7 +565,7 @@ describe("composite parse — GRAPH-WALK follows the actual link, not the fragme
       <${TRACK}> a media:Track ; dct:title "Once" .
       <${PLAYED_AT}> a time:Instant ; time:inXSDDateTime "2020-01-01T12:00:00.000Z"^^xsd:dateTime .
     `;
-    expect(Scrobble.parse(RES, toStore(ttl))?.trackTitle).toBe("Once");
+    expect(Scrobble.parse(RES, toStore(ttl))).toBeUndefined();
   });
 });
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * L2 (shapes) — parse a SHACL profile into a normalized shape model and produce the
  * SKOLEMIZED shape graph (design §5): every anonymous NodeShape / property shape
@@ -16,7 +17,7 @@
 import { literalMapper } from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { Graph, parseTurtle, RDF, SH, XSD } from "./rdf.js";
+import { Graph, parseTurtle, RDF, RDFS, SH, XSD } from "./rdf.js";
 
 /** A scalar a closed `sh:in` value set may carry (mirrors the manifest's ManifestScalar). */
 export type ShapeScalar = string | number | boolean;
@@ -70,6 +71,8 @@ export interface NodeShapeModel {
 export interface NormalizedShapes {
   /** The skolemized shape graph — byte-reproducible when serialised. */
   quads: Quad[];
+  /** Explicit input ontology subclass edges, for checking composite sh:class targets. */
+  superClasses?: Record<string, string[]>;
   /** The node shapes, sorted by target class (stable). */
   nodeShapes: NodeShapeModel[];
 }
@@ -155,7 +158,11 @@ function resolveKind(nodeKind: string | undefined, datatype: string | undefined)
  * Parse a SHACL profile into a normalized shape model with a skolemized graph.
  * `shapesBase` is the namespace the skolem IRIs are minted under.
  */
-export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedShapes {
+export function parseShapes(
+  shapesTtl: string,
+  shapesBase: string,
+  ontologyQuads: Quad[] = [],
+): NormalizedShapes {
   const quads = parseTurtle(shapesTtl);
   const graph = new Graph(quads);
 
@@ -234,7 +241,11 @@ export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedSh
       properties.push(constraint);
     }
     properties.sort((a, b) => a.pathIri.localeCompare(b.pathIri));
-    nodeShapes.push({ iri: shapeIri, targetClass, properties });
+    nodeShapes.push({
+      iri: subject.termType === "NamedNode" ? subject.value : shapeIri,
+      targetClass,
+      properties,
+    });
   }
 
   // Any remaining blank nodes (e.g. nested lists) get a deterministic skolem by a
@@ -259,7 +270,19 @@ export function parseShapes(shapesTtl: string, shapesBase: string): NormalizedSh
     throw new Error("shapes skolemization left an unmapped blank node");
   }
 
-  return { quads: rewritten, nodeShapes };
+  const superClasses: Record<string, string[]> = Object.create(null);
+  for (const q of ontologyQuads) {
+    if (
+      q.predicate.value === `${RDFS}subClassOf` &&
+      q.subject.termType === "NamedNode" &&
+      q.object.termType === "NamedNode"
+    ) {
+      const parents = superClasses[q.subject.value] ?? [];
+      parents.push(q.object.value);
+      superClasses[q.subject.value] = parents;
+    }
+  }
+  return { quads: rewritten, nodeShapes, superClasses };
 }
 
 function rewriteTerm(term: Term, skolem: Map<string, string>): Term {

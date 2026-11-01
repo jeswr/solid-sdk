@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The guard inventory — the single audited home for the untrusted-input filters
  * that the six hand-written `@jeswr` data-model packages each duplicated. Every
@@ -10,12 +11,31 @@
  * machinery — so it is client-safe and reads as a small spec.
  *
  * The `httpIriOrUndefined` / `isHttpIri` pair is the **injection-safe LEXICAL**
- * IRI filter (matching `@jeswr/rdf-serialize` and the solid-vc c77v decision): it
- * canonicalises via `URL.href` so no whitespace/control character can ride into
- * an emitted `NamedNode`, and it is carried verbatim from the reviewed reference
- * (`@jeswr/solid-bookmark`'s `src/iri.ts`) so behaviour is identical across the
- * suite.
+ * IRI filter: it retains solid-bookmark's `URL.href` canonicalisation for parity,
+ * then rejects any remaining IRIREF-forbidden characters before a NamedNode is
+ * emitted. rdf-serialize instead escapes the lexical input and preserves identity;
+ * the composite graph-walk therefore additionally requires canonical equality.
  */
+
+/** True when an IRI contains bytes unsafe in a Turtle IRIREF. */
+export function hasForbiddenIriCharacters(value: string): boolean {
+  for (const ch of value) {
+    const c = ch.codePointAt(0) as number;
+    if (c <= 0x20 || (c >= 0x7f && c <= 0x9f) || '<>"{}|^`\\'.includes(ch)) return true;
+  }
+  return false;
+}
+
+/** Absolute, lexical IRI safety; never rewrites RDF identity. */
+export function isSafeAbsoluteIri(value: unknown): value is string {
+  if (typeof value !== "string" || hasForbiddenIriCharacters(value)) return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The **canonical** absolute http(s) IRI for `value`, else `undefined` — the
@@ -39,7 +59,8 @@ export function httpIriOrUndefined(value: unknown): string | undefined {
   if (typeof value !== "string" || value === "") return undefined;
   try {
     const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:" ? u.href : undefined;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    return hasForbiddenIriCharacters(u.href) ? undefined : u.href;
   } catch {
     return undefined;
   }

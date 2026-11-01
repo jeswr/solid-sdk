@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The interpreter — `defineModel(manifest)` turns a validated shape-manifest into
  * a typed model over `@rdfjs/wrapper`: a `Wrapper` class with per-field accessors,
@@ -20,7 +21,6 @@ import {
   NamedNodeAs,
   NamedNodeFrom,
   OptionalAs,
-  OptionalFrom,
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
@@ -111,7 +111,12 @@ function planField(field: ManifestField): FieldPlan {
 
 /** Whether a field is an IRI field carrying the http(s)-only scheme guard. */
 function hasIriSchemeGuard(field: ManifestField): boolean {
-  return field.kind === "iri" && field.guards?.iriScheme === "http-https";
+  return field.kind === "iri" && field.guards?.iriScheme !== undefined;
+}
+
+function fieldIri(field: ManifestField, value: unknown): string | undefined {
+  const iri = httpIriOrUndefined(value);
+  return field.guards?.iriScheme === "https" && !iri?.startsWith("https:") ? undefined : iri;
 }
 
 /**
@@ -135,6 +140,8 @@ function sameValueZero(a: unknown, b: unknown): boolean {
  * read, write, and set-member boundary regardless of the value's provenance.
  */
 function applyScalarGuards(field: ManifestField, value: unknown): unknown {
+  if (field.in !== undefined && !field.in.some((member) => sameValueZero(member, value)))
+    return undefined;
   const g = field.guards;
   if (g === undefined) return value;
   if (typeof value === "number") {
@@ -185,6 +192,7 @@ function applyDatatypeValidity(mapper: DatatypeMapper, value: unknown): unknown 
     if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return undefined;
     return value;
   }
+  if (mapper.jsType === "boolean" && typeof value !== "boolean") return undefined;
   return value;
 }
 
@@ -225,106 +233,13 @@ function* matchObjects(dataset: DatasetCore, subject: Term, predicate: Term): Ge
 }
 
 /**
- * A live set of http(s)-canonical IRIs over `(doc, predicate)`. Every boundary is
- * guarded so an IRI field's set can NEVER surface or store a non-http(s) /
- * non-canonical value, regardless of how the underlying RDF was written (design
- * §7.3 — the filter is applied to every IRI field, fail-closed). READS go through
- * {@link rawNamedNodeValues} (no throwing mapper); WRITES go through the vetted
- * `SetFrom` base (`NamedNodeFrom.string`). `add` canonicalises + drops non-http;
- * `delete` removes every backing member whose canonical form matches; iteration /
- * `has` / `size` / `forEach` expose only the canonical http members.
- */
-function makeIriFilteredSet(doc: TermWrapper, predicate: string, base: Set<unknown>): Set<string> {
-  const canonicalMembers = (): Set<string> => {
-    const out = new Set<string>();
-    for (const raw of rawNamedNodeValues(doc, predicate)) {
-      const c = httpIriOrUndefined(raw);
-      if (c !== undefined) out.add(c);
-    }
-    return out;
-  };
-  const filtered: Set<string> = {
-    add(value: string) {
-      const c = httpIriOrUndefined(value);
-      if (c !== undefined) base.add(c);
-      return filtered;
-    },
-    delete(value: string) {
-      const c = httpIriOrUndefined(value);
-      if (c === undefined) return false;
-      let deleted = false;
-      // Remove every backing member whose canonical form matches (a non-canonical
-      // equivalent — e.g. `http://x.org` vs `http://x.org/` — is still removed).
-      for (const raw of rawNamedNodeValues(doc, predicate)) {
-        if (httpIriOrUndefined(raw) === c && base.delete(raw as unknown)) deleted = true;
-      }
-      return deleted;
-    },
-    has(value: string) {
-      const c = httpIriOrUndefined(value);
-      return c !== undefined && canonicalMembers().has(c);
-    },
-    clear() {
-      for (const raw of rawNamedNodeValues(doc, predicate)) base.delete(raw as unknown);
-    },
-    forEach(callback, thisArg?) {
-      for (const v of canonicalMembers()) callback.call(thisArg, v, v, filtered);
-    },
-    keys() {
-      return canonicalMembers().keys();
-    },
-    values() {
-      return canonicalMembers().values();
-    },
-    entries() {
-      return canonicalMembers().entries();
-    },
-    [Symbol.iterator]() {
-      return canonicalMembers()[Symbol.iterator]();
-    },
-    get size() {
-      return canonicalMembers().size;
-    },
-    [Symbol.toStringTag]: "Set",
-  } as Set<string>;
-  return filtered;
-}
-
-/**
- * Whether a field carries a hard value guard (a datatype lexical / numeric
- * validator, or a numeric-range / string-length guard) that must be enforced on the
- * LIVE set's `add` + reads too — not only in the `build` path. The cosmetic
- * trim/dropBlank/sanitize guards stay build-time (their historical home).
- */
-function setNeedsValueGuard(field: ManifestField, mapper: DatatypeMapper): boolean {
-  // EVERY numeric field needs the guarded set: applyDatatypeValidity enforces the
-  // finite-number / value-space check on the live `add` for ALL numeric datatypes
-  // (incl. decimal/double/float, which have no numericValid but still must reject a
-  // non-number member), matching the singleton + build-time set write paths. Every
-  // DATE field does too: a non-Date / Invalid-Date member must drop on `add` (its
-  // toISOString would throw the write), and a malformed stored literal on read.
-  if (mapper.jsType === "number" || mapper.jsType === "date") return true;
-  if (mapper.lexicalValid !== undefined || mapper.numericValid !== undefined) return true;
-  const g = field.guards;
-  return (
-    g !== undefined &&
-    (g.minInclusive !== undefined ||
-      g.maxInclusive !== undefined ||
-      g.minLength !== undefined ||
-      g.nonBlank === true)
-  );
-}
-
-/**
  * Wrap a live set so every `add` AND every read (iteration / has / size / forEach)
  * passes through the datatype + scalar guards fail-closed — a direct
  * `wrapper.field.add("P1W")` (xsd:duration) or `.add(0)` (minInclusive 1) can no
  * longer land an invalid member, and a pre-existing invalid member in untrusted pod
- * data is not surfaced on read. COMPOSES over any base set: for an IRI field it
- * wraps the http(s)-scheme-filtered set (from {@link makeIriFilteredSet}), so an IRI
- * set carrying both a scheme guard and a scalar guard (e.g. `minLength`) enforces
- * BOTH. For an IRI field `mapper` is `iriMapper` (no lexical/numeric validator), so
- * only the scalar guards apply here — the scheme filter is the wrapped base's job.
+ * data is not surfaced on read. IRI sets apply the scheme filter before scalar
+ * guards; all other sets check datatype validity before the same scalar guards.
+ * The base writes through @rdfjs/wrapper, while reads isolate malformed raw terms.
  */
 function makeGuardedSet(
   doc: TermWrapper,
@@ -338,7 +253,7 @@ function makeGuardedSet(
     // For an IRI-scheme field, CANONICALISE first (strip padding, normalise) so the
     // scalar guards (e.g. minLength) evaluate the STORED canonical form, not the raw
     // padded input — otherwise a padded IRI could pass minLength then be stored short.
-    const v = iri ? httpIriOrUndefined(value) : applyDatatypeValidity(mapper, value);
+    const v = iri ? fieldIri(field, value) : applyDatatypeValidity(mapper, value);
     return applyScalarGuards(field, v);
   };
   // Read members from the RAW dataset, mapping each object term inside `tryRead` so a
@@ -385,7 +300,7 @@ function makeGuardedSet(
       let deleted = false;
       if (iri) {
         for (const raw of rawNamedNodeValues(doc, predicate)) {
-          if (httpIriOrUndefined(raw) === g && base.delete(raw)) deleted = true;
+          if (fieldIri(field, raw) === g && base.delete(raw)) deleted = true;
         }
         return deleted;
       }
@@ -449,14 +364,28 @@ function predicatePresent(doc: TermWrapper, predicate: string): boolean {
 /** Read a single (non-set) field's value, applying read-side guards, fail-closed. */
 function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
   const { field, mapper } = plan;
-  const raw = tryRead(() => OptionalFrom.subjectPredicate(doc, field.predicate, mapper.as));
+  // Count DISTINCT RDF terms, including malformed terms, before selecting any value.
+  let object: Term | undefined;
+  for (const candidate of matchObjects(
+    doc.dataset,
+    doc as unknown as Term,
+    doc.factory.namedNode(field.predicate),
+  )) {
+    if (object !== undefined && !object.equals(candidate)) return undefined;
+    object = candidate;
+  }
+  if (object !== undefined && field.maxCount === 0) return undefined;
+  const raw =
+    object === undefined
+      ? undefined
+      : tryRead(() => mapper.as(new TermWrapper(object, doc.dataset, doc.factory)));
   // Normalise through the field's value filter — the http(s) scheme filter for an
   // IRI field, else the datatype lexical/numeric validity — THEN the scalar guards
   // (numeric range / string length). Both categories apply even to an IRI field
   // that carries a scalar guard (e.g. minLength), fail-closed.
   const normalise = (v: unknown): unknown =>
     hasIriSchemeGuard(field)
-      ? applyScalarGuards(field, httpIriOrUndefined(v))
+      ? applyScalarGuards(field, fieldIri(field, v))
       : applyScalarGuards(field, applyDatatypeValidity(mapper, v));
   // A configured default is applied ONLY when the predicate is genuinely ABSENT. A
   // PRESENT value that is unreadable (the mapper threw ⇒ raw undefined) or fails
@@ -477,18 +406,8 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
     mapper.as as ITermAsValueMapping<unknown>,
     mapper.from as unknown as ITermFromValueMapping<unknown>,
   );
-  // A field carrying a hard value guard (numeric/lexical datatype validity, numeric
-  // range, string length, or — for an IRI field — a scalar guard on top of the scheme
-  // filter) gets the guarded set, which enforces canonicalisation + those guards on
-  // both `add` and reads. A plain IRI-scheme set (no scalar guard) keeps the lighter
-  // iri-filtered set; everything else is the raw base.
-  if (setNeedsValueGuard(field, mapper)) {
-    return makeGuardedSet(doc, field.predicate, base as Set<unknown>, field, mapper);
-  }
-  if (hasIriSchemeGuard(field)) {
-    return makeIriFilteredSet(doc, field.predicate, base as Set<unknown>) as Set<unknown>;
-  }
-  return base;
+  // Every set uses the raw-term, per-member tryRead path, including strings and booleans.
+  return makeGuardedSet(doc, field.predicate, base as Set<unknown>, field, mapper);
 }
 
 /** Write a single (non-set) field's value, applying write-side guards, fail-closed. */
@@ -499,8 +418,8 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
     // An IRI value must be a string; the scheme filter (when present) also
     // canonicalises. A non-string is dropped fail-closed BEFORE the scalar guards, so
     // it can never reach NamedNodeFrom.string or slip a minLength/nonBlank guard.
-    if (hasIriSchemeGuard(field)) v = httpIriOrUndefined(v);
-    else if (typeof v !== "string") v = undefined;
+    if (hasIriSchemeGuard(field)) v = fieldIri(field, v);
+    else v = applyDatatypeValidity(mapper, v);
     v = applyScalarGuards(field, v); // scalar guards (e.g. minLength) apply to IRI writes too
     OptionalAs.object(
       doc,
@@ -633,6 +552,25 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
   writeSingle(doc, plan, v);
 }
 
+/** SHACL counts distinct RDF terms, including terms whose mapper later drops them. */
+function exceedsMaximum(doc: TermWrapper, field: ManifestField): boolean {
+  if (field.maxCount === undefined) return false;
+  const seen = new Set<string>();
+  for (const term of matchObjects(
+    doc.dataset,
+    doc as unknown as Term,
+    doc.factory.namedNode(field.predicate),
+  )) {
+    const key =
+      term.termType === "Literal"
+        ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
+        : JSON.stringify([term.termType, term.value]);
+    seen.add(key);
+    if (seen.size > field.maxCount) return true;
+  }
+  return false;
+}
+
 /**
  * Read one flat field from `doc` into `data` (the parse per-field logic). Returns
  * `"reject"` when a `requiredFailClosed` single field is absent/unreadable (so the
@@ -642,7 +580,12 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
 function readFlatFieldInto(doc: TermWrapper, plan: FieldPlan, data: EntityData): "ok" | "reject" {
   const { field } = plan;
   if (field.collection === "set") {
+    if (exceedsMaximum(doc, field)) return field.guards?.requiredFailClosed ? "reject" : "ok";
     const members = [...fieldSet(doc, plan)];
+    const min = Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0);
+    if (members.length < min) {
+      return field.guards?.requiredFailClosed ? "reject" : "ok";
+    }
     const arr = field.guards?.sortOnRead
       ? members.slice().sort((a, b) => String(a).localeCompare(String(b)))
       : members;
@@ -780,11 +723,11 @@ interface NestedTargetResolution {
 /**
  * Resolve the SINGLE target of a `nested` (maxCount-1) link FAIL-CLOSED, streaming the raw
  * object terms with EARLY exit — never materialising the full candidate list. A non-http(s)
- * / non-NamedNode object is skipped (never a link target); the instant a SECOND distinct
- * canonical http(s) target is seen the link is rejected as AMBIGUOUS; and if the raw object
+ * / non-canonical IRI rejects the link; non-NamedNode objects are skipped. The instant a
+ * SECOND distinct canonical target is seen the link is rejected; and if the raw object
  * reads exceed {@link MAX_LINK_READS} before resolving, the link is rejected (a hostile
- * fan-out on one predicate must not force unbounded work). Two lexical forms of the SAME
- * canonical target are NOT ambiguous (they resolve to one target). How a rejected link
+ * fan-out on one predicate must not force unbounded work). Only lexical IRIs already equal
+ * to their canonical form are followed, preserving the linked RDF subject. How a rejected link
  * affects the composite is decided by the CALLER per the link's grade (see
  * {@link NestedTargetResolution.reject}) — the resolver only reports the link failure.
  */
@@ -796,8 +739,8 @@ function resolveNestedTarget(doc: TermWrapper, predicate: string): NestedTargetR
     if (++reads > MAX_LINK_READS) return { reject: true };
     if (object.termType !== "NamedNode") continue;
     const canon = httpIriOrUndefined(object.value);
-    if (canon === undefined) continue;
-    if (target === undefined) target = canon;
+    if (canon === undefined || canon !== object.value) return { reject: true };
+    if (target === undefined) target = object.value;
     else if (canon !== target) return { reject: true };
   }
   return { reject: false, target };

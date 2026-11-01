@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // Phase G — the SHACL generator-readiness capabilities the runtime must interpret:
 //   G3  numeric-range + string-length / non-blank closed value guards
@@ -868,7 +869,7 @@ describe("Phase G hardening — defaults obey the guards, minLength counts code 
 
 // --- guard validation (manifest.ts) ---
 describe("G3 — manifest guard validation", () => {
-  it("accepts the new numeric / length guards", () => {
+  it("accepts numeric guards on numeric fields", () => {
     expect(() =>
       validateManifest(
         manifestWith({
@@ -877,7 +878,7 @@ describe("G3 — manifest guard validation", () => {
           kind: "literal",
           datatype: "xsd:integer",
           maxCount: 1,
-          guards: { minInclusive: 0, maxInclusive: 10, minLength: 1, nonBlank: true },
+          guards: { minInclusive: 0, maxInclusive: 10 },
         }),
       ),
     ).not.toThrow();

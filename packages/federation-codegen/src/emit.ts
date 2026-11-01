@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * Emit the generated artifacts (design §7): model.json (the verified projection),
@@ -140,7 +141,9 @@ function propKey(name: string): string {
 function dataFieldLine(field: ManifestField): string {
   const base = baseTsType(field);
   if (field.collection === "set") {
-    return `  ${propKey(field.name)}?: ${base}[];`;
+    const member = field.in !== undefined ? `(${base})` : base;
+    const opt = isRequired(field) ? "" : "?";
+    return `  ${propKey(field.name)}${opt}: ${member}[];`;
   }
   const opt = isRequired(field) ? "" : "?";
   return `  ${propKey(field.name)}${opt}: ${base};`;

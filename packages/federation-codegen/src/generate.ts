@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * The generation pipeline (design §3): ontology + SHACL profile + codegen config →
@@ -88,11 +89,11 @@ export function generateModel(input: GenerateInput): GenerateResult {
   const ontology = adapter.adapt(ontologyQuads);
 
   // [L2] parse + skolemize the SHACL profile (the stable waist).
-  const shapes = parseShapes(input.shapesTtl, input.config.shapesBase);
+  const shapes = parseShapes(input.shapesTtl, input.config.shapesBase, ontologyQuads);
 
   // [L1] tier-a admission (fail-closed unless explicitly demonstrating a gap).
   const namespace = input.admissionNamespace ?? ontology.namespace ?? "";
-  const admission = admit(ontology, shapes, namespace);
+  const admission = admit(ontology, shapes, namespace, input.config);
   if (!admission.ok && !input.allowUnadmitted) {
     throw new AdmissionError(admission.violations);
   }

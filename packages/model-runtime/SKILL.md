@@ -3,6 +3,7 @@ name: model-runtime
 description: Use when loading a generated domain model (model.js from @jeswr/federation-codegen), calling defineModel on a shape-manifest, reading or writing pod RDF through generated entities, or changing the audited guard set in @jeswr/model-runtime.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Generated-model runtime
 
@@ -27,11 +28,18 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   whose fidelity assertion proves every field traces to `shapes.ttl` or the committed config.
 - Keep generated artifacts data-only. A manifest must never carry code, regex source,
   templates or path expressions; `validateManifest` rejects unknown keys and enforces caps.
-- Every IRI field with `iriScheme: "http-https"` goes through `httpIriOrUndefined` on read
+- Every IRI field with `iriScheme: "http-https"` or `iriScheme: "https"` goes through `httpIriOrUndefined` on read
   and write. Do not add a bypass; widen schemes only with a new reviewed guard.
-- A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse and the
-  build. Warning/Info constraints drop the field and admit the record.
-- Composite entities graph-walk real link triples from the root; never assume fragments.
+- A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse when
+  missing, malformed, ambiguous, or outside its set cardinality bounds. Optional fields drop.
+- build does not enforce requiredFailClosed: missing or invalid values are dropped and a
+  typed shell may be returned. This preserves the bookmark facade's write contract. Parse
+  the built store and require a defined result before publishing it if MUST validation is needed.
+- Closed `in` enums are enforced on reads, build, setters and live-set adds. Invalid enum
+  values drop, consistently with other invalid writes; they do not throw.
+- Composite entities graph-walk exact link terms from the root; never assume fragments.
+  A linked IRI must already equal its safe http(s) canonical form; otherwise the required
+  link rejects the record and an optional link drops its subtree.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
   belongs in the consuming package's facade, not in this runtime.
 - Changes here are security-critical: add an adversarial test that fails before the fix.
