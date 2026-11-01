@@ -44,7 +44,7 @@ export function emitModelJson(manifest: ModelManifest): string {
 // audited runtime's `defineModel` on the derived (generation-time, fidelity-rooted)
 // view manifest; the handles then pair each index entry with its view Wrapper.
 const NODE_VIEWS_TEMPLATE =
-  `const nodeViews = defineModel(nodeViewsManifest);\n` +
+  `const nodeViews = defineModel(nodeViewsManifest, { migrationManifest: manifest });\n` +
   `export const nodes = Object.freeze(\n` +
   `  Object.fromEntries(\n` +
   `    Object.entries(nodeViewIndex).map(([compositeName, nodesOf]) => [\n` +

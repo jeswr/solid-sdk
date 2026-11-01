@@ -193,7 +193,9 @@ describe("emitted model.js / model.d.ts — the per-node surface", () => {
     const js = emitModelJs(manifest, views);
     expect(js).toContain("const nodeViewsManifest = {");
     expect(js).toContain("const nodeViewIndex = {");
-    expect(js).toContain("const nodeViews = defineModel(nodeViewsManifest);");
+    expect(js).toContain(
+      "const nodeViews = defineModel(nodeViewsManifest, { migrationManifest: manifest });",
+    );
     expect(js).toContain("export const nodes = Object.freeze(");
     expect(js).toContain('"TreeParentNode"');
   });

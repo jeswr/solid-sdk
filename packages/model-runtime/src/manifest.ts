@@ -377,7 +377,7 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
  * A `nested` field is a COMPOSITE structural link — pure structure, never data. It
  * carries a target sub-node reference (`node`) and a predicate, and MAY carry only the
  * `requiredFailClosed` guard (the cross-node MUST). It must NOT carry any data-shape key
- * (datatype / collection / minCount / maxCount / default / defaultNow /
+ * (datatype / collection / maxCount / default / defaultNow /
  * materializeDefault / in) nor any guard other than `requiredFailClosed` — those would
  * be silently ignored, so they fail closed here.
  */
@@ -392,7 +392,6 @@ function validateNestedField(
     "aliasPredicates",
     "datatype",
     "collection",
-    "minCount",
     "maxCount",
     "default",
     "defaultNow",
@@ -404,6 +403,10 @@ function validateNestedField(
     }
   }
   const field: ManifestField = { name, predicate, kind: "nested", node };
+  if (raw.minCount !== undefined) {
+    field.minCount = checkCount(raw.minCount, "field.minCount");
+    if (field.minCount > 1) fail("nested field.minCount exceeds its single-valued link maximum");
+  }
   if (raw.hasClass !== undefined) field.hasClass = checkIri(raw.hasClass, "field.hasClass");
   if (raw.classOnly !== undefined) {
     if (raw.classOnly !== true) fail("field.classOnly must be true when present");

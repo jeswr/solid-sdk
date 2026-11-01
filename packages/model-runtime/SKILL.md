@@ -101,7 +101,14 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   identical recognition and parsed results; throw exported `MigrationError` before emission
   on any change, including an invalid-record repair or a newly exposed default. Bound all
   candidate scans, class walks and re-parse reads/visits with a shared 10,000 budget; exhaustion
-  throws the same typed error. Before deleting alias types, materialise satisfied explicit
+  throws the same typed error.
+- Every write path (build, singleton setters, live-set add/delete/clear, `mark()`,
+  `storeToTurtle`, `serialize`) runs the SAME checked migration on a copy BEFORE the explicit
+  change; on `MigrationError` the live dataset is unchanged. There is no unchecked fast path.
+  Generated per-node views pass the owning manifest as `defineModel(views, { migrationManifest })`
+  so their checks see the full model.
+- Nested links carry their own `minCount`, independent of root requiredness and severity:
+  inside strict `sh:node` validation an absent link below its minimum makes the child fail. Before deleting alias types, materialise satisfied explicit
   link classes on affected subjects, preserving ancestry proofs as builds do.
 - Deliberate G5 migration exception (root reads): for singleton `sh:alternativePath` fields, SHACL
   counts the union for `maxCount`, but runtime reads resolve canonical-first. A stale

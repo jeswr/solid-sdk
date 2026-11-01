@@ -153,6 +153,13 @@ parsed results throw the exported `MigrationError` before any output is emitted.
 shares a 10,000-read/visit budget across candidate scanning, class walks and re-parsing;
 exhaustion also throws `MigrationError`. This includes rejecting cleanup that would repair
 invalid required data or expose a previously masked default. The input store stays unchanged.
+The same checked migration runs before every mutation (build, setters, live-set
+`add`/`delete`/`clear`, `mark()`), so a no-op write can never silently repair or change a
+record; a failed check throws `MigrationError` and leaves the live dataset untouched. Set
+projections are compared by membership, not iteration order. `defineModel(input, {
+migrationManifest })` lets a per-node view run those checks against its full owning model.
+Nested links keep their own `minCount`, enforced during strict child validation regardless
+of `sh:severity`.
 
 The generator derives aliases exclusively from explicit extra `sh:targetClass` values and
 bounded `sh:alternativePath` lists. Vocabulary alignment annotations never grant aliases.

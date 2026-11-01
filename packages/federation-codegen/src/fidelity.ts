@@ -483,6 +483,11 @@ function assertCompositeFidelity(
             `composite ${composite.name} link ${field.name} target class does not conform to sh:class / sh:node`,
           );
         }
+        if (field.minCount !== constraint.minCount) {
+          throw new FidelityError(
+            `composite ${composite.name} nested link ${field.name} minCount differs from its shape`,
+          );
+        }
         const required = field.guards?.requiredFailClosed === true;
         if (required && !isPresenceMust(constraint)) {
           throw new FidelityError(
