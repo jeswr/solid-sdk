@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONNECTORS,
   connectorForUrl,
+  identitiesIn,
   type ProvenanceContext,
   provenanceOf,
 } from "../../src/apps/home/lib/model/provenance";
@@ -40,7 +41,7 @@ describe("Home §5.3 provenance", () => {
   ])("rule 2: resolves %s app and person names", async (predicate) => {
     for (const [iri, kind, label] of [
       [app, "app", "MyHealth"],
-      [person, "source", "Bob"],
+      [person, "person", "Bob"],
     ]) {
       const dataset = await rdf(`<#it> prov:${predicate} <${iri}> .`);
       expect(provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, context)).toEqual({
@@ -95,6 +96,27 @@ describe("Home §5.3 provenance", () => {
         identities: new Map([[app, { kind: "app", label: "https://app.example/client.jsonld" }]]),
       }),
     ).toEqual({ kind: "app", label: "another app" });
+  });
+
+  // AUTHORED-BY Claude Opus 5.5 — finding 7
+  it("labels a person's WebID with that profile's name, never as another app", async () => {
+    const named = await rdf(
+      `<#it> prov:wasAttributedTo <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person>; <http://xmlns.com/foaf/0.1/name> "Bob Jones" .`,
+    );
+    const identities = identitiesIn(named, subject);
+    expect(identities.get(person)).toEqual({ kind: "person", label: "Bob Jones" });
+    expect(provenanceOf(named, subject, STORAGE, { ...context, identities })).toEqual({
+      kind: "person",
+      label: "Bob Jones",
+    });
+    // Without identities (the item page before this fix) the same item read as an app.
+    const unnamed = await rdf(
+      `<#it> prov:wasAttributedTo <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person> .`,
+    );
+    expect(provenanceOf(unnamed, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+      kind: "person",
+      label: "another person",
+    });
   });
 
   it("ports all connector host patterns and protects host boundaries", () => {

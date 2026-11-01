@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, LoadingSkeleton, PodMeter } from "@jeswr/suite-ui";
 import Link from "next/link";
 import type { DomainItem } from "../lib/model/discovery";
 import { sortItems } from "../lib/model/discovery";
-import { greeting, itemTitle, relativeTime } from "../state/presentation";
+import { asOfTime, greeting, itemTitle, relativeTime } from "../state/presentation";
 import type { HomeAccess } from "../state/use-home-access";
 
 export interface HomeHeaderProps {
@@ -15,6 +16,10 @@ export interface HomeHeaderProps {
   now: number;
   quota?: number;
   access?: HomeAccess | undefined;
+  /** The browser is offline: what's shown is the copy read at `asOf`. */
+  offline?: boolean;
+  /** When the shown copy was read from the pod (ms). */
+  asOf?: number | undefined;
   onRetry: () => void;
 }
 
@@ -26,6 +31,8 @@ export function HomeHeader({
   now,
   quota,
   access,
+  offline = false,
+  asOf,
   onRetry,
 }: HomeHeaderProps) {
   const latest = sortItems(items.filter((item) => item.modified))[0];
@@ -33,6 +40,9 @@ export function HomeHeader({
     <header className="hm-header">
       <h1>{greeting(new Date(now), displayName)}</h1>
       <p className="hm-muted">Here's what's in your pod and who can see it.</p>
+      {offline && asOf !== undefined ? (
+        <p className="hm-muted">You're offline. This is your pod as of {asOfTime(asOf)}.</p>
+      ) : null}
       <section className="hm-pod" aria-label="Your pod">
         <h2>Your pod</h2>
         {status === "loading" ? (

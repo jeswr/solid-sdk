@@ -608,3 +608,79 @@ describe("empty-document fallback when a server refuses an ACL for a missing res
     expect(pod.has(prefs)).toBe(false);
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5 — finding 9
+describe("manual items never land in a public folder", () => {
+  const address = () => types.find((type) => type.id === "address") as (typeof types)[number];
+  const makePod = () =>
+    createDemoPod({
+      root,
+      seed: [
+        {
+          path: "profile/card",
+          contentType: "text/turtle",
+          body: `<#me> <${SOLID}privateTypeIndex> <${root}settings/privateTypeIndex.ttl>.`,
+        },
+        { path: "personal/old.ttl", contentType: "text/turtle", body: "<#x> <#y> <#z>." },
+      ],
+    });
+  /** The pod reports public read on `publicUrl` (and, optionally, anything under it). */
+  const publicOn = (pod: ReturnType<typeof makePod>, test: (url: string) => boolean) =>
+    vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const response = await pod.fetch(input, init);
+      if (!test(String(input))) return response;
+      const headers = new Headers(response.headers);
+      headers.set("wac-allow", 'user="read write append control",public="read"');
+      return new Response(response.body, { status: response.status, headers });
+    });
+
+  it("refuses before writing when the target folder reports public read", async () => {
+    const pod = makePod();
+    const fetch = publicOn(pod, (url) => url === `${root}personal/`);
+    const url = manualUrl(root, address(), "Home", "pub123");
+    const template = await loadTemplate(address().manualForm as string, url, fetchTemplate);
+    const fields = autoFormFor(template, `${url}#it`);
+    await expect(
+      createManualItem({ storageUrl: root, webId, fetch }, address(), url, template, fields, {}),
+    ).rejects.toThrow("Anyone with the link can see this folder");
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    expect(pod.has(url)).toBe(false);
+  });
+
+  it("checks the nearest existing folder when the target folder doesn't exist yet", async () => {
+    const pod = createDemoPod({ root, seed: [] });
+    const fetch = publicOn(pod, (url) => url === root);
+    const url = manualUrl(root, address(), "Home", "pub456");
+    const template = await loadTemplate(address().manualForm as string, url, fetchTemplate);
+    await expect(
+      createManualItem(
+        { storageUrl: root, webId, fetch },
+        address(),
+        url,
+        template,
+        autoFormFor(template, `${url}#it`),
+        {},
+      ),
+    ).rejects.toThrow("Make the folder private");
+    expect(pod.has(url)).toBe(false);
+  });
+
+  it("removes an item the server reports public after writing it", async () => {
+    const pod = makePod();
+    const url = manualUrl(root, address(), "Home", "pub789");
+    const fetch = publicOn(pod, (target) => target === url);
+    const template = await loadTemplate(address().manualForm as string, url, fetchTemplate);
+    await expect(
+      createManualItem(
+        { storageUrl: root, webId, fetch },
+        address(),
+        url,
+        template,
+        autoFormFor(template, `${url}#it`),
+        {},
+      ),
+    ).rejects.toThrow("Anyone with the link can see this folder");
+    expect(pod.has(url)).toBe(false);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
+  });
+});

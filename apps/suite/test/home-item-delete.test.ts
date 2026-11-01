@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readItem } from "../src/apps/home/components/item/data";
 import {
   createDeleteController,
+  HOLD_GRACE_MS,
   UNDO_MS,
 } from "../src/apps/home/components/item/delete-controller";
 import { classificationForType } from "../src/apps/home/lib/model/classify";
@@ -369,4 +370,80 @@ it("can delete a file and Undo preserves its exact bytes and content type", asyn
   await pod.fetch(file, { method: "DELETE" });
   expect(await controller.undo(file)).toBe(true);
   expect(new Uint8Array(await (await pod.fetch(file)).arrayBuffer())).toEqual(data);
+});
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 2 (findings 3, 4, 5)
+it("a held deletion waits for its Undo toast however long Sonner pauses, then runs on release", async () => {
+  vi.useFakeTimers();
+  const { controller, item, pod, refresh } = await setup();
+  await controller.remove(item, vi.fn());
+  const started = vi.fn();
+  expect(controller.hold(url, started)).toBe(true);
+  // The toast is hovered past the undo window: nothing is deleted and Undo still works.
+  await vi.advanceTimersByTimeAsync(UNDO_MS + 10_000);
+  expect(pod.has(url)).toBe(true);
+  expect(started).not.toHaveBeenCalled();
+  expect(await controller.undo(url)).toBe(true);
+  expect(pod.has(url)).toBe(true);
+  // A late close of the same toast can't commit a deletion that was undone.
+  controller.release(url);
+  await vi.advanceTimersByTimeAsync(UNDO_MS + HOLD_GRACE_MS);
+  expect(pod.has(url)).toBe(true);
+  // Next time the toast closes without Undo: the deletion starts at once, exactly once.
+  await controller.remove(
+    (await readItem({ fetch: pod.fetch, storageUrl: root } as never, url)).item,
+    vi.fn(),
+  );
+  expect(controller.hold(url, started)).toBe(true);
+  controller.release(url);
+  controller.release(url);
+  expect(started).toHaveBeenCalledOnce();
+  expect(controller.hold(url)).toBe(false);
+  expect(await controller.undo(url)).toBe(false);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(pod.has(url)).toBe(false);
+  expect(refresh).toHaveBeenCalled();
+});
+it("commits a held deletion after the grace period and tells the holder it started", async () => {
+  vi.useFakeTimers();
+  const { controller, item, pod } = await setup();
+  await controller.remove(item, vi.fn());
+  const started = vi.fn();
+  controller.hold(url, started);
+  await vi.advanceTimersByTimeAsync(UNDO_MS + HOLD_GRACE_MS - 1);
+  expect(pod.has(url)).toBe(true);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(started).toHaveBeenCalledOnce();
+  expect(pod.has(url)).toBe(false);
+});
+it("treats a resumed deletion another tab already finished as done, then refreshes", async () => {
+  vi.useFakeTimers();
+  const { session, pod, controller, item, refresh } = await setup();
+  await controller.remove(item, vi.fn());
+  controller.dispose();
+  const failed = vi.fn();
+  const reloaded = createDeleteController({ ...session }, refresh, failed);
+  expect(reloaded.pendingDeletes()).toEqual([{ url, deleteAt: expect.any(Number), resumed: true }]);
+  await pod.fetch(url, { method: "DELETE" });
+  refresh.mockClear();
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(failed).not.toHaveBeenCalled();
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(reloaded.getSnapshot().size).toBe(0);
+});
+it("treats a 412 for an item that is now missing as done (a changed item still fails, above)", async () => {
+  vi.useFakeTimers();
+  const { pod, controller, item, fetch, refresh } = await setup();
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method !== "DELETE") return pod.fetch(input, init);
+    // Another tab removed it between our read and our conditional DELETE.
+    await pod.fetch(input, { method: "DELETE" });
+    return new Response(null, { status: 412 });
+  });
+  const failed = vi.fn();
+  await controller.remove(item, failed);
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(failed).not.toHaveBeenCalled();
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(pod.has(url)).toBe(false);
 });

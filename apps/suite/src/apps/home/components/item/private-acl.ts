@@ -179,6 +179,42 @@ export async function discardEmptyDocument(
     .catch(() => undefined);
 }
 
+/** Whether a response's `WAC-Allow` header grants the public any access. */
+export function publiclyAccessible(headers: Headers): boolean {
+  const modes = /(?:^|,)\s*public\s*=\s*"([^"]*)"/i.exec(headers.get("wac-allow") ?? "");
+  return /\b(?:read|append|write)\b/i.test(modes?.[1] ?? "");
+}
+
+export class PublicFolderError extends Error {
+  constructor() {
+    super(
+      "Anyone with the link can see this folder, so Home won't add a private item to it. Make the folder private, then try again.",
+    );
+  }
+}
+
+/**
+ * Refuse to put a new item where the public could read it: the nearest existing folder
+ * (whose access the new item inherits) must not report public access. A server that
+ * reports no `WAC-Allow` can't be checked here and is allowed, as before; the created
+ * item is checked again after its write.
+ */
+export async function assertFolderNotPublic(
+  session: PrivateAclSession,
+  container: string,
+): Promise<void> {
+  for (
+    let url: string | undefined = assertWithinPodScope(session.storageUrl, container);
+    url !== undefined;
+    url = parentOf(url, session.storageUrl)
+  ) {
+    const response = await session.fetch(url, { method: "HEAD", redirect: "error" });
+    if (response.status === 404) continue;
+    if (publiclyAccessible(response.headers)) throw new PublicFolderError();
+    return;
+  }
+}
+
 /**
  * After the first write, confirm the server governs the document with the ACL that
  * was verified, and that it reports no public access.
@@ -190,12 +226,11 @@ export async function verifyPrivateDocument(
 ): Promise<void> {
   const head = await session.fetch(target, { method: "HEAD", redirect: "error" });
   const advertised = aclLink(head.headers, target);
-  const publicModes = /(?:^|,)\s*public\s*=\s*"([^"]*)"/i.exec(head.headers.get("wac-allow") ?? "");
   if (
     !head.ok ||
     acpHeaders(head.headers) ||
     (advertised !== undefined && advertised !== endpoint) ||
-    /\b(?:read|append|write)\b/i.test(publicModes?.[1] ?? "")
+    publiclyAccessible(head.headers)
   )
     throw new PrivateAccessError("Couldn't verify private access to your settings.");
 }

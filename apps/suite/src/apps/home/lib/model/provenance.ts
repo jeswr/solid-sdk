@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
-  kind: "source" | "app" | "you";
+  kind: "source" | "app" | "person" | "you";
   label: string;
   logoId?: string;
 }
@@ -83,21 +84,23 @@ export function identitiesIn(
   const identities = new Map<string, { kind: "app" | "person"; label: string }>();
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
-      const agent = subjectOf(dataset, iri);
-      const label = agent.name?.trim();
+      const label = subjectOf(dataset, iri).name?.trim();
       if (!label || /http/i.test(label)) continue;
-      const person = agent.types.some((type) =>
-        [
-          `${NS.FOAF}Person`,
-          `${NS.SCHEMA}Person`,
-          `${NS.VCARD}Individual`,
-          `${NS.PROV}Person`,
-        ].includes(type),
-      );
-      identities.set(iri, { kind: person ? "person" : "app", label });
+      identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
     }
   }
   return identities;
+}
+
+const PERSON_TYPES = [
+  `${NS.FOAF}Person`,
+  `${NS.SCHEMA}Person`,
+  `${NS.VCARD}Individual`,
+  `${NS.PROV}Person`,
+];
+/** Whether the loaded graph types this agent as a person (e.g. a WebID's profile). */
+function isPerson(dataset: DatasetCore, iri: string): boolean {
+  return subjectOf(dataset, iri).types.some((type) => PERSON_TYPES.includes(type));
 }
 
 /** Home §5.3, in precedence order; labels contain names, never raw identifiers. */
@@ -109,6 +112,7 @@ export function provenanceOf(
 ): Provenance {
   const node = subjectOf(dataset, subject);
   let attributedToAnother = false;
+  let attributedToPerson = false;
   for (const value of node.sourceUrls) {
     const connector = connectorForUrl(value);
     if (connector) return providedBy(connector);
@@ -118,8 +122,10 @@ export function provenanceOf(
       if (iri === context.userWebId) continue;
       attributedToAnother = true;
       const identity = context.identities?.get(iri);
+      // A person's WebID is labelled with that profile's name, never as an app.
       if (identity?.label.trim() && !/http/i.test(identity.label))
-        return { kind: identity.kind === "app" ? "app" : "source", label: identity.label.trim() };
+        return { kind: identity.kind, label: identity.label.trim() };
+      if (identity?.kind === "person" || isPerson(dataset, iri)) attributedToPerson = true;
     }
   }
   const url = httpUrl(containerUrl);
@@ -132,6 +138,7 @@ export function provenanceOf(
     const connector = CONNECTORS.find((connector) => connector.id === id);
     if (connector) return providedBy(connector);
   }
+  if (attributedToPerson) return { kind: "person", label: "another person" };
   return attributedToAnother
     ? { kind: "app", label: "another app" }
     : { kind: "you", label: "Added by you" };

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
@@ -9,7 +10,14 @@ import { applyFieldEdits } from "../../lib/forms/subject-edit";
 import type { DataType } from "../../lib/model/domains";
 import { inStorage, readResource, serializeTurtle, subjectOf } from "../../lib/model/rdf";
 import { registrationsFrom } from "../../lib/model/type-index";
-import { discardEmptyDocument, preparePrivateDocument, verifyPrivateDocument } from "./private-acl";
+import {
+  assertFolderNotPublic,
+  discardEmptyDocument,
+  PublicFolderError,
+  preparePrivateDocument,
+  publiclyAccessible,
+  verifyPrivateDocument,
+} from "./private-acl";
 
 export interface ManualSession {
   storageUrl: string;
@@ -228,8 +236,12 @@ export async function createManualItem(
 ) {
   if (!type.manualForm || !type.container)
     throw new Error("This data type can't be added manually");
-  const target = assertWithinPodScope(new URL(type.container, session.storageUrl).href, url);
+  const container = new URL(type.container, session.storageUrl).href;
+  const target = assertWithinPodScope(container, url);
+  // Field values become RDF terms through valueToTerm (escaped IRIs, encoded mailto:).
   const dataset = applyFieldEdits(template, `${target}#it`, fields, values);
+  // Manual items are personal: never write one where the public can read it.
+  await assertFolderNotPublic(session, container);
   const response = await session.fetch(target, {
     method: "PUT",
     redirect: "error",
@@ -237,6 +249,15 @@ export async function createManualItem(
     body: await serializeTurtle(dataset),
   });
   if (!response.ok) throw new Error("Couldn't save this item. Please try again.");
+  const created = await session.fetch(target, { method: "HEAD", redirect: "error" });
+  if (publiclyAccessible(created.headers)) {
+    await discardEmptyDocument(
+      session,
+      target,
+      created.headers.get("etag") ?? response.headers.get("etag"),
+    );
+    throw new PublicFolderError();
+  }
   try {
     await registerManualType(
       session,

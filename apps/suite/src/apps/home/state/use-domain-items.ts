@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { TypedViewData } from "@jeswr/suite-ui";
@@ -34,6 +35,8 @@ interface Snapshot {
   refreshing: boolean;
   used: number | undefined;
   updated: number;
+  /** When the cards were last read from the pod (ms), for the offline "as of" line. */
+  loadedAt?: number;
 }
 const initial: Snapshot = {
   status: "loading",
@@ -258,6 +261,7 @@ function createDomainStore(session: HomeSession) {
           refreshing: false,
           used,
           updated: background ? snapshot.updated + 1 : snapshot.updated,
+          loadedAt: Date.now(),
         });
       } catch (error) {
         const url = error instanceof RdfFetchError ? (error.url ?? profileUrl) : profileUrl;

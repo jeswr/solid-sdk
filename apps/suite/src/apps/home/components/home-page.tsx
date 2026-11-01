@@ -120,6 +120,8 @@ export function HomePage({ domain }: { domain: string }) {
         access={access}
         status={data.status}
         now={now}
+        offline={!online}
+        asOf={data.loadedAt}
         onRetry={retry}
       />
       <DomainNavigation

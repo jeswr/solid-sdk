@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -20,12 +21,13 @@ import { typedViewData } from "../../../../components/typed-view-data";
 import { decodeRef } from "../../../../lib/refs";
 import { classificationForType } from "../../lib/model/classify";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
-import { provenanceOf } from "../../lib/model/provenance";
-import { itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
+import { identitiesIn, provenanceOf } from "../../lib/model/provenance";
+import { inStorage } from "../../lib/model/rdf";
+import { asOfTime, itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
 import { domainStore } from "../../state/use-domain-items";
 import { useHomeSession } from "../home-app";
 import { domainHref } from "../home-sidebar";
-import { type ItemRead, ItemReadError, readItem } from "./data";
+import { type ItemRead, ItemReadError, readExternalProfile, readItem } from "./data";
 import { DetailView } from "./detail-view";
 import { EditForm } from "./edit-form";
 import { openShare } from "./open-share";
@@ -58,6 +60,8 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
     view?: TypedViewData;
     error?: number;
     cached?: boolean;
+    /** When this copy was read, for the offline "as of" line. */
+    loadedAt?: number;
   }>({});
   const [version, setVersion] = useState(0);
   const [editing, setEditing] = useState(query.get("edit") === "1");
@@ -80,10 +84,18 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
         setState({ error: 404 });
         return;
       }
+      const profileUrl = session.webId.split("#")[0];
+      const external = !inStorage(url, session.storageUrl);
+      if (external && url !== profileUrl) {
+        // Only this storage (and the user's own public profile) can be opened here.
+        setState({ error: 404 });
+        return;
+      }
       try {
-        const cached = domainStore(session)
-          .getSnapshot()
-          .items.find((item) => item.url === url && (!subject || item.subject.value === subject));
+        const snapshot = domainStore(session).getSnapshot();
+        const cached = snapshot.items.find(
+          (item) => item.url === url && (!subject || item.subject.value === subject),
+        );
         let read: ItemRead;
         const offline = !navigator.onLine;
         if (offline && cached)
@@ -91,7 +103,10 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
         else if (offline) {
           setState({ error: 0, cached: true });
           return;
-        } else read = await readItem(session, url, subject, controller.signal);
+        } else if (external)
+          // A WebID hosted elsewhere: the same credential-free read the Home cards use.
+          read = await readExternalProfile(session, subject, controller.signal);
+        else read = await readItem(session, url, subject, controller.signal);
         if (contactDetails)
           read = {
             ...read,
@@ -118,6 +133,7 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
                 .filter((property) => property.values.length),
             },
             cached: offline,
+            loadedAt: offline ? (snapshot.loadedAt ?? Date.now()) : Date.now(),
           });
       } catch (error) {
         if (live) setState({ error: error instanceof ItemReadError ? error.status : 500 });
@@ -165,6 +181,8 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
     provenanceOf(read.item.dataset, read.item.subject, read.item.containerUrl, {
       storage: session.storageUrl,
       userWebId: session.webId,
+      // The same names the Home card resolves, so the card and this page agree.
+      identities: identitiesIn(read.item.dataset, read.item.subject),
     });
   const source = actions.find((action) => action.id === "source");
   const copy = async () => {
@@ -205,7 +223,10 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
             <ProvenanceBadge source={provenance?.label ?? "source"} />
           )}
           {!online || state.cached ? (
-            <p role="status">Showing saved copies. Reconnect to save.</p>
+            <p role="status">
+              Showing saved copies
+              {state.loadedAt ? ` as of ${asOfTime(state.loadedAt)}` : ""}. Reconnect to save.
+            </p>
           ) : null}
           <div className="hm-item-toolbar">
             <Toolbar
@@ -273,7 +294,12 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
               ) : (
                 <DetailView data={state.view} />
               )}
-              <WhoCanSee url={read.item.url} session={session} online={online} />
+              <WhoCanSee
+                url={read.item.url}
+                session={session}
+                online={online}
+                publicProfile={!inStorage(read.item.url, session.storageUrl)}
+              />
               {advanced && technical ? (
                 <details className="hm-item-technical" open>
                   <summary>Technical details</summary>

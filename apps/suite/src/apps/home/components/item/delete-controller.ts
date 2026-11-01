@@ -4,9 +4,14 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import type { DomainItem } from "../../lib/model/discovery";
 import { linkedProtectedDocument, protectedDocument } from "../../state/protected-document";
 import type { HomeSession } from "../../state/use-domain-items";
-import { isContainer, readItem } from "./data";
+import { ItemReadError, isContainer, readItem } from "./data";
 
 export const UNDO_MS = 8_000;
+/**
+ * While a toast holds a deletion (its timer pauses on hover and focus), this page's own
+ * timer waits this much longer before committing anyway, e.g. when no toast is shown.
+ */
+export const HOLD_GRACE_MS = 30_000;
 /** What survives a reload. Item content is never copied into browser storage. */
 interface Tombstone {
   url: string;
@@ -21,6 +26,11 @@ interface PendingDelete {
   durable: boolean;
   timer: ReturnType<typeof setTimeout>;
   committing: boolean;
+  /** Undo has started; a late toast close must not commit. */
+  undoing: boolean;
+  onError: () => void;
+  /** Called once when the DELETE starts, so an Undo toast can be dismissed. */
+  onStart?: () => void;
 }
 const same = (a: Tombstone, b: Tombstone) =>
   a.url === b.url && a.etag === b.etag && a.deleteAt === b.deleteAt;
@@ -89,6 +99,9 @@ export function createDeleteController(
     queue.update((entries) => entries.filter((other) => !same(other, entry.tombstone)));
     publish(entry.tombstone.url, false);
   };
+  /** The item is already gone (e.g. another tab finished this deletion). */
+  const gone = async (url: string) =>
+    (await session.fetch(url, { method: "HEAD", redirect: "error" })).status === 404;
   const commit = async (entry: PendingDelete, resumed: boolean) => {
     const { url, etag } = entry.tombstone;
     // Undo in another tab removes the shared tombstone; respect it.
@@ -96,7 +109,17 @@ export function createDeleteController(
     if (queued && !queued.some((other) => same(other, entry.tombstone))) return;
     if (resumed) {
       // Re-check protection: browser storage is not a trusted source of targets.
-      const read = await readItem(session, url);
+      let read: Awaited<ReturnType<typeof readItem>>;
+      try {
+        read = await readItem(session, url);
+      } catch (error) {
+        // Another tab already finished it: that is the outcome this tombstone asked for.
+        if (error instanceof ItemReadError && error.status === 404) {
+          await refresh();
+          return;
+        }
+        throw error;
+      }
       if (
         isContainer(read.item) ||
         protectedDocument(read.item, session.storageUrl, session.webId) ||
@@ -109,8 +132,20 @@ export function createDeleteController(
       redirect: "error",
       headers: { "if-match": etag },
     });
-    if (!response.ok && response.status !== 404) throw new Error("Delete failed");
+    // 412 with the item missing means it was deleted elsewhere meanwhile: also success.
+    if (!response.ok && response.status !== 404 && !(response.status === 412 && (await gone(url))))
+      throw new Error("Delete failed");
     await refresh();
+  };
+  /** Start the DELETE now (once), unless Undo has started. */
+  const start = (entry: PendingDelete) => {
+    if (entry.committing || entry.undoing) return;
+    clearTimeout(entry.timer);
+    entry.committing = true;
+    entry.onStart?.();
+    void commit(entry, !entry.restore)
+      .catch(entry.onError)
+      .finally(() => forget(entry));
   };
   const schedule = (
     tombstone: Tombstone,
@@ -123,18 +158,12 @@ export function createDeleteController(
       durable: !restore,
       timer: undefined as unknown as ReturnType<typeof setTimeout>,
       committing: false,
+      undoing: false,
+      onError,
     };
     pending.set(tombstone.url, entry);
     publish(tombstone.url, true);
-    entry.timer = setTimeout(
-      () => {
-        entry.committing = true;
-        void commit(entry, !restore)
-          .catch(onError)
-          .finally(() => forget(entry));
-      },
-      Math.max(0, tombstone.deleteAt - Date.now()),
-    );
+    entry.timer = setTimeout(() => start(entry), Math.max(0, tombstone.deleteAt - Date.now()));
     return entry;
   };
   if (typeof localStorage !== "undefined")
@@ -190,9 +219,41 @@ export function createDeleteController(
         reading.delete(item.url);
       }
     },
+    /** Deletions waiting for their undo window: those resumed from an earlier page have no copy. */
+    pendingDeletes(): { url: string; deleteAt: number; resumed: boolean }[] {
+      return [...pending.values()]
+        .filter((entry) => !entry.committing && !entry.undoing)
+        .map((entry) => ({
+          url: entry.tombstone.url,
+          deleteAt: entry.tombstone.deleteAt,
+          resumed: !entry.restore,
+        }));
+    },
+    /**
+     * Let a UI element (an Undo toast) decide when the deletion runs: this page's timer
+     * waits {@link HOLD_GRACE_MS} past the undo window, and the holder calls `release`
+     * when it closes. `onStart` runs when the DELETE starts, however it was started.
+     */
+    hold(url: string, onStart?: () => void): boolean {
+      const entry = pending.get(url);
+      if (!entry || entry.committing || entry.undoing) return false;
+      clearTimeout(entry.timer);
+      if (onStart) entry.onStart = onStart;
+      entry.timer = setTimeout(
+        () => start(entry),
+        Math.max(0, entry.tombstone.deleteAt - Date.now()) + HOLD_GRACE_MS,
+      );
+      return true;
+    },
+    /** The holder closed without Undo: delete now. */
+    release(url: string): void {
+      const entry = pending.get(url);
+      if (entry) start(entry);
+    },
     async undo(url: string): Promise<boolean> {
       const entry = pending.get(url);
-      if (!entry || entry.committing) return false;
+      if (!entry || entry.committing || entry.undoing) return false;
+      entry.undoing = true;
       clearTimeout(entry.timer);
       try {
         // A resumed entry was never removed: cancelling its tombstone is the undo.

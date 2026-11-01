@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-import { extractMediaType, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Claude Opus 5.5
+import { extractMediaType, RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
 import type { Term } from "@rdfjs/types";
@@ -86,6 +87,53 @@ export async function readItem(
     contentType,
     writable: canWrite(target, session.storageUrl, response.headers.get("wac-allow")),
     size: bytes.byteLength,
+  };
+}
+/**
+ * The WebID profile when it lives outside this storage (an identity provider's host).
+ * Read it as the domain store does — public, credential-free, no redirects — never with
+ * the storage's authenticated transport. Home can't edit it there, so it is read-only.
+ */
+export async function readExternalProfile(
+  session: Pick<HomeSession, "webId" | "storageUrl">,
+  subject?: string | Term,
+  signal?: AbortSignal,
+  publicFetch: typeof fetch = globalThis.fetch,
+): Promise<ItemRead> {
+  const url = session.webId.split("#")[0] as string;
+  let read: Awaited<ReturnType<typeof readResource>>;
+  try {
+    read = await readResource(
+      (input, init) => publicFetch(input, { ...init, credentials: "omit", redirect: "error" }),
+      url,
+      signal,
+    );
+  } catch (error) {
+    throw new ItemReadError(error instanceof RdfFetchError ? (error.status ?? 500) : 500);
+  }
+  const node = subjectOf(
+    read.dataset,
+    subject && (typeof subject === "string" || subject.termType !== "BlankNode")
+      ? subject
+      : session.webId,
+  );
+  if (![...read.dataset].some((quad) => quad.subject.equals(TermAs.term(node))))
+    throw new ItemReadError(404);
+  return {
+    item: {
+      ...classifySubject(node, session.webId),
+      url,
+      subject: TermAs.term(node),
+      dataset: read.dataset,
+      etag: read.etag,
+      title: node.name ?? nameFromUrl(url),
+      containerUrl: new URL(".", url).href,
+      ...(node.modified ? { modified: node.modified } : {}),
+    },
+    body: "",
+    contentType: "text/turtle",
+    writable: false,
+    size: 0,
   };
 }
 /** Rows come from this resource’s effective policy; consent expiry is informational. */

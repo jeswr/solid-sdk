@@ -42,6 +42,19 @@ describe("Home header access seam", () => {
       "0 apps and 0 people have access",
     );
   });
+  // AUTHORED-BY Claude Opus 5.5 — finding 10
+  it("says when the offline copy is from, and only while offline", () => {
+    const asOf = Date.parse("2026-11-01T08:42:00Z");
+    const time = new Date(asOf).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    expect(render({ offline: true, asOf })).toContain(
+      `You&#x27;re offline. This is your pod as of ${time}.`,
+    );
+    expect(render({ asOf })).not.toContain("offline");
+    expect(render({ offline: true })).not.toContain("as of");
+  });
   it("settles an empty access snapshot as owner-only access", () => {
     const empty = render({ access: { apps: 0, people: 0, publicItems: 0 } });
     expect(empty).toContain("Only you have access");

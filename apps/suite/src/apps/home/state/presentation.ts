@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type TypedViewData, typedViewRegistry } from "@jeswr/suite-ui";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import { encodeRef } from "../../../lib/refs";
@@ -126,6 +127,11 @@ export function relativeTime(value: string, now: number): string {
   if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
   const days = Math.floor(hours / 24);
   return `${days} ${days === 1 ? "day" : "days"} ago`;
+}
+
+/** A clock time for "as of" lines, in the viewer's locale (e.g. "9:05 AM"). */
+export function asOfTime(value: number): string {
+  return new Date(value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 export function itemTitle(item: DomainItem): string {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
@@ -9,6 +10,29 @@ import { accessSummary } from "./data";
 import { openShare } from "./open-share";
 
 export function WhoCanSee({
+  url,
+  session,
+  online,
+  publicProfile = false,
+}: {
+  url: string;
+  session: HomeSession;
+  online: boolean;
+  /** A WebID profile hosted outside storage: public, and its access isn't this pod's. */
+  publicProfile?: boolean;
+}) {
+  if (publicProfile)
+    return (
+      <section className="hm-item-access" id="access" aria-labelledby="hm-access-heading">
+        <h2 id="hm-access-heading">Who can see this</h2>
+        <p>Anyone with the link</p>
+        <p className="hm-muted">This is your public profile. Its host manages who can change it.</p>
+      </section>
+    );
+  return <PodAccess url={url} session={session} online={online} />;
+}
+
+function PodAccess({
   url,
   session,
   online,
