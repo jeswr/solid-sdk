@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Public-address classification for SSRF defence — the MECHANICAL IP primitive of the guard.
  *
@@ -239,11 +240,16 @@ function isPublicIpv6(addr: ipaddr.IPv6, allowLoopback: boolean): boolean {
   // embedded v4 is non-public (the embedded v4 is extracted from the canonical byte array).
   if (range === "6to4") {
     const v4 = embeddedV4(addr, 2);
-    return v4 !== undefined && isPublicIpv4FromBytes(v4, allowLoopback);
+    return v4 !== undefined && isPublicIpv4(v4, allowLoopback);
   }
   if (range === "rfc6052") {
+    // ipaddr.js groups the local-use /48 with the well-known /96. Local-use
+    // translators have varying IPv4 offsets; never decode them as a /96.
+    if (addr.parts[0] === 0x64 && addr.parts[1] === 0xff9b && addr.parts[2] === 1) {
+      return false;
+    }
     const v4 = embeddedV4(addr, 12);
-    return v4 !== undefined && isPublicIpv4FromBytes(v4, allowLoopback);
+    return v4 !== undefined && isPublicIpv4(v4, allowLoopback);
   }
   return PUBLIC_IPV6_RANGES.has(range);
 }
@@ -263,14 +269,6 @@ function embeddedV4(addr: ipaddr.IPv6, startByte: number): ipaddr.IPv4 | undefin
   } catch {
     return undefined;
   }
-}
-
-function isPublicIpv4FromBytes(addr: ipaddr.IPv4, allowLoopback: boolean): boolean {
-  const range = addr.range();
-  if (range === "loopback") {
-    return allowLoopback;
-  }
-  return range === PUBLIC_IPV4_RANGE;
 }
 
 /**

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
@@ -206,9 +207,20 @@ it.each([
     release.resolve();
     await done;
   }
-  expect((await done).map((result) => result.status)).toEqual(
-    phase === "503" ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"],
-  );
+  if (phase === "503")
+    expect((await done).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+  else {
+    // The tabs share provisioning locks, but cannot advance each other's
+    // captured parent receipts. A child creation can therefore refuse the
+    // other tab's next write; retry only as a fresh operation after settlement.
+    for (const [index, result] of (await done).entries()) {
+      if (result.status === "fulfilled") continue;
+      expect(result.reason).toMatchObject({ kind: "conflict", status: 412, url: PRIVATE });
+      await upload(index === 0 ? client : await otherTab(f), index === 0 ? "first" : "second");
+    }
+    expect(f.pod.has(`${PRIVATE}first`)).toBe(true);
+    expect(f.pod.has(`${PRIVATE}second`)).toBe(true);
+  }
   expect(f.pod.has(PRIVATE)).toBe(phase !== "503");
   expect(f.exposures).toEqual([]);
 });

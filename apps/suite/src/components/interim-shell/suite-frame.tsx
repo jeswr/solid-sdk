@@ -11,18 +11,28 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { CalendarDays, FileText, HardDrive, Menu, Search, Users, Wallet } from "lucide-react";
+import {
+  CalendarDays,
+  FileText,
+  HardDrive,
+  Images,
+  Menu,
+  Search,
+  Users,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "money";
+export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "money";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
+  { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
 ];
 

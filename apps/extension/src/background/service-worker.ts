@@ -64,7 +64,9 @@ import {
 } from './core/class-grant';
 import { safePathUrl } from './core/class-path';
 import { normaliseAccessRequest } from './core/class-request';
+import { ResolutionBudget } from './core/class-resolution-budget';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
+import { createInternalRead } from './core/class-resolve-read';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
 import { fetchWithRedirects } from './core/manual-redirect';
 import {
@@ -290,15 +292,28 @@ function withProfileTask<T>(id: string, task: () => Promise<T>): Promise<T> {
 /** Concurrent requests retain their own cancellation scope; lifecycle changes cancel all of them. */
 const profileOperations = new Map<string, Map<AbortController, string | undefined>>();
 
-async function cancellable<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+async function cancellable<T>(
+  signal: AbortSignal,
+  task: () => Promise<T>,
+  onDiscard?: (result: T) => void,
+): Promise<T> {
   signal.throwIfAborted();
   let onAbort = () => {};
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);
     signal.addEventListener('abort', onAbort, { once: true });
   });
+  let pending: Promise<T> | undefined;
   try {
-    return await Promise.race([aborted, task()]);
+    pending = task();
+    const result = await Promise.race([aborted, pending]);
+    signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    // The abort fence can discard an already-created resource before its consumer runs.
+    // Also clean up a late result from a task that ignores abort, without waiting for it.
+    if (pending && onDiscard) void pending.then(onDiscard).catch(() => {});
+    throw error;
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
@@ -308,18 +323,28 @@ async function withProfileOperation<T>(
   id: string,
   task: (signal: AbortSignal) => Promise<T>,
   origin?: string,
+  parentSignal?: AbortSignal,
+  queueSignal?: AbortSignal,
 ): Promise<T | null> {
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  parentSignal?.addEventListener('abort', cancel, { once: true });
+  if (parentSignal?.aborted) cancel();
   const operations = profileOperations.get(id) ?? new Map<AbortController, string | undefined>();
   operations.set(controller, origin);
   profileOperations.set(id, operations);
   try {
-    await profileTasks.get(id);
+    await cancellable(controller.signal, () =>
+      cancellable(queueSignal ?? controller.signal, async () => {
+        await profileTasks.get(id);
+      }),
+    );
     return await cancellable(controller.signal, () => task(controller.signal));
   } catch (error) {
     if (controller.signal.aborted) return null;
     throw error;
   } finally {
+    parentSignal?.removeEventListener('abort', cancel);
     operations.delete(controller);
     if (operations.size === 0) profileOperations.delete(id);
   }
@@ -334,58 +359,123 @@ function cancelProfileOperations(id: string, origin?: string): void {
 function withProfileLifecycle<T>(id: string, task: () => Promise<T>): Promise<T> {
   return withProfileTask(id, async () => {
     cancelProfileOperations(id);
+    refreshHandoffs.delete(id);
     return task();
   });
 }
 
-const refreshes = new Map<string, SingleFlight<StoredSession | null>>();
-function refreshOnce(id: string): Promise<StoredSession | null> {
-  let flight = refreshes.get(id);
-  if (!flight) {
-    flight = new SingleFlight<StoredSession | null>();
-    refreshes.set(id, flight);
+// A redeemed, rotated chain whose transaction was cancelled remains worker-only until a
+// later live request can persist it. Never redeem its spent predecessor a second time.
+const refreshHandoffs = new Map<string, { previous: StoredSession; updated: StoredSession }>();
+
+// One refresh-token redemption per profile; cancellation detaches just that waiter.
+const refreshes = new Map<
+  string,
+  {
+    flight: SingleFlight<StoredSession | null>;
+    controller: AbortController;
+    waiters: number;
   }
-  return flight.run(async () => {
-    const store = await getProfiles();
-    // A delayed reader can enter after the previous flight committed rotated tokens.
-    // Only the credentials read INSIDE this flight may be redeemed or signed out.
-    const ctx = await store.session(id);
-    if (!ctx) return null;
-    if (ctx.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) return ctx.session;
-    try {
-      const updated = await refreshSession(ctx.session, ctx.keyPair);
-      await store.updateSession(id, updated);
-      return updated;
-    } catch {
-      return withProfileTask(id, async () => {
-        // Read and compare under the same lifecycle lock as re-login. A stale failure
-        // must neither sign out replacement credentials nor cancel their requests.
-        const current = await store.session(id);
-        if (
-          current?.session.accessToken === ctx.session.accessToken &&
-          current.session.refreshToken === ctx.session.refreshToken &&
-          current.session.dpopJkt === ctx.session.dpopJkt
-        ) {
-          cancelProfileOperations(id);
-          try {
-            try {
-              await formFill.revokeProfile(id);
-              await store.signOut(id);
-            } finally {
-              await syncOriginGrants();
-            }
-          } finally {
-            // Revocation commits before replica cleanup, which may fail and need a retry.
-            // A toolbar update may await this refresh; schedule its guarded repaint.
-            void updateDefaultIconAndBroadcast().catch(() => {});
-          }
-        } else if (current && current.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) {
-          return current.session;
+>();
+async function refreshOnce(id: string, signal: AbortSignal): Promise<StoredSession | null> {
+  signal.throwIfAborted();
+  let shared = refreshes.get(id);
+  if (!shared) {
+    shared = {
+      flight: new SingleFlight<StoredSession | null>(),
+      controller: new AbortController(),
+      waiters: 0,
+    };
+    refreshes.set(id, shared);
+  }
+  const refreshSignal = shared.controller.signal;
+  shared.waiters++;
+  try {
+    return await cancellable(signal, () =>
+      shared.flight.run(async () => {
+        const store = await cancellable(refreshSignal, () => getProfiles());
+        // A delayed reader can enter after the previous flight committed rotated tokens.
+        // Only the credentials read INSIDE this flight may be redeemed or signed out.
+        refreshSignal.throwIfAborted();
+        const ctx = await cancellable(refreshSignal, () => store.session(id));
+        refreshSignal.throwIfAborted();
+        if (!ctx) return null;
+        if (ctx.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) {
+          refreshHandoffs.delete(id);
+          return ctx.session;
         }
-        return null;
-      });
+        try {
+          const handoff = refreshHandoffs.get(id);
+          const sameChain =
+            handoff?.previous.accessToken === ctx.session.accessToken &&
+            handoff.previous.refreshToken === ctx.session.refreshToken &&
+            handoff.previous.dpopJkt === ctx.session.dpopJkt &&
+            handoff.previous.webId === ctx.session.webId &&
+            handoff.previous.issuer === ctx.session.issuer;
+          refreshHandoffs.delete(id);
+          const updated =
+            sameChain && handoff.updated.expiresAt >= Date.now() + EXPIRY_BUFFER_MS
+              ? handoff.updated
+              : await cancellable(refreshSignal, () =>
+                  refreshSession(
+                    sameChain ? handoff.updated : ctx.session,
+                    ctx.keyPair,
+                    refreshSignal,
+                  ),
+                );
+          refreshSignal.throwIfAborted();
+          refreshHandoffs.set(id, { previous: ctx.session, updated });
+          await cancellable(refreshSignal, () => store.updateSession(id, updated, refreshSignal));
+          refreshSignal.throwIfAborted();
+          refreshHandoffs.delete(id);
+          return updated;
+        } catch {
+          // Cancelling a waiter is not evidence that its credentials are invalid.
+          refreshSignal.throwIfAborted();
+          refreshHandoffs.delete(id);
+          return cancellable(refreshSignal, () =>
+            withProfileTask(id, async () => {
+              refreshSignal.throwIfAborted();
+              // Read and compare under the same lifecycle lock as re-login. A stale failure
+              // must neither sign out replacement credentials nor cancel their requests.
+              const current = await store.session(id);
+              refreshSignal.throwIfAborted();
+              if (
+                current?.session.accessToken === ctx.session.accessToken &&
+                current.session.refreshToken === ctx.session.refreshToken &&
+                current.session.dpopJkt === ctx.session.dpopJkt
+              ) {
+                // Validation commits us to teardown. Cancel every existing operation before
+                // awaiting persistence or purges, including this refresh's own waiter. From
+                // here cleanup must finish under the lifecycle lock independently of its signal.
+                cancelProfileOperations(id);
+                try {
+                  try {
+                    await formFill.revokeProfile(id);
+                    await store.signOut(id);
+                  } finally {
+                    await syncOriginGrants();
+                  }
+                } finally {
+                  // Revocation commits before replica cleanup, which may fail and need a retry.
+                  // A toolbar update may await this refresh; schedule its guarded repaint.
+                  void updateDefaultIconAndBroadcast().catch(() => {});
+                }
+              } else if (current && current.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) {
+                return current.session;
+              }
+              return null;
+            }),
+          );
+        }
+      }),
+    );
+  } finally {
+    if (--shared.waiters === 0) {
+      shared.controller.abort();
+      if (refreshes.get(id) === shared) refreshes.delete(id);
     }
-  });
+  }
 }
 
 type SessionContext = { profileId: string; session: StoredSession; keyPair: CryptoKeyPair };
@@ -393,7 +483,8 @@ type SessionContext = { profileId: string; session: StoredSession; keyPair: Cryp
 /** Recheck captured credentials after asynchronous work, including key replacement on re-login. */
 async function checkProfileSession(ctx: SessionContext, signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
-  const current = await (await getProfiles()).session(ctx.profileId);
+  const store = await cancellable(signal, () => getProfiles());
+  const current = await cancellable(signal, () => store.session(ctx.profileId));
   signal.throwIfAborted();
   if (
     current?.session.dpopJkt !== ctx.session.dpopJkt ||
@@ -409,7 +500,7 @@ async function checkOriginAuthority(
   signal: AbortSignal,
 ): Promise<OriginGrant> {
   await checkProfileSession(ctx, signal);
-  const current = await originGrantFor(parent.origin);
+  const current = await cancellable(signal, () => originGrantFor(parent.origin));
   signal.throwIfAborted();
   if (current?.profileId !== ctx.profileId || current?.createdAt !== parent.createdAt)
     throw new Error('Origin grant changed.');
@@ -417,15 +508,22 @@ async function checkOriginAuthority(
 }
 
 /** Resolve the default once per request. Never re-select it after an await. */
-async function ensureSession(profileId?: string): Promise<SessionContext | null> {
-  const store = await getProfiles();
-  const id = profileId ?? (await store.getDefault())?.profile.id;
+async function ensureSession(
+  profileId?: string,
+  signal = new AbortController().signal,
+): Promise<SessionContext | null> {
+  const store = await cancellable(signal, () => getProfiles());
+  const id = profileId ?? (await cancellable(signal, () => store.getDefault()))?.profile.id;
+  signal.throwIfAborted();
   if (!id) return null;
-  let ctx = await store.session(id);
+  let ctx = await cancellable(signal, () => store.session(id));
+  signal.throwIfAborted();
   if (!ctx) return null;
   if (ctx.session.expiresAt < Date.now() + EXPIRY_BUFFER_MS) {
-    if (!(await refreshOnce(id))) return null;
-    ctx = await store.session(id);
+    if (!(await refreshOnce(id, signal))) return null;
+    signal.throwIfAborted();
+    ctx = await cancellable(signal, () => store.session(id));
+    signal.throwIfAborted();
   }
   return ctx ? { ...ctx, profileId: id } : null;
 }
@@ -489,8 +587,10 @@ async function buildFetchSession(
   session: StoredSession,
   keyPair: CryptoKeyPair,
   profileId: string,
+  signal = new AbortController().signal,
 ): Promise<FetchSession> {
-  const { podOrigins } = await (await getProfiles()).get(profileId);
+  const store = await cancellable(signal, () => getProfiles());
+  const { podOrigins } = await cancellable(signal, () => store.get(profileId));
   const allowedOrigins = computeAllowedOrigins({
     webId: session.webId,
     issuer: session.issuer,
@@ -724,18 +824,27 @@ async function handleProfileFetch(
             if ('deny' in latest) throw new Error(await latest.deny.text());
           },
           fetchImpl: (input, init) =>
-            cancellable(signal, async () => {
-              const hopUrl = input.toString();
-              // A probe discovers a GET/HEAD target, so check the original method's
-              // grant. Its HEAD method does not grant it any additional authority.
-              const probing = init!.redirect === 'follow';
-              const hopMethod = probing ? method : init!.method!;
-              const latest = await gate(hopUrl, hopMethod);
-              if ('deny' in latest) throw new Error(await latest.deny.text());
-              if (!probing) sent.set(`${hopMethod} ${hopUrl}`, { url: hopUrl, method: hopMethod });
-              onEgress();
-              return fetch(input, { ...init, signal });
-            }),
+            cancellable(
+              signal,
+              async () => {
+                const hopUrl = input.toString();
+                // A probe discovers a GET/HEAD target, so check the original method's
+                // grant. Its HEAD method does not grant it any additional authority.
+                const probing = init!.redirect === 'follow';
+                const hopMethod = probing ? method : init!.method!;
+                const latest = await gate(hopUrl, hopMethod);
+                if ('deny' in latest) throw new Error(await latest.deny.text());
+                if (!probing)
+                  sent.set(`${hopMethod} ${hopUrl}`, { url: hopUrl, method: hopMethod });
+                onEgress();
+                return fetch(input, { ...init, signal });
+              },
+              (response) => {
+                // Until the bounded reader takes ownership, discarded fetch results still
+                // own a stream that aborting the request alone may leave open.
+                void response.body?.cancel(signal.reason).catch(() => {});
+              },
+            ),
         });
         // Consume network bodies outside the lifecycle queue, including cache.put's body.
         // Chrome exposes an empty body stream on a 304 revalidation, but the Response
@@ -1223,6 +1332,10 @@ type ConsentChoice = {
   respond?: (result: AccessResponse) => void;
 };
 const consentResolvers = new Map<string, (choice: ConsentChoice) => void>();
+const consentDiscovery = new Map<
+  string,
+  { origin: string; controller: AbortController; tabId?: number }
+>();
 const CONSENT_TIMEOUT_MS = 5 * 60_000;
 const CONSENT_EXPIRED = 'This access request has expired. Please request access again.';
 const originRevocationVersions = new Map<string, number>();
@@ -1231,9 +1344,23 @@ function originRevocationVersion(origin: string): number {
   return originRevocationVersions.get(origin) ?? 0;
 }
 
+function cancelTabDiscovery(tabId: number, url?: string): void {
+  for (const request of consentDiscovery.values()) {
+    if (request.tabId === tabId && (url === undefined || originOf(url) !== request.origin))
+      request.controller.abort();
+  }
+}
+chrome.tabs.onRemoved?.addListener((tabId) => cancelTabDiscovery(tabId));
+chrome.tabs.onUpdated?.addListener((tabId, change) => {
+  if (change.url) cancelTabDiscovery(tabId, change.url);
+});
+
 /** Also fences discovery and approvals that have already left the pending-consent maps. */
 function invalidateOriginConsents(origin: string): void {
   originRevocationVersions.set(origin, originRevocationVersion(origin) + 1);
+  for (const request of consentDiscovery.values()) {
+    if (request.origin === origin) request.controller.abort();
+  }
   for (const [consentId, choices] of pendingConsents) {
     if (![...choices.values()].some((choice) => choice.pending.origin === origin)) continue;
     pendingConsents.delete(consentId);
@@ -1299,8 +1426,10 @@ function isHttpIri(value: unknown): value is string {
 async function podOriginsFor(
   session: StoredSession,
   profileId: string,
+  signal = new AbortController().signal,
 ): Promise<ReadonlySet<string>> {
-  const { podOrigins } = await (await getProfiles()).get(profileId);
+  const store = await cancellable(signal, () => getProfiles());
+  const { podOrigins } = await cancellable(signal, () => store.get(profileId));
   return computeAllowedOrigins({
     webId: session.webId,
     podOrigins,
@@ -1309,8 +1438,8 @@ async function podOriginsFor(
   });
 }
 
-/** Public discovery never carries credentials; private indexes use scoped DPoP reads. */
-function makeResolveFetch(
+/** Existing form-fill discovery has its own lifecycle and redirect policy. */
+function makeFormFillFetch(
   session: FetchSession,
   webId: string,
   signal = new AbortController().signal,
@@ -1359,6 +1488,55 @@ function makeResolveFetch(
   };
 }
 
+/** Internal discovery bypasses the page gate and replica; each direct send rechecks authority. */
+function makeResolveRead(
+  session: FetchSession,
+  webId: string,
+  budget: ResolutionBudget,
+  signal: AbortSignal,
+  beforeRequest: (url: string, authenticated: boolean) => Promise<void>,
+) {
+  return createInternalRead({
+    webId,
+    authenticatedOrigins: session.allowedOrigins,
+    allowedOrigins: session.allowedOrigins,
+    budget,
+    signal,
+    send: async (url, authenticated, method, readSignal, beforeSend) => {
+      const fetchImpl: typeof fetch = async (input, init) => {
+        // authenticatedFetch's opaque-redirect probe must never escape this boundary.
+        if (init?.redirect !== 'manual') throw new Error('Opaque discovery redirect denied');
+        const target = input.toString();
+        if (!safePathUrl(target) || !isValidClientIdUrl(target))
+          throw new Error('Unsafe discovery URL');
+        if (isTokenEndpoint(target, session.tokenEndpoint))
+          throw new Error('Token endpoint fetch denied');
+        await beforeRequest(target, authenticated);
+        readSignal.throwIfAborted();
+        beforeSend();
+        return fetch(input, {
+          ...init,
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: readSignal,
+        });
+      };
+      if (authenticated) {
+        const result = await authenticatedFetch(session, {
+          url,
+          method,
+          headers: { Accept: 'text/turtle' },
+          body: null,
+          fetchImpl,
+          signal: readSignal,
+        });
+        return result.response;
+      }
+      return fetchImpl(url, { method, headers: { Accept: 'text/turtle' }, redirect: 'manual' });
+    },
+  });
+}
+
 /** Open the consent window and resolve with the approved class IRIs (or [] on deny/timeout). */
 function openConsentAndAwait(consentId: string): Promise<ConsentChoice> {
   return new Promise<ConsentChoice>((resolve) => {
@@ -1387,7 +1565,7 @@ function openConsentAndAwait(consentId: string): Promise<ConsentChoice> {
 
 async function handleRequestAccess(
   message: RequestAccessRequest,
-  sender: MessageSender | undefined,
+  sender: (MessageSender & { readonly tab?: { readonly id?: number } }) | undefined,
 ): Promise<AccessResponse> {
   const requestId = message.requestId;
   const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
@@ -1415,73 +1593,152 @@ async function handleRequestAccess(
   const now = Date.now();
   const spec = normaliseAccessRequest(message, now);
   if ('error' in spec) return { requestId, error: spec.error };
-  const store = await getProfiles();
-  const { profiles, defaultProfileId } = await store.list();
-  const parent = await originGrantFor(requestingOrigin);
+  let store: Awaited<ReturnType<typeof getProfiles>>;
   const consentId = crypto.randomUUID();
   const choices = new Map<string, ProfileConsent>();
-  // Each profile's targets are independently resolved and shown before approval.
-  const ordered = [...profiles].sort(
-    (a, b) => Number(b.id === defaultProfileId) - Number(a.id === defaultProfileId),
-  );
-  for (const profile of ordered) {
-    try {
-      const choice = await withProfileOperation(
-        profile.id,
-        async (signal) => {
-          const ctx = await ensureSession(profile.id);
-          signal.throwIfAborted();
-          if (!ctx) return null;
-          const checkAuthority = async () => {
-            if (revocationVersion !== originRevocationVersion(requestingOrigin))
-              throw new Error(CONSENT_EXPIRED);
-            await checkProfileSession(ctx, signal);
-            const latest = await originGrantFor(requestingOrigin);
+  const discoveryController = new AbortController();
+  const budget = new ResolutionBudget(discoveryController.signal);
+  consentDiscovery.set(consentId, {
+    origin: requestingOrigin,
+    controller: discoveryController,
+    tabId: sender?.tab?.id,
+  });
+  try {
+    store = await budget.run(() => getProfiles());
+    const { profiles, defaultProfileId } = await budget.run(() => store.list());
+    const parent = await budget.run(() => originGrantFor(requestingOrigin));
+    // Each profile's targets are independently resolved and shown before approval.
+    const ordered = [...profiles].sort(
+      (a, b) => Number(b.id === defaultProfileId) - Number(a.id === defaultProfileId),
+    );
+    for (const profile of ordered) {
+      try {
+        const choice = await withProfileOperation(
+          profile.id,
+          async (operationSignal) => {
+            // One combined signal governs preflight, reads and final authority checks.
+            // Keep operation cancellation distinct so budget exhaustion can retain candidates.
+            const signal = AbortSignal.any([operationSignal, budget.signal]);
+            const ready = await budget.run(async () => {
+              const ctx = await ensureSession(profile.id, signal);
+              signal.throwIfAborted();
+              if (!ctx) return null;
+              const session = await cancellable(signal, () =>
+                buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId, signal),
+              );
+              const allowedOrigins = await cancellable(signal, () =>
+                podOriginsFor(ctx.session, ctx.profileId, signal),
+              );
+              signal.throwIfAborted();
+              return { ctx, session, allowedOrigins };
+            }, signal);
+            const { ctx, session, allowedOrigins } = ready ?? {};
             signal.throwIfAborted();
-            // Initial consent needs no parent. An existing binding must remain live and unchanged.
-            if (latest?.profileId !== parent?.profileId || latest?.createdAt !== parent?.createdAt)
-              throw new Error('Origin grant changed.');
-          };
-          const session = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
-          const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
-          const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: null }>();
-          for (const cls of spec.classes) {
-            const { targets } = await resolveClassTargets(cls, {
-              webId: ctx.session.webId,
-              fetch: makeResolveFetch(
-                { ...session, allowedOrigins },
-                ctx.session.webId,
-                signal,
-                checkAuthority,
-              ),
-              authenticatedOrigins: allowedOrigins,
-              allowedOrigins,
-            });
-            await checkAuthority();
-            resolved.set(cls, { targets, shape: null });
-          }
-          return {
-            ctx,
-            label: profile.label,
-            pending: buildPendingConsent(
-              consentId,
-              requestingOrigin,
+            if (!ctx || !session || !allowedOrigins) return null;
+            const checkAuthority = async () => {
+              discoveryController.signal.throwIfAborted();
+              if (revocationVersion !== originRevocationVersion(requestingOrigin))
+                throw new Error(CONSENT_EXPIRED);
+              await budget.run(() => checkProfileSession(ctx, signal), signal);
+              const latest = await budget.run(() => originGrantFor(requestingOrigin), signal);
+              signal.throwIfAborted();
+              // Initial consent needs no parent. An existing binding must remain live and unchanged.
+              if (
+                latest?.profileId !== parent?.profileId ||
+                latest?.createdAt !== parent?.createdAt
+              )
+                throw new Error('Origin grant changed.');
+            };
+            const read = makeResolveRead(
+              { ...session, allowedOrigins },
               ctx.session.webId,
-              spec,
-              resolved,
-              now,
-            ),
-          };
-        },
-        requestingOrigin,
-      );
-      if (choice) choices.set(profile.id, choice);
-    } catch {
-      // A signed-out, replaced or revoked session cannot contribute a consent choice.
+              budget,
+              signal,
+              checkAuthority,
+            );
+            const resolved = new Map<
+              string,
+              { targets: readonly PinnedTarget[]; shape: null; truncated: boolean }
+            >();
+            for (const cls of spec.classes) {
+              const { targets, truncated } = await resolveClassTargets(cls, {
+                webId: ctx.session.webId,
+                fetch: read.fetch,
+                read,
+                budget,
+                signal,
+                authenticatedOrigins: allowedOrigins,
+                allowedOrigins,
+              });
+              resolved.set(cls, { targets, shape: null, truncated });
+              try {
+                await checkAuthority();
+              } catch (error) {
+                operationSignal.throwIfAborted();
+                if (!budget.truncated) throw error;
+                // No late lookup may resume discovery. Lifecycle/revocation cancellation
+                // still invalidates this choice; approval rechecks durable authority.
+                break;
+              }
+            }
+            operationSignal.throwIfAborted();
+            if (
+              revocationVersion !== originRevocationVersion(requestingOrigin) ||
+              (parent?.expiresAt !== undefined && parent.expiresAt <= Date.now())
+            )
+              throw new Error(CONSENT_EXPIRED);
+            // Deadline exhaustion during the final lookup must reach the consent snapshot.
+            if (budget.truncated) {
+              for (const cls of spec.classes) {
+                const previous = resolved.get(cls);
+                resolved.set(cls, {
+                  targets: previous?.targets ?? [],
+                  shape: null,
+                  truncated: true,
+                });
+              }
+            }
+            return {
+              ctx,
+              label: profile.label,
+              pending: buildPendingConsent(
+                consentId,
+                requestingOrigin,
+                ctx.session.webId,
+                spec,
+                resolved,
+                now,
+              ),
+            };
+          },
+          requestingOrigin,
+          discoveryController.signal,
+          budget.signal,
+        );
+        discoveryController.signal.throwIfAborted();
+        if (choice) choices.set(profile.id, choice);
+      } catch {
+        // A signed-out, replaced or revoked session cannot contribute a consent choice.
+      }
     }
+  } catch {
+    return { requestId, error: 'Discovery cancelled or timed out' };
+  } finally {
+    // Later classes/profiles share the budget, so earlier snapshots need the same notice.
+    if (budget.truncated) {
+      for (const choice of choices.values()) {
+        choice.pending = {
+          ...choice.pending,
+          classes: choice.pending.classes.map((cls) => ({ ...cls, truncated: true })),
+        };
+      }
+    }
+    budget.dispose();
+    consentDiscovery.delete(consentId);
   }
   if (revocationVersion !== originRevocationVersion(requestingOrigin))
     return { requestId, error: CONSENT_EXPIRED };
+  if (discoveryController.signal.aborted) return { requestId, error: 'Discovery cancelled' };
   if (!choices.size) return { requestId, error: 'Not authenticated' };
   pendingConsents.set(consentId, choices);
   let decision: ConsentChoice;
@@ -1598,6 +1855,7 @@ function handleGetPendingConsent(
       expiresAt: c.expiresAt,
       targets: c.targets.map((t) => ({ url: t.url, kind: t.kind })),
       shape: c.shape,
+      ...(c.truncated ? { truncated: true } : {}),
     })),
   };
 }
@@ -1714,18 +1972,19 @@ async function handleResolveClass(
   if (!isHttpIri(message.classIRI)) {
     return { requestId, error: 'resolveClass: an https: class IRI is required.' };
   }
-  const parent = await originGrantFor(requestingOrigin);
-  if (!parent) return { requestId, error: 'Not authenticated' };
-
+  const budget = new ResolutionBudget();
   try {
+    const parent = await budget.run(() => originGrantFor(requestingOrigin));
+    if (!parent) return { requestId, error: 'Not authenticated' };
     const result = await withProfileOperation(
       parent.profileId,
-      async (signal) => {
-        const ctx = await ensureSession(parent.profileId);
+      async (operationSignal) => {
+        const signal = AbortSignal.any([operationSignal, budget.signal]);
+        const ctx = await budget.run(() => ensureSession(parent.profileId, signal), signal);
         signal.throwIfAborted();
         if (!ctx) return { requestId, error: 'Not authenticated' };
         const checkGrant = async () => {
-          const current = await checkOriginAuthority(parent, ctx, signal);
+          const current = await budget.run(() => checkOriginAuthority(parent, ctx, signal), signal);
           if (
             current.scope.classes !== undefined &&
             !grantsForSession(
@@ -1738,16 +1997,23 @@ async function handleResolveClass(
           return current;
         };
         const current = await checkGrant();
-        const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
-        const profilePods = await podOriginsFor(ctx.session, ctx.profileId);
+        const fetchSession = await budget.run(
+          () => buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId, signal),
+          signal,
+        );
+        const profilePods = await budget.run(
+          () => podOriginsFor(ctx.session, ctx.profileId, signal),
+          signal,
+        );
         const allowedOrigins = new Set(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
-        const { targets } = await resolveClassTargets(message.classIRI, {
-          webId: ctx.session.webId,
-          fetch: makeResolveFetch(
+        let targets: Awaited<ReturnType<typeof resolveClassTargets>>['targets'];
+        {
+          const read = makeResolveRead(
             { ...fetchSession, allowedOrigins },
             ctx.session.webId,
+            budget,
             signal,
             async (url, authenticated) => {
               const latest = await checkGrant();
@@ -1760,24 +2026,40 @@ async function handleResolveClass(
               )
                 throw new Error('Out of grant scope');
             },
-          ),
-          authenticatedOrigins: allowedOrigins,
-          allowedOrigins,
-        });
+          );
+          ({ targets } = await resolveClassTargets(message.classIRI, {
+            webId: ctx.session.webId,
+            fetch: read.fetch,
+            read,
+            budget,
+            signal,
+            authenticatedOrigins: allowedOrigins,
+            allowedOrigins,
+          }));
+        }
         const latest = await checkGrant();
+        const visible: PinnedTarget[] = [];
+        for (const target of targets) {
+          if (!budget.active()) budget.signal.throwIfAborted();
+          signal.throwIfAborted();
+          if (latest.scope.pods.includes(new URL(target.url).origin))
+            visible.push({ url: target.url, kind: target.kind });
+        }
         return {
           requestId,
           shape: null,
-          targets: targets
-            .filter((t) => latest.scope.pods.includes(new URL(t.url).origin))
-            .map((t) => ({ url: t.url, kind: t.kind })),
+          targets: visible,
         };
       },
       requestingOrigin,
+      undefined,
+      budget.signal,
     );
     return result ?? { requestId, error: 'Discovery cancelled' };
   } catch (error) {
     return { requestId, error: error instanceof Error ? error.message : 'Discovery failed' };
+  } finally {
+    budget.dispose();
   }
 }
 
@@ -1972,7 +2254,7 @@ const formFill = new FormFillWorker({
       const current = () => checkProfileSession(ctx, signal);
       const pods = await podOriginsFor(ctx.session, profileId);
       const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, profileId);
-      const read = makeResolveFetch(
+      const read = makeFormFillFetch(
         { ...fetchSession, allowedOrigins: pods },
         ctx.session.webId,
         signal,
