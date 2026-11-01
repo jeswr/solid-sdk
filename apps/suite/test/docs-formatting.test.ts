@@ -24,8 +24,8 @@ import {
   DOCUMENT_COLOURS,
   FONT_FAMILIES,
   fontFamily,
-  indentFromMargin,
   fontSize,
+  indentFromMargin,
   lineHeight,
   paragraphSpace,
   sanitiseStyleAttrs,
@@ -268,6 +268,15 @@ it("round trips font, colour, size, highlight and paragraph layout through Yjs a
   editors.length = 0;
   first.destroy();
   second.destroy();
+});
+
+it("clears block layout with Ctrl+\\ like the Clear formatting menu command", () => {
+  const editor = create(
+    '<p data-indent="2" style="text-align:center;line-height:2;margin-top:12pt"><strong><span style="font-size:16pt">Styled</span></strong></p>',
+  );
+  editor.commands.selectAll();
+  editor.commands.keyboardShortcut("Mod-\\");
+  expect(editor.getHTML()).toMatch(/^<p>Styled<\/p>/);
 });
 
 it("indents paragraphs and both list kinds within bounds and clears formatting", () => {

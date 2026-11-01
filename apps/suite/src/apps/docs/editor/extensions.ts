@@ -17,6 +17,7 @@ import { normaliseHtmlLists } from "../lib/editor/html-lists";
 import { editorShortcut, validLink } from "../lib/editor/logic";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
+import { clearFormatting } from "./formatting";
 import { protectiveLinkRel } from "./link-rel";
 import { privateImage } from "./private-image";
 import { textStyleExtensions } from "./text-style";
@@ -104,7 +105,11 @@ const EditorKeys = Extension.create({
       "Mod-Shift-e": () => this.editor.commands.setTextAlign("center"),
       "Mod-Shift-r": () => this.editor.commands.setTextAlign("right"),
       "Mod-Shift-j": () => this.editor.commands.setTextAlign("justify"),
-      "Mod-\\": () => this.editor.chain().unsetAllMarks().clearNodes().run(),
+      // The same clear as Format > Clear formatting, including block layout.
+      "Mod-\\": () => {
+        clearFormatting(this.editor);
+        return true;
+      },
       Tab: () => {
         const e = this.editor;
         if (e.isActive("table")) return e.commands.goToNextCell();
