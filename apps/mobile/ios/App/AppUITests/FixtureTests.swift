@@ -93,9 +93,15 @@ final class FixtureTests: XCTestCase {
 
         let navigation = app.webViews.links["Test foreign navigation"]
         XCTAssertTrue(navigation.waitForExistence(timeout: 10))
-        navigation.tap()
-        let (_, before) = try readResult(app, page: "navigation", done: false, step: "before foreign navigation")
         let foreign = app.webViews.links["Attempt foreign navigation"]
+        // The index result can still grow after done=true (late bridge responses), which may move
+        // the small link while XCUITest synthesizes the tap, so WebKit drops it. The link is a
+        // same-origin navigation to a fixed page, so re-tapping until that page appears is safe.
+        for _ in 0..<3 where !foreign.exists {
+            if navigation.exists { navigation.tap() }
+            _ = foreign.waitForExistence(timeout: 10)
+        }
+        let (_, before) = try readResult(app, page: "navigation", done: false, step: "before foreign navigation")
         XCTAssertTrue(foreign.waitForExistence(timeout: 10))
         foreign.tap()
         // SuiteNavigationPlugin may open Safari; bring the same application back to observe
