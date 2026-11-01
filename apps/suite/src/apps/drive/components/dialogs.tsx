@@ -47,10 +47,13 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatModified, formatSize, friendlyType } from "../lib/view/view";
 import { useAccessLabel } from "../state/access";
 import { useDrive } from "../state/drive-context";
-import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
+import { captureDriveFocusRemoval, hrefFor, useDriveActions, useDriveUi } from "../state/ui";
+
+import { ShareDialog } from "./share-dialog";
 
 export function DriveDialogs() {
-  const { dialog, closeDialog } = useDriveUi();
+  const { dialog, closeDialog, restoreDialogFocus } = useDriveUi();
+  const { session, invalidate } = useDrive();
   const onOpenChange = (open: boolean) => {
     if (!open) closeDialog();
   };
@@ -75,6 +78,17 @@ export function DriveDialogs() {
         }
         onOpenChange={onOpenChange}
       />
+      {dialog?.kind === "share" && (
+        <ShareDialog
+          key={dialog.id}
+          item={dialog.item}
+          session={session}
+          link={hrefFor(dialog.item)}
+          onClose={closeDialog}
+          onSaved={() => invalidate(dialog.item.url)}
+          onCloseAutoFocus={restoreDialogFocus}
+        />
+      )}
       <UploadConflictDialog />
     </>
   );

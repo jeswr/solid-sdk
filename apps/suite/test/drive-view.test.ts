@@ -97,6 +97,8 @@ describe("Drive listing presentation", () => {
       file("Work", { kind: "folder" }),
       file("file2.txt"),
       file("Archive", { kind: "folder" }),
+      file("file2.txt.acl"),
+      file("folder.ACR"),
     ];
     const before = [...items];
     const result = viewItems(items);
