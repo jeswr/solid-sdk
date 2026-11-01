@@ -1,5 +1,6 @@
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 //
 // INTEGRATION tests for the Phase-0 per-requesting-origin gate AS WIRED INTO the service
 // worker. These drive the REAL `chrome.runtime.onMessage` listener the worker registers,
@@ -1594,16 +1595,14 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
   }) => {
     const { a, b } = await twoProfiles();
     await loadWorker();
-    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    const cancel = vi.fn();
     let entered!: () => void;
     const started = new Promise<void>((resolve) => {
       entered = resolve;
     });
     fetchImpl = async () => {
       const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          stream = controller;
-        },
+        cancel,
         pull() {
           entered();
         },
@@ -1618,8 +1617,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect((await profileMessage(lifecycle, { profileId: '1' })).ok).toBe(true);
     expect(await pending).toEqual({ requestId: 'r1', error: 'Fetch cancelled' });
     expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
-    stream.enqueue(new TextEncoder().encode('late private bytes'));
-    stream.close();
+    expect(cancel).toHaveBeenCalledOnce();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(cacheStore.size).toBe(0);
     expect([...idbMeta.values()].some((record) => record.webId === a.session.webId)).toBe(false);

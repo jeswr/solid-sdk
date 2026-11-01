@@ -22,6 +22,8 @@ import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
 import { MemoryProfileDb } from './profile-fixtures';
 
+// AUTHORED-BY Codex GPT-6
+
 let profileDb: MemoryProfileDb;
 vi.mock('../src/background/profile-db', () => ({
   ProfileDb: { open: async () => profileDb },
@@ -635,22 +637,81 @@ describe('binary extension fetch transport', () => {
     expect(result.bodyBase64).toBe('bodyBase64' in expected ? expected.bodyBase64 : undefined);
   });
 
-  it('returns 502 without relaying or caching an oversized response', async () => {
+  // Emit more than the cap, then stay open: an unbounded read cannot finish this body.
+  function oversizedOpenBody(cancel: (reason: unknown) => void): ReadableStream<Uint8Array> {
+    const chunk = new Uint8Array(1024 * 1024);
+    let emitted = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted++ <= MAX_BODY_BYTES / chunk.byteLength) controller.enqueue(chunk);
+      },
+      cancel,
+    });
+  }
+
+  it.each([
+    undefined,
+    '1',
+  ])('cancels an oversized open response before EOF with Content-Length=%s, without relay or cache', async (length) => {
     await start();
-    // One raw allocation; the response reader is stubbed to avoid copies of the large body.
-    const oversized = new ArrayBuffer(MAX_BODY_BYTES + 1);
-    fetchImpl = async () => {
-      const response = new Response('placeholder');
-      vi.spyOn(response, 'arrayBuffer').mockResolvedValue(oversized);
-      return response;
-    };
+    const cancel = vi.fn();
+    fetchImpl = async () =>
+      new Response(oversizedOpenBody(cancel), {
+        headers: length ? { 'content-length': length } : {},
+      });
     const result = await sendFetch({ url, stampedOrigin: origin }, sender);
     expect(result).toEqual({
       requestId: 'r1',
       status: 502,
       error: 'Response body exceeds the 25 MiB limit for extension fetches',
     });
+    expect(cancel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Response body exceeds the 25 MiB limit for extension fetches',
+      }),
+    );
     expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('rejects an excessive Content-Length and cancels without reading the body', async () => {
+    await start();
+    const cancel = vi.fn();
+    const pull = vi.fn();
+    fetchImpl = async () =>
+      new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+        headers: { 'content-length': String(MAX_BODY_BYTES + 1) },
+      });
+    const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+    expect(result.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pull).not.toHaveBeenCalled();
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('cancels an oversized cached response before EOF after a 304, without relaying bytes', async () => {
+    await start();
+    fetchImpl = async () => new Response('cached', { headers: { etag: '"v1"' } });
+    expect((await sendFetch({ url, stampedOrigin: origin }, sender)).body).toBe('cached');
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const cancel = vi.fn();
+    vi.spyOn(cache, 'match').mockResolvedValue(
+      new Response(oversizedOpenBody(cancel), { headers: { 'content-length': '1' } }),
+    );
+    const open = vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    fetchImpl = async () => new Response(null, { status: 304 });
+    try {
+      const result = await sendFetch({ url, stampedOrigin: origin }, sender);
+      expect(result).toEqual({
+        requestId: 'r1',
+        status: 502,
+        error: 'Response body exceeds the 25 MiB limit for extension fetches',
+      });
+      expect(new Headers(fetchCalls.at(-1)?.init?.headers).get('if-none-match')).toBe('"v1"');
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      open.mockRestore();
+    }
   });
 
   it.each([

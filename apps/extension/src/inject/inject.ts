@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every
@@ -12,6 +13,9 @@ import {
   assertBodySize,
   base64ToBytes,
   bytesToBase64,
+  MAX_BODY_BYTES,
+  REQUEST_BODY_LIMIT_ERROR,
+  readBodyBounded,
   validateBodyFields,
 } from '../shared/body-codec';
 
@@ -288,46 +292,56 @@ function installSolidInjection(): void {
     const headers = new Headers(snapInit?.headers ?? request?.headers);
     let body: string | undefined;
     let bodyBase64: string | undefined;
-    if (source != null) {
-      if (typeof source === 'string') {
-        validateBodyFields(source, undefined);
-        body = source;
+    try {
+      if (source != null) {
+        if (typeof source === 'string') {
+          validateBodyFields(source, undefined);
+          body = source;
+        } else if (
+          ArrayBuffer.isView(source) ||
+          Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+        ) {
+          const view = ArrayBuffer.isView(source)
+            ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+            : new Uint8Array(source as ArrayBuffer);
+          assertBodySize(view.byteLength);
+          const copy = new Uint8Array(view);
+          if (snapInit) snapInit.body = copy;
+          bodyBase64 = bytesToBase64(copy);
+        } else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
+          body = source.toString();
+          validateBodyFields(body, undefined);
+          if (snapInit) snapInit.body = new URLSearchParams(body);
+          if (!headers.has('content-type'))
+            headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+        } else if (source instanceof Blob) {
+          assertBodySize(source.size);
+          if (!headers.has('content-type') && source.type) headers.set('content-type', source.type);
+          bodyBase64 = bytesToBase64(new Uint8Array(await source.arrayBuffer()));
+        } else {
+          throw new Error(
+            'window.solid.fetch does not support FormData or ReadableStream request bodies',
+          );
+        }
       } else if (
-        ArrayBuffer.isView(source) ||
-        Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+        request &&
+        !['GET', 'HEAD'].includes(method.toUpperCase()) &&
+        request.body !== null
       ) {
-        const view = ArrayBuffer.isView(source)
-          ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
-          : new Uint8Array(source as ArrayBuffer);
-        assertBodySize(view.byteLength);
-        const copy = new Uint8Array(view);
-        if (snapInit) snapInit.body = copy;
-        bodyBase64 = bytesToBase64(copy);
-      } else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
-        body = source.toString();
-        validateBodyFields(body, undefined);
-        if (snapInit) snapInit.body = new URLSearchParams(body);
-        if (!headers.has('content-type'))
-          headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
-      } else if (source instanceof Blob) {
-        assertBodySize(source.size);
-        if (!headers.has('content-type') && source.type) headers.set('content-type', source.type);
-        bodyBase64 = bytesToBase64(new Uint8Array(await source.arrayBuffer()));
-      } else {
-        // One-shot/structured bodies retain native semantics on the transparency path.
-        if (autoDivert) return PRISTINE_FETCH(input, snapInit);
-        throw new Error(
-          'window.solid.fetch does not support FormData or ReadableStream request bodies',
+        bodyBase64 = bytesToBase64(
+          await readBodyBounded(
+            (snapInput as Request).clone().body,
+            MAX_BODY_BYTES,
+            REQUEST_BODY_LIMIT_ERROR,
+            snapInit?.signal ?? request.signal,
+          ),
         );
       }
-    } else if (
-      request &&
-      !['GET', 'HEAD'].includes(method.toUpperCase()) &&
-      request.body !== null
-    ) {
-      bodyBase64 = bytesToBase64(
-        new Uint8Array(await (snapInput as Request).clone().arrayBuffer()),
-      );
+    } catch (error) {
+      // Serialization is best-effort for the global patch: native fetch retains the
+      // unread snapshot even if the bounded bridge read overflows or fails.
+      if (autoDivert) return PRISTINE_FETCH(snapInput, snapInit);
+      throw error;
     }
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID();

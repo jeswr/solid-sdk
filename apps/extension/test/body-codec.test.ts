@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -9,6 +10,7 @@ import {
   encodeResponseBody,
   MAX_BODY_BYTES,
   REQUEST_BODY_LIMIT_ERROR,
+  readBodyBounded,
   validateBase64,
   validateBodyFields,
 } from '../src/shared/body-codec';
@@ -21,6 +23,13 @@ describe('bounded standard base64', () => {
     const encoded = bytesToBase64(bytes);
     expect(encoded).toBe(bytes.toString('base64'));
     expect(base64ToBytes(encoded)).toEqual(new Uint8Array(bytes));
+  });
+
+  it('decodes a multi-MiB valid payload without materialising a string iterator', () => {
+    const bytes = randomBytes(4 * 1024 * 1024);
+    const decoded = base64ToBytes(bytes.toString('base64'));
+    expect(decoded.byteLength).toBe(bytes.byteLength);
+    expect(Buffer.from(decoded).equals(bytes)).toBe(true);
   });
 
   it.each([
@@ -76,6 +85,72 @@ describe('bounded standard base64', () => {
     expect(() => validateBodyFields('', undefined)).not.toThrow();
     expect(() => validateBodyFields(undefined, '')).not.toThrow();
     expect(() => validateBase64('AA==')).not.toThrow();
+  });
+});
+
+describe('bounded body streams', () => {
+  const errorMessage = 'body too large';
+
+  it('handles absent and empty bodies, and coalesces chunks up to the exact limit', async () => {
+    expect(await readBodyBounded(null, 0, errorMessage)).toEqual(new Uint8Array(0));
+    expect(
+      await readBodyBounded(new ReadableStream({ start: (c) => c.close() }), 0, errorMessage),
+    ).toEqual(new Uint8Array(0));
+    const bytes = randomBytes(200_000);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(0));
+        for (let offset = 0; offset < bytes.length; offset += 1000)
+          controller.enqueue(bytes.subarray(offset, offset + 1000));
+        controller.close();
+      },
+    });
+    const result = await readBodyBounded(body, bytes.length, errorMessage);
+    expect(Buffer.from(result).equals(bytes)).toBe(true);
+    expect(result.buffer.byteLength).toBe(bytes.length);
+    expect(body.locked).toBe(false);
+  });
+
+  it('cancels and rejects overflow before EOF even if cancellation never settles', async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3, 4]));
+        // Intentionally never close: an arrayBuffer-style read would hang.
+      },
+      cancel,
+    });
+    await expect(readBodyBounded(body, 3, errorMessage)).rejects.toThrow(errorMessage);
+    expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ message: errorMessage }));
+    expect(body.locked).toBe(false);
+  });
+
+  it.each([
+    'before reading',
+    'during a pending read',
+  ])('honours abort %s and releases the reader', async (when) => {
+    const controller = new AbortController();
+    const reason = new Error('cancelled');
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    if (when === 'before reading') controller.abort(reason);
+    const result = readBodyBounded(body, 3, errorMessage, controller.signal);
+    controller.abort(reason);
+    await expect(result).rejects.toBe(reason);
+    expect(cancel).toHaveBeenCalledWith(reason);
+    expect(body.locked).toBe(false);
+    await expect(readBodyBounded(null, 3, errorMessage, controller.signal)).rejects.toBe(reason);
+  });
+
+  it('propagates a stream failure and removes the abort listener', async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const error = new Error('read failed');
+    const body = new ReadableStream<Uint8Array>({ start: (c) => c.error(error) });
+    await expect(readBodyBounded(body, 3, errorMessage, controller.signal)).rejects.toBe(error);
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(body.locked).toBe(false);
   });
 });
 

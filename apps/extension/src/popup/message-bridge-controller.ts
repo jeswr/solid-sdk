@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * MessageBridgeLoginController — a chrome.identity-backed {@link LoginController} that
  * lets the popup adopt `<jeswr-login-panel>` (the suite-wide login surface, for visual
@@ -36,6 +37,7 @@ import type {
   RecentLoginAccount,
   RestoreOutcome,
 } from '@jeswr/solid-elements';
+import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR, readBodyBounded } from '../shared/body-codec';
 import type {
   ActionResult,
   FetchResponse,
@@ -344,7 +346,12 @@ export class MessageBridgeLoginController implements LoginController {
       // Read the bytes once. For an explicitly text-typed body we trust the type and decode;
       // for the ambiguous MISSING/empty content-type we additionally verify the bytes are valid
       // UTF-8 text — a binary payload with no usable content-type must fail loudly, not be coerced.
-      const bytes = new Uint8Array(await input.clone().arrayBuffer());
+      const bytes = await readBodyBounded(
+        input.clone().body,
+        MAX_BODY_BYTES,
+        REQUEST_BODY_LIMIT_ERROR,
+        init?.signal ?? input.signal,
+      );
       if (contentType === null && isBinaryRequestBody(bytes)) {
         throw new Error(
           'authenticatedFetch currently supports only text request bodies (binary body with no Content-Type).',

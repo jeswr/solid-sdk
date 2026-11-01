@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -20,10 +21,11 @@
  */
 
 import {
-  assertBodySize,
   base64ToBytes,
   encodeResponseBody,
+  MAX_BODY_BYTES,
   RESPONSE_BODY_LIMIT_ERROR,
+  readBodyBounded,
   validateBodyFields,
 } from '../shared/body-codec';
 import type {
@@ -669,7 +671,7 @@ async function handleProfileFetch(
     validateBodyFields(message.body, message.bodyBase64);
     const requestBody =
       message.bodyBase64 !== undefined ? base64ToBytes(message.bodyBase64) : (message.body ?? null);
-    const bufferedBodies = new WeakMap<Response, ArrayBuffer>();
+    const bufferedBodies = new WeakMap<Response, Uint8Array<ArrayBuffer>>();
     const origin = originOf(message.url);
     const db = await getReplicaDb();
     const cache = await getReplicaCache();
@@ -714,9 +716,8 @@ async function handleProfileFetch(
           method.toUpperCase() !== 'HEAD' &&
           result.response.body &&
           !NULL_BODY_STATUSES.has(result.response.status)
-            ? await cancellable(signal, () => result.response.arrayBuffer())
+            ? await readResponseBodyBounded(result.response, signal)
             : null;
-        if (responseBody) assertBodySize(responseBody.byteLength, RESPONSE_BODY_LIMIT_ERROR);
         const response = new Response(responseBody, {
           status: result.response.status,
           statusText: result.response.statusText,
@@ -797,10 +798,8 @@ async function handleProfileFetch(
       isHead || NULL_BODY_STATUSES.has(result.response.status)
         ? { body: undefined }
         : encodeResponseBody(
-            new Uint8Array(
-              bufferedBodies.get(result.response) ??
-                (await cancellable(signal, () => result.response.arrayBuffer())),
-            ),
+            bufferedBodies.get(result.response) ??
+              (await readResponseBodyBounded(result.response, signal)),
             result.response.headers.get('content-type'),
           );
     // A cached body read can yield too; recheck authority before delivering bytes.
@@ -825,6 +824,21 @@ async function handleProfileFetch(
       error: err instanceof Error ? err.message : 'Fetch failed',
     };
   }
+}
+
+/** Content-Length can reject early; the stream bound also applies when it lies or is absent. */
+async function readResponseBodyBounded(
+  response: Response,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const length = response.headers.get('content-length');
+  if (length && /^\d+$/.test(length) && Number(length) > MAX_BODY_BYTES) {
+    const error = new Error(RESPONSE_BODY_LIMIT_ERROR);
+    void response.body?.cancel(error).catch(() => {});
+    signal.throwIfAborted();
+    throw error;
+  }
+  return readBodyBounded(response.body, MAX_BODY_BYTES, RESPONSE_BODY_LIMIT_ERROR, signal);
 }
 
 /** A small Response carrying a gate-deny reason, for the replica's injected gate port. */

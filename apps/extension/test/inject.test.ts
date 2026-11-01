@@ -13,8 +13,10 @@
 // window, then re-import the module (which installs at import) under a reset module registry.
 
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR } from '../src/shared/body-codec';
 
 let dom: JSDOM;
 let posted: Array<Record<string, unknown>>;
@@ -706,15 +708,125 @@ describe('inject — binary bodies and Request inputs', () => {
     }
   });
 
-  it('rejects oversized raw bodies before posting, including on autoDivert', async () => {
+  it.each([
+    ['bytes', () => new Uint8Array(MAX_BODY_BYTES + 1)],
+    ['text', () => 'a'.repeat(MAX_BODY_BYTES + 1)],
+    ['Blob', () => new Blob([new Uint8Array(MAX_BODY_BYTES + 1)])],
+    ['URLSearchParams', () => new URLSearchParams({ data: 'a'.repeat(MAX_BODY_BYTES) })],
+  ] as const)('rejects oversized %s explicitly and keeps autoDivert native before body reads', async (_name, makeBody) => {
     await importInject();
     posted.length = 0;
-    const bytes = new Uint8Array(26_214_401);
-    for (const run of [solidApi().fetch, dom.window.fetch])
-      await expect(run('https://pod.example/data', { method: 'PUT', body: bytes })).rejects.toThrow(
-        'Request body exceeds the 25 MiB limit for extension fetches',
-      );
+    const body = makeBody();
+    const read = body instanceof Blob ? vi.spyOn(body, 'arrayBuffer') : undefined;
+    const init: RequestInit = {
+      method: 'PUT',
+      body,
+      credentials: 'include',
+      headers: { 'X-App': 'original' },
+    };
+    const url = new URL('https://api.thirdparty.example/data');
+    await expect(solidApi().fetch(url, init)).rejects.toThrow(REQUEST_BODY_LIMIT_ERROR);
+    expect(await (await dom.window.fetch(url, init)).text()).toBe('native');
+    expect(nativeFetch).toHaveBeenCalledOnce();
+    const [nativeUrl, nativeInit] = nativeFetch.mock.calls[0] as [string, RequestInit];
+    expect(nativeUrl).toBe(url.href);
+    expect(nativeInit.body).toBe(body);
+    expect(nativeInit.method).toBe('PUT');
+    expect(nativeInit.credentials).toBe('include');
+    expect(new Headers(nativeInit.headers).get('x-app')).toBe('original');
+    if (read) expect(read).not.toHaveBeenCalled();
     expect(posted).toHaveLength(0);
-    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('bounds an open Request stream and preserves native fallback (autoDivert=%s)', async (autoDivert) => {
+    await importInject();
+    posted.length = 0;
+    const chunk = new Uint8Array(1024 * 1024).fill(42);
+    let emitted = 0;
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+      pull(c) {
+        if (emitted++ <= MAX_BODY_BYTES / chunk.byteLength) c.enqueue(chunk);
+        // Stay open after overflow so serialization must finish before EOF.
+      },
+    });
+    const request = new Request('https://api.thirdparty.example/upload', {
+      method: 'PUT',
+      body,
+      headers: { 'X-App': 'original', 'Content-Length': '1' },
+      credentials: 'include',
+      mode: 'cors',
+      duplex: 'half',
+    } as RequestInit);
+    const init = {
+      headers: new Headers({ 'X-App': 'snapshot' }),
+      credentials: 'omit' as RequestCredentials,
+    };
+    const promise = (autoDivert ? dom.window.fetch : solidApi().fetch)(request, init);
+    init.headers.set('X-App', 'mutated');
+    init.credentials = 'include';
+    if (autoDivert) {
+      expect(await (await promise).text()).toBe('native');
+      expect(nativeFetch).toHaveBeenCalledOnce();
+      const [copy, snapInit] = nativeFetch.mock.calls[0] as [Request, RequestInit];
+      expect(copy).not.toBe(request);
+      expect(copy.bodyUsed).toBe(false);
+      expect(copy.url).toBe(request.url);
+      expect(copy.method).toBe('PUT');
+      expect(copy.mode).toBe('cors');
+      expect(snapInit.credentials).toBe('omit');
+      expect(new Headers(snapInit.headers).get('x-app')).toBe('snapshot');
+      controller.close();
+      const reader = copy.body!.getReader();
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        expect(value[0]).toBe(42);
+        expect(value.at(-1)).toBe(42);
+        size += value.byteLength;
+      }
+      expect(size).toBe(MAX_BODY_BYTES + chunk.byteLength);
+      reader.releaseLock();
+    } else {
+      await expect(promise).rejects.toThrow(REQUEST_BODY_LIMIT_ERROR);
+      expect(nativeFetch).not.toHaveBeenCalled();
+      controller.close();
+    }
+    expect(request.bodyUsed).toBe(false);
+    expect(posted).toHaveLength(0);
+  });
+
+  it('rejects a failed Blob read explicitly and falls back with immutable snapshots on autoDivert', async () => {
+    await importInject();
+    posted.length = 0;
+    const body = new Blob(['upload']);
+    vi.spyOn(body, 'arrayBuffer').mockRejectedValue(new Error('serialization failed'));
+    const url = new URL('https://api.thirdparty.example/upload');
+    const init: RequestInit = {
+      method: 'POST',
+      body,
+      headers: new Headers({ 'X-App': 'original' }),
+      credentials: 'include',
+    };
+    await expect(solidApi().fetch(url, init)).rejects.toThrow('serialization failed');
+    const promise = dom.window.fetch(url, init);
+    url.pathname = '/mutated';
+    (init.headers as Headers).set('X-App', 'mutated');
+    init.credentials = 'omit';
+    await promise;
+    expect(nativeFetch).toHaveBeenCalledWith(
+      'https://api.thirdparty.example/upload',
+      expect.objectContaining({ body, credentials: 'include' }),
+    );
+    const [, snapInit] = nativeFetch.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(snapInit.headers).get('x-app')).toBe('original');
+    expect(posted).toHaveLength(0);
   });
 });

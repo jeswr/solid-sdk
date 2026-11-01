@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * Unit tests for the popup's MessageBridgeLoginController — the chrome.identity-backed
  * LoginController that bridges the panel's SYNCHRONOUS getter contract to the ASYNC
@@ -13,6 +14,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageBridgeLoginController } from '../src/popup/message-bridge-controller';
+import { MAX_BODY_BYTES, REQUEST_BODY_LIMIT_ERROR } from '../src/shared/body-codec';
 import type { SessionState } from '../src/shared/messages';
 
 /** A mock of `chrome.runtime.sendMessage` (callback form) returning a canned reply. */
@@ -366,6 +368,39 @@ describe('NO-TOKEN-LEAK invariant', () => {
     const headerKeys = Object.keys(sent.headers).map((k) => k.toLowerCase());
     expect(headerKeys).not.toContain('authorization');
     expect(headerKeys).not.toContain('dpop');
+  });
+
+  it.each([
+    'overflow',
+    'abort',
+  ])('bounds popup Request reads before sending to the worker (%s)', async (kind) => {
+    installChrome(() => activeState());
+    const c = new MessageBridgeLoginController();
+    await c.restore();
+    sentMessages.length = 0;
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        stream = controller;
+        if (kind === 'overflow') controller.enqueue(new Uint8Array(MAX_BODY_BYTES + 1));
+        // Leave open: the read must reject without waiting for EOF.
+      },
+    });
+    const request = new Request('https://alice.pod.example/upload', {
+      method: 'PUT',
+      body,
+      headers: { 'content-type': 'text/turtle' },
+      duplex: 'half',
+    } as RequestInit);
+    const controller = new AbortController();
+    const promise = c.authenticatedFetch(request, { signal: controller.signal });
+    if (kind === 'abort') controller.abort(new Error('popup cancelled'));
+    await expect(promise).rejects.toThrow(
+      kind === 'overflow' ? REQUEST_BODY_LIMIT_ERROR : 'popup cancelled',
+    );
+    expect(sentMessages).toHaveLength(0);
+    expect(request.bodyUsed).toBe(false);
+    stream.close();
   });
 
   it('REJECTS a Request with a binary/multipart body (text-only protocol; no silent coercion)', async () => {
