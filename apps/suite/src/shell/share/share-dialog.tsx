@@ -159,7 +159,8 @@ function SharingContent({
       (cause) => {
         if (controller.signal.aborted) return;
         setError(
-          cause instanceof ShareError && cause.code === "forbidden"
+          cause instanceof ShareError &&
+            (cause.code === "forbidden" || cause.code === "unsupported")
             ? cause.message
             : "Can't load sharing. Try again.",
         );
@@ -415,25 +416,26 @@ function SharingContent({
                             type="date"
                             id={`${id}-expiry-${person.webId}`}
                             aria-label={`Access ends for ${person.name ?? person.webId}`}
-                            value={
+                            // Uncontrolled and committed on blur: typing a date must not
+                            // save each keystroke (a second save while busy is dropped), and
+                            // clearing the field never silently makes the grant permanent.
+                            key={person.expires?.getTime() ?? "none"}
+                            defaultValue={
                               person.expires
                                 ? `${person.expires.getFullYear()}-${String(person.expires.getMonth() + 1).padStart(2, "0")}-${String(person.expires.getDate()).padStart(2, "0")}`
                                 : ""
                             }
                             disabled={disabled}
-                            onChange={(event) => {
+                            onBlur={(event) => {
                               const value = event.target.value;
+                              if (!value || value === event.target.defaultValue) return;
                               try {
-                                const expires = value
-                                  ? grantExpires("custom", value, new Date())
-                                  : undefined;
+                                const expires = grantExpires("custom", value, new Date());
+                                if (!expires) return;
                                 void act(person.webId, () =>
-                                  adapter.setPerson(
-                                    url,
-                                    person.webId,
-                                    person.role as ShareRole,
-                                    expires ? { expires } : {},
-                                  ),
+                                  adapter.setPerson(url, person.webId, person.role as ShareRole, {
+                                    expires,
+                                  }),
                                 );
                               } catch {
                                 setError("Choose a future end date");
