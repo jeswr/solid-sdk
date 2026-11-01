@@ -1,7 +1,13 @@
 // AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { defineModel, type ManifestEntity, MigrationError, type ModelManifest } from "./index.js";
+import {
+  type CompositeManifestEntity,
+  defineModel,
+  type ManifestEntity,
+  MigrationError,
+  type ModelManifest,
+} from "./index.js";
 
 const EX = "https://ex.test/";
 const DOC = `${EX}doc`;
@@ -68,5 +74,64 @@ describe("R12: migrationManifest adds owning context and never drops primary che
     expect(ds.countQuads(DOC, null, `${EX}OldThing`, null)).toBe(0);
     expect(ds.countQuads(DOC, null, `${EX}Thing`, null)).toBe(1);
     expect(await e.storeToTurtle(ds)).not.toContain("OldThing");
+  });
+});
+
+describe("R13: overrides keep primary checks for untyped composite write focuses", () => {
+  const tree = (): CompositeManifestEntity => ({
+    name: "Tree",
+    kind: "composite",
+    root: "root",
+    nodes: [
+      {
+        name: "root",
+        typeIris: [`${EX}Root`],
+        fragment: "it",
+        fields: [
+          {
+            name: "tags",
+            predicate: `${EX}p`,
+            aliasPredicates: [`${EX}old`],
+            kind: "literal",
+            datatype: "xsd:string",
+            collection: "set",
+            minCount: 1,
+            guards: { requiredFailClosed: true },
+          },
+          {
+            name: "title",
+            predicate: `${EX}title`,
+            aliasPredicates: [`${EX}oldTitle`],
+            kind: "literal",
+            datatype: "xsd:string",
+            maxCount: 1,
+          },
+          // An optional link: resolving it needs the composite's own node table.
+          { name: "child", predicate: `${EX}child`, kind: "nested", node: "leaf" },
+        ],
+      },
+      { name: "leaf", typeIris: [`${EX}Leaf`], fragment: "leaf", fields: [] },
+    ],
+  });
+  type Root = { tags: Set<string>; title: string | undefined };
+  // Untyped and unreached: only the write's own focus makes it a check subject. The
+  // integer alias member makes the required set invalid, so migrating only the
+  // guarded "valid" member would silently repair the record.
+  const data = 'ex:doc ex:old "valid", 1 .';
+  const mutations: [string, (w: Root) => unknown][] = [
+    ["tags.delete", (w) => w.tags.delete("absent")],
+    ["tags.add", (w) => w.tags.add("valid")],
+    ["tags.clear", (w) => w.tags.clear()],
+  ];
+  it.each(mutations)("%s rejects with and without an override", (_label, mutate) => {
+    for (const options of [{}, { migrationManifest: manifest(a()) }]) {
+      const e = defineModel(manifest(tree()), options).entities.Tree;
+      if (!e) throw new Error("missing entity");
+      const ds = store(data);
+      const before = [...ds];
+      const w = new e.Wrapper(DOC, ds, DataFactory) as unknown as Root;
+      expect(() => mutate(w)).toThrow(MigrationError);
+      expect([...ds]).toEqual(before);
+    }
   });
 });
