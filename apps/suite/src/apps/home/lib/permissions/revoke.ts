@@ -70,8 +70,9 @@ export interface RevokeChange {
  * The inverse of one ACL document write, as whole authorization rules (each with its
  * nested blank annotations, serialised alone). `remove` holds the rules the write
  * created or rewrote, exactly as written; `add` holds the rules it removed or
- * rewrote, exactly as they were. Undo matches `remove` structurally in a fresh read,
- * so unrelated later edits to the same document survive, and only ever adds `add`.
+ * rewrote, exactly as they were. Undo puts back only the grants `add` has and
+ * `remove` lacks, into whatever form of each rule exists now, so later edits to the
+ * same document survive and undos of several revokes apply in any order.
  */
 export interface RestoreDelta {
   source: string;
@@ -80,7 +81,7 @@ export interface RestoreDelta {
 }
 export interface RevokePlan {
   changes: RevokeChange[];
-  /** Rule-level inverse; refuses (RestoreConflictError) once those rules changed elsewhere. */
+  /** Rule-level inverse; refuses (RestoreConflictError) only when a rule was changed elsewhere. */
   restore?: RestoreDelta[];
 }
 export function planRevoke(
@@ -188,20 +189,29 @@ function ownerRetainsAnyControl(
   );
 }
 /**
- * Delete a rule with the nested blank annotations only it references. When any nested
- * node is shared with another description, only the rule's own statements go.
+ * Delete a rule with the nested blank annotations only it references. A nested node
+ * another description still references stays, with everything it references in turn.
  */
 function deleteRule(dataset: DatasetCore, root: Term): void {
   const quads = authorizationQuads(dataset, root);
   const inside = new Set(quads.map((quad) => termKey(quad.subject)));
-  const shared = quads.some(
-    (quad) =>
-      quad.object.termType === "BlankNode" &&
-      [...dataset.match(null, null, quad.object)].some(
-        (reference) => !inside.has(termKey(reference.subject)),
-      ),
-  );
-  for (const quad of shared ? [...dataset.match(root)] : quads) dataset.delete(quad);
+  const nested = (term: Term) => term.termType === "BlankNode" && termKey(term) !== termKey(root);
+  const queue = quads
+    .map((quad) => quad.object)
+    .filter(
+      (object) =>
+        nested(object) &&
+        [...dataset.match(null, null, object)].some(
+          (reference) => !inside.has(termKey(reference.subject)),
+        ),
+    );
+  const kept = new Set<string>();
+  for (const node of queue) {
+    if (kept.has(termKey(node))) continue;
+    kept.add(termKey(node));
+    for (const quad of dataset.match(node)) if (nested(quad.object)) queue.push(quad.object);
+  }
+  for (const quad of quads) if (!kept.has(termKey(quad.subject))) dataset.delete(quad);
 }
 function dropDescription(node: AccessNode): void {
   deleteRule(node.dataset, TermAs.term(node));
@@ -249,14 +259,197 @@ function sameRoot(a: Term, b: Term): boolean {
     ? b.termType === "NamedNode" && a.value === b.value
     : b.termType === "BlankNode";
 }
+const PRINCIPALS: readonly string[] = ["agent", "agentClass", "agentGroup"];
+const RULE = DataFactory.namedNode("urn:x-suite-permissions:rule");
+/** The principals, origins and targets a rule grants over, as sets of statements. */
+interface Grants {
+  principals: Set<string>;
+  origins: Set<string>;
+  targets: Set<string>;
+}
+/** A rule split into its grants and the rest of its description, without its identity. */
+interface RuleShape extends Grants {
+  root: Term;
+  body: Quad[];
+}
+function shapeOf(quads: Quad[], root: Term): RuleShape {
+  const shape: RuleShape = {
+    root,
+    body: [],
+    principals: new Set(),
+    origins: new Set(),
+    targets: new Set(),
+  };
+  const own = (term: Term) => termKey(term) === termKey(root);
+  for (const quad of quads) {
+    const name = quad.predicate.value.startsWith(ACL) ? quad.predicate.value.slice(ACL.length) : "";
+    if (own(quad.subject) && quad.object.termType === "NamedNode") {
+      if (PRINCIPALS.includes(name)) {
+        shape.principals.add(`${name} ${quad.object.value}`);
+        continue;
+      }
+      if (name === "origin") {
+        shape.origins.add(quad.object.value);
+        continue;
+      }
+      if ((SCOPES as readonly string[]).includes(name)) {
+        shape.targets.add(`${name} ${quad.object.value}`);
+        continue;
+      }
+    }
+    const swap = (term: Term) => (own(term) ? RULE : term);
+    shape.body.push(
+      DataFactory.quad(
+        swap(quad.subject) as Quad["subject"],
+        quad.predicate,
+        swap(quad.object) as Quad["object"],
+        quad.graph,
+      ),
+    );
+  }
+  return shape;
+}
+function shapes(dataset: DatasetCore): RuleShape[] {
+  return authorizations(dataset).map((node) => {
+    const root = TermAs.term(node);
+    return shapeOf(authorizationQuads(dataset, root), root);
+  });
+}
+function sameBody(a: RuleShape, b: RuleShape): boolean {
+  return isomorphic(a.body, b.body);
+}
 /**
- * Apply an inverse delta to a fresh read. Every rule to remove must still be present
- * unchanged (equivalent blank rules only as a complete set) and every named rule to
- * add must be absent; otherwise someone else changed them and nothing is written.
+ * What a rule grants, as principal x origin x target cells. An empty principal or
+ * origin set is its own cell value: an origin-free rule applies to every origin.
  */
-async function applyDelta(dataset: DatasetCore, delta: RestoreDelta, url: string): Promise<void> {
-  const remove = await Promise.all(delta.remove.map((rule) => parseRule(rule, url)));
-  const add = await Promise.all(delta.add.map((rule) => parseRule(rule, url)));
+function cells(grants: Grants): Set<string> {
+  const result = new Set<string>();
+  for (const principal of grants.principals.size ? grants.principals : [""])
+    for (const origin of grants.origins.size ? grants.origins : [""])
+      for (const target of grants.targets) result.add(JSON.stringify([principal, origin, target]));
+  return result;
+}
+function covered(granted: Set<string>, cell: string): boolean {
+  const [principal, , target] = JSON.parse(cell) as string[];
+  return granted.has(cell) || granted.has(JSON.stringify([principal, "", target]));
+}
+function covers(granted: Set<string>, wanted: Iterable<string>): boolean {
+  return [...wanted].every((cell) => covered(granted, cell));
+}
+function grantsOf(values: Iterable<string>): Grants {
+  const grants: Grants = { principals: new Set(), origins: new Set(), targets: new Set() };
+  for (const cell of values) {
+    const [principal, origin, target] = JSON.parse(cell) as string[];
+    if (principal) grants.principals.add(principal);
+    if (origin) grants.origins.add(origin);
+    grants.targets.add(target as string);
+  }
+  return grants;
+}
+/** Partition cells into products, each expressible as one rule. */
+function products(values: Set<string>): Grants[] {
+  const group = <T>(entries: [string, T][]) => {
+    const groups = new Map<string, T[]>();
+    for (const [key, value] of entries) groups.set(key, [...(groups.get(key) ?? []), value]);
+    return [...groups.values()];
+  };
+  const pairs = new Map<string, Set<string>>();
+  for (const cell of values) {
+    const [principal, origin, target] = JSON.parse(cell) as string[];
+    const set = pairs.get(principal as string) ?? new Set<string>();
+    set.add(JSON.stringify([origin, target]));
+    pairs.set(principal as string, set);
+  }
+  // An empty principal or origin is never merged with a real one: that would drop it.
+  return group(
+    [...pairs].map(([principal, set]) => [
+      JSON.stringify([!principal, [...set].sort()]),
+      principal,
+    ]),
+  ).flatMap((principals) => {
+    const targets = new Map<string, Set<string>>();
+    for (const pair of pairs.get(principals[0] as string) as Set<string>) {
+      const [origin, target] = JSON.parse(pair) as string[];
+      targets.set(
+        origin as string,
+        (targets.get(origin as string) ?? new Set()).add(target as string),
+      );
+    }
+    return group(
+      [...targets].map(([origin, set]) => [JSON.stringify([!origin, [...set].sort()]), origin]),
+    ).map((origins) =>
+      grantsOf(
+        principals.flatMap((principal) =>
+          origins.flatMap((origin) =>
+            [...(targets.get(origin) as Set<string>)].map((target) =>
+              JSON.stringify([principal, origin, target]),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+}
+/**
+ * Widen a rule by the missing cells only when the result grants exactly its own cells,
+ * the missing ones and what the document already grants: never more, never fewer.
+ */
+function merged(rule: RuleShape, missing: Set<string>, granted: Set<string>): Grants | undefined {
+  const extra = grantsOf(missing);
+  const next: Grants = {
+    principals: new Set([...rule.principals, ...extra.principals]),
+    origins: new Set([...rule.origins, ...extra.origins]),
+    targets: new Set([...rule.targets, ...extra.targets]),
+  };
+  const result = cells(next);
+  return covers(result, [...cells(rule), ...missing]) &&
+    covers(new Set([...granted, ...missing]), result)
+    ? next
+    : undefined;
+}
+function addGrants(dataset: DatasetCore, root: Term, grants: Grants): void {
+  const statement = (value: string) => {
+    const split = value.indexOf(" ");
+    return [value.slice(0, split), value.slice(split + 1)] as const;
+  };
+  for (const [name, iri] of [
+    ...[...grants.principals, ...grants.targets].map(statement),
+    ...[...grants.origins].map((origin) => ["origin", origin] as const),
+  ])
+    dataset.add(
+      DataFactory.quad(
+        root as Quad["subject"],
+        DataFactory.namedNode(ACL + name),
+        DataFactory.namedNode(iri),
+      ),
+    );
+}
+function createRule(dataset: DatasetCore, template: RuleShape, root: Term, grants: Grants): void {
+  // Fresh blank labels: a parser-local label must never merge with an existing node.
+  const blanks = new Map<string, Term>();
+  const term = (value: Term): Term =>
+    value.equals(RULE)
+      ? root
+      : value.termType === "BlankNode"
+        ? (blanks.get(value.value) ??
+          (blanks.set(value.value, DataFactory.blankNode()).get(value.value) as Term))
+        : value;
+  for (const quad of template.body)
+    dataset.add(
+      DataFactory.quad(
+        term(quad.subject) as Quad["subject"],
+        quad.predicate,
+        term(quad.object) as Quad["object"],
+        quad.graph,
+      ),
+    );
+  addGrants(dataset, root, grants);
+}
+/**
+ * Exact inverse: when every rule the write left is still present unchanged (equivalent
+ * blank rules only as a complete set), take those rules out so the originals replace them.
+ */
+function takeExact(dataset: DatasetCore, remove: DeltaRule[]): boolean {
   const nodes = authorizations(dataset).map((node) => TermAs.term(node));
   const selected = new Map<string, Term>();
   for (const rule of remove) {
@@ -267,24 +460,93 @@ async function applyDelta(dataset: DatasetCore, delta: RestoreDelta, url: string
     const twins = remove.filter(
       (other) => sameRoot(rule.root, other.root) && isomorphic(rule.quads, other.quads),
     );
-    if (candidates.length !== twins.length) throw new RestoreConflictError();
+    if (candidates.length !== twins.length) return false;
     for (const node of candidates) selected.set(termKey(node), node);
   }
   for (const node of selected.values()) deleteRule(dataset, node);
+  return true;
+}
+/**
+ * Put one removed rule's grants back into whatever form of that rule exists now: its
+ * named rule, or for a blank rule another blank rule with the same description; else
+ * re-create it. `exact` re-adds the whole rule after takeExact removed its successors;
+ * otherwise only the cells still missing are added, so undos apply in any order.
+ */
+function restoreRule(
+  dataset: DatasetCore,
+  rule: RuleShape,
+  wanted: Set<string>,
+  exact: boolean,
+): void {
+  const current = shapes(dataset);
+  const named =
+    rule.root.termType === "NamedNode"
+      ? current.find((shape) => termKey(shape.root) === termKey(rule.root))
+      : undefined;
+  // Someone else changed this rule's modes or annotations: restoring would widen theirs.
+  if (named && !sameBody(named, rule)) throw new RestoreConflictError();
+  const family = current.filter((shape) => sameBody(shape, rule));
+  const granted = new Set(family.flatMap((shape) => [...cells(shape)]));
+  const missing = exact ? wanted : new Set([...wanted].filter((cell) => !covered(granted, cell)));
+  if (!missing.size) return;
+  const blanks = family
+    .filter((shape) => shape.root.termType === "BlankNode")
+    .sort((a, b) => cells(b).size - cells(a).size);
+  const candidates = named ? [named] : rule.root.termType === "BlankNode" ? blanks : [];
+  for (const candidate of candidates) {
+    const own = cells(candidate);
+    // An exact undo keeps equivalent and nested blank rules as separate rules.
+    if (exact && candidate !== named && (covers(own, missing) || covers(missing, own))) continue;
+    const next = merged(candidate, missing, granted);
+    if (!next) continue;
+    addGrants(dataset, candidate.root, next);
+    // A blank piece the merged rule now wholly grants is a leftover split: rejoin it.
+    if (!exact)
+      for (const other of blanks)
+        if (other !== candidate && covers(cells(next), cells(other)))
+          deleteRule(dataset, other.root);
+    return;
+  }
+  for (const [index, grants] of (exact ? [rule] : products(missing)).entries())
+    createRule(
+      dataset,
+      rule,
+      index === 0 && rule.root.termType === "NamedNode" && !named
+        ? rule.root
+        : DataFactory.blankNode(),
+      grants,
+    );
+}
+/**
+ * Apply an inverse delta to a fresh read. Only grants this revoke removed are put back:
+ * changes made since, here or elsewhere, are kept, and undos work in any order. A
+ * conflict is raised only when someone else changed a rule so it can't take them back.
+ */
+async function applyDelta(
+  dataset: DatasetCore,
+  delta: RestoreDelta,
+  url: string,
+  storage: string,
+): Promise<void> {
+  const remove = await Promise.all(delta.remove.map((rule) => parseRule(rule, url)));
+  const add = (await Promise.all(delta.add.map((rule) => parseRule(rule, url)))).map((rule) =>
+    shapeOf(rule.quads, rule.root),
+  );
+  for (const rule of add)
+    for (const target of rule.targets)
+      assertWithinPodScope(storage, target.slice(target.indexOf(" ") + 1));
+  const left = remove.map((rule) => shapeOf(rule.quads, rule.root));
+  const exact = takeExact(dataset, remove);
   for (const rule of add) {
-    if (rule.root.termType === "NamedNode" && [...dataset.match(rule.root)].length)
-      throw new RestoreConflictError();
-    // Fresh blank labels: a parser-local label must never merge with an existing node.
-    const blanks = new Map<string, Term>();
-    const term = <T extends Term>(value: T): T =>
-      (value.termType === "BlankNode"
-        ? (blanks.get(value.value) ??
-          blanks.set(value.value, DataFactory.blankNode()).get(value.value))
-        : value) as T;
-    for (const quad of rule.quads)
-      dataset.add(
-        DataFactory.quad(term(quad.subject), quad.predicate, term(quad.object), quad.graph),
-      );
+    const kept = new Set(
+      left.filter((shape) => sameBody(shape, rule)).flatMap((shape) => [...cells(shape)]),
+    );
+    restoreRule(
+      dataset,
+      rule,
+      new Set([...cells(rule)].filter((cell) => exact || !covered(kept, cell))),
+      exact,
+    );
   }
 }
 function copyDescription(node: AccessNode): AccessNode {
@@ -500,7 +762,7 @@ export async function applyRevoke(
         if (!current.etag || current.etag.startsWith("W/")) throw new AclConflictError();
         const inverse = plan.restore?.find((r) => r.source === url);
         const dataset: DatasetCore = new Store([...current.dataset]);
-        if (inverse) await applyDelta(dataset, inverse, url);
+        if (inverse) await applyDelta(dataset, inverse, url, options.storage);
         else {
           const detached = new Map<string, string[]>();
           for (const change of await resolveChanges(dataset, changes))

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import { click, h, key, mount } from "./drive-ui-dom";
@@ -209,6 +210,17 @@ it("keeps keyboard focus on the switch while saving and returns it there after U
   expect(document.activeElement).toBe(toggle());
   expect(toggle()?.disabled).toBe(false);
   expect(toggle()?.getAttribute("aria-disabled")).toBe("true");
+  // The focusable controls carry the explanation, so their wrappers add no tab stop.
+  const stops = () =>
+    [...view.host.querySelectorAll(".hm-permission-hint")].map((hint) =>
+      hint.getAttribute("tabindex"),
+    );
+  expect(stops()).toEqual(["-1", "-1"]);
+  const css = readFileSync(
+    new URL("../src/apps/home/components/permissions/permissions.css", import.meta.url),
+    "utf8",
+  );
+  expect(css).toMatch(/\.hm-permission-line \[aria-disabled="true"\] \{[^}]*opacity: 0\.5/);
   await click(toggle() as HTMLButtonElement);
   expect(state.revoke).toHaveBeenCalledTimes(1);
   const saved = { ...state, removed: { files: { row, line, token: "t" } } };
@@ -225,6 +237,10 @@ it("keeps keyboard focus on the switch while saving and returns it there after U
   await view.render(h(PermissionAccessRow, { ...props, binding: state }));
   expect(document.activeElement).toBe(toggle());
   expect(toggle()?.hasAttribute("aria-disabled")).toBe(false);
+  // Offline the switch is truly disabled, so its wrapper is the keyboard path to why.
+  await view.render(h(PermissionAccessRow, { ...props, binding: { ...state, online: false } }));
+  expect(toggle()?.disabled).toBe(true);
+  expect(stops()).toEqual(["0", "0"]);
 });
 
 it("explains and disables an Undo whose rules were changed elsewhere", async () => {
