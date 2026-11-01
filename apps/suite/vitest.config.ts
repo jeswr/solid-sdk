@@ -50,6 +50,7 @@ export default defineConfig({
         "src/apps/contacts/lib/phone/**/*.ts",
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
+        "src/apps/contacts/lib/{form-schema,carddav,import-export}.ts",
         "src/apps/contacts/state/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/money/lib/model/**/*.ts",
