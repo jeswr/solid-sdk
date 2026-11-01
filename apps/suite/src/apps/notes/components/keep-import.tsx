@@ -20,12 +20,13 @@ import {
   MAX_KEEP_NOTE_BYTES,
   planKeepImport,
 } from "../lib/keep";
+import type { StoredNote } from "../lib/model/store";
 import { useNotesContext } from "../state/notes-context";
 
 type Phase =
   | { kind: "choose"; reading?: boolean }
   | { kind: "review"; plan: KeepImportPlan }
-  | { kind: "importing"; total: number; done: number }
+  | { kind: "importing"; total: number; done: number; stopping: boolean }
   | {
       kind: "finished";
       imported: number;
@@ -53,7 +54,11 @@ async function readSelection(list: FileList) {
 }
 
 export function KeepImportDialog({ open, close }: { open: boolean; close: () => void }) {
-  const { notes, create, move, refresh } = useNotesContext();
+  const { notes, store, updatePrefs, refresh, active, archived, trashed } = useNotesContext();
+  const lists = [active, archived, trashed];
+  // Duplicates are found against every note, so wait until all three lists have loaded.
+  const failedLists = lists.some((list) => list.error !== undefined);
+  const loaded = lists.every((list) => list.data !== undefined && list.error === undefined);
   const [phase, setPhase] = useState<Phase>({ kind: "choose" });
   const stopped = useRef(false);
   const filesInput = useRef<HTMLInputElement>(null);
@@ -93,28 +98,61 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
     let remaining: KeepImportItem[] = [];
     let imported = 0;
     let unarchived = 0;
-    setPhase({ kind: "importing", total: items.length, done: 0 });
+    setPhase({ kind: "importing", total: items.length, done: 0, stopping: false });
     for (const [index, item] of items.entries()) {
       if (stopped.current) {
         remaining = items.slice(index);
         break;
       }
+      // Write through the store and refresh the lists once at the end: the context's
+      // mutations reload every note after each write, which a large import can't afford.
+      let note: StoredNote;
       try {
-        const note = await create(item.input, item.pinned, item.colour);
+        note = await store.create(item.input);
         imported++;
-        if (item.archived) await move(note, "archive").catch(() => unarchived++);
       } catch {
         failed.push(item);
+        setPhase({
+          kind: "importing",
+          total: items.length,
+          done: index + 1,
+          stopping: stopped.current,
+        });
+        continue;
       }
-      setPhase({ kind: "importing", total: items.length, done: index + 1 });
+      if (item.archived)
+        note = await store.archive(note).catch(() => {
+          unarchived++;
+          return note;
+        });
+      const url = note.url;
+      if (item.pinned || item.colour !== "default")
+        updatePrefs((prefs) => ({
+          ...prefs,
+          pinned: item.pinned ? [...prefs.pinned, url] : prefs.pinned,
+          colours:
+            item.colour === "default" ? prefs.colours : { ...prefs.colours, [url]: item.colour },
+        }));
+      setPhase({
+        kind: "importing",
+        total: items.length,
+        done: index + 1,
+        stopping: stopped.current,
+      });
     }
     await refresh().catch(() => undefined);
     setPhase({ kind: "finished", imported, failed, remaining, unarchived });
   };
 
+  const stop = () => {
+    stopped.current = true;
+    setPhase((current) =>
+      current.kind === "importing" ? { ...current, stopping: true } : current,
+    );
+  };
   const dismiss = () => {
     if (phase.kind === "importing") {
-      stopped.current = true;
+      stop();
       return;
     }
     setPhase({ kind: "choose" });
@@ -149,19 +187,32 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
               aria-label="Keep note files"
               onChange={(event) => void choose(event.target.files)}
             />
-            <Button disabled={phase.reading} onClick={() => folderInput.current?.click()}>
+            <Button
+              disabled={phase.reading || !loaded}
+              onClick={() => folderInput.current?.click()}
+            >
               <FolderOpen size={18} aria-hidden="true" />
               Choose Keep folder
             </Button>
             <Button
               variant="outline"
-              disabled={phase.reading}
+              disabled={phase.reading || !loaded}
               onClick={() => filesInput.current?.click()}
             >
               <FileJson size={18} aria-hidden="true" />
               Choose note files
             </Button>
             {phase.reading && <p role="status">Reading your notes…</p>}
+            {!loaded && !failedLists && <p role="status">Loading the notes you already have…</p>}
+            {failedLists && (
+              <p role="alert">
+                Couldn't load all of your notes, so Notes can't check which ones you've already
+                imported.{" "}
+                <Button variant="link" onClick={() => void refresh().catch(() => undefined)}>
+                  Try again
+                </Button>
+              </p>
+            )}
           </div>
         )}
         {phase.kind === "review" && (
@@ -224,10 +275,12 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
         {phase.kind === "importing" && (
           <div className="notes-keep-progress">
             <p role="status">
-              Importing {phase.done.toLocaleString()} of {phase.total.toLocaleString()}…
+              {phase.stopping
+                ? "Stopping after this note…"
+                : `Importing ${phase.done.toLocaleString()} of ${phase.total.toLocaleString()}…`}
             </p>
             <Progress value={phase.done} max={phase.total} aria-label="Import progress" />
-            <Button variant="outline" onClick={() => (stopped.current = true)}>
+            <Button variant="outline" disabled={phase.stopping} onClick={stop}>
               Stop
             </Button>
           </div>

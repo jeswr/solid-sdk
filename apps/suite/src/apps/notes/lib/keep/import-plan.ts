@@ -28,13 +28,18 @@ const COLOURS: Record<KeepColour, NoteColour> = {
 };
 
 /** Plain-language reasons; they never echo note content. */
-export const KEEP_SKIP_REASONS: Record<KeepImportErrorCode | "duplicate", string> = {
+export const KEEP_SKIP_REASONS: Record<
+  KeepImportErrorCode | "duplicate" | "empty" | "attachmentsOnly",
+  string
+> = {
   INVALID_KEEP_NOTE: "Not a Google Keep note",
   NOTE_TOO_LARGE: "Larger than 1 MB",
   BATCH_TOO_LARGE: "Too many files",
   INVALID_TIMESTAMP: "Has a date Notes can't read",
   UNSAFE_ATTACHMENT_PATH: "Has an attachment Notes can't safely read",
   duplicate: "Already in Notes",
+  empty: "Has no text to import",
+  attachmentsOnly: "Only has images or recordings, which Notes can't store yet",
 };
 
 export interface KeepImportItem {
@@ -53,15 +58,34 @@ export interface KeepImportPlan {
   readonly ignored: number;
   /** Attachment files referenced by the ready notes; Notes can't store them yet. */
   readonly attachments: number;
-  /** Ready notes whose import changed something, such as an unknown colour or an unsafe link. */
+  /** Ready notes with an unknown colour or a link that is not a web address. */
   readonly adjusted: number;
 }
 
+/** Drop any user name and password a saved link carried; they never go into a note. */
+function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.href;
+  } catch {
+    return url;
+  }
+}
+
 function linkHtml(url: string, title: string | undefined): string {
-  const label = escapeHtml(title?.trim() || url);
-  const href = validLink(url);
+  const safe = withoutCredentials(url);
+  const label = escapeHtml(title?.trim() || safe);
+  const href = validLink(safe);
   return href ? `<p><a href="${escapeHtml(href)}">${label}</a></p>` : `<p>${label}</p>`;
 }
+
+const paragraphs = (text: string) =>
+  trimBlankLines(text.replace(/\r\n?/g, "\n").split("\n"))
+    .map((line) => (line.trim() ? `<p>${escapeHtml(line)}</p>` : "<p></p>"))
+    .join("");
 
 function trimBlankLines(lines: string[]): string[] {
   let start = 0;
@@ -71,27 +95,29 @@ function trimBlankLines(lines: string[]): string[] {
   return lines.slice(start, end);
 }
 
-/** The Notes body for a Keep note: paragraphs or a task list, then its web links. */
-export function keepBodyHtml(draft: KeepNoteDraft): string {
+/**
+ * The Notes body for a Keep note: paragraphs or a task list, any text Keep kept beside
+ * a checklist, then its web links.
+ */
+export function keepBodyHtml(draft: KeepNoteDraft, extraText = ""): string {
   const content =
     draft.body.kind === "checklist"
-      ? taskListHtml(draft.body.items.filter((item) => item.text.trim()))
-      : trimBlankLines(draft.body.text.replace(/\r\n?/g, "\n").split("\n"))
-          .map((line) => (line.trim() ? `<p>${escapeHtml(line)}</p>` : "<p></p>"))
-          .join("");
+      ? taskListHtml(draft.body.items.filter((item) => item.text.trim())) + paragraphs(extraText)
+      : paragraphs(draft.body.text);
   return content + draft.links.map((link) => linkHtml(link.url, link.title)).join("");
 }
 
 export function keepDraftToNote(
   fileName: string,
   draft: KeepNoteDraft,
+  extraText = "",
 ): KeepImportItem & { trashed: boolean } {
   const title = draft.title.trim();
   return {
     fileName,
     input: {
       title: title.length > 200 ? captureTitle(title) : title,
-      body: keepBodyHtml(draft),
+      body: keepBodyHtml(draft, extraText),
       labels: [...new Set(draft.labels.map((label) => label.trim()).filter(Boolean))],
     },
     pinned: draft.pinned,
@@ -101,18 +127,19 @@ export function keepDraftToNote(
   };
 }
 
-/** Identifies a note by its title and body, to spot notes imported before. */
-export const keepFingerprint = (note: { title: string; body: string }) =>
-  JSON.stringify([note.title.trim(), note.body]);
+/** Identifies a note by its title, body and labels, to spot notes imported before. */
+export const keepFingerprint = (note: { title: string; body: string; labels: readonly string[] }) =>
+  JSON.stringify([note.title.trim(), note.body, [...note.labels].sort()]);
 
 /**
  * Parse a Takeout selection and decide what to import. Only `.json` files are read,
- * notes from Keep's Trash are left out, and a note whose title and body already match
- * an existing note is skipped, so choosing the same files twice does not duplicate them.
+ * notes from Keep's Trash and notes with no text are left out, and a note whose title,
+ * body and labels already match an existing note is skipped, so choosing the same files
+ * twice does not duplicate them.
  */
 export function planKeepImport(
   files: readonly KeepNoteFile[],
-  existing: readonly { title: string; body: string }[],
+  existing: readonly { title: string; body: string; labels: readonly string[] }[],
 ): KeepImportPlan {
   const json = files.filter((file) => /\.json$/i.test(file.fileName));
   if (json.length > MAX_KEEP_BATCH_FILES)
@@ -136,9 +163,22 @@ export function planKeepImport(
       skipped.push({ fileName, reason: KEEP_SKIP_REASONS[result.error.code] });
       continue;
     }
-    const { trashed: inTrash, ...item } = keepDraftToNote(fileName, result.draft);
+    // A checklist's displaced text is kept below the list rather than dropped.
+    const extraText = result.warnings
+      .map((warning) => (warning.code === "TEXT_CONTENT_IGNORED" ? warning.textContent : ""))
+      .join("\n");
+    const { trashed: inTrash, ...item } = keepDraftToNote(fileName, result.draft, extraText);
     if (inTrash) {
       trashed++;
+      continue;
+    }
+    if (!item.input.title && !item.input.body) {
+      skipped.push({
+        fileName,
+        reason: result.draft.attachments.length
+          ? KEEP_SKIP_REASONS.attachmentsOnly
+          : KEEP_SKIP_REASONS.empty,
+      });
       continue;
     }
     const key = keepFingerprint(item.input);
@@ -148,7 +188,7 @@ export function planKeepImport(
     }
     seen.add(key);
     attachments += result.draft.attachments.length;
-    if (result.warnings.length) adjusted++;
+    if (result.warnings.some((warning) => warning.code !== "TEXT_CONTENT_IGNORED")) adjusted++;
     ready.push(item);
   }
   return { ready, skipped, trashed, ignored: files.length - json.length, attachments, adjusted };

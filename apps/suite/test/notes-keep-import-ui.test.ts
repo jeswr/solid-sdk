@@ -51,15 +51,34 @@ async function choose(label: string, files: File[]) {
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
+type Prefs = { pinned: string[]; colours: Record<string, string> };
+let prefs: Prefs;
+const loadedList = () => ({ data: [], error: undefined });
+const create = () => (mocks.context.store as { create: ReturnType<typeof vi.fn> }).create;
+const archive = () => (mocks.context.store as { archive: ReturnType<typeof vi.fn> }).archive;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  prefs = { pinned: [], colours: {} };
   mocks.context = {
     notes: [
       { ...stored("Old"), body: "<p>Kept</p>" },
       { ...stored("Binned"), body: "<p>x</p>", location: "trashed" },
     ],
-    create: vi.fn(async (input: { title: string }) => stored(input.title)),
-    move: vi.fn(async (note: StoredNote) => ({ ...note, location: "archived" })),
+    store: {
+      create: vi.fn(async (input: { title: string }) => stored(input.title)),
+      archive: vi.fn(async (note: StoredNote) => ({
+        ...note,
+        url: note.url.replace("/notes/", "/notes/archive/"),
+        location: "archived",
+      })),
+    },
+    updatePrefs: vi.fn((change: (value: Prefs) => Prefs) => {
+      prefs = change(prefs);
+    }),
+    active: loadedList(),
+    archived: loadedList(),
+    trashed: loadedList(),
     refresh: vi.fn(async () => {}),
     labels: [],
     persistLabels: vi.fn(),
@@ -81,7 +100,13 @@ it("opens from the sidebar and imports a Takeout folder with pins, colours and a
       labels: [{ name: "Home" }],
       attachments: [{ filePath: "a.jpg", mimetype: "image/jpeg" }],
     }),
-    keepFile("Ideas.json", { title: "Ideas", textContent: "Plant beans", isArchived: true }),
+    keepFile("Ideas.json", {
+      title: "Ideas",
+      textContent: "Plant beans",
+      isArchived: true,
+      isPinned: true,
+      color: "GREEN",
+    }),
     keepFile("Old.json", { title: "Old", textContent: "Kept" }),
     keepFile("Binned.json", { title: "Binned", textContent: "x", isTrashed: true }),
     keepFile("Broken.json", { title: 1 }),
@@ -97,34 +122,53 @@ it("opens from the sidebar and imports a Takeout folder with pins, colours and a
   expect(text()).toContain("Takeout/Keep/Old.json: Already in Notes");
   expect(text()).toContain("Takeout/Keep/Broken.json: Not a Google Keep note");
   await click(button("Import 2 notes"));
-  expect(mocks.context.create).toHaveBeenNthCalledWith(
-    1,
-    { title: "Shopping", body: expect.stringContaining("Milk"), labels: ["Home"] },
-    true,
-    "yellow",
-  );
-  expect(mocks.context.create).toHaveBeenNthCalledWith(
-    2,
-    { title: "Ideas", body: "<p>Plant beans</p>", labels: [] },
-    false,
-    "default",
-  );
-  expect(mocks.context.move).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({ title: "Ideas" }),
-    "archive",
-  );
-  expect(mocks.context.refresh).toHaveBeenCalled();
+  expect(create()).toHaveBeenNthCalledWith(1, {
+    title: "Shopping",
+    body: expect.stringContaining("Milk"),
+    labels: ["Home"],
+  });
+  expect(create()).toHaveBeenNthCalledWith(2, {
+    title: "Ideas",
+    body: "<p>Plant beans</p>",
+    labels: [],
+  });
+  expect(archive()).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: "Ideas" }));
+  // Pins and colours follow each note to its final (archived) address.
+  expect(prefs.pinned).toHaveLength(2);
+  expect(prefs.pinned[1]).toContain("/notes/archive/");
+  expect(Object.values(prefs.colours)).toEqual(["yellow", "green"]);
+  // One list refresh for the whole import, not one per note.
+  expect(mocks.context.refresh).toHaveBeenCalledOnce();
   expect(text()).toContain("Imported 2 notes.");
   await click(button("Done"));
   expect(text()).not.toContain("Import from Google Keep");
   await ui.unmount();
 });
 
+it("waits for every note list before checking for duplicates", async () => {
+  mocks.context.archived = { data: undefined, error: undefined };
+  const ui = await mount(h(KeepImportDialog, { open: true, close: vi.fn() }));
+  expect(text()).toContain("Loading the notes you already have…");
+  expect(button("Choose Keep folder").disabled).toBe(true);
+  expect(button("Choose note files").disabled).toBe(true);
+  mocks.context.archived = { data: undefined, error: new Error("403") };
+  await ui.render(h(KeepImportDialog, { open: true, close: vi.fn() }));
+  expect(text()).toContain("Couldn't load all of your notes");
+  expect(text()).not.toContain("Loading the notes you already have…");
+  await click(button("Try again"));
+  expect(mocks.context.refresh).toHaveBeenCalledOnce();
+  (mocks.context.refresh as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("offline"));
+  await click(button("Try again"));
+  mocks.context.archived = loadedList();
+  await ui.render(h(KeepImportDialog, { open: true, close: vi.fn() }));
+  expect(button("Choose note files").disabled).toBe(false);
+  await ui.unmount();
+});
+
 it("reports failures, retries only notes not yet in the pod, and notes archive failures", async () => {
   const close = vi.fn();
-  const create = mocks.context.create as ReturnType<typeof vi.fn>;
-  create.mockRejectedValueOnce(new Error("offline")).mockRejectedValueOnce(new Error("offline"));
-  (mocks.context.move as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("412"));
+  create().mockRejectedValueOnce(new Error("offline")).mockRejectedValueOnce(new Error("offline"));
+  archive().mockRejectedValueOnce(new Error("412"));
   const ui = await mount(h(KeepImportDialog, { open: true, close }));
   await choose("Keep note files", [
     keepFile("A.json", { title: "A", textContent: "a", isArchived: true, color: "MAUVE" }),
@@ -140,23 +184,17 @@ it("reports failures, retries only notes not yet in the pod, and notes archive f
   mocks.context.notes = [{ ...stored("B"), body: "<p>b</p>" }];
   await ui.render(h(KeepImportDialog, { open: true, close }));
   await click(button("Try again"));
-  expect(create).toHaveBeenCalledTimes(4);
-  expect(create).toHaveBeenLastCalledWith(
-    { title: "A", body: "<p>a</p>", labels: [] },
-    false,
-    "default",
-  );
+  expect(create()).toHaveBeenCalledTimes(4);
+  expect(create()).toHaveBeenLastCalledWith({ title: "A", body: "<p>a</p>", labels: [] });
   expect(text()).toContain("Imported 1 note.");
   await click(button("Done"));
   expect(close).toHaveBeenCalledOnce();
   await ui.unmount();
 });
 
-it("stops between notes and offers to import the rest", async () => {
-  const create = mocks.context.create as ReturnType<typeof vi.fn>;
+async function startTwo(close: () => void) {
   const first = deferred<StoredNote>();
-  create.mockReturnValueOnce(first.promise);
-  const close = vi.fn();
+  create().mockReturnValueOnce(first.promise);
   const ui = await mount(h(KeepImportDialog, { open: true, close }));
   await choose("Keep note files", [
     keepFile("A.json", { title: "A", textContent: "a" }),
@@ -164,22 +202,37 @@ it("stops between notes and offers to import the rest", async () => {
   ]);
   await click(button("Import 2 notes"));
   expect(text()).toContain("Importing 0 of 2…");
-  // Escape or the close button stops the import instead of closing mid-way.
-  await act(() =>
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-  );
-  expect(close).not.toHaveBeenCalled();
+  return { ui, first };
+}
+
+it("stops between notes from the Stop button and offers to import the rest", async () => {
+  const { ui, first } = await startTwo(vi.fn());
   await click(button("Stop"));
+  expect(text()).toContain("Stopping after this note…");
+  expect(button("Stop").disabled).toBe(true);
   await act(() => first.resolve(stored("A")));
+  expect(create()).toHaveBeenCalledTimes(1);
   expect(text()).toContain("Imported 1 note.");
   expect(text()).toContain("Stopped with 1 note still to import.");
   await click(button("Import the rest"));
-  expect(create).toHaveBeenLastCalledWith(
-    { title: "B", body: "<p>b</p>", labels: [] },
-    false,
-    "default",
-  );
+  expect(create()).toHaveBeenLastCalledWith({ title: "B", body: "<p>b</p>", labels: [] });
   expect(text()).toContain("Imported 1 note.");
+  await ui.unmount();
+});
+
+it("stops instead of closing when the dialog is dismissed mid-import", async () => {
+  const close = vi.fn();
+  const { ui, first } = await startTwo(close);
+  await act(() =>
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  expect(close).not.toHaveBeenCalled();
+  expect(text()).toContain("Stopping after this note…");
+  await act(() => first.resolve(stored("A")));
+  expect(create()).toHaveBeenCalledTimes(1);
+  expect(text()).toContain("Stopped with 1 note still to import.");
   await ui.unmount();
 });
 

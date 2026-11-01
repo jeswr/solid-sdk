@@ -62,6 +62,7 @@ describe("Keep note bodies", () => {
             { url: "https://example.org/a?b=1&c=2", title: "Plan <one>" },
             { url: "https://example.org/b", title: "  " },
             { url: "https://user:secret@example.org/c" },
+            { url: "not a url" },
           ],
         }),
       ),
@@ -69,7 +70,8 @@ describe("Keep note bodies", () => {
       "<p>See</p>" +
         '<p><a href="https://example.org/a?b=1&amp;c=2">Plan &lt;one&gt;</a></p>' +
         '<p><a href="https://example.org/b">https://example.org/b</a></p>' +
-        "<p>https://user:secret@example.org/c</p>",
+        '<p><a href="https://example.org/c">https://example.org/c</a></p>' +
+        "<p>not a url</p>",
     );
   });
 });
@@ -107,7 +109,7 @@ describe("Keep drafts to notes", () => {
 
 describe("Keep import plans", () => {
   it("imports good notes and reports trashed, duplicate, invalid and other files", () => {
-    const existing = { title: "Old", body: "<p>Kept</p>" };
+    const existing = { title: "Old", body: "<p>Kept</p>", labels: [] };
     const plan = planKeepImport(
       [
         file("Keep/Shopping.json", {
@@ -122,6 +124,20 @@ describe("Keep import plans", () => {
         }),
         file("Keep/Old.JSON", { title: "Old", textContent: "Kept" }),
         file("Keep/Plain.json", { title: "Plain", textContent: "Hello" }),
+        file("Keep/Plain work.json", {
+          title: "Plain",
+          textContent: "Hello",
+          labels: [{ name: "Work" }],
+        }),
+        file("Keep/Both.json", {
+          title: "Both",
+          textContent: "Displaced <text>",
+          listContent: [{ text: "Item", isChecked: false }],
+        }),
+        file("Keep/Blank.json", { title: " ", textContent: "\n" }),
+        file("Keep/Photo.json", {
+          attachments: [{ filePath: "b.jpg", mimetype: "image/jpeg" }],
+        }),
         file("Keep/Binned.json", { title: "Binned", textContent: "x", isTrashed: true }),
         { fileName: "Keep/Broken.json", json: "{" },
         { fileName: "Keep/Shopping.html", json: "<html>" },
@@ -132,15 +148,23 @@ describe("Keep import plans", () => {
     expect(plan.ready.map((item) => item.fileName)).toEqual([
       "Keep/Shopping.json",
       "Keep/Plain.json",
+      "Keep/Plain work.json",
+      "Keep/Both.json",
     ]);
+    expect(plan.ready[3]?.input.body).toMatch(/<\/ul><p>Displaced &lt;text&gt;<\/p>$/);
     expect(plan.skipped).toEqual([
       { fileName: "Keep/Shopping copy.json", reason: KEEP_SKIP_REASONS.duplicate },
       { fileName: "Keep/Old.JSON", reason: KEEP_SKIP_REASONS.duplicate },
+      { fileName: "Keep/Blank.json", reason: KEEP_SKIP_REASONS.empty },
+      { fileName: "Keep/Photo.json", reason: KEEP_SKIP_REASONS.attachmentsOnly },
       { fileName: "Keep/Broken.json", reason: KEEP_SKIP_REASONS.INVALID_KEEP_NOTE },
     ]);
     expect(plan).toMatchObject({ trashed: 1, ignored: 2, attachments: 1, adjusted: 1 });
-    expect(keepFingerprint({ title: " Old ", body: "<p>Kept</p>" })).toBe(
+    expect(keepFingerprint({ title: " Old ", body: "<p>Kept</p>", labels: [] })).toBe(
       keepFingerprint(existing),
+    );
+    expect(keepFingerprint({ title: "T", body: "", labels: ["b", "a"] })).toBe(
+      keepFingerprint({ title: "T", body: "", labels: ["a", "b"] }),
     );
   });
   it("names files whose names could not be read by position", () => {
