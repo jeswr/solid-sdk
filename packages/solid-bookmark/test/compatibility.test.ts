@@ -205,6 +205,11 @@ it("does not carry an impossible date-only created value", async () => {
     doc(`schema:url <https://example.org/> ; dct:created "2025-03-04+14:00"^^xsd:date`),
   );
   expect(edge?.created?.toISOString()).toBe("2025-03-03T10:00:00.000Z");
+  const early = await parseBookmarkTtl(
+    RES,
+    doc(`schema:url <https://example.org/> ; dct:created "0025-03-04"^^xsd:date`),
+  );
+  expect(early?.created?.getUTCFullYear()).toBe(25);
 });
 
 it("rejects a relative or unsafe resource URL instead of minting a relative subject", () => {

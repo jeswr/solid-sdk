@@ -143,7 +143,9 @@ const XSD_DATE = /^(\d{4})-(\d{2})-(\d{2})(Z|([+-])(\d{2}):(\d{2}))?$/;
 /** Midnight of a valid `xsd:date` in its zone (UTC when none); undefined if not a real date. */
 function parseXsdDate(match: RegExpExecArray): Date | undefined {
   const [, year, month, day, , sign, hours, minutes] = match;
-  const utc = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  const utc = new Date(0);
+  // setUTCFullYear, not Date.UTC, which maps years 0–99 to 1900–1999.
+  utc.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
   // Reject calendar overflow (2025-02-30) rather than rolling into the next month.
   if (utc.getUTCMonth() !== Number(month) - 1 || utc.getUTCDate() !== Number(day)) return undefined;
   if (sign === undefined) return utc;
