@@ -64,10 +64,15 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const [importedDomains, setImportedDomains] = useState<readonly DataCategory[]>([]);
   const [failure, setFailure] = useState<unknown>();
   const [blockedHref, setBlockedHref] = useState<string>();
+  const [popupClosed, setPopupClosed] = useState(false);
+  const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
   const running = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
+  // The heading of whichever step or result panel is showing; it takes focus when the
+  // panel changes, because the control that changed it has just unmounted.
+  const panelHeading = useRef<HTMLHeadingElement>(null);
+  const view = useRef(`${step}:${phase}`);
   const mode: ConnectionMode =
     entry.status === "demo" ? "demo" : entry.tier === "C" ? "file" : "live";
   const destinations = destinationsFor(entry.id);
@@ -82,7 +87,10 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     if (!online) controller.current?.abort();
   }, [online]);
   useEffect(() => {
-    if (step > 1 || phase === "done" || phase === "error") heading.current?.focus();
+    // Compare views rather than counting effect runs, so a remount never steals focus.
+    if (view.current === `${step}:${phase}`) return;
+    view.current = `${step}:${phase}`;
+    panelHeading.current?.focus();
   }, [step, phase]);
 
   async function start(file?: File) {
@@ -92,11 +100,15 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     controller.current = abort;
     setFailure(undefined);
     setBlockedHref(undefined);
+    setPopupClosed(false);
+    setNotice("");
     setWritten(0);
     setImportedDomains([]);
     setProgress(undefined);
     setPhase(mode === "live" && adapter?.oauth ? "waiting" : "running");
     const domainsByResource = new Map<string, DataCategory>();
+    const oauth = mode === "live" ? adapter?.oauth : undefined;
+    let started = false;
     try {
       const result = await runSavedImport(
         session.storageUrl,
@@ -104,17 +116,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         mode,
         abort.signal,
         (action) => update(entry.id, action),
-        async (cursor, connection) => {
-          let sourceAuth: SourceAuth | undefined;
-          if (mode === "live" && adapter?.oauth) {
-            setPhase("waiting");
-            const config = { ...adapter.oauth, scopes: selectedScopes };
-            const token = await login(entry.id, config, abort.signal, setBlockedHref);
-            const transport = fetchWithSignal(sourceFetch, abort.signal);
-            sourceAuth =
-              adapter.createSourceAuth?.(config, token, transport) ??
-              createSourceAuth(entry.id, adapter, token, transport);
-          }
+        async (cursor, connection, sourceAuth: SourceAuth | undefined) => {
+          started = true;
           abort.signal.throwIfAborted();
           setBlockedHref(undefined);
           setStep(3);
@@ -157,6 +160,20 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 signal: abort.signal,
               });
         },
+        // Sign in before the run is recorded: abandoning sign-in is not a sync attempt.
+        oauth && adapter
+          ? async () => {
+              const config = { ...oauth, scopes: selectedScopes };
+              const token = await login(entry.id, config, abort.signal, setBlockedHref, () =>
+                setPopupClosed(true),
+              );
+              const transport = fetchWithSignal(sourceFetch, abort.signal);
+              return (
+                adapter.createSourceAuth?.(config, token, transport) ??
+                createSourceAuth(entry.id, adapter, token, transport)
+              );
+            }
+          : undefined,
       );
       const completed = new Map<string, DataCategory>();
       for (const { url } of result.written) {
@@ -167,8 +184,14 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
       setReport(result);
       setPhase("done");
     } catch (error) {
-      setFailure(error);
-      setPhase(abort.signal.aborted ? "cancelled" : "error");
+      if (abort.signal.aborted && !started) {
+        // Nothing was imported or recorded: return to sign-in.
+        setPhase("idle");
+        setNotice(`Sign-in to ${entry.name} cancelled.`);
+      } else {
+        setFailure(error);
+        setPhase(abort.signal.aborted ? "cancelled" : "error");
+      }
     } finally {
       running.current = false;
       controller.current = null;
@@ -179,7 +202,35 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     setStep(1);
     setReport(undefined);
     setBlockedHref(undefined);
+    setNotice("");
   }
+  const total = progress?.total;
+  // One always-mounted live region; its text changes, so every outcome is announced.
+  const announcement =
+    phase === "waiting"
+      ? popupClosed
+        ? `Didn't finish signing in to ${entry.name}? Choose Cancel to stop waiting.`
+        : `Waiting for ${entry.name}…`
+      : phase === "running"
+        ? total !== undefined && progress
+          ? progressCopy(progress.done, total, "collections")
+          : progressCopy(written, undefined, "collections")
+        : phase === "done" && report
+          ? [
+              addedCopy(
+                report.state?.counts.items ?? report.written.length,
+                importedDomains.map((domain) => domain.label).join(", ") || "your pod",
+              ),
+              skippedCopy(report.skipped ?? 0),
+            ]
+              .filter(Boolean)
+              .join(". ")
+              .concat(".")
+          : phase === "cancelled"
+            ? "Last sync incomplete. Items already added are kept."
+            : phase === "error"
+              ? `${entry.name} sync didn't finish. ${connectorErrorCopy(failure, entry.name)}`
+              : notice;
   if (!online)
     return (
       <div className="hm-connect hm-connect-page">
@@ -200,9 +251,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
       <div className="hm-connect-flow-header">
         <ConnectorLogo entry={entry} />
         <div>
-          <h1 ref={heading} tabIndex={-1}>
-            Synchronise your {entry.name} data
-          </h1>
+          <h1>Synchronise your {entry.name} data</h1>
           <StatusBadge status={entry.status} />
         </div>
       </div>
@@ -220,11 +269,14 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               </li>
             ))}
           </ol>
+          <p className="hm-connect-sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {announcement}
+          </p>
           {entry.status === "soon" ? (
             <p>Coming soon</p>
           ) : phase === "done" && report ? (
-            <div className="hm-connect-result" role="status">
-              <h2>
+            <div className="hm-connect-result">
+              <h2 ref={panelHeading} tabIndex={-1}>
                 {addedCopy(
                   report.state?.counts.items ?? report.written.length,
                   importedDomains.map((domain) => domain.label).join(", ") || "your pod",
@@ -254,15 +306,22 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               </div>
             </div>
           ) : phase === "error" ? (
-            <ErrorState error="unknown">
-              <p>{connectorErrorCopy(failure, entry.name)}</p>
-              <button type="button" className="hm-connect-button" onClick={retry}>
-                Try again
-              </button>
-            </ErrorState>
+            <div className="hm-connect-result">
+              <h2 ref={panelHeading} tabIndex={-1}>
+                {entry.name} sync didn't finish
+              </h2>
+              <ErrorState error="unknown">
+                <p>{connectorErrorCopy(failure, entry.name)}</p>
+                <button type="button" className="hm-connect-button" onClick={retry}>
+                  Try again
+                </button>
+              </ErrorState>
+            </div>
           ) : phase === "cancelled" ? (
-            <div className="hm-connect-result" role="status">
-              <h2>Last sync incomplete</h2>
+            <div className="hm-connect-result">
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Last sync incomplete
+              </h2>
               <p>Items already added are kept. You can sync again to finish.</p>
               <button type="button" className="hm-connect-button" onClick={retry}>
                 Sync again
@@ -270,7 +329,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             </div>
           ) : phase === "running" ? (
             <div className="hm-connect-result">
-              <h2>Importing</h2>
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Importing
+              </h2>
               <Progress
                 aria-label="Import progress"
                 value={
@@ -278,9 +339,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 }
               />
               <p>{progress?.label}</p>
-              <p role="status" aria-live="polite" aria-atomic="true">
-                {progressCopy(written, undefined, "collections")}
-              </p>
+              <p>{announcement}</p>
               <button
                 type="button"
                 className="hm-connect-button hm-connect-secondary"
@@ -291,7 +350,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             </div>
           ) : step === 1 ? (
             <div className="hm-connect-result">
-              <h2>Choose what to sync</h2>
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Choose what to sync
+              </h2>
               {scopes.length ? (
                 <fieldset className="hm-connect-scopes">
                   <legend>Data to synchronise</legend>
@@ -330,7 +391,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             </div>
           ) : entry.tier === "C" && fileAdapter ? (
             <div className="hm-connect-result">
-              <h2>Import a file</h2>
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Import a file
+              </h2>
               <p>{fileAdapter.fileHint}</p>
               <label
                 className="hm-connect-drop"
@@ -375,7 +438,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             </div>
           ) : (
             <div className="hm-connect-result">
-              <h2>Sign in to {entry.name}</h2>
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Sign in to {entry.name}
+              </h2>
               {mode === "demo" && (
                 <p>
                   No sign-in is needed. This imports recorded demo data from {entry.name} into your
@@ -384,7 +449,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               )}
               {phase === "waiting" ? (
                 <>
-                  <p role="status">Waiting for {entry.name}…</p>
+                  <p>Waiting for {entry.name}…</p>
                   {blockedHref && (
                     <p>
                       Your browser blocked the sign-in window.{" "}
@@ -398,6 +463,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       </a>
                     </p>
                   )}
+                  {popupClosed && <p>Didn't finish signing in?</p>}
                   <button
                     type="button"
                     className="hm-connect-button hm-connect-secondary"
@@ -407,9 +473,12 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   </button>
                 </>
               ) : (
-                <button type="button" className="hm-connect-button" onClick={() => void start()}>
-                  Continue with {entry.name}
-                </button>
+                <>
+                  {notice && <p>{notice}</p>}
+                  <button type="button" className="hm-connect-button" onClick={() => void start()}>
+                    Continue with {entry.name}
+                  </button>
+                </>
               )}
             </div>
           )}

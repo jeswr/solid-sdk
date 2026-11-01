@@ -66,6 +66,12 @@ export function ConnectCatalogue() {
         <h1>Connect services</h1>
         <p>Bring your data from other services into your pod.</p>
       </header>
+      {/* Always mounted, so going offline is announced when the note appears. */}
+      <div role="status" aria-live="polite">
+        {!online && (
+          <p className="hm-connect-offline">You're offline. Reconnect to connect services.</p>
+        )}
+      </div>
       <div className="hm-connect-search">
         <label htmlFor="connector-search">Search services</label>
         <input

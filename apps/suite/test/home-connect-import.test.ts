@@ -7,6 +7,7 @@ import {
   runImport,
 } from "@jeswr/pod-connectors";
 import { createSpotifyAdapter } from "@jeswr/pod-connectors/adapters/spotify";
+import { fixtureFetch } from "@jeswr/pod-connectors/core/fixture-fetch";
 import { memoryFile } from "@jeswr/pod-connectors/testing";
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Parser, Store } from "n3";
@@ -640,6 +641,98 @@ describe("saved import transactions", () => {
       lastOutcome: cancelled ? "incomplete" : "error",
       cursor: "last-good",
     });
+  });
+});
+
+describe("sign-in before recording a run", () => {
+  it("records nothing when sign-in is abandoned and records the start only after it succeeds", async () => {
+    const [store] = preferencesPair();
+    const update = updater(store, "spotify");
+    const controller = new AbortController();
+    const run = vi.fn();
+    await expect(
+      runSavedImport(DEMO_ROOT, "spotify", "live", controller.signal, update, run, async () => {
+        controller.abort();
+        controller.signal.throwIfAborted();
+      }),
+    ).rejects.toThrow();
+    expect(run).not.toHaveBeenCalled();
+    expect(store.read(DEMO_WEBID).spotify).toBeUndefined();
+    const auth = { fetch: vi.fn<typeof fetch>() };
+    let duringSignIn: unknown = "unread";
+    const report = await runSavedImport(
+      DEMO_ROOT,
+      "spotify",
+      "live",
+      new AbortController().signal,
+      update,
+      async (_cursor, connection, received) => {
+        expect(received).toBe(auth);
+        expect(connection.lastOutcome).toBe("incomplete");
+        return {
+          adapterId: "spotify",
+          mode: "live",
+          written: [],
+          categories: [],
+          indexUrl: `${DEMO_ROOT}index`,
+        } satisfies ImportReport;
+      },
+      async () => {
+        duringSignIn = store.read(DEMO_WEBID).spotify;
+        return auth;
+      },
+    );
+    expect(report.adapterId).toBe("spotify");
+    expect(duringSignIn).toBeUndefined();
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({ lastOutcome: "ok" });
+  });
+});
+
+describe("permissions without a matching collection", () => {
+  const sync = async (id: string, selection: readonly string[]) => {
+    const { session } = await setup();
+    const adapter = createRegistry().adapterById(id);
+    if (!adapter) throw new Error("Missing adapter");
+    // Replays repeated routes in order, as the package's demo mode does.
+    const source = { adapter, fetch: vi.fn(fixtureFetch(id, adapter.fixtures())) };
+    const report = await runImport({
+      adapter: withSelectedScopes(source.adapter, withRequiredScopes(id, selection)),
+      mode: "live",
+      sourceAuth: { fetch: source.fetch },
+      podWriter: createImportWriter(session, id, new AbortController().signal),
+    });
+    const paths = source.fetch.mock.calls.map(([input]) => new URL(String(input)).pathname);
+    const slugs = report.written.map(({ url }) =>
+      url.slice(url.indexOf(`/${id}/`) + id.length + 2),
+    );
+    return { report, paths, slugs };
+  };
+  it.each([
+    [["read:user"], ["work/profile.ttl"], false],
+    [["repo"], ["work/repositories.ttl"], true],
+  ] as const)("imports only the GitHub collection for %j", async (selection, slugs, repos) => {
+    const result = await sync("github", selection);
+    expect(result.slugs).toEqual(slugs);
+    expect(result.paths.some((path) => path.endsWith("/user/repos"))).toBe(repos);
+  });
+  it("advances Strava's checkpoint without its unused profile permission", async () => {
+    const full = await sync("strava", ["read", "activity:read"]);
+    const withoutProfile = await sync("strava", ["activity:read"]);
+    expect(full.report.cursor).toBeDefined();
+    expect(withoutProfile.report.cursor).toBe(full.report.cursor);
+    expect(withoutProfile.slugs).toEqual(full.slugs);
+    const profileOnly = await sync("strava", ["read"]);
+    expect(profileOnly.paths.some((path) => path.endsWith("/athlete/activities"))).toBe(false);
+    expect(profileOnly.report.cursor).toBeUndefined();
+  });
+  it("requires Dropbox's account permission and advances only with file details", async () => {
+    expect(withRequiredScopes("dropbox", [])).toEqual(["account_info.read"]);
+    const files = await sync("dropbox", ["files.metadata.read"]);
+    expect(files.report.cursor).toBeDefined();
+    expect(files.slugs).toContain("documents/files.ttl");
+    const none = await sync("dropbox", []);
+    expect(none.paths.some((path) => path.includes("/files/"))).toBe(false);
+    expect(none.report.cursor).toBeUndefined();
   });
 });
 

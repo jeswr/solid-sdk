@@ -213,19 +213,62 @@ describe("OAuth cancellation boundaries", () => {
     await response.promise;
     expect(sourceFetch).toHaveBeenCalledTimes(1);
   });
-  it("stops when the popup is manually closed", async () => {
+  it("reports a closed popup but keeps waiting without a timeout until cancelled", async () => {
     const { navigate, popup, sourceFetch } = browser();
     const navigated = deferred<void>();
     navigate.mockImplementation(() => navigated.resolve());
     const { login } = await import("../src/apps/home/components/connect/oauth-login");
     vi.useFakeTimers();
-    const pending = login("spotify", config, new AbortController().signal, () => {});
-    const rejected = expect(pending).rejects.toThrow();
+    const controller = new AbortController();
+    const onClosed = vi.fn();
+    let settled = false;
+    const pending = login("spotify", config, controller.signal, () => {}, onClosed);
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     await navigated.promise;
     popup.close();
     await vi.advanceTimersByTimeAsync(500);
-    await rejected;
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    // No fixed sign-in deadline: the user chooses Cancel.
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(settled).toBe(false);
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    controller.abort();
+    await expect(pending).rejects.toThrow();
     expect(vi.getTimerCount()).toBe(0);
     expect(sourceFetch).not.toHaveBeenCalled();
+  });
+  it("completes through the BroadcastChannel when a COOP provider makes the popup read closed", async () => {
+    const { navigate, popup, sourceFetch } = browser();
+    const onClosed = deferred<void>();
+    navigate.mockImplementation(() => {
+      // Cross-Origin-Opener-Policy severs the opener: the still-open popup reads closed.
+      popup.closed = true;
+    });
+    const { login } = await import("../src/apps/home/components/connect/oauth-login");
+    const pending = login(
+      "spotify",
+      config,
+      new AbortController().signal,
+      () => {},
+      () => onClosed.resolve(),
+    );
+    await onClosed.promise;
+    const href = navigate.mock.calls[0]?.[0];
+    if (!href) throw new Error("Missing authorization request");
+    const channel = new BroadcastChannel("suite-connector-oauth");
+    channel.postMessage({
+      type: "pod-manager-oauth",
+      url: `${origin}/oauth-callback.html?code=good&state=${new URL(href).searchParams.get("state")}`,
+    });
+    channel.close();
+    expect((await pending).accessToken).toBe("memory-only");
+    expect(sourceFetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -95,11 +95,13 @@
   margin-top: var(--space-2);
 }
 .hm-connect-badge[data-status="demo"],
-.hm-connect-incomplete {
+.hm-connect-incomplete,
+.hm-connect-offline {
   color: var(--warning-foreground);
   background: var(--warning);
 }
-.hm-connect-incomplete {
+.hm-connect-incomplete,
+.hm-connect-offline {
   padding: var(--space-2);
   border-radius: var(--radius-md);
 }

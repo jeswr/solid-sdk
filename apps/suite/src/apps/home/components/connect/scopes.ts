@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import type { IntegrationAdapter } from "@jeswr/pod-connectors";
 
+/** Scopes the provider needs for sign-in or account identification; never optional.
+ * Dropbox grants account_info.read to every app regardless of the request. */
 const prerequisites: Readonly<Record<string, readonly string[]>> = {
   discord: ["identify"],
   reddit: ["identity"],
+  dropbox: ["account_info.read"],
 };
 export const requiredScopesFor = (id: string): readonly string[] => prerequisites[id] ?? [];
 export const withRequiredScopes = (id: string, selected: readonly string[]): readonly string[] => [
@@ -116,7 +119,12 @@ export function withSelectedScopes(
                 skipRegistration: true,
               }),
       });
-      if (selected.length === adapter.metadata.scopes.length) return outcome;
+      // Only a withheld scope that gates imported data makes the run partial; one the
+      // adapter never reads (Strava's profile `read`) cannot leave data behind.
+      const partial = adapter.metadata.scopes.some(
+        (scope) => !selected.includes(scope) && policy.some((rule) => rule.scopes.includes(scope)),
+      );
+      if (!partial) return outcome;
       // A partial selection cannot advance a checkpoint shared with omitted data.
       const { cursor: _cursor, ...rest } = outcome;
       return { ...rest, ...(ctx.cursor === undefined ? {} : { cursor: ctx.cursor }) };

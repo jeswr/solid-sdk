@@ -25,12 +25,16 @@ function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /** Own the lifecycle around the package's PKCE primitives. Reserve one popup
- * during the click gesture; a blocked popup gets a native link to the same request. */
+ * during the click gesture; a blocked popup gets a native link to the same request.
+ * A popup that reads as closed may still be open (a provider page sending
+ * Cross-Origin-Opener-Policy severs the opener), so keep waiting for the callback
+ * and report it through onClosed; the caller's signal is the only way to give up. */
 export async function login(
   id: string,
   config: OAuthAppConfig,
   signal: AbortSignal,
   onBlocked: (href: string) => void,
+  onClosed: () => void = () => {},
 ): Promise<TokenSet> {
   signal.throwIfAborted();
   if (!config.clientId) throw new IntegrationAuthError(id, "not-configured");
@@ -49,7 +53,6 @@ export async function login(
       const cleanup = () => {
         window.removeEventListener("message", message);
         signal.removeEventListener("abort", abort);
-        clearTimeout(timeout);
         clearInterval(closedPoll);
         channel.close();
       };
@@ -79,15 +82,10 @@ export async function login(
         cleanup();
         resolve(answer.href);
       };
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new IntegrationAuthError(id, "cancelled"));
-      }, 120000);
       const closedPoll = setInterval(() => {
-        if (popup?.closed) {
-          cleanup();
-          reject(new IntegrationAuthError(id, "cancelled"));
-        }
+        if (!popup?.closed) return;
+        clearInterval(closedPoll);
+        onClosed();
       }, 500);
       signal.addEventListener("abort", abort, { once: true });
       window.addEventListener("message", message);

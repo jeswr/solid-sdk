@@ -104,6 +104,7 @@ test("Spotify demo writes real items, records demo provenance and syncing again 
   await expect(page.getByText(/No sign-in is needed/)).toBeVisible();
   await page.getByRole("button", { name: "Continue with Spotify" }).click();
   await expect(page.getByRole("heading", { name: "Added 25 items to Media" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Added 25 items to Media" })).toBeFocused();
   await expect(page.getByRole("link", { name: "See in Media" })).toHaveAttribute(
     "href",
     "/home/media",
@@ -115,6 +116,7 @@ test("Spotify demo writes real items, records demo provenance and syncing again 
   expect(first.demoResourceUrls).toHaveLength(10);
   await accessible(page);
   await page.getByRole("button", { name: "Sync again" }).click();
+  await expect(page.getByRole("heading", { name: "Choose what to sync" })).toBeFocused();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Continue with Spotify" }).click();
   await expect(page.getByRole("heading", { name: "Added 25 items to Media" })).toBeVisible();
@@ -195,8 +197,14 @@ test("offline catalogue disables every action and the flow is replaced until rec
   await expect(actions).toHaveCount(18);
   for (const action of await actions.all()) await expect(action).toBeDisabled();
   await expect(page.locator('[title="Reconnect to connect services"]')).toHaveCount(18);
+  await expect(
+    page.getByText("You're offline. Reconnect to connect services.", { exact: true }),
+  ).toBeVisible();
   await accessible(page);
   await context.setOffline(false);
+  await expect(
+    page.getByText("You're offline. Reconnect to connect services.", { exact: true }),
+  ).toHaveCount(0);
   await page.goto("/connect/spotify");
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeVisible();
   await context.setOffline(true);
@@ -241,7 +249,7 @@ test("cancelling a pending file import preserves incomplete status across reload
   await expect(page.getByText("Last sync incomplete", { exact: true })).toBeVisible();
 });
 
-for (const service of ["discord", "reddit"]) {
+for (const service of ["discord", "reddit", "dropbox"]) {
   test(`${service} requires identity permission and explains why`, async ({ page }) => {
     await page.goto(`/connect/${service}`);
     const identity = page.getByRole("checkbox", { name: /Required to identify your account/ });
