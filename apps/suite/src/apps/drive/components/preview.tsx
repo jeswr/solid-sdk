@@ -38,6 +38,7 @@ import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
+import { NativePdfHandoff } from "./native-pdf";
 import { ProtectionBanner } from "./protection-banner";
 
 const TEXT_LIMIT = 1024 * 1024;
@@ -48,7 +49,9 @@ type Loaded =
   | { status: "error" }
   | { status: "blob"; url: string }
   | { status: "text"; text: string; truncated: boolean }
-  | { status: "rdf"; quads: Quad[] };
+  | { status: "rdf"; quads: Quad[] }
+  // The native shell hands PDFs to the platform viewer instead of reading them here (E5).
+  | { status: "handoff" };
 
 const LABELS: Record<string, string> = {
   fn: "Name",
@@ -99,6 +102,7 @@ function useLoadedFile(
   metadataStatus: "loading" | "ready" | "error" | undefined,
 ): Loaded {
   const kind = filePreviewKind(item);
+  const handoff = kind === "pdf" && process.env.NEXT_PUBLIC_SUITE_TARGET === "native";
   const recordOpen = useRecordSharedOpen();
   // Strong metadata validators decide whether folder invalidation changed bytes.
   const version = useResourceVersion(
@@ -123,8 +127,8 @@ function useLoadedFile(
       recorded.current = true;
       recordOpen(current);
     };
-    if (kind === "none") {
-      setState({ status: "error" });
+    if (kind === "none" || handoff) {
+      setState(handoff ? { status: "handoff" } : { status: "error" });
       // Unsupported formats still count as opened when their metadata is accessible.
       if (metadataStatus === "ready") recordOnce(item);
       else if (metadataStatus === undefined)
@@ -184,6 +188,7 @@ function useLoadedFile(
     item.size,
     item.contentType,
     kind,
+    handoff,
     version,
     recordOpen,
     metadataStatus,
@@ -259,6 +264,7 @@ export function PreviewBody({
     );
   }
   if (loaded.status === "rdf") return <RdfSummary quads={loaded.quads} />;
+  if (loaded.status === "handoff") return <NativePdfHandoff key={item.url} item={item} />;
   if (loaded.status === "text") {
     const note = loaded.truncated ? (
       <p className="drv-preview-note">Showing the first 1 MB.</p>

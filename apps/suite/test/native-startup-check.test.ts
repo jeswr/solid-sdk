@@ -37,8 +37,19 @@ it("reports every missing feature in a fixed order", () => {
   ]);
 });
 
+// The DOM harness installs its globals with vi.stubGlobal, so restore only what these tests set.
+const restore: (() => void)[] = [];
+function setGlobal(name: string, value: unknown) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, name);
+  Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+  restore.push(() =>
+    previous
+      ? Object.defineProperty(globalThis, name, previous)
+      : Reflect.deleteProperty(globalThis, name),
+  );
+}
 afterEach(() => {
-  vi.unstubAllGlobals();
+  while (restore.length) restore.pop()?.();
   vi.resetModules();
 });
 
@@ -48,18 +59,18 @@ async function gate() {
 }
 
 it("renders the app once the check passes", async () => {
-  vi.stubGlobal("isSecureContext", true);
-  vi.stubGlobal("navigator", { ...navigator, locks: { request: () => undefined } });
-  vi.stubGlobal("indexedDB", { open: () => undefined });
+  setGlobal("isSecureContext", true);
+  setGlobal("navigator", { ...navigator, locks: { request: () => undefined } });
+  setGlobal("indexedDB", { open: () => undefined });
   const Gate = await gate();
   const view = await mount(h(Gate, null, h("span", null, "Pod content")));
   expect(view.host.textContent).toBe("Pod content");
 });
 
 it("shows the update screen instead of the app when a feature is missing", async () => {
-  vi.stubGlobal("isSecureContext", true);
-  vi.stubGlobal("navigator", { ...navigator, locks: undefined });
-  vi.stubGlobal("indexedDB", { open: () => undefined });
+  setGlobal("isSecureContext", true);
+  setGlobal("navigator", { ...navigator, locks: undefined });
+  setGlobal("indexedDB", { open: () => undefined });
   const Gate = await gate();
   const view = await mount(h(Gate, null, h("span", null, "Pod content")));
   expect(view.host.textContent).toContain("Update needed");

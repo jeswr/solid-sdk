@@ -30,4 +30,3 @@ export function NativeStartupGate({ children }: { children: ReactNode }) {
     </main>
   );
 }
-

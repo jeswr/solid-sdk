@@ -7,10 +7,10 @@ export type PlatformFeature = "secure-context" | "web-crypto" | "web-locks" | "i
 
 /** The globals the check reads; `globalThis` in the app, a plain object in tests. */
 export interface StartupScope {
-  isSecureContext?: boolean;
-  crypto?: { subtle?: unknown };
-  navigator?: { locks?: { request?: unknown } };
-  indexedDB?: { open?: unknown };
+  isSecureContext?: boolean | undefined;
+  crypto?: { subtle?: unknown } | undefined;
+  navigator?: { locks?: { request?: unknown } | undefined } | undefined;
+  indexedDB?: { open?: unknown } | undefined;
 }
 
 /** The features this WebView lacks, in a fixed order; empty when the app can start. */
