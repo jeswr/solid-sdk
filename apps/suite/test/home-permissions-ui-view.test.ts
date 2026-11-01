@@ -15,6 +15,7 @@ import {
   permissionDate,
   relativePath,
   revokeCopy,
+  sameAgent,
   visibleRows,
 } from "../src/apps/home/lib/permissions/view";
 
@@ -93,6 +94,16 @@ describe("permission copy and navigation", () => {
     }
     expect(agentId("!broken!")).toBeUndefined();
     expect(agentHref(row({ id: "urn:unsupported" }))).toBe("/permissions/a/unknown");
+  });
+  it("matches an origin-only app id against its round-tripped detail reference", () => {
+    const app = row({ kind: "app", id: "https://app.example" });
+    const id = agentId(agentHref(app).split("/").at(-1) as string);
+    expect(id).toBe("https://app.example/");
+    expect(sameAgent(app.id, id)).toBe(true);
+    expect(sameAgent(bob.id, bob.id)).toBe(true);
+    expect(sameAgent(bob.id, undefined)).toBe(false);
+    expect(sameAgent("public", "https://app.example/")).toBe(false);
+    expect(sameAgent(app.id, "https://other.example/")).toBe(false);
   });
   it("displays paths without revealing foreign URLs and names inherited parents", () => {
     expect(relativePath(`${root}drive/Work/Budget%202026.csv`, root)).toBe(

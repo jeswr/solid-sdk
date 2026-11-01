@@ -6,7 +6,7 @@ import { encodeRef } from "../../src/lib/refs";
 
 const ROOT = "https://alice.demo.pod/";
 const BOB = "https://bob.demo.pod/profile/card#me";
-const APP = "https://maracoach.example";
+const APP = "https://maracoach.example/";
 
 test.use({ locale: "en" });
 test.beforeEach(async ({ page }) => {
@@ -152,7 +152,7 @@ test("Apps: Advanced modes, relative path, gated grant link, saved view and data
   const app = card(page, "maracoach.example");
   await app.locator(".su-permission-trigger").click();
   await expect(app).toContainText("Personalise the service");
-  await page.getByRole("button", { name: "Advanced", exact: true }).click();
+  await page.getByRole("radio", { name: "Advanced", exact: true }).click();
   await expect(app.getByText("Read", { exact: true })).toBeVisible();
   await expect(app.getByText("Change", { exact: true })).toBeVisible();
   await expect(app.locator("code")).toHaveText(["health/"]);
@@ -170,10 +170,7 @@ test("Apps: Advanced modes, relative path, gated grant link, saved view and data
   await page.getByRole("button", { name: "Clear filters", exact: true }).click();
   await accessible(page);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Advanced", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(page.getByRole("radio", { name: "Advanced", exact: true })).toBeChecked();
   await page.getByRole("tab", { name: "Apps", exact: true }).click();
   await app.locator(".su-permission-trigger").click();
   await expect(grant).toBeDisabled();
@@ -242,9 +239,9 @@ test("app metadata links are safe and remote logo only loads after Show logo", a
       headers: { "access-control-allow-origin": "*" },
       body: JSON.stringify({
         client_name: "MaraCoach",
-        client_uri: `${APP}/about`,
-        policy_uri: `${APP}/privacy`,
-        tos_uri: `${APP}/terms`,
+        client_uri: `${APP}about`,
+        policy_uri: `${APP}privacy`,
+        tos_uri: `${APP}terms`,
         logo_uri: "https://images.example/mara.svg",
       }),
     }),

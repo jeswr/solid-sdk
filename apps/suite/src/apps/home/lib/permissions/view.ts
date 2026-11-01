@@ -136,6 +136,20 @@ export function agentId(ref: string): string | undefined {
   }
 }
 
+/**
+ * Route refs carry the URL parser's href, so an origin-only app id
+ * ("https://app.example") comes back with a trailing slash; compare by href.
+ */
+export function sameAgent(rowId: string, id: string | undefined): boolean {
+  if (id === undefined) return false;
+  if (rowId === id) return true;
+  try {
+    return new URL(rowId).href === id;
+  } catch {
+    return false;
+  }
+}
+
 export function accessRequestsEnabled(json?: string): boolean {
   try {
     return JSON.parse(json || "{}").accessRequests === true;

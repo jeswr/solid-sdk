@@ -6,7 +6,7 @@ import { Globe, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import type { ClientMetadata } from "../../lib/permissions";
-import { agentId, agentName, permissionDate } from "../../lib/permissions/view";
+import { agentId, agentName, permissionDate, sameAgent } from "../../lib/permissions/view";
 import { usePermissions } from "../../state/permissions";
 import { useHomeSession } from "../home-app";
 import { PermissionAccessRow } from "./permission-access";
@@ -71,7 +71,7 @@ export function PermissionAgentPage({ agentRef }: { agentRef: string }) {
   const session = useHomeSession();
   const preferences = usePermissionPreferences();
   const id = agentId(agentRef);
-  const row = binding.rows.find((r) => r.id === id);
+  const row = binding.rows.find((r) => sameAgent(r.id, id));
   const name = row ? agentName(row) : "Permissions";
   const pseudo = row?.kind === "public" || row?.kind === "authenticated";
   return (
