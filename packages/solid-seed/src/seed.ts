@@ -538,11 +538,15 @@ const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
 async function assertEmptyContainer(target: SeedTarget, url: string): Promise<void> {
   const response = await podFetch(target, url, {
     method: "GET",
-    headers: { accept: "text/turtle" },
+    cache: "no-store",
+    headers: {
+      accept: "text/turtle",
+      prefer: 'return=representation; include="http://www.w3.org/ns/ldp#PreferContainment"',
+    },
   });
   const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   let members: number | undefined;
-  if (response.ok && type === "text/turtle") {
+  if (response.status === 200 && type === "text/turtle") {
     const text = await boundedText(response, MAX_ACL_BYTES);
     try {
       members =
@@ -550,7 +554,8 @@ async function assertEmptyContainer(target: SeedTarget, url: string): Promise<vo
           ? undefined
           : new Parser({ format: "text/turtle", baseIRI: url })
               .parse(text)
-              .filter((q) => q.subject.value === url && q.predicate.value === LDP_CONTAINS).length;
+              // Any containment triple counts, however its subject is spelled.
+              .filter((q) => q.predicate.value === LDP_CONTAINS).length;
     } catch {
       members = undefined;
     }

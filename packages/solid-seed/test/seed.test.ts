@@ -957,6 +957,34 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(pod.resources.get("https://pod.example/c/secret")?.body).toBe("private");
   });
 
+  it("a containment triple counts however the listing spells the container", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: containerLayout(pod, false) });
+    pod.ignoreIfNoneMatch = true;
+    pod.alwaysCreated = true;
+    const inner = pod.authFetch;
+    const target = {
+      webid: pod.webid,
+      baseUrl: pod.baseUrl,
+      authFetch: (async (input, init) => {
+        const response = await inner(input, init);
+        if (init?.method !== "GET" || String(input) !== "https://pod.example/c/") return response;
+        return new Response(
+          "<https://pod.example:443/c> <http://www.w3.org/ns/ldp#contains> <https://pod.example/c/secret> .",
+          { status: 200, headers: response.headers },
+        );
+      }) as typeof fetch,
+    };
+    const layout = containerLayout(pod, true);
+    const error = await seedPods({
+      layout: { pods: [{ ...layout.pods[0], account: { target } } as PodLayout["pods"][number]] },
+      mode: "replace",
+    }).catch((caught: unknown) => caught);
+    expect(String((error as SeedError).cause)).toMatch(/not confirmed empty/);
+    const acl = "https://pod.example/c/.acl";
+    expect(grantsPublicRead(pod.resources.get(acl)?.body, acl)).toBe(false);
+  });
+
   it("replace of an existing container writes its owner-only ACL only over the ACL it checked", async () => {
     const pod = new MemoryPod("https://pod.example");
     pod.containerPutConflict = true;
