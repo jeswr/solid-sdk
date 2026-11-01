@@ -178,6 +178,8 @@ export function ColourPopover({
   close: () => void;
 }) {
   const label = kind === "color" ? "Text colour" : "Highlight colour";
+  // A click or Tab elsewhere already put focus where the person meant it to go.
+  const outside = useRef(false);
   return (
     <Popover open onOpenChange={close}>
       <PopoverAnchor asChild>
@@ -186,9 +188,12 @@ export function ColourPopover({
       <PopoverContent
         aria-label={label}
         className="docs-colour-popover"
+        onInteractOutside={() => {
+          outside.current = true;
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          focusDocument(editor);
+          if (!outside.current) focusDocument(editor);
         }}
       >
         <p>{label}</p>

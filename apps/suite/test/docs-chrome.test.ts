@@ -575,6 +575,40 @@ it("offers a labelled colour grid with arrows, Home/End, selection and Reset", a
   view.rerender(h(ColourGrid, { value: null, label: "Highlight colour", choose }));
 });
 
+it("leaves focus where the person moved it when the colour picker closes from outside", async () => {
+  const editor = create();
+  document.body.append(editor.view.dom);
+  const frame = () => act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  function Picker() {
+    const [open, setOpen] = useState(true);
+    return h(
+      "div",
+      null,
+      h("button", { type: "button" }, "Elsewhere"),
+      h("button", { type: "button", onClick: () => setOpen(true) }, "Reopen"),
+      open && h(ColourPopover, { editor, kind: "color", close: () => setOpen(false) }),
+    );
+  }
+  const view = render(h(Picker));
+  await vi.waitFor(() => expect(screen.queryByRole("grid")).not.toBeNull());
+  const elsewhere = button("Elsewhere");
+  await act(() => elsewhere.focus());
+  await vi.waitFor(() => expect(screen.queryByRole("grid")).toBeNull());
+  await frame();
+  await frame();
+  expect(document.activeElement).toBe(elsewhere);
+  // A keyboard close still returns to the document.
+  fireEvent.click(button("Reopen"));
+  await vi.waitFor(() => expect(screen.queryByRole("grid")).not.toBeNull());
+  key(screen.getByRole("gridcell", { name: "Red" }), "Escape");
+  await vi.waitFor(() => expect(screen.queryByRole("grid")).toBeNull());
+  await frame();
+  await frame();
+  expect(document.activeElement).toBe(editor.view.dom);
+  view.unmount();
+  editor.view.dom.remove();
+});
+
 it.each([
   "color",
   "backgroundColor",
