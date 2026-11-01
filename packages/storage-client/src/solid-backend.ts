@@ -159,7 +159,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["list"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",
@@ -167,7 +167,13 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: "Solid listings have one page",
       });
     }
-    const result = await get(container, { Accept: "text/turtle" }, opts.signal);
+    const result = await get(
+      container,
+      { Accept: "text/turtle" },
+      opts.signal,
+      false,
+      opts.revalidate,
+    );
     if (result.kind !== "container") {
       discard(result.body);
       throw new StorageError("method-not-allowed", {
@@ -191,16 +197,16 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
 
   async function* listAll(
     url: string,
-    opts: { signal?: AbortSignal } = {},
+    opts: Parameters<StorageClient["listAll"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url);
     yield* paginate(
       container,
       (cursor) =>
         inspect
-          ? list(container, { cursor, signal: opts.signal }, inspect)
-          : client.list(container, { cursor, signal: opts.signal }),
+          ? list(container, { ...opts, cursor }, inspect)
+          : client.list(container, { ...opts, cursor }),
       opts.signal,
     );
   }

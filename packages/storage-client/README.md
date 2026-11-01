@@ -31,8 +31,20 @@ if (etag === null) throw new Error('Read a validator before editing this resourc
 await storage.write(url, 'second draft', { contentType: 'text/plain', ifMatch: etag });
 ```
 
+Memory `writeRdf` defaults to Turtle and also supports `contentType: 'application/ld+json'`
+through `@jeswr/rdf-serialize`, in both Solid and LWS protocol modes. JSON-LD output is an
+expanded, context-free array, with named graphs, stable document-local blank-node labels and
+literal lexical values preserved. Empty datasets produce `[]`. Prefixes are ignored, contexts
+are never accepted or fetched, and malformed or directional literals reject with `TypeError`.
+Turtle and N-Triples output behavior is unchanged. JSON-LD RDF patches still return 415.
+The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain unsupported.
+
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
 See [SKILL.md](SKILL.md) for app usage and fixture workflows.
+
+`head`, `list`, and `listAll` accept `{ revalidate: true }` to revalidate cached HTTP
+responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
+Omitting the option preserves the transport's default cache behavior.
 
 LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` and never
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
@@ -50,13 +62,6 @@ the **metadata document's ETag**, and refuses server-managed `type`, `up`, and `
 Recursive deletion preflights logical containment and deletes children before containers, with
 conditional requests throughout. `RecursiveDeleteService` availability does not establish
 `Depth: infinity` support, so deletion retains client traversal even when that service is advertised.
-
-Memory `writeRdf` defaults to Turtle and also supports `contentType: 'application/ld+json'`
-through `@jeswr/rdf-serialize`, in both Solid and LWS protocol modes. JSON-LD output is an
-expanded, context-free array, with named graphs, stable document-local blank-node labels and
-literal lexical values preserved. Empty datasets produce `[]`. Prefixes are ignored, contexts
-are never accepted or fetched, and malformed or directional literals reject with `TypeError`.
-Turtle and N-Triples output behavior is unchanged. JSON-LD RDF patches still return 415.
 
 From the workspace root:
 

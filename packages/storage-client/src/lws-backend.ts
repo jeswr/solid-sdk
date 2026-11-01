@@ -247,13 +247,15 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
   }
 
+  // Container identifiers may be slashless; validate the representation rather than URL shape.
   // Also used by recursive deletion, after HEAD confirms a scoped target is a container.
-  // Unlike public list(), that traversal must accept slashless opaque identifiers.
   const list: StorageClient["list"] = async (container, opts = {}) => {
     const result = await get(
       opts.cursor === undefined ? container : opts.cursor.url,
       { Accept: LIST_ACCEPT },
       opts.signal,
+      false,
+      opts.revalidate,
     );
     const raw = await jsonBody(
       result,
@@ -329,13 +331,13 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     readRdf,
     isWithinStorage,
     async list(url, opts) {
-      return list(listingContainer(root, url, "lws"), opts);
+      return list(listingContainer(root, url), opts);
     },
     async *listAll(url, opts = {}) {
-      const container = listingContainer(root, url, "lws");
+      const container = listingContainer(root, url);
       yield* paginate(
         container,
-        (cursor) => client.list(container, { cursor, signal: opts.signal }),
+        (cursor) => client.list(container, { ...opts, cursor }),
         opts.signal,
       );
     },

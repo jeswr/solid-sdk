@@ -1,8 +1,9 @@
 ---
 name: pod-access
-description: Use when working on @jeswr/pod-access, the pod sharing and permissions across access-control models package in the Solid SDK workspace.
+description: Use when maintaining @jeswr/pod-access offline WAC/ACP translation, policy reports and bounded access proofs, or assessing its unimplemented sharing and grant APIs.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-access
 
@@ -10,6 +11,21 @@ This package owns the offline WAC/ACP translation core extracted from `apps/pod-
 readers/writers, neutral policy/report types, conservative translation, inheritance composition,
 and bounded access proofs. See `README.md` for exports. The broader sharing client from SDK core
 ADR-003 §9 is still unimplemented; the `./testing` entry point remains reserved.
+
+## Quick reference
+
+There is no `share()`, grant CRUD, permission query or usable test fake yet; do not invent
+examples, import planned exports or implement a replacement inside an app.
+
+Use [storage-capabilities](../storage-capabilities/SKILL.md) to inspect
+`features.accessControl` (`wac`, `acp`, `odrl-grants`, `none`), `accessRequests` and
+`accessGrants`. An available service describes server support; it does not provide a
+pod-access sharing client or prove the caller has permission. Keep sharing controls
+unavailable until the required integration exists. `ReadResult.allow === null` means the
+server supplied no usable hint; it does not establish denial or access.
+
+Read [LWS app differences](../../skills/lws-vs-solid/SKILL.md) for grant versus token
+semantics. Do not assume WAC ACL documents work against an LWS grant service.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-003-storage-client.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.

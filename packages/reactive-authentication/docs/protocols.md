@@ -1,6 +1,7 @@
 ---
 title: Protocol support
 ---
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Protocol support
 
@@ -67,6 +68,8 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
   `CredentialSource.getCredential`. Exchange uses `resource=S` (not PRM's `resource`), subject token,
   subject token type and client ID. Access tokens are fenced and cached per AS, S and credential context
   until expiry minus 30 seconds; rejection invalidation is compare-and-remove, and `forget()` logs out.
+  For both challenge forms, responses without `expires_in` are used only for the current request;
+  access tokens (including JWTs) are not cached, and stored entries without an expiry are discarded.
   Validation failures acquire no credential and make no token request.
 - **LWS legacy.** A `Bearer` challenge with `as_uri` and `realm` also selects `LwsTokenProvider`
   unless `legacyLwsChallenge: false` (default true). Both values come from the same

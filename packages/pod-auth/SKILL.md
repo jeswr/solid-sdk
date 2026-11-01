@@ -1,46 +1,163 @@
 ---
 name: pod-auth
-description: Use when working on @jeswr/pod-auth, the suite client authentication and session lifecycle package in the Solid SDK workspace.
+description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-# @jeswr/pod-auth
+# Work with `@jeswr/pod-auth`
 
-`createPodAuth` supplies injected UI hooks, provider composition, `fetch`, `login`, `identity`,
-`restore`, `logout`, `remembered` and lifecycle event subscriptions. Read `README.md` for the API.
-`./node` supplies `forClientCredentials` and `forCid` with explicit static roots and memory-only credentials.
-Its optional trusted fetch injection never replaces global fetch or relaxes protocol endpoint checks.
-`createNodeOidcClient` delegates split server authorization to reactive-authentication. Its sensitive
+Use this package for new suite client authentication. It owns session policy over the imported
+`@jeswr/reactive-authentication` protocol engine. It supersedes the current-integration guidance in
+[`skills/solid-reactive-authentication`](../../skills/solid-reactive-authentication/SKILL.md), which
+routes existing integrations to the current packages and historical references.
+Read [README.md](./README.md) and `src/types.ts` for the implemented API; do not infer APIs from the
+published 0.1.x package or copy its providers into applications. This workspace package remains
+private and experimental pending conformance.
+
+`@jeswr/pod-auth/node` also exports `createNodeOidcClient` for server-side brokers (mcp-oauth's
+pod sessions). It delegates split server authorization to reactive-authentication. Its sensitive
 state and original private JWK envelope belong only in an encrypted server vault with callback consume,
-refresh CAS and durable retirement. Signing keys are non-extractable; browser key storage is unchanged.
-CID mode (`lws.subject.cid`) requires a caller-provided non-extractable ES256 key; resolve and authorize
-its exact same-document authentication method and prove key possession before releasing a credential.
-Never infer a WebID from an opaque client-credentials token or fall back to OIDC for a failed CID identity.
-`./react` supplies the thin `PodAuthProvider` / `usePodAuth` lifecycle mirror, ported from solid-auth-core.
-Restore once across StrictMode replay, mirror lifecycle events, and fence late restore results against
-newer events. Keep React optional and expose only identity plus stable public core actions.
+refresh CAS and durable retirement. Signing keys are imported non-extractable; browser key storage is unchanged.
 
-Persist only refresh records with matching non-extractable ES256 keys, scoped by issuer/WebID/clientId.
-Remembered pointers contain public metadata only. Restore refreshes under a Web Lock (keyed FIFO Node fallback)
-and permits prompt=none only after invalid_grant, with no interactive fallback. Preserve credentials on
-transient failures; discard invalid keys; propagate storage errors. Rotation must be durable before use.
-Logout must revoke when advertised, purge across reloads, fence late results and emit even on failure.
-The pure session-restore decision and tests are a verbatim port; preserve their behavior and attribution. CID configuration without a private signing key must fail closed.
+## Quick reference
 
-Before changing authentication policy, read SDK core ADR-001 D4 and `ADR-004-auth.md` in
-`solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
+| Entry point | Use |
+| --- | --- |
+| `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
+| `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
+| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
+| `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 
-This package is security critical. Keep coverage thresholds at 100% and add behavioral and adversarial
-tests for every change. Use `./testing`'s mock OP over the real protocol engine. Test boundary exclusions,
-UI cancellation, hint/identity mismatch, callbacks, provider ordering and shared-session fences.
+```ts
+import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
 
-Keep provider composition in `src/providers.ts`. Protocol logic stays in reactive-authentication;
-never call `registerGlobally`. Capture the pristine transport and enforce loopback restrictions on
-every protocol hop. Share the Solid session and its fence with UMA and the LWS OIDC source. Store only
-refresh records persistently, namespace caller-provided stores, and propagate storage errors.
+// Supply application UI that returns the complete callback URL and honors cancellation.
+declare const ui: PodAuthOptions['ui'];
 
-Keep development tool versions aligned with the root manifest. The pinned pnpm 10.4.1 with
-`ignore-scripts` requires local tool declarations for filtered scripts.
+const auth = createPodAuth({
+  clientId: 'https://suite.example/.well-known/solid-client-id.jsonld',
+  redirectUri: 'https://suite.example/auth/callback.html',
+  boundary: { roots: ['https://pod.example/alice/'] },
+  ui,
+});
 
-Build reactive-authentication before this package. Validate `lint`, `build`, `typecheck` and `test`;
-run the root gate before committing the final change.
+await auth.restore();
+await auth.login({ webId: 'https://id.example/alice#me' });
+const response = await auth.fetch('https://pod.example/alice/private');
+const identity = await auth.identity();
+```
+
+Pass `auth.fetch` to [storage-client](../storage-client/SKILL.md),
+[storage-capabilities](../storage-capabilities/SKILL.md) and
+[pod-notifications](../pod-notifications/SKILL.md). Read the
+[LWS differences](../../skills/lws-vs-solid/SKILL.md) for storage and grant semantics.
+
+Construct one core per application session. `ui.getCode` must return the complete callback URL,
+including `state`, `code` and `iss`, honor cancellation and own popup/redirect cleanup. Choose among
+advertised issuers explicitly; omitting the chooser for multiple issuers throws `AmbiguousIssuerError`.
+Same-hint concurrent login is single-flight; different hints reject while login is pending. Log out
+before switching accounts. `identity()` reads claims only; it never refreshes, contacts an issuer or
+returns credentials. Public profile reads are not proof of authentication.
+
+## Preserve the credential boundary
+
+- Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
+  Construct auth after installing the intended pristine transport in tests. Protocol discovery,
+  registration, token and refresh HTTP must never recurse through a credential-attaching wrapper.
+- Credentials attach only within configured static roots or automatically verified storage roots.
+  `boundary.automatic: false` selects static-only behavior. `boundary.eligible` restricts both kinds.
+  Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
+  public resources must not prompt; unverified 401s remain 401s.
+- Keep provider composition in `src/providers.ts`, ordered Solid-OIDC, UMA, then LWS. Share the Solid
+  session and its fence with UMA and the LWS OIDC source. Keep protocol logic in the engine, including
+  PKCE S256, state/nonce, DPoP binding, nonce retry limits and verified RFC 9728 / legacy LWS discovery.
+- Require HTTPS for the production client ID. `{ dynamicRegistration: true }` is limited to a loopback
+  callback outside production. `allowInsecureLoopback` permits only explicit development HTTP and is
+  checked on every protocol hop. Browser callback origins must match the application origin.
+- Fence login, refresh, restore, persistence and logout against stale work after each awaited boundary.
+  Do not expose identity until credentials and refresh rotation are durable.
+
+## Session lifecycle
+
+`restore()` reads a last-active pointer and redeems the refresh token under a Web Lock. Node's keyed
+FIFO fallback coordinates only the current realm, not workers/processes; browsers without Web Locks
+fail closed. Restore permits one `prompt=none` attempt through `ui.getCode` only after definitive
+`invalid_grant`, never interactive fallback or an iframe. Initial interactive login requests consent.
+
+Persist only refresh records beside the matching non-extractable ES256 private key and exportable
+public key, scoped by issuer/WebID/actual client ID inside an application namespace. Discard unloadable,
+extractable, mismatched or non-ES256 keys before redemption. Access/ID tokens and registrations remain
+in memory. Preserve credentials/pointers on transient network/discovery/refresh failures; propagate
+storage errors. Retain the verbatim ported `decideSilentRestore` decision and tests with attribution.
+
+`remembered()` reads only public last-active metadata and currently returns zero or one records. It
+does not load credentials or contact the network. `logout()` revokes when advertised, purges stored
+sessions/keys and the pointer across reloads, fences in-flight work, and emits `logout` even on failure.
+Await cleanup; errors reject after cleanup attempts and notification. Clear application capability
+caches on `logout`. Local logout does not sign out the OP browser session.
+
+`on('login' | 'restore' | 'logout' | 'expired' | 'challenge', handler)` returns an idempotent
+unsubscribe function. Events carry identity snapshots and timestamps; observers cannot interrupt auth.
+React consumers mount one `PodAuthProvider` with `auth` or `config` and read `usePodAuth()`. Restore
+once across StrictMode replay, mirror core lifecycle events, fence late restore results against newer
+events, and remove subscriptions on unmount. Keep action/fetch handles stable and React optional.
+Use identity presence for authentication; agent identities may have no WebID.
+
+## Node agents
+
+`forClientCredentials` establishes a DPoP service session; `forCid` resolves an existing LWS CID and
+signs its self-issued subject JWT. Both require non-empty explicit static boundary roots and keep
+credentials in memory. They establish identity before returning. Client credentials report their
+configured client identifier as subject; never infer a WebID from an opaque token.
+
+CID mode, also available through core `lws.subject.cid`, requires a caller-owned non-extractable
+ES256 private key. Resolve without credentials/redirects, authorize the exact same-document
+`JsonWebKey` authentication method and controller, and prove the supplied key matches before exposing
+identity or releasing credentials. Missing, unresolved, unauthorized or mismatched keys fail closed;
+never generate a key implicitly or fall back to OIDC. The caller owns provisioning and retention.
+
+## Client Identifier Document
+
+Run `node scripts/client-id.mjs <config.json> <public-directory>` from the workspace root. Use the
+[README config recipe](./README.md#generate-the-suite-client-identifier-document): required HTTPS
+`origin`, `name`, non-empty same-origin `redirectUris`, and `fedapp.sectors`; optional `logo`,
+`fedapp.access`, `consumes`, `produces` and `declaresShape`. The generator embeds the federation
+package's canonical mappings, fixes public-client scope/auth/DPoP metadata and fails on unknown or
+unsafe config. Redirects remain exact; production generation has no HTTP exception or environment
+fallback. HTTP federation IRIs identify terms, not HTTP transport endpoints.
+
+Serve `<public-directory>/.well-known/solid-client-id.jsonld` at exactly the generated `client_id`,
+with `application/ld+json`; include all permitted popup and full-page callbacks and keep the file fixed
+per Vercel deploy. Hosting/route/header wiring belongs to the consuming app. This OAuth Client
+Identifier Document does not provision the LWS agent CID's authentication key or replace `forCid`'s
+document-resolution checks.
+
+## Migrate the deprecated client packages
+
+| Deprecated package | Current direction |
+| --- | --- |
+| `@jeswr/solid-dpop` | Suite sessions use pod-auth; agent grants use `pod-auth/node`; proof internals stay in the protocol engine |
+| `@jeswr/solid-openid-client` | Move session ownership to pod-auth; use core UI hooks for user authorization and `/node` for agent factories |
+| `@jeswr/solid-session-restore` | Use core `restore()`, `remembered()` and `logout()`; persistence is owned by pod-auth |
+| `@jeswr/solid-auth-core` | Replace `createSolidAuth` with `createPodAuth`, and `/react` with `PodAuthProvider` / `usePodAuth` |
+
+These are migration directions, not drop-in export aliases. In particular `/node` exports the two agent
+factories, not the old `OidcSession`/`createSolidOidcClient` API or proof helpers. Do not publish legacy
+credentials into `Identity` or reproduce provider logic to preserve an old signature. Leave deprecated
+code, exports and mirror pins available for existing consumers; migrate apps in their own tasks.
+`auth-solid`, server verifiers and `solid-webauthn-reauth` are outside these four deprecations.
+
+## Validate changes
+
+Before changing authentication policy, read SDK core ADR-001 D4 and ADR-004 in
+`solid-suite-planning/specs/sdk-core/`, alongside the repository's `AGENTS.md`.
+This package is security-critical: preserve 100% coverage thresholds and add behavioral/adversarial
+tests for changes. Use `./testing` over the real engine for boundary exclusions, callback and hint
+validation, cancellation, provider routing, cross-account/stale-operation fences, key rejection,
+rotation, storage failures and logout/restore races. Never log tokens, authorization codes or keys.
+
+Build reactive-authentication before pod-auth, then run `lint`, `build`, `typecheck`, `test` and the
+root gate. Generator regressions live in `test/client-id.test.mjs` under `pnpm run test:root`, with
+offline OIDC schema/JSON-LD checks. Keep development tool versions aligned with root; pnpm 10.4.1
+with `ignore-scripts` requires local tool declarations for filtered scripts.

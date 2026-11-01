@@ -48,6 +48,59 @@ loopback callback outside production. Plain HTTP additionally requires `allowIns
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
 must match the current application origin. Loopback includes localhost, 127.0.0.0/8 and ::1.
 
+## Generate the suite Client Identifier Document
+
+From the workspace root, generate the static document required by ADR-004 D7:
+
+```sh
+node scripts/client-id.mjs client-id.config.json path/to/public
+```
+
+The JSON config describes one HTTPS suite origin and every permitted popup or full-page callback:
+
+```json
+{
+  "origin": "https://suite.example",
+  "name": "Solid Suite",
+  "logo": "https://suite.example/logo.svg",
+  "redirectUris": [
+    "https://suite.example/auth/callback.html",
+    "https://suite.example/drive/auth/callback.html"
+  ],
+  "fedapp": {
+    "sectors": ["https://jeswr.org/ns/sectors/scheduling#sector"],
+    "access": ["http://www.w3.org/ns/auth/acl#Read"],
+    "consumes": ["http://www.w3.org/2005/01/wf/flow#Task"],
+    "produces": ["http://www.w3.org/2005/01/wf/flow#Task"],
+    "declaresShape": ["https://suite.example/shapes#TaskShape"]
+  }
+}
+```
+
+`origin`, `name`, a non-empty `redirectUris`, and `fedapp.sectors` are required. `logo` and the other
+federation arrays are optional. Federation values are absolute HTTP(S) IRIs; `access` accepts only
+the canonical `http://www.w3.org/ns/auth/acl#Read`, `Write`, `Append`, or `Control` mode IRIs.
+`consumes`/`produces` reference shapes or shared classes; `declaresShape` claims authorship of a SHACL
+shape, so include it only when the app defines that shape. This generator supports flat app-level
+declarations. It does not infer per-sector permissions.
+
+The generator writes `path/to/public/.well-known/solid-client-id.jsonld`. It fixes the client ID to
+the configured origin plus that path, requests `openid webid offline_access`, declares a public
+client (`none`) and DPoP-bound access tokens, and embeds canonical federation mappings from
+`packages/solid-federation-vocab/context.jsonld`. It never fetches contexts or reads environment
+variables. Unknown fields, credentials in URLs, non-HTTPS deployment URLs, cross-origin callbacks,
+fragments in callbacks, and URLs requiring silent normalization fail before any output is written.
+Redirect URLs remain byte-for-byte intact; exact duplicates are removed in first-seen order.
+HTTP federation IRIs are identifiers, not transport destinations.
+
+Serve the generated resource at exactly `https://suite.example/.well-known/solid-client-id.jsonld`
+with `Content-Type: application/ld+json`, and use that URL as pod-auth's `clientId`. Include the
+artifact in each Vercel deploy; keep its contents fixed for that deploy. The script generates the
+file only; the hosting application configures the route and headers. It does not change app builds
+or publish a deployment.
+
+## Session lifecycle
+
 Optional `storage.sessions` and `storage.caches` accept structural async key-value stores, namespaced
 by client configuration. Metadata and refresh-only session records use separate stores; access/ID
 tokens and client registrations stay in memory. Browser defaults use `createBrowserCaches` with

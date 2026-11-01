@@ -1,6 +1,6 @@
 ---
 name: storage-client
-description: Use when using or maintaining @jeswr/storage-client, including createPodClient, conditional storage mutations, Solid and LWS semantics, and offline HTTP fixture recording/replay.
+description: Use when reading, creating, conditionally editing, listing or moving pod resources with @jeswr/storage-client, or maintaining its Solid/LWS backends and offline fixtures.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -8,7 +8,7 @@ description: Use when using or maintaining @jeswr/storage-client, including crea
 
 # @jeswr/storage-client
 
-## App usage
+## Quick reference
 
 Apps import `createPodClient` from `@jeswr/storage-client`. Inject the authenticated, guarded
 fetch supplied by the auth layer; discovery and storage operations use that same transport.
@@ -21,6 +21,10 @@ work and tests (the SDK layer guard disallows app manifest edges to those subpat
 
 ```ts
 import { createPodClient } from '@jeswr/storage-client';
+
+declare const authenticatedFetch: typeof fetch; // Inject pod-auth auth.fetch.
+declare const storageRoot: string;
+declare const signal: AbortSignal;
 
 const { storage, features } = await createPodClient({
   fetch: authenticatedFetch,
@@ -36,6 +40,10 @@ await storage.write(created.url, 'second draft', {
   contentType: 'text/plain', ifMatch: current.etag,
 });
 ```
+
+Read [LWS app differences](../../skills/lws-vs-solid/SKILL.md) before assuming path containment,
+permission headers or recursive notifications. Use [pod-notifications](../pod-notifications/SKILL.md)
+for changes; [pod-access](../pod-access/SKILL.md) currently has no sharing implementation.
 
 `capabilities` in the factory options is an optional `DescriptionCache`, shared with other
 capability consumers; the default is the capabilities package's shared in-memory cache.
@@ -89,6 +97,13 @@ and inspect captures before committing them.
 import {
   createRecordingFetch, createReplayFetch, loadFixtures,
 } from '@jeswr/storage-client/testing';
+import { createPodClient } from '@jeswr/storage-client';
+import { createMemoryCache } from '@jeswr/storage-capabilities/cache';
+
+declare const authenticatedFetch: typeof fetch;
+declare const directory: string; // Fresh directory containing synthetic/public fixture data.
+declare const storageRoot: string;
+const freshCache = createMemoryCache();
 
 const recordedFetch = createRecordingFetch({ fetch: authenticatedFetch, directory });
 // In RECORD=1 mode, inject recordedFetch into the conformance client's factory.
@@ -177,9 +192,11 @@ Solid read side (ADR-003 §6):
   On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
   context that differs from `storage` gives `scope` and discards the body. Matching/absent links
   are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
-- `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
-  `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
-  first, then fetched as canonical URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
+- `list` and `listAll` accept scoped opaque container identifiers, including those without a trailing
+  slash, preserving their URLs. Query/fragment (even empty `?`/`#`) gives `bad-request`; the response
+  must be a valid Container or ContainerPage. GET Accept:
+  `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped first, then fetched as canonical
+  URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
 - Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
   for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
@@ -463,7 +480,7 @@ Rules the memory backend enforces, and the real backends must match:
   literal lexical values preserved. Prefixes are ignored; no caller context is accepted and no
   remote context is emitted or fetched. Malformed terms and directional literals (including
   `rdf:dirLangString`) reject with `TypeError`. JSON-LD RDF patch support is unchanged (415).
-  The Solid HTTP backend remains read-only pending T-022; LWS HTTP is still reserved.
+  The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain unsupported.
 
 RDF/JS types (`DatasetCore`, `Quad`, `Term`) come from `@jeswr/fetch-rdf`'s type re-exports, so the
 emitted declarations need no `@rdfjs/types` dependency (which the layer guard does not allow).
