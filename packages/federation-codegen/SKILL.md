@@ -30,6 +30,11 @@ const result = generateModel({ ontologyTtl, shapesTtl, config });
 CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --out <dir>`
 (`--update-lock` accepts a reviewed input change).
 
+A workspace package that commits generated output must pass the root `check:codegen` guard.
+It needs a `codegen` script writing to `src/generated`, a `workspace:*` devDependency on this
+package, and a drift test running `pnpm run codegen --out <tmp>` with a byte comparison.
+`packages/solid-bookmark` (`package.json`, `test/codegen.test.ts`) is the reference.
+
 ## Rules
 
 - Admission (tier a) must pass: every class/property labelled and defined, domain/range or a
