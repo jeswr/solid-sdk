@@ -299,9 +299,11 @@ SHA-256 grant ID. It creates the ODRL grant and DPV receipt under `settings/acce
 `If-None-Match: *`, grants each role with `addGrant` from `./roles`, then CASes to Approved. The
 role layer is additive (it never downgrades an existing role), writes conditionally, materialises a
 missing own ACL keeping the owner's Control, and refuses a legacy `acl:defaultForNew` ancestor on
-CSS. Its refusals (`isRoleError`, for example `owner-lockout`, `conflict` or `unsupported`) are
-rethrown unchanged and never retried; the approval stays Approving and can be retried once the cause
-is fixed. Initial CAS races throw `RequestConflictError` with
+CSS. Each grant is planned (without writing) before anything is recorded, so a refusal the role
+layer can foresee (`owner-lockout`, `unsupported`, an unknown ACL construct) stops the decision while
+the request is still pending. A refusal that only appears later (for example a `conflict` from a
+concurrent edit) is rethrown unchanged and never retried; the approval stays Approving and can be
+retried, and a lost race against another approver that finished reports the approval. Initial CAS races throw `RequestConflictError` with
 the re-read winner's status. Explicitly retrying resumes the pinned decision, ignoring new
 overrides, without resolving again or rolling back ACLs. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
@@ -326,8 +328,13 @@ Grant records, consent receipts and each approval's pinned decision live in
 `<storage>settings/access-records/`. Before writing there, `decide` creates the folder with an
 owner-only ACL, or checks that its existing ACL names only the owner and gives them Read, Write
 and Control over the folder and its contents; a shared folder stops the decision. A folder that
-exists without its own ACL is made private only while it is empty, because anything already in it
-may have been written by someone else. Approval first pins its decision (targets, modes, expiry) in a
+exists without its own ACL is made private only while it lists as empty, because anything already in
+it may have been written by someone else: its new ACL is marked unverified, and the mark is removed
+(with a conditional write) only once the folder still lists as empty. A crash or a failed check
+leaves the mark, so later calls check again and keep refusing while anything is inside; a folder
+that cannot be listed is refused. Each pinned decision is bound to the request's requester and
+requested types and modes, so a new request at a reused notification URL never resumes an old
+decision, and a pinned grant must name this requester and stay within the role its request maps to. Approval first pins its decision (targets, modes, expiry) in a
 create-only record in that folder, then moves the request to Approving. A retry resumes only from
 that record (even when the crash came before the request changed state, so the Type Index is not
 read again): a notification that claims to be Approving or Approved without one was written by the

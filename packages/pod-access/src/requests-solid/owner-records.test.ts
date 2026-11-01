@@ -19,14 +19,16 @@ const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
 const INDEX = `${POD}settings/publicTypeIndex.ttl`;
 const RECORDS = `${POD}settings/access-records/`;
+
+/** The owner's pinned-decision record for the fixture request (read access to contacts). */
+const pinnedIntent = async () =>
+  `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
 const opts = (pod = buildPod()) => ({
   fetch: pod.fetch,
   webId: OWNER,
   storage: POD,
   publicFetch: async () => new Response(null, { status: 404 }),
 });
-const intentOf = async () =>
-  `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
 const puts = (pod: ReturnType<typeof buildPod>, from = 0) =>
   pod.log.slice(from).filter(({ method }) => method === "PUT");
 
@@ -83,7 +85,7 @@ describe("owner-controlled approval records", () => {
     ).rejects.toThrow("500");
     pod.intercept = undefined;
     expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "pending" });
-    const intent = await intentOf();
+    const intent = await pinnedIntent();
     expect(pod.etag(intent)).toBe('"v1"');
     const result = await decide(
       { id: ID },
@@ -120,12 +122,14 @@ describe("owner-controlled approval records", () => {
       `${pod.body(`${RECORDS}.acl`)}\n${PREFIXES}[] a acl:Authorization; acl:origin <https://app.example>; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
     );
     expect((await decide({ id: ID }, { approve: true }, opts(inert))).status).toBe("approved");
-    // A server that answers HEAD but cannot list the new folder yet still gets it made private.
+    // A folder that cannot be listed is not known to be empty: fail closed.
     const unlisted = buildPod();
     unlisted.intercept = (method, url) =>
       method === "GET" && url === RECORDS ? new Response(null, { status: 404 }) : undefined;
-    await decide({ id: ID }, { approve: false }, opts(unlisted));
-    expect(unlisted.body(`${RECORDS}.acl`)).toContain(OWNER);
+    await expect(decide({ id: ID }, { approve: false }, opts(unlisted))).rejects.toThrow(
+      "can't be listed",
+    );
+    expect(unlisted.has(`${RECORDS}.acl`)).toBe(false);
   });
 
   it("refuses to write records into a shared, uncontrolled or unstable records folder", async () => {
@@ -243,7 +247,7 @@ describe("owner-controlled approval records", () => {
     // A pinned decision planted while the folder inherited someone else's write access.
     const planted = buildPod();
     planted.seed(RECORDS, "");
-    const intent = await intentOf();
+    const intent = await pinnedIntent();
     planted.seed(intent, `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot "{}" .`);
     for (const approve of [true, false]) {
       await expect(decide({ id: ID }, { approve }, opts(planted))).rejects.toThrow(
@@ -295,5 +299,148 @@ describe("owner-controlled approval records", () => {
       method === "HEAD" && url === RECORDS && plain.has(RECORDS) ? new Response(null) : undefined;
     await decide({ id: ID }, { approve: false }, opts(plain));
     expect(plain.body(`${RECORDS}.acl`)).toContain(OWNER);
+  });
+
+  it("keeps distrusting a folder whose privacy check was interrupted", async () => {
+    const intent = await pinnedIntent();
+    const planted = async (pod: ReturnType<typeof buildPod>) => {
+      const grantId = await deriveGrantId(ID, [`${POD}`], OWNER);
+      const snapshot = JSON.stringify({
+        grantId,
+        targets: [POD],
+        agent: REQUESTER,
+        modes: ["append", "read", "write"],
+        targetModes: { [POD]: ["append", "read", "write"] },
+        dataTypes: [CONTACTS_CLASS],
+        schemaVersion: "1",
+        decidedAt: "2026-11-01T00:00:00.000Z",
+      });
+      pod.seed(
+        intent,
+        `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot ${JSON.stringify(snapshot)} .`,
+      );
+    };
+    for (const interruption of ["crash", "stray"] as const) {
+      const pod = buildPod();
+      pod.intercept = (method, url, init) => {
+        if (method !== "PUT" || url !== `${RECORDS}.acl`) return undefined;
+        if (interruption === "stray") {
+          void planted(pod);
+          return undefined;
+        }
+        if (new Headers(init?.headers).has("if-match")) throw new Error("crash");
+        return undefined;
+      };
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        interruption === "crash" ? "crash" : "already has files",
+      );
+      pod.intercept = undefined;
+      if (interruption === "crash") await planted(pod);
+      expect(pod.body(`${RECORDS}.acl`)).toContain("unverifiedRecords");
+      for (const approve of [true, false])
+        await expect(decide({ id: ID }, { approve }, opts(pod))).rejects.toThrow(
+          "already has files",
+        );
+      expect(pod.has(`${POD}.acl`) && pod.body(`${POD}.acl`)?.includes(REQUESTER)).toBe(false);
+      expect(pod.has(`${ALICE}.acl`)).toBe(false);
+      // Once the planted file is cleared, the folder is checked again and sealed.
+      pod.delete(intent);
+      expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
+      expect(pod.body(`${RECORDS}.acl`)).not.toContain("unverifiedRecords");
+    }
+  });
+
+  it("never resumes a decision recorded for different content at the same request URL", async () => {
+    const pod = buildPod();
+    const first = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(first.status).toBe("approved");
+    // The handled notification is removed; a new one from someone else lands at the same URL.
+    const other = "https://other.example/profile#me";
+    pod.seed(ID, accessRequestTurtle(ID).replaceAll(REQUESTER, other));
+    const second = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(second.status).toBe("approved");
+    expect(second.grantUrl).toBe(first.grantUrl);
+    const acl = pod.body(`${ALICE}.acl`) as string;
+    expect(acl).toContain(other);
+    // A pinned record whose agent is not this request's requester is refused before any write.
+    const forged = buildPod();
+    const intent = await pinnedIntent();
+    const grantId = await deriveGrantId(ID, [ALICE], OWNER);
+    const snapshot = JSON.stringify({
+      grantId,
+      targets: [ALICE],
+      agent: other,
+      modes: ["read"],
+      targetModes: { [ALICE]: ["read"] },
+      dataTypes: [CONTACTS_CLASS],
+      schemaVersion: "1",
+      decidedAt: "2026-11-01T00:00:00.000Z",
+    });
+    await decide({ id: ID }, { approve: false }, opts(forged)).catch(() => undefined);
+    const sealed = buildPod();
+    await decide({ id: ID }, { approve: true }, opts(sealed));
+    sealed.seed(ID, accessRequestTurtle(ID));
+    sealed.seed(
+      intent,
+      `${PREFIXES}<${intent}> accm:requestRef <${ID}>; accm:snapshot ${JSON.stringify(snapshot)} .`,
+    );
+    const before = sealed.log.length;
+    await expect(decide({ id: ID }, { approve: true }, opts(sealed))).rejects.toThrow(
+      "Invalid persisted",
+    );
+    expect(puts(sealed, before)).toEqual([]);
+  });
+
+  it("refuses before recording anything when the sharing layer would refuse the grant", async () => {
+    const pod = buildPod();
+    pod.seed(
+      `${ALICE}.acl`,
+      `${PREFIXES}<#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${ALICE}>; acl:mode acl:Read, acl:Write, acl:Control.
+<#app> a acl:Authorization; acl:origin <https://app.example>; acl:agent <https://bob.example/#me>; acl:accessTo <${ALICE}>; acl:mode acl:Read.`,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow();
+    expect(puts(pod)).toEqual([]);
+    expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "pending" });
+  });
+
+  it("refuses a pinned grant wider than an append-only request", async () => {
+    const pod = buildPod();
+    await decide({ id: ID }, { approve: false }, opts(pod));
+    pod.seed(ID, accessRequestTurtle(ID).replace("odrl:read", `<${ACL.Append}>`));
+    const appendIntent = `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} append`], OWNER, "intent-2")}.ttl`;
+    const snapshot = JSON.stringify({
+      grantId: await deriveGrantId(ID, [ALICE], OWNER),
+      targets: [ALICE],
+      agent: REQUESTER,
+      modes: ["read"],
+      targetModes: { [ALICE]: ["read"] },
+      dataTypes: [CONTACTS_CLASS],
+      schemaVersion: "1",
+      decidedAt: "2026-11-01T00:00:00.000Z",
+    });
+    pod.seed(
+      appendIntent,
+      `${PREFIXES}<${appendIntent}> accm:requestRef <${ID}>; accm:snapshot ${JSON.stringify(snapshot)} .`,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "Invalid persisted",
+    );
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+  });
+
+  it("reports the winner when another resumer finishes while this one loses a grant race", async () => {
+    const pod = buildPod();
+    pod.intercept = (method, url) => {
+      if (method === "PUT" && /access-records\/grant-/.test(url)) throw new Error("crash");
+    };
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("crash");
+    pod.intercept = (method, url) => {
+      if (method === "PUT" && url === `${ALICE}.acl`) {
+        pod.seed(ID, (pod.body(ID) as string).replaceAll("Approving", "Approved"));
+        return new Response(null, { status: 412 });
+      }
+      return undefined;
+    };
+    expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
   });
 });

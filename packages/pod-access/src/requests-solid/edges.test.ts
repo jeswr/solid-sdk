@@ -34,6 +34,10 @@ const ALICE = `${POD}contacts/alice.ttl`;
 const CAROL = `${POD}contacts/carol.ttl`;
 const INDEX = `${POD}settings/publicTypeIndex.ttl`;
 const RECORDS = `${POD}settings/access-records/`;
+
+/** The owner's pinned-decision record for the fixture request (read access to contacts). */
+const pinnedIntent = async () =>
+  `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
 const opts = (pod = buildPod()) => ({
   fetch: pod.fetch,
   webId: OWNER,
@@ -375,7 +379,7 @@ describe("forward-only approval reconciliation", () => {
     };
     await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("crash");
     pod.intercept = undefined;
-    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+    const intent = await pinnedIntent();
     const dataset = await graph(pod.body(intent) as string);
     return {
       intent,

@@ -31,6 +31,10 @@ const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
 const CAROL = `${POD}contacts/carol.ttl`;
 const RECORDS = `${POD}settings/access-records/`;
+
+/** The owner's pinned-decision record for the fixture request (read access to contacts). */
+const pinnedIntent = async () =>
+  `${RECORDS}intent-${await deriveGrantId(ID, [`agent ${REQUESTER}`, `${CONTACTS_CLASS} read`], OWNER, "intent-2")}.ttl`;
 const NOW = "2026-11-01T12:00:00.000Z";
 function options(pod = buildPod()) {
   return {
@@ -189,15 +193,20 @@ describe("decision state machine", () => {
     );
     expect(result).toMatchObject({ status: "approved", notified: false, expiryEnforced: false });
     // The owner-only records folder and the owner's intent record precede the request CAS.
-    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
-    expect(writes.slice(0, 3).map((write) => write.url)).toEqual([
+    const intent = await pinnedIntent();
+    // The folder ACL is created marked unverified, then sealed once the folder still lists empty.
+    expect(writes.slice(0, 4).map((write) => write.url)).toEqual([
       RECORDS,
+      `${RECORDS}.acl`,
       `${RECORDS}.acl`,
       intent,
     ]);
-    expect(writes[2]?.headers.get("if-none-match")).toBe("*");
+    expect(writes[1]?.body).toContain("unverifiedRecords");
+    expect(writes[2]?.headers.get("if-match")).toBe('"v1"');
+    expect(writes[3]?.headers.get("if-none-match")).toBe("*");
     expect(pod.body(`${RECORDS}.acl`)).not.toContain(REQUESTER);
-    writes.splice(0, 3);
+    expect(pod.body(`${RECORDS}.acl`)).not.toContain("unverifiedRecords");
+    writes.splice(0, 4);
     expect(writes[0]).toMatchObject({ url: ID });
     expect(writes[0]?.headers.get("if-match")).toBe('"v1"');
     expect(writes[0]?.body).toContain("Approving");
@@ -299,7 +308,7 @@ describe("decision state machine", () => {
     expect(await entry(pod)).toMatchObject({ status: "approving" });
     const persisted = pod.body(ID) as string;
     expect(persisted).not.toContain(ALICE);
-    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+    const intent = await pinnedIntent();
     expect(pod.body(intent)).toContain(ALICE);
     pod.seed(`${POD}settings/publicTypeIndex.ttl`, "corrupted index @@@");
     pod.seed(`${POD}contacts/new.ttl`, "<urn:new> a <urn:Contact>.");

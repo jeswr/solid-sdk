@@ -11,6 +11,7 @@ import { Store } from "n3";
 import {
   accessModel,
   applyGrant,
+  checkGrant,
   ensureOwnerOnlyContainer,
   ROLE_MODES,
   roleFor,
@@ -35,7 +36,10 @@ import { ACCM, DCT, DPV, LDP, RDF } from "./vocab.js";
 
 export interface RequestDecision {
   approve: boolean;
-  /** Viewer narrows to Read; editor grants only the requested Read/Write/Append modes. */
+  /**
+   * Viewer narrows to requested Read. Otherwise each target gets the role its requested modes map
+   * to: Editor (Read, Write, Append) when Write was asked for, else Viewer.
+   */
   role?: "viewer" | "editor";
   /** Receipt metadata only. WAC cannot enforce expiry or revoke automatically. */
   expiresAt?: Date;
@@ -70,6 +74,9 @@ export interface DecisionResult {
   /** Always false: expiresAt is receipt metadata; WAC does not enforce it. */
   expiryEnforced: false;
 }
+
+/** A readable request, as decide() projects it. */
+type RequestEntry = Exclude<AccessRequestEntry, { status: "unreadable" }>;
 
 interface Snapshot {
   grantId: string;
@@ -138,8 +145,18 @@ function urls(storage: string, id: string) {
  * requester, so a claimed `Approving` state or snapshot inside one proves nothing: recovery only
  * ever resumes from this create-only document in the owner-only records folder.
  */
-async function intentUrl(storage: string, id: string, owner: string): Promise<string> {
-  const key = await deriveGrantId(id, [], owner, "intent-1");
+async function intentUrl(storage: string, entry: RequestEntry, owner: string): Promise<string> {
+  // Bound to what was asked, so a new request reusing an old notification URL never resumes an
+  // old decision.
+  const asked = Object.entries(entry.modesByType).map(
+    ([type, modes]) => `${type} ${[...modes].sort().join(",")}`,
+  );
+  const key = await deriveGrantId(
+    entry.id,
+    [`agent ${entry.requester}`, ...asked],
+    owner,
+    "intent-2",
+  );
   return scoped(storage, `${recordsFolder(storage)}intent-${key}.ttl`);
 }
 
@@ -211,12 +228,37 @@ async function receipt(
   return turtle(dataset);
 }
 
+/**
+ * A pinned decision belongs to this request only if it names this requester, approves only data
+ * types this request asked for, and grants no mode beyond the role those types' requests map to.
+ */
+function withinRequest(snapshot: Snapshot, entry: RequestEntry): boolean {
+  if (
+    snapshot.agent !== entry.requester ||
+    !Array.isArray(snapshot.dataTypes) ||
+    snapshot.dataTypes.length === 0 ||
+    !snapshot.dataTypes.every((type) => Object.hasOwn(entry.modesByType, type))
+  )
+    return false;
+  const asked = snapshot.dataTypes.flatMap((type) => entry.modesByType[type] as RequestMode[]);
+  const allowed = asked.includes("write")
+    ? ROLE_MODES.editor
+    : asked.includes("read")
+      ? ROLE_MODES.viewer
+      : [];
+  return Object.values(snapshot.targetModes ?? {}).every(
+    (modes) => Array.isArray(modes) && modes.every((mode) => allowed.includes(mode)),
+  );
+}
+
 async function validateSnapshot(
   snapshot: Snapshot,
-  id: string,
+  entry: RequestEntry,
   options: DecideOptions,
 ): Promise<void> {
+  const id = entry.id;
   if (
+    !withinRequest(snapshot, entry) ||
     snapshot.schemaVersion !== "1" ||
     snapshot.targets.length === 0 ||
     snapshot.targets.length > MAX_MEMBERS ||
@@ -229,9 +271,10 @@ async function validateSnapshot(
       const modes = Object.hasOwn(snapshot.targetModes, target)
         ? snapshot.targetModes[target]
         : undefined;
+      // Every pinned grant is exactly a role, and no wider than the approved types asked for.
       return (
         Array.isArray(modes) &&
-        modes.length > 0 &&
+        Object.values(ROLE_MODES).some((role) => role.join() === [...modes].sort().join()) &&
         modes.every((mode) => snapshot.modes.includes(mode))
       );
     }) ||
@@ -254,7 +297,7 @@ async function complete(
   fetchFn: typeof fetch,
 ): Promise<{ grantUrl: string; receiptUrl: string }> {
   const id = request.entry.id;
-  await validateSnapshot(snapshot, id, options);
+  await validateSnapshot(snapshot, request.entry as RequestEntry, options);
   const locations = urls(options.storage, snapshot.grantId);
   const grant = new Store(
     policyToRdf({
@@ -296,14 +339,20 @@ async function complete(
   for (const target of snapshot.targets) {
     const model = await accessModel({ fetch: fetchFn, storage: options.storage, target });
     if (model !== "wac") throw new UnsupportedAccessModelError(model);
-    await applyGrant(
-      target,
-      options.storage,
-      options.webId,
-      snapshot.agent,
-      snapshot.targetModes[target] as RequestMode[],
-      fetchFn,
-    );
+    try {
+      await applyGrant(
+        target,
+        options.storage,
+        options.webId,
+        snapshot.agent,
+        snapshot.targetModes[target] as RequestMode[],
+        fetchFn,
+      );
+    } catch (error) {
+      // A competing resumer may have finished while this one lost a write race.
+      if ((await current(id, fetchFn)).entry.status === "approved") return locations;
+      throw error;
+    }
   }
   // A competing resumer can finish first. Verify the final state after every lost CAS.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -377,7 +426,7 @@ export async function decide(
   const parsed = request.entry;
   const now = (options.now ?? (() => new Date()))().toISOString();
   const records = recordsFolder(storage);
-  const intent = await intentUrl(storage, id, options.webId);
+  const intent = await intentUrl(storage, parsed, options.webId);
   const resuming = parsed.status === "approving" || parsed.status === "approved";
   const recorded = resuming ? await readIntent(intent, id, fetchFn) : undefined;
   // A claimed approval with no owner record was written by the requester: it can still be denied.
@@ -419,7 +468,7 @@ export async function decide(
   if (pinned !== undefined) {
     snapshot = pinned;
     await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
-    await validateSnapshot(snapshot, id, options);
+    await validateSnapshot(snapshot, parsed, options);
     await moveToApproving(request, id, snapshot, fetchFn);
   } else if (parsed.status === "pending") {
     const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)];
@@ -459,6 +508,15 @@ export async function decide(
     for (const target of targets) {
       const targetModel = await accessModel({ fetch: fetchFn, storage, target });
       if (targetModel !== "wac") throw new UnsupportedAccessModelError(targetModel);
+      // Refuse now, before anything is recorded, what the sharing layer would refuse later.
+      await checkGrant(
+        target,
+        storage,
+        options.webId,
+        parsed.requester,
+        targetModes[target] as RequestMode[],
+        fetchFn,
+      );
     }
     snapshot = {
       grantId: await deriveGrantId(id, targets, options.webId),
@@ -479,14 +537,14 @@ export async function decide(
     if (!(await writeIntent(intent, id, snapshot, fetchFn))) {
       snapshot = (await readIntent(intent, id, fetchFn)) as Snapshot;
     }
-    await validateSnapshot(snapshot, id, options);
+    await validateSnapshot(snapshot, parsed, options);
     await moveToApproving(request, id, snapshot, fetchFn);
   } else {
     // Resume only from the owner's record, never from the requester-authored notification.
     snapshot = recorded as Snapshot;
     await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
   }
-  await validateSnapshot(snapshot, id, options);
+  await validateSnapshot(snapshot, parsed, options);
   const locations =
     parsed.status === "approved"
       ? urls(storage, snapshot.grantId)

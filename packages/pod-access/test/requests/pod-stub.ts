@@ -44,6 +44,8 @@ function containerListing(url: string, resources: Map<string, StoredResource>): 
   const children = new Set<string>();
   for (const key of resources.keys()) {
     if (!key.startsWith(url) || key === url) continue;
+    // Like CSS, an ACL of an existing resource is auxiliary and never listed as a member.
+    if (key.endsWith(".acl") && resources.has(key.slice(0, -4))) continue;
     const rest = key.slice(url.length);
     if (rest.length === 0) continue;
     const slash = rest.indexOf("/");
