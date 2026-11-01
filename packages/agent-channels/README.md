@@ -54,13 +54,14 @@ or destination accounts are refused. Lookup has `finalAbsence: true`.
 All DESIGN §3.2 rows have frozen constants in `CARRIAGE_PROFILES`. Only email's
 25,000,000-byte limit is specified there. Other structured profiles use the pilot's
 64 KiB local ceiling; Discord uses an 8 KiB local JSON request ceiling with separate
-2000-character content and 2048-character footer limits. Other footer-only profiles
+2000-character content and 2048-character footer limits; Signal/WhatsApp use the
+64 KiB local ceiling over Matrix. Other footer-only profiles
 conservatively cap at 256 bytes pending their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
-Gmail and the optional read-only X binding are implemented. Other provider exports
-remain reserved for their own tasks. Packages remain private per ADR-001 D5.
+Gmail, Microsoft Graph mail, GitHub notifications, Mastodon, Discord, Matrix and the
+optional read-only X binding are implemented; see their sections below.
 
 Gmail notification triage labels recognised LinkedIn notification senders as
 `linkedin-proxy`, retaining the email provenance and an explicit unverified warning.
@@ -119,14 +120,6 @@ The frozen `GITHUB_READ_ONLY` profile and descriptor advertise zero send bytes,
 `sendSupported: false`, and no structured payload. There is no `./github/send`.
 See the [GitHub notification API](https://docs.github.com/en/rest/activity/notifications)
 and [`gh api` manual](https://cli.github.com/manual/gh_api) for provider behavior.
-
-Provider exports without a section above remain reserved for their own tasks. Packages
-
-64 KiB local ceiling; Signal/WhatsApp use that same local ceiling over Matrix.
-Other footer-only profiles conservatively cap at 256 bytes pending their binding
-tasks. LinkedIn/X have zero-byte read-only profiles. No profile
-constant implements sending. The direct descriptor advertises zero owner rate
-limits by default; it is a capability statement, never permission to send.
 
 Provider exports without a section above remain reserved for their own tasks. Packages
 remain private per ADR-001 D5.
