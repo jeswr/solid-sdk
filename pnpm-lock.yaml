@@ -2502,6 +2502,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@jeswr/agent-executor':
+        specifier: workspace:*
+        version: link:../agent-executor
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

@@ -39,7 +39,8 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@solid/community-server": "7.2.0",
-    "componentsjs": "5.5.1"
+    "componentsjs": "5.5.1",
+    "@jeswr/agent-executor": "workspace:*"
   },
   "dependencies": {
     "@jeswr/agent-model": "workspace:*",
