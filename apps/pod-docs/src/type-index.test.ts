@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { mockFetch, turtleToStore } from "./test-helpers.js";
@@ -94,7 +95,8 @@ describe("typed wrappers", () => {
 describe("ensureTypeRegistrations", () => {
   it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
+      [`HEAD ${POD}settings/`]: { status: 200 },
+      [`GET ${WEBID.split("#")[0]}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
       [`GET ${PRIVATE_INDEX}`]: {
@@ -123,7 +125,10 @@ describe("ensureTypeRegistrations", () => {
 
   it("adds to an existing private index without bootstrapping", async () => {
     const { fetch, calls } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
+      [`GET ${WEBID.split("#")[0]}`]: {
+        body: profileWith({ privateIndex: PRIVATE_INDEX }),
+        etag: 'W/"p"',
+      },
       [`GET ${PRIVATE_INDEX}`]: {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
         etag: 'W/"i"',
@@ -148,7 +153,7 @@ describe("ensureTypeRegistrations", () => {
   it("falls back to the public index when no private index is linked", async () => {
     const Public = "https://alice.pod/settings/publicTypeIndex.ttl";
     const { fetch } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({ publicIndex: Public }), etag: 'W/"p"' },
+      [`GET ${WEBID.split("#")[0]}`]: { body: profileWith({ publicIndex: Public }), etag: 'W/"p"' },
       [`GET ${Public}`]: {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
         etag: 'W/"i"',
@@ -173,7 +178,10 @@ describe("ensureTypeRegistrations", () => {
       <#reg> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .
     `;
     const { fetch, calls } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
+      [`GET ${WEBID.split("#")[0]}`]: {
+        body: profileWith({ privateIndex: PRIVATE_INDEX }),
+        etag: 'W/"p"',
+      },
       [`GET ${PRIVATE_INDEX}`]: { body: existingIndex, etag: 'W/"i"' },
     });
     const result = await ensureTypeRegistrations({
@@ -197,7 +205,8 @@ describe("ensureTypeRegistrations", () => {
       <#reg> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .
     `;
     const { fetch } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
+      [`HEAD ${POD}settings/`]: { status: 200 },
+      [`GET ${WEBID.split("#")[0]}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 412 }, // create-only collision
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
       [`GET ${PRIVATE_INDEX}`]: { body: existingIndex, etag: 'W/"i"' },
@@ -214,7 +223,8 @@ describe("ensureTypeRegistrations", () => {
 
   it("propagates a non-412 failure while creating the index document", async () => {
     const { fetch } = mockFetch({
-      [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
+      [`HEAD ${POD}settings/`]: { status: 200 },
+      [`GET ${WEBID.split("#")[0]}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 500 },
     });
     await expect(

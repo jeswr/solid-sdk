@@ -1,23 +1,7 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-/**
- * The Pod-Docs CRUD store — the ONE place the app touches pod I/O for documents.
- *
- * Storage model: one resource per document under a dedicated container
- * (`pod-docs/`) at the pod root, the container registered in the user's Type
- * Index for cross-app discovery. One-resource-per-document keeps each write
- * small and conflict-scoped, lets per-document ACLs differ later, and maps onto
- * the Type-Index `solid:instanceContainer` model.
- *
- * Every caller-supplied URL is scope-guarded (a confused-deputy defence) before
- * any authenticated I/O, and conditional writes (`If-Match` / `If-None-Match`)
- * prevent silent clobbering. RDF is read via `@jeswr/fetch-rdf`, listed via
- * `@solid/object`'s `ContainerDataset`, and written via `n3.Writer` — never a
- * bespoke parser.
- */
-import { RdfFetchError } from "@jeswr/fetch-rdf";
-import type { DatasetCore } from "@rdfjs/types";
-import { ContainerDataset } from "@solid/object";
-import { DataFactory } from "n3";
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Document persistence over the discovered SDK client, with logical containment checks. */
+import { createAccessClient, type Grant } from "@jeswr/pod-access";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import {
   type BuildDocumentInput,
   buildDocument,
@@ -25,21 +9,24 @@ import {
   parseDocument,
 } from "./document.js";
 import { OutOfScopeError } from "./errors.js";
-import { deleteRdf, nameFromUrl, readRdf, writeRdf } from "./rdf-io.js";
+import {
+  deleteRdf,
+  nameFromUrl,
+  readRdf,
+  requireEtag,
+  serializeTurtle,
+  storageFor,
+  writeRdf,
+} from "./rdf-io.js";
 import { ensureTypeRegistrations } from "./type-index.js";
 import { DOCUMENT_CLASS, PREFIXES } from "./vocab.js";
 
-/** Container slug under the pod root where Pod-Docs documents live. */
 export const DOCS_SLUG = "pod-docs/";
-
-/** A stored document the UI consumes: stable `url`, `etag`, parsed `data`. */
 export interface StoredDocument {
   url: string;
-  /** ETag from the last read — pass back on save to guard against clobbering. */
   etag: string | null;
   data: PodDocument;
 }
-
 /** One browsable entry in the documents container (a listing row). */
 export interface DocumentEntry {
   url: string;
@@ -52,11 +39,6 @@ export interface DocumentEntry {
   modified?: string;
 }
 
-/**
- * Lower-case, hyphenated, ASCII-only slug — URI-safe and `:`-free (an
- * ACL-matching hazard on some servers). Empty input yields `""` so the caller
- * falls back to a purely random name. Capped so URLs stay reasonable.
- */
 export function toSlug(input: string | undefined): string {
   if (!input) return "";
   return input
@@ -69,194 +51,202 @@ export function toSlug(input: string | undefined): string {
     .replace(/-+$/g, "");
 }
 
-/**
- * A typed CRUD handle for Pod-Docs documents, bound to a pod root + WebID.
- * Construct via {@link createDocsStore}. Production callers pass NO `fetchImpl`
- * (the auth-patched global runs); tests inject one.
- */
-export class DocsStore {
-  private readonly containerUrl: string;
+/** Supply container when reopening a server-assigned LWS collection identifier. */
+export type DocsStoreOptions = {
+  podRoot: string;
+  webId: string;
+  fetchImpl?: typeof fetch;
+  storage?: StorageClient;
+  container?: string;
+};
 
+export class DocsStore {
+  private containerUrl: string;
+  private pending: Promise<StorageClient> | undefined;
+  private preparation: Promise<StorageClient> | undefined;
+  private readonly explicitContainer: boolean;
   constructor(
     private readonly podRoot: string,
     private readonly webId: string,
     private readonly fetchImpl?: typeof fetch,
+    private readonly storage?: StorageClient,
+    container?: string,
   ) {
-    this.containerUrl = new URL(DOCS_SLUG, podRoot).toString();
+    this.explicitContainer = container !== undefined;
+    this.containerUrl = container ?? new URL(DOCS_SLUG, podRoot).href;
   }
-
-  /** The container documents live in (always ends in `/`). */
   get container(): string {
     return this.containerUrl;
   }
+  private client(): Promise<StorageClient> {
+    this.pending ??= storageFor(this.podRoot, this.fetchImpl, this.storage);
+    return this.pending;
+  }
 
-  /**
-   * Fail closed unless `url` is a single document *resource* strictly inside the
-   * store's container: same origin, path prefixed by the container, the
-   * remainder one non-empty segment with no (real or encoded) slash, and no
-   * query/fragment (the builders append `#it`/`#rev-n`, so a supplied fragment
-   * would mint a mismatched subject). Rejects the container root, sub-containers
-   * and nested descendants.
-   */
-  private assertInContainer(url: string): void {
+  /** Reject foreign or ambiguous references before discovery; ask storage for logical parentage. */
+  private async assertInContainer(url: string): Promise<StorageClient> {
     let parsed: URL;
-    let containerUrl: URL;
     try {
       parsed = new URL(url);
-      containerUrl = new URL(this.containerUrl);
     } catch {
       throw new OutOfScopeError(url, this.containerUrl);
     }
-    const containerPath = containerUrl.pathname; // ends in "/"
+    const root = new URL(this.podRoot);
     if (
-      parsed.origin !== containerUrl.origin ||
-      !parsed.pathname.startsWith(containerPath) ||
-      parsed.search !== "" ||
-      parsed.hash !== ""
+      parsed.origin !== root.origin ||
+      parsed.href !== url ||
+      parsed.username ||
+      parsed.password ||
+      url.includes("?") ||
+      url.includes("#") ||
+      url === this.containerUrl ||
+      /%2f/i.test(parsed.pathname)
     ) {
       throw new OutOfScopeError(url, this.containerUrl);
     }
-    const rest = parsed.pathname.slice(containerPath.length);
-    const isDirectChild = rest.length > 0 && !rest.includes("/") && !/%2f/i.test(rest);
-    if (!isDirectChild) {
+    const storage = await this.client();
+    if (!storage.isWithinStorage(url)) throw new OutOfScopeError(url, this.containerUrl);
+    const head =
+      storage.protocol === "lws" ? await storage.head(url, { revalidate: true }) : undefined;
+    const parent = head ? head.parent : await storage.parentOf(url);
+    if (
+      parent !== this.containerUrl ||
+      head?.kind === "container" ||
+      (!head && parsed.pathname.endsWith("/"))
+    ) {
       throw new OutOfScopeError(url, this.containerUrl);
     }
+    return storage;
   }
 
-  /**
-   * Mint a fresh, collision-resistant document resource URL inside the
-   * container. `slugHint` (e.g. the title) seeds a readable, URI-safe prefix; a
-   * random suffix guarantees uniqueness without a round-trip. Never contains `:`.
-   */
+  /** A name hint only. Creation always uses the SDK's returned URL. */
   newDocumentUrl(slugHint?: string): string {
     const slug = toSlug(slugHint);
     const rand = Math.random().toString(36).slice(2, 8);
     const file = slug ? `${slug}-${rand}.ttl` : `${rand}.ttl`;
-    return `${this.containerUrl}${file}`;
+    return `${this.containerUrl.replace(/\/?$/, "/")}${file}`;
   }
 
-  /**
-   * List every Pod-Docs document in the container. Reads each non-container
-   * child and keeps only those that actually parse to a `pd:Document`, so a
-   * stray non-document file in `pod-docs/` is never listed. Unreadable or
-   * out-of-scope rows are skipped rather than failing the whole list.
-   *
-   * The `name` and `modified` come from the container listing (cheap); `title`
-   * is the parsed `dct:title`. A missing/forbidden container resolves to `[]`.
-   */
+  /** List all SDK pages, omitting subcontainers, non-documents and unreadable children. */
   async list(): Promise<DocumentEntry[]> {
-    const url = this.containerUrl;
-    let dataset: DatasetCore;
-    try {
-      ({ dataset } = await readRdf(url, this.fetchImpl));
-    } catch (e) {
-      if (e instanceof RdfFetchError && (e.status === 404 || e.status === 403)) return [];
-      throw e;
-    }
-    const container = new ContainerDataset(dataset, DataFactory).container;
+    const storage = await this.client();
     const out: DocumentEntry[] = [];
-    for (const r of container?.contains ?? []) {
-      if (r.id === url) continue; // the container's self-description
-      if (r.isContainer) continue; // sub-containers are not documents
-      let doc: StoredDocument | undefined;
-      try {
-        doc = await this.read(r.id);
-      } catch {
-        // A child that vanished, is out of scope, or failed to fetch/parse is
-        // skipped; the rest of the listing still loads.
-        continue;
+    try {
+      for await (const entry of storage.listAll(this.containerUrl, { revalidate: true })) {
+        if (entry.kind === "container") continue;
+        let doc: StoredDocument | undefined;
+        try {
+          doc = await this.read(entry.url);
+        } catch {
+          continue;
+        }
+        if (!doc) continue;
+        out.push({
+          url: entry.url,
+          name: nameFromUrl(entry.url),
+          title: doc.data.title,
+          isContainer: false,
+          modified: entry.modified?.toISOString(),
+        });
       }
-      if (!doc) continue; // not a pd:Document — skip the stray file
-      out.push({
-        url: r.id,
-        name: r.name,
-        title: doc.data.title,
-        isContainer: false,
-        modified: r.modified?.toISOString(),
-      });
+    } catch (error) {
+      if (
+        error instanceof StorageError &&
+        (error.code === "not-found" || error.code === "forbidden")
+      )
+        return [];
+      throw error;
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * Read one document by URL. Returns `undefined` when the resource holds no
-   * `pd:Document`. A 404 surfaces as `RdfFetchError` with `.status === 404`.
-   */
   async read(url: string): Promise<StoredDocument | undefined> {
-    this.assertInContainer(url);
-    const { dataset, etag } = await readRdf(url, this.fetchImpl);
+    const storage = await this.assertInContainer(url);
+    const { dataset, etag } = await readRdf(url, this.fetchImpl, storage);
     const data = parseDocument(url, dataset);
-    if (data === undefined) return undefined;
-    return { url, etag, data };
+    return data === undefined ? undefined : { url, etag, data };
   }
 
-  /**
-   * Create a new document. Registers the container in the Type Index on first
-   * use (idempotent), then writes the resource create-only so a colliding URL is
-   * never silently overwritten. The first save materialises revision `rev-0`.
-   *
-   * @returns the new document URL and its ETag.
-   */
+  /** Create the collection if absent, retaining the server's identifier. */
+  private ensureContainer(): Promise<StorageClient> {
+    this.preparation ??= this.prepareContainer().catch((error: unknown) => {
+      this.preparation = undefined;
+      throw error;
+    });
+    return this.preparation;
+  }
+
+  private async prepareContainer(): Promise<StorageClient> {
+    const storage = await this.client();
+    try {
+      await storage.head(this.containerUrl, { revalidate: true });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "not-found" || this.explicitContainer)
+        throw error;
+      this.containerUrl = (
+        await storage.create(this.podRoot, null, { kind: "container", name: "pod-docs" })
+      ).url;
+    }
+    return storage;
+  }
+
   async create(
     input: Omit<BuildDocumentInput, "priorRevisions">,
     slugHint?: string,
   ): Promise<{ url: string; etag: string | null }> {
+    const storage = await this.ensureContainer();
     await this.ensureRegistered();
-    const url = this.newDocumentUrl(slugHint ?? input.title);
-    const dataset = buildDocument(url, { ...input, priorRevisions: [] });
-    const { etag } = await writeRdf(url, dataset, {
-      createOnly: true,
-      fetchImpl: this.fetchImpl,
-      prefixes: PREFIXES,
+    const hint = this.newDocumentUrl(slugHint ?? input.title);
+    const dataset = buildDocument("", { ...input, priorRevisions: [] });
+    // Relative fragments bind #it and #rev-0 to the POST result, even when the server ignores Slug.
+    const body = await serializeTurtle(dataset, PREFIXES);
+    return storage.create(this.containerUrl, body, {
+      contentType: "text/turtle",
+      name: nameFromUrl(hint),
     });
-    return { url, etag };
   }
 
-  /**
-   * Save an edit to an existing document, appending a new `prov:Entity`
-   * revision to its history. Pass back the document's prior state from
-   * {@link read} — its `revisions` as `priorRevisions` (so the chain is
-   * preserved), and its `created` / `creator` (so the original creation time
-   * and authorship are NOT silently rewritten to the edit; an omitted `created`
-   * defaults to now and an omitted `creator` is cleared). Sends `If-Match` when
-   * an `etag` is supplied so a concurrent edit fails with 412 instead of
-   * clobbering.
-   */
+  /** Append a revision; thread created, creator and priorRevisions back from the preceding read. */
   async save(
     url: string,
     input: BuildDocumentInput,
     etag?: string | null,
   ): Promise<{ etag: string | null }> {
-    this.assertInContainer(url);
-    const dataset = buildDocument(url, input);
-    return writeRdf(url, dataset, { etag, fetchImpl: this.fetchImpl, prefixes: PREFIXES });
+    const storage = await this.assertInContainer(url);
+    requireEtag(etag, url);
+    return writeRdf(url, buildDocument(url, input), { etag, storage, prefixes: PREFIXES });
   }
 
-  /** Delete a document (idempotent — a missing resource resolves to success). */
-  async remove(url: string): Promise<void> {
-    this.assertInContainer(url);
-    await deleteRdf(url, this.fetchImpl);
+  async remove(url: string, etag?: string | null): Promise<void> {
+    try {
+      const storage = await this.assertInContainer(url);
+      await deleteRdf(url, this.fetchImpl, storage, etag);
+    } catch (error) {
+      if (error instanceof StorageError && error.code === "not-found") return;
+      throw error;
+    }
   }
 
-  /** Register the documents container in the user's Type Index (idempotent). */
+  async share(url: string, grant: Grant, opts: { inherit?: boolean } = {}): Promise<Grant> {
+    const storage = await this.assertInContainer(url);
+    return createAccessClient({ storage }).share(url, grant, opts);
+  }
+
+  /** Solid Type Index registration is optional protocol metadata, absent on LWS. */
   async ensureRegistered(): Promise<void> {
-    await ensureTypeRegistrations({
-      webId: this.webId,
-      podRoot: this.podRoot,
-      registrations: [{ forClass: DOCUMENT_CLASS, container: this.containerUrl }],
-      fetchImpl: this.fetchImpl,
-    });
+    const storage = await this.client();
+    if (storage.protocol === "solid")
+      await ensureTypeRegistrations({
+        webId: this.webId,
+        podRoot: this.podRoot,
+        registrations: [{ forClass: DOCUMENT_CLASS, container: this.containerUrl }],
+        fetchImpl: this.fetchImpl,
+        storage,
+      });
   }
 }
 
-/** Build a Pod-Docs store bound to the active pod root + WebID. */
-export function createDocsStore(opts: {
-  podRoot: string;
-  webId: string;
-  fetchImpl?: typeof fetch;
-}): DocsStore {
-  return new DocsStore(opts.podRoot, opts.webId, opts.fetchImpl);
+export function createDocsStore(opts: DocsStoreOptions): DocsStore {
+  return new DocsStore(opts.podRoot, opts.webId, opts.fetchImpl, opts.storage, opts.container);
 }
-
-/** Re-export the friendly-name helper for callers that render listings. */
 export { nameFromUrl };

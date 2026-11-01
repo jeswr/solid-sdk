@@ -35,10 +35,9 @@ The existing RDF model exports remain available for working with datasets in mem
 
 `@jeswr/pod-drive` (the package in `src/`) is a pure, auth-agnostic data layer:
 
-- **Read** a pod's containers and their children as a typed model — `listContainer(url)` returns a
-  `DriveContainer` whose `entries` are folder-first, name-sorted `DriveResource`s, each exposing
-  `size` (`posix:size`), `modifiedAt` (`dcterms:modified`, falling back to a `posix:mtime`
-  epoch), `contentType` (`dcterms:format`), `isContainer`, and `name`.
+- **Read** a pod's containers through `StorageClient.listAll` — `listContainer(url)` returns
+  plain entries sorted by folder then name, exposing `size`, `modifiedAt`, `contentType`,
+  `isContainer`, and `name` from the SDK's protocol-neutral metadata.
 - **WAC-aware**: a `401`/`403` from the pod is surfaced as a typed `DriveAccessError` (prompt
   login / show "no access") rather than a raw fetch error; a `404` is re-thrown unchanged so the
   caller can create the resource.
@@ -46,18 +45,15 @@ The existing RDF model exports remain available for working with datasets in mem
   containers from a fetched type index, and `buildDriveRootRegistration(...)` /
   `buildDriveRootMarker(...)` produce the quads to register the app's primary class
   (`poddrive:DriveRoot`) so peers can find a user's drives without guessing paths.
-- **Writes** are serialised with `n3.Writer` (`quadsToTurtle`) — the HTTP `PUT`/`PATCH` (with
-  `If-Match: <etag>`) is the UI layer's job, keeping this module trivially testable.
+- **Mutations and sharing** use `createDriveStore` over `StorageClient` and pod-access.
+  The view delegates persistence to the data layer.
 
 ### Library invariants (suite house rules)
 
-- The RDF stack is **`@jeswr/fetch-rdf`** (fetch + parse) → **`@solid/object`** / **`@rdfjs/wrapper`**
-  (typed accessors) → **`n3.Writer`** (serialise). There is **no bespoke RDF parser** and triples
-  are **never hand-concatenated** — every quad goes through the n3 `DataFactory` and every read
-  through a typed accessor.
-- The model **builds on `@solid/object`'s `Resource` / `Container` / `ContainerDataset`** rather
-  than reinventing container reading, extending them only for the Pod-Drive-specific reads
-  (`dcterms:format` content type, a `posix:mtime` integer fallback, `poddrive:DriveRoot`).
+- The SDK owns protocol I/O and parsing. There is **no bespoke RDF parser** or application
+  container walker in the persistence path.
+- The optional in-memory RDF model retains `@solid/object` / `@rdfjs/wrapper` accessors and
+  `n3.Writer` serialization for callers working with existing datasets and Type Index markers.
 - The data layer never imports an auth library: pass the authenticated `fetch` (e.g. the one
   `@solid/reactive-authentication` patches onto `globalThis.fetch`) into `listContainer`, or omit
   it to use the ambient global. The layer is issuer-agnostic.

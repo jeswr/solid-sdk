@@ -20,6 +20,19 @@ Suite vocabulary writes use `https://jeswr.org/ns/` only, via `@jeswr/suite-voca
 Readers accept legacy namespace aliases; Type Index discovery matches both canonical and
 legacy class IRIs. Standard vocabularies keep their published namespaces.
 
+## Storage client API
+
+`createDocsStore({ podRoot, webId, fetchImpl?, storage?, container? })` uses the
+public PodClient storage surface. Inject either memory protocol with `storage`.
+Supply `container` to reopen a server-assigned LWS collection; otherwise the first
+create prepares the default collection and retains its returned identifier in
+`store.container`. Explicit missing collections fail without creating elsewhere.
+Document creation uses relative RDF fragments so server-assigned URLs retain valid
+revision subjects. `save` requires the ETag from the prior read; `remove` accepts
+that ETag or obtains a fresh one. `share` delegates to `@jeswr/pod-access`.
+Solid Type Index registration is preserved; LWS has no Solid Type Index bootstrap,
+and sharing reports unsupported where pod-access does not implement the access model.
+
 ## What it does
 
 - **A typed document model** (`src/document.ts`). A Pod-Docs document is one pod resource,
@@ -32,9 +45,9 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
   snapshot, `prov:generatedAtTime` and `prov:wasAttributedTo`. The document points at the head
   via `pd:currentRevision`; the whole chain lives in the one resource and is reconstructed
   head-first (with a cycle guard against malformed/hostile data).
-- **Pod CRUD + discovery** (`src/store.ts`). One resource per document under `pod-docs/`, the
-  container registered in the user's **Type Index** (`solid:instanceContainer`) for cross-app
-  discovery (e.g. a Pod Manager's "My data"). Every caller-supplied URL is scope-guarded (a
+- **Pod CRUD + discovery** (`src/store.ts`). One resource per document in a dedicated collection.
+  Solid uses `pod-docs/` and registers it in the user's **Type Index** (`solid:instanceContainer`);
+  LWS retains the server-selected collection URL. Every caller-supplied URL is scope-guarded (a
   confused-deputy defence) and writes are conditional (`If-Match` / `If-None-Match`) so a
   concurrent edit fails loudly instead of clobbering.
 - **Federation metadata** (`clientid.jsonld`). The Client Identifier Document publishes the
@@ -46,9 +59,8 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 
 All RDF goes through the suite's sanctioned libraries — **never a bespoke parser**:
 
-- [`@jeswr/fetch-rdf`](https://github.com/jeswr/fetch-rdf) to GET + parse (force-revalidated),
-- [`@solid/object`](https://github.com/o-development/solid-object) (`ContainerDataset`) to read
-  container listings,
+- `@jeswr/storage-client` for RDF reads/writes and complete, protocol-neutral listings,
+- the injected SDK transport preserves cache revalidation in the default factory path,
 - [`@rdfjs/wrapper`](https://github.com/rdfjs/wrapper) typed accessors to extract + build
   (never hand-built quads),
 - `n3.Writer` to serialise.

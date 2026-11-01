@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Solid Type Index — read + bootstrap-write, via typed `@rdfjs/wrapper`
@@ -9,7 +10,7 @@
  * CSS does not seed these files, so reads tolerate their absence and the app
  * bootstraps a private index when missing.
  */
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -22,8 +23,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { ResourceWriteError } from "./errors.js";
-import { readRdf, writeRdf } from "./rdf-io.js";
+import { readRdf, storageFor, writeRdf } from "./rdf-io.js";
 import { NS, RDF_TYPE } from "./vocab.js";
 
 const SOLID = NS.SOLID;
@@ -156,18 +156,23 @@ function fragmentFor(reg: DesiredRegistration): string {
 }
 
 /** Mint a fresh, empty private type index. Tolerates "already exists" (412). */
-async function createIndexDocument(indexUrl: string, fetchImpl?: typeof fetch): Promise<void> {
+async function createIndexDocument(
+  indexUrl: string,
+  fetchImpl?: typeof fetch,
+  storage?: StorageClient,
+): Promise<void> {
   const store = new Store();
   new TypeIndexDocument(indexUrl, store, DataFactory).markUnlistedIndex();
   try {
     await writeRdf(indexUrl, store, {
       createOnly: true,
+      storage,
       fetchImpl,
       prefixes: INDEX_PREFIXES,
     });
   } catch (e) {
     // 412 under If-None-Match:* = the document already exists — fine, link + reuse.
-    if (e instanceof ResourceWriteError && e.status === 412) return;
+    if (e instanceof StorageError && e.code === "conflict") return;
     throw e;
   }
 }
@@ -188,24 +193,33 @@ export async function ensureTypeRegistrations(opts: {
   podRoot: string;
   registrations: DesiredRegistration[];
   fetchImpl?: typeof fetch;
+  storage?: StorageClient;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations, fetchImpl } = opts;
+  const storage = await storageFor(podRoot, fetchImpl, opts.storage);
 
-  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, fetchImpl);
+  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, fetchImpl, storage);
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
 
   if (!indexUrl) {
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
-    await createIndexDocument(indexUrl, fetchImpl);
+    const settings = new URL("settings/", podRoot).href;
+    try {
+      await storage.head(settings, { revalidate: true });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "not-found") throw error;
+      await storage.create(podRoot, null, { kind: "container", name: "settings" });
+    }
+    await createIndexDocument(indexUrl, fetchImpl, storage);
     const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
     anchor.privateIndex = indexUrl;
-    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl });
+    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl, storage });
     bootstrapped = true;
   }
 
-  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl);
+  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl, storage);
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -227,7 +241,12 @@ export async function ensureTypeRegistrations(opts: {
   }
 
   if (added > 0) {
-    await writeRdf(indexUrl, indexDs, { etag: indexEtag, fetchImpl, prefixes: INDEX_PREFIXES });
+    await writeRdf(indexUrl, indexDs, {
+      etag: indexEtag,
+      fetchImpl,
+      storage,
+      prefixes: INDEX_PREFIXES,
+    });
   }
   return { indexUrl, added, bootstrapped };
 }
@@ -241,16 +260,19 @@ export async function discoverRegistrations(
   webId: string,
   profile: DatasetCore,
   fetchImpl?: typeof fetch,
+  storage?: StorageClient,
 ): Promise<RegisteredLocation[]> {
   const links = typeIndexLinks(webId, profile);
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
   const out: RegisteredLocation[] = [];
+  if (urls.length === 0) return out;
+  const client = await storageFor(webId, fetchImpl, storage);
   for (const url of urls) {
     try {
-      const { dataset } = await readRdf(url, fetchImpl);
+      const { dataset } = await readRdf(url, fetchImpl, client);
       out.push(...new TypeIndexDataset(dataset, DataFactory).all());
     } catch (e) {
-      if (e instanceof RdfFetchError && (e.status === 404 || e.status === 403)) continue;
+      if (e instanceof StorageError && (e.status === 404 || e.status === 403)) continue;
       throw e;
     }
   }
