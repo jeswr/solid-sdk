@@ -1,14 +1,14 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * DATA-CLASS → CONCRETE TARGET resolution — the compile step (design §2.3, resolution ladder).
  *
  * At GRANT time a data-class IRI is resolved to the concrete pod resources/containers that
  * hold data of that class, and the result is PINNED into the immutable grant (TOCTOU
- * mitigation, design §6.2). This module implements the ubiquitous rung of the ladder — the
+ * mitigation, design §6.2). SAI registrations run first, followed by the ubiquitous rung — the
  * **Solid Type Index** (`solid:publicTypeIndex` / `solid:privateTypeIndex` →
  * `solid:TypeRegistration` `solid:forClass` → `solid:instance` / `solid:instanceContainer`).
- * The SAI `interop:DataRegistration` rung and the SHACL-validate rung (design §2.3 rungs 1 & 3)
- * are documented follow-ups; the resolver is structured so they slot in as additional passes.
+ * SAI class matching lives in class-resolve-sai.ts; SHACL member sampling remains a follow-up.
  *
  * RDF is parsed with N3.js (the house rule — never regex over Turtle). The pure parse helpers
  * are unit-testable against fixtures; `resolveClassTargets` takes an injected fetch that
@@ -25,6 +25,12 @@
 
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
+import {
+  type ClassResolution,
+  memoiseResolveFetch,
+  mergeClassTargets,
+  resolveSaiTargets,
+} from './class-resolve-sai';
 
 const SOLID = 'http://www.w3.org/ns/solid/terms#';
 const PUBLIC_TYPE_INDEX = `${SOLID}publicTypeIndex`;
@@ -154,12 +160,23 @@ export function parseTargetsForClass(
 }
 
 /**
- * Resolve `classIRI` to its concrete, pinned targets by walking the Type Index: fetch the WebID
- * profile → its type-index refs → each index, unioning the targets. Returns a deduped list
- * (possibly empty — an unregistered class resolves to NOTHING, and the gate then denies every
- * request for it, fail-closed). Never throws on a per-document fetch/parse failure.
+ * Resolve SAI first, then Type Index, sharing one public profile read and document cache.
+ * Merge only rung-produced targets, preserving provenance and truncation internally.
+ * An unregistered class resolves to nothing. Per-document fetch/parse failures are skipped.
  */
 export async function resolveClassTargets(
+  classIRI: string,
+  opts: ResolveOptions,
+): Promise<ClassResolution> {
+  const fetch = memoiseResolveFetch(opts.fetch);
+  const options = { ...opts, fetch };
+  const profile = await fetch(opts.webId, false);
+  const sai = await resolveSaiTargets(classIRI, options, profile);
+  const indexed = await resolveTypeIndexTargets(classIRI, options);
+  return mergeClassTargets(sai, indexed);
+}
+
+async function resolveTypeIndexTargets(
   classIRI: string,
   opts: ResolveOptions,
 ): Promise<PinnedTarget[]> {

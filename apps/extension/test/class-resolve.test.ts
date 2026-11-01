@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Unit tests for the data-class → target resolver (design §2.3, Type-Index rung). Pure parse
 // helpers run against Turtle fixtures; the network walk runs against an injected fetch. Proves
@@ -9,8 +10,20 @@ import { describe, expect, it } from 'vitest';
 import {
   parseTargetsForClass,
   parseTypeIndexRefs,
-  resolveClassTargets,
+  resolveClassTargets as resolveClass,
 } from '../src/background/core/class-resolve';
+
+// Keep the original Type Index target/filter assertions and check its resolver annotations.
+async function resolveClassTargets(...args: Parameters<typeof resolveClass>) {
+  const result = await resolveClass(...args);
+  expect(result.truncated).toBe(false);
+  for (const target of result.targets) {
+    expect(target.source).toBe('type-index');
+    expect(target.sources).toEqual(['type-index']);
+    expect(target.check).toBe('unchecked');
+  }
+  return result.targets.map(({ url, kind }) => ({ url, kind }));
+}
 
 const WEBID = 'https://alice.pod.example/profile/card#me';
 const FINANCE = 'https://w3id.org/jeswr/sectors/finance#Transaction';

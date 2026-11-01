@@ -1317,7 +1317,7 @@ async function handleRequestAccess(
           const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
           const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: null }>();
           for (const cls of spec.classes) {
-            const targets = await resolveClassTargets(cls, {
+            const { targets } = await resolveClassTargets(cls, {
               webId: ctx.session.webId,
               fetch: makeResolveFetch(
                 { ...session, allowedOrigins },
@@ -1571,7 +1571,7 @@ async function handleResolveClass(
         const allowedOrigins = new Set(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
-        const targets = await resolveClassTargets(message.classIRI, {
+        const { targets } = await resolveClassTargets(message.classIRI, {
           webId: ctx.session.webId,
           fetch: makeResolveFetch(
             { ...fetchSession, allowedOrigins },

@@ -928,6 +928,86 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
 });
 
 describe('Phase-2 requestAccess → consent → grant (wired)', () => {
+  it('pins SAI-only targets without resolver metadata in storage or page replies, and never widens them', async () => {
+    await seedSession();
+    await loadWorker();
+    const pod = 'https://alice.pod.example';
+    const dataClass = 'http://www.w3.org/2006/vcard/ns#Individual';
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const registration = `${pod}/data/contacts/`;
+    const docs: Record<string, string> = {
+      [`${pod}/profile/card`]: `<${WEBID}> <${interop}hasRegistrySet> <${pod}/registries> .`,
+      [`${pod}/registries`]: `<> <${interop}hasDataRegistry> <${pod}/data/> .`,
+      [`${pod}/data/`]: `<> <${interop}hasDataRegistration> <${registration}> .`,
+      [registration]: `<> <${interop}registeredShapeTree> <https://shapes.activitypods.org/shapetrees/as/Profile> .`,
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url.split('#')[0]] ?? '', {
+        status: docs[url.split('#')[0]] === undefined ? 404 : 200,
+      });
+    const requested = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'sai-consent',
+        classes: [dataClass],
+        modes: ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId,
+        approvedClasses: [dataClass],
+      },
+      EXT_SENDER,
+    );
+    const granted = await requested;
+    expect(granted.ok).toBe(true);
+    const pinned = [{ url: registration, kind: 'container' }];
+    const grants = granted.grants as ClassGrant[];
+    expect(grants[0].targets).toEqual(pinned);
+    const stored = storage.get('solid:origin-grants') as OriginGrant[];
+    expect(stored[0].scope.classes?.[0].targets).toEqual(pinned);
+    for (const call of fetchCalls) {
+      expect(call.init?.credentials).toBe('omit');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        !call.url.includes('/profile/card'),
+      );
+    }
+
+    // A new registration can be discovered later, but the original grant stays pinned.
+    const later = `${pod}/data/later/`;
+    docs[`${pod}/data/`] += `<> <${interop}hasDataRegistration> <${later}> .`;
+    docs[later] = docs[registration];
+    const resolved = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'sai-resolve',
+        classIRI: dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(resolved).toEqual({
+      requestId: 'sai-resolve',
+      shape: null,
+      targets: [...pinned, { url: later, kind: 'container' }],
+    });
+    expect(
+      (storage.get('solid:origin-grants') as OriginGrant[])[0].scope.classes?.[0].targets,
+    ).toEqual(pinned);
+    expect(
+      (await sendFetch({ url: `${later}private.ttl`, stampedOrigin: APPX.origin }, APPX)).status,
+    ).toBe(403);
+  });
+
   const PROFILE = `
     @prefix solid: <http://www.w3.org/ns/solid/terms#> .
     <${WEBID}> solid:publicTypeIndex <https://alice.pod.example/settings/pub.ttl> .`;
