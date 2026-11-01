@@ -140,7 +140,7 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
         binding: "matrix",
         carriage: MATRIX_CONTENT.id,
         structuredPayload: true,
-        endToEndEncrypted: true,
+        endToEndEncrypted: false,
         deliveryReceipts: false,
         historyWindow: "P0D",
         maxMessageBytes: MATRIX_CONTENT.maxBytes,

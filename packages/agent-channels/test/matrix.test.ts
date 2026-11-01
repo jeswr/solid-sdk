@@ -66,7 +66,7 @@ it("filters sync to m.direct rooms, bounds pages and commits the baseline only a
   expect(r.binding.send).toBeUndefined();
   expect(r.binding.describe("connected")).toMatchObject({
     carriage: "matrix-event/0.1",
-    endToEndEncrypted: true,
+    endToEndEncrypted: false,
     sendSupported: true,
     rateLimit: { perRecipient: 0, perDay: 0 },
   });

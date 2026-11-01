@@ -212,7 +212,8 @@ This task's explicit `PUT /rooms/{id}/send/m.room.message/{proposalId}` path sen
 plaintext content only. A read-grant check of `m.room.encryption` must return 404;
 encrypted, unreadable or unknown room state refuses, so the binding never downgrades
 an encrypted room. Outbound E2EE key distribution is outside this binding's current
-send path. The provider's transaction ID supplies idempotency; this binding never
+send path, so its capability descriptor advertises `endToEndEncrypted: false`.
+The provider's transaction ID supplies idempotency; this binding never
 retries sends. Malformed acknowledgements and ambiguous HTTP failures remain uncertain.
 
 Lookup obtains a known event ID from `eventIdFor(proposalId, account)`, which the
