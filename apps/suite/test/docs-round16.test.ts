@@ -138,10 +138,10 @@ it("maps the insertion anchor through appended transactions and releases the lis
     );
     const anchor = insertionAnchor(editor);
     editor.view.dispatch(editor.state.tr.insertText("New ", 1).setMeta("prefix", true));
-    expect(anchor.position).toBe(34);
+    expect(anchor.selection.from).toBe(34);
     anchor.release();
     editor.commands.insertContentAt(1, "After release ");
-    expect(anchor.position).toBe(34);
+    expect(anchor.selection.from).toBe(34);
   } finally {
     destroy();
   }
@@ -255,6 +255,7 @@ it.each([
     }),
   } as unknown as DocumentPersistence;
   const close = vi.fn();
+  const off = vi.spyOn(editor, "off");
   try {
     editor.commands.setContent("<p>Important words to keep</p>");
     editor.commands.setTextSelection(change === "deleted anchor" ? 20 : 24);
@@ -277,7 +278,6 @@ it.each([
     );
     if (change === "initial save") expect(runtime.flush).toHaveBeenCalledOnce();
     else expect(fetchImpl).toHaveBeenCalledOnce();
-    const off = vi.spyOn(editor, "off");
     if (change === "insertion") editor.commands.insertContentAt(1, "New ");
     if (change === "deletion") editor.commands.deleteRange({ from: 16, to: 24 });
     if (change === "deleted anchor") editor.commands.deleteRange({ from: 16, to: 24 });
@@ -295,7 +295,6 @@ it.each([
       finish(new Response(null, { status: change === "failed upload" ? 500 : 201 }));
       await put;
     });
-    expect(off).toHaveBeenCalledWith("transaction", expect.any(Function));
     if (change === "failed upload" || change === "destroyed editor") {
       expect(close).not.toHaveBeenCalled();
       if (change === "failed upload") {
@@ -324,6 +323,7 @@ it.each([
     editor.state.doc.check();
   } finally {
     await act(async () => root.unmount());
+    expect(off).toHaveBeenCalledWith("transaction", expect.any(Function));
     host.remove();
     destroy();
   }

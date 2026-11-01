@@ -69,18 +69,15 @@ it.each([
   }
 });
 
-it("round46 numbered rendered checklists preserve states while plain siblings become unchecked tasks", () => {
+it("round46 numbered rendered checklists preserve states and ordinary sibling numbering", () => {
   const { json } = importHtml(
     '<ol start="3"><li><label><input type="checkbox" checked="false">Done</label></li><li>Unmarked</li><li><input type="checkbox">Open</li></ol>',
   );
-  expect(json.content?.[0]).toMatchObject({
-    type: "taskList",
-    content: [
-      { type: "taskItem", attrs: { checked: true } },
-      { type: "taskItem", attrs: { checked: false } },
-      { type: "taskItem", attrs: { checked: false } },
-    ],
-  });
+  expect(json.content).toMatchObject([
+    { type: "taskList", content: [{ type: "taskItem", attrs: { checked: true } }] },
+    { type: "orderedList", attrs: { start: 4 }, content: [{ type: "listItem" }] },
+    { type: "taskList", content: [{ type: "taskItem", attrs: { checked: false } }] },
+  ]);
   expect(JSON.stringify(json)).toContain("Unmarked");
 });
 
