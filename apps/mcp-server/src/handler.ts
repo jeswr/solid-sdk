@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { randomBytes } from "node:crypto";
+import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
 import {
   type ConsentContext,
   createAuthorizationServer,
@@ -9,7 +10,7 @@ import {
   type SessionVault,
   type SigningKey,
 } from "@jeswr/mcp-oauth";
-import { createSolidMcpServer } from "@jeswr/solid-mcp";
+import { createSolidMcpServer, createStoragePodPort } from "@jeswr/solid-mcp";
 import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
 import { createVaultOAuthStores, decode, digest, encode, vaultSigningKey } from "./persistence.js";
 import { podLoginFor, podRootFor, withCssCompatibility } from "./pod.js";
@@ -107,10 +108,22 @@ export async function createApp(
     server: async (principal) => {
       const fetcher = withCssCompatibility(await sessions.fetchFor(principal.sessionId));
       const podRoot = await podRootFor(principal.webId, options.upstreamFetch);
-      // This constructor creates a scoped FetchPodPort and the chat tools.
+      // This constructor creates a storage-client PodPort and the chat tools.
       // No MCP headers or caller-selected identity enter the pod capability.
       return createSolidMcpServer({
         fetch: fetcher,
+        pod: createStoragePodPort(
+          {
+            fetch: fetcher,
+            podRoot,
+            webId: principal.webId,
+            readOnly: options.readOnly !== false,
+          },
+          refuseRedirects(
+            options.upstreamFetch ??
+              createNodeGuardedFetch({ maxBytes: 1024 * 1024, timeoutMs: 8_000, maxRedirects: 0 }),
+          ),
+        ),
         podRoot,
         webId: principal.webId,
         readOnly: options.readOnly !== false,

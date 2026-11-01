@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { getCACertificates, setDefaultCACertificates } from "node:tls";
-import { createSession, rdfFetchFor } from "@jeswr/solid-dpop";
+import { forClientCredentials } from "@jeswr/pod-auth/node";
 import { DataFactory as df, Writer } from "n3";
 
 export const CSS = "https://localhost:3390/";
@@ -201,14 +201,22 @@ export async function cssAccount() {
     webId,
   });
   const credentials = { issuer: CSS, id: cc.id as string, secret: cc.secret as string };
-  const session = await createSession(credentials);
-  const fetcher = rdfFetchFor(session, credentials, (url, init) =>
-    fetch(url, {
-      ...init,
-      body: init?.body ? Buffer.from(init.body) : undefined,
-      redirect: "manual",
-    }),
-  );
+  let podToken: string | undefined;
+  const auth = await forClientCredentials({
+    issuer: CSS,
+    clientId: cc.id,
+    clientSecret: cc.secret,
+    boundary: [podRoot],
+    fetch: (input, init) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).origin !== new URL(CSS).origin)
+        throw new Error("CSS fixture transport escaped local CSS");
+      const authorization = request.headers.get("authorization");
+      if (authorization?.startsWith("DPoP ")) podToken = authorization.slice(5);
+      return fetch(request, { redirect: "manual" });
+    },
+  });
+  const fetcher = auth.fetch;
   // Seed required profile data through a Writer; no interpolated Turtle syntax.
   const writer = new Writer();
   const person = df.namedNode(webId);
@@ -243,7 +251,8 @@ export async function cssAccount() {
     body: "local CSS private fixture",
   });
   if (!put.ok) throw new Error(`CSS private seed status ${put.status}`);
-  return { webId, podRoot, jar, credentials, fetcher, privateUrl, podToken: session.accessToken };
+  if (!podToken) throw new Error("CSS fixture did not observe authenticated pod access");
+  return { webId, podRoot, jar, credentials, fetcher, privateUrl, podToken };
 }
 
 /** Drive CSS's real account-selection/consent controls; keep cookies on CSS only. */

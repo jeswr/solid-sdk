@@ -11,9 +11,11 @@ Node runtime. The prepared rewrite preserves all routes; automatic deployment re
 
 OAuth mode composes `@jeswr/mcp-oauth`, its AES-GCM vault, and
 `@jeswr/solid-mcp/http`. Every authenticated MCP POST builds a new server and scoped
-fetch-backed PodPort from the verified grant's pod session, including chat tools.
+storage-client PodPort (Solid or LWS) from the verified grant's pod session, including chat tools.
 Opaque DCR client IDs map to stable `/clients/<id>` IRIs for memory provenance;
-Client ID Metadata Document URLs retain their identity. Caller headers never reach the pod.
+Client ID Metadata Document URLs retain their identity. Caller headers never reach the pod. Upstream OIDC and single-user client credentials use
+`@jeswr/pod-auth/node`; storage descriptions outside the pod use guarded anonymous discovery.
+LWS exact create-only operations fail closed because its names are hints.
 
 Routes: `/mcp`, `/healthz`, `/client-id.jsonld`, `/auth/{authorize,login,callback,consent,
 register,token,revoke,jwks}`, `/.well-known/oauth-authorization-server/auth`, and

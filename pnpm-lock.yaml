@@ -601,9 +601,9 @@ importers:
       '@jeswr/mcp-oauth':
         specifier: workspace:*
         version: link:../../packages/mcp-oauth
-      '@jeswr/solid-dpop':
+      '@jeswr/pod-auth':
         specifier: workspace:*
-        version: link:../../packages/solid-dpop
+        version: link:../../packages/pod-auth
       '@jeswr/solid-mcp':
         specifier: workspace:*
         version: link:../../packages/solid-mcp

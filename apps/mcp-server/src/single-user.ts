@@ -1,13 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
-import {
-  authedFetch,
-  type ClientCredentials,
-  createSession,
-  type FetchLike,
-} from "@jeswr/solid-dpop";
-import { createSolidMcpServer, normalizePodRoot } from "@jeswr/solid-mcp";
+import { forClientCredentials } from "@jeswr/pod-auth/node";
+import { createSolidMcpServer, createStoragePodPort, normalizePodRoot } from "@jeswr/solid-mcp";
 import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
 import { withCssCompatibility } from "./pod.js";
 import { equalSecret, publicOrigin, secureResponse } from "./security.js";
@@ -15,7 +10,7 @@ import { equalSecret, publicOrigin, secureResponse } from "./security.js";
 export interface SingleUserOptions {
   publicOrigin: string;
   accessToken: string;
-  credentials: ClientCredentials;
+  credentials: { issuer: string; id: string; secret: string };
   podRoot: string;
   webId: string;
   readOnly?: boolean;
@@ -36,48 +31,35 @@ export async function createSingleUserApp(options: SingleUserOptions) {
   );
   const issuer = new URL(credentials.issuer);
   publicOrigin(issuer.origin);
-  const exchange: FetchLike = async (url, init) => {
-    const response = await transport(url, init as RequestInit);
-    if (!init?.method && response.ok) {
-      const body = (await response.json()) as { issuer?: string; token_endpoint?: string };
-      if (body?.issuer !== credentials.issuer || typeof body.token_endpoint !== "string")
-        throw new Error("Issuer mismatch");
-      const endpoint = new URL(body.token_endpoint);
-      publicOrigin(endpoint.origin);
-      if (endpoint.username || endpoint.password || endpoint.hash)
-        throw new Error("Invalid token endpoint");
-      return Response.json(body);
-    }
-    return response;
-  };
-  const session = await createSession(credentials, exchange);
-  // Serialize token renewal; all requests keep the same in-memory DPoP key.
-  let tail: Promise<unknown> = Promise.resolve();
+  const auth = await forClientCredentials({
+    issuer: credentials.issuer,
+    clientId: credentials.id,
+    clientSecret: credentials.secret,
+    boundary: [podRoot],
+    fetch: transport,
+  });
   const fetcher: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
+    const request = new Request(input, { ...init, redirect: "manual", credentials: "omit" });
     const profile = new URL(options.webId);
     profile.hash = "";
-    if (
-      !isWithinPodScope(podRoot, request.url) &&
-      (request.url !== profile.href || request.method !== "GET")
-    )
+    const outside = !isWithinPodScope(podRoot, request.url);
+    if (outside && (request.url !== profile.href || request.method !== "GET"))
       throw new Error("Outside pod scope");
     for (const name of ["authorization", "dpop", "cookie"])
       if (request.headers.has(name)) throw new Error("Caller credentials refused");
-    const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
-    const run = tail.then(() =>
-      authedFetch(
-        session,
-        credentials,
-        request.method,
-        request.url,
-        { headers: Object.fromEntries(request.headers), body },
-        exchange,
-      ),
-    );
-    tail = run.catch(() => {});
-    return run;
+    // Off-pod discovery never carries service credentials.
+    return outside ? transport(request) : auth.fetch(request);
   };
+  const compatible = withCssCompatibility(fetcher);
+  const pod = createStoragePodPort(
+    {
+      fetch: compatible,
+      podRoot,
+      webId: options.webId,
+      readOnly: options.readOnly !== false,
+    },
+    transport,
+  );
   const http = createMcpHttpHandler({
     resourceUrl: `${origin.origin}/mcp`,
     allowedOrigins: options.allowedOrigins ?? [],
@@ -85,7 +67,8 @@ export async function createSingleUserApp(options: SingleUserOptions) {
       equalSecret(request.headers.get("authorization") ?? "", `Bearer ${options.accessToken}`),
     server: () =>
       createSolidMcpServer({
-        fetch: withCssCompatibility(fetcher),
+        fetch: compatible,
+        pod,
         podRoot,
         webId: options.webId,
         readOnly: options.readOnly !== false,

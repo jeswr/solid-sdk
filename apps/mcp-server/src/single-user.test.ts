@@ -22,6 +22,17 @@ it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-
         expires_in: 300,
       });
     }
+    if (url.endsWith("/.well-known/solid"))
+      return new Response("", { headers: { "content-type": "text/turtle" } });
+    if (request.method === "HEAD")
+      return new Response(null, {
+        headers: {
+          link: '<https://pod.example/.well-known/solid>; rel="http://www.w3.org/ns/solid/terms#storageDescription", <http://www.w3.org/ns/pim/space#Storage>; rel="type", <http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+        },
+      });
+    if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+    if (!request.headers.has("authorization"))
+      return new Response(null, { status: 401, headers: { "www-authenticate": "DPoP" } });
     expect(request.headers.get("authorization")).toBe("DPoP upstream-private-token");
     expect(request.headers.get("cookie")).toBeNull();
     return new Response("private content", { headers: { "content-type": "text/plain" } });
@@ -62,7 +73,11 @@ it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-
     const result = await response.json();
     expect(result.result.content[0].text).toBe("private content");
   }
-  expect(upstream.mock.calls.filter(([url]) => String(url).endsWith("/token"))).toHaveLength(1);
+  expect(
+    upstream.mock.calls.filter(([url]) =>
+      (url instanceof Request ? url.url : String(url)).endsWith("/token"),
+    ),
+  ).toHaveLength(1);
   const result = await (
     await call("pod_write", {
       url: `${options.podRoot}new.txt`,
@@ -73,7 +88,11 @@ it("uses a separate MCP bearer, DPoP pod credentials, read-only defaults and in-
   expect(result.result.isError).toBe(true);
   const offPod = await (await call("fetch", { id: "https://evil.example/secret" })).json();
   expect(offPod.result.isError).toBe(true);
-  expect(upstream.mock.calls.some(([url]) => String(url).includes("evil.example"))).toBe(false);
+  expect(
+    upstream.mock.calls.some(([url]) =>
+      (url instanceof Request ? url.url : String(url)).includes("evil.example"),
+    ),
+  ).toBe(false);
   await expect(createSingleUserApp({ ...options, accessToken: "weak" })).rejects.toThrow();
 });
 

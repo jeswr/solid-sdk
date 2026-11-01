@@ -19,10 +19,10 @@
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/mcp-oauth": "workspace:*",
-    "@jeswr/solid-dpop": "workspace:*",
     "@jeswr/solid-mcp": "workspace:*",
     "@solid/object": "^0.6.0",
-    "n3": "^2.1.1"
+    "n3": "^2.1.1",
+    "@jeswr/pod-auth": "workspace:*"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
