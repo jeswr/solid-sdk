@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
 import {
@@ -57,6 +58,7 @@ describe("transition — the happy ratchet", () => {
     expect(card.agentCardUrl).toBe(CARD);
 
     const offered = expectOk(transition(card, { kind: "offer", offer: rdfOffer }, AT));
+    expect(offered.pendingOfferVersion).toBe(2);
     expect(offered.state).toBe("offer-pending");
     expect(offered.pendingOffer?.targetChannel).toBe("rdf");
 
@@ -265,6 +267,29 @@ describe("serialize / parse round-trip (pod persistence)", () => {
     );
     s = expectOk(transition(s, { kind: "identity-verified", webId: WEBID }, AT));
     expect(await roundTrip(s)).toEqual(s);
+    expect(s.personIriVersion).toBe(2);
+  });
+
+  it("preserves legacy key metadata through negotiation, fallback, and revocation", async () => {
+    const card = { ...toCardDiscovered(), personIriVersion: 1 as const };
+    const offered = expectOk(transition(card, { kind: "offer", offer: rdfOffer }, AT));
+    const upgraded = expectOk(
+      transition(
+        offered,
+        {
+          kind: "offer-response",
+          response: { accept: true, protocolHash: "abc123" },
+        },
+        AT,
+      ),
+    );
+    const fallback = expectOk(transition(upgraded, { kind: "transport-failure" }, AT));
+    const revoked = expectOk(transition(fallback, { kind: "revoke-verification" }, AT));
+    expect(upgraded.pendingOfferVersion).toBeUndefined();
+    for (const state of [card, offered, upgraded, fallback, revoked]) {
+      expect(state.personIriVersion).toBe(1);
+      expect(await roundTrip(state)).toEqual(state);
+    }
   });
 
   it("round-trips every pending-offer binding", async () => {
@@ -284,6 +309,8 @@ describe("serialize / parse round-trip (pod persistence)", () => {
       ),
     );
     const back = await roundTrip(offered);
+    expect(back).toEqual(offered);
+    expect(back?.pendingOfferVersion).toBe(2);
     expect(back?.state).toBe("offer-pending");
     expect(back?.pendingOffer).toMatchObject({
       targetChannel: "a2a",
@@ -291,6 +318,19 @@ describe("serialize / parse round-trip (pod persistence)", () => {
       protocolHash: "h1",
       protocolSource: "https://example.test/protocol/v1",
     });
+  });
+
+  it.each([
+    "personIriVersion",
+    "offerIriVersion",
+  ])("rejects an unsupported %s", async (property) => {
+    const offered = expectOk(
+      transition(toCardDiscovered(), { kind: "offer", offer: rdfOffer }, AT),
+    );
+    const turtle = await serializeRelationship(offered, Resource);
+    const unsupported = turtle.replace(`${property} "2"`, `${property} "99"`);
+    expect(unsupported).not.toBe(turtle);
+    expect(parseRelationship(unsupported, Resource)).toBeUndefined();
   });
 
   it("round-trips an upgraded state", async () => {
