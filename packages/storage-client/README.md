@@ -38,6 +38,10 @@ See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
 Omitting the option preserves the transport's default cache behavior.
 
+`read`, `head`, `list`, and `listAll` accept additional `headers` for request-local
+transport markers. Listings forward them on every page. Accept, Range and
+If-None-Match remain controlled by the operation's dedicated options.
+
 LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` and never
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
 returned URL comes from the server's Location, independently of the parent path.

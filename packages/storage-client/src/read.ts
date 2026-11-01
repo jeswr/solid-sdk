@@ -20,6 +20,16 @@ export const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$
 const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 
+/** Preserve protocol headers while allowing request-local transport markers. */
+function requestHeaders(
+  headers: Record<string, string>,
+  extra?: RequestInit["headers"],
+): Record<string, string> {
+  const additional = new Headers(extra);
+  for (const name of ["accept", "range", "if-none-match"]) additional.delete(name);
+  return { ...Object.fromEntries(additional), ...headers };
+}
+
 export interface ReadExpectation {
   range: boolean;
   conditional: boolean;
@@ -93,9 +103,18 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     signal: AbortSignal | undefined,
     range = false,
     revalidate = false,
+    extraHeaders?: RequestInit["headers"],
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
-    const response = await send(fetch, "GET", target, headers, signal, undefined, revalidate);
+    const response = await send(
+      fetch,
+      "GET",
+      target,
+      requestHeaders(headers, extraHeaders),
+      signal,
+      undefined,
+      revalidate,
+    );
     const shape = await shapeOf("GET", target, response, {
       range,
       conditional: "If-None-Match" in headers,
@@ -111,7 +130,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
         fetch,
         "HEAD",
         target,
-        { Accept: "*/*" },
+        requestHeaders({ Accept: "*/*" }, opts.headers),
         opts.signal,
         undefined,
         opts.revalidate,
@@ -137,7 +156,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
         }
         headers.Range = `bytes=${start}-${end ?? ""}`;
       }
-      return get(url, headers, opts.signal, opts.range !== undefined);
+      return get(url, headers, opts.signal, opts.range !== undefined, false, opts.headers);
     },
 
     async readRdf(

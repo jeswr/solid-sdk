@@ -142,6 +142,8 @@ export interface MetadataOp {
 /** Options for fresh HEAD and listing observations. */
 export interface ObservationOptions {
   signal?: AbortSignal;
+  /** Additional HTTP headers; Accept, Range and If-None-Match remain operation-controlled. */
+  headers?: RequestInit["headers"];
   /** Revalidate HTTP cache entries before use (`cache: 'no-cache'`), on every listing page. */
   revalidate?: boolean;
 }
@@ -164,6 +166,8 @@ export interface StorageClient {
       ifNoneMatch?: string;
       range?: { start: number; end?: number };
       signal?: AbortSignal;
+      /** Additional HTTP headers; Accept, Range and If-None-Match remain option-controlled. */
+      headers?: RequestInit["headers"];
     },
   ): Promise<ReadResult>;
   /** read + parseRdf (fetch-rdf). Accept: text/turtle, application/ld+json. Throws 'not-rdf' when the body is not RDF. */
