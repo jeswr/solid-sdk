@@ -67,6 +67,9 @@ export function FontSizeControl({ editor }: { editor: Editor }) {
           if (Number(draft) !== current) apply(draft);
         }}
         onKeyDown={(event) => {
+          // Typed digits belong to the field, not to an enclosing menu's typeahead or
+          // the toolbar's arrow-key roving; Tab and Escape still reach the menu.
+          if (event.key !== "Tab" && event.key !== "Escape") event.stopPropagation();
           if (event.key === "Enter") {
             event.preventDefault();
             apply(draft);

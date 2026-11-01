@@ -761,5 +761,21 @@ it("keeps toolbar controls in order and moves them into More at narrow widths", 
   await openSub("Font family");
   await selectItem("Georgia");
   expect(editor.getAttributes("textStyle").fontFamily).toBe("Georgia, serif");
+  // Digits typed into the overflow font-size field stay in it instead of driving the
+  // submenu's typeahead to the "10" item.
+  await act(() => more.focus());
+  key(more, "Enter");
+  await vi.waitFor(() =>
+    expect(screen.queryByRole("menuitem", { name: "Font size" })).not.toBeNull(),
+  );
+  await openSub("Font size");
+  const field = screen.getByRole("spinbutton", { name: "Font size in points" });
+  await act(() => field.focus());
+  key(field, "1");
+  await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  expect(document.activeElement).toBe(field);
+  fireEvent.change(field, { target: { value: "13" } });
+  key(field, "Enter");
+  expect(editor.getAttributes("textStyle").fontSize).toBe("13pt");
   view.unmount();
 });
