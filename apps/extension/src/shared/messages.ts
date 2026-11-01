@@ -156,6 +156,13 @@ export interface RevokeGrantRequest {
   readonly stampedOrigin?: string;
 }
 
+/** End THIS origin's binding and all nested grants without signing the account out. */
+export interface DisconnectRequest {
+  readonly type: 'SOLID_DISCONNECT';
+  readonly requestId: string;
+  readonly stampedOrigin?: string;
+}
+
 /** `window.solid.resolveClass(classIRI)` — read-only introspection of a class → targets. */
 export interface ResolveClassRequest {
   readonly type: 'SOLID_RESOLVE_CLASS';
@@ -164,7 +171,7 @@ export interface ResolveClassRequest {
   readonly stampedOrigin?: string;
 }
 
-/** The worker's reply to any of the four access-management requests (correlated by requestId). */
+/** The worker's reply to an access-management request (correlated by requestId). */
 export interface AccessResponse {
   /** Sent only after explicit origin consent; enables the newly granted API before resolving. */
   readonly webId?: string;
@@ -278,6 +285,7 @@ export type WorkerRequest =
   | RequestAccessRequest
   | ListGrantsRequest
   | RevokeGrantRequest
+  | DisconnectRequest
   | ResolveClassRequest
   | GetPendingConsentRequest
   | ConsentDecisionMessage;
