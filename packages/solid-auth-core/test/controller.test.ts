@@ -1308,18 +1308,36 @@ describe("createSolidAuth — logout is fail-closed (High fixes)", () => {
     }
   });
 
-  it("authenticatedFetch returns the pristine publicFetch again after logout", async () => {
+  it("authenticatedFetch keeps caller credentials behind manual redirects after logout", async () => {
     const store = new RecordingStore();
+    const sent: Request[] = [];
+    const publicFetch: typeof fetch = async (input, init) => {
+      sent.push(new Request(input, init));
+      return new Response("unfollowed", { status: 302, headers: { Location: "/next" } });
+    };
     const controller = createSolidAuth({
       authFlow,
       callbackUri: "https://app.example/callback",
       clientId: "https://app.example/clientid.jsonld",
       store,
+      publicFetch,
     });
     await controller.login("https://alice.pod.example/profile/card#me");
     expect(controller.authenticatedFetch).not.toBe(controller.publicFetch); // logged in
     await controller.logout();
-    expect(controller.authenticatedFetch).toBe(controller.publicFetch); // logged out
+    for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+      const response = await controller.authenticatedFetch("https://alice.pod.example/start", {
+        headers: { [header]: "caller-owned" },
+        redirect: "follow",
+      });
+      expect(response.status).toBe(302);
+      expect(sent.at(-1)?.redirect).toBe("manual");
+      expect(sent.at(-1)?.headers.get(header)).toBe("caller-owned");
+    }
+    expect(sent).toHaveLength(3);
+    await controller.authenticatedFetch("https://alice.pod.example/public", { redirect: "error" });
+    expect(sent.at(-1)?.redirect).toBe("error");
+    expect(sent.at(-1)?.headers.has("Authorization")).toBe(false);
   });
 
   it("a stale restore's invalid_grant DELETE cannot remove a newer login's credential (High fix)", async () => {
@@ -3852,7 +3870,6 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
       // The LIVE session is gone (logged-out surface, exactly like logout)…
       expect(controller.webId).toBeNull();
       expect(controller.issuer).toBeNull();
-      expect(controller.authenticatedFetch).toBe(controller.publicFetch);
       // …but the DURABLE credential is UNTOUCHED (the contrast with logout)…
       expect(store.map.get(Issuer)?.refreshToken).toBe("refresh-token");
       // …and the silent-restore pointer is KEPT (the next load retries restore)…
@@ -3922,8 +3939,8 @@ describe("createSolidAuth — dropLiveSession keeps the durable credential (tran
 
     await controller.dropLiveSession();
 
-    // After dropLiveSession the getter hands back the pristine publicFetch identity…
-    expect(controller.authenticatedFetch).toBe(controller.publicFetch);
+    // After dropLiveSession the same guarded handle adds no session credentials.
+    expect(controller.authenticatedFetch).toBe(capturedLiveHandle);
     recordedAuthHeader = null;
     await controller.authenticatedFetch("https://alice.pod.example/private/doc");
     expect(recordedAuthHeader).toBeNull();
@@ -4422,7 +4439,6 @@ describe("createSolidAuth — dropSession is a DEPRECATED alias for dropLiveSess
     // dropLiveSession block above; here we only pin that the alias === dropLiveSession.
     await controller.dropSession();
     expect(controller.webId).toBeNull();
-    expect(controller.authenticatedFetch).toBe(controller.publicFetch);
     expect(store.map.get("https://idp.example/")?.refreshToken).toBe("refresh-token");
   });
 });
