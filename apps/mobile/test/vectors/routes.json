@@ -1,0 +1,427 @@
+{
+  "_authoredBy": "// AUTHORED-BY Codex GPT-6",
+  "description": "E3 raw percent-encoded path vectors. Reject invalid paths with 404; decode each segment exactly once. Native resolvers must return the resolved file MIME type.",
+  "manifest": {
+    "version": 1,
+    "routes": [
+      {
+        "pattern": "/",
+        "segments": [],
+        "directory": "",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/drive/my",
+        "segments": [
+          {
+            "type": "static",
+            "value": "drive"
+          },
+          {
+            "type": "static",
+            "value": "my"
+          }
+        ],
+        "directory": "drive/my",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/drive/f/[ref]",
+        "segments": [
+          {
+            "type": "static",
+            "value": "drive"
+          },
+          {
+            "type": "static",
+            "value": "f"
+          },
+          {
+            "type": "param",
+            "name": "ref"
+          }
+        ],
+        "directory": "drive/f/__",
+        "files": [
+          "index.html",
+          "index.txt",
+          "__next._full.txt",
+          "__next._tree.txt",
+          "__next.!KHN1aXRlKQ.drive.f.$d$ref.__PAGE__.txt"
+        ]
+      },
+      {
+        "pattern": "/drive/p/[ref]",
+        "segments": [
+          {
+            "type": "static",
+            "value": "drive"
+          },
+          {
+            "type": "static",
+            "value": "p"
+          },
+          {
+            "type": "param",
+            "name": "ref"
+          }
+        ],
+        "directory": "drive/p/__",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/tasks/l/[label]",
+        "segments": [
+          {
+            "type": "static",
+            "value": "tasks"
+          },
+          {
+            "type": "static",
+            "value": "l"
+          },
+          {
+            "type": "param",
+            "name": "label"
+          }
+        ],
+        "directory": "tasks/l/__",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/docs/new",
+        "segments": [
+          {
+            "type": "static",
+            "value": "docs"
+          },
+          {
+            "type": "static",
+            "value": "new"
+          }
+        ],
+        "directory": "docs/new",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/docs/[ref]/history",
+        "segments": [
+          {
+            "type": "static",
+            "value": "docs"
+          },
+          {
+            "type": "param",
+            "name": "ref"
+          },
+          {
+            "type": "static",
+            "value": "history"
+          }
+        ],
+        "directory": "docs/__/history",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/docs/[...path]",
+        "segments": [
+          {
+            "type": "static",
+            "value": "docs"
+          },
+          {
+            "type": "catch-all",
+            "name": "path",
+            "optional": false
+          }
+        ],
+        "directory": "docs/__",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      },
+      {
+        "pattern": "/optional/[[...path]]",
+        "segments": [
+          {
+            "type": "static",
+            "value": "optional"
+          },
+          {
+            "type": "catch-all",
+            "name": "path",
+            "optional": true
+          }
+        ],
+        "directory": "optional/__",
+        "files": ["index.html", "index.txt", "__next._full.txt", "__next._tree.txt"]
+      }
+    ],
+    "assets": ["_next/static/chunk.js", "logo.svg", "public/nested/file.txt"]
+  },
+  "cases": [
+    {
+      "request": "/",
+      "path": "index.html",
+      "status": 200
+    },
+    {
+      "request": "/drive/my",
+      "path": "drive/my/index.html",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/YQ/",
+      "path": "drive/f/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/Yg/index.html",
+      "path": "drive/f/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/Yg/index.txt",
+      "path": "drive/f/__/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/Yg/__next._full.txt",
+      "path": "drive/f/__/__next._full.txt",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/Yg/__next._tree.txt",
+      "path": "drive/f/__/__next._tree.txt",
+      "status": 200
+    },
+    {
+      "request": "/drive/p/YQ/",
+      "path": "drive/p/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/tasks/l/work.2026/",
+      "path": "tasks/l/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/tasks/l/work.2026/index.txt",
+      "path": "tasks/l/__/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/tasks/l/Caf%C3%A9/",
+      "path": "tasks/l/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/b/",
+      "path": "docs/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/b/index.txt",
+      "path": "docs/__/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/b/__next._full.txt",
+      "path": "docs/__/__next._full.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/new/",
+      "path": "docs/new/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/new/index.txt",
+      "path": "docs/new/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/new/history",
+      "path": "docs/__/history/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/new/history/index.txt",
+      "path": "docs/__/history/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/a/history/",
+      "path": "docs/__/history/index.html",
+      "status": 200
+    },
+    {
+      "request": "/optional/",
+      "path": "optional/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/optional/a/b/index.txt",
+      "path": "optional/__/index.txt",
+      "status": 200
+    },
+    {
+      "request": "/_next/static/chunk.js",
+      "path": "_next/static/chunk.js",
+      "status": 200
+    },
+    {
+      "request": "/logo.svg",
+      "path": "logo.svg",
+      "status": 200
+    },
+    {
+      "request": "/public/nested/file.txt",
+      "path": "public/nested/file.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/%252F/",
+      "path": "docs/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/unknown",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/drive/f/index.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/drive/f/__next._full.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/drive/f/a/missing.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a/../b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/%2e%2E/b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/./b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/%2f/b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a%2Fb",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a%5cb",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a\\b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a%00b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a\u0000b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/%",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/%FF",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs//b",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "relative",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a?q=1",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/a#frag",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/drive/f/Yg/__next.!KHN1aXRlKQ.drive.f.$d$ref.__PAGE__.txt",
+      "path": "drive/f/__/__next.!KHN1aXRlKQ.drive.f.$d$ref.__PAGE__.txt",
+      "status": 200
+    },
+    {
+      "request": "/drive/f/Yg/__next.!KHN1aXRlKQ.drive.f.%24d%24ref.__PAGE__.txt",
+      "path": "drive/f/__/__next.!KHN1aXRlKQ.drive.f.$d$ref.__PAGE__.txt",
+      "status": 200
+    },
+    {
+      "request": "/docs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "docs/__/index.html",
+      "status": 200
+    },
+    {
+      "request": "/docs/index.txt",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/index.html",
+      "path": "404.html",
+      "status": 404
+    },
+    {
+      "request": "/docs/__next._full.txt",
+      "path": "404.html",
+      "status": 404
+    }
+  ]
+}

@@ -1,13 +1,15 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 /** Drive's route bodies: folder, Recent, Starred, Shared, Search, Trash and preview. */
 
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
-import { notFound, useParams, useSearchParams } from "next/navigation";
+import { notFound, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
+import { useRouteParams } from "../../../lib/route-params";
 import {
   type DriveClient,
   DriveError,
@@ -30,8 +32,9 @@ import { type BrowserItem, FileBrowser } from "./file-browser";
 import { trashMenu } from "./item-menu";
 import { PreviewPage } from "./preview";
 
-function useRefParam(): string {
-  const params = useParams<{ ref: string }>();
+function useRefParam(pattern: string): string | undefined {
+  const params = useRouteParams<{ ref: string }>(pattern);
+  if (!params) return undefined;
   try {
     return decodeRef(params.ref);
   } catch (error) {
@@ -102,7 +105,13 @@ export function FolderView({ url }: { url?: string }) {
 }
 
 export function FolderRefView() {
-  const url = useRefParam();
+  const url = useRefParam("/drive/f/[ref]");
+  if (!url)
+    return (
+      <div className="drv-boot" role="status">
+        Loading…
+      </div>
+    );
   if (!url.endsWith("/")) notFound();
   return <FolderView url={url} />;
 }
@@ -393,7 +402,17 @@ export function SearchView() {
 }
 
 export function PreviewRouteView() {
-  const url = useRefParam();
+  const url = useRefParam("/drive/p/[ref]");
+  if (!url)
+    return (
+      <div className="drv-boot" role="status">
+        Loading…
+      </div>
+    );
+  return <ResolvedPreviewRouteView url={url} />;
+}
+
+function ResolvedPreviewRouteView({ url }: { url: string }) {
   const { client } = useDrive();
   const [result, setResult] = useState<{
     url: string;

@@ -7,14 +7,16 @@
     "dev": "pnpm --filter @jeswr/suite-ui run build && next dev --webpack -p 3210",
     "build": "next build --webpack",
     "start": "next start -p 3210",
-    "lint": "biome check src test e2e *.ts *.mjs",
+    "lint": "biome check src test e2e scripts *.ts *.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
     "measure:univer": "node test/univer-spike.measure.mjs",
     "test:mime": "vitest run test/mime.test.ts --coverage",
     "test:coverage": "vitest run --coverage",
-    "coverage:music": "vitest run --coverage"
+    "coverage:music": "vitest run --coverage",
+    "build:native": "node scripts/build-native.mjs",
+    "check:native": "node scripts/check-native.mjs www"
   },
   "dependencies": {
     "@jeswr/pod-connectors": "workspace:*",

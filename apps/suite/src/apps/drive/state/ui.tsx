@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
+
 /**
  * Drive's UI state shared across routes: the open dialog, the preview, the
  * details pane, and the item actions (04-drive §4) with their toasts and
@@ -23,6 +25,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
+import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
 import {
   type DriveClient,
@@ -479,7 +482,7 @@ export function useDriveActions() {
         router.push(hrefFor(item));
         return;
       }
-      if (setPreview) {
+      if (setPreview && process.env.NEXT_PUBLIC_SUITE_TARGET !== "native") {
         const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
         setPreview({
           activationId: crypto.randomUUID(),
@@ -513,7 +516,7 @@ export function useDriveActions() {
 
   const copyLink = useCallback(
     async (item: DriveItem) => {
-      const link = `${location.origin}${hrefFor(item)}`;
+      const link = `${process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? PUBLIC_SUITE_URL : location.origin}${hrefFor(item)}`;
       try {
         await navigator.clipboard.writeText(link);
         const access = await accessControl(session.fetch, session.storageUrl).effective(item.url);

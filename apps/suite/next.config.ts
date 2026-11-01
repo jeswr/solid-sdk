@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  ...(process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
+    ? ({ output: "export", trailingSlash: true, images: { unoptimized: true } } as const)
+    : {}),
   transpilePackages: ["@jeswr/suite-ui"],
   devIndicators: false,
   webpack(config) {

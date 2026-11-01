@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * The account the suite is acting for. Until sign-in (SH-02) and the SDK façade
@@ -11,21 +12,9 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from "
 import { getDemoPod, resetDemoPod } from "../demo-pod/browser";
 import { DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../demo-pod/seed";
 
-export interface PodSession {
-  readonly mode: "demo";
-  readonly webId: string;
-  readonly displayName: string;
-  readonly storageUrl: string;
-  readonly fetch: typeof globalThis.fetch;
-  /** Change events for resources in the storage (the demo pod's live updates). */
-  subscribe(listener: (url: string) => void): () => void;
-  reset(): Promise<void>;
-}
+import type { SessionState } from "./types";
 
-type SessionState =
-  | { status: "loading" }
-  | { status: "ready"; session: PodSession }
-  | { status: "error"; error: unknown };
+export type { PodSession } from "./types";
 
 const SessionContext = createContext<SessionState>({ status: "loading" });
 

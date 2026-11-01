@@ -97,6 +97,26 @@
           "tailwindDirectives": true
         }
       }
+    },
+    {
+      "includes": ["apps/suite/**", "!apps/suite/src/lib/route-params.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "next/navigation": {
+                    "importNames": ["useParams"],
+                    "message": "Use useRouteParams from @/lib/route-params for native routing."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
