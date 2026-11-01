@@ -578,7 +578,8 @@ it("offers a labelled colour grid with arrows, Home/End, selection and Reset", a
 it("leaves focus where the person moved it when the colour picker closes from outside", async () => {
   const editor = create();
   document.body.append(editor.view.dom);
-  const frame = () => act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  const frame = () =>
+    act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   function Picker() {
     const [open, setOpen] = useState(true);
     return h(
