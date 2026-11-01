@@ -17,13 +17,13 @@ import {
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useState } from "react";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
 import type { SearchSource } from "./lib/search-results";
 import { appRegistry, visibleApps } from "./registry";
 import { GlobalSearch } from "./search/global-search";
-import { createLocalSearchSource } from "./search/local-source";
+import { useShellSearchSource } from "./search/search-context";
 import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
@@ -36,10 +36,7 @@ export interface SuiteShellProps {
   context?: ReactNode;
   actions?: ReactNode;
   details?: ShellFrameProps["details"];
-  /**
-   * Where the TopBar search looks. Defaults to an empty local index (results then
-   * come only from items an app registers); SDK-APP-09 `useSearch` replaces it.
-   */
+  /** Overrides the account's shared search source (ShellSearchProvider) for this page. */
   searchSource?: SearchSource;
   children: ReactNode;
 }
@@ -56,7 +53,7 @@ function Frame({
 }: SuiteShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const emptySource = useMemo(() => createLocalSearchSource([]), []);
+  const shellSource = useShellSearchSource();
   const { active } = useAccounts();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
@@ -134,7 +131,7 @@ function Frame({
           account: <div className="shell-mobile-account">{account}</div>,
           search: (
             <GlobalSearch
-              source={searchSource ?? emptySource}
+              source={searchSource ?? shellSource}
               scope={{ app: slug, label: app.name }}
               onOpen={(result) => router.push(result.href)}
               onSeeAll={(query, scope) =>
@@ -152,12 +149,21 @@ function Frame({
   );
 }
 
+/**
+ * Global shortcuts (and the palette and help sheet they open) exist only while the
+ * session is usable: an expired session's re-auth dialog must stay the only layer.
+ */
+function ReadyShortcuts() {
+  const { status } = useAccounts();
+  return status === "ready" ? <GlobalShortcuts /> : null;
+}
+
 export function SuiteShell(props: SuiteShellProps) {
   return (
     <Suspense>
       <SessionGuard>
         <ShortcutsProvider>
-          <GlobalShortcuts />
+          <ReadyShortcuts />
           <Frame {...props} />
         </ShortcutsProvider>
       </SessionGuard>

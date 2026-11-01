@@ -10,7 +10,7 @@ import {
   Label,
 } from "@jeswr/suite-ui";
 import { useId, useRef, useState } from "react";
-import { type RegisteredShortcut, useRegisteredShortcuts } from "./provider";
+import { type RegisteredShortcut, useRegisteredShortcuts, useShortcutSettings } from "./provider";
 
 const frameShortcuts: RegisteredShortcut[] = [
   { id: "frame.sidebar", keys: "[", label: "Toggle sidebar", group: "Global" },
@@ -60,6 +60,20 @@ export function ShortcutsTable() {
     </div>
   );
 }
+/** WCAG 2.1.4 character key shortcuts: a persistent way to turn them off. */
+export function CharacterKeysToggle() {
+  const { characterKeys, setCharacterKeys } = useShortcutSettings();
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={characterKeys}
+        onChange={(event) => setCharacterKeys(event.target.checked)}
+      />
+      Use single-key shortcuts (such as / and g then d)
+    </label>
+  );
+}
 export function ShortcutHelpSheet({
   open,
   onOpenChange,
@@ -84,6 +98,7 @@ export function ShortcutHelpSheet({
         <DialogDescription>
           Shortcuts pause while you type. Command shortcuts work everywhere.
         </DialogDescription>
+        <CharacterKeysToggle />
         <ShortcutsTable />
       </DialogContent>
     </Dialog>

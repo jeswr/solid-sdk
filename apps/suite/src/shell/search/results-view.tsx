@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { Button, EmptyState, ErrorState, Label, LoadingSkeleton, suiteApps } from "@jeswr/suite-ui";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   defaultSearchFilters,
   filterSearchResults,
@@ -37,6 +37,12 @@ export function SearchResultsView({
   const filtered = filterSearchResults(results, filters, accountId ? { accountId } : {});
   const start = Math.max(0, Math.min(Math.floor(scrollTop / 80) - 3, filtered.length - 1));
   const visible = filtered.slice(start, start + 18);
+  // A new query or result set starts at the top; a stale offset would window past the new list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: query/results identity is the trigger
+  useEffect(() => {
+    setScrollTop(0);
+    viewport.current?.scrollTo?.(0, 0);
+  }, [query, results]);
   const update = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => {
     setFilters((current) => ({ ...current, [key]: value }));
     setScrollTop(0);

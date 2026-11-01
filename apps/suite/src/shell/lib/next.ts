@@ -4,6 +4,8 @@
  * then "/home" (02-suite-shell §1).
  */
 export const START_PAGE = "/drive";
+/** The start page's app name, for "Go to …" links (server components cannot read the registry). */
+export const START_PAGE_NAME = "Drive";
 
 /** Validate both the supplied path and its decoded form before handing it to the router. */
 export function safeNext(next: string | null | undefined): string {

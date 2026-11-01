@@ -6,10 +6,10 @@
  */
 import { type AppSlug, EmptyState, suiteApps } from "@jeswr/suite-ui";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { SearchResult } from "@/shell/lib/search-results";
-import { createLocalSearchSource } from "@/shell/search/local-source";
 import { SearchResultsView } from "@/shell/search/results-view";
+import { useShellSearchSource } from "@/shell/search/search-context";
 import { useAccounts } from "@/shell/session/accounts-provider";
 import { SuiteShell } from "@/shell/suite-shell";
 
@@ -23,9 +23,7 @@ function SearchPage() {
   const query = params.get("q")?.trim() ?? "";
   const scope = scopeOf(params.get("scope"));
   const { active } = useAccounts();
-  // One local index per account (02-§5 "Searching your saved copies").
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new account gets a fresh index
-  const source = useMemo(() => createLocalSearchSource([]), [active?.id]);
+  const source = useShellSearchSource();
   const [state, setState] = useState<{
     results: readonly SearchResult[];
     loading: boolean;
@@ -49,7 +47,7 @@ function SearchPage() {
     return () => controller.abort();
   }, [query, scope, source, attempt]);
   return (
-    <SuiteShell app={scope ?? "home"} pageTitle="Search" searchSource={source}>
+    <SuiteShell app={scope ?? "home"} pageTitle="Search">
       {!query ? (
         <EmptyState
           title="Search your suite"

@@ -4,6 +4,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect } from "react";
 import { SuiteEnvironmentContext } from "@/shell/environment";
 import type { SuiteEnv } from "@/shell/lib/env";
+import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 
 function ThemeAttribute() {
@@ -24,7 +25,9 @@ export function Providers({
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
       <SuiteEnvironmentContext.Provider value={environment}>
-        <AccountsProvider>{children}</AccountsProvider>
+        <AccountsProvider>
+          <ShellSearchProvider>{children}</ShellSearchProvider>
+        </AccountsProvider>
       </SuiteEnvironmentContext.Provider>
     </ThemeProvider>
   );

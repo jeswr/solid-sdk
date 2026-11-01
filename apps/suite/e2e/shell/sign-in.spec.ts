@@ -164,7 +164,7 @@ test("invalid Drive reference renders the not-found page", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "We couldn't find that page", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/home");
+  await expect(page.getByRole("link", { name: "Go to Drive" })).toHaveAttribute("href", "/drive");
   await expect(page.getByRole("link", { name: "Search", exact: true })).toHaveAttribute(
     "href",
     "/search",
@@ -177,10 +177,17 @@ test("client identity and callback bridge are served", async ({ page, request, b
   const client = await request.get(clientUrl);
   expect(client.ok()).toBe(true);
   expect(client.headers()["content-type"]).toContain("application/ld+json");
-  expect(await client.json()).toMatchObject({
-    client_id: clientUrl,
-    redirect_uris: [`${baseURL}/auth/callback.html`],
+  // Unconfigured local server: answered for loopback only, never cached.
+  expect(client.headers()["cache-control"]).toBe("no-store");
+  const document = await client.json();
+  const origin = new URL(document.client_id).origin;
+  expect(new URL(origin).hostname).toMatch(/^(localhost|127\.0\.0\.1)$/);
+  expect(document.client_id).toBe(`${origin}/.well-known/solid-client-id.jsonld`);
+  expect(document.redirect_uris).toEqual([`${origin}/auth/callback.html`]);
+  const forged = await request.get(clientUrl, {
+    headers: { "x-forwarded-host": "attacker.example" },
   });
+  expect((await forged.json()).client_id).toBe(document.client_id);
   const callback = await request.get("/auth/callback.html");
   expect(callback.ok()).toBe(true);
   expect(await callback.text()).toContain("Signing you in…");

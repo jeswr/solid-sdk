@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
-import { buildClientId } from "../src/shell/lib/client-id";
+import { buildClientId, trustedClientOrigin } from "../src/shell/lib/client-id";
 
 describe("client identifier document", () => {
   it("uses the exact request origin and path without query or fragment", () => {
@@ -29,5 +29,41 @@ describe("client identifier document", () => {
     expect(document.client_id).toBe("https://suite.example.org/.well-known/solid-client-id.jsonld");
     expect(document.redirect_uris).toEqual(["https://suite.example.org/auth/callback.html"]);
     expect(document.logo_uri).toBe("https://suite.example.org/icon.svg");
+  });
+  it("takes the origin from configuration, never from the request host", () => {
+    const req = "https://attacker.example/.well-known/solid-client-id.jsonld";
+    expect(trustedClientOrigin({ NEXT_PUBLIC_SUITE_ORIGIN: "https://suite.example" }, req)).toEqual(
+      {
+        origin: "https://suite.example",
+        cacheable: true,
+      },
+    );
+    expect(
+      trustedClientOrigin(
+        { VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "suite.example.org" },
+        req,
+      ).origin,
+    ).toBe("https://suite.example.org");
+    expect(
+      trustedClientOrigin({ VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "b.vercel.app" }, req).origin,
+    ).toBe("https://b.vercel.app");
+    expect(trustedClientOrigin({ VERCEL_URL: "d.vercel.app" }, req).origin).toBe(
+      "https://d.vercel.app",
+    );
+    expect(trustedClientOrigin({}, req)).toEqual({ cacheable: false });
+    expect(trustedClientOrigin({ NEXT_PUBLIC_SUITE_ORIGIN: "http://suite.example" }, req)).toEqual({
+      cacheable: false,
+    });
+    expect(trustedClientOrigin({ NEXT_PUBLIC_SUITE_ORIGIN: "::bad::" }, req)).toEqual({
+      cacheable: false,
+    });
+  });
+  it("answers loopback development requests without caching", () => {
+    expect(
+      trustedClientOrigin({}, "http://127.0.0.1:3210/.well-known/solid-client-id.jsonld"),
+    ).toEqual({ origin: "http://127.0.0.1:3210", cacheable: false });
+    expect(
+      trustedClientOrigin({ NEXT_PUBLIC_SUITE_ORIGIN: "http://localhost:3000" }, "x:"),
+    ).toEqual({ origin: "http://localhost:3000", cacheable: true });
   });
 });

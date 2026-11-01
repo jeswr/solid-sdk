@@ -2,6 +2,11 @@
 "use client";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import {
+  characterShortcutsEnabled,
+  SHORTCUTS_SETTING_EVENT,
+  setCharacterShortcutsEnabled,
+} from "../lib/shortcut-settings";
+import {
   createSequenceMatcher,
   isEditableTarget,
   parseKeys,
@@ -23,7 +28,11 @@ type Entry = Shortcut & { token: string };
 const Context = createContext<{
   shortcuts: readonly Entry[];
   register: (shortcut: Shortcut) => () => void;
+  characterKeys: boolean;
+  setCharacterKeys: (on: boolean) => void;
 } | null>(null);
+
+const hasPrimaryModifier = (keys: string) => /\b(cmd|ctrl|meta|alt)(\/ctrl)?\+/iu.test(keys);
 
 /** editor > app > global; later registrations win within the same scope. */
 export function ShortcutsProvider({
@@ -34,6 +43,21 @@ export function ShortcutsProvider({
   platform?: string;
 }) {
   const [shortcuts, setShortcuts] = useState<Entry[]>([]);
+  const [characterKeys, setCharacterKeysState] = useState(true);
+  useEffect(() => {
+    const sync = () => setCharacterKeysState(characterShortcutsEnabled());
+    sync();
+    addEventListener(SHORTCUTS_SETTING_EVENT, sync);
+    addEventListener("storage", sync);
+    return () => {
+      removeEventListener(SHORTCUTS_SETTING_EVENT, sync);
+      removeEventListener("storage", sync);
+    };
+  }, []);
+  const setCharacterKeys = (on: boolean) => {
+    setCharacterKeysState(on);
+    setCharacterShortcutsEnabled(on);
+  };
   const [register] = useState(() => {
     let serial = 0;
     return (shortcut: Shortcut) => {
@@ -48,7 +72,11 @@ export function ShortcutsProvider({
     let matcher = createSequenceMatcher([]);
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.repeat) return;
-      const active = shortcuts.filter((shortcut) => !shortcut.when || shortcut.when());
+      const active = shortcuts.filter(
+        (shortcut) =>
+          (characterKeys || hasPrimaryModifier(shortcut.keys)) &&
+          (!shortcut.when || shortcut.when()),
+      );
       const nextSignature = active.map((shortcut) => shortcut.token).join(",");
       if (signature !== nextSignature) {
         signature = nextSignature;
@@ -75,8 +103,12 @@ export function ShortcutsProvider({
     };
     document.addEventListener("keydown", keydown);
     return () => document.removeEventListener("keydown", keydown);
-  }, [shortcuts, platform]);
-  return <Context.Provider value={{ shortcuts, register }}>{children}</Context.Provider>;
+  }, [shortcuts, platform, characterKeys]);
+  return (
+    <Context.Provider value={{ shortcuts, register, characterKeys, setCharacterKeys }}>
+      {children}
+    </Context.Provider>
+  );
 }
 export function useShortcut(shortcut: Shortcut) {
   const context = useContext(Context);
@@ -100,4 +132,15 @@ export function useShortcut(shortcut: Shortcut) {
 }
 export function useRegisteredShortcuts(): readonly RegisteredShortcut[] {
   return useContext(Context)?.shortcuts ?? [];
+}
+
+export function useShortcutSettings(): {
+  characterKeys: boolean;
+  setCharacterKeys: (on: boolean) => void;
+} {
+  const context = useContext(Context);
+  return {
+    characterKeys: context?.characterKeys ?? true,
+    setCharacterKeys: context?.setCharacterKeys ?? (() => {}),
+  };
 }

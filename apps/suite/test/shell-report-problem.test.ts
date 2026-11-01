@@ -54,14 +54,14 @@ describe("problem reports", () => {
     expect(result.origin + result.pathname).toBe("https://github.com/jeswr/solid-sdk/issues/new");
     expect(result.searchParams.get("labels")).toBe("suite");
     const body = result.searchParams.get("body") ?? "";
-    expect(body).toHaveLength(2000);
+    expect(body.length).toBeLessThanOrEqual(2000);
     expect(body).toContain("Route: /drive/f/[ref]");
     expect(body).toContain("Error ID: id-123");
     expect(body).not.toMatch(/SECRET|private|example\.(com|org)|#me/u);
     expect(result.searchParams.get("title")).toBe("Solid Suite: problem in Drive <redacted>");
   });
   it("supports missing error details and caps the title", () => {
-    const url = new URL(reportProblemUrl({ app: "x".repeat(200), route: "/home" }));
+    const url = new URL(reportProblemUrl({ app: "Drive ".repeat(40), route: "/home" }));
     expect(url.searchParams.get("title")).toHaveLength(160);
     expect(url.searchParams.get("body")).toContain("Error ID: Not available");
   });
@@ -73,6 +73,25 @@ describe("problem reports", () => {
         error: new Error("Cannot read https://example.org/private"),
       }),
     );
-    expect(url.searchParams.get("body")).toContain("Cannot read <redacted>");
+    const body = url.searchParams.get("body") ?? "";
+    expect(body).toContain("Error type: Error");
+    expect(body).not.toContain("Cannot read");
+  });
+  it("never forwards error messages or odd error ids", () => {
+    const error = new Error("Authorization: Bearer SECRET refresh_token=SECRET");
+    error.name = "Weird name with https://example.org";
+    const body =
+      new URL(
+        reportProblemUrl({ app: "Home", route: "/home", error, errorId: "a b<script>" }),
+      ).searchParams.get("body") ?? "";
+    expect(body).not.toMatch(/SECRET|example|script/u);
+    expect(body).toContain("Error type: Not available");
+    expect(body).toContain("Error ID: Not available");
+  });
+  it("scrubs credentials, JWTs and percent-encoded identifiers", () => {
+    const text = redact(
+      "Authorization: Bearer abc.def DPoP xyz refresh_token=SECRET access-token: SECRET2 eyJhbGciOi.eyJzdWIi.sig https%3A%2F%2Fid.example%2Falice%23me AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+    expect(text).not.toMatch(/abc\.def|xyz|SECRET|eyJ|id\.example|alice|AAAAAAAA/u);
   });
 });
