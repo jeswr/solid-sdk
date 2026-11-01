@@ -4,6 +4,7 @@ import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import {
   Activity,
   ArrowDownToLine,
+  ArrowUpFromLine,
   Footprints,
   HeartPulse,
   LayoutDashboard,
@@ -44,6 +45,7 @@ function Sidebar() {
     { href: "/health/immunisations", label: "Immunisations", icon: Syringe },
     { href: "/health/workouts", label: "Workouts", icon: Footprints },
     { href: "/health/import", label: "Import", icon: ArrowDownToLine },
+    { href: "/health/export", label: "Export", icon: ArrowUpFromLine },
   ];
   return (
     <div className="hlt-sidebar">
