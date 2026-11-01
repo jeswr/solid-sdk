@@ -820,6 +820,9 @@ importers:
 
   apps/pod-docs:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access

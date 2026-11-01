@@ -10,7 +10,8 @@
  * CSS does not seed these files, so reads tolerate their absence and the app
  * bootstraps a private index when missing.
  */
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { fetchRdf } from "@jeswr/fetch-rdf";
+import { type StorageClient, StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -23,7 +24,14 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { readRdf, storageFor, writeRdf } from "./rdf-io.js";
+import {
+  REVALIDATE_HEADERS,
+  readRdf,
+  requireEtag,
+  serializeTurtle,
+  storageFor,
+  writeRdf,
+} from "./rdf-io.js";
 import { NS, RDF_TYPE } from "./vocab.js";
 
 const SOLID = NS.SOLID;
@@ -198,7 +206,15 @@ export async function ensureTypeRegistrations(opts: {
   const { webId, podRoot, registrations, fetchImpl } = opts;
   const storage = await storageFor(podRoot, fetchImpl, opts.storage);
 
-  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, fetchImpl, storage);
+  const profileUrl = documentUrl(webId);
+  const profileStorage = storage.isWithinStorage(profileUrl) ? storage : undefined;
+  // A WebID can live outside every pod. It is an RDF document, not a storage root.
+  const { dataset: profileDs, etag: profileEtag } = profileStorage
+    ? await readRdf(webId, fetchImpl, profileStorage)
+    : await fetchRdf(profileUrl, {
+        fetch: fetchImpl ?? globalThis.fetch,
+        headers: REVALIDATE_HEADERS,
+      });
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
@@ -215,11 +231,30 @@ export async function ensureTypeRegistrations(opts: {
     await createIndexDocument(indexUrl, fetchImpl, storage);
     const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
     anchor.privateIndex = indexUrl;
-    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl, storage });
+    if (profileStorage) {
+      await writeRdf(profileUrl, profileDs, { etag: profileEtag, storage: profileStorage });
+    } else {
+      const response = await (fetchImpl ?? globalThis.fetch)(profileUrl, {
+        method: "PUT",
+        redirect: "manual",
+        headers: {
+          "content-type": "text/turtle",
+          "if-match": requireEtag(profileEtag, profileUrl),
+        },
+        body: await serializeTurtle(profileDs),
+      });
+      void response.body?.cancel();
+      if (!response.ok || response.redirected) throw toStorageError("PUT", profileUrl, response);
+    }
     bootstrapped = true;
   }
 
-  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl, storage);
+  const indexStorage = await storageFor(
+    indexUrl,
+    fetchImpl,
+    storage.isWithinStorage(indexUrl) ? storage : undefined,
+  );
+  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl, indexStorage);
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -244,7 +279,7 @@ export async function ensureTypeRegistrations(opts: {
     await writeRdf(indexUrl, indexDs, {
       etag: indexEtag,
       fetchImpl,
-      storage,
+      storage: indexStorage,
       prefixes: INDEX_PREFIXES,
     });
   }
@@ -266,9 +301,13 @@ export async function discoverRegistrations(
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
   const out: RegisteredLocation[] = [];
   if (urls.length === 0) return out;
-  const client = await storageFor(webId, fetchImpl, storage);
   for (const url of urls) {
     try {
+      const client = await storageFor(
+        url,
+        fetchImpl,
+        storage?.isWithinStorage(url) ? storage : undefined,
+      );
       const { dataset } = await readRdf(url, fetchImpl, client);
       out.push(...new TypeIndexDataset(dataset, DataFactory).all());
     } catch (e) {

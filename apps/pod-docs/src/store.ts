@@ -79,7 +79,12 @@ export class DocsStore {
     return this.containerUrl;
   }
   private client(): Promise<StorageClient> {
-    this.pending ??= storageFor(this.podRoot, this.fetchImpl, this.storage);
+    this.pending ??= storageFor(this.podRoot, this.fetchImpl, this.storage).catch(
+      (error: unknown) => {
+        this.pending = undefined;
+        throw error;
+      },
+    );
     return this.pending;
   }
 
