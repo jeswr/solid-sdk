@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type Nanopublication, type Nanopublications, NanopubStore } from "@jeswr/pkg-memory";
 import { safeIri } from "@jeswr/rdf-serialize";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
@@ -65,6 +66,7 @@ export function memoryContext(pod: PodPort, readOnly: boolean, client?: MemoryCl
   const port: PodPort = {
     root: pod.root,
     webId: pod.webId,
+    head: (url) => output.head(url),
     async read(url) {
       const read = await output.read(url);
       reads.set(url, read);

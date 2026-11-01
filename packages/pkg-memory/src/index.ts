@@ -43,3 +43,4 @@ export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
 export type { Fact, TemporalValue } from "./templates.js";
 export { createFactAssertion } from "./templates.js";
+export { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";

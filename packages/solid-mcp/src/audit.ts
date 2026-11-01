@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { MEMORY_PURPOSES, type MemoryPurpose } from "@jeswr/pkg-memory";
+import {
+  discoverWacAcl,
+  MEMORY_PURPOSES,
+  type MemoryPurpose,
+  validateDedicatedWacAcl,
+} from "@jeswr/pkg-memory";
 import { DataFactory as df, Store } from "n3";
 import { requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
@@ -63,14 +68,24 @@ export async function auditSpecialRead(
   async function protect(target: string, inherit: boolean) {
     let acl: string;
     try {
-      const metadata = await output.head(target);
-      if (!metadata.acl) throw new Error();
-      const advertised = new URL(metadata.acl);
-      if (advertised.hash || advertised.search || advertised.href === target) throw new Error();
-      acl = requirePodScopedWriteUrl({ podRoot: pod.root }, advertised.href);
+      acl = await discoverWacAcl({ root: pod.root, head: (url) => output.head(url) }, target);
     } catch {
       // Never expose server URLs or backend errors through an audit denial.
       throw new Error("Audit protection unavailable");
+    }
+    const existing = await optional(acl);
+    const cond = condition(existing);
+    if (existing) {
+      try {
+        if (existing.contentType.split(";")[0]?.trim().toLowerCase() !== "text/turtle")
+          throw new Error();
+        validateDedicatedWacAcl(
+          await parseBoundedRdf(decoder.decode(existing.body), "text/turtle", acl),
+          target,
+        );
+      } catch {
+        throw new Error("Audit protection unavailable");
+      }
     }
     const dataset = new Store();
     const node = new MemoryNode(`${acl}#owner`, dataset, df);
@@ -82,7 +97,7 @@ export async function auditSpecialRead(
     for (const mode of ["Read", "Write", "Control"]) grants.push([`${ACL}mode`, ACL + mode]);
     if (inherit) grants.push([`${ACL}default`, target]);
     for (const [predicate, object] of grants) node.terms(predicate).add(df.namedNode(object));
-    await write(acl, serializeBoundedTurtle(dataset), condition(await optional(acl)));
+    await write(acl, serializeBoundedTurtle(dataset), cond);
   }
   // Retry compare-and-swap conflicts with a fresh read; never overwrite another call's activity.
   for (let attempt = 0; attempt < 3; attempt++) {

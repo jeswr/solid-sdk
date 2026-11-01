@@ -166,10 +166,16 @@ supported. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
 preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
 ACLs of nanopub, policy and lock resources. Each nanopub's owner-only ACL is established
-conditionally before writing its private bytes, replacing any orphan resource ACL
-that would override the container default. The adapter must support the spec's
-`.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
-a strong ETag.
+conditionally before writing its private bytes, replacing an orphan resource ACL
+only when it is proven dedicated to that target. The optional `PodPort.head(url)`
+capability must return `{ acl }` from a unique, unanchored server-advertised WAC
+Link, including on HTTP 404. Every protected container, policy, lock and nanopub
+uses that pod-scoped URL; no `.acl` path is guessed. Missing or unsafe discovery,
+ACP, and existing ACLs with shared, unscoped, malformed or unsupported rules fail
+closed with `Memory protection unavailable`. All scope values, including legacy
+`acl:defaultForNew`, must name only the target; unrelated grants are never dropped.
+Existing ACL replacement requires a strong read ETag and `If-Match`; absent ACLs
+use `If-None-Match: *`. ACL read/write failures stop the operation.
 
 An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
 container protection, coordinates puts across store instances and processes.
@@ -224,7 +230,10 @@ returning a policy for authorization. Restrictions are never silently discarded.
 
 For offline storage tests, `@jeswr/pkg-memory/testing` exports
 `createMemoryPodPort({ root, webId })` with byte copies, ETags, and conditional
-write/delete behavior.
+write/delete behavior. This generic port advertises no access-control model.
+Storage fixtures must explicitly add WAC metadata, for example
+`{ ...port, async head(target) { return { acl: target + ".acl" }; } }` for a
+test server that actually associates those ACL URLs with its resources.
 
 New typed facts use `https://jeswr.org/ns/sectors/health#` and
 `https://jeswr.org/ns/core#`. Parsing, hashing and reserializing supplied assertion

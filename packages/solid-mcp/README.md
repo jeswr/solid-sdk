@@ -337,6 +337,15 @@ and retains the optional model (`schema:instrument`) and conversation id
 and an operation-local output boundary. Memory writes require `readOnly:false` at
 both server and adapter layers.
 
+Before writing any private content, memory discovers the server-advertised WAC
+ACL for each protected container, policy, mutex and nanopub through `PodPort.head`.
+It uses the advertised pod-scoped URL, including non-default ACL locations, and
+never guesses `.acl`. Missing HEAD metadata, absent or unsafe WAC links and ACP
+storage fail closed with `Memory protection unavailable`. Existing ACLs must be
+proven dedicated to the exact target before replacement; shared or unscoped rules,
+including legacy `acl:defaultForNew` scopes, refuse the write. ACL mutations use
+strong read ETags with `If-Match`, or `If-None-Match: *` when absent.
+
 Recall evaluates the owner-editable `private/pkg/mcp-policy.ttl` for this client on
 every call. Health and finance are denied by default. Denials expose category names
 only. The first memory write creates the default policy; recall always requires an
@@ -381,7 +390,11 @@ protected target's actual WAC ACL using HEAD and installs an owner-only authoriz
 there; it never guesses a `.acl` URL. ACL URLs must be within the configured pod.
 Missing, ambiguous or unsafe WAC links, ACP-only storage, and custom PodPorts without
 WAC HEAD metadata refuse auditing and the sensitive read with the fixed diagnostic
-`Audit protection unavailable`. ACP is unsupported. Strong ETags and bounded
+`Audit protection unavailable`. Existing ACLs must contain only supported WAC
+authorizations dedicated to that exact target; shared, unscoped or unprovable ACLs
+refuse replacement with the same fixed diagnostic, preserving all existing grants.
+ACL writes use the strong read ETag with `If-Match`, or `If-None-Match: *` on 404.
+ACP is unsupported. Strong ETags and bounded
 compare-and-swap retries preserve concurrent entries. The saved activity is verified
 through the current PodPort. Audit denial, corruption,
 overflow or persistence failure withholds the tool result. Ordinary contact

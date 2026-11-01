@@ -831,6 +831,8 @@ describe("additional memory boundary regressions", () => {
       const method = init?.method ?? "GET";
       requests.push({ url, method });
       const headers = new Headers(init?.headers);
+      if (method === "HEAD")
+        return new Response(null, { status: 404, headers: { link: `<${url}.acl>; rel="acl"` } });
       const cond = {
         ...(headers.has("if-match") ? { ifMatch: headers.get("if-match") as string } : {}),
         ...(headers.has("if-none-match") ? { ifNoneMatch: "*" as const } : {}),

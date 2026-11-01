@@ -3,7 +3,9 @@
 import { DataFactory as df, Parser, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { auditSpecialRead } from "../src/audit.js";
+import { serializeBoundedTurtle } from "../src/bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
+import { MemoryNode } from "../src/memory-context.js";
 import { purposeDenied } from "../src/personal-policy.js";
 import type { PodPort } from "../src/pod-port.js";
 import { createWacMemoryPodPort } from "./wac-memory-pod.js";
@@ -45,7 +47,24 @@ it("does not write an audit for ordinary data", async () => {
 it("protects missing ancestors and replaces orphan public ACLs before writing data", async () => {
   const pod = fixture();
   for (const target of [`${ROOT}private/pkg/audit/`, url()]) {
-    await pod.write(`${target}.acl`, encoder.encode("public orphan ACL"), "text/turtle", {});
+    const dataset = new Store();
+    const node = new MemoryNode("urn:example:public", dataset, df);
+    for (const [predicate, object] of [
+      [
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        "http://www.w3.org/ns/auth/acl#Authorization",
+      ],
+      ["http://www.w3.org/ns/auth/acl#accessTo", target],
+      ["http://www.w3.org/ns/auth/acl#agentClass", "http://xmlns.com/foaf/0.1/Agent"],
+      ["http://www.w3.org/ns/auth/acl#mode", "http://www.w3.org/ns/auth/acl#Read"],
+    ] as const)
+      node.terms(predicate).add(df.namedNode(object));
+    await pod.write(
+      `${target}.acl`,
+      encoder.encode(serializeBoundedTurtle(dataset)),
+      "text/turtle",
+      {},
+    );
   }
   const write = vi.spyOn(pod, "write");
   await audit(pod, [`${PD}MedicalHealth`, `${PD}Financial`, `${PD}MedicalHealth`]);

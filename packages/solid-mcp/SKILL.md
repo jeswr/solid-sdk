@@ -65,3 +65,14 @@ the sensitive read. Do not add ACP support. Preserve strong conditional ETags an
 bounded retries. A read-only server must withhold results that require auditing.
 Keep shared internal helpers stripped from declarations so private pkg-memory
 types remain bundled.
+
+Memory writes forward the current port's HEAD capability into `NanopubStore`.
+Require unique server-advertised, pod-scoped WAC ACLs for every protected container,
+policy, lock and nanopub, including on 404. Missing discovery and ACP fail closed
+before private content with `Memory protection unavailable`; never guess `.acl`.
+Both memory and audit reuse pkg-memory's `validateDedicatedWacAcl` checks before
+replacing an existing ACL. All accessTo/default/defaultForNew scopes must name only
+the target, with no unscoped, malformed or unknown rules; otherwise leave the ACL
+untouched and return the fixed protection diagnostic. Read existing ACLs with strong
+ETags and mutate with `If-Match` / `If-None-Match: *`. Test ports explicitly advertise
+WAC metadata via `test/wac-memory-pod.ts`.
