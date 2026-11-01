@@ -317,12 +317,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
         const { webId: statedWebId } = await provider.login(new URL(issuer), {
           silentFirst,
+          expectedWebId: knownWebId,
         });
         // A cached fresh session resolves login() without running the code
         // flow — nothing ever navigates the popup, so close the blank window
         // the click handler opened.
         getController().closeIfOpen();
-        const id = knownWebId ?? statedWebId;
+        // The ID token's WebID is authoritative: if the user signed in at the
+        // IdP as someone other than the WebID they typed, the session (and so
+        // every private read) is that account's, so the UI must show it too.
+        const id = statedWebId ?? knownWebId;
         if (!id) throw new NoWebIdFromProviderError(issuer);
 
         // From here the 401-upgrade path knows whose session this is, and
@@ -374,7 +378,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // — "Continue as" with a live session must not flash a blank window.
       // Everywhere else (typed WebID: the issuer is a profile fetch away)
       // the popup opens here, synchronously, exactly as before.
-      openPopupUnlessRenewable(getController(), providerSyncRef.current, opts?.issuer);
+      // With a known issuer the input is the account's WebID (recent-account
+      // chip, issuer choice): a cached session for another account is not
+      // renewable for it, so the popup opens.
+      openPopupUnlessRenewable(
+        getController(),
+        providerSyncRef.current,
+        opts?.issuer,
+        opts?.issuer === undefined ? undefined : input,
+      );
       setStatus("authenticating");
       try {
         // Resolve the smart input: WebID (deref → solid:oidcIssuer) or bare
@@ -443,7 +455,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     activeIssuerRef.current = undefined;
     if (issuer) {
       void providerReadyRef.current
-        ?.then((p) => p?.forgetPersisted(new URL(issuer)))
+        ?.then((p) => p?.forgetIssuer(new URL(issuer)))
         .catch(() => {});
       void sessionStoreRef.current?.delete(issuer).catch(() => {});
     }

@@ -171,6 +171,19 @@ export class AmbiguousIssuerError extends Error {
   }
 }
 
+/**
+ * An in-flight login/refresh/restore settled AFTER its issuer was forgotten
+ * (logout, or an account switch on the same issuer). Its result is discarded:
+ * never cached, persisted or rescheduled, so a logged-out credential cannot be
+ * revived by work that started before the logout.
+ */
+export class IssuerForgottenError extends Error {
+  constructor(issuer: string) {
+    super(`The session for ${issuer} was signed out while it was being established.`);
+    this.name = "IssuerForgottenError";
+  }
+}
+
 /** The default issuer policy: single → it; several → throw (never pick silently). */
 function defaultChooseIssuer(webId: string): ChooseIssuerCallback {
   return async (issuers: string[]) => {
@@ -254,6 +267,13 @@ export interface LoginOptions {
    * session is likely and silent success means zero typing.
    */
   silentFirst?: boolean;
+  /**
+   * The WebID the user asked to sign in as, when the app knows it (a typed
+   * WebID or a recent-account chip). A cached session for the same issuer that
+   * belongs to a DIFFERENT WebID is discarded and the code flow runs, so an
+   * account switch never silently reuses the previous account's tokens.
+   */
+  expectedWebId?: string;
 }
 
 /** Refresh this much before the reported expiry to absorb clock skew. */
@@ -427,6 +447,14 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * failed prompt can be retried.
    */
   #issuer?: Promise<URL>;
+  /** The href {@link #issuer} resolved to, so a logout can unpin it synchronously. */
+  #pinnedIssuerHref?: string;
+  /**
+   * Per-issuer generation counter, bumped by every forget. Each unit of auth
+   * work records the generation it started in and may only publish, persist or
+   * reschedule while it is still current (see {@link #begin}).
+   */
+  readonly #epochs = new Map<string, number>();
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
   /**
@@ -537,7 +565,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     issuer: URL,
     options: LoginOptions = {},
   ): Promise<{ webId: string | undefined }> {
-    this.#issuer = Promise.resolve(issuer);
+    this.#pin(issuer);
+    if (this.#belongsToAnotherWebId(issuer, options.expectedWebId)) {
+      // Same issuer, different account: never hand back the previous
+      // account's tokens. The persisted entry is overwritten by the new login.
+      this.#forgetInMemory(issuer.href);
+    }
     const mode: AuthorizeMode =
       options.silentFirst === true ? "silent-first" : "interactive";
     const session = await this.#getSession(issuer, this.#authSignal, mode);
@@ -562,17 +595,27 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * APP-SPECIFIC (candidate for upstream alongside the PR #11/#12 session
    * cache): upstream's DPoPTokenProvider exposes no popup-avoidance probe.
    */
-  canRenewWithoutInteraction(issuer: URL): boolean {
+  canRenewWithoutInteraction(issuer: URL, expectedWebId?: string): boolean {
     const session = this.#settledSessions.get(issuer.href);
     if (session === undefined) return false;
+    if (this.#belongsToAnotherWebId(issuer, expectedWebId)) return false;
     return !hasExpired(session) || session.refreshToken !== undefined;
   }
 
   async upgrade(request: Request): Promise<Request> {
-    this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
-      this.#issuer = undefined; // allow retry after cancel/failure
-      throw e;
-    });
+    if (this.#issuer === undefined) {
+      const resolving: Promise<URL> = this.#resolveIssuer(this.#authSignal).then(
+        (resolved) => {
+          if (this.#issuer === resolving) this.#pinnedIssuerHref = resolved.href;
+          return resolved;
+        },
+        (e) => {
+          if (this.#issuer === resolving) this.#issuer = undefined; // allow retry
+          throw e;
+        },
+      );
+      this.#issuer = resolving;
+    }
     const issuer = await this.#issuer;
     const session = await this.#getSession(issuer, this.#authSignal);
     const headers = new Headers(request.headers);
@@ -642,16 +685,26 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     // Renew, unless a concurrent caller already replaced the expired session.
     if (this.#sessions.get(issuer.href) === cached) {
       this.#sessions.delete(issuer.href);
-      return this.#begin(issuer, this.#renew(issuer, session, signal, mode));
+      const epoch = this.#epochOf(issuer.href);
+      return this.#begin(issuer, this.#renew(issuer, session, signal, mode, epoch));
     }
     return this.#getSession(issuer, signal, mode);
   }
 
-  /** Cache the in-flight work; evict on failure so the next request can retry. */
+  /**
+   * Cache the in-flight work; evict on failure so the next request can retry.
+   *
+   * Fenced by the issuer's generation: work that settles after
+   * {@link forgetIssuer} (or an account switch) rejects with
+   * {@link IssuerForgottenError} and is never cached, persisted or rescheduled.
+   */
   async #begin(issuer: URL, work: Promise<IssuerSession>): Promise<IssuerSession> {
-    this.#sessions.set(issuer.href, work);
+    const href = issuer.href;
+    const epoch = this.#epochOf(href);
+    this.#sessions.set(href, work);
     try {
       const session = await work;
+      if (this.#epochOf(href) !== epoch) throw new IssuerForgottenError(href);
       // Synchronous snapshot for canRenewWithoutInteraction(). The SAME object
       // is stored, so in-place staleness marks (invalidate()'s expiresAt = 0,
       // #renew dropping a rejected refresh token) are visible to the probe.
@@ -662,17 +715,54 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // own errors are swallowed inside #persist — a storage failure degrades to
       // in-memory-only, it never breaks a live login).
       await this.#persist(issuer, session);
+      if (this.#epochOf(href) !== epoch) {
+        // Forgotten while the write was pending: the logout's delete may have
+        // landed before our put, so delete again, then restore whatever a
+        // newer login has since settled.
+        await this.#clearPersisted(issuer);
+        const newer = this.#settledSessions.get(href);
+        if (newer !== undefined) await this.#persist(issuer, newer);
+        throw new IssuerForgottenError(href);
+      }
       // Keep the cached session continuously fresh (opt-in). Every settled
       // session — first login, lazy renew, refresh-grant restore, AND a
       // proactive refresh's own result — reschedules from its (rotated) token.
       this.#scheduleProactive(issuer, session);
       return session;
     } catch (e) {
-      if (this.#sessions.get(issuer.href) === work) {
-        this.#sessions.delete(issuer.href);
-      }
+      if (this.#sessions.get(href) === work) this.#sessions.delete(href);
+      // A failure (e.g. invalid_grant) of forgotten work must not be handled
+      // as a failure of whatever session now holds this issuer.
+      if (this.#epochOf(href) !== epoch) throw new IssuerForgottenError(href);
       throw e;
     }
+  }
+
+  #epochOf(href: string): number {
+    return this.#epochs.get(href) ?? 0;
+  }
+
+  #pin(issuer: URL): void {
+    this.#issuer = Promise.resolve(issuer);
+    this.#pinnedIssuerHref = issuer.href;
+  }
+
+  /** True when the cached session for `issuer` is known to be another WebID's. */
+  #belongsToAnotherWebId(issuer: URL, expectedWebId: string | undefined): boolean {
+    if (expectedWebId === undefined) return false;
+    const cachedWebId = this.#settledSessions.get(issuer.href)?.webId;
+    return cachedWebId !== undefined && cachedWebId !== expectedWebId;
+  }
+
+  /**
+   * Drop every in-memory trace of an issuer's session and fence off any work
+   * still in flight for it (it will reject with {@link IssuerForgottenError}).
+   */
+  #forgetInMemory(href: string): void {
+    this.#epochs.set(href, this.#epochOf(href) + 1);
+    this.#clearScheduler(href);
+    this.#sessions.delete(href);
+    this.#settledSessions.delete(href);
   }
 
   // ── Proactive refresh (opt-in; MIRRORS-CANDIDATE for upstream) ─────────────
@@ -806,6 +896,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       );
       // #begin's success path already rescheduled via #scheduleProactive.
     } catch (e) {
+      // Signed out mid-refresh: the logout already cleared this cycle.
+      if (e instanceof IssuerForgottenError) return;
       await this.#handleProactiveFailure(issuer, e);
     }
   }
@@ -918,7 +1010,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * Stop proactively refreshing one issuer (e.g. explicit logout). Clears its
    * timer + bookkeeping; the visibility listeners are released once the last
    * scheduler is gone. Does NOT touch the persisted session — logout clears that
-   * separately via {@link forgetPersisted}.
+   * separately via {@link forgetIssuer}.
    */
   stopProactiveRefresh(issuer: URL): void {
     this.#clearScheduler(issuer.href);
@@ -1015,9 +1107,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         issuer,
         this.#restore(issuer, stored),
       );
-      this.#issuer = Promise.resolve(issuer); // pin, like login()
+      this.#pin(issuer); // like login()
       return session.webId === undefined ? undefined : { webId: session.webId };
-    } catch {
+    } catch (e) {
+      // Signed out while restoring: the logout already cleared the store, and
+      // a newer login may have written its own entry since.
+      if (e instanceof IssuerForgottenError) return undefined;
       // The refresh token was expired/revoked (token endpoint invalid_grant) or
       // the restore otherwise failed: clear the dead entry and report "nothing
       // restored" so the caller stays silent (no popup on restore).
@@ -1067,13 +1162,18 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
-   * Clear the durable session for an issuer (explicit logout). Public so the
-   * React session bridge can wipe the persisted refresh token + key on sign-out.
+   * Sign out of an issuer (explicit logout): drop the in-memory session (so no
+   * later request is upgraded with it), stop refreshing it, unpin it as the
+   * 401-upgrade issuer, fence off any login/refresh/restore still in flight for
+   * it, and wipe the persisted refresh token + key so the credential is not
+   * revived on the next load.
    */
-  async forgetPersisted(issuer: URL): Promise<void> {
-    // Logout: stop refreshing this issuer (no leaked timer, no churn) AND drop
-    // the durable credential so it is not silently revived on the next load.
-    this.#clearScheduler(issuer.href);
+  async forgetIssuer(issuer: URL): Promise<void> {
+    this.#forgetInMemory(issuer.href);
+    if (this.#pinnedIssuerHref === issuer.href) {
+      this.#issuer = undefined;
+      this.#pinnedIssuerHref = undefined;
+    }
     await this.#clearPersisted(issuer);
   }
 
@@ -1086,7 +1186,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     issuer: URL,
     expired: IssuerSession,
     signal: AbortSignal,
-    mode: AuthorizeMode = "silent-first",
+    mode: AuthorizeMode,
+    epoch: number,
   ): Promise<IssuerSession> {
     if (expired.refreshToken === undefined) {
       return this.#authenticate(issuer, signal, mode);
@@ -1094,6 +1195,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     try {
       return await this.#refresh(issuer, expired, expired.refreshToken);
     } catch {
+      // Signed out while the grant was in flight: never open a login window
+      // for a session the user has just left.
+      if (this.#epochOf(issuer.href) !== epoch) throw new IssuerForgottenError(issuer.href);
       // The grant was rejected (refresh-token expiry, revocation, rotation
       // reuse, …): drop the dead token IN PLACE so the synchronous probe
       // (canRenewWithoutInteraction) stops promising a popup-free renewal on

@@ -348,12 +348,12 @@ describe("proactive refresh: teardown & logout", () => {
     expect(refreshGrants()).toHaveLength(0); // no refresh after teardown
   });
 
-  it("forgetPersisted() (logout) stops scheduling — no refresh after logout", async () => {
+  it("forgetIssuer() (logout) stops scheduling — no refresh after logout", async () => {
     vi.useFakeTimers();
     const { provider } = makeProvider();
     await provider.login(ISSUER);
 
-    await provider.forgetPersisted(ISSUER); // logout
+    await provider.forgetIssuer(ISSUER); // logout
     await tick(10 * 60_000);
 
     expect(refreshGrants()).toHaveLength(0);

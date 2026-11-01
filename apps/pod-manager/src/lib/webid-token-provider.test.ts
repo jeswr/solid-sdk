@@ -701,14 +701,14 @@ describe("persisted refresh-token session: restore without a window", () => {
     expect(noPopup).not.toHaveBeenCalled();
   });
 
-  it("forgetPersisted clears the stored session (logout)", async () => {
+  it("forgetIssuer clears the stored session (logout)", async () => {
     const store = new StructuredCloneSessionStore();
     const getCode = vi.fn((url: URL) => as.authorize(url));
     const provider = makeProviderWith(store, getCode as unknown as typeof noPopup);
     await provider.login(new URL("https://as.test"));
     expect(store.peek(ISSUER_HREF)).toBeDefined();
 
-    await provider.forgetPersisted(new URL("https://as.test"));
+    await provider.forgetIssuer(new URL("https://as.test"));
     expect(store.peek(ISSUER_HREF)).toBeUndefined();
 
     // After logout, a reload restores nothing (no silent revival of a logged-out
