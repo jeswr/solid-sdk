@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { accountId, assertGrant } from "../direct/shared.js";
@@ -142,6 +143,7 @@ export function createDiscordSend(
       if (typeof verifyApproval !== "function" || (await verifyApproval(copy, account)) !== true)
         throw new ProviderRejectedError("owner approval required");
       current(expected.message);
+      io.assertAuthority();
       const response = await request(
         `https://discord.com/api/v10/channels/${expected.channel}/messages`,
         {

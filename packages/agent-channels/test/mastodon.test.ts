@@ -464,14 +464,21 @@ it("renders an exact direct-only request with footer and keeps signed evidence l
   expect(Buffer.byteLength(plan.request.status)).toBeLessThanOrEqual(256);
   expect(wire.digest).toBe(digestBytes(wire.bytes));
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens })).toEqual({
+  expect(
+    await s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens }),
+  ).toEqual({
     outcome: "rejected",
     detail: "dry-run",
   });
   expect(s.tokens.calls).toEqual([]);
   expect(s.verifyApproval).not.toHaveBeenCalled();
   expect(s.requests).toEqual([]);
-  const io = { account, tokens: { send: s.tokens.send.bind(s.tokens) }, dryRun: false };
+  const io = {
+    assertAuthority: vi.fn(),
+    account,
+    tokens: { send: s.tokens.send.bind(s.tokens) },
+    dryRun: false,
+  };
   expect(await s.send.transmit(wire, io)).toEqual({
     outcome: "accepted",
     providerRef: "600",
@@ -522,11 +529,21 @@ it("refuses altered wires, unpinned recipients, invalid signatures and incompati
   for (const changed of invalid) {
     expect((await s.send.validate(changed as Wire, proposal)).ok).toBe(false);
     await expect(
-      s.send.transmit(changed as Wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(changed as Wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: s.tokens,
+        dryRun: false,
+      }),
     ).rejects.toThrow();
   }
   await expect(
-    s.send.transmit(wire, { account: { id: "other" }, tokens: s.tokens, dryRun: false }),
+    s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account: { id: "other" },
+      tokens: s.tokens,
+      dryRun: false,
+    }),
   ).rejects.toThrow("account differs");
   await expect(s.send.render(proposal, DIRECT)).rejects.toThrow("carriage");
   await expect(
@@ -591,7 +608,7 @@ it("requires strict owner approval and the send grant, rechecking expiry after e
     const s = sender([], { verifyApproval });
     const wire = await s.send.render(signed(), MASTODON_FOOTER);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow("approval required");
     expect(s.requests).toEqual([]);
   }
@@ -602,7 +619,7 @@ it("requires strict owner approval and the send grant, rechecking expiry after e
     now = value;
     expect((await s.send.validate(wire, signed())).ok).toBe(false);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow("expired");
   }
   now = at;
@@ -613,9 +630,9 @@ it("requires strict owner approval and the send grant, rechecking expiry after e
       return { access: "send" as const, accessToken: "fake-send" };
     }),
   };
-  await expect(s.send.transmit(wire, { account, tokens, dryRun: false })).rejects.toThrow(
-    "expired",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens, dryRun: false }),
+  ).rejects.toThrow("expired");
   now = at;
   const late = sender([], {
     now: () => now,
@@ -625,12 +642,22 @@ it("requires strict owner approval and the send grant, rechecking expiry after e
     },
   });
   await expect(
-    late.send.transmit(wire, { account, tokens: late.tokens, dryRun: false }),
+    late.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: late.tokens,
+      dryRun: false,
+    }),
   ).rejects.toThrow("expired");
   now = at;
   const bad = { read: vi.fn(), send: vi.fn(async () => ({ access: "read", accessToken: "fake" })) };
   await expect(
-    s.send.transmit(wire, { account, tokens: bad as never, dryRun: false }),
+    s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: bad as never,
+      dryRun: false,
+    }),
   ).rejects.toThrow("wrong-scope");
   expect(tokens.read).not.toHaveBeenCalled();
   expect(s.requests).toEqual([]);
@@ -642,9 +669,9 @@ it.each([
 ])("classifies HTTP %s without retrying", async (status) => {
   const s = sender([new Response("private provider details", { status })]);
   const wire = await s.send.render(signed(), MASTODON_FOOTER);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    status < 429 ? "refused" : "uncertain",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow(status < 429 ? "refused" : "uncertain");
   expect(s.requests).toHaveLength(1);
 });
 
@@ -659,7 +686,7 @@ it("treats malformed or non-direct acknowledgements and network failures as unce
     const s = sender([reply]);
     const wire = await s.send.render(signed(), MASTODON_FOOTER);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow(/uncertain/);
     expect(s.requests).toHaveLength(1);
   }
@@ -675,7 +702,12 @@ it("sends only the checked snapshot when the outbox changes during owner approva
     wire.digest = digestBytes(wire.bytes);
     return true;
   });
-  await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false });
+  await s.send.transmit(wire, {
+    assertAuthority: vi.fn(),
+    account,
+    tokens: s.tokens,
+    dryRun: false,
+  });
   expect(JSON.parse(s.requests[0]?.body ?? "null")).toEqual(request);
   expect(createMastodonSend({ ...s.config, instance: undefined, now: undefined })).toHaveProperty(
     "render",
@@ -790,7 +822,7 @@ it.each([
   expect(JSON.parse(wire.bytes).request.status.split("\n")[0]).toBe(`@${normalized}`);
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
   await expect(
-    s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
   ).resolves.toEqual({
     outcome: "accepted",
     providerRef: "600",
@@ -850,7 +882,14 @@ it("accepts the exact status byte ceiling and counts Unicode by UTF-8 bytes", as
   const wire = await s.send.render(proposal, MASTODON_FOOTER);
   expect(Buffer.byteLength(JSON.parse(wire.bytes).request.status)).toBe(256);
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: "600",
   });

@@ -70,6 +70,13 @@ lookup and before handing over send credentials, closing asynchronous revocation
   their `/send` exports.
   The executor supplies a send-only TokenProvider projection; wrong-account requests,
   wrong-scope/empty grants and grants resolved after revocation fail closed.
+  It also supplies `io.assertAuthority()`, a required synchronous check of the shared
+  invalidation revision and the latest credential-time authority deadlines. Every
+  binding must call it after all asynchronous checks, immediately before each
+  request or direct delivery, without an intervening await. Invalidated authority
+  throws a typed pre-delivery refusal and settles as `not-sent`; unresolved resends
+  retain prior uncertainty. Invalidation after a request was issued cannot erase
+  its acknowledgement or justify claiming non-delivery.
 - `AuditSink` is system-only and must retain historical transmission accounting records.
   Entries contain identifiers/digests, authorization references and outcomes, never
   proposal bodies, provider error text or tokens. `drain()` waits for late settlement

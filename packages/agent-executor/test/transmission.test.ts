@@ -478,9 +478,9 @@ describe("asynchronous send boundary", () => {
         await io.tokens.send({ id: "urn:other-account" });
         return { outcome: "accepted", providerRef: "must-not-happen" };
       });
-    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
     await h.executor.drain();
-    expect(h.records.get(e.proposal.id)?.status).toBe("uncertain");
+    expect(h.records.get(e.proposal.id)?.status).toBe("not-sent");
   });
   it("halt arriving just before credential request prevents obtaining a token", async () => {
     const h = harness();
@@ -490,7 +490,7 @@ describe("asynchronous send boundary", () => {
       await io.tokens.send(io.account);
       return { outcome: "accepted", providerRef: "must-not-happen" };
     });
-    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
     await h.executor.drain();
     expect(h.options.tokens.send).not.toHaveBeenCalled();
   });

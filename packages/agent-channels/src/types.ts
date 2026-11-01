@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { AnyMessage, ChannelCapability } from "@jeswr/agent-model";
 
 /** Opaque daemon account reference; never a credential or raw channel handle. */
@@ -38,6 +39,8 @@ export type ProviderLookupResult =
 export interface TransmissionIo {
   readonly account: AccountRef;
   readonly tokens: Pick<TokenProvider, "send">;
+  /** Executor-owned synchronous fence; call after all awaits, immediately before each request. */
+  readonly assertAuthority: () => void;
   readonly dryRun?: boolean;
 }
 /** Scope-separated grants, obtained through different provider consent paths. */

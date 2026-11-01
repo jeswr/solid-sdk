@@ -510,6 +510,7 @@ export function createExecutor(options: ExecutorOptions) {
     const reservation = { record: prepared.record };
     let executorFailure: { error: unknown } | undefined;
     let credentialsReleased = false;
+    let authority: AuthorityDeadlines | undefined;
     function checkExecutorFailure() {
       if (executorFailure) throw executorFailure.error;
     }
@@ -518,19 +519,25 @@ export function createExecutor(options: ExecutorOptions) {
       send: async (account) => {
         checkExecutorFailure();
         if (account.id !== entry.account.id || (await controls()).halted)
-          throw new Error("Send gate closed");
+          throw new ProviderRejectedError("Send gate closed");
         const grant = await o.tokens.send({ id: account.id });
         if (grant.access !== "send" || typeof grant.accessToken !== "string" || !grant.accessToken)
-          throw new Error("Send grant unavailable");
-        const authority = await recheck();
+          throw new ProviderRejectedError("Send grant unavailable");
+        authority = await recheck();
         // No asynchronous work may separate this clock check from releasing the grant.
         if (!authority || temporalFailure(authority) || revision !== state.revision)
-          throw new Error("Send grant unavailable");
+          throw new ProviderRejectedError("Send grant unavailable");
         checkExecutorFailure();
         credentialsReleased = true;
         return grant;
       },
     };
+    function assertAuthority(): void {
+      checkExecutorFailure();
+      // Bindings may await approval/preflight after receiving credentials. Fence the effect itself.
+      if (!authority || temporalFailure(authority) || revision !== state.revision)
+        throw new ProviderRejectedError("Send gate closed");
+    }
     async function recheck(): Promise<AuthorityDeadlines | undefined> {
       try {
         const result = await o.transmissions.exclusive(() =>
@@ -587,6 +594,7 @@ export function createExecutor(options: ExecutorOptions) {
       return binding.send.transmit(entry.wire, {
         account: entry.account,
         tokens,
+        assertAuthority,
         dryRun: false,
       });
     }

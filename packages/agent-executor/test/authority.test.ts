@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { AGENT } from "@jeswr/agent-mandate";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
@@ -293,7 +294,7 @@ describe("final temporal transitions", () => {
       provider();
       return { outcome: "accepted", providerRef: "must-not-send" };
     });
-    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
     expect(provider).not.toHaveBeenCalled();
   });
 
@@ -380,7 +381,7 @@ describe("final temporal transitions", () => {
         return { outcome: "accepted", providerRef: "must-not-send" };
       });
       expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
-        status: stage === "binding" ? "not-sent" : "uncertain",
+        status: "not-sent",
       });
       expect(scheduled).toBe(true);
       expect(provider).not.toHaveBeenCalled();
@@ -423,7 +424,7 @@ describe("final credential authority", () => {
     if (change === "present") h.state.haltFile = true;
     else vi.spyOn(h.controls, "haltFileExists").mockRejectedValue(new Error("HALT unreadable"));
     resume.resolve();
-    expect(await transmission).toMatchObject({ status: "uncertain" });
+    expect(await transmission).toMatchObject({ status: "not-sent" });
     await h.executor.drain();
     expect(h.options.tokens.send).toHaveBeenCalledOnce();
     expect(provider).not.toHaveBeenCalled();
@@ -514,7 +515,7 @@ describe("final credential authority", () => {
         provider();
         return { outcome: "accepted", providerRef: "must-not-send" };
       });
-      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
       expect(notification).toBeDefined();
       const reevaluated = await notification;
       expect(reevaluated?.[queued.proposal.id]).toMatchObject({
@@ -604,7 +605,7 @@ describe("final credential authority", () => {
         provider();
         return { outcome: "accepted", providerRef: "must-not-send" };
       });
-      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
       await h.executor.drain();
       expect(checkingCredentials).toBe(false);
       expect(provider).not.toHaveBeenCalled();
@@ -659,7 +660,7 @@ describe("final credential authority", () => {
       return { outcome: "accepted", providerRef: "must-not-send" };
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
-      status: stage === "decision" ? "not-sent" : "uncertain",
+      status: "not-sent",
     });
     await notification;
     await h.executor.drain();
@@ -713,7 +714,7 @@ describe("final credential authority", () => {
       return { outcome: "accepted", providerRef: "must-not-send" };
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
-      status: stage === "binding" ? "not-sent" : "uncertain",
+      status: "not-sent",
     });
     await notification;
     await h.executor.drain();
@@ -721,4 +722,28 @@ describe("final credential authority", () => {
     expect(provider).not.toHaveBeenCalled();
     expect(h.binding.send.transmit).toHaveBeenCalledTimes(stage === "binding" ? 0 : 1);
   });
+});
+
+it.each([
+  "without-grant",
+  "expired-after-grant",
+])("the final synchronous fence rejects %s before delivery", async (stage) => {
+  const h = harness();
+  const e = await h.enqueue();
+  const provider = vi.fn();
+  vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+    if (stage === "expired-after-grant") {
+      await io.tokens.send(io.account);
+      // A binding can suspend after credentials while verifying its owner approval.
+      await Promise.resolve();
+      h.state.at = "2027-01-01T00:00:00.000Z";
+    }
+    io.assertAuthority();
+    provider();
+    return { outcome: "accepted", providerRef: "must-not-send" };
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
+  expect(h.records.get(e.proposal.id)?.status).toBe("not-sent");
+  expect(provider).not.toHaveBeenCalled();
+  expect(h.options.tokens.send).toHaveBeenCalledTimes(stage === "without-grant" ? 0 : 1);
 });

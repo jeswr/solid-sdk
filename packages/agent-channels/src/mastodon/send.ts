@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   assertJsonBounds,
   canonicalJson,
@@ -151,19 +152,26 @@ export function createMastodonSend(
         throw new ProviderRejectedError("Mastodon account differs from configured sender");
       const { wire, proposal, body } = await checked(input);
       current(proposal);
-      const response = await rest("/api/v1/statuses", account, io.tokens, "send", {
-        body,
-        key: wire.digest,
-        async beforeRequest() {
-          current(proposal);
-          if (
-            typeof verifyApproval !== "function" ||
-            (await verifyApproval(wire, account)) !== true
-          )
-            throw new ProviderRejectedError("owner approval required");
-          current(proposal);
+      const response = await rest(
+        "/api/v1/statuses",
+        account,
+        io.tokens,
+        "send",
+        {
+          body,
+          key: wire.digest,
+          async beforeRequest() {
+            current(proposal);
+            if (
+              typeof verifyApproval !== "function" ||
+              (await verifyApproval(wire, account)) !== true
+            )
+              throw new ProviderRejectedError("owner approval required");
+            current(proposal);
+          },
         },
-      });
+        () => io.assertAuthority(),
+      );
       if ([400, 401, 403, 404, 422].includes(response.status))
         throw new ProviderRejectedError(`Mastodon send refused: HTTP ${response.status}`);
       if (!response.ok) throw new Error(`Mastodon send uncertain: HTTP ${response.status}`);

@@ -45,11 +45,17 @@ Parsed BridgeMessages carry unverified JSON-LD; parsing confers no authority.
 The root's pure `readEnvelope(raw)` validator is also used for daemon eligibility.
 It applies the same 64 KiB byte and compact-JWS string bounds as the direct parser.
 
-`transmit(wire, { account, tokens, dryRun? })` defaults to dry-run. Explicit
+`transmit(wire, { account, tokens, assertAuthority, dryRun? })` defaults to dry-run. Explicit
 `dryRun: false` delivers only to the isolated in-memory inbox selected by `account`;
 there is no network transport. Read paths request only `tokens.read(account)`;
 send paths request only `tokens.send(account)`. Grants carry distinct `access`
 discriminants and nonempty tokens. The recording provider uses distinct fake grants.
+The executor supplies a required synchronous `assertAuthority()` fence. Every send
+binding calls it after all credential, signature, approval and preflight awaits,
+immediately before issuing each guarded fetch (including Matrix room-state reads)
+or accepting a direct message. No await separates the fence from that request.
+It checks the executor revision and authority deadlines; a grant alone never
+authorizes a later transmission. Invalidation fails definitively before delivery.
 Pagination is account-scoped, bounded by total bytes and item count, and fails when
 the next item cannot fit. Exact repeated sends are idempotent; conflicting bytes
 or destination accounts are refused. Lookup has `finalAbsence: true`.
@@ -185,7 +191,8 @@ bound to that exact digest and sender account. Capability descriptions and
 recipient pins grant no authority. A real transmit requires `dryRun: false`,
 verified signed content, an exact re-render, current validity, the configured
 account, a separate `TokenProvider.send` grant, and successful owner approval.
-Validity is rechecked after credentials and approval await. Dry-run requests no
+Validity is rechecked after credentials and approval await, then the executor
+authority fence runs synchronously before the request. Dry-run requests no
 credentials and makes no network call.
 
 Transmit uses `users.messages.send` with the reviewed MIME as canonical base64url.

@@ -63,11 +63,14 @@ export function matrixRest(homeserver: string, options?: OriginFetchOptions) {
     access: Access,
     body?: string,
     beforeRequest?: () => Promise<void>,
+    assertAuthority?: () => void,
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await beforeRequest?.();
+    // Approval and credential waits must finish before the synchronous executor fence.
+    assertAuthority?.();
     return scoped(`${homeserver}/_matrix/client/v3${path}`, {
       method: body === undefined ? "GET" : "PUT",
       redirect: "manual",

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Approval, Mandate, MandateVerifier, PolicyEngine } from "@jeswr/agent-mandate";
 import type {
   ActionProposal,
@@ -67,6 +68,8 @@ export interface SendBinding {
       io: {
         readonly account: AccountRef;
         readonly tokens: TokenProvider;
+        /** Required immediately before each effect, with no intervening await. */
+        readonly assertAuthority: () => void;
         readonly dryRun: boolean;
       },
     ): Promise<SendResult>;

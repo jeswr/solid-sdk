@@ -86,11 +86,14 @@ export function mastodonRest(instance: string, options: OriginFetchOptions = {})
     tokens: Pick<TokenProvider, Access>,
     access: Access,
     send?: { body: string; key: string; beforeRequest: () => Promise<void> },
+    assertAuthority?: () => void,
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await send?.beforeRequest();
+    // Keep the definitive authority refusal outside transport-uncertainty sanitization.
+    assertAuthority?.();
     try {
       return await scoped(`${origin}${path}`, {
         method: send ? "POST" : "GET",

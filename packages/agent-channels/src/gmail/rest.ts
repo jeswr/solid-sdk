@@ -66,6 +66,7 @@ export function gmailRest(options: OriginFetchOptions = {}, tenant?: GmailTenant
     access: Access,
     body?: string,
     beforeRequest?: () => Promise<void>,
+    assertAuthority?: () => void,
   ) => {
     const ref = Object.freeze({ id: accountId(account) });
     let grant: ReadGrant | SendGrant;
@@ -76,6 +77,8 @@ export function gmailRest(options: OriginFetchOptions = {}, tenant?: GmailTenant
     }
     assertGrant(grant, access);
     await beforeRequest?.();
+    // Approval and credential waits must finish before the synchronous executor fence.
+    assertAuthority?.();
     const response = await scoped(`${BASE}${path}`, {
       method: body === undefined ? "GET" : "POST",
       redirect: "manual",

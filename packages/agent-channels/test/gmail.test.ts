@@ -171,7 +171,9 @@ it.each([
   expect(r.requests).toEqual([]);
   const s = sender([], { tokens, tenant: "ODI" });
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  await expect(s.send.transmit(wire, { account, tokens, dryRun: false })).rejects.toMatchObject({
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens, dryRun: false }),
+  ).rejects.toMatchObject({
     state: "setup-required",
     code: error,
   });
@@ -202,7 +204,7 @@ it("snapshots Workspace guidance and leaves dry-run independent of account setup
     tenant: "ODI",
   });
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  const io = { account, tokens: s.tokens };
+  const io = { assertAuthority: vi.fn(), account, tokens: s.tokens };
   expect(await s.send.transmit(wire, io)).toEqual({ outcome: "rejected", detail: "dry-run" });
   expect(s.tokens.calls).toEqual([]);
   expect(s.requests).toEqual([]);
@@ -227,7 +229,7 @@ it.each([
     const s = sender([refusal()], { tenant: "ODI" });
     const wire = await s.send.render(signed(), EMAIL_MIME);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toBeInstanceOf(GmailSetupRequiredError);
     expect(s.requests).toHaveLength(1);
     s.queue.push(refusal());
@@ -247,7 +249,7 @@ it("keeps ambiguous HTTP failures uncertain even when their body mentions policy
     const s = sender([response], { tenant: "ODI" });
     const wire = await s.send.render(signed(), EMAIL_MIME);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow("uncertain");
     expect(s.requests).toHaveLength(1);
   }
@@ -477,7 +479,7 @@ it("uses dry-run by default and requires approved exact MIME, account, signature
   const s = sender([fixtures.accepted]);
   const proposal = signed();
   const wire = await s.send.render(proposal, EMAIL_MIME);
-  const io = { account, tokens: { send: s.tokens.send.bind(s.tokens) } };
+  const io = { assertAuthority: vi.fn(), account, tokens: { send: s.tokens.send.bind(s.tokens) } };
   expect(await s.send.transmit(wire, io)).toEqual({ outcome: "rejected", detail: "dry-run" });
   expect(await s.send.transmit(wire, { ...io, dryRun: true })).toEqual({
     outcome: "rejected",
@@ -516,7 +518,7 @@ it("refuses tampering and rechecks expiry after credential and owner-approval aw
   let now = at;
   const s = sender([], { now: () => now });
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  const io = { account, tokens: s.tokens, dryRun: false };
+  const io = { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false };
   const bytes = wire.bytes.replace("To: receiver", "To: stranger");
   for (const changed of [
     { ...wire, bytes, digest: digestBytes(bytes) },
@@ -566,7 +568,14 @@ it("transmits approved MIME with Unicode at the summary truncation boundary", as
   });
   const wire = await s.send.render(proposal, EMAIL_MIME);
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: "d4",
   });
@@ -597,7 +606,14 @@ it("transmits approved MIME when verified object keys differ from the signed pay
   });
   const wire = await s.send.render(proposal, EMAIL_MIME);
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: "d4",
   });
@@ -613,9 +629,9 @@ it.each([
 ])("distinguishes definitive HTTP 400 rejection from uncertain HTTP %s", async (status) => {
   const s = sender([new Response(null, { status })]);
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    status === 400 ? "refused" : "uncertain",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow(status === 400 ? "refused" : "uncertain");
 });
 
 it("treats malformed acknowledgements and transport failures as uncertain, without retrying", async () => {
@@ -628,7 +644,7 @@ it("treats malformed acknowledgements and transport failures as uncertain, witho
     const s = sender([reply]);
     const wire = await s.send.render(signed(), EMAIL_MIME);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow();
     expect(s.requests).toHaveLength(1);
   }
@@ -808,7 +824,14 @@ it("transmits only the checked snapshot when the outbox object changes during ow
     wire.digest = digestBytes(wire.bytes);
     return true;
   });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: "d4",
   });

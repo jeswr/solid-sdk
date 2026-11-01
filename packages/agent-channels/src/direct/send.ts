@@ -95,6 +95,7 @@ export function createDirectSend(
         assertCurrent(message);
         assertGrant(await io.tokens.send(accountRef), "send");
         assertCurrent(message);
+        io.assertAuthority();
         const previous = mailbox.accepted.get(message.id);
         if (previous) {
           if (previous.bytes !== snapshot.bytes || previous.account !== account)

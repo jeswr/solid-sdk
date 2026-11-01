@@ -151,3 +151,101 @@ it.each([
     }
   }
 });
+
+for (const bindingId of ["gmail", "graph-mail", "matrix"] as const) {
+  for (const change of ["halt", "mandate", "approval"] as const) {
+    it.each([
+      "approval",
+      "issued",
+    ])(`real ${bindingId}: ${change} invalidation during %s preserves delivery truth`, async (stage) => {
+      const h = harness(bindingId);
+      const original = await h.enqueue();
+      const recipient = "urn:recipient:fixture";
+      const renderable = signed({ ...original.renderable.message, to: { actor: recipient } });
+      const fake = fixtureTransport(
+        bindingId === "matrix"
+          ? [[], { event_id: "$sent" }]
+          : [
+              new Response(
+                bindingId === "gmail" ? JSON.stringify({ id: "18c9f2a0b1234567" }) : null,
+                { status: bindingId === "gmail" ? 200 : 202 },
+              ),
+            ],
+      );
+      let notification: Promise<unknown> | undefined;
+      const invalidate = () => {
+        if (change === "halt") h.state.haltFile = true;
+        if (change === "mandate") h.state.mandate = undefined;
+        if (change === "approval") h.confirm(entry, "deny");
+        // The same store's other executor also invalidates this in-flight projection.
+        const observer = createExecutor(h.options);
+        notification =
+          change === "approval" ? observer.onApprovalChange() : observer.onControlOrMandateChange();
+      };
+      const common = {
+        account: original.account,
+        tokens: options().tokens,
+        verify: verifyMessage,
+        verifyApproval: vi.fn(async () => {
+          if (stage === "approval") invalidate();
+          return true;
+        }),
+        now: () => Date.parse(NOW),
+        transport: fake.options,
+      };
+      const send =
+        bindingId === "matrix"
+          ? createMatrixSend({
+              ...common,
+              homeserver,
+              userId,
+              recipients: new Map([[recipient, roomId]]),
+            })
+          : (bindingId === "gmail" ? createGmailSend : createGraphMailSend)({
+              ...common,
+              from: "sender@example.test",
+              recipients: new Map([[recipient, "recipient@example.test"]]),
+              parseEmail,
+            });
+      const profile = bindingId === "matrix" ? MATRIX_CONTENT : EMAIL_MIME;
+      const wire = await send.render(renderable, profile);
+      const entry = { ...original, renderable, wire, wireDigest: wire.digest };
+      seal(entry);
+      h.entries.set(entry.proposal.id, entry);
+      h.needsApproval();
+      h.confirm(entry);
+      const transport = fake.transport.getMockImplementation();
+      if (!transport) throw new Error("missing fixture transport");
+      fake.transport.mockImplementation(async (input, init) => {
+        const response = await transport(input, init);
+        if (stage === "issued" && init?.method !== "GET") invalidate();
+        return response;
+      });
+      const executor = createExecutor({
+        ...h.options,
+        bindings: {
+          [bindingId]: {
+            id: bindingId,
+            carriage: profile,
+            send: {
+              ...send,
+              validate: (candidate, context) => send.validate(candidate, context.renderable),
+            },
+          },
+        },
+      });
+      const status = stage === "approval" ? "not-sent" : "sent";
+      expect(await executor.transmit(entry.proposal.id)).toMatchObject({ status });
+      await notification;
+      await executor.drain();
+      expect(common.verifyApproval).toHaveBeenCalledOnce();
+      expect(fake.requests.filter((request) => request.method !== "GET")).toHaveLength(
+        stage === "approval" ? 0 : 1,
+      );
+      expect(h.records.get(entry.proposal.id)).toMatchObject({ status });
+      expect(h.auditRecords).toContainEqual(
+        expect.objectContaining({ type: "transmission", outcome: status }),
+      );
+    });
+  }
+}

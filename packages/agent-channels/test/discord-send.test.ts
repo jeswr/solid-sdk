@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { digestBytes } from "@jeswr/agent-model";
 import type { guardedFetch } from "@jeswr/guarded-fetch";
 import { expect, it, vi } from "vitest";
@@ -93,7 +94,14 @@ it("renders deterministic footer-only JSON with no envelope or allowed mentions,
   expect(await s.send.validate(wire, s.proposal)).toEqual({ ok: true });
   expect(s.tokens.calls).toEqual([]);
   expect(s.requests).toEqual([]);
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: ack.id,
   });
@@ -134,7 +142,14 @@ it("round-trips outbound footer discovery through a bot DM event without upgradi
 it("defaults to dry-run even for invalid input, with no grants, outbox lookup, approval or network", async () => {
   const s = sender();
   for (const dryRun of [undefined, true]) {
-    expect(await s.send.transmit({} as Wire, { account, tokens: s.tokens, dryRun })).toEqual({
+    expect(
+      await s.send.transmit({} as Wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: s.tokens,
+        dryRun,
+      }),
+    ).toEqual({
       outcome: "rejected",
       detail: "dry-run",
     });
@@ -160,7 +175,12 @@ it("pins recipients and configuration, and binds channel changes into the approv
   expect(JSON.parse((await custom.send.render(s.proposal, DISCORD_FOOTER)).bytes).nonce).not.toBe(
     JSON.parse(wire.bytes).nonce,
   );
-  await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false });
+  await s.send.transmit(wire, {
+    assertAuthority: vi.fn(),
+    account,
+    tokens: s.tokens,
+    dryRun: false,
+  });
   expect(s.requests[0]?.url.pathname).toContain(channel);
 });
 
@@ -180,7 +200,12 @@ it("snapshots wire bytes before awaited outbox lookup and does not allow approva
   });
   original = await s.send.render(proposal, DISCORD_FOOTER);
   const exact = original.bytes;
-  await s.send.transmit(original, { account, tokens: s.tokens, dryRun: false });
+  await s.send.transmit(original, {
+    assertAuthority: vi.fn(),
+    account,
+    tokens: s.tokens,
+    dryRun: false,
+  });
   expect(s.requests[0]?.body).toBe(exact);
 });
 
@@ -188,20 +213,30 @@ it("refuses account mismatch, missing approval and wrong-scope send grants", asy
   const s = sender();
   const wire = await s.send.render(s.proposal, DISCORD_FOOTER);
   await expect(
-    s.send.transmit(wire, { account: { id: "other" }, tokens: s.tokens, dryRun: false }),
+    s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account: { id: "other" },
+      tokens: s.tokens,
+      dryRun: false,
+    }),
   ).rejects.toThrow(ProviderRejectedError);
   expect(s.tokens.calls).toEqual([]);
   const badTokens = {
     send: async () => ({ access: "read", accessToken: "fake" }),
   } as unknown as TokenProvider;
   await expect(
-    s.send.transmit(wire, { account, tokens: badTokens, dryRun: false }),
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: badTokens, dryRun: false }),
   ).rejects.toThrow("wrong-scope");
   for (const verifyApproval of [async () => false, undefined]) {
     const denied = sender([], { verifyApproval } as Partial<DiscordSendOptions>);
     const exact = await denied.send.render(denied.proposal, DISCORD_FOOTER);
     await expect(
-      denied.send.transmit(exact, { account, tokens: denied.tokens, dryRun: false }),
+      denied.send.transmit(exact, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: denied.tokens,
+        dryRun: false,
+      }),
     ).rejects.toThrow("owner approval required");
     expect(denied.requests).toEqual([]);
   }
@@ -218,9 +253,9 @@ it.each([
   const s = sender();
   const wire = change(await s.send.render(s.proposal, DISCORD_FOOTER));
   expect(await s.send.validate(wire, s.proposal)).toEqual({ ok: false, reason: "malformed" });
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    ChannelParseError,
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow(ChannelParseError);
   expect(s.requests).toEqual([]);
 });
 
@@ -237,9 +272,9 @@ it.each([
     ok: false,
     reason: "terms-digest-mismatch",
   });
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    "differs from signed proposal",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow("differs from signed proposal");
   expect(s.tokens.calls).toEqual([]);
 });
 
@@ -275,7 +310,7 @@ it("checks freshness before and after awaited credentials and approval", async (
     const wire = await s.send.render(s.proposal, DISCORD_FOOTER);
     expect(await s.send.validate(wire, s.proposal)).toEqual({ ok: false, reason: "malformed" });
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow("expired or not yet valid");
     expect(s.tokens.calls).toEqual([]);
   }
@@ -298,9 +333,9 @@ it("checks freshness before and after awaited credentials and approval", async (
         return { access: "send", accessToken: "fake-send" };
       },
     };
-    await expect(s.send.transmit(wire, { account, tokens, dryRun: false })).rejects.toThrow(
-      "expired or not yet valid",
-    );
+    await expect(
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens, dryRun: false }),
+    ).rejects.toThrow("expired or not yet valid");
     expect(s.requests).toEqual([]);
   }
 });
@@ -360,9 +395,9 @@ it.each([
 ])("treats HTTP %s as refusal without retry", async (status) => {
   const s = sender([new Response(null, { status })]);
   const wire = await s.send.render(s.proposal, DISCORD_FOOTER);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    ProviderRejectedError,
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow(ProviderRejectedError);
   expect(s.requests).toHaveLength(1);
 });
 
@@ -377,7 +412,7 @@ it.each([
   const s = sender([reply]);
   const wire = await s.send.render(s.proposal, DISCORD_FOOTER);
   const error = await s.send
-    .transmit(wire, { account, tokens: s.tokens, dryRun: false })
+    .transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false })
     .catch((e: Error) => e);
   expect(error).toBeInstanceOf(Error);
   expect(error).not.toBeInstanceOf(ProviderRejectedError);
@@ -391,9 +426,9 @@ it("refuses redirects and cannot widen REST origins through the exported set", a
     new Response(null, { status: 307, headers: { location: "https://attacker.example/steal" } }),
   ]);
   const wire = await s.send.render(s.proposal, DISCORD_FOOTER);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    "transport failed or refused redirect",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow("transport failed or refused redirect");
   expect(s.requests).toHaveLength(1);
   expect(s.requests[0]?.url.origin).toBe("https://discord.com");
   (ORIGINS as Set<string>).delete("https://attacker.example");

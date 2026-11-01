@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson } from "@jeswr/agent-model";
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
@@ -132,15 +133,23 @@ export function createGraphMailSend(
         },
         saveToSentItems: true,
       });
-      const response = await rest("/sendMail", account, io.tokens, "send", body, async () => {
-        renderer.current(message);
-        if (
-          typeof verifyApproval !== "function" ||
-          (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
-        )
-          throw new ProviderRejectedError("owner approval required");
-        renderer.current(message);
-      });
+      const response = await rest(
+        "/sendMail",
+        account,
+        io.tokens,
+        "send",
+        body,
+        async () => {
+          renderer.current(message);
+          if (
+            typeof verifyApproval !== "function" ||
+            (await verifyApproval(Object.freeze({ ...snapshot }), account)) !== true
+          )
+            throw new ProviderRejectedError("owner approval required");
+          renderer.current(message);
+        },
+        () => io.assertAuthority(),
+      );
       if (response.status === 400) throw new ProviderRejectedError("Graph send refused: HTTP 400");
       if (response.status !== 202) throw new Error(`Graph send uncertain: HTTP ${response.status}`);
       // sendMail has no response body or provider object ID. Acceptance is not delivery.

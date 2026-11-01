@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { digestBytes } from "@jeswr/agent-model";
 import { expect, it, vi } from "vitest";
 import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
@@ -37,7 +38,7 @@ it("requires explicit send, exact approved MIME and a separate send grant; proje
   const s = sender([accepted()]);
   const proposal = signed();
   const wire = await s.send.render(proposal, EMAIL_MIME);
-  const io = { account, tokens: s.tokens };
+  const io = { assertAuthority: vi.fn(), account, tokens: s.tokens };
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
   for (const dryRun of [undefined, true])
     expect(await s.send.transmit(wire, { ...io, dryRun })).toEqual({
@@ -89,7 +90,7 @@ it("requires explicit send, exact approved MIME and a separate send grant; proje
 it("refuses absent approvals, tampered MIME, invalid signatures and wrong-purpose grants without transmission", async () => {
   const s = sender([]);
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  const io = { account, tokens: s.tokens, dryRun: false };
+  const io = { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false };
   for (const verifyApproval of [undefined, async () => false, async () => "yes"]) {
     const refused = sender([], { verifyApproval });
     await expect(refused.send.transmit(wire, io)).rejects.toThrow("approval required");
@@ -127,7 +128,7 @@ it("rechecks validity after credential and approval awaits and snapshots mutable
   let now = at;
   const s = sender([accepted()], { now: () => now, footer: "Fixture agent footer" });
   const wire = { ...(await s.send.render(signed(), EMAIL_MIME)) };
-  const io = { account, tokens: s.tokens, dryRun: false };
+  const io = { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false };
   now = at + 24 * 3600000;
   await expect(s.send.transmit(wire, io)).rejects.toThrow("expired");
   now = at;
@@ -170,9 +171,9 @@ it.each([
 ])("requires exactly HTTP 202 and distinguishes rejection from uncertainty (%s)", async (status) => {
   const s = sender([new Response(null, { status })]);
   const wire = await s.send.render(signed(), EMAIL_MIME);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    status === 400 ? "refused" : "uncertain",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow(status === 400 ? "refused" : "uncertain");
   expect(s.requests).toHaveLength(1);
 });
 
@@ -184,7 +185,7 @@ it("refuses redirects and reports sanitized transport uncertainty without retrie
     const s = sender([response]);
     const wire = await s.send.render(signed(), EMAIL_MIME);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow("binding transport failed");
     expect(s.requests).toHaveLength(1);
   }

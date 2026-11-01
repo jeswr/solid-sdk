@@ -172,6 +172,9 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
         account,
         io.tokens,
         "send",
+        undefined,
+        undefined,
+        () => io.assertAuthority(),
       );
       if (!responseState.ok)
         throw new ProviderRejectedError(
@@ -217,6 +220,7 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
             throw new ProviderRejectedError("current mandate and owner approval required");
           current(proposal.message);
         },
+        () => io.assertAuthority(),
       );
       if ([400, 401, 403, 404].includes(response.status))
         throw new ProviderRejectedError(`Matrix send refused: HTTP ${response.status}`);

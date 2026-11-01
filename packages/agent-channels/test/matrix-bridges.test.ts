@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { capabilityToTurtle } from "../src/capability.js";
 import { encodeEventContent } from "../src/envelope.js";
 import { createMatrixSend, type MatrixSendOptions } from "../src/matrix/send.js";
@@ -280,11 +280,20 @@ it.each(
   expect(data.content.body).toContain(AGENT_FOOTER);
   expect(data.compactJws).toBe(proposal.compactJws);
   expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens })).toMatchObject({
+  expect(
+    await s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens }),
+  ).toMatchObject({
     detail: "dry-run",
   });
   expect(s.requests).toEqual([]);
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+  expect(
+    await s.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: s.tokens,
+      dryRun: false,
+    }),
+  ).toEqual({
     outcome: "accepted",
     providerRef: "$sent",
   });
@@ -375,7 +384,7 @@ it("snapshots trusted bridge pins and refuses different carriage, tampered local
     const bad = { ...wire, bytes, digest: digestBytes(bytes) };
     expect(await s.send.validate(bad, proposal)).toMatchObject({ ok: false });
     await expect(
-      s.send.transmit(bad, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(bad, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow();
   }
   expect(s.requests).toEqual([]);
@@ -398,7 +407,7 @@ it.each([
   const s = sender("signal", [state]);
   const wire = await s.send.render(signed(), CARRIAGE_PROFILES.signal);
   await expect(
-    s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
   ).rejects.toThrow();
   expect(s.requests).toHaveLength(1);
   expect(s.tokens.calls.map((call) => call.access)).toEqual(["send"]);
@@ -407,9 +416,9 @@ it.each([
 it("refuses structured Matrix carriage when a previously native room becomes bridged", async () => {
   const s = sender("signal", [[bridgeState("signal")]], { bridgeRooms: undefined });
   const wire = await s.send.render(signed(), MATRIX_CONTENT);
-  await expect(s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).rejects.toThrow(
-    "carriage",
-  );
+  await expect(
+    s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
+  ).rejects.toThrow("carriage");
   expect(s.requests).toHaveLength(1);
 });
 
@@ -424,7 +433,7 @@ it.each([
     const s = sender("signal", [state], bridge ? {} : { bridgeRooms: undefined });
     const wire = await s.send.render(signed(), bridge ? CARRIAGE_PROFILES.signal : MATRIX_CONTENT);
     await expect(
-      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+      s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens, dryRun: false }),
     ).rejects.toThrow();
     expect(s.requests).toHaveLength(1);
     expect(s.tokens.calls.map((call) => call.access)).toEqual(["send"]);

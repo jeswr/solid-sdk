@@ -54,6 +54,8 @@ function wireIntent(intent: ActionProposal["intent"]) {
   return terms;
 }
 
+// Starts a real loopback CSS and replays the whole walkthrough: ~27 s locally, ~39 s on an
+// idle CI runner, and past 60 s when turbo runs it beside other suites on two vCPUs.
 it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain executor-gated", async () => {
   const css = await startD2Css();
   try {
@@ -430,7 +432,7 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
   } finally {
     await css.close();
   }
-}, 60000);
+}, 120000);
 
 it.each([
   { args: [] },

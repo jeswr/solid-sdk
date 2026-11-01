@@ -76,6 +76,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
             throw new ProviderRejectedError("owner approval required");
           renderer.current(proposal.message);
         },
+        () => io.assertAuthority(),
       );
       if (response.status === 400) throw new ProviderRejectedError("Gmail send refused: HTTP 400");
       if (!response.ok) throw new Error(`Gmail send uncertain: HTTP ${response.status}`);

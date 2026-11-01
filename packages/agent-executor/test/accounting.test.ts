@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { AGENT, type Limit } from "@jeswr/agent-mandate";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -472,7 +473,7 @@ it("a refreshed claim cannot take a slot consumed while its token was pending", 
   h.state.at = "2026-11-01T00:00:00.000Z";
   expect(await h.executor.transmit(next.proposal.id)).toMatchObject({ status: "sent" });
   release.resolve();
-  expect(await pending).toMatchObject({ status: "uncertain" });
+  expect(await pending).toMatchObject({ status: "not-sent" });
   expect(provider).toHaveBeenCalledOnce();
   expect(h.records.get(first.proposal.id)?.committedAt).toBe(h.state.at);
 });
@@ -513,7 +514,7 @@ for (const stage of ["disposition", "handoff"] as const) {
       provider();
       return { outcome: "accepted", providerRef: "must-not-send" };
     });
-    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
     expect(provider).not.toHaveBeenCalled();
   });
 }

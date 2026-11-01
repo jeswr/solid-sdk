@@ -35,6 +35,7 @@ function sender(replies: unknown[] = [], patch: Partial<MatrixSendOptions> = {})
 }
 const render = (s: ReturnType<typeof sender>) => s.send.render(signed(), MATRIX_CONTENT);
 const live = (s: ReturnType<typeof sender>) => ({
+  assertAuthority: vi.fn(),
   account,
   tokens: { send: s.tokens.send.bind(s.tokens) },
   dryRun: false,
@@ -86,7 +87,9 @@ it("renders a golden event, validates exact bytes, and keeps the proposal ID as 
 it("defaults to dry-run with no credentials, approval or network activity", async () => {
   const s = sender();
   const wire = await render(s);
-  expect(await s.send.transmit(wire, { account, tokens: s.tokens })).toEqual({
+  expect(
+    await s.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens: s.tokens }),
+  ).toEqual({
     outcome: "rejected",
     detail: "dry-run",
   });

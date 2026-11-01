@@ -13,7 +13,12 @@ bound. Contracts are in src/types.ts; explicit synthetic fakes live only in ./te
 
 Preserve the nine-step order and fail closed. Halt precedes proposal/mandate reads;
 proposal state never grants authority. Re-evaluate every queued item on control/mandate
-change, and recheck authority after asynchronous lookup/token waits. The host must call
+change, and recheck authority after asynchronous lookup/token waits. Supply the
+required synchronous io.assertAuthority fence to bindings: it checks the shared
+revision and latest authority deadlines after all binding awaits, immediately
+before each request/delivery with no intervening await. Pre-delivery gate refusals
+settle as not-sent; preserve prior resend uncertainty and acknowledgements for
+requests already issued. The host must call
 onApprovalChange for every detected approval-store change to invalidate in-flight snapshots
 and re-evaluate queued items. Only verified owner
 approvals and controls enter their adapter seams. Exact wire and all action terms are

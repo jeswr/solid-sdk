@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DEFAULT_LIMITS, parseBoundedJson } from "@jeswr/agent-model";
 import { accountId, assertGrant } from "../direct/shared.js";
 import { MAX_EMAIL_BYTES } from "../email-mime.js";
@@ -66,6 +67,7 @@ export function graphMailRest(options: OriginFetchOptions = {}) {
     access: Access,
     body?: string,
     beforeRequest?: () => Promise<void>,
+    assertAuthority?: () => void,
   ) => {
     const target =
       path === DELTA_INITIAL
@@ -77,6 +79,8 @@ export function graphMailRest(options: OriginFetchOptions = {}) {
     const grant = await tokens[access](ref);
     assertGrant(grant, access);
     await beforeRequest?.();
+    // Approval and credential waits must finish before the synchronous executor fence.
+    assertAuthority?.();
     return scoped(target, {
       method: body === undefined ? "GET" : "POST",
       redirect: "manual",

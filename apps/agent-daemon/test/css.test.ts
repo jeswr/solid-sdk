@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { AuditWriter, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
 import { createInMemoryDirectBinding, RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import {
@@ -119,7 +120,12 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       { message: { ...message, id: "urn:message:seed" }, compactJws: "seed.signed.message" },
       direct.carriage,
     );
-    await direct.send.transmit(seed, { account: { id: "fixture" }, tokens, dryRun: false });
+    await direct.send.transmit(seed, {
+      assertAuthority: () => {},
+      account: { id: "fixture" },
+      tokens,
+      dryRun: false,
+    });
     const stores = createMemoryStores(at);
     const key: KeyPair = {
       ...(await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [

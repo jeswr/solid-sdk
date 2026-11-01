@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { AGENT, solidOdrlEngine } from "@jeswr/agent-mandate";
 import { type ControlStatement, canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { vi } from "vitest";
@@ -29,6 +30,7 @@ export function harness(bindingId = "gmail") {
       transmit: vi.fn(async (_wire, io) => {
         if (io.dryRun) return { outcome: "rejected" as const, detail: "dry-run" };
         await io.tokens.send(io.account);
+        io.assertAuthority();
         return { outcome: "accepted" as const, providerRef: "test:1" };
       }),
     },

@@ -21,6 +21,9 @@ exclusively in channel send subpaths, importable only by agent-executor and chan
 tests. The guard permits only testing.ts's direct/send factory re-export for
 test composition. Read credentials come only from TokenProvider.read; send
 credentials come only from TokenProvider.send. Sending defaults to dry-run.
+Every send must call the executor's required synchronous io.assertAuthority() after
+all awaits and immediately before issuing each request or direct delivery, with no
+intervening await. Credential release alone is not continuing send authority.
 Matrix transmit's room-state preflight also uses only the executor's io.tokens.send;
 the construction-time read provider is exclusively for lookup. Refuse encrypted or
 unreadable rooms. Export typed provider refusals through ./provider/send so the executor
