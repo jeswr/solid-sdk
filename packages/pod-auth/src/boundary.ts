@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
-  type AuthorizationServerPolicy,
+  type ChallengeBinding,
   CredentialBoundary,
   describes,
   type HttpOptions,
@@ -93,7 +93,11 @@ export function createBoundary(
     authorizationServer: URL;
     resource: URL;
   }) => allows(resource) && trustsOrigin(authorizationServer);
-  const trustLws: AuthorizationServerPolicy = async ({ authorizationServer, realm, resource }) => {
+  const trustLws = async (
+    { authorizationServer, realm, resource }: ChallengeBinding,
+    signal: AbortSignal,
+  ) => {
+    signal.throwIfAborted();
     if (!trustAuthorizationServer({ authorizationServer, resource })) return false;
     if (
       (realm.href.endsWith("/") || realm.href === resource.href) &&
@@ -103,7 +107,9 @@ export function createBoundary(
       return true;
     // A description can identify an audience only inside an existing grant; it cannot add roots.
     if (realm.origin !== resource.origin) return false;
-    return (await descriptionRoots(realm.href, new AbortController().signal)).some(
+    const descriptions = await descriptionRoots(realm.href, signal);
+    signal.throwIfAborted();
+    return descriptions.some(
       (root) => root.endsWith("/") && allows(root) && isWithin(resource, root),
     );
   };

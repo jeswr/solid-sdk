@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
+import { challengeContext, SessionFence } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
 import { createBoundary } from "./boundary.js";
 import { createPodAuth } from "./index.js";
+import { createLwsProvider } from "./lws-provider.js";
 import { createMockLwsAs, createMockOp } from "./testing.js";
 
 const attacker = "https://attacker.example/";
@@ -334,11 +336,13 @@ test("LWS audiences must fit a grant or a description rooted within it", async (
       }),
     ["https://pod.example/alice/"],
   );
-  expect(await boundary.trustLws(binding("https://pod.example/alice/"))).toBe(true);
-  expect(await boundary.trustLws(binding("https://pod.example/storage"))).toBe(true);
-  expect(await boundary.trustLws(binding(attacker))).toBe(false);
-  expect(await boundary.trustLws(binding("https://pod.example/"))).toBe(false);
-  expect(await boundary.trustLws(binding("https://pod.example/alice/", attacker))).toBe(false);
+  expect(await boundary.trustLws(binding("https://pod.example/alice/"), signal())).toBe(true);
+  expect(await boundary.trustLws(binding("https://pod.example/storage"), signal())).toBe(true);
+  expect(await boundary.trustLws(binding(attacker), signal())).toBe(false);
+  expect(await boundary.trustLws(binding("https://pod.example/"), signal())).toBe(false);
+  expect(await boundary.trustLws(binding("https://pod.example/alice/", attacker), signal())).toBe(
+    false,
+  );
 });
 
 test("UMA metadata cannot move the claim-token exchange to a foreign endpoint", async () => {
@@ -439,6 +443,198 @@ test("exact resource grants cannot silently authorize a container audience", asy
     async () => new Response(null, { status: 404 }),
     ["https://pod.example/alice", "https://pod.example/alice/private"],
   );
-  expect(await boundary.trustLws(binding("https://pod.example/alice"))).toBe(false);
-  expect(await boundary.trustLws(binding("https://pod.example/alice/private"))).toBe(true);
+  expect(await boundary.trustLws(binding("https://pod.example/alice"), signal())).toBe(false);
+  expect(await boundary.trustLws(binding("https://pod.example/alice/private"), signal())).toBe(
+    true,
+  );
+});
+
+test.each([
+  ["oidc", "legacy", "caller", "abort"],
+  ["oidc", "legacy", "logout", "abort"],
+  ["oidc", "resource_metadata", "caller", "abort"],
+  ["oidc", "resource_metadata", "logout", "abort"],
+  ["cid", "legacy", "caller", "abort"],
+  ["cid", "legacy", "logout", "abort"],
+  ["cid", "resource_metadata", "caller", "abort"],
+  ["cid", "resource_metadata", "logout", "abort"],
+  ["oidc", "legacy", "logout", "late"],
+  ["oidc", "resource_metadata", "logout", "late"],
+  ["cid", "legacy", "logout", "late"],
+  ["cid", "resource_metadata", "logout", "late"],
+] as const)("%s %s trust discovery honors %s cancellation with an %s transport", async (mode, challenge, cancellation, delivery) => {
+  const f = fixture();
+  const documentUrl = "https://agent.example/id";
+  const keyId = documentUrl + "#key";
+  const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign",
+    "verify",
+  ]);
+  const publicKeyJwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+  const as = createMockLwsAs({
+    challenge,
+    subject:
+      mode === "oidc"
+        ? {
+            issuer: f.op.issuer,
+            subject: f.op.subject,
+            clientId: f.op.clientId,
+            publicKey: f.op.publicKey,
+            tokenType: "id_token",
+          }
+        : {
+            issuer: documentUrl,
+            subject: documentUrl,
+            clientId: documentUrl,
+            publicKey: publicKeyJwk,
+            tokenType: "jwt",
+          },
+  });
+  const ready = Promise.withResolvers<Request>();
+  const release = Promise.withResolvers<Response>();
+  const requests: Request[] = [];
+  let descriptions = 0;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    requests.push(request);
+    // RFC 9728 first resolves storage in the engine; stall the subsequent policy fetch.
+    if (request.url === as.storage && ++descriptions === (challenge === "legacy" ? 1 : 2)) {
+      ready.resolve(request);
+      if (delivery === "abort")
+        request.signal.addEventListener("abort", () => release.reject(request.signal.reason), {
+          once: true,
+        });
+      return release.promise;
+    }
+    if (request.url === documentUrl)
+      return Promise.resolve(
+        Response.json({
+          id: documentUrl,
+          authentication: [
+            { id: keyId, type: "JsonWebKey", controller: documentUrl, publicKeyJwk },
+          ],
+        }),
+      );
+    return request.url.startsWith(as.issuer) ? as.fetch(request) : f.op.fetch(request);
+  });
+  const auth = createPodAuth({
+    clientId: f.op.clientId,
+    redirectUri: f.op.redirectUri,
+    boundary: { roots: [as.root], automatic: false },
+    ui: f.ui,
+    ...(mode === "cid"
+      ? { lws: { subject: { cid: { documentUrl, keyId, privateKey: keys.privateKey } } } }
+      : {}),
+  });
+  await auth.login();
+  const caller = new AbortController();
+  const pending = auth.fetch(as.root + "private", { signal: caller.signal });
+  // Observe rejection immediately so logout cannot cause an unhandled rejection.
+  const settled = pending.then(
+    (response) => ({ response, error: undefined }),
+    (error: Error) => ({ response: undefined, error }),
+  );
+  const discovery = await ready.promise;
+  const description = await as.fetch(as.storage);
+  try {
+    expect(discovery.signal.aborted).toBe(false);
+    expect(discovery.credentials).toBe("omit");
+    expect(discovery.redirect).toBe("error");
+    expect(discovery.headers.has("authorization")).toBe(false);
+    expect(discovery.headers.has("dpop")).toBe(false);
+    if (cancellation === "caller") caller.abort();
+    else await auth.logout();
+    expect(discovery.signal.aborted).toBe(true);
+    if (delivery === "late") release.resolve(description);
+    const result = await settled;
+    expect(result.response).toBeUndefined();
+    expect(result.error).toBe(discovery.signal.reason);
+    expect(as.stats.exchanges).toBe(0);
+    expect(requests.filter((request) => request.url === as.tokenEndpoint)).toHaveLength(0);
+    expect(
+      requests
+        .filter((request) => request.url.startsWith(as.issuer))
+        .every((request) => !request.headers.has("authorization") && !request.headers.has("dpop")),
+    ).toBe(true);
+    if (cancellation === "logout") expect(await auth.identity()).toBeNull();
+    else {
+      // Cancelling one fetch preserves the session and its ability to authenticate another fetch.
+      expect(await auth.identity()).not.toBeNull();
+      expect((await auth.fetch(as.root + "other")).status).toBe(200);
+      expect(as.stats.exchanges).toBe(1);
+    }
+  } finally {
+    release.resolve(description);
+    await settled;
+  }
+});
+
+test("session supersession cancels LWS policy discovery even without a manager-bound request", async () => {
+  const ready = Promise.withResolvers<Request>();
+  const release = Promise.withResolvers<Response>();
+  const boundary = policy(
+    async (input, init) => {
+      const request = new Request(input, init);
+      ready.resolve(request);
+      request.signal.addEventListener("abort", () => release.reject(request.signal.reason), {
+        once: true,
+      });
+      return release.promise;
+    },
+    ["https://pod.example/alice/"],
+  );
+  const fence = new SessionFence(crypto.randomUUID(), { broadcast: false });
+  const source = { id: "subject", fence, getCredential: vi.fn() };
+  const provider = createLwsProvider(source, boundary, fence);
+  const request = new Request("https://pod.example/alice/private");
+  const pending = provider.upgrade(
+    request,
+    challengeContext(
+      new Response(null, {
+        status: 401,
+        headers: {
+          "www-authenticate":
+            'Bearer as_uri="https://pod.example/", realm="https://pod.example/storage"',
+        },
+      }),
+    ),
+  );
+  const rejected = expect(pending).rejects.toThrow("superseded");
+  const discovery = await ready.promise;
+  await fence.supersede();
+  expect(request.signal.aborted).toBe(false);
+  expect(discovery.signal.aborted).toBe(true);
+  await rejected;
+  expect(source.getCredential).not.toHaveBeenCalled();
+});
+
+test("concurrent LWS requests for the same resource keep caller cancellation independent", async () => {
+  const f = fixture();
+  const ready = Promise.withResolvers<Request>();
+  const release = Promise.withResolvers<Response>();
+  let descriptions = 0;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === "https://pod.example/storage" && ++descriptions === 2) {
+      ready.resolve(request);
+      request.signal.addEventListener("abort", () => release.reject(request.signal.reason), {
+        once: true,
+      });
+      return release.promise;
+    }
+    return f.op.fetch(request);
+  });
+  const auth = f.make();
+  await auth.login();
+  const caller = new AbortController();
+  const pending = auth.fetch(f.op.root + "lws", { signal: caller.signal });
+  const rejected = expect(pending).rejects.toThrow("aborted");
+  const discovery = await ready.promise;
+  // The second request must complete while the first request's description is still stalled.
+  expect((await auth.fetch(f.op.root + "lws")).status).toBe(200);
+  caller.abort();
+  expect(discovery.signal.aborted).toBe(true);
+  await rejected;
+  expect((await auth.fetch(f.op.root + "lws")).status).toBe(200);
+  expect(f.op.stats.exchanges).toBe(1);
 });
