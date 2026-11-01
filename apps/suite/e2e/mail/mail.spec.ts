@@ -111,8 +111,12 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   await expect(compose).toBeDisabled();
   await expect(compose).toHaveAccessibleDescription("Sending needs a connected mail account");
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Navigation", exact: true })).toBeHidden();
+    // The drawer autofocuses its Close button, whose tooltip takes the first Escape.
+    const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await expect(drawer).toBeHidden({ timeout: 500 });
+    }).toPass();
   }
   const iri = await rows.first().getAttribute("data-thread");
   await rows.first().focus();
