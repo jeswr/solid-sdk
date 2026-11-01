@@ -162,14 +162,24 @@ function covers(policyId: string, broad: string, narrow: OdrlActionName): boolea
   );
 }
 
+/** Which side of a policy a rule sits on. */
+export type RuleKind = "permission" | "prohibition";
+
 /**
  * Match action, target and effective assignee before lowering for either backend.
  * A prohibition also matches a request for a BROADER action that covers the
  * prohibited one (a `write` request covers a prohibited `append`), so "any
  * prohibition wins" cannot be sidestepped by asking for the umbrella action.
+ * Callers pass `kind` from the array the rule came from; without it the rule's
+ * membership in `p.prohibitions` decides.
  */
-export function candidate(r: Rule, p: Policy, q: Intent): boolean {
-  const prohibition = (p.prohibitions ?? []).includes(r);
+export function candidate(
+  r: Rule,
+  p: Policy,
+  q: Intent,
+  kind: RuleKind = (p.prohibitions ?? []).includes(r) ? "prohibition" : "permission",
+): boolean {
+  const prohibition = kind === "prohibition";
   // Use the shared matcher for standard action implications before validating context.
   const actionMatches = isOdrlAction(q.action)
     ? covers(p.id, r.action, q.action) ||
@@ -188,28 +198,33 @@ export const solidOdrlEngine: PolicyEngine = {
   evaluate(p, q) {
     const supported = supportedPolicy(p);
     const attributes: NonNullable<Intent["attributes"]> = { ...q.attributes, dateTime: q.at };
-    const rules = [...(p.permissions ?? []), ...(p.prohibitions ?? [])].filter((r) =>
-      candidate(r, p, q),
-    );
-    const missing = rules.some((r) =>
+    const permitted = (p.permissions ?? []).filter((r) => candidate(r, p, q, "permission"));
+    const prohibited = (p.prohibitions ?? []).filter((r) => candidate(r, p, q, "prohibition"));
+    const missing = [...permitted, ...prohibited].some((r) =>
       (r.constraints ?? []).some((c) => !knownOperand(c, attributes[c.leftOperand])),
     );
-    // A set-valued request operand satisfies isAnyOf when ANY element matches, so
-    // one allowed recipient would carry unlisted ones through a permission
-    // allowlist. Leave such permissions to confirmation (the sparq adapter
-    // refuses set-valued operands outright).
-    const setValued = (p.permissions ?? [])
-      .filter((r) => candidate(r, p, q))
-      .some((r) =>
-        (r.constraints ?? []).some(
-          (c) => c.operator === "isAnyOf" && Array.isArray(attributes[c.leftOperand]),
-        ),
-      );
-    const lower = (rs: readonly Rule[] = []): OdrlRule[] =>
-      rs
+    // A set-valued request operand is safe only where its operator errs toward
+    // denial for the rule kind. isAnyOf is satisfied when ANY element matches, so
+    // one allowed recipient would carry unlisted ones through a permission (or a
+    // duty) allowlist; isNoneOf fails when one element is listed, so one listed
+    // recipient would switch off a "never outside this set" prohibition. Leave
+    // both to confirmation (the sparq adapter refuses set-valued operands outright).
+    const unsafeSet = (kind: RuleKind) => (c: Constraint) =>
+      Array.isArray(attributes[c.leftOperand]) &&
+      c.operator === (kind === "prohibition" ? "isNoneOf" : "isAnyOf");
+    const setValued =
+      permitted.some(
+        (r) =>
+          (r.constraints ?? []).some(unsafeSet("permission")) ||
+          (r.duties ?? []).some((d) => (d.constraints ?? []).some(unsafeSet("permission"))),
+      ) ||
+      prohibited.some((r) => (r.constraints ?? []).some(unsafeSet("prohibition"))) ||
+      (p.obligations ?? []).some((d) => (d.constraints ?? []).some(unsafeSet("permission")));
+    const lower = (rs: readonly Rule[] | undefined, kind: RuleKind): OdrlRule[] =>
+      (rs ?? [])
         .filter(
           (r) =>
-            candidate(r, p, q) &&
+            candidate(r, p, q, kind) &&
             (r.constraints ?? []).every((c) => knownOperand(c, attributes[c.leftOperand])),
         )
         .map((r) => ({
@@ -217,12 +232,12 @@ export const solidOdrlEngine: PolicyEngine = {
           action: "use",
           constraints: r.constraints as OdrlRule["constraints"],
         }));
-    const permissions = lower(p.permissions);
+    const permissions = lower(p.permissions, "permission");
     const lowered: OdrlPolicy = {
       ...p,
       conflict: "prohibit",
       permissions,
-      prohibitions: lower(p.prohibitions),
+      prohibitions: lower(p.prohibitions, "prohibition"),
       obligations: [], // Checked independently below, including when no rule matches.
     };
     const request = { ...q, action: "use" as const, attributes };

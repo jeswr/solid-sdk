@@ -7,7 +7,7 @@
 //    allowlist because one element matches.
 
 import { describe, expect, it } from "vitest";
-import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
+import { candidate, evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import type { Intent, Mandate, Rule } from "../src/types.js";
 import { AGENT } from "../src/types.js";
 
@@ -95,5 +95,58 @@ describe("a multi-valued request operand cannot satisfy a permission allowlist",
       intent(send, { [recipientSet]: [h("a"), h("b")] }),
     );
     expect(effect.effect).toBe("indeterminate");
+  });
+});
+
+describe("set-valued operands cannot switch off a prohibition or satisfy a duty", () => {
+  const recipientSet = `${AGENT}recipientSet`;
+  const send = `${AGENT}SendMessage`;
+
+  it("an isNoneOf prohibition is not bypassed by adding one listed recipient", async () => {
+    const m = mandateWith({ type: "permission", action: send }, [
+      {
+        type: "prohibition",
+        action: send,
+        constraints: [{ leftOperand: recipientSet, operator: "isNoneOf", rightOperand: [h("a")] }],
+      },
+    ]);
+    expect((await evaluateIntent(m, intent(send, { [recipientSet]: h("b") }))).decision).toBe(
+      "prohibited",
+    );
+    const d = await evaluateIntent(m, intent(send, { [recipientSet]: [h("a"), h("b")] }));
+    expect(d.decision).not.toBe("permit");
+  });
+
+  it("a duty's isAnyOf constraint is not satisfied by one matching element of a set", async () => {
+    const m = mandateWith({
+      type: "permission",
+      action: send,
+      duties: [
+        {
+          action: "inform",
+          constraints: [{ leftOperand: "recipient", operator: "isAnyOf", rightOperand: [h("a")] }],
+        },
+      ],
+    });
+    const done = { "fulfilled:inform": true };
+    expect((await evaluateIntent(m, intent(send, { recipient: h("a"), ...done }))).decision).toBe(
+      "permit",
+    );
+    const d = await evaluateIntent(m, intent(send, { recipient: [h("a"), h("b")], ...done }));
+    expect(d.decision).not.toBe("permit");
+  });
+
+  it("a prohibition copied out of its policy still covers a broader request", async () => {
+    const prohibition: Rule = { type: "prohibition", action: "append" };
+    const p = { id: "urn:p", prohibitions: [{ ...prohibition }] };
+    // The rule passed in is a copy, not the array member: the explicit kind decides.
+    expect(candidate(prohibition, p, intent("write"), "prohibition")).toBe(true);
+    expect(candidate(prohibition, p, intent("write"), "permission")).toBe(false);
+    // Without a kind, membership in p.prohibitions decides.
+    expect(candidate(p.prohibitions[0] as Rule, p, intent("write"))).toBe(true);
+    expect(candidate(prohibition, p, intent("write"))).toBe(false);
+    expect(candidate({ type: "permission", action: "use" }, { id: "urn:q" }, intent("read"))).toBe(
+      true,
+    );
   });
 });

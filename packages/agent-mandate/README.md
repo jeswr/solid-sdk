@@ -62,8 +62,10 @@ Typed decimal values must retain their decimal identity through the evaluator's 
 conversion; insignificant zeros and exponent formatting do not change that identity.
 Date-time operands must have millisecond precision (additional trailing zeros are accepted).
 Values that would lose precision require confirmation, including in prohibitions and duties.
-A set-valued request operand under an `isAnyOf` permission constraint requires confirmation, so one
-allowed value cannot carry others through an allowlist. Targets and actions match exactly; the
+A set-valued request operand requires confirmation under an `isAnyOf` permission, duty or obligation
+constraint (one allowed value cannot carry others through an allowlist) and under an `isNoneOf`
+prohibition constraint (one listed value cannot switch the prohibition off). `isAllOf` is satisfied
+by any superset of its values. Targets and actions match exactly; the
 executor must canonicalise target IRIs before evaluation.
 Typed float values also require confirmation whenever binary32 rounding changes their value.
 
