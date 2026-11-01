@@ -17,11 +17,12 @@ import {
   turnIntoTask,
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
-import { NS, serializeChat } from "./rdf";
+import { ChatNode, NS, serializeChat } from "./rdf";
 import {
   buildRoom,
   buildRoomAcl,
   joinRoom,
+  leaveRoom,
   type RoomInput,
   readJoinedRooms,
   readRoom,
@@ -94,7 +95,7 @@ async function optionalChat(
     return { url, dataset: new Store(), etag: null };
   }
 }
-async function ensureContainer(
+export async function ensureContainer(
   fetch: typeof globalThis.fetch,
   base: string,
   url: string,
@@ -168,6 +169,18 @@ async function optionalCondition(
     if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
     return { document: { url, dataset: new Store(), etag: null }, condition: { ifNoneMatch: "*" } };
   }
+}
+export async function removeJoinedRoom(
+  fetch: typeof globalThis.fetch,
+  storage: string,
+  room: string,
+): Promise<void> {
+  const base = `${roomContainer(storage)}chat/`;
+  const url = joinedRoomsUrl(storage);
+  const current = await optionalCondition(fetch, base, url);
+  const dataset = leaveRoom(url, current.document.dataset, room);
+  if (dataset.size === current.document.dataset.size) return;
+  await saveChat(fetch, base, url, dataset, current.condition);
 }
 /** Inserts only the new subject into existing days; never replaces other participants' statements. */
 export async function sendMessage(
@@ -254,8 +267,13 @@ export function saveMessageTask(
   actor: string,
   task: MessageTask,
   at: Date,
+  due?: Date,
 ) {
-  return mutate(fetch, room, subject, (dataset) => turnIntoTask(dataset, subject, actor, task, at));
+  return mutate(fetch, room, subject, (dataset) => {
+    const result = turnIntoTask(dataset, subject, actor, task, at);
+    if (due) new ChatNode(subject, result, DataFactory).setDate(`${NS.WF}dateDue`, due);
+    return result;
+  });
 }
 /** Creates a new container, its advertised WAC ACL, then its descriptor. Never overwrites a room. */
 export async function createRoom(
