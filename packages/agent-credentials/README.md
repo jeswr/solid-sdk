@@ -56,6 +56,23 @@ Provision each purpose separately. The same token value is never automatically r
 another purpose. Tokens with an expiry refuse after expiry; static API/bot tokens can omit it.
 Telegram personal-account MTProto is deferred.
 
+`./matrix` adds explicit provisioned-device import without reading the real registry or
+logging tokens. `importMatrixDevice({ store, file, account, purpose, expected })` accepts
+a private JSON file containing exactly `homeserver`, `user_id`, `device_id`, and
+`access_token`. `expected` pins an HTTPS homeserver origin, `userId`, `deviceId`, and an
+existing private `cryptoStorePath` compatible with matrix-sdk-crypto-nodejs. The registry's
+device-file schema was unavailable during implementation; this conservative input schema
+must be checked against its provisioning output before live composition. No conversion of
+other crypto-store formats, login, SSO or device creation occurs. Source file and parent,
+crypto directory and stored records must be owner-only; symlinks are refused.
+
+Import read and send purposes explicitly, even when the provider uses a single token.
+`createMatrixTokenProvider({ store, account, read, send? })` returns the channel grant
+shape (`read({id})` / `send({id})`). It rechecks device, homeserver, account and purpose
+pins on each call; missing send provisioning never falls back to read. The host initializes
+its OlmMachine with the pinned device and crypto directory. Device records live separately
+under the store's private `matrix/` directory and cannot be selected as generic token files.
+
 From the workspace root, build first and provision with explicit references:
 
 ```sh

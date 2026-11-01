@@ -113,6 +113,8 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./mastodon/send",
       "./discord",
       "./discord/send",
+      "./matrix",
+      "./matrix/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -161,4 +163,16 @@ it("keeps Discord sending out of the root and reader surfaces", () => {
   expect(entry8).not.toHaveProperty("createDiscordSend");
   expect(entry8).toHaveProperty("createDiscordReader");
   expect(entry24).toHaveProperty("createDiscordSend");
+});
+
+it("keeps Matrix sends out of the reader and root surfaces", () => {
+  expect(entry0).not.toHaveProperty("createMatrixSend");
+  expect(entry6).not.toHaveProperty("createMatrixSend");
+  expect(entry6).toHaveProperty("createMatrixReader");
+});
+
+it("exposes Matrix sends only on the executor subpath", () => {
+  expect(entry22).toHaveProperty("createMatrixSend");
+  expect(entry0).not.toHaveProperty("createMatrixSend");
+  expect(entry6).not.toHaveProperty("createMatrixSend");
 });

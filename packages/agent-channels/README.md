@@ -121,6 +121,14 @@ See the [GitHub notification API](https://docs.github.com/en/rest/activity/notif
 and [`gh api` manual](https://cli.github.com/manual/gh_api) for provider behavior.
 
 Provider exports without a section above remain reserved for their own tasks. Packages
+
+64 KiB local ceiling; Signal/WhatsApp use that same local ceiling over Matrix.
+Other footer-only profiles conservatively cap at 256 bytes pending their binding
+tasks. LinkedIn/X have zero-byte read-only profiles. No profile
+constant implements sending. The direct descriptor advertises zero owner rate
+limits by default; it is a capability statement, never permission to send.
+
+Provider exports without a section above remain reserved for their own tasks. Packages
 remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
@@ -376,3 +384,118 @@ with bot authentication, refuses redirects and never retries. Explicit client an
 rate-limit refusals throw `ProviderRejectedError`; server/transport failures and
 malformed acknowledgements remain uncertain. There is no lookup or `finalAbsence`.
 Dry-run invokes no outbox callback, approval, credential provider or transport.
+
+`./matrix` exports `createMatrixReader`, `createMatrixCrypto`, `parseMatrixMessage`,
+`matrixOrigins` and `MatrixRoomError` (A-027 / sst-dpn). The reader pins `account`,
+`homeserver` (an HTTPS origin) and `userId`. Its runtime origins are derived from that
+trusted configuration; there is no homeserver discovery or redirect following.
+Credentials come exclusively from `TokenProvider.read` (the matching device provider
+from `@jeswr/agent-credentials/matrix` can be supplied structurally).
+
+Each poll fetches the user's `m.direct` account data, sends its room allowlist in the
+`/sync` filter, and checks it locally even if the server ignores the filter. Same-sync
+`m.direct` updates supersede the snapshot; additions cause a retry from the previous
+checkpoint with a fresh filter, so a newly direct room cannot lose filtered-out events. Sync responses/cursors are capped at 1 MiB,
+512 pending events and 512 direct rooms; individual events are capped at 64 KiB.
+The opaque account/homeserver/user cursor buffers pending ciphertext until the caller's
+item and aggregate byte bounds are drained. It never advances past a failed decrypt or
+malformed/truncated DM timeline: `MatrixRoomError.roomId` identifies the failed room,
+and the caller must retain its previous cursor. A limited timeline requires explicit
+history recovery; this binding does not silently accept gaps or auto-backfill history.
+Joined and left DM timelines share these checks; a room delta without a timeline is empty.
+On decryption failure, the reader synchronizes crypto changes and retries once, retaining
+the pending ciphertext and delivery checkpoint. Any timelines returned during that crypto
+sync are read again after pending delivery drains, so later key delivery cannot skip messages.
+The live reader retains a separate crypto sync token for the blocked delivery batch,
+acknowledging applied to-device messages so queued keys can continue arriving on retries.
+
+The host initializes the Rust SDK's `OlmMachine` with the provisioned device identity
+and private persistent crypto-store path, then supplies `await createMatrixCrypto(machine)`.
+The adapter applies sync to-device events, device lists, key counts and fallback-key
+metadata before decrypting timelines. It performs no key upload, to-device send or other
+network I/O. The host owns machine shutdown and serialization of that device's sync loop.
+The SDK's native library must be provisioned separately: repository policy disables its
+postinstall downloader. Unit tests always use fakes; the additional real Rust session
+test runs when that native library is present and explicitly skips otherwise. It uses
+only a synthetic, in-memory session and no provider or real credentials.
+
+Inbound text uses `matrix-chat-to-pod`'s `matrixEventToCanonical` before becoming a
+BridgeMessage. It keeps the room as thread key, plain text and ciphertext raw digest;
+HTML is never exposed as rendered content. For encrypted events, `native` is bounded
+decrypted event JSON, and parsing checks its room/event/sender against the ciphertext.
+Edits, redactions, media and other non-message events refuse as new text statements.
+The envelope content key supplies unverified JSON-LD only; decryption and parsing grant
+no agent identity or authority. `MATRIX_CONTENT` retains its exported constant name
+but now advertises the brief's `matrix-event/0.1` carriage ID.
+
+`./matrix/send` exports `createMatrixSend({ account, homeserver, userId, recipients,
+bridgeRooms?, tokens, verify, verifyApproval, eventIdFor?, crypto?, footer?, now?, transport? })`.
+`recipients` pins actors to rooms. The exact approved JSON wire contains the room ID,
+`txnId` equal to the signed proposal ID, and deterministic `m.text` content with the
+required footer and (for native Matrix rooms) `org.jeswr.agent.envelope`. The room,
+transaction ID, body and carrier all participate in the digest and are re-derived
+before transmission.
+
+Real transmission requires explicit `dryRun: false`, the pinned sender account,
+verified signed content, current validity, a `TokenProvider.send` grant and
+`verifyApproval(wire, account) === true`. The executor must check the current mandate,
+halt/limits and owner approval bound to this exact wire/account in that callback;
+capability metadata is never authorization. Validity is checked again after credential
+and approval awaits. Dry-run obtains no credentials and makes no requests.
+
+This task's explicit `PUT /rooms/{id}/send/m.room.message/{proposalId}` path sends
+plaintext content only. A bounded read-grant `GET /rooms/{id}/state` must confirm
+the absence of `m.room.encryption`; encrypted, unreadable or unknown room state
+refuses, so the binding never downgrades an encrypted room. Outbound E2EE key
+distribution is outside this binding's current
+send path, so its capability descriptor advertises `endToEndEncrypted: false`.
+The provider's transaction ID supplies idempotency; this binding never
+retries sends. Malformed acknowledgements and ambiguous HTTP failures remain uncertain.
+
+Lookup obtains a known event ID from `eventIdFor(proposalId, account)`, which the
+executor should supply from persisted outbox evidence. It uses only read credentials
+for `GET /rooms/{id}/event/{eventId}`, requires the pinned Matrix sender and exact
+reviewed content, and can use the supplied crypto adapter for encrypted copies.
+Lookup remains valid after proposal expiry. Missing IDs, 404s, unreadable or changed
+events return `unknown`. It never claims `absent` and leaves `finalAbsence` unset
+(the contract's false value), so a miss cannot authorize another send.
+
+### Signal and WhatsApp over Matrix (A-044 / sst-hhc)
+
+`./matrix` also exports `detectMatrixBridge`, `describeMatrixBridge` and
+`MatrixBridgeChannel` (`"signal" | "whatsapp"`). The reader recognizes mautrix ghost
+MXIDs (`@signal_<id>:server`, `@whatsapp_<id>:server`, also with a leading underscore)
+and `m.bridge` / legacy `uk.half-shot.bridge` room state with `content.protocol.id`
+`signal` or `whatsapp`. These are unverified routing hints. Sender handles remain
+Matrix MXIDs, room IDs remain thread keys, and raw event bytes remain the provenance
+anchor. Double-puppeted senders are classified using room state. Conflicting,
+malformed or unsupported bridge state refuses the room and retains the checkpoint.
+
+Sync requests include bridge state and `full_state=true`, so incremental polls do
+not depend on a process-local state cache. Timeline state changes apply in order;
+per-event hints survive in the bounded cursor until delivery. The optional bounded
+`native` JSON wrapper `{ bridge, event }` transports those hints alongside plaintext
+or decrypted content without altering `raw`. Existing A-027 cursors remain readable.
+The reader still imports only `m.direct` rooms; linking a bridge does not authorize
+group or history ingestion. Bridged text remains an observation: any Matrix envelope
+key is ignored, including one supplied by a remote user or a double puppet.
+
+`describeMatrixBridge(channel, credentialState)` returns a descriptor with
+`binding: "matrix"`, the logical channel, its `signal-footer/0.1` or
+`whatsapp-footer/0.1` carriage, `structuredPayload: false` and
+`endToEndEncrypted: false`. The 64 KiB limit is a local wire ceiling, not a remote
+provider guarantee. Rate limits remain zero until the owner supplies authority.
+
+For sending, configure `bridgeRooms: new Map([[roomId, "signal"]])` (or `"whatsapp"`)
+alongside the existing trusted recipient pins, then render with `SIGNAL_FOOTER` or
+`WHATSAPP_FOOTER`. Only the human summary and configured URL footer cross the bridge;
+the compact JWS stays in the executor's reviewed local wire, outside `content`.
+Validation re-derives both copies. The pre-send state check must match the pinned
+bridge; native Matrix carriage to a room that becomes bridged is refused. Dry-run,
+signature, freshness, current mandate/approval, credential separation and lookup
+rules remain required. Matrix acceptance/lookup confirms only the Matrix event,
+not remote Signal/WhatsApp delivery. Encrypted portal sends remain unsupported.
+
+See the [hosted bridge device-linking runbook](docs/hosted-matrix-bridges.md) for A-028
+setup and revocation. Tests use sanitized event-shape fixtures and fake transports;
+they never link accounts or contact live messaging providers.

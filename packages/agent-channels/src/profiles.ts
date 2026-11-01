@@ -37,7 +37,7 @@ export const SLACK_METADATA = profile(
   "application/ld+json",
 );
 export const MATRIX_CONTENT = profile(
-  "matrix-content/0.1",
+  "matrix-event/0.1",
   "event-content",
   "required",
   64 * 1024,
@@ -76,8 +76,19 @@ export const MASTODON_FOOTER = profile("mastodon-footer/0.1", "footer-url-only",
 export const TELEGRAM_FOOTER = profile("telegram-footer/0.1", "footer-url-only", "required", 256);
 export const IMESSAGE_FOOTER = profile("imessage-footer/0.1", "footer-url-only", "required", 256);
 export const SMS_FOOTER = profile("sms-footer/0.1", "footer-url-only", "required", 256);
-export const SIGNAL_FOOTER = profile("signal-footer/0.1", "footer-url-only", "required", 256);
-export const WHATSAPP_FOOTER = profile("whatsapp-footer/0.1", "footer-url-only", "required", 256);
+// Bridged messages use the Matrix binding's local wire ceiling, not a remote provider limit.
+export const SIGNAL_FOOTER = profile(
+  "signal-footer/0.1",
+  "footer-url-only",
+  "required",
+  MATRIX_CONTENT.maxBytes,
+);
+export const WHATSAPP_FOOTER = profile(
+  "whatsapp-footer/0.1",
+  "footer-url-only",
+  "required",
+  MATRIX_CONTENT.maxBytes,
+);
 /** Read-only proxies; zero bytes explicitly forbids rendering a send. */
 export const LINKEDIN_READ_ONLY = profile("linkedin-read-only/0.1", "footer-url-only", "none", 0);
 export const X_READ_ONLY = profile("x-read-only/0.1", "footer-url-only", "none", 0);

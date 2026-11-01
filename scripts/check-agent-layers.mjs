@@ -40,6 +40,8 @@ const allowed = {
     ...modelSdks,
   ]),
   "agent-channels": new Set([
+    "@jeswr/matrix-chat-to-pod",
+    "@matrix-org/matrix-sdk-crypto-nodejs",
     agent("model"),
     "@jeswr/guarded-fetch",
     "@jeswr/fetch-rdf",
