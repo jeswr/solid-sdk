@@ -3,7 +3,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { AccessControlResource, type Matcher, Policy } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { ACL, ACP, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
+import { ACL, ACP, copyDataset, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 import { assertUnvalidatedTargetAcp } from "./acp-target.js";
 
@@ -74,13 +74,14 @@ function matcherClauses(matcher: Matcher, dialect?: AcpDialect, negative = false
  * matchers reject the path rather than silently removing a possible grant.
  */
 export function readAcp(
-  dataset: DatasetCore,
+  input: DatasetCore,
   resource: string,
   url: string,
   dialect?: AcpDialect,
   target = false,
   onInactive?: (node: string, reason: string) => void,
 ): EffectivePolicy {
+  const dataset = copyDataset(input);
   if (target && dialect !== "css") assertUnvalidatedTargetAcp(dataset, resource);
   const result: EffectivePolicy = { grants: [], denials: [] };
   // CSS enumerates EVERY acp:resource statement, not only the requested IRI.

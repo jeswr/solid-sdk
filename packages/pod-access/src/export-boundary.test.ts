@@ -100,6 +100,97 @@ describe("public export boundary", () => {
     `);
   });
 
+  it("keeps reader wrappers out of caller datasets and preserves independent reads", async () => {
+    await checkBuiltExports(`
+      const { DataFactory, Store } = await load("n3");
+      const resource = "https://pod.example/file";
+      const aclUrl = resource + ".acl";
+      const acrUrl = resource + ".acr";
+      const wac = await parseRdf(
+        '<#public> a <' + access.ACL + 'Authorization>; <' + access.ACL + 'accessTo> <' + resource +
+        '>; <' + access.ACL + 'agentClass> <' + access.FOAF + 'Agent>; <' + access.ACL + 'mode> <' +
+        access.ACL + 'Read>.', "text/turtle", { baseIRI: aclUrl });
+      const acpTurtle = vocabulary =>
+        '<#acr> a <' + access.ACP + 'AccessControlResource>; <' + access.ACP + 'resource> <' +
+        resource + '>; <' + access.ACP + 'accessControl> <#control>. ' +
+        '<#control> <' + access.ACP + 'apply> <#policy>. ' +
+        '<#policy> <' + access.ACP + 'allow> <' + vocabulary + 'Read>; <' + access.ACP +
+        'allOf> <#matcher>. <#matcher> <' + access.ACP + 'agent> <' + access.ACP + 'PublicAgent>.';
+      const css = await parseRdf(acpTurtle(access.ACL), "text/turtle", { baseIRI: acrUrl });
+      const ess = await parseRdf(acpTurtle(access.ACP), "text/turtle", { baseIRI: acrUrl });
+      const fixtures = [
+        { dataset: wac, reader: access.readWac, url: aclUrl, dialect: "css" },
+        { dataset: css, reader: access.readAcp, url: acrUrl, dialect: "css" },
+        { dataset: ess, reader: access.readAcp, url: acrUrl, dialect: "ess" },
+      ];
+      const read = () => fixtures.flatMap(({ dataset, reader, url, dialect }) =>
+        [false, true].map(target => reader(dataset, resource, url, dialect, target)));
+      const baseline = read();
+      for (const policy of baseline) {
+        assert.equal(policy.grants.length, 1);
+        assert.deepEqual(policy.grants[0].who, [[{ kind: "public" }]]);
+        assert.deepEqual(policy.grants[0].modes, new Set(["read"]));
+        assert.deepEqual(policy.denials, []);
+      }
+
+      // Record every method argument, including calls on datasets returned by match.
+      const calls = [];
+      function decorate(dataset) {
+        const decorated = new Proxy(dataset, {
+          get(target, key) {
+            const value = Reflect.get(target, key, target);
+            if (typeof value !== "function") return value;
+            return (...args) => {
+              calls.push({ method: key, args });
+              const result = Reflect.apply(value, target, args);
+              if (key === "match") return decorate(result);
+              return result === target ? decorated : result;
+            };
+          },
+        });
+        return decorated;
+      }
+      for (const { dataset, reader, url, dialect } of fixtures) {
+        const decorated = decorate(new Store([...dataset]));
+        for (const target of [false, true])
+          assert.deepEqual(reader(decorated, resource, url, dialect, target),
+            reader(dataset, resource, url, dialect, target));
+        assert.equal(await access.serialize(decorated), await access.serialize(dataset));
+      }
+      assert.ok(calls.filter(call => call.method === Symbol.iterator).length >= 9,
+        "Every reader and serializer must copy the caller's quads");
+      const terms = calls.flatMap(call => call.args).filter(value => value != null);
+
+      // Reproduce the reported attack if a wrapper ever escapes. The worker isolates
+      // the mutation, and the independent reads must remain public afterwards.
+      for (const term of terms) {
+        const prototype = Object.getPrototypeOf(term);
+        if (typeof prototype.iris === "function")
+          Object.defineProperty(prototype, "iris", { configurable: true, value: () => [] });
+      }
+      assert.deepEqual(read(), baseline);
+      for (const policy of read()) {
+        assert.throws(() => access.assertNotWider(access.emptyPolicy(), policy), /widens read/);
+        assert.equal(access.policiesEqual(access.emptyPolicy(), policy), false);
+      }
+      const prototypes = new Set([
+        DataFactory.namedNode("urn:plain"), DataFactory.blankNode("plain"),
+        DataFactory.literal("plain"), DataFactory.defaultGraph(), DataFactory.variable("plain"),
+        DataFactory.quad(DataFactory.namedNode("urn:s"), DataFactory.namedNode("urn:p"),
+          DataFactory.namedNode("urn:o")),
+      ].map(term => Object.getPrototypeOf(term)));
+      function assertPlainTerm(term) {
+        assert.equal(typeof term.termType, "string");
+        assert.equal(typeof term.value, "string");
+        assert.ok(prototypes.has(Object.getPrototypeOf(term)), "Only plain RDF/JS terms may escape");
+        if (term.termType === "Quad")
+          [term.subject, term.predicate, term.object, term.graph].forEach(assertPlainTerm);
+        if (term.termType === "Literal") assertPlainTerm(term.datatype);
+      }
+      terms.forEach(assertPlainTerm);
+    `);
+  });
+
   it("preserves public WAC and ACP reads after mutating all reachable export prototypes", async () => {
     await checkBuiltExports(`
       const resource = "https://pod.example/file";

@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory, Writer } from "n3";
+import { DataFactory, Store, Writer } from "n3";
 import type { Mode } from "./types.js";
 /** WAC vocabulary namespace used by the extracted migrator core. */
 export const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -37,6 +37,10 @@ export function safeIri(value: string): string {
     throw new TypeError("Unsafe RDF IRI");
   return value;
 }
+/** Isolate caller RDF: Store indexes term values and recreates plain DataFactory terms. */
+export function copyDataset(dataset: DatasetCore): Store {
+  return new Store([...dataset], { factory: DataFactory });
+}
 /** Typed graph accessors shared by the WAC and ACP implementations. */
 export class RdfNode extends TermWrapper {
   iris(predicate: string): string[] {
@@ -58,7 +62,8 @@ export class RdfNode extends TermWrapper {
   }
 }
 /** Serialize RDF as Turtle after validating every named-node IRI. */
-export function serialize(dataset: DatasetCore): Promise<string> {
+export function serialize(input: DatasetCore): Promise<string> {
+  const dataset = copyDataset(input);
   for (const quad of dataset)
     for (const term of [quad.subject, quad.predicate, quad.object, quad.graph])
       if (term.termType === "NamedNode") safeIri(term.value);
