@@ -1,9 +1,10 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 // Phase G — SHACL generator-readiness capabilities on the generator side:
 //   G1  severity-aware requiredFailClosed  (Warning/Info minCount ⇒ NO guard)
 //   G2  sh:in RDF-list extraction → manifest enum + admission
 //   G3  sh:minInclusive / sh:maxInclusive / sh:minLength → closed named guards
-//        + a singleton non-blank string guard
+//        + an explicit non-blank string pattern guard
 import { describe, expect, it } from "vitest";
 import type { NormalizedOntology } from "../../src/adapter.js";
 import {
@@ -40,9 +41,9 @@ const SHAPES = `
   # G3 — numeric range.
   sh:property [ sh:path ex:rating ; sh:name "rating" ;
     sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 1 ; sh:maxInclusive 5 ] ;
-  # G3 — singleton non-blank (minLength ≥ 1 on a scalar string).
+  # G3 — singleton minimum length plus an explicit non-blank pattern.
   sh:property [ sh:path ex:code ; sh:name "code" ;
-    sh:datatype xsd:string ; sh:maxCount 1 ; sh:minLength 1 ] ;
+    sh:datatype xsd:string ; sh:maxCount 1 ; sh:minLength 1 ; sh:pattern "\\\\S" ] ;
   # G4 — xsd:duration field (datatype coverage).
   sh:property [ sh:path ex:offset ; sh:name "offset" ;
     sh:datatype xsd:duration ; sh:maxCount 1 ] .
@@ -180,7 +181,7 @@ describe("G3 — numeric-range + non-blank closed guards", () => {
   it("compiles sh:minLength to a closed minLength guard", () => {
     expect(byName("code")?.guards?.minLength).toBe(1);
   });
-  it("adds a singleton non-blank guard for a minLength ≥ 1 scalar string", () => {
+  it("compiles an explicit non-blank pattern on a scalar string", () => {
     expect(byName("code")?.guards?.nonBlank).toBe(true);
   });
   it("the guards are pure DATA numbers (no regex source in the manifest)", () => {
@@ -285,9 +286,9 @@ describe("G3 — lexical guards (minLength / nonBlank) only on string-valued lit
   const { manifest: mixedManifest } = compileManifest(mixed, CONFIG);
   const mByName = (n: string) => flat(mixedManifest.entities[0]).fields.find((f) => f.name === n);
 
-  it("emits minLength + nonBlank for a string-valued literal", () => {
+  it("emits minLength without inventing nonBlank for a string-valued literal", () => {
     expect(mByName("label")?.guards?.minLength).toBe(2);
-    expect(mByName("label")?.guards?.nonBlank).toBe(true);
+    expect(mByName("label")?.guards?.nonBlank).toBeUndefined();
   });
   it("does NOT emit minLength / nonBlank for a numeric literal (runtime no-op)", () => {
     expect(mByName("count")?.guards?.minLength).toBeUndefined();

@@ -162,6 +162,25 @@ function fieldIri(field: ManifestField, value: unknown): string | undefined {
   return field.guards?.iriScheme === "https" && !iri?.startsWith("https:") ? undefined : iri;
 }
 
+/** Shape patterns inspect RDF spelling before any scheme-policy normalization. */
+function readTerm(doc: TermWrapper, plan: FieldPlan, term: Term): unknown {
+  const { field, mapper } = plan;
+  if (!enumTermMatches(doc, plan, term)) return undefined;
+  const pattern = field.guards?.iriPattern;
+  if (pattern !== undefined) {
+    if (term.termType !== "NamedNode") return undefined;
+    const matches =
+      term.value.startsWith("https://") ||
+      (pattern === "http-https" && term.value.startsWith("http://"));
+    if (!matches) return undefined;
+  }
+  const raw = tryRead(() => mapper.as(new TermWrapper(term, doc.dataset, doc.factory)));
+  const value = hasIriSchemeGuard(field)
+    ? fieldIri(field, raw)
+    : applyDatatypeValidity(mapper, raw);
+  return applyScalarGuards(field, value);
+}
+
 /**
  * SameValueZero equality (native `Set` semantics: NaN matches NaN; +0 matches -0),
  * extended with `Date` VALUE equality: every read mints a fresh `Date` object, so
@@ -316,17 +335,9 @@ function makeGuardedSet(
       seen.add(key);
       out.push(g);
     };
-    if (iri) {
-      for (const raw of rawNamedNodeValues(doc, predicate)) {
-        if (field.in !== undefined && !field.in.includes(raw)) continue;
-        push(raw);
-      }
-    } else {
-      const pred = doc.factory.namedNode(predicate);
-      for (const q of doc.dataset.match(doc as unknown as Term, pred, null, null)) {
-        if (!enumTermMatches(doc, { field, mapper }, q.object)) continue;
-        push(tryRead(() => mapper.as(new TermWrapper(q.object, doc.dataset, doc.factory))));
-      }
+    const pred = doc.factory.namedNode(predicate);
+    for (const q of doc.dataset.match(doc as unknown as Term, pred, null, null)) {
+      push(readTerm(doc, { field, mapper }, q.object));
     }
     return out;
   };
@@ -408,8 +419,8 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
       : applyScalarGuards(field, applyDatatypeValidity(mapper, v));
   let present = false;
   for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
-    // Count DISTINCT raw RDF terms per predicate, including malformed terms, before
-    // mapping. Ambiguity/cardinality violations drop the field WITHOUT alias fallback.
+    // Migration reads deliberately resolve canonical first. Check DISTINCT raw
+    // terms per predicate before mapping; ambiguity never falls back to aliases.
     let object: Term | undefined;
     for (const candidate of matchObjects(
       doc.dataset,
@@ -422,9 +433,7 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
     if (object === undefined) continue;
     present = true;
     if (field.maxCount === 0) return undefined;
-    if (!enumTermMatches(doc, plan, object)) continue;
-    const raw = tryRead(() => mapper.as(new TermWrapper(object, doc.dataset, doc.factory)));
-    const value = normalise(raw);
+    const value = readTerm(doc, plan, object);
     // Undefined alone triggers fallback: false, zero and the empty string win.
     if (value !== undefined) return value;
   }
@@ -705,6 +714,18 @@ function readFlatFieldInto(doc: TermWrapper, plan: FieldPlan, data: EntityData):
   const { field } = plan;
   if (field.collection === "set") {
     if (exceedsMaximum(doc, field)) return field.guards?.requiredFailClosed ? "reject" : "ok";
+    if (field.guards?.requiredFailClosed) {
+      // A surviving valid member cannot mask a Violation on another raw member.
+      for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+        for (const term of matchObjects(
+          doc.dataset,
+          doc as unknown as Term,
+          doc.factory.namedNode(predicate),
+        )) {
+          if (readTerm(doc, plan, term) === undefined) return "reject";
+        }
+      }
+    }
     const members = [...fieldSet(doc, plan)];
     const min = Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0);
     if (members.length < min) {

@@ -87,6 +87,7 @@ const manifest = {
           "maxCount": 1,
           "guards": {
             "iriScheme": "http-https",
+            "iriPattern": "http-https",
             "requiredFailClosed": true
           }
         },

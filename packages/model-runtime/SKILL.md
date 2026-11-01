@@ -53,6 +53,7 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   and write. Do not add a bypass; widen schemes only with a new reviewed guard.
 - A Violation-graded MUST (`requiredFailClosed`) rejects the whole record on parse when
   missing, malformed, ambiguous, or outside its set cardinality bounds. Optional fields drop.
+  Required sets also reject any invalid raw member; optional sets retain valid members.
 - build does not enforce requiredFailClosed: missing or invalid values are dropped and a
   typed shell may be returned. This preserves the bookmark facade's write contract. Parse
   the built store and require a defined result before publishing it if MUST validation is needed.
@@ -78,6 +79,12 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   Reads never mutate. Set mutations migrate retained
   members. Setters clear aliases even on `undefined`/invalid input; `mark` clears alias
   types. Serialisation migrates known aliases in a copy and writes canonical IRIs only.
+- Deliberate G5 migration exception: for singleton `sh:alternativePath` fields, SHACL
+  counts the union for `maxCount`, but runtime reads resolve canonical-first. A stale
+  conflicting alias beside a valid canonical value can therefore parse even when the
+  emitted SHACL rejects that union's cardinality. This preserves the reviewed bookmark
+  oracle. Writes are canonical-only and clear aliases, so the runtime never produces
+  that conflicting data.
 - Composite entities graph-walk exact link terms from the root; never assume fragments.
   Count distinct raw object terms of every kind before filtering NamedNodes; more
   than one rejects a required link's record or drops an optional link's whole subtree.

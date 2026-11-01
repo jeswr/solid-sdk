@@ -31,6 +31,7 @@ export {
   type JsType,
   literalMapper,
   readLiteral,
+  VALIDATED_DATATYPES,
   XSD,
 } from "./datatypes.js";
 export {

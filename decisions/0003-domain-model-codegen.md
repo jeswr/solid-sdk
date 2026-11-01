@@ -67,6 +67,13 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | later | model packages | sst-ild.4.7 |
 | ild.9 `@jeswr/rdf-serialize/wrapper` helpers and consumer rewire | open | `packages/rdf-serialize` plus six consumers | sst-ild.9 |
 
+G5 deliberately preserves canonical-first singleton migration reads. With
+`sh:alternativePath`, SHACL counts the union for `maxCount`, whereas the runtime checks
+each predicate separately and selects the guarded canonical value before aliases. Stale
+conflicting legacy triples can therefore parse even when the emitted SHACL rejects the
+union's `maxCount`. The reviewed solid-bookmark oracle is binding here (round-6 M1 declined).
+Writes are canonical-only and clear aliases, so the runtime never produces such data.
+
 Two follow-ups are recorded rather than decided here: `model-runtime` serialises with
 `n3.Writer` directly instead of through `@jeswr/rdf-serialize`, and it carries its own http(s)
 IRI filter alongside rdf-serialize's `safeHttpIri`. Both are second occurrences and should

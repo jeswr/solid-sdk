@@ -96,7 +96,17 @@ export function linkTargetConforms(
   c: ShapeConstraint,
   targetClass: string,
 ): boolean {
-  if (c.hasClass !== undefined && !classConforms(shapes, targetClass, c.hasClass)) return false;
+  if (c.hasClass !== undefined) {
+    const target = shapes.nodeShapes.find((shape) => shape.targetClass === targetClass);
+    // Runtime node recognition accepts any declared alias. Generation must prove
+    // EACH accepted type satisfies the link class, or refuse this projection.
+    if (
+      ![targetClass, ...(target?.aliasTypeIris ?? [])].every((type) =>
+        classConforms(shapes, type, c.hasClass as string),
+      )
+    )
+      return false;
+  }
   if (c.node !== undefined) {
     const target = shapes.nodeShapes.find((shape) => shape.iri === c.node);
     if (target === undefined || target.targetClass !== targetClass) return false;
@@ -151,6 +161,7 @@ function compileField(
   // Shape-derived: http(s) scheme guard from an ^https?:// pattern on an IRI field.
   if (constraint.kind === "iri" && isHttpPattern(constraint.pattern)) {
     guards.iriScheme = iriSchemeForPattern(constraint.pattern);
+    guards.iriPattern = iriSchemeForPattern(constraint.pattern);
   }
   // G1 — SEVERITY-AWARE requiredness: fail-closed on absence only when the required
   // constraint is Violation-graded (or severity absent, SHACL's default). A
@@ -172,18 +183,6 @@ function compileField(
   if (constraint.minLength !== undefined && hasStringRuntimeValue(constraint)) {
     guards.minLength = constraint.minLength;
   }
-  // G3 — a singleton non-blank string guard (minLength ≥ 1 on a single literal),
-  // mirroring the set-level dropBlank for scalar fields; string-valued literals only.
-  if (
-    constraint.minLength !== undefined &&
-    constraint.minLength >= 1 &&
-    collection === undefined &&
-    constraint.kind === "literal" &&
-    hasStringRuntimeValue(constraint)
-  ) {
-    guards.nonBlank = true;
-  }
-
   if (constraint.pattern === "\\S" && hasStringRuntimeValue(constraint)) guards.nonBlank = true;
 
   // Config-supplied guards (recorded as provenance so fidelity can trace them).
@@ -207,6 +206,12 @@ function compileField(
     if (fieldConfig.emptyStringDrop !== undefined) {
       guards.emptyStringDrop = fieldConfig.emptyStringDrop;
       record("emptyStringDrop");
+    }
+    if (fieldConfig.nonBlank !== undefined) {
+      if (guards.nonBlank && !fieldConfig.nonBlank)
+        throw new Error(`field ${name} config cannot disable the nonblank pattern`);
+      guards.nonBlank = fieldConfig.nonBlank;
+      record("nonBlank");
     }
     if (fieldConfig.sanitizeText !== undefined) {
       guards.sanitizeText = fieldConfig.sanitizeText;

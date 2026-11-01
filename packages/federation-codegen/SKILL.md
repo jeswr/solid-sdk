@@ -52,8 +52,11 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   Generated per-node `subject()` handles call
   runtime `subjectIri`, rejecting unsafe resources with `TypeError` and preserving
   exact lexical identity for safe resources and derived fragment IRIs.
-- `iriScheme: "https"` is the HTTPS-only guard compiled from `sh:pattern "^https://"`;
-  `"http-https"` permits both schemes. Fidelity rejects widening an HTTPS-only shape.
+- Shape-derived `iriPattern` checks the original RDF lexical spelling before URL
+  normalization (`"https"` for `^https://`, `"http-https"` for `^https?://`). The
+  separate `iriScheme` guard applies scheme policy and normalization. Fidelity
+  requires both guards for these patterns. `sh:minLength` derives only `minLength`;
+  `nonBlank` requires the supported `\\S` pattern or explicit field config policy.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
   for string-valued nonblank fields. Advisory flat class hints may only be omitted with
@@ -62,6 +65,12 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   Inline or unprojected `sh:node` values are admission errors. Every projected parameter
   retains strict RDF term-kind, datatype and lexical validation; enum literals use the
   runtime's `readLiteral` reader.
+  Admission rejects every `sh:datatype` outside model-runtime's exported immutable
+  `VALIDATED_DATATYPES` inventory; there is no opaque-string fallback.
+  For composite `sh:class` links, generation rejects a target if any accepted child
+  type alias lacks identity or explicit ontology subclass ancestry to that class.
+  Every accepted alias must preserve the class constraint; aliases alone grant no
+  class membership. Compilation and fidelity both enforce this restriction.
   Decimal/integer bounds and enums must preserve canonical decimal spelling through
   JS number conversion. Reject noncanonical literal enum members that the runtime
   writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.
