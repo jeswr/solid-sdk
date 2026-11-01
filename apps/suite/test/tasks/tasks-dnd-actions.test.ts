@@ -7,6 +7,7 @@ import {
   planPromote,
   planToSection,
 } from "../../src/apps/tasks/lib/dnd/plan";
+import type { DropPlan } from "../../src/apps/tasks/lib/dnd/types";
 import type { StoredProject, StoredTask } from "../../src/apps/tasks/lib/model/store";
 import { announceRetries, applyDropPlan, replanner } from "../../src/apps/tasks/state/drop-actions";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
@@ -312,27 +313,70 @@ describe("applyDropPlan", () => {
     expect((await store.readTask(urls[1] as string)).task.rank).toBe(2);
   });
 
-  it("announces a retry's own outcome", async () => {
-    const { cache } = await cramped();
+  it("announces a retry's own outcome, repeating success only where the task now sits", async () => {
+    const { cache, replan } = await cramped();
     const task = viewOf(cache, "c");
     const announce = vi.fn();
-    const retried = announceRetries(cache, task, "Original", () => "Retried", announce);
-    retried(true, { kind: "none" });
-    retried(false, { kind: "none" });
-    retried(false, { kind: "reschedule", url: task.url, dayKey: "2026-11-04" });
-    announceRetries(
-      cache,
-      { ...task, url: "https://pod.test/gone.ttl" },
-      "Original",
-      () => "",
-      announce,
-    )(false, { kind: "none" });
+    const announcer = (plan: DropPlan) =>
+      announceRetries(cache, {
+        task,
+        plan,
+        message: "Original",
+        showCompleted: false,
+        describe: () => "Retried",
+        announce,
+      });
+    // c sits third in No section; a plan that put it there has nothing left to do.
+    const here: DropPlan = {
+      kind: "position",
+      url: task.url,
+      projectUrl: task.projectUrl,
+      sectionId: undefined,
+      parentId: undefined,
+      sectionChanged: false,
+      parentChanged: false,
+      position: 3,
+      renumber: [],
+      index: 3,
+    };
+    announcer(here)(true, { kind: "none" });
+    announcer(here)(false, { kind: "none" });
+    // The first plan put c second (after a): a none re-plan there is a failure.
+    announcer(replan())(false, { kind: "none" });
+    announcer(here)(false, { kind: "reschedule", url: task.url, dayKey: "2026-11-04" });
     expect(announce.mock.calls.map(([message]) => message)).toEqual([
       "Retried",
       "Original",
       "Couldn't move 'c'.",
       "Couldn't move 'c'.",
     ]);
+  });
+
+  it("announces a project move once the cache's own Retry succeeds", async () => {
+    const { cache, pod, failures } = await cramped();
+    const home = (await cache.createProject("Home")) as StoredProject;
+    await cache.loadTasks(home);
+    const other = (await cache.createProject("Other")) as StoredProject;
+    await cache.loadTasks(other);
+    const [a, b] = ["a", "b"].map((title) => viewOf(cache, title));
+    pod.intercept = (request) =>
+      request.method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    const onRetried = vi.fn();
+    const plan = { kind: "project", url: a?.url as string, projectUrl: home.url } as const;
+    expect(await applyDropPlan(plan, writer(cache), undefined, onRetried)).toBe(false);
+    const toOther = { kind: "project", url: b?.url as string, projectUrl: home.url } as const;
+    expect(await applyDropPlan(toOther, writer(cache), undefined, onRetried)).toBe(false);
+    pod.intercept = undefined;
+    // b then moves elsewhere (Other) through the menu: no announcement for the Home drop.
+    const storedB = cache
+      .getSnapshot()
+      .tasks[a?.projectUrl as string]?.items.find((item) => item.url === b?.url) as StoredTask;
+    await cache.moveTaskToProject(storedB, other);
+    expect(onRetried).not.toHaveBeenCalled();
+    const [, retry] = failures.mock.calls[0] as [unknown, () => void];
+    retry();
+    await vi.waitFor(() => expect(onRetried).toHaveBeenCalledWith(true, plan));
+    expect(onRetried).toHaveBeenCalledOnce();
   });
 
   it("re-plans nothing for a vanished task, and skips drops of tasks outside the cache", async () => {

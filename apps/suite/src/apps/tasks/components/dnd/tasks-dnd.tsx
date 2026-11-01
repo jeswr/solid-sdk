@@ -299,13 +299,15 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           const replan = replanner(tasks.cache, task.url, (fresh, project) =>
             planFor(fresh, project, drop),
           );
-          const retried = announceRetries(
-            tasks.cache,
+          const retried = announceRetries(tasks.cache, {
             task,
+            plan: next,
             message,
-            (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
-            setStatus,
-          );
+            showCompleted,
+            describe: (plan) =>
+              dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+            announce: setStatus,
+          });
           void applyDropPlan(next, tasks, replan, retried).then((written) => {
             setStatus(written ? message : failedMessage(task));
             const moved = written && sectionToast(next, names);

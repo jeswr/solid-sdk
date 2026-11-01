@@ -205,6 +205,49 @@ export function planMove(
   return planAt(active, level, destination, views);
 }
 
+/**
+ * Move up/down as a drop anchored to the neighbour row ("before" it going up,
+ * "after" it going down). `planDrop` with it equals `planMove`, but it stays
+ * idempotent: once the task sits there, planning it again yields none.
+ */
+export function moveTarget(
+  active: TaskView,
+  direction: -1 | 1,
+  views: readonly TaskView[],
+  { manual = true }: PlanOptions = {},
+): DropTarget | undefined {
+  const level = levelOf(active, views);
+  const all = members(level, views);
+  const at = all.findIndex((view) => view.url === active.url);
+  const neighbour = all[at + direction];
+  if (!manual || at < 0 || !neighbour) return undefined;
+  return {
+    kind: "task",
+    url: neighbour.url,
+    container: { kind: "section", projectUrl: level.projectUrl, sectionId: level.sectionId },
+    placement: direction < 0 ? "before" : "after",
+  };
+}
+
+/**
+ * Whether the planned task already sits where `plan` puts it, in the visible
+ * rows `views`: the same rendered level and 1-based slot, or the same day.
+ * Project moves change the task's URL, so they never match here.
+ */
+export function isPlaced(plan: DropPlan, views: readonly TaskView[]): boolean {
+  if (plan.kind === "none" || plan.kind === "project") return false;
+  const task = views.find((view) => view.url === plan.url);
+  if (!task) return false;
+  if (plan.kind === "reschedule") return taskDayKey(task) === plan.dayKey;
+  const level = levelOf(task, views);
+  return (
+    level.projectUrl === plan.projectUrl &&
+    level.sectionId === plan.sectionId &&
+    level.parent?.id === plan.parentId &&
+    members(level, views).findIndex((view) => view.url === task.url) + 1 === plan.index
+  );
+}
+
 /** "Move to section…" appends to the chosen section; undefined means No section. */
 export function planToSection(
   active: TaskView,

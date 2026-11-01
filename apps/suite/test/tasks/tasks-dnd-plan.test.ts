@@ -15,6 +15,8 @@ import { dropPriority, placementFor, sameContainer } from "../../src/apps/tasks/
 import {
   canNest,
   effectiveParent,
+  isPlaced,
+  moveTarget,
   nestCandidates,
   planDrop,
   planMove,
@@ -429,6 +431,51 @@ describe("keyboard equivalents", () => {
     expect(planMove(parent, 1, views)).toEqual({ kind: "none" });
     expect(position(planMove(k2, -1, views)).position).toBe(0);
     expect(planMove(k1, -1, views)).toEqual({ kind: "none" });
+  });
+
+  it("anchors Move up/down to the neighbour row, so planning it again is a no-op", () => {
+    const { a, b, c, parent, k1, k2, views } = fixture();
+    for (const [task, direction] of [
+      [b, -1],
+      [b, 1],
+      [a, 1],
+      [k2, -1],
+      [k1, 1],
+    ] as const) {
+      const target = moveTarget(task, direction, views);
+      if (!target) throw new Error("Expected a target");
+      const plan = position(planDrop(task, target, views));
+      expect(plan).toEqual(planMove(task, direction, views));
+      // Once the task sits there, the same target plans nothing.
+      const moved = views.map((view) =>
+        view.url === task.url ? { ...view, position: plan.position } : view,
+      );
+      const after = moved.find((view) => view.url === task.url) as TaskView;
+      expect(planDrop(after, target, moved)).toEqual({ kind: "none" });
+      expect(isPlaced(plan, moved)).toBe(true);
+      expect(isPlaced(plan, views)).toBe(false);
+    }
+    expect(moveTarget(b, 1, views)).toMatchObject({ url: c.url, placement: "after" });
+    expect(moveTarget(a, -1, views)).toBeUndefined();
+    expect(moveTarget(parent, 1, views)).toBeUndefined();
+    expect(moveTarget(b, -1, views, { manual: false })).toBeUndefined();
+    expect(moveTarget(view("stray"), 1, views)).toBeUndefined();
+  });
+
+  it("tells whether a plan's task already sits where it was planned", () => {
+    const { a, k1, views } = fixture();
+    const due = view("due", { allDay: "2026-11-04" });
+    expect(isPlaced({ kind: "none" }, views)).toBe(false);
+    expect(isPlaced({ kind: "project", url: a.url, projectUrl: OTHER }, views)).toBe(false);
+    expect(isPlaced({ kind: "reschedule", url: due.url, dayKey: "2026-11-04" }, [due])).toBe(true);
+    expect(isPlaced({ kind: "reschedule", url: due.url, dayKey: "2026-11-05" }, [due])).toBe(false);
+    const promote = position(planPromote(k1, views));
+    expect(isPlaced(promote, views)).toBe(false);
+    expect(isPlaced({ ...promote, url: "missing" }, views)).toBe(false);
+    const here = position(planMove(a, 1, views));
+    expect(isPlaced({ ...here, url: a.url, index: 1 }, views)).toBe(true);
+    expect(isPlaced({ ...here, url: a.url, index: 1, sectionId: S1 }, views)).toBe(false);
+    expect(isPlaced({ ...here, url: a.url, index: 1, projectUrl: OTHER }, views)).toBe(false);
   });
 
   it("moves to a section, nests and promotes", () => {

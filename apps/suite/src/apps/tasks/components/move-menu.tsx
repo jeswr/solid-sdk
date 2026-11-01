@@ -14,7 +14,9 @@ import { usePathname } from "next/navigation";
 import { dropMessage, failedMessage, projectNames, sectionToast } from "../lib/dnd/announce";
 import {
   effectiveParent,
+  moveTarget,
   nestCandidates,
+  planDrop,
   planMove,
   planNest,
   planPromote,
@@ -30,14 +32,29 @@ import { useTasks } from "../state/tasks-context";
 
 const NO_SECTION = "__none";
 
+type Plan = (task: TaskView, views: readonly TaskView[], options: PlanOptions) => DropPlan;
 /** Plans one move from a task, its listing's visible rows and the project context. */
-export type Planner = (
-  task: TaskView,
-  views: readonly TaskView[],
-  options: PlanOptions,
-) => DropPlan;
-export const moveUp: Planner = (task, views, options) => planMove(task, -1, views, options);
-export const moveDown: Planner = (task, views, options) => planMove(task, 1, views, options);
+export interface Planner extends Plan {
+  /**
+   * Fixes a relative move to an absolute target when first planned, so a
+   * Retry that finds the task already moved plans nothing instead of moving it again.
+   */
+  anchor?: (task: TaskView, views: readonly TaskView[], options: PlanOptions) => Plan;
+}
+const relative = (direction: -1 | 1): Planner =>
+  Object.assign(
+    (task: TaskView, views: readonly TaskView[], options: PlanOptions) =>
+      planMove(task, direction, views, options),
+    {
+      anchor: (task: TaskView, views: readonly TaskView[], options: PlanOptions): Plan => {
+        const target = moveTarget(task, direction, views, options);
+        return (fresh, rows, current) =>
+          target ? planDrop(fresh, target, rows, current) : { kind: "none" };
+      },
+    },
+  );
+export const moveUp = relative(-1);
+export const moveDown = relative(1);
 
 /** The keyboard equivalents of every drag (06-tasks §4.4), for row and card ⋯ menus. */
 export function useTaskMoves(task: TaskView) {
@@ -52,8 +69,9 @@ export function useTaskMoves(task: TaskView) {
   const views = visibleTasks(all, preferences.showCompletedInProject);
   const plan = (make: Planner) => make(task, views, options);
   /** Announces the outcome once the write settles; Retry plans again from fresh state. */
-  const run = (make: Planner) => {
-    const first = plan(make);
+  const run = (relativeMake: Planner) => {
+    const make = relativeMake.anchor?.(task, views, options) ?? relativeMake;
+    const first = make(task, views, options);
     if (first.kind === "none") return Promise.resolve(false);
     const names = projectNames(tasks.projects);
     const message = dropMessage(task, first, views, names, manual);
@@ -61,14 +79,14 @@ export function useTaskMoves(task: TaskView) {
     const replan = replanner(tasks.cache, task.url, (fresh, project) =>
       make(fresh, visibleTasks(project, showCompleted), { all: project, manual }),
     );
-    const announce = (text: string) => focus?.announce(text);
-    const retried = announceRetries(
-      tasks.cache,
+    const retried = announceRetries(tasks.cache, {
       task,
+      plan: first,
       message,
-      (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
-      announce,
-    );
+      showCompleted,
+      describe: (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+      announce: (text) => focus?.announce(text),
+    });
     return applyDropPlan(first, tasks, replan, retried).then((written) => {
       focus?.announce(written ? message : failedMessage(task));
       const moved = written && sectionToast(first, names);

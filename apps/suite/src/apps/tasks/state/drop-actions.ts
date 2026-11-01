@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { failedMessage } from "../lib/dnd/announce";
-import { renumberWriteOrder } from "../lib/dnd/plan";
+import { isPlaced, renumberWriteOrder, visibleTasks } from "../lib/dnd/plan";
 import type { DropPlan } from "../lib/dnd/types";
 import type { StoredTask } from "../lib/model/store";
 import type { TaskItem } from "../lib/model/task";
@@ -36,25 +36,35 @@ export function replanner(
   };
 }
 
+export interface RetryAnnouncement {
+  task: TaskView;
+  /** The first plan and its message. */
+  plan: DropPlan;
+  message: string;
+  /** Whether the listing shows completed rows, for `isPlaced`. */
+  showCompleted: boolean;
+  describe: (plan: DropPlan) => string;
+  announce: (message: string) => void;
+}
+
 /**
  * The `onRetried` announcer for a drop: a written retry describes its own
- * plan; a retry with nothing left to do (the task already sits where it was
- * meant to go) repeats the original message; anything else is a failure.
+ * plan; a retry with nothing left to do repeats the original message only if
+ * the task already sits where the first plan put it (or, for a project move,
+ * its copy is in that project); anything else is a failure.
  */
 export function announceRetries(
   cache: TasksCache,
-  task: TaskView,
-  original: string,
-  describe: (plan: DropPlan) => string,
-  announce: (message: string) => void,
+  { task, plan: first, message, showCompleted, describe, announce }: RetryAnnouncement,
 ): (written: boolean, plan: DropPlan) => void {
+  const placed = () => {
+    const { views } = cache.getSnapshot();
+    const project = views.filter((view) => view.projectUrl === task.projectUrl);
+    return isPlaced(first, visibleTasks(project, showCompleted));
+  };
   return (written, plan) => {
     if (written) announce(describe(plan));
-    else if (
-      plan.kind === "none" &&
-      cache.getSnapshot().views.some((view) => view.url === task.url)
-    )
-      announce(original);
+    else if (plan.kind === "none" && placed()) announce(message);
     else announce(failedMessage(task));
   };
 }
@@ -87,7 +97,18 @@ export async function applyDropPlan(
   if (!stored) return false;
   if (plan.kind === "project") {
     const target = snapshot().projects.find((project) => project.url === plan.projectUrl);
-    return Boolean(target && (await tasks.moveTaskToProject(stored, target)));
+    if (!target) return false;
+    const moved = await tasks.moveTaskToProject(stored, target);
+    if (!moved) {
+      // The cache retries a project move itself (one retained operation); report its success.
+      const stop = tasks.cache.subscribeTaskMoves(({ from, to }) => {
+        if (from !== stored.url) return;
+        stop();
+        if (snapshot().tasks[plan.projectUrl]?.items.some((item) => item.url === to))
+          onRetried(true, plan);
+      });
+    }
+    return Boolean(moved);
   }
   const retry = () => {
     const next = replan();
