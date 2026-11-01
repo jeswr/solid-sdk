@@ -599,9 +599,53 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     for (const mode of ["create", "ensure"] as const) {
       await seedPods({ layout: containerLayout, mode });
     }
-    const order = pod.putRecords().map((r) => new URL(r.url).pathname);
-    expect(order).toEqual(["/private/", "/private/.acl", "/private/", "/private/.acl"]);
+    const order = pod.putRecords().map((r) => [new URL(r.url).pathname, r.body === ""]);
+    // create: empty container, ACL, description (refused with 409, as CSS does);
+    // ensure: the container exists, so only the ACL is reconciled.
+    expect(order).toEqual([
+      ["/private/", true],
+      ["/private/.acl", false],
+      ["/private/", false],
+      ["/private/", true],
+      ["/private/.acl", false],
+    ]);
+    await seedPods({ layout: containerLayout, mode: "replace" });
+  });
+
+  it("a container description lands after its ACL on a server that stores it", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({
+      layout: {
+        pods: [
+          {
+            account: { target: pod },
+            resources: [
+              {
+                path: "/private/",
+                source: { body: "<> a <https://example.org/Box> ." },
+                access: { publicRead: false },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const order = pod.putRecords().map((r) => [new URL(r.url).pathname, r.body === ""]);
+    expect(order).toEqual([
+      ["/private/", true],
+      ["/private/.acl", false],
+      ["/private/", false],
+    ]);
     expect(pod.resources.get("https://pod.example/private/")?.body).toContain("Box");
+  });
+
+  it("a failed data write also removes the ACL this run wrote, so create can re-run", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1);
+    await expect(seedPods({ layout: layout(pod) })).rejects.toBeInstanceOf(SeedError);
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(false);
+    await seedPods({ layout: layout(pod) });
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
   });
 
   it("every pod request refuses redirects", async () => {

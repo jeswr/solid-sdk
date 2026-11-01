@@ -438,10 +438,10 @@ async function writeResource(
  * Write a resource that carries an access spec so its data never sits under an
  * inherited (possibly public) ACL: create an empty placeholder, confirm the
  * server's ACL location, write the ACL, and only then write the data. If the ACL
- * or the data cannot be written, a placeholder this run created is removed, so a
- * re-run starts again. A container is created with its own description instead,
- * because servers such as CSS refuse a PUT to an existing container; only that
- * description (not member data) is briefly governed by the inherited ACL.
+ * or the data cannot be written, a placeholder this run created (and the ACL this
+ * run wrote for it) is removed, so a re-run starts again. A container's
+ * description is skipped when the server refuses a PUT to an existing container
+ * (409, as CSS does; CSS also ignores a container body on creation).
  * A process that dies between placeholder and data leaves the placeholder, and
  * `ensure` cannot tell it from real data; re-run with `replace` after a crash.
  */
@@ -454,13 +454,10 @@ async function writeProtected(
   const url = resource.outcome.url;
   const contentType = resource.spec.contentType ?? DEFAULT_CONTENT_TYPE;
   let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
-  const container = url.endsWith("/");
   let createdPlaceholder = false;
-  let dataWritten = false;
   try {
-    await put(pod.target, url, container ? body : placeholderBody(contentType), contentType, true);
+    await put(pod.target, url, placeholderBody(contentType), contentType, true);
     createdPlaceholder = true;
-    dataWritten = container;
   } catch (error) {
     if (!(error instanceof HttpFailure && error.status === 412) || mode === "create") throw error;
     // The resource exists: ensure leaves its data alone; replace keeps the old data
@@ -474,11 +471,18 @@ async function writeProtected(
     if (createdPlaceholder) await removePlaceholder(pod.target, url);
     throw error;
   }
-  if (outcome === "skipped" || dataWritten) return outcome;
+  if (outcome === "skipped") return outcome;
   try {
     await put(pod.target, url, body, contentType, false);
   } catch (error) {
-    if (createdPlaceholder) await removePlaceholder(pod.target, url);
+    // CSS refuses any PUT to an existing container and ignores a container's body
+    // even on creation, so there is no description to write.
+    if (url.endsWith("/") && error instanceof HttpFailure && error.status === 409) return outcome;
+    if (createdPlaceholder) {
+      // Not every server deletes a resource's ACL with it; this run wrote this one.
+      await removePlaceholder(pod.target, `${url}.acl`);
+      await removePlaceholder(pod.target, url);
+    }
     throw error;
   }
   return outcome;
