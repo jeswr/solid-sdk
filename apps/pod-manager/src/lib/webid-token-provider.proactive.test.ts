@@ -187,13 +187,19 @@ describe("proactive refresh: scheduling", () => {
 
   it("reschedules from the ROTATED token — a second cycle fires with a new refresh_token", async () => {
     vi.useFakeTimers();
-    const { provider, getCode } = makeProvider();
+    const cycles = settlements();
+    const { provider, getCode } = makeProvider(undefined, { onProactiveRefreshSettled: cycles.settled });
     await provider.login(ISSUER);
 
+    // Wait for cycle 1 to settle (and arm the next timer) before advancing again.
+    const firstCycle = cycles.next();
     await tick(65_000); // cycle 1
+    await firstCycle;
     await settleRefreshGrants(1);
 
+    const secondCycle = cycles.next();
     await tick(65_000); // cycle 2 (from rotated token)
+    await secondCycle;
     await settleRefreshGrants(2);
     const grants = refreshGrants();
     expect(grants[1]?.get("refresh_token")).not.toBe(grants[0]?.get("refresh_token"));
