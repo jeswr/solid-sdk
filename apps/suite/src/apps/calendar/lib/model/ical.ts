@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding and UTF-8 folding.
-import { RRule } from "rrule";
+import rrule from "rrule/dist/es5/rrule.js";
+
+const { RRule } = rrule;
+
 import { fromWallClock, wallClock } from "./recurrence";
 import type { CalendarDate, CalendarEvent, RecurrenceRule, Reminder, Weekday } from "./types";
 import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";

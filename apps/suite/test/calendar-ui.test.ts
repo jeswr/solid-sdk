@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   path: "/calendar/week",
   date: "2026-11-01",
   query: "",
+  extra: {} as Record<string, string>,
   router: { replace: vi.fn(), push: vi.fn() },
 }));
 vi.mock("@/lib/session/pod-session", () => ({
@@ -29,7 +30,7 @@ vi.mock(
 );
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.path,
-  useSearchParams: () => new URLSearchParams({ d: mocks.date, q: mocks.query }),
+  useSearchParams: () => new URLSearchParams({ d: mocks.date, q: mocks.query, ...mocks.extra }),
   useRouter: () => mocks.router,
 }));
 vi.mock("next/link", () => ({
@@ -38,6 +39,7 @@ vi.mock("next/link", () => ({
 
 import { CalendarApp } from "../src/apps/calendar/components/calendar-app";
 import { CalendarScreen, CalendarSearch } from "../src/apps/calendar/components/calendar-views";
+import { CalendarEditorRoute } from "../src/apps/calendar/components/event-editor";
 import { calendarIO } from "../src/apps/calendar/lib/model";
 import {
   CalendarProvider,
@@ -51,6 +53,7 @@ import {
   PALETTE,
   rangeKey,
 } from "../src/apps/calendar/state/view";
+import { encodeRef } from "../src/lib/refs";
 
 const NOW = Date.UTC(2026, 10, 1, 12);
 let unsubscribe: (() => void) | undefined;
@@ -59,6 +62,7 @@ beforeEach(async () => {
   mocks.path = "/calendar/week";
   mocks.date = "2026-11-01";
   mocks.query = "";
+  mocks.extra = {};
   mocks.status = "ready";
   mocks.router.replace.mockReset();
   mocks.router.push.mockReset();
@@ -88,6 +92,7 @@ beforeEach(async () => {
   };
   vi.stubGlobal("HTMLButtonElement", window.HTMLButtonElement);
   vi.stubGlobal("HTMLAnchorElement", window.HTMLAnchorElement);
+  vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
 });
 afterEach(() => {
   unsubscribe?.();
@@ -123,7 +128,7 @@ it("renders week recurrence, filters Work everywhere and persists visibility per
   expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(0);
   expect(mounted.host.querySelectorAll('.cal-month [role="gridcell"]')).toHaveLength(42);
 });
-it("moves month focus, handles date navigation and opens the selected day", async () => {
+it("moves month focus, handles date navigation and opens quick-create", async () => {
   mocks.path = "/calendar/month";
   const mounted = await mount(screen("month"));
   await settle();
@@ -145,7 +150,10 @@ it("moves month focus, handles date navigation and opens the selected day", asyn
   await settle();
   expect(document.activeElement?.getAttribute("data-day")).toBe("2026-12-02");
   await key(document.activeElement as HTMLElement, "Enter");
-  expect(mocks.router.push).toHaveBeenLastCalledWith("/calendar/day?d=2026-12-02");
+  expect(document.querySelector(".cal-quick")).not.toBeNull();
+  await key(document.activeElement as HTMLElement, "Escape");
+  await settle();
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-12-02");
 });
 it("moves between week slots, tabs to an event, shows read-only details and restores focus", async () => {
   const mounted = await mount(screen());
@@ -978,4 +986,312 @@ it("acknowledges writes and reconciles details per calendar while another calend
   expect(event()?.data.name).toBe("Remote rename");
   expect(context.selected?.data.name).toBe("Remote rename");
   expect(latest.status === "ready" && latest.warnings).toHaveLength(1);
+});
+
+async function changeField(input: HTMLInputElement | HTMLSelectElement, value: string) {
+  await act(() => {
+    const prototype =
+      input instanceof window.HTMLSelectElement
+        ? window.HTMLSelectElement.prototype
+        : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(
+      new Event(input instanceof window.HTMLSelectElement ? "change" : "input", { bubbles: true }),
+    );
+  });
+}
+it("creates a weekly series from the full editor and announces invalid end dates", async () => {
+  mocks.path = "/calendar/e/new";
+  mocks.extra = {
+    start: "2027-01-04",
+    end: "2027-01-05",
+    cal: `${DEMO_ROOT}calendar/work.ttl#it`,
+    return: "/calendar/month?d=2027-01-01",
+  };
+  const mounted = await mount(
+    h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: "new" }) }),
+  );
+  await settle();
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    editor.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Weekly planning",
+  );
+  await changeField(
+    [...editor.querySelectorAll("input")].find((i) =>
+      i.closest(".suite-date-field")?.textContent?.startsWith("End"),
+    ) as HTMLInputElement,
+    "3 Jan 2027",
+  );
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(editor.querySelector('[role="alert"]')?.textContent).toBe("End must be after start.");
+  await changeField(
+    [...editor.querySelectorAll("input")].find((i) =>
+      i.closest(".suite-date-field")?.textContent?.startsWith("End"),
+    ) as HTMLInputElement,
+    "5 Jan 2027",
+  );
+  expect((editor.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Weekly planning",
+  );
+  const frequency = [...editor.querySelectorAll("select")].find((s) =>
+    s.closest("label")?.textContent?.startsWith("Frequency"),
+  ) as HTMLSelectElement;
+  await changeField(frequency, "WEEKLY");
+  expect((editor.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Weekly planning",
+  );
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect(editor.querySelector('[role="alert"]')?.textContent).toBeUndefined();
+  expect(mocks.router.push).toHaveBeenLastCalledWith("/calendar/month?d=2027-01-01");
+  const account = mocks.session as PodSession;
+  const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/work/`,
+    new Date("2027-01-01"),
+    new Date("2027-02-01"),
+  );
+  expect(events.filter((e) => e.data.name === "Weekly planning")).toHaveLength(4);
+  const created = events.find((e) => e.data.name === "Weekly planning");
+  if (!created) throw new Error("Missing newly created series");
+  mocks.path = `/calendar/e/${encodeRef(created.url)}`;
+  mocks.extra = { occurrence: "2027-01-11", return: "/calendar/month?d=2027-01-01" };
+  await mounted.render(
+    h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(created.url) }) }),
+  );
+  await settle();
+  const nextEditor = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    nextEditor.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Changed local",
+  );
+  await act(() =>
+    nextEditor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await click(
+    [...document.querySelectorAll(".cal-series-dialog button")].find(
+      (b) => b.textContent === "This event",
+    ) as HTMLElement,
+  );
+  await settle();
+  const saved = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/work/`,
+    new Date("2027-01-01"),
+    new Date("2027-02-01"),
+  );
+  expect(saved.filter((e) => e.data.name === "Changed local")).toHaveLength(1);
+  expect(saved.filter((e) => e.data.name === "Weekly planning")).toHaveLength(3);
+});
+it("loads the series master for editing an occurrence and detaches just that occurrence", async () => {
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: "2026-10-28T09:30:00.000Z", return: "/calendar/week?d=2026-11-01" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    editor.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Changed once",
+  );
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await click(
+    [...document.querySelectorAll(".cal-series-dialog button")].find(
+      (b) => b.textContent === "This event",
+    ) as HTMLElement,
+  );
+  await settle();
+  const account = mocks.session as PodSession;
+  const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/work/`,
+    new Date("2026-10-26"),
+    new Date("2026-11-02"),
+  );
+  expect(events.filter((e) => e.data.name === "Changed once")).toHaveLength(1);
+  expect(events.filter((e) => e.data.name === "Team stand-up")).toHaveLength(2);
+});
+it("retains offline intents and replays them on online, while rejecting invalid ETags", async () => {
+  const account = mocks.session as PodSession;
+  let offline = true;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT" && offline) throw new TypeError("network");
+      return account.fetch(input, init);
+    },
+  };
+  let api: ReturnType<typeof useEventMutations> | undefined;
+  let status = "";
+  function Probe() {
+    api = useEventMutations();
+    status = useCalendarState().syncStatus;
+    return null;
+  }
+  const mounted = await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const url = `${DEMO_ROOT}calendar/work/offline.ttl`;
+  const data = {
+    name: "Offline",
+    start: new Date("2026-11-01T15:00Z"),
+    end: new Date("2026-11-01T16:00Z"),
+  };
+  await act(async () => {
+    await api?.create(url, data);
+  });
+  expect(status).toBe("Saved on this device, will sync");
+  expect(localStorage.getItem(`suite:calendar:outbox:${DEMO_WEBID}`)).toContain("Offline");
+  offline = false;
+  await act(() => window.dispatchEvent(new Event("online")));
+  await settle();
+  expect(status).toBe("Saved");
+  expect((await calendarIO(account.fetch, account.storageUrl).loadEvent(url))?.data.name).toBe(
+    "Offline",
+  );
+  for (const etag of ["", "*", 'W/"1"'])
+    await act(async () => {
+      await expect(api?.update(url, data, etag)).rejects.toThrow("Reload");
+    });
+  await mounted.unmount();
+});
+it("keeps offline writes when navigator reports offline and surfaces non-network transport errors", async () => {
+  const account = mocks.session as PodSession;
+  let failure: unknown = new Error("transport denied");
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT") throw failure;
+      return account.fetch(input, init);
+    },
+  };
+  let api: ReturnType<typeof useEventMutations> | undefined;
+  let status = "";
+  function Probe() {
+    api = useEventMutations();
+    status = useCalendarState().syncStatus;
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const url = `${DEMO_ROOT}calendar/work/network.ttl`;
+  const data = { name: "Network", start: "2026-11-01" };
+  await act(async () => {
+    await expect(api?.create(url, data)).rejects.toThrow("transport denied");
+  });
+  failure = new TypeError("network");
+  const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await act(async () => {
+    await api?.create(url, data);
+  });
+  expect(status).toBe("Saved on this device, will sync");
+  online.mockRestore();
+});
+it("does not write before discovery has identified the user's calendars", async () => {
+  const account = mocks.session as PodSession;
+  const loading = deferred<Response>();
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      String(input).includes("profile/card") ? loading.promise : account.fetch(input, init),
+  };
+  let api: ReturnType<typeof useEventMutations> | undefined;
+  function Probe() {
+    api = useEventMutations();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await act(async () => {
+    await expect(
+      api?.create(`${DEMO_ROOT}calendar/work/e.ttl`, { name: "Early", start: "2026-11-01" }),
+    ).rejects.toThrow("Calendars are still loading");
+  });
+});
+it("parses and saves a quick-create title through the existing mutations", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const cell = mounted.host.querySelector('.cal-month [data-day="2026-11-02"]') as HTMLElement;
+  await act(() => cell.focus());
+  await key(cell, "Enter");
+  await settle();
+  const popover = document.querySelector(".cal-quick") as HTMLElement;
+  expect(popover).not.toBeNull();
+  await changeField(
+    popover.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Lunch with Sam tomorrow 1pm",
+  );
+  await changeField(
+    popover.querySelector("select") as HTMLSelectElement,
+    `${DEMO_ROOT}calendar/work.ttl#it`,
+  );
+  await act(() =>
+    popover
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect(document.querySelector(".cal-quick")).toBeNull();
+  const account = mocks.session as PodSession;
+  const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/work/`,
+    new Date("2026-11-02"),
+    new Date("2026-11-03"),
+  );
+  const lunch = events.find((e) => e.data.name === "Lunch with Sam");
+  expect(lunch?.data.start).toEqual(new Date("2026-11-02T13:00Z"));
+  expect(lunch?.data.end).toEqual(new Date("2026-11-02T14:00Z"));
+});
+it("infers the calendar for a legacy event and saves its editor fields", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const old = await io.loadEvent(url);
+  if (!old?.etag) throw new Error("Missing seed");
+  await io.saveEvent(
+    url,
+    { ...old.data, inCalendar: undefined, recurrence: undefined },
+    { etag: old.etag },
+  );
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  expect((form.querySelector('[aria-label="Calendar"]') as HTMLSelectElement).value).toBe(
+    `${DEMO_ROOT}calendar/work.ttl#it`,
+  );
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Edited legacy",
+  );
+  await act(() =>
+    form
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect((await io.loadEvent(url))?.data.name).toBe("Edited legacy");
+});
+it("rejects an impossible date in a direct new-event URL", async () => {
+  mocks.path = "/calendar/e/new";
+  mocks.extra = { start: "2026-02-31", end: "2026-03-02", cal: `${DEMO_ROOT}calendar/work.ttl#it` };
+  const mounted = await mount(
+    h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: "new" }) }),
+  );
+  await settle();
+  expect(mounted.host.querySelector('[role="alert"]')?.textContent).toBe(
+    "This event reference or its dates are invalid.",
+  );
+  expect(mounted.host.querySelector(".cal-editor-page")).toBeNull();
 });

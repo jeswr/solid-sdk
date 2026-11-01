@@ -15,7 +15,9 @@ import {
   useState,
 } from "react";
 import { type PodSession, usePodSessionState } from "@/lib/session/pod-session";
-import { type CalendarEvent, expandEvent } from "../lib/model";
+import { type CalendarEvent, expandEvent, validateEvent } from "../lib/model";
+import { eventDocument } from "./editing";
+import { createEventOutbox } from "./outbox";
 import {
   createCalendar,
   discoverCalendars,
@@ -55,6 +57,7 @@ interface CalendarContextValue {
   revision: number;
   cache: Map<string, Promise<RangeResult>>;
   writes: EventWrite[];
+  syncStatus: string;
   mutate: (write: EventWrite) => Promise<void>;
   create: (title: string, colour: string) => Promise<void>;
   selected: Occurrence | undefined;
@@ -77,6 +80,10 @@ function SessionCalendarProvider({
   const [revision, setRevision] = useState(0);
   const cache = useMemo(() => new Map<string, Promise<RangeResult>>(), []);
   const [writes, setWrites] = useState<EventWrite[]>([]);
+  const [queuedWrites, setQueuedWrites] = useState<EventWrite[]>([]);
+  const [syncStatus, setSyncStatus] = useState("");
+  const calendarRef = useRef(calendars);
+  calendarRef.current = calendars;
   const [selected, setSelected] = useState<Occurrence>();
   const trigger = useRef<HTMLElement>(null);
   const returnDay = useRef<HTMLElement | null>(null);
@@ -132,15 +139,73 @@ function SessionCalendarProvider({
   }, [session, revision]);
   const mutate = useMemo(
     () =>
-      eventMutations(session, setWrites, reload, (_error, conflict) => {
-        toast.error(
-          conflict
-            ? "This event changed elsewhere. The latest version has been loaded."
-            : "Couldn't save the event. Your change was reverted.",
-        );
-      }),
+      eventMutations(
+        {
+          ...session,
+          fetch: async (input, init) => {
+            try {
+              if (!navigator.onLine) throw new TypeError("Offline");
+              return await session.fetch(input, init);
+            } catch (error) {
+              if (error instanceof TypeError) throw new TypeError("Calendar network unavailable");
+              throw error;
+            }
+          },
+        },
+        setWrites,
+        reload,
+        (error, conflict) => {
+          if (error instanceof TypeError && error.message === "Calendar network unavailable")
+            return;
+          toast.error(
+            conflict
+              ? "This event changed elsewhere. The latest version has been loaded."
+              : "Couldn't save the event. Your change was reverted.",
+          );
+        },
+      ),
     [session, reload],
   );
+  const outbox = useMemo(
+    () =>
+      createEventOutbox(
+        session.webId,
+        {
+          getItem: (key) => localStorage.getItem(key),
+          setItem: (key, value) => localStorage.setItem(key, value),
+        },
+        mutate,
+        (entries, offline) => {
+          setQueuedWrites(entries);
+          setSyncStatus(
+            entries.length ? (offline ? "Saved on this device, will sync" : "Saving…") : "Saved",
+          );
+        },
+        (write) => {
+          const current = calendarRef.current;
+          if (current.status !== "ready") throw new Error("Calendars are still loading");
+          eventDocument(write.url, session.storageUrl, current.calendars);
+          if (write.kind !== "delete") validateEvent(write.data);
+          if (
+            write.kind !== "create" &&
+            (!write.etag || write.etag === "*" || write.etag.startsWith("W/"))
+          )
+            throw new Error("Reload this event before saving");
+        },
+      ),
+    [session, mutate],
+  );
+  const ready = calendars.status === "ready";
+  useEffect(() => {
+    if (!ready) return;
+    outbox.restore();
+    const retry = () => {
+      void outbox.flush();
+    };
+    retry();
+    addEventListener("online", retry);
+    return () => removeEventListener("online", retry);
+  }, [outbox, ready]);
   const create = useCallback(
     async (title: string, colour: string) => {
       try {
@@ -181,6 +246,7 @@ function SessionCalendarProvider({
     },
     [selected, closeEvent],
   );
+  const visibleWrites = useMemo(() => [...writes, ...queuedWrites], [writes, queuedWrites]);
   return (
     <Context
       value={{
@@ -191,8 +257,9 @@ function SessionCalendarProvider({
         reload,
         revision,
         cache,
-        writes,
-        mutate,
+        writes: visibleWrites,
+        syncStatus,
+        mutate: outbox.save,
         create,
         selected,
         focusRequest,
@@ -226,7 +293,11 @@ export function useCalendars() {
   const { calendars, reload } = useCalendarState();
   return { ...calendars, reload };
 }
-export function useEventsInRange(from: string, to: string): EventsState & { reload: () => void } {
+export function useEventsInRange(
+  from: string,
+  to: string,
+  reconcileSelection = true,
+): EventsState & { reload: () => void } {
   const { session, calendars, prefs, cache, revision, writes, reload, reconcile } =
     useCalendarState();
   const latestWrites = useRef(writes);
@@ -311,14 +382,14 @@ export function useEventsInRange(from: string, to: string): EventsState & { relo
     return { ...state, events, warnings: [...calendars.warnings, ...state.warnings] };
   }, [snapshot, key, writes, calendars, from, to, zone]);
   useEffect(() => {
-    if (state.status === "ready")
+    if (reconcileSelection && state.status === "ready")
       reconcile(
         state.events,
         from,
         to,
         state.warnings.map((warning) => warning.calendarUrl),
       );
-  }, [state, from, to, reconcile]);
+  }, [state, from, to, reconcile, reconcileSelection]);
   return { ...state, reload };
 }
 export function useEventMutations() {
