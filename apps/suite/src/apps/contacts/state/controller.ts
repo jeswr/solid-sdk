@@ -6,15 +6,13 @@ import type { AddressBookData, ContactData, ContactGroupData } from "../lib/mode
 // The model barrel also exports the server-side DAV importer. Keep the browser graph
 // on its client-safe modules so bundlers never pull in Node's HTTP implementation.
 import { ContactsModel } from "../lib/model/book";
-import { discoverContacts, registerAddressBook } from "../lib/model/discovery";
-import {
-  ContactsWriteError,
-  PartialWriteError,
-  replacement,
-  type Snapshot,
-} from "../lib/model/transport";
+import { discoverContacts } from "../lib/model/discovery";
+import { openDocument, saveDocument } from "../lib/model/intent";
+import { ContactsWriteError, PartialWriteError, type Snapshot } from "../lib/model/transport";
 import { applyContactPatch, type ContactPatch, decodeContactRef, encodeContactRef } from "./data";
-import { ensureBook, ensurePrivateIndex, optionalDocument, restoreLinks } from "./recovery";
+import { type DeleteToken, IntentRunner, newIntent } from "./intents";
+import { browserIntentStorage, type Intent, IntentJournal, type IntentStorage } from "./journal";
+import { optionalDocument } from "./recovery";
 
 export interface ContactsData {
   book: Snapshot<AddressBookData> | null;
@@ -80,25 +78,21 @@ export class ContactsController {
   private indexUrl: string;
   private bookUrl: string;
   private registrationPending = false;
-  // Keep these until all recovery writes finish, including across a failed reconciliation.
-  private deletionRepairs = new Map<
-    string,
-    { person: Snapshot<ContactData>; labels: string[]; people: boolean }
-  >();
-  private migrations = new Map<
-    string,
-    { destination: string; source: Snapshot<unknown>; completed: readonly string[] }
-  >();
+  private runner: IntentRunner;
+  private journals = new Map<string, IntentJournal>();
   private current: ContactsState = { status: "loading", data: this.baseline, saving: false };
   constructor(
     fetch: typeof globalThis.fetch,
     readonly storage: string,
     readonly webId: string,
     private onError: (message: string) => void,
+    private intentStorage: () => IntentStorage = browserIntentStorage,
+    onDeleted: (token: DeleteToken) => void = () => {},
   ) {
     this.model = new ContactsModel(fetch, storage);
     this.indexUrl = new URL("settings/privateTypeIndex.ttl", storage).href;
     this.bookUrl = this.model.bookUrl;
+    this.runner = new IntentRunner(this.model, webId, onDeleted);
   }
   getSnapshot = () => this.current;
   subscribe = (listener: () => void) => {
@@ -134,7 +128,7 @@ export class ContactsController {
       // AddressBook registrations precede the potentially large Individual containers. Discovery
       // is bounded independently of the full people index load and reports truncation to the UI.
       const found = await discoverContacts(this.model, this.indexUrl);
-      this.bookUrl = found.books[0] ?? this.model.bookUrl;
+      this.bookUrl = this.model.transport.url(found.books[0] ?? this.model.bookUrl);
       this.registrationPending = !found.books.length;
       return found;
     } catch (error) {
@@ -145,22 +139,55 @@ export class ContactsController {
       throw error;
     }
   }
+  private journal(bookUrl: string) {
+    let journal = this.journals.get(bookUrl);
+    if (!journal) {
+      journal = new IntentJournal(this.webId, bookUrl, this.onError, this.intentStorage);
+      this.journals.set(bookUrl, journal);
+    }
+    return journal;
+  }
+  private async resume() {
+    let recovered = false;
+    for (const bookUrl of new Set([this.model.bookUrl, this.bookUrl])) {
+      const journal = this.journal(bookUrl);
+      await journal.lock(async () => {
+        for (const intent of journal.list()) {
+          recovered = true;
+          await this.runner.run(journal, intent);
+        }
+      });
+    }
+    return recovered;
+  }
+  private async perform(
+    bookUrl: string,
+    matches: (intent: Intent) => boolean,
+    prepare: () => Promise<Intent>,
+  ) {
+    const journal = this.journal(bookUrl);
+    return journal.lock(async () => {
+      const intent = journal.list().find(matches) ?? (await prepare());
+      journal.put(intent); // Must precede the first pod write.
+      await this.runner.run(journal, intent);
+      return intent;
+    });
+  }
   private async read(discovery: boolean): Promise<ContactsData> {
-    const found = discovery
-      ? await this.discover()
-      : { flat: this.baseline.flat, incomplete: this.baseline.incomplete };
+    // Recover the conventional/previous book before discovery can observe half a migration.
+    const recovered = await this.resume();
+    let found =
+      discovery || recovered
+        ? await this.discover()
+        : { flat: this.baseline.flat, incomplete: this.baseline.incomplete };
+    // No ready list can hide a partially written document, even in a fresh tab/controller.
+    if (await this.resume()) found = await this.discover();
     let book: Snapshot<AddressBookData>;
     try {
       book = await this.model.loadAddressBook(this.bookUrl);
     } catch (error) {
       if (error instanceof RdfFetchError && error.status === 404) return { ...empty(), ...found };
       throw error;
-    }
-    for (const [id, repair] of this.deletionRepairs) {
-      // A 412 can mean the surviving person changed. Restore links to its current document.
-      const person = await this.model.loadContact(repair.person.url);
-      await restoreLinks(this.model, book, person, repair.labels, repair.people);
-      this.deletionRepairs.delete(id);
     }
     const [people, groups] = await Promise.all([
       this.model.loadPeople(book),
@@ -244,9 +271,19 @@ export class ContactsController {
       apply: (data) => data,
       write: async () => {
         this.registrationPending = true;
-        if (!this.baseline.book) await ensureBook(this.model, this.webId);
-        this.indexUrl = await ensurePrivateIndex(this.model, this.webId);
-        await registerAddressBook(this.model, this.indexUrl);
+        await this.perform(
+          this.bookUrl,
+          (intent) => intent.kind === "book",
+          async () =>
+            newIntent("book", this.bookUrl, this.indexUrl, {
+              destinations: [
+                this.bookUrl,
+                this.indexUrl,
+                this.baseline.book?.data.nameEmailIndex ?? new URL("people.ttl", this.bookUrl).href,
+                this.baseline.book?.data.groupIndex ?? new URL("groups.ttl", this.bookUrl).href,
+              ],
+            }),
+        );
         this.registrationPending = false;
       },
     });
@@ -259,7 +296,18 @@ export class ContactsController {
     return this.mutate({
       apply: (current) => ({ ...current, people: [...current.people, person] }),
       write: async (current) => {
-        await this.model.createContact(this.book(current), data, url);
+        const book = this.book(current);
+        await this.perform(
+          book.url,
+          (intent) => intent.kind === "create" && intent.destination === url,
+          async () => {
+            const plan = await this.model.planContact(book, data, url);
+            return newIntent("create", book.url, url, {
+              person: await saveDocument(plan.document),
+              destinations: plan.changes.map((change) => change.url),
+            });
+          },
+        );
       },
     }).then(() => `${url}#this`);
   }
@@ -281,7 +329,8 @@ export class ContactsController {
       },
     });
   }
-  delete(id: string) {
+  delete(id: string): Promise<DeleteToken> {
+    let token: DeleteToken;
     return this.mutate({
       apply: (data) => ({
         ...data,
@@ -293,27 +342,33 @@ export class ContactsController {
       }),
       write: async (data) => {
         const book = this.book(data);
-        const person = this.person(data, id);
-        try {
-          await this.model.deleteContact(book, person);
-        } catch (error) {
-          if (error instanceof PartialWriteError) {
-            const peopleUrl = book.data.nameEmailIndex ?? new URL("people.ttl", book.url).href;
-            this.deletionRepairs.set(id, {
-              person,
-              // The model writes a group only when it actually removed this person. Its fresh
-              // reads may include memberships added since our last UI snapshot.
-              labels: error.completed
-                .filter((url) => url !== peopleUrl)
-                .map((url) => `${url}#this`),
-              people: error.completed.includes(peopleUrl),
+        this.person(data, id);
+        const intent = await this.perform(
+          book.url,
+          (entry) => entry.kind === "delete" && `${entry.destination}#this` === id,
+          async () => {
+            // This runs after all previously queued updates and reads the actual RDF to delete.
+            const person = await this.model.loadContact(id);
+            const changes = await this.model.planDeleteContact(book, person);
+            const labels = changes.slice(0, -2).map((change) => change.url);
+            return newIntent("delete", book.url, person.url, {
+              person: await saveDocument(person),
+              labels,
+              destinations: changes.map((change) => change.url),
             });
-          }
-          throw error;
-        }
+          },
+        );
+        token = { person: intent.person as DeleteToken["person"], labels: intent.labels };
       },
-    });
+    }).then(() => token);
   }
+  async undo(token: DeleteToken) {
+    return this.restore(
+      await openDocument(token.person),
+      token.labels.map((url) => `${url}#this`),
+    );
+  }
+
   /** Preserve the document identity and memberships; If-None-Match protects an occupied URL. */
   restore(person: Snapshot<ContactData>, labels: readonly string[]) {
     const id = `${person.url}#this`;
@@ -328,11 +383,25 @@ export class ContactsController {
         ),
       }),
       write: async (data) => {
-        this.book(data);
-        await this.model.transport.commit([
-          { url: person.url, dataset: person.dataset, etag: null },
-        ]);
-        this.deletionRepairs.set(id, { person, labels: [...labels], people: true });
+        const book = this.book(data);
+        await this.perform(
+          book.url,
+          (intent) => intent.kind === "restore" && intent.destination === person.url,
+          async () => {
+            // The initial Undo still requires an unoccupied document. Replays check the saved UID.
+            await this.model.transport
+              .read(person.url, () => {
+                throw new ContactsWriteError(412, person.url, null);
+              })
+              .catch((error: unknown) => {
+                if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+              });
+            return newIntent("restore", book.url, person.url, {
+              person: await saveDocument(person),
+              labels: labels.map((label) => label.replace(/#this$/, "")),
+            });
+          },
+        );
       },
     });
   }
@@ -405,28 +474,25 @@ export class ContactsController {
           apply: (data) => data,
           write: async (data) => {
             const book = this.book(data);
-            let progress = this.migrations.get(source.id);
-            if (!progress) {
-              progress = {
-                destination: new URL(`people/${crypto.randomUUID()}.ttl`, book.url).href,
-                source: await this.model.loadFlatContacts(source.id),
-                completed: [],
-              };
-              this.migrations.set(source.id, progress);
-            }
-            if (progress.completed.includes(progress.destination)) {
-              const person = await this.model.loadContact(progress.destination);
-              await restoreLinks(this.model, book, person, []);
-              await this.model.transport.commit([replacement(progress.source)]);
-            } else {
-              try {
-                await this.model.migrateToBook(book, source.id, progress.destination);
-              } catch (error) {
-                if (error instanceof PartialWriteError) progress.completed = error.completed;
-                throw error;
-              }
-            }
-            this.migrations.delete(source.id);
+            await this.perform(
+              book.url,
+              (intent) =>
+                intent.kind === "migrate" &&
+                intent.source?.url === this.model.transport.url(source.id),
+              async () => {
+                const destination = new URL(`people/${crypto.randomUUID()}.ttl`, book.url).href;
+                const { plan, source: original } = await this.model.planMigration(
+                  book,
+                  source.id,
+                  destination,
+                );
+                return newIntent("migrate", book.url, destination, {
+                  person: await saveDocument(plan.document),
+                  destinations: plan.changes.map((change) => change.url),
+                  source: await saveDocument(original),
+                });
+              },
+            );
             this.baseline = {
               ...this.baseline,
               flat: this.baseline.flat.filter((item) => item.id !== source.id),

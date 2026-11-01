@@ -171,6 +171,29 @@ function button(host: ParentNode, text: string) {
 }
 
 describe("Contacts rendered behavior with the existing Drive DOM harness", () => {
+  it("keeps Contacts usable and shows a persistent recovery warning when the localStorage getter throws", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    ) as PropertyDescriptor;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("storage blocked");
+      },
+    });
+    try {
+      const view = await setup();
+      expect(view.host.querySelector(".con-list-heading")?.textContent).toContain("40 contacts");
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("recovery will be lost on reload"),
+        { duration: Infinity },
+      );
+      await view.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", descriptor);
+    }
+  });
   it("virtualises a 200-contact book and reaches its last row with End", async () => {
     const view = await setup(200);
     const rows = () => view.host.querySelectorAll("[data-collection-item]");
@@ -229,6 +252,20 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
     });
     await act(async () => env.push(`${env.href.split("?")[0]}?q=no-such-person-987`));
     await settle(() => expect(view.host.textContent).toContain("No matches"));
+    await view.unmount();
+  });
+  it.each([
+    "unknown",
+    "Z3JvdXBzL3JlbW92ZWQudHRs",
+  ])("shows an unknown label (%s) with a link back to All contacts", async (ref) => {
+    const view = await setup();
+    await act(async () => env.push(`/contacts/label/${ref}`));
+    await settle(() => expect(view.host.querySelector("h1")?.textContent).toBe("Label not found"));
+    expect(view.host.textContent).not.toContain("No matches");
+    const back = view.host.querySelector<HTMLAnchorElement>('.con-list a[href="/contacts"]');
+    expect(back?.textContent).toBe("All contacts");
+    await click(back as Element);
+    await settle(() => expect(view.host.querySelector("h1")?.textContent).toBe("All contacts"));
     await view.unmount();
   });
   it("stars, deletes and restores a contact with its labels through the real model", async () => {

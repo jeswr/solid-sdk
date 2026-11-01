@@ -21,6 +21,7 @@ import {
   starsKey,
   toggleStar,
 } from "./data";
+import { browserIntentStorage } from "./journal";
 
 const Context = createContext<ContactsController | null>(null);
 const StarsContext = createContext<{ stars: ReadonlySet<string>; toggle(id: string): void }>({
@@ -29,23 +30,39 @@ const StarsContext = createContext<{ stars: ReadonlySet<string>; toggle(id: stri
 });
 export function ContactsProvider({ children }: { children: ReactNode }) {
   const session = usePodSessionState();
-  const controller = useMemo(
-    () =>
-      session.status === "ready"
-        ? new ContactsController(
-            session.session.fetch,
-            session.session.storageUrl,
-            session.session.webId,
-            (message) => toast.error(message, { duration: Infinity }),
-          )
-        : null,
-    [session],
-  );
+  const controller = useMemo(() => {
+    if (session.status !== "ready") return null;
+    const controller = new ContactsController(
+      session.session.fetch,
+      session.session.storageUrl,
+      session.session.webId,
+      (message) => toast.error(message, { duration: Infinity }),
+      browserIntentStorage,
+      (token) =>
+        toast("Contact deleted", {
+          duration: 8000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void controller.undo(token).catch(() => {});
+            },
+          },
+        }),
+    );
+    return controller;
+  }, [session]);
   const [stars, setStars] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     if (session.status !== "ready" || !controller) return;
     const { session: pod } = session;
-    setStars(readStars(localStorage, pod.webId));
+    const syncStars = () => {
+      try {
+        setStars(readStars(localStorage, pod.webId));
+      } catch {
+        setStars(new Set());
+      }
+    };
+    syncStars();
     void controller.refresh();
     let timer: ReturnType<typeof setTimeout>;
     const unsubscribe = pod.subscribe(() => {
@@ -55,7 +72,13 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
       }, 60);
     });
     const sync = (event: StorageEvent) => {
-      if (event.key === starsKey(pod.webId)) setStars(readStars(localStorage, pod.webId));
+      if (event.key === starsKey(pod.webId)) syncStars();
+      if (event.key?.startsWith(`solid-suite:contacts:intent:${encodeURIComponent(pod.webId)}:`)) {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          void controller.refresh();
+        }, 60);
+      }
     };
     addEventListener("storage", sync);
     return () => {

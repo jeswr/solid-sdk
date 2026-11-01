@@ -97,7 +97,7 @@ export function ContactsList({
     if (state.book && path.startsWith("/contacts/label/"))
       groupUrl = decodeContactRef(state.book.url, path.slice("/contacts/label/".length));
   } catch {
-    /* Unknown label is an empty filtered view. */
+    /* Invalid references use the same not-found state as a removed label. */
   }
   const group = state.data.groups.find((g) => g.url === groupUrl);
   const filtered = filterContacts(state.contacts, stars, group, path === "/contacts/starred");
@@ -221,6 +221,16 @@ export function ContactsList({
     },
   ];
   const height = useMemo(() => 620, []);
+  if (state.status === "ready" && state.book && missingLabel)
+    return (
+      <section className="con-list" aria-labelledby="con-missing-label">
+        <h1 id="con-missing-label">Label not found</h1>
+        <p>This label isn't here any more.</p>
+        <Button asChild>
+          <Link href="/contacts">All contacts</Link>
+        </Button>
+      </section>
+    );
   const title = group?.data.name ?? (path === "/contacts/starred" ? "Starred" : "All contacts");
   return (
     <section className="con-list" aria-labelledby="con-list-title">

@@ -124,6 +124,19 @@ test("labels filter the current list and search highlights matching text", async
   await accessible(page);
 });
 
+test("an unknown label shows a not-found state with a link back to All contacts", async ({
+  page,
+}) => {
+  await open(page);
+  await page.goto("/contacts/label/unknown");
+  await expect(page.getByRole("heading", { name: "Label not found", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No matches", exact: true })).toBeHidden();
+  await accessible(page);
+  await page.locator(".con-list").getByRole("link", { name: "All contacts", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "All contacts", exact: true })).toBeVisible();
+  await expect(page.locator(".con-list-heading").getByRole("status")).toHaveText("40 contacts");
+});
+
 test("Labels consumes Escape for suggestions, then details closes and restores the row", async ({
   page,
 }) => {

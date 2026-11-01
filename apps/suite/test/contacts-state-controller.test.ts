@@ -14,6 +14,7 @@ import {
   FRIENDS,
   GROUPS,
   INDEX,
+  MemoryIntentStorage,
   PEOPLE,
   PM,
   ROOT,
@@ -37,10 +38,11 @@ async function controllerSetup() {
     `@prefix solid: <http://www.w3.org/ns/solid/terms#>. @prefix vcard: <http://www.w3.org/2006/vcard/ns#>. <#book> a solid:TypeRegistration; solid:forClass vcard:AddressBook; solid:instance <${BOOK}#this>. <#pm> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}#it>.`,
   );
   const errors = vi.fn();
-  const controller = new ContactsController(pod.fetch, ROOT, WEBID, errors);
+  const storage = new MemoryIntentStorage();
+  const controller = new ContactsController(pod.fetch, ROOT, WEBID, errors, () => storage);
   await controller.refresh();
   expect(controller.getSnapshot().status, String(controller.getSnapshot().error)).toBe("ready");
-  return { controller, pod, errors };
+  return { controller, pod, errors, storage };
 }
 describe("Contacts reads and discovery", () => {
   it("bounds per-person reads to six while preserving index order", async () => {
@@ -250,7 +252,7 @@ describe("Contacts optimistic conditional mutations", () => {
       pod.seed(ALICE, original.replace('"Alice"', '"Alice changed elsewhere"'), '"new"');
       return new Response(null, { status });
     };
-    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(PartialWriteError);
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(ContactsWriteError);
     expect(controller.getSnapshot().status).toBe("ready");
     expect(controller.getSnapshot().data.people[0]?.data.name).toBe("Alice changed elsewhere");
     expect(
@@ -281,7 +283,7 @@ describe("Contacts optimistic conditional mutations", () => {
     const { controller, pod } = await controllerSetup();
     pod.fail = (url, method) =>
       url === PEOPLE && method === "PUT" ? new Response(null, { status: 412 }) : undefined;
-    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(PartialWriteError);
+    await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(ContactsWriteError);
     expect(controller.getSnapshot().data.people).toHaveLength(1);
     expect(controller.getSnapshot().data.groups[0]?.data.members).toContain(`${ALICE}#this`);
   });
@@ -306,11 +308,12 @@ describe("Contacts optimistic conditional mutations", () => {
     await expect(controller.delete(`${ALICE}#this`)).rejects.toBeInstanceOf(ContactsWriteError);
     expect(controller.getSnapshot().data.people[0]?.url).toBe(ALICE);
     pod.fail = undefined;
+    const writesBeforeUndo = pod.writes.length;
     await expect(controller.restore(person, [])).rejects.toMatchObject({ status: 412 });
     expect(
       isomorphic([...(await controller.model.loadContact(ALICE)).dataset], [...person.dataset]),
     ).toBe(true);
-    expect(pod.writes.at(-1)?.headers.get("if-none-match")).toBe("*");
+    expect(pod.writes).toHaveLength(writesBeforeUndo);
   });
   it("Undo preserves UID, custom properties, contact-point metadata and unrelated RDF", async () => {
     const { controller, pod } = await controllerSetup();
@@ -454,8 +457,8 @@ describe("Contacts optimistic conditional mutations", () => {
     pod.fail = (url, method) =>
       url === INDEX && method === "PUT" ? new Response(null, { status: 412 }) : undefined;
     await expect(controller.createBook()).rejects.toThrow();
-    expect(controller.getSnapshot().data.book).not.toBeNull();
-    expect(controller.getSnapshot().data.registrationPending).toBe(true);
+    expect(controller.getSnapshot().status).toBe("error");
+    expect(pod.files.has(BOOK)).toBe(true);
     pod.fail = undefined;
     await controller.createBook();
     expect(pod.files.get(INDEX)?.body).toContain("contacts-");
@@ -505,7 +508,8 @@ describe("Contacts optimistic conditional mutations", () => {
       pod.writes.filter((r) => r.method === "PUT" && r.headers.get("if-none-match") === "*");
     expect(destinations()).toHaveLength(1);
     pod.fail = undefined;
-    expect(await controller.migrate()).toEqual({ moved: 1, failed: 0 });
+    await controller.refresh();
+    expect(controller.getSnapshot().status).toBe("ready");
     expect(destinations()).toHaveLength(1);
     expect(
       controller.getSnapshot().data.people.filter((p) => p.data.name === "Pat Morgan"),
@@ -524,21 +528,25 @@ describe("Contacts optimistic conditional mutations", () => {
       return undefined;
     };
     expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
-    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    await controller.refresh();
+    expect(controller.getSnapshot().status).toBe("error");
     pod.seed(
       PM,
       `${pod.files.get(PM)?.body}\n<#it> <https://example.org/changed> "new data".`,
       '"changed"',
     );
     pod.fail = undefined;
-    expect(await controller.migrate()).toEqual({ moved: 0, failed: 1 });
+    await controller.refresh();
+    expect(controller.getSnapshot().status).toBe("error");
     expect(pod.files.has(PM)).toBe(true);
     expect(
       pod.writes
         .filter((r) => r.headers.get("if-none-match") === "*" && r.method === "PUT")
         .map((r) => r.url),
     ).toEqual([expect.any(String), expect.any(String)]);
-    expect(controller.getSnapshot().data.people).toHaveLength(2);
+    expect(
+      (await controller.model.loadPeople(await controller.model.loadAddressBook())).data,
+    ).toHaveLength(2);
   });
   it("migrates sources sequentially, preserves fields, and reports partial failures", async () => {
     const { controller, pod } = await controllerSetup();

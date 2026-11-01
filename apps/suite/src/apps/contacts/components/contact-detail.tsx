@@ -17,7 +17,6 @@ import {
   LoadingSkeleton,
   renderAsync,
   TagInput,
-  toast,
 } from "@jeswr/suite-ui";
 import { LiteralAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { ArrowLeft, ExternalLink, Mail, Pencil, Phone, Star, Trash2 } from "lucide-react";
@@ -185,22 +184,8 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                     <AlertDialogAction
                       variant="destructive"
                       onClick={() => {
-                        const saved = person;
                         onClose();
-                        void mutations
-                          .delete(id)
-                          .then(() => {
-                            toast("Contact deleted", {
-                              duration: 8000,
-                              action: {
-                                label: "Undo",
-                                onClick: () => {
-                                  void mutations.restore(saved, labels).catch(() => {});
-                                },
-                              },
-                            });
-                          })
-                          .catch(() => {});
+                        void mutations.delete(id).catch(() => {});
                       }}
                     >
                       Delete contact

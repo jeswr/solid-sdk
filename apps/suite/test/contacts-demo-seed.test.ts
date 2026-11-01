@@ -8,6 +8,7 @@ import { projectContact } from "../src/apps/contacts/state/data";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import { seedContacts } from "../src/lib/demo-pod/seed-contacts";
+import { MemoryIntentStorage } from "./contacts-support";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -18,8 +19,13 @@ describe("Contacts demo seed", () => {
     const files = await buildDemoSeed(1000);
     const pod = createDemoPod({ root: DEMO_ROOT, seed: files });
     const errors: string[] = [];
-    const controller = new ContactsController(pod.fetch, DEMO_ROOT, DEMO_WEBID, (error) =>
-      errors.push(error),
+    const storage = new MemoryIntentStorage();
+    const controller = new ContactsController(
+      pod.fetch,
+      DEMO_ROOT,
+      DEMO_WEBID,
+      (error) => errors.push(error),
+      () => storage,
     );
     await controller.refresh();
     expect(controller.getSnapshot().status, String(controller.getSnapshot().error)).toBe("ready");
