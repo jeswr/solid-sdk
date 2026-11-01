@@ -2069,10 +2069,15 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   // ── Issuer resolution: WebID profile → solid:oidcIssuer (never regex) ──────
-  async #resolveIssuer(webId: string): Promise<URL> {
+  /** The `solid:oidcIssuer` values the WebID's (public) profile advertises. */
+  async #advertisedIssuers(webId: string): Promise<string[]> {
     const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
     const agent = new Agent(webId, dataset, DataFactory);
-    const issuers = [...agent.oidcIssuer];
+    return [...agent.oidcIssuer];
+  }
+
+  async #resolveIssuer(webId: string): Promise<URL> {
+    const issuers = await this.#advertisedIssuers(webId);
     if (issuers.length === 0) throw new NoSolidIssuerError(webId);
     if (issuers.length === 1) return new URL(issuers[0]);
     const choose = this.#opts.chooseIssuer;
@@ -2083,14 +2088,7 @@ class SolidAuthEngine implements SolidAuth {
     // issuer↔WebID binding (a malicious OP could then assert this WebID). Compare by
     // URL origin+path (tolerant of a trailing slash), fail closed otherwise.
     const chosenUrl = new URL(chosen);
-    const advertised = issuers.some((i) => {
-      try {
-        return new URL(i).href.replace(/\/$/, "") === chosenUrl.href.replace(/\/$/, "");
-      } catch {
-        return false;
-      }
-    });
-    if (!advertised) {
+    if (!issuers.some((i) => sameIssuer(i, chosenUrl))) {
       throw new Error(
         `chooseIssuer returned an issuer (${chosen}) that the WebID profile does not advertise.`,
       );
@@ -2668,7 +2666,8 @@ class SolidAuthEngine implements SolidAuth {
   ): Promise<{ authorizationUrl: string }> {
     // Resolve the issuer + the (optional) requested WebID. `webId` binds the login to
     // an identity (its issuer resolved from the profile, then PROVEN on return);
-    // `oidcIssuer` is used directly (its returned WebID accepted after an https guard).
+    // `oidcIssuer` is used directly (its returned WebID must be https AND list this
+    // issuer in its profile — checked on return in #exchangeRedirectCode).
     let issuer: URL;
     let requestedWebId: string | null;
     if (options.webId !== undefined && options.webId !== "") {
@@ -2905,7 +2904,7 @@ class SolidAuthEngine implements SolidAuth {
     // SCHEME GUARD (untrusted WebID): the WebID's origin joins the credential boundary
     // (the DPoP token may be attached to it), so it MUST be https (loopback http only
     // under the opt-in) — a cleartext WebID would let the token ride over plaintext.
-    // Fail closed. This is the ONLY WebID guard for the issuer-only (`webId` null) path.
+    // Fail closed.
     const webId = validateWebId(claimedWebId, this.#opts.allowInsecureLoopback ?? false);
     // WEBID-MATCH GUARD (fail-closed): when the login was BOUND to a requested WebID,
     // the OP MUST have authenticated as it — the launch carries only the public WebID,
@@ -2915,6 +2914,18 @@ class SolidAuthEngine implements SolidAuth {
       throw new Error(
         `Signed in as a different WebID than requested (asked for ${flow.webId}, got ${webId}).`,
       );
+    }
+    // ISSUER-BINDING GUARD (fail-closed) for the issuer-only (`webId` null) path: any OP
+    // can put any WebID in its id_token, so the returned WebID is only accepted when its
+    // own profile lists THIS issuer as a solid:oidcIssuer (the Solid-OIDC binding the
+    // WebID-first path gets from #resolveIssuer). A profile that cannot be read fails too.
+    if (flow.webId === null) {
+      const advertised = await this.#advertisedIssuers(webId);
+      if (!advertised.some((i) => sameIssuer(i, issuer))) {
+        throw new Error(
+          `The WebID ${webId} does not list ${issuer.href} as its solid:oidcIssuer, so this identity provider cannot sign in as it.`,
+        );
+      }
     }
     return {
       generation,
@@ -3310,6 +3321,18 @@ function needsInteraction(e: unknown): boolean {
   try {
     const err = (e as { cause?: { parameters?: URLSearchParams } }).cause?.parameters?.get("error");
     return err !== undefined && err !== null && INTERACTION_REQUIRED_ERRORS.has(err);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether an advertised `solid:oidcIssuer` value names `issuer` (tolerant of a trailing
+ * slash, as discovery normalises it). Unparseable values never match (fail-closed).
+ */
+function sameIssuer(advertised: string, issuer: URL): boolean {
+  try {
+    return new URL(advertised).href.replace(/\/$/, "") === issuer.href.replace(/\/$/, "");
   } catch {
     return false;
   }

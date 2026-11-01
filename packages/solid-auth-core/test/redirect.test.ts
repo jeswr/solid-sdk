@@ -544,6 +544,27 @@ describe("completeRedirectLogin", () => {
     expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
   });
 
+  it("issuer-only login: accepts the returned WebID when its profile lists THIS issuer", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example" });
+    agentIssuer = "https://idp.example"; // advertised without the trailing slash
+    const result = await auth.completeRedirectLogin(callback());
+    expect(result.webId).toBe(webIdClaim);
+    expect(auth.webId).toBe(webIdClaim);
+  });
+
+  it("issuer-only login: REJECTS a WebID whose profile does not list this issuer (fail-closed)", async () => {
+    const store = new RecordingStore();
+    const { auth, storage } = makeAuth({ store });
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/" });
+    // A hostile OP asserts a WebID whose profile names a DIFFERENT issuer.
+    agentIssuer = "https://real-idp.example/";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull(); // no session, no credential, no pointer
+    expect(store.puts).toHaveLength(0);
+    expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
+  });
+
   it("REJECTS a non-DPoP (Bearer) token_type (sender-constraint enforced)", async () => {
     const { auth } = await begunAuth();
     loginTokenType = "Bearer";
