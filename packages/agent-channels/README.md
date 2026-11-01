@@ -53,8 +53,16 @@ their binding tasks. LinkedIn/X have zero-byte read-only profiles. No profile
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
-Provider exports other than Gmail remain reserved for their own tasks. Packages
-remain private per ADR-001 D5.
+Gmail and the optional read-only X binding are implemented. Other provider exports
+remain reserved for their own tasks. Packages remain private per ADR-001 D5.
+
+Gmail notification triage labels recognised LinkedIn notification senders as
+`linkedin-proxy`, retaining the email provenance and an explicit unverified warning.
+`./x` exports the opt-in `createXReader` and a shared `createXSpendCounter`; the
+counter refuses calls beyond a configured cap within each UTC accounting period.
+There is no LinkedIn or X send binding. See [LinkedIn and X limits](../../docs/bindings/linkedin-x.md)
+for the mailbox rule, OAuth 2 PKCE read scopes, configured cost bounds and
+process-local counter lifetime.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
 

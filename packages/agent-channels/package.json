@@ -28,6 +28,10 @@
       "types": "./dist/gmail.d.ts",
       "default": "./dist/gmail.js"
     },
+    "./x": {
+      "types": "./dist/x.d.ts",
+      "default": "./dist/x.js"
+    },
     "./graph-mail": {
       "types": "./dist/graph-mail.d.ts",
       "default": "./dist/graph-mail.js"

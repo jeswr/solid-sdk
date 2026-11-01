@@ -15,9 +15,12 @@ import {
   record,
   responseBody,
 } from "./gmail/rest.js";
+import { triageLinkedInNotification } from "./gmail/triage.js";
 import type { OriginFetchOptions } from "./origins.js";
 import { EMAIL_MIME } from "./profiles.js";
 import type { TokenProvider } from "./types.js";
+
+export { triageLinkedInNotification } from "./gmail/triage.js";
 
 export const ORIGINS: ReadonlySet<string> = gmailOrigins();
 export interface GmailReaderOptions extends EmailConfig {
@@ -193,7 +196,7 @@ export function createGmailReader(options: GmailReaderOptions): ChannelBinding {
         return { items, next: JSON.stringify(state) };
       },
       parse(item) {
-        return inspectEmail(item.raw, config).message;
+        return triageLinkedInNotification(inspectEmail(item.raw, config).message);
       },
       threadKey(message) {
         return message.threadId;
