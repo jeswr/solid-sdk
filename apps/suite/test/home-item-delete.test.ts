@@ -975,3 +975,133 @@ it("takes over a claim that went stale as its own pending deletion, so Undo work
   expect(pod.has(url)).toBe(false);
   expect(saved.size).toBe(0);
 });
+
+// AUTHORED-BY Claude Opus 5.5 — fix round 6 (findings 1, 2, 3)
+/** Storage events reach every controller in this test, as they would reach other tabs. */
+function storageEvents() {
+  const events = new EventTarget();
+  vi.stubGlobal("addEventListener", events.addEventListener.bind(events));
+  vi.stubGlobal("removeEventListener", events.removeEventListener.bind(events));
+  return () => events.dispatchEvent(Object.assign(new Event("storage"), { key: queueKey }));
+}
+it("adopting another tab's newer tombstone drops the older saved copy, so Undo keeps the new version", async () => {
+  vi.useFakeTimers();
+  const storageEvent = storageEvents();
+  const { session, item, fetch, pod } = await setup();
+  const offered = vi.fn();
+  const tabA = createDeleteController(
+    session,
+    vi.fn(async () => {}),
+    vi.fn(),
+    offered,
+  );
+  await tabA.remove(item, vi.fn());
+  // Another live tab claims the deletion; tab A's commit meets that claim and watches it.
+  const [tombstone] = JSON.parse(saved.get(queueKey) as string);
+  saved.set(queueKey, JSON.stringify([{ ...tombstone, claim: { by: "tab-b", at: Date.now() } }]));
+  tabA.release(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(tabA.getSnapshot().has(url)).toBe(true);
+  // Tab B finished; a newer version was written and tab C deleted that one.
+  await pod.fetch(url, { method: "DELETE" });
+  const newer = '<#it> <http://purl.org/dc/terms/title> "Version two".';
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: newer,
+  });
+  const etag = (await readItem(session, url)).item.etag;
+  expect(etag).not.toBe(item.etag);
+  const deleteAt = Date.now() + UNDO_MS;
+  saved.set(queueKey, JSON.stringify([{ url, etag, deleteAt }]));
+  storageEvent();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(offered).toHaveBeenCalledWith(url, deleteAt);
+  expect(tabA.pendingDeletes()).toEqual([{ url, deleteAt, resumed: true }]);
+  fetch.mockClear();
+  // Undo withdraws tab C's tombstone and writes nothing: version one never replaces two.
+  expect(await tabA.undo(url)).toBe(true);
+  expect(sends(fetch, "PUT")).toBe(0);
+  expect(await (await pod.fetch(url)).text()).toBe(newer);
+  expect(saved.size).toBe(0);
+  await vi.advanceTimersByTimeAsync(UNDO_MS + HOLD_GRACE_MS);
+  expect(sends(fetch, "DELETE")).toBe(0);
+  tabA.dispose();
+});
+it("renews a committer's claim while a slow DELETE is outstanding, so Undo waits it out", async () => {
+  vi.useFakeTimers();
+  const { pod, fetch, etagged, tabA, failedB } = await copyHolderAndCommitter();
+  const deleting = gate();
+  let sent = false;
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE") {
+      sent = true;
+      await deleting.opened;
+    }
+    return etagged(input, init);
+  });
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sent).toBe(true);
+  const undone = tabA.undo(url);
+  let settled = false;
+  void undone.then(() => {
+    settled = true;
+  });
+  // The DELETE is held well past the stale age: tab B keeps its claim live meanwhile.
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS * 2);
+  const [claimed] = JSON.parse(saved.get(queueKey) as string);
+  expect(claimed).toMatchObject({ undone: true });
+  expect(Date.now() - claimed.claim.at).toBeLessThan(CLAIM_STALE_MS);
+  expect(settled).toBe(false);
+  expect(sends(fetch, "PUT")).toBe(0);
+  deleting.open();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(await undone).toBe(true);
+  expect(failedB).not.toHaveBeenCalled();
+  expect(await (await pod.fetch(url)).text()).toBe(body);
+  expect(saved.size).toBe(0);
+  // Renewal stopped when the DELETE settled: nothing writes the queue afterwards.
+  const writes = vi.spyOn(localStorage, "setItem");
+  await vi.advanceTimersByTimeAsync(CLAIM_STALE_MS * 2);
+  expect(writes).not.toHaveBeenCalled();
+  expect(saved.size).toBe(0);
+  expect(sends(fetch, "DELETE")).toBe(1);
+});
+it("a watching tab keeps the card hidden after Undo marks the tombstone undone, until the claim clears", async () => {
+  vi.useFakeTimers();
+  const storageEvent = storageEvents();
+  const { session, pod, fetch, etagged, tabA, tabB } = await copyHolderAndCommitter();
+  const refreshC = vi.fn(async () => {});
+  const tabC = createDeleteController({ ...session }, refreshC);
+  const deleting = gate();
+  fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE") await deleting.opened;
+    return etagged(input, init);
+  });
+  // Tab B claims and sends its DELETE; tab C's commit meets that claim and watches it.
+  await vi.advanceTimersByTimeAsync(UNDO_MS);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  expect(tabC.getSnapshot().has(url)).toBe(true);
+  expect(tabC.pendingDeletes()).toEqual([]);
+  // Tab A's Undo marks the tombstone undone while B's DELETE is still in flight.
+  const undone = tabA.undo(url);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(JSON.parse(saved.get(queueKey) as string)[0]).toMatchObject({ undone: true });
+  storageEvent();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(tabC.getSnapshot().has(url)).toBe(true);
+  expect(refreshC).not.toHaveBeenCalled();
+  // B's DELETE settles and its claim clears: C now follows the pod.
+  deleting.open();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(saved.size).toBe(0);
+  storageEvent();
+  await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS);
+  expect(tabC.getSnapshot().size).toBe(0);
+  expect(refreshC).toHaveBeenCalled();
+  expect(await undone).toBe(true);
+  expect(await (await pod.fetch(url)).text()).toBe(body);
+  expect(tabB.getSnapshot().size).toBe(0);
+  expect(sends(fetch, "DELETE")).toBe(1);
+  tabC.dispose();
+});

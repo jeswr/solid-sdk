@@ -19,6 +19,11 @@ export const HOLD_GRACE_MS = 30_000;
 export const CLAIM_STALE_MS = 120_000;
 /** How often a tab waiting on another tab's claim looks again, besides storage events. */
 export const CLAIM_POLL_MS = 1_000;
+/**
+ * How often a committer renews its claim while its DELETE is outstanding, well within
+ * {@link CLAIM_STALE_MS}, so a live but slow DELETE never looks abandoned to other tabs.
+ */
+export const CLAIM_RENEW_MS = CLAIM_STALE_MS / 4;
 /** What survives a reload. Item content is never copied into browser storage. */
 interface Tombstone {
   url: string;
@@ -228,16 +233,16 @@ export function createDeleteController(
   };
   /**
    * Resolves once no other live tab claims `tombstone`: it finished (or abandoned) the
-   * deletion, or its claim went stale. Woken by storage events, and polled as well.
+   * deletion, or its claim went stale. A committer renews its claim while its DELETE is
+   * outstanding, so a slow DELETE is waited out. Woken by storage events, and polled as well.
    */
   const claimCleared = (tombstone: Tombstone) =>
     new Promise<void>((resolve) => {
-      const deadline = Date.now() + CLAIM_STALE_MS;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const check = () => {
         clearTimeout(timer);
         const found = queue.entries()?.find((other) => same(other, tombstone));
-        if (!found || !claimedElsewhere(found) || Date.now() >= deadline) {
+        if (!found || !claimedElsewhere(found)) {
           wakers.delete(check);
           resolve();
         } else timer = setTimeout(check, CLAIM_POLL_MS);
@@ -246,8 +251,9 @@ export function createDeleteController(
       check();
     });
   /**
-   * Another live tab claimed this deletion: keep the card hidden while it commits, and
-   * look again when the queue changes or that claim would go stale.
+   * Another live tab claimed this deletion: keep the card hidden while it commits (even once
+   * an Undo marked it undone, since its DELETE may still be in flight), and look again when
+   * the queue changes or that claim would go stale.
    */
   const watch = (entry: PendingDelete) => {
     entry.committing = false;
@@ -255,7 +261,7 @@ export function createDeleteController(
       if (entry.watching !== check) return;
       clearTimeout(entry.timer);
       const found = queue.entries()?.find((other) => same(other, entry.tombstone));
-      if (found?.claim && !found.undone && claimedElsewhere(found)) {
+      if (found?.claim && claimedElsewhere(found)) {
         entry.timer = setTimeout(check, found.claim.at + CLAIM_STALE_MS - Date.now());
         return;
       }
@@ -274,27 +280,39 @@ export function createDeleteController(
    * follows the refreshed pod. When that tab's claim went stale (it closed mid-commit, so
    * its DELETE may never have been sent), this tab takes the deletion over as its own
    * pending one, with a fresh undo window and Undo offered again. Another tab's newer
-   * tombstone for the same item is adopted the same way, or watched while it is claimed.
+   * tombstone for the same item is adopted the same way, or watched while it is claimed;
+   * this page's saved copy is of an older version, so the entry then acts as a resumed one.
    */
   const takeOver = async (entry: PendingDelete) => {
     const { url, etag } = entry.tombstone;
-    const current = await queue.transact((entries) => {
+    const taken = await queue.transact((entries) => {
       const found =
         entries.find((other) => same(other, entry.tombstone)) ??
         entries.find((other) => other.url === url);
       if (!found || found.undone) return { next: entries, result: undefined };
-      if (claimedElsewhere(found) || !same(found, entry.tombstone))
-        return { next: entries, result: found };
+      if (!same(found, entry.tombstone))
+        return { next: entries, result: { current: found, adopted: true } };
+      if (claimedElsewhere(found))
+        return { next: entries, result: { current: found, adopted: false } };
       const fresh: Tombstone = { url, etag, deleteAt: Date.now() + UNDO_MS };
       // Before the lock is released, so an Undo queued behind it withdraws the fresh one.
       entry.tombstone = fresh;
-      return { next: entries.map((other) => (other === found ? fresh : other)), result: fresh };
+      return {
+        next: entries.map((other) => (other === found ? fresh : other)),
+        result: { current: fresh, adopted: false },
+      };
     });
     if (pending.get(url) !== entry || entry.undoing || entry.committing) return;
-    if (!current) {
+    if (!taken) {
       await refresh();
       await forget(entry);
       return;
+    }
+    const { current, adopted } = taken;
+    if (adopted) {
+      // Undo must never write this page's older copy over the version that tombstone deletes.
+      delete entry.restore;
+      entry.durable = true;
     }
     entry.tombstone = current;
     if (claimedElsewhere(current)) {
@@ -362,7 +380,25 @@ export function createDeleteController(
       await refresh();
       return;
     }
-    const response = await sent.response;
+    // Keep the claim fresh while the DELETE is outstanding, so another tab's Undo waits for
+    // it rather than taking a slow DELETE for an abandoned one.
+    const renew = entry.durable
+      ? setInterval(() => {
+          void queue.update((entries) =>
+            entries.map((other) =>
+              same(other, entry.tombstone) && other.claim?.by === owner
+                ? { ...other, claim: { by: owner, at: Date.now() } }
+                : other,
+            ),
+          );
+        }, CLAIM_RENEW_MS)
+      : undefined;
+    let response: Response;
+    try {
+      response = await sent.response;
+    } finally {
+      clearInterval(renew);
+    }
     // 412 with the item missing means it was deleted elsewhere meanwhile: also success.
     if (!response.ok && response.status !== 404 && !(response.status === 412 && (await gone(url))))
       throw new Error("Delete failed");
