@@ -98,6 +98,51 @@ describe("a multi-valued request operand cannot satisfy a permission allowlist",
   });
 });
 
+describe("an isAllOf permission is not an allowlist for extra values", () => {
+  const recipientSet = `${AGENT}recipientSet`;
+  const send = `${AGENT}SendMessage`;
+  const m = mandateWith({
+    type: "permission",
+    action: send,
+    constraints: [
+      { leftOperand: recipientSet, operator: "isAllOf", rightOperand: [h("a"), h("b")] },
+    ],
+  });
+
+  it("exactly the listed recipients still permit autonomously", async () => {
+    expect(await evaluateIntent(m, intent(send, { [recipientSet]: [h("b"), h("a")] }))).toEqual({
+      decision: "permit",
+      reason: "autonomous",
+    });
+  });
+
+  it("the listed recipients plus an outside one are not an autonomous permit", async () => {
+    const d = await evaluateIntent(m, intent(send, { [recipientSet]: [h("a"), h("b"), h("c")] }));
+    expect(d.decision).not.toBe("permit");
+    expect(
+      (
+        await solidOdrlEngine.evaluate(
+          m.autonomous,
+          intent(send, { [recipientSet]: [h("a"), h("b"), h("c")] }),
+        )
+      ).effect,
+    ).toBe("indeterminate");
+  });
+  it("a single-value isAllOf operand admits only that value", async () => {
+    const one = mandateWith({
+      type: "permission",
+      action: send,
+      constraints: [{ leftOperand: recipientSet, operator: "isAllOf", rightOperand: h("a") }],
+    });
+    expect((await evaluateIntent(one, intent(send, { [recipientSet]: [h("a")] }))).decision).toBe(
+      "permit",
+    );
+    expect(
+      (await evaluateIntent(one, intent(send, { [recipientSet]: [h("a"), h("c")] }))).decision,
+    ).not.toBe("permit");
+  });
+});
+
 describe("set-valued operands cannot switch off a prohibition or satisfy a duty", () => {
   const recipientSet = `${AGENT}recipientSet`;
   const send = `${AGENT}SendMessage`;

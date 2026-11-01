@@ -1911,3 +1911,29 @@ it("requires confirmation on process failure while checking an unsupported polic
     reason: "indeterminate",
   });
 });
+
+it("decides a mistyped rule by the list it sits in, as solid-odrl does", async () => {
+  // A hand-built policy whose prohibitions entry says type "permission": the
+  // array, not the field, makes it a prohibition for both engines.
+  const p: Policy = {
+    ...policy,
+    prohibitions: [
+      {
+        type: "permission",
+        action: "read",
+        duties: [{ action: "inform" }],
+        constraints: [{ leftOperand: "count", operator: "gt", rightOperand: "2" }],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { count: "10" } });
+  expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:duty-prohibition"] }),
+    status: 0,
+  }));
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: "prohibited",
+  });
+  expect(run).toHaveBeenCalledOnce();
+});

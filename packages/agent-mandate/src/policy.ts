@@ -209,9 +209,20 @@ export const solidOdrlEngine: PolicyEngine = {
     // duty) allowlist; isNoneOf fails when one element is listed, so one listed
     // recipient would switch off a "never outside this set" prohibition. Leave
     // both to confirmation (the sparq adapter refuses set-valued operands outright).
-    const unsafeSet = (kind: RuleKind) => (c: Constraint) =>
-      Array.isArray(attributes[c.leftOperand]) &&
-      c.operator === (kind === "prohibition" ? "isNoneOf" : "isAnyOf");
+    // isAllOf only requires the listed values to be present, so an unlisted extra
+    // value would also ride through a permission: confirm unless every request
+    // value is literally listed.
+    const unsafeSet = (kind: RuleKind) => (c: Constraint) => {
+      const value = attributes[c.leftOperand];
+      if (!Array.isArray(value)) return false;
+      if (kind === "prohibition") return c.operator === "isNoneOf";
+      if (c.operator === "isAnyOf") return true;
+      if (c.operator !== "isAllOf") return false;
+      const listed = (Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand]).map(
+        String,
+      );
+      return value.some((v) => !listed.includes(String(v)));
+    };
     const setValued =
       permitted.some(
         (r) =>

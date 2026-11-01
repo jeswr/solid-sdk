@@ -143,8 +143,8 @@ export function sparqPolicyEngine(
           attributes.set(left, value);
         }
         // The shared evaluator matches prohibitions independently of their duties.
-        const comparable = (r: Rule) =>
-          (r.type === "prohibition" || (r.duties ?? []).length === 0) &&
+        const comparable = (r: Rule, kind: RuleKind) =>
+          (kind === "prohibition" || (r.duties ?? []).length === 0) &&
           supportedPolicy({ id: policy.id, permissions: [r] }) &&
           (r.constraints ?? []).every(
             (c) =>
@@ -161,18 +161,18 @@ export function sparqPolicyEngine(
           (policy.obligations ?? []).length > 0 ||
           rules.some((r) => (r.duties ?? []).length > 0) ||
           [
-            ...(policy.permissions ?? []).filter((r) =>
-              candidate(r, policy, request, "permission"),
+            ...(policy.permissions ?? []).filter(
+              (r) => candidate(r, policy, request, "permission") && !comparable(r, "permission"),
             ),
-            ...(policy.prohibitions ?? []).filter((r) =>
-              candidate(r, policy, request, "prohibition"),
+            ...(policy.prohibitions ?? []).filter(
+              (r) => candidate(r, policy, request, "prohibition") && !comparable(r, "prohibition"),
             ),
-          ].some((r) => !comparable(r));
+          ].length > 0;
         // Only a definite prohibition may decide a policy with unresolved candidates.
         if (
           unresolved &&
           !(policy.prohibitions ?? []).some(
-            (r) => candidate(r, policy, request, "prohibition") && comparable(r),
+            (r) => candidate(r, policy, request, "prohibition") && comparable(r, "prohibition"),
           )
         )
           return { effect: "indeterminate" };
@@ -180,7 +180,7 @@ export function sparqPolicyEngine(
         // Select candidates here, then use one exact action for rules and request.
         const lower = (rules: readonly Rule[] | undefined, kind: RuleKind) =>
           (rules ?? [])
-            .filter((r) => candidate(r, policy, request, kind) && comparable(r))
+            .filter((r) => candidate(r, policy, request, kind) && comparable(r, kind))
             .map(({ assignee: _assignee, assigner: _assigner, duties: _duties, ...rule }) => ({
               ...rule,
               action: "use",
