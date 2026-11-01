@@ -250,6 +250,40 @@ describe("WAC sharing adapter", () => {
       ),
     ).toBe(false);
   });
+  it("moves the comments container's accessTo and default together", async () => {
+    const { fetch, documents, doc } = await server();
+    const comments = document("wac", false, COMMENTS);
+    authorization(comments, ALICE, ["Read", "Write", "Control"]);
+    // Carol is a commenter in the usual container shape: herself and her members.
+    const carol = authorization(comments, CAROL, ["Read", "Append"]);
+    carol.default = COMMENTS;
+    authorization(doc, CAROL, ["Read"]);
+    documents.set(comments.source, comments);
+    const adapter = new WacSharingAdapter({ fetch, webId: ALICE, commentsUrl: COMMENTS });
+    await adapter.load(FILE, signal());
+    await adapter.setPerson(FILE, BOB, "commenter");
+    const rows = () => [...new AclResource(comments.dataset, DataFactory).authorizations];
+    const bob = rows().filter((row) => row.agent.has(BOB));
+    expect(bob.some((row) => row.canAppend && row.default === COMMENTS)).toBe(true);
+    await adapter.setPerson(FILE, CAROL, null);
+    // No Append is left behind on the members either.
+    expect(rows().some((row) => row.agent.has(CAROL) && row.canAppend)).toBe(false);
+  });
+  it("refuses comment changes for a principal whose container grant is one-sided", async () => {
+    const { fetch, documents, doc } = await server();
+    const comments = document("wac", false, COMMENTS);
+    authorization(comments, ALICE, ["Read", "Write", "Control"]);
+    authorization(comments, CAROL, ["Read", "Append"]);
+    authorization(doc, CAROL, ["Read"]);
+    documents.set(comments.source, comments);
+    const adapter = new WacSharingAdapter({ fetch, webId: ALICE, commentsUrl: COMMENTS });
+    await adapter.load(FILE, signal());
+    await expect(adapter.setPerson(FILE, CAROL, null)).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    // Refused before any write: no half-applied plan.
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+  });
   it("does not confer management just because an ACL is readable", async () => {
     const { fetch } = await server();
     const adapter = new WacSharingAdapter({ fetch, webId: BOB });

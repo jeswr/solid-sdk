@@ -155,8 +155,12 @@ export class WacSharingAdapter implements SharingAdapter {
       if (previous && !signal.aborted)
         previous.state = {
           ...previous.state,
+          // Only a failed connection is "offline"; anything else (an ACL the core can't
+          // summarise, a parse error) is a lasting reason not to write.
           readOnly:
-            error instanceof ShareError && error.code !== "network" ? "forbidden" : "offline",
+            (error instanceof ShareError && error.code === "network") || error instanceof TypeError
+              ? "offline"
+              : "forbidden",
         };
       throw error;
     }
@@ -256,14 +260,18 @@ export class WacSharingAdapter implements SharingAdapter {
   ) {
     const predicate = principal.kind === "public" ? `${ACL}agentClass` : `${ACL}agent`;
     const identifier = principal.kind === "public" ? PUBLIC : principal.webId;
+    // A container (the comments container) is governed by accessTo for itself and default
+    // for its members; they must move together or a downgrade leaves member access behind.
+    // Only symmetric authorizations are changed; any other shape fails closed.
+    const container = new URL(resource).pathname.endsWith("/");
     const modes = new Set<string>();
     for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
       const scoped = new ScopedAuthorization(auth as Term, dataset, DataFactory);
-      if (
-        !scoped.values(`${ACL}accessTo`).has(resource) ||
-        !scoped.values(predicate).has(identifier)
-      )
-        continue;
+      if (!scoped.values(predicate).has(identifier)) continue;
+      const own = scoped.values(`${ACL}accessTo`).has(resource);
+      const members = container && scoped.values(`${ACL}default`).has(resource);
+      if (container && own !== members) throw new ShareError("unsupported");
+      if (!own) continue;
       for (const mode of auth.mode) modes.add(mode);
       // Split the principal away from ALL other principals before changing its target scope.
       const subject = DataFactory.blankNode();
@@ -276,6 +284,7 @@ export class WacSharingAdapter implements SharingAdapter {
       isolated.values(`${ACL}agentClass`).clear();
       isolated.values(predicate).add(identifier);
       isolated.values(`${ACL}accessTo`).delete(resource);
+      if (container) isolated.values(`${ACL}default`).delete(resource);
       if (!isolated.values(`${ACL}accessTo`).size && !isolated.values(`${ACL}default`).size) {
         for (const quad of [...dataset.match(isolated as Term)]) dataset.delete(quad);
       }
@@ -286,6 +295,7 @@ export class WacSharingAdapter implements SharingAdapter {
     const grant = new ScopedAuthorization(DataFactory.blankNode(), dataset, DataFactory);
     grant.type.add(`${ACL}Authorization`);
     grant.values(`${ACL}accessTo`).add(resource);
+    if (container) grant.values(`${ACL}default`).add(resource);
     grant.values(predicate).add(identifier);
     for (const mode of modes) grant.mode.add(mode);
   }
