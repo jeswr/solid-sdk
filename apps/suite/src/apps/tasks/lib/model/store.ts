@@ -299,10 +299,13 @@ export class TaskStore {
     }
     return tasks;
   }
-  async createTask(project: StoredProject, data: TaskDetails): Promise<StoredTask> {
+  async createTask(
+    project: StoredProject,
+    data: TaskDetails,
+    id = this.uuid(),
+  ): Promise<StoredTask> {
     const container = project.tracker.stateStore;
     if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
-    const id = this.uuid();
     if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
     const url = `${container}${id}.ttl`;
     const now = this.now();
@@ -328,5 +331,24 @@ export class TaskStore {
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);
+  }
+  /** Each resource keeps its own read validator; a conflict stops further removal. */
+  async deleteSection(project: StoredProject, id: string): Promise<StoredProject> {
+    if (!project.tracker.sections.some((section) => section.id === id))
+      throw new TypeError("Unknown section.");
+    for (const item of await this.listTasks(project.tracker.stateStore as string)) {
+      if (item.task.types.has(id)) {
+        await this.updateTask(item, (task) => task.types.delete(id));
+      }
+    }
+    return this.updateProject(project, (tracker) => tracker.removeSection(id));
+  }
+  /** Delete children before their container. Stale Type Index locations are ignored on discovery. */
+  async deleteProject(project: StoredProject): Promise<void> {
+    const container = project.tracker.stateStore as string;
+    for (const item of await this.listTasks(container)) await this.deleteTask(item);
+    const resource = await this.io.read(container);
+    await this.io.remove(container, resource.etag);
+    await this.io.remove(project.url, project.etag);
   }
 }
