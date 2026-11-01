@@ -18,6 +18,7 @@ import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-sessio
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { isEditing, openAddTask } from "../state/add-focus";
+import { useReminderScheduler } from "../state/reminders";
 import { TasksProvider, useTasks } from "../state/tasks-context";
 import { Composer } from "./composer/composer";
 import { TaskDetail } from "./detail/task-detail";
@@ -77,6 +78,12 @@ function TasksChrome({ children }: { children: ReactNode }) {
       }),
     [tasks.cache, taskUrl, params, pathname, router],
   );
+  // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
+  useReminderScheduler(tasks.cache, (url) => {
+    const query = new URLSearchParams(params.toString());
+    query.set("task", encodeRef(url));
+    router.push(`${pathname}?${query}`, { scroll: false });
+  });
   const origin = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (taskRef !== null && origin.current === undefined) {
