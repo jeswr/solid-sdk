@@ -13,7 +13,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
 import { Store } from "n3";
 import type { DemoSeedFile } from "../../../lib/demo-pod/pod";
-import { demoAccountHash, demoApprovalDocument, demoMandateFiles } from "./demo-mandate";
+import { demoAccountHash, demoMandateFiles } from "./demo-mandate";
 import { AGENT, metadataNode, PROV, RDF } from "./paths";
 
 const ROOT = "https://alice.demo.pod/";
@@ -260,11 +260,8 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
   const files: DemoSeedFile[] = await Promise.all(
     records.map(async (record) => ({
       path: record.id.slice(ROOT.length),
-      body:
-        record.type === "approval"
-          ? await demoApprovalDocument(record)
-          : await recordToTurtle(record),
-      contentType: record.type === "approval" ? "application/trig" : "text/turtle",
+      body: await recordToTurtle(record),
+      contentType: "text/turtle",
       modified: now,
     })),
   );
