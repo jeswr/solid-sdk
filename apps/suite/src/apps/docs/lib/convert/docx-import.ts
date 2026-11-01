@@ -90,6 +90,7 @@ function mapLists(
   document: DocxElement,
   styleMap: string[],
   blocks: ReadonlyMap<string, DocxBlockMetadata>,
+  runs: ReadonlyMap<string, { styleId: string | null; css: string }>,
 ) {
   function container(element: DocxElement) {
     const ancestors: { path: string; key: string; list: string }[] = [];
@@ -132,7 +133,7 @@ function mapLists(
         indentLevel >= 0 &&
         ancestors.length > 0;
       const mappedStyle = (ancestors: string[]) => {
-        const block = table
+        let block = table
           ? "table:fresh"
           : child.styleId === "Code" ||
               child.styleId === "ListContinuationCode" ||
@@ -141,6 +142,8 @@ function mapLists(
             : quoted && blockStyle === "quote"
               ? "p:fresh"
               : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
+        if (identity?.type === "paragraph" && identity.css)
+          block = block.replace(/(p|h[1-3]):fresh$/, `$1[style='${identity.css}']:fresh`);
         const styleId = `SuiteList${styleMap.length}`;
         // Mammoth uses the first matching rule. Every generated list/continuation
         // path must precede presets while retaining the paragraph's block style.
@@ -193,11 +196,30 @@ function mapLists(
       } else {
         ancestors.length = 0;
         // A Word edit may remove the list that introduced this continuation.
-        if (quoted || (child.type === "paragraph" && continuationStyle)) mappedStyle([]);
+        if (
+          quoted ||
+          (child.type === "paragraph" && continuationStyle) ||
+          (identity?.type === "paragraph" && identity.css)
+        )
+          mappedStyle([]);
         container(child);
       }
     }
   }
+  function styleRuns(element: DocxElement) {
+    if (element.type === "run") {
+      const formatting = runs.get(element.styleId ?? "");
+      if (formatting && element.styleName !== "Task Marker") {
+        const id = `SuiteText${styleMap.length}`;
+        styleMap.unshift(
+          `r.${id} => span[style='${formatting.css}']${element.styleName === "Inline Code" ? " > code" : ""}`,
+        );
+        element.styleId = id;
+      }
+    }
+    for (const child of element.children ?? []) styleRuns(child);
+  }
+  styleRuns(document);
   container(document);
   return document;
 }
@@ -282,7 +304,8 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     { arrayBuffer: await archive.toArrayBuffer() },
     {
       styleMap,
-      transformDocument: (document: DocxElement) => mapLists(document, styleMap, identified.blocks),
+      transformDocument: (document: DocxElement) =>
+        mapLists(document, styleMap, identified.blocks, identified.runs),
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       ignoreEmptyParagraphs: false,

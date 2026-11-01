@@ -2,14 +2,14 @@
 "use client";
 import {
   AppIcon,
-  Badge,
+  Avatar,
+  AvatarFallback,
   Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   IconButton,
-  Input,
   Kbd,
   toast,
 } from "@jeswr/suite-ui";
@@ -48,13 +48,15 @@ import {
 } from "../lib/editor/logic";
 import { DocsError, DocsSidebar, DocumentSkeleton, Hint } from "./common";
 import { DeleteDialog } from "./delete-dialog";
+import { EditorMenubar } from "./editor-menubar";
 import { CountPopover, LinkPopover } from "./editor-popovers";
 import { BlockSelect, EditorToolbar, ToolButton } from "./editor-toolbar";
-import { FileMenu } from "./file-menu";
 import { FindBar } from "./find-bar";
 import { ImageUpload } from "./image-upload";
 import { ImportDialog } from "./import-dialog";
+import { InlineTitle } from "./inline-title";
 import { OutlinePane } from "./outline-pane";
+import { PageCanvas } from "./page-canvas";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
 import { TableActions } from "./table-actions";
@@ -127,6 +129,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const [help, setHelp] = useState(false);
   const [why, setWhy] = useState(false);
   const [outline, setOutline] = useState(true);
+  const [zoom, setZoom] = useState(100);
   const [slash, setSlash] = useState<SlashPosition | null>(null);
   const [image, setImage] = useState<{
     file: File | null;
@@ -344,10 +347,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     now ?? runtime.lastSaved,
     runtime.readOnly,
   );
-  const commitTitle = () => {
-    const committed = title.trim() || "Untitled document";
-    if (committed !== runtime.title) runtime.rename(committed);
-    else void runtime.flush();
+  const commitTitle = (value: string) => {
+    runtime.rename(value);
     setTitle(runtime.title);
   };
   const act = async (task: () => Promise<void>) => {
@@ -379,7 +380,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     <div className="docs-editor-shell" data-outline={outline ? "open" : "closed"}>
       <SuiteFrame
         app="docs"
-        sidebar={<OutlinePane editor={editor} revision={revision} />}
+        sidebar={<DocsSidebar />}
         context={
           <div className="docs-title-context">
             <Link ref={topRef} href="/docs" className="docs-back" aria-label="Back to documents">
@@ -388,30 +389,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             <span className="docs-title-icon">
               <AppIcon app="docs" size={32} decorative />
             </span>
-            <Input
-              ref={titleRef}
-              aria-label="Document title"
-              placeholder="Untitled document"
-              maxLength={200}
+            <InlineTitle
+              title={title}
               readOnly={runtime.readOnly}
-              className="docs-title-input"
-              value={title}
-              onChange={(event) => {
-                setTitle(event.target.value);
-                runtime.stageTitle(event.target.value);
+              inputRef={titleRef}
+              commit={commitTitle}
+              done={() => {
+                if (editor) focusDocument(editor);
               }}
-              onBlur={commitTitle}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  commitTitle();
-                  if (editor) focusDocument(editor);
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  topRef.current?.focus();
-                }
-              }}
+              cancel={() => topRef.current?.focus()}
             />
             <IconButton
               label={
@@ -448,57 +434,74 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 Why?
               </Button>
             )}
-            <Hint text="Co-editing isn't available on this storage; changes merge when you reconnect.">
-              <Badge className="docs-collab">
-                Editing alone — changes merge when others reconnect
-              </Badge>
-            </Hint>
             <Hint text="Sharing arrives with sign-in">
               <Button disabled className="docs-share" aria-label="Share">
                 <Share2 aria-hidden="true" />
                 <span>Share</span>
               </Button>
             </Hint>
-            <FileMenu
-              download={(format) =>
-                void act(async () => {
-                  if (!editor) return;
-                  const name = await downloadDocument(
-                    editor.getJSON(),
-                    title,
-                    format,
-                    runtime.session,
-                  );
-                  toast.success(`Downloaded ${name}`);
-                })
-              }
-              print={print}
-              importFile={() => setImporting(true)}
-              draft={!runtime.stored}
-              readOnly={runtime.readOnly}
-              copy={() =>
-                void act(async () => {
-                  await runtime.flush();
-                  if (!runtime.stored) return;
-                  const copy = await copyDocument(
-                    runtime.store,
-                    runtime.stored,
-                    runtime.session,
-                    editor?.getJSON(),
-                  );
-                  router.push(`/docs/d/${encodeRef(copy.url)}`);
-                })
-              }
-              rename={() => {
-                titleRef.current?.focus();
-                titleRef.current?.select();
-              }}
-              remove={() => setDeleting(true)}
-              shortcuts={() => setHelp(true)}
-            />
+            <div
+              className="docs-account"
+              role="img"
+              aria-label={`Account: ${runtime.session.displayName}`}
+              title={`${runtime.session.displayName} · ${runtime.session.webId}`}
+            >
+              <Avatar>
+                <AvatarFallback>
+                  {runtime.session.displayName.slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </>
         }
       >
+        {editor && (
+          <EditorMenubar
+            editor={editor}
+            actions={actions}
+            mac={mac}
+            online={runtime.online}
+            outline={outline}
+            setOutline={setOutline}
+            zoom={zoom}
+            setZoom={setZoom}
+            download={(format) =>
+              void act(async () => {
+                if (!editor) return;
+                const name = await downloadDocument(
+                  editor.getJSON(),
+                  title,
+                  format,
+                  runtime.session,
+                );
+                toast.success(`Downloaded ${name}`);
+              })
+            }
+            print={print}
+            importFile={() => setImporting(true)}
+            draft={!runtime.stored}
+            readOnly={runtime.readOnly}
+            copy={() =>
+              void act(async () => {
+                await runtime.flush();
+                if (!runtime.stored) return;
+                const copy = await copyDocument(
+                  runtime.store,
+                  runtime.stored,
+                  runtime.session,
+                  editor?.getJSON(),
+                );
+                router.push(`/docs/d/${encodeRef(copy.url)}`);
+              })
+            }
+            rename={() => {
+              titleRef.current?.focus();
+              titleRef.current?.select();
+            }}
+            remove={() => setDeleting(true)}
+            help={() => setHelp(true)}
+          />
+        )}
         {importing && editor && (
           <ImportDialog
             replace
@@ -530,7 +533,17 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}
         {editor && !runtime.readOnly && (
-          <EditorToolbar editor={editor} actions={actions} mac={mac} online={runtime.online} />
+          <EditorToolbar
+            editor={editor}
+            actions={actions}
+            mac={mac}
+            online={runtime.online}
+            print={print}
+            zoom={zoom}
+            setZoom={setZoom}
+            outline={outline}
+            toggleOutline={() => setOutline((value) => !value)}
+          />
         )}
         {find && editor && (
           <FindBar
@@ -540,11 +553,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             inputRef={findRef}
           />
         )}
-        <div className="docs-page-wrap">
-          <article className="docs-page" aria-label="Document page">
-            <h1 className="sr-only">{title || "Untitled document"}</h1>
+        <div className="docs-writing-area">
+          {outline && (
+            <aside className="docs-outline-pane" aria-label="Document outline pane">
+              <OutlinePane editor={editor} revision={revision} close={() => setOutline(false)} />
+            </aside>
+          )}
+          <PageCanvas zoom={zoom} title={title}>
             {editor ? <EditorContent editor={editor} /> : <DocumentSkeleton message="Syncing…" />}
-          </article>
+          </PageCanvas>
         </div>
         {editor && !runtime.readOnly && (
           <BubbleMenu

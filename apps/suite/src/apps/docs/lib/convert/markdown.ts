@@ -1299,7 +1299,7 @@ const blockTypes = new Set(
     .map((type) => type.name),
 );
 export const MARKDOWN_NOTES =
-  "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL.";
+  "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL. Font family, size, text and highlight colours, line height and paragraph spacing are omitted.";
 
 /** Lift block HTML tokens out of inline containers before schema validation. */
 function splitInlineBlocks(node: JSONContent): JSONContent[] {
@@ -1332,9 +1332,10 @@ function clean(
       .filter((mark) => {
         const keep =
           mark.type !== "comment" &&
+          mark.type !== "textStyle" &&
           !(dropHighlights && mark.type === "highlight") &&
           (mark.type !== "link" || safeDestination(String(mark.attrs?.href)));
-        if (!keep) reportSkipped(skipped, "Unsupported marks");
+        if (!keep && mark.type !== "textStyle") reportSkipped(skipped, "Unsupported marks");
         return keep;
       })
       .map((mark) =>
@@ -1430,7 +1431,20 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     }
     return result;
   };
-  const cleaned = clean(json, dropHighlights);
+  const stripStyles = (node: JSONContent): JSONContent => ({
+    ...node,
+    ...(node.attrs
+      ? {
+          attrs: Object.fromEntries(
+            Object.entries(node.attrs).filter(
+              ([key]) => !["lineHeight", "spaceBefore", "spaceAfter", "indent"].includes(key),
+            ),
+          ),
+        }
+      : {}),
+    ...(node.content ? { content: node.content.map(stripStyles) } : {}),
+  });
+  const cleaned = stripStyles(clean(json, dropHighlights));
   checkRules(cleaned);
   const blocks = (content: JSONContent[]): string =>
     content

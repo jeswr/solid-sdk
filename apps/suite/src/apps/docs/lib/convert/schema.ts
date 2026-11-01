@@ -8,6 +8,7 @@ import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { parseDocumentHtml, parseHtmlDocument } from "../editor/parse-html";
+import { sanitiseStyleAttrs } from "../editor/styles";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -53,7 +54,7 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       reportSkipped(skipped, "Unsupported nodes");
       return [];
     }
-    const attrs = { ...node.attrs };
+    const attrs = sanitiseStyleAttrs({ ...node.attrs });
     if (node.type === "image") {
       const link = node.marks?.find((mark) => mark.type === "link");
       if (link) attrs.link = normaliseImageLink(link.attrs);
@@ -84,16 +85,22 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
     }
     if (
       "textAlign" in attrs &&
-      ![null, "left", "center", "right", "justify"].includes(attrs.textAlign)
+      !([null, "left", "center", "right", "justify"] as unknown[]).includes(attrs.textAlign)
     ) {
       attrs.textAlign = null;
       reportSkipped(skipped, "Unsupported alignment");
     }
-    const marks = (node.marks ?? []).filter((mark) => {
-      if (importSchema.marks[mark.type]) return true;
-      reportSkipped(skipped, "Unsupported marks");
-      return false;
-    });
+    const marks = (node.marks ?? [])
+      .map((mark) =>
+        mark.type === "textStyle"
+          ? { ...mark, attrs: sanitiseStyleAttrs({ ...mark.attrs }) }
+          : mark,
+      )
+      .filter((mark) => {
+        if (importSchema.marks[mark.type]) return true;
+        reportSkipped(skipped, "Unsupported marks");
+        return false;
+      });
     const mapped: JSONContent = {
       ...node,
       attrs,

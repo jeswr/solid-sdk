@@ -1,0 +1,361 @@
+// @vitest-environment jsdom
+// AUTHORED-BY Codex
+import { Editor, generateHTML, type JSONContent } from "@tiptap/react";
+import { Packer } from "docx";
+import { openArrayBuffer } from "mammoth/lib/zipfile";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
+import {
+  clearFormatting,
+  indentDocument,
+  paragraphSpacing,
+} from "../src/apps/docs/editor/formatting";
+import { toDocx } from "../src/apps/docs/lib/convert/docx-export";
+import { importDocx } from "../src/apps/docs/lib/convert/docx-import";
+import { docxStyles } from "../src/apps/docs/lib/convert/docx-styles";
+import { WORD } from "../src/apps/docs/lib/convert/docx-xml";
+import { exportMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { sanitiseImport } from "../src/apps/docs/lib/convert/sanitise";
+import { importHtml, normaliseImport } from "../src/apps/docs/lib/convert/schema";
+import {
+  colour,
+  colourHex,
+  DOCUMENT_COLOURS,
+  FONT_FAMILIES,
+  fontFamily,
+  fontSize,
+  lineHeight,
+  paragraphSpace,
+  sanitiseStyleAttrs,
+  sanitiseStyles,
+} from "../src/apps/docs/lib/editor/styles";
+
+vi.stubGlobal("ClipboardEvent", window.Event);
+const editors: Editor[] = [];
+function create(content = "<p>Styled words</p>", doc?: Doc) {
+  const editor = new Editor({
+    extensions: doc ? editorExtensions(doc, vi.fn()) : baseExtensions(vi.fn()),
+    content,
+  });
+  editors.push(editor);
+  return editor;
+}
+afterEach(() => {
+  editors.splice(0).forEach((editor) => {
+    editor.destroy();
+  });
+});
+
+describe("document style allowlist", () => {
+  it("accepts only the advertised families and normalizes point sizes", () => {
+    for (const family of FONT_FAMILIES) {
+      expect(fontFamily(family.label)).toBe(family.value);
+      expect(fontFamily(family.value)).toBe(family.value);
+    }
+    for (const unsafe of [
+      null,
+      12,
+      "url(evil)",
+      "Arial; position:fixed",
+      "Comic Sans MS",
+      "Arial, evil",
+    ])
+      expect(fontFamily(unsafe)).toBeNull();
+    expect(fontSize("18.666666px")).toBe("14pt");
+    expect(fontSize(" 14PT ")).toBe("14pt");
+    expect(fontSize("6")).toBe("6pt");
+    expect(fontSize("96pt")).toBe("96pt");
+    for (const unsafe of [
+      null,
+      14,
+      "",
+      "5pt",
+      "97pt",
+      "14em",
+      "calc(12pt)",
+      "14pt!important",
+      "-6pt",
+    ])
+      expect(fontSize(unsafe)).toBeNull();
+  });
+  it("validates hex and RGB channels and rejects CSS expressions and alpha", () => {
+    for (const token of DOCUMENT_COLOURS) expect(colour(token.value)).toBe(token.value);
+    expect(colour("#" + "abc")).toBe(`rgb${"("}170, 187, 204)`);
+    expect(colour("#" + "C00000")).toBe(`rgb${"("}192, 0, 0)`);
+    expect(colour(` RGB${"("} 12, 45, 255 ) `)).toBe(`rgb${"("}12, 45, 255)`);
+    expect(colourHex(`rgb${"("}1, 10, 255)`)).toBe("010AFF");
+    expect(colourHex("invalid")).toBeNull();
+    for (const unsafe of [
+      undefined,
+      {},
+      "red",
+      `rgb${"("}256,0,0)`,
+      `rgb${"("}-1,0,0)`,
+      `rgba${"("}1,2,3,0.5)`,
+      "#" + "abcd",
+      "var(--evil)",
+      "url(evil)",
+      `rgb${"("}1,2,3); display:none`,
+    ])
+      expect(colour(unsafe)).toBeNull();
+    expect(lineHeight("1.15")).toBe("1.15");
+    expect(lineHeight("3")).toBe("3");
+    for (const unsafe of [null, "0.9", "3.1", "20px", "2;position:fixed", "normal"])
+      expect(lineHeight(unsafe)).toBeNull();
+    expect(paragraphSpace("12pt")).toBe("12pt");
+    expect(paragraphSpace(null)).toBeNull();
+    expect(paragraphSpace("200pt")).toBeNull();
+  });
+  it("drops every unrelated declaration and sanitizes JSON attributes", () => {
+    expect(
+      sanitiseStyles(
+        `font-family: Georgia; font-size: 14pt; color: rgb${"("}192,0,0); position:fixed; background-image:url(evil); font-size:15pt; bogus; line-height:1.5; margin-top:12pt; margin-bottom:0pt`,
+      ),
+    ).toBe(
+      `font-family: Georgia, serif; font-size: 15pt; color: rgb${"("}192, 0, 0); line-height: 1.5; margin-top: 12pt; margin-bottom: 0pt`,
+    );
+    expect(sanitiseStyles("color:url(evil); font-size:100pt; color:expression(evil)")).toBe("");
+    expect(
+      sanitiseStyleAttrs({
+        fontFamily: "evil",
+        color: `rgb${"("}1,2,3)`,
+        lineHeight: "2",
+        level: 2,
+      }),
+    ).toEqual({ fontFamily: null, color: `rgb${"("}1, 2, 3)`, lineHeight: "2", level: 2 });
+  });
+});
+
+it("keeps allowlisted HTML styles and removes active or arbitrary CSS on import and paste", () => {
+  const html = `<p style="line-height:1.5;position:fixed"><span style="font-family:Georgia;font-size:14pt;color:rgb${"("}192,0,0);background-color:rgb${"("}255,230,120);background-image:url(https://evil.test/a)">Styled words</span></p>`;
+  const imported = importHtml(html);
+  expect(imported.json.content?.[0]).toMatchObject({
+    attrs: { lineHeight: "1.5" },
+    content: [
+      {
+        marks: [
+          {
+            type: "textStyle",
+            attrs: {
+              fontFamily: "Georgia, serif",
+              fontSize: "14pt",
+              color: `rgb${"("}192, 0, 0)`,
+              backgroundColor: `rgb${"("}255, 230, 120)`,
+            },
+          },
+        ],
+      },
+    ],
+  });
+  expect(sanitiseImport(html)).not.toMatch(/position|background-image|evil/);
+  const editor = create();
+  editor.commands.selectAll();
+  editor.view.pasteHTML(html);
+  expect(editor.getHTML()).toContain("font-family: Georgia, serif");
+  expect(editor.getHTML()).not.toMatch(/position|url\(/);
+  editor.commands.selectAll();
+  editor.view.pasteHTML(
+    '<p><span style="font-family:evil;font-size:999pt;color:url(evil)">Safe text</span></p>',
+  );
+  expect(editor.getHTML()).not.toMatch(/evil|999/);
+  const malicious = normaliseImport({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { lineHeight: "url(evil)" },
+        content: [
+          {
+            type: "text",
+            text: "Safe",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  fontFamily: "evil",
+                  fontSize: "999pt",
+                  color: "expression(evil)",
+                  backgroundColor: "url(evil)",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  expect(JSON.stringify(malicious.json)).not.toMatch(/evil|999/);
+});
+
+it("round trips font, colour, size, highlight and paragraph layout through Yjs and HTML", () => {
+  const first = new Doc();
+  const editor = create(undefined, first);
+  editor.commands.setContent("<p>Persist me</p>");
+  editor.commands.selectAll();
+  editor
+    .chain()
+    .setFontFamily("Georgia, serif")
+    .setFontSize("14pt")
+    .setColor(`rgb${"("}192, 0, 0)`)
+    .setBackgroundColor(`rgb${"("}255, 230, 120)`)
+    .setLineHeight("1.5")
+    .run();
+  paragraphSpacing(editor, { spaceBefore: "12pt", spaceAfter: "0pt" });
+  indentDocument(editor, 1);
+  const second = new Doc();
+  applyUpdate(second, encodeStateAsUpdate(first));
+  const restored = create(undefined, second);
+  expect(restored.getJSON()).toEqual(editor.getJSON());
+  expect(importHtml(editor.getHTML()).json.content?.[0]).toMatchObject({
+    attrs: { lineHeight: "1.5", spaceBefore: "12pt", spaceAfter: "0pt" },
+  });
+  expect(exportMarkdown(editor.getJSON())).toBe("Persist me");
+  restored.commands.selectAll();
+  clearFormatting(restored);
+  expect(restored.getHTML()).toBe("<p>Persist me</p>");
+  editor.commands.selectAll();
+  editor.commands.unsetLineHeight();
+  expect(editor.getAttributes("paragraph").lineHeight).toBeNull();
+  editor.destroy();
+  restored.destroy();
+  editors.length = 0;
+  first.destroy();
+  second.destroy();
+});
+
+it("indents paragraphs and both list kinds within bounds and clears formatting", () => {
+  const editor = create();
+  editor.commands.selectAll();
+  for (let i = 0; i < 10; i++) indentDocument(editor, 1);
+  expect(editor.getAttributes("paragraph").indent).toBe(8);
+  for (let i = 0; i < 10; i++) indentDocument(editor, -1);
+  expect(editor.getAttributes("paragraph").indent).toBe(0);
+  for (const type of ["bulletList", "taskList"]) {
+    editor.commands.setContent(
+      type === "taskList"
+        ? '<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>One</p></li><li data-type="taskItem" data-checked="false"><p>Two</p></li></ul>'
+        : "<ul><li><p>One</p></li><li><p>Two</p></li></ul>",
+    );
+    editor.commands.setTextSelection(10);
+    indentDocument(editor, 1);
+    indentDocument(editor, -1);
+    expect(editor.getText()).toContain("Two");
+  }
+  editor.commands.setContent(
+    '<h1 data-indent="invalid" style="line-height:2;margin-top:12pt;margin-bottom:8pt"><span style="font-size:16pt">Heading</span></h1>',
+  );
+  editor.commands.selectAll();
+  clearFormatting(editor);
+  expect(editor.getHTML()).toBe("<p>Heading</p><p></p>");
+  for (const indent of [-1, 0, 1, 9, 1.5, "bad"]) {
+    const html = generateHTML(
+      {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            attrs: { indent, lineHeight: "url(evil)" },
+            content: [
+              {
+                type: "text",
+                text: "Safe",
+                marks: [
+                  {
+                    type: "textStyle",
+                    attrs: {
+                      fontFamily: "evil",
+                      color: "url(evil)",
+                      fontSize: "100pt",
+                      backgroundColor: "bad",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      baseExtensions(vi.fn()),
+    );
+    expect(html).not.toMatch(/evil|100pt/);
+    expect(html.includes("margin-left")).toBe(indent === 1);
+  }
+});
+
+it("exports native Word run properties and recovers them in paragraphs and lists", async () => {
+  const editor = create();
+  editor.commands.selectAll();
+  editor
+    .chain()
+    .setFontFamily("Georgia, serif")
+    .setFontSize("14pt")
+    .setColor(`rgb${"("}192, 0, 0)`)
+    .setBackgroundColor(`rgb${"("}255, 230, 120)`)
+    .setLineHeight("1.5")
+    .run();
+  paragraphSpacing(editor, { spaceBefore: "12pt", spaceAfter: "0pt" });
+  const json: JSONContent = editor.getJSON();
+  json.content?.push({
+    type: "bulletList",
+    content: [
+      { type: "listItem", content: [json.content[0] as NonNullable<typeof json.content>[number]] },
+    ],
+  });
+  const bytes = await Packer.toBuffer(await toDocx(json, vi.fn()));
+  const zip = await openArrayBuffer(Uint8Array.from(bytes).buffer);
+  const xml = await zip.read("word/document.xml", "utf-8");
+  for (const property of [
+    'w:ascii="Georgia"',
+    'w:val="28"',
+    'w:val="C00000"',
+    'w:fill="FFE678"',
+    'w:line="360"',
+    'w:before="240"',
+  ])
+    expect(xml).toContain(property);
+  const imported = await importDocx(Uint8Array.from(bytes).buffer, {
+    uploadImage: vi.fn(),
+    progress: vi.fn(),
+  });
+  const result = importHtml(imported.html).json;
+  for (const paragraph of [result.content?.[0], result.content?.[1]?.content?.[0]?.content?.[0]]) {
+    expect(paragraph).toMatchObject({
+      attrs: { lineHeight: "1.5", spaceBefore: "12pt", spaceAfter: "0pt" },
+      content: [
+        {
+          marks: [
+            {
+              type: "textStyle",
+              attrs: {
+                fontFamily: "Georgia, serif",
+                fontSize: "14pt",
+                color: `rgb${"("}192, 0, 0)`,
+                backgroundColor: `rgb${"("}255, 230, 120)`,
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
+});
+
+it("reads inherited Word properties safely, including absent, cyclic and unknown styles", () => {
+  const parse = (source: string) => new DOMParser().parseFromString(source, "application/xml");
+  const definitions = parse(
+    `<w:styles xmlns:w="${WORD}"><w:style w:styleId="Base"><w:name w:val="Base"/><w:rPr><w:rFonts w:ascii="Georgia"/><w:color w:val="C00000"/></w:rPr><w:pPr><w:spacing w:line="360" w:before="240"/></w:pPr></w:style><w:style w:styleId="Child"><w:basedOn w:val="Base"/><w:rPr><w:sz w:val="28"/></w:rPr></w:style><w:style w:styleId="Cycle"><w:basedOn w:val="Cycle"/></w:style><w:style w:styleId="Base"/></w:styles>`,
+  );
+  const document = parse(
+    `<w:document xmlns:w="${WORD}"><w:body><w:p><w:pPr><w:pStyle w:val="Base"/></w:pPr><w:r><w:rPr><w:rStyle w:val="Child"/><w:shd w:fill="FFE678"/></w:rPr><w:t>A</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Cycle"/><w:spacing w:line="400" w:lineRule="exact" w:after="99999"/></w:pPr><w:r><w:t>B</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Unknown"/><w:spacing w:line="400" w:lineRule="atLeast"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="evil"/><w:sz w:val="9999"/><w:color w:val="evil"/></w:rPr><w:t>C</w:t></w:r></w:p><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/></w:rPr><w:t>D</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  const styles = docxStyles(document, definitions);
+  expect(styles.paragraph(document.getElementsByTagNameNS(WORD, "p")[0] as Element)).toBe(
+    "line-height: 1.5; margin-top: 12pt",
+  );
+  expect(styles.paragraph(document.getElementsByTagNameNS(WORD, "p")[1] as Element)).toBe("");
+  expect(styles.paragraph(document.getElementsByTagNameNS(WORD, "p")[2] as Element)).toBe("");
+  expect([...styles.runs.values()][0]?.css).toContain("font-family: Georgia, serif");
+  expect([...styles.runs.values()][0]?.css).toContain("font-size: 14pt");
+  expect([...styles.runs.values()][1]?.css).toContain("font-family: Arial, sans-serif");
+});

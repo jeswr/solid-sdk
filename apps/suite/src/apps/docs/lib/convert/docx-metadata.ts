@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex
 import type { readNumbering } from "./docx-numbering";
+import { docxStyles } from "./docx-styles";
 import { WORD } from "./docx-xml";
 
 export type DocxBlockMetadata = { styleId: string | null } & (
-  | { type: "paragraph"; numbering: ReturnType<typeof readNumbering>[number] }
+  | { type: "paragraph"; numbering: ReturnType<typeof readNumbering>[number]; css: string }
   | { type: "table"; indent: number }
 );
 
@@ -23,6 +24,7 @@ export function identifyDocxBlocks(
     paragraph: new Map<string, Element>(),
     table: new Map<string, Element>(),
   };
+  const formatting = docxStyles(document, definitions);
   for (const style of definitions.getElementsByTagNameNS(WORD, "style")) {
     const id = style.getAttributeNS(WORD, "styleId");
     const type = style.getAttributeNS(WORD, "type");
@@ -60,6 +62,7 @@ export function identifyDocxBlocks(
         ? {
             type: "paragraph",
             numbering: numbering[paragraphIndex++] as ReturnType<typeof readNumbering>[number],
+            css: formatting.paragraph(element),
           }
         : { type: "table", indent: Number(indent?.getAttributeNS(WORD, "w") ?? 0) }),
     });
@@ -85,5 +88,6 @@ export function identifyDocxBlocks(
     xml: serializer.serializeToString(document),
     styles: serializer.serializeToString(definitions),
     blocks,
+    runs: formatting.runs,
   };
 }

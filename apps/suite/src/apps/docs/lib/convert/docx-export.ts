@@ -22,6 +22,7 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
+import { colourHex, fontFamily, fontSize, lineHeight, paragraphSpace } from "../editor/styles";
 import { wordListFormat } from "./docx-list-format";
 import { type QuoteAncestor, quoteStyleName } from "./docx-quotes";
 
@@ -50,6 +51,11 @@ function inline(node: JSONContent): ParagraphChild[] {
   const marks = new Set((node.marks ?? []).map((mark) => mark.type));
   const link = node.marks?.find((mark) => mark.type === "link");
   const href = validLink(String(link?.attrs?.href ?? ""));
+  const style = node.marks?.find((mark) => mark.type === "textStyle")?.attrs;
+  const family = fontFamily(style?.fontFamily);
+  const size = fontSize(style?.fontSize);
+  const color = colourHex(style?.color);
+  const fill = colourHex(style?.backgroundColor);
   const options: IRunOptions = {
     text: node.text ?? "",
     ...(marks.has("bold") ? { bold: true } : {}),
@@ -63,6 +69,17 @@ function inline(node: JSONContent): ParagraphChild[] {
       ? { style: "InlineCode", font: codeFont, shading: { fill: "F2F2F2" } }
       : {}),
     ...(href && !marks.has("code") ? { style: "Hyperlink" } : {}),
+    ...(family
+      ? {
+          font:
+            family === "var(--font-ui)"
+              ? "Onest"
+              : (family.split(",")[0] as string).replaceAll('"', ""),
+        }
+      : {}),
+    ...(size ? { size: Number.parseFloat(size) * 2 } : {}),
+    ...(color ? { color } : {}),
+    ...(fill ? { shading: { fill } } : {}),
   };
   const run = new TextRun(options);
   return hyperlink(href, [run]);
@@ -184,6 +201,22 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           }[String(node.attrs?.textAlign)];
           addParagraph({
             ...(alignment ? { alignment } : {}),
+            spacing: {
+              ...(lineHeight(node.attrs?.lineHeight)
+                ? { line: Math.round(Number(node.attrs?.lineHeight) * 240) }
+                : {}),
+              ...(paragraphSpace(node.attrs?.spaceBefore)
+                ? { before: Number.parseFloat(node.attrs?.spaceBefore) * 20 }
+                : {}),
+              ...(paragraphSpace(node.attrs?.spaceAfter)
+                ? { after: Number.parseFloat(node.attrs?.spaceAfter) * 20 }
+                : {}),
+            },
+            ...(Number.isInteger(node.attrs?.indent) &&
+            node.attrs?.indent > 0 &&
+            node.attrs?.indent <= 8
+              ? { indent: { left: Number(node.attrs?.indent) * 720 } }
+              : {}),
             ...(node.type === "heading"
               ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
               : {}),

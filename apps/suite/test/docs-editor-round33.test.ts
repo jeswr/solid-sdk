@@ -93,6 +93,8 @@ async function mountEditor(
   readOnly = false,
 ) {
   const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
     storageUrl: "https://pod.test/",
     fetch: fetchImpl,
   } as unknown as PodSession;
@@ -479,7 +481,7 @@ it("round39 leaving a document cancels all pending File menu prints before anoth
     for (let attempt = 0; attempt < 2; attempt++) {
       await act(async () => {
         view.host
-          .querySelector<HTMLButtonElement>('[aria-label="File menu"]')
+          .querySelector<HTMLButtonElement>("[data-docs-menu-trigger]")
           ?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
       });
       const download = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -738,7 +740,7 @@ it("round36 the dynamic Alt text menu action preserves its control's focus", asy
 it("round36 cancelling menu-opened Import restores the File menu trigger", async () => {
   const view = await mountEditor();
   try {
-    const trigger = view.host.querySelector('[aria-label="File menu"]') as HTMLElement;
+    const trigger = view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement;
     await menuItem(trigger, "Import to replace…");
     await vi.waitFor(() =>
       expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull(),
@@ -761,7 +763,7 @@ it.each([
   const view = await mountEditor();
   try {
     await menuItem(
-      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Import to replace…",
     );
     const input = document.querySelector('[role="dialog"] input[type="file"]') as HTMLInputElement;
@@ -817,7 +819,7 @@ it("round37 editor Undo opens the restored document instead of a reused original
   });
   try {
     await menuItem(
-      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Move to trash",
     );
     const confirm = Array.from(

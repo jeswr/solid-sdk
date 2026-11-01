@@ -19,6 +19,7 @@ import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
 import { protectiveLinkRel } from "./link-rel";
 import { privateImage } from "./private-image";
+import { textStyleExtensions } from "./text-style";
 
 const SafeStarterKit = StarterKit.extend({
   addExtensions() {
@@ -249,6 +250,7 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Highlight,
+    ...textStyleExtensions,
     Subscript,
     Superscript,
     privateImage(fetchImpl),

@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
+import { sanitiseStyles } from "../editor/styles";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
-/** Only the editor's supported HTML surface; no styles, active content or embedded data. */
+/** Only supported HTML and allowlisted document styles, without active content. */
 export function sanitiseImport(html: string, skipped: SkippedItem[] = []): string {
   const allowedTags = [
     "p",
+    "span",
     "h1",
     "h2",
     "h3",
@@ -48,17 +50,22 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
   };
   return sanitizeHtml(html, {
     allowedTags,
-    allowedAttributes,
+    allowedAttributes: { ...allowedAttributes, "*": ["style"] },
+    // Values have already passed the stricter shared document-style allowlist.
+    parseStyleAttributes: false,
     transformTags: {
       "*": (tagName, attribs) => {
         if (/^h[4-6]$/.test(tagName)) tagName = "h3";
         if (!allowedTags.includes(tagName)) reportSkipped(skipped, "Unsupported HTML");
+        const style = sanitiseStyles(attribs.style ?? "");
+        delete attribs.style;
         for (const key of Object.keys(attribs)) {
           if (!(allowedAttributes[tagName] ?? []).includes(key)) {
             delete attribs[key];
             reportSkipped(skipped, "Unsupported attributes");
           }
         }
+        if (style) attribs.style = style;
         for (const key of ["src", "href"]) {
           const url = attribs[key];
           if (url === undefined) continue;
