@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { encodeRef } from "../src/lib/refs";
@@ -7,7 +8,7 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { aclBody, DRIVE, OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ ref: "" }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

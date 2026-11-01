@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { encodeRef } from "../src/lib/refs";
@@ -20,7 +21,7 @@ vi.mock("../src/apps/drive/lib/client/client", async (original) => ({
   ...(await original<typeof import("../src/apps/drive/lib/client/client")>()),
   createSolidDriveClient: () => mocks.client,
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));

@@ -42,6 +42,7 @@ export async function writeResource(
   if (opts.createOnly) headers.set("if-none-match", "*");
   const response = await (opts.fetchImpl ?? globalThis.fetch)(url, {
     method: "PUT",
+    redirect: "error",
     headers,
     body,
   });
