@@ -6,12 +6,13 @@ import {
   parseBoundedJson,
   validateMessage,
 } from "@jeswr/agent-model";
-import { envelope } from "./direct/shared.js";
 import { renderBodies } from "./email/bodies.js";
 import { headerValues, leaves, type MimeNode, parseMime, shapeOf } from "./email/mime.js";
 import type { EmailMessage } from "./email-message.js";
+import { decodeEnvelopeObject } from "./envelope.js";
 import { ChannelParseError } from "./errors.js";
 import { toBridgeMessage } from "./message.js";
+import { AGENT_FOOTER } from "./profiles.js";
 import type { RenderableProposal } from "./types.js";
 
 /** Inject legacy-bridge's parseEmail; a reverse dependency would create a cycle. */
@@ -21,7 +22,8 @@ export interface EmailConfig {
   /** Trusted receiving account, never inferred from an unauthenticated To header. */
   readonly recipient: string;
   readonly ownAccounts: ReadonlySet<string>;
-  readonly footer: string;
+  /** Same deployment footer as the sender; defaults to the J2 wording. */
+  readonly footer?: string;
 }
 export const SUPPORTED_SHAPE =
   "multipart/mixed(multipart/alternative(text/plain,text/html),application/ld+json)";
@@ -85,8 +87,11 @@ function parityMatches(root: MimeNode, proposal: RenderableProposal, footer: str
       (text, i) => normalized((parts[i] as MimeNode).text as string) === normalized(text),
     ) &&
     parts.every((part) =>
-      part.headers.every(([name]) =>
-        ["content-type", "content-transfer-encoding", "content-disposition"].includes(name),
+      part.headers.every(
+        ([name]) =>
+          ["content-type", "content-transfer-encoding", "content-disposition"].includes(name) ||
+          // Exchange adds attachment display metadata when projecting Graph JSON to MIME.
+          (part.type === "application/ld+json" && name === "content-description"),
       ),
     )
   );
@@ -153,18 +158,19 @@ function collectStructuredCopies(
       (value as Record<string, unknown>)["@type"] !== "agent:SignedMessage"
     )
       continue;
-    const v = value as Record<string, unknown>;
-    const jws = v["agent:compactJws"];
-    if (typeof jws !== "string" || canonicalJson(value) !== envelope(jws))
+    try {
+      copies.add(decodeEnvelopeObject(value));
+    } catch {
       throw new ChannelParseError("invalid structured copy");
-    copies.add(jws);
+    }
   }
 }
 /** Parse observations and enforce carrier agreement. This never verifies a signature. */
 function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   if (Buffer.byteLength(raw) > MAX_EMAIL_BYTES)
     throw new ChannelParseError("email exceeds local byte cap");
-  assertFooter(config.footer);
+  const footer = config.footer ?? AGENT_FOOTER;
+  assertFooter(footer);
   let email: EmailMessage;
   try {
     email = config.parseEmail(raw);
@@ -181,7 +187,7 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   collectStructuredCopies(mimeCarriers(mime.root), copies, true);
   if (copies.size !== 1) throw new ChannelParseError("conflicting structured copies");
   const proposal = decodeEmailProposal([...copies][0] as string);
-  const match = parityMatches(mime.root, proposal, config.footer);
+  const match = parityMatches(mime.root, proposal, footer);
   const strict = new Set([...config.ownAccounts].map((a) => a.toLowerCase())).has(
     config.recipient.toLowerCase(),
   );

@@ -67,6 +67,21 @@ it("renders exact deterministic MIME with three copies, approved footer and lega
   expect(inspectEmail(Buffer.from(wire.bytes), config).parity).toBe("match");
 });
 
+it("defaults the footer from one config constant and preserves custom-footer STRICT parity", async () => {
+  const { footer: _footer, ...defaults } = renderOptions;
+  const { footer: _configFooter, ...defaultConfig } = config;
+  const proposal = signed();
+  const wire = await createEmailRenderer(defaults).render(proposal, EMAIL_MIME);
+  expect(wire).toEqual(await createEmailRenderer(renderOptions).render(proposal, EMAIL_MIME));
+  expect(inspectEmail(wire.bytes, defaultConfig).parity).toBe("match");
+  const footer = "— Sent by a configured software agent · https://configured.example/agent";
+  const custom = await createEmailRenderer({ ...defaults, footer }).render(proposal, EMAIL_MIME);
+  expect(inspectEmail(custom.bytes, { ...defaultConfig, footer }).parity).toBe("match");
+  expect(parseEmail(custom.bytes).textBody).toContain(footer);
+  expect(parseEmail(custom.bytes).textBody).not.toContain(AGENT_FOOTER);
+  expect(() => inspectEmail(custom.bytes, defaultConfig)).toThrow("human-parity-mismatch");
+});
+
 it.each([
   "propose",
   "accept",

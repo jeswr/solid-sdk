@@ -5,6 +5,7 @@ export * from "./capability.js";
 export * from "./channel.js";
 export { readEnvelope } from "./direct/shared.js";
 export type * from "./email-message.js";
+export * from "./envelope.js";
 export * from "./errors.js";
 export * from "./message.js";
 export * from "./origins.js";

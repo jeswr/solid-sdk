@@ -107,6 +107,8 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./gmail/send",
       "./x",
       "./github",
+      "./graph-mail",
+      "./graph-mail/send",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -134,4 +136,11 @@ it("keeps Gmail send and MIME render factories out of read surfaces", () => {
   expect(x).not.toHaveProperty("send");
   expect(entry0).not.toHaveProperty("createXReader");
   expect(manifest.exports).not.toHaveProperty("./x/send");
+});
+
+it("keeps Graph mail sending out of the root and reader surfaces", () => {
+  expect(entry0).not.toHaveProperty("createGraphMailSend");
+  expect(entry4).toHaveProperty("createGraphMailReader");
+  expect(entry4).not.toHaveProperty("createGraphMailSend");
+  expect(entry20).toHaveProperty("createGraphMailSend");
 });

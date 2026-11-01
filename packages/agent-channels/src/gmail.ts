@@ -17,7 +17,7 @@ import {
 } from "./gmail/rest.js";
 import { triageLinkedInNotification } from "./gmail/triage.js";
 import type { OriginFetchOptions } from "./origins.js";
-import { EMAIL_MIME } from "./profiles.js";
+import { AGENT_FOOTER, EMAIL_MIME } from "./profiles.js";
 import type { TokenProvider } from "./types.js";
 
 export { triageLinkedInNotification } from "./gmail/triage.js";
@@ -57,14 +57,15 @@ function cursorState(cursor: string, account: string): State {
 /** Read-only binding. Wire bytes are parsed by the injected legacy-bridge parser. */
 export function createGmailReader(options: GmailReaderOptions): ChannelBinding {
   const tokens = options.tokens;
+  const footer = options.footer ?? AGENT_FOOTER;
   const config: EmailConfig = {
     parseEmail: options.parseEmail,
     recipient: options.recipient,
     ownAccounts: new Set([...options.ownAccounts]),
-    footer: options.footer,
+    footer,
   };
   assertEmailAddress(config.recipient);
-  assertFooter(config.footer);
+  assertFooter(footer);
   const rest = gmailRest(options.transport);
   return {
     id: "gmail",

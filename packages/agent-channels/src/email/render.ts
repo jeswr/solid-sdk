@@ -15,13 +15,14 @@ import {
   MAX_EMAIL_BYTES,
 } from "../email-mime.js";
 import { ChannelParseError } from "../errors.js";
-import { EMAIL_MIME } from "../profiles.js";
+import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import type { RenderableProposal, Wire } from "../types.js";
 import { renderBodies } from "./bodies.js";
 
 export interface EmailRenderOptions {
   readonly from: string;
-  readonly footer: string;
+  /** Single-line deployment config; defaults to DESIGN §3.2's J2 wording. */
+  readonly footer?: string;
   /** Trusted actor -> single pinned mailbox, snapshotted at construction. */
   readonly recipients: ReadonlyMap<string, string>;
   /** Pure local verifier; must verify the sender key and intended audience. */
@@ -38,7 +39,7 @@ function base64(text: string): string {
 /** Private implementation shared exclusively by send entry points. */
 export function emailRenderer(options: EmailRenderOptions) {
   const from = options.from;
-  const footer = options.footer;
+  const footer = options.footer ?? AGENT_FOOTER;
   const recipients = new Map(options.recipients);
   const verify = options.verify;
   const now = options.now ?? Date.now;

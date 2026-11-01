@@ -5,7 +5,9 @@
 > Experimental — AI-agent-generated. Private workspace package; Gmail defaults to dry-run.
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
-(A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez). The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
+(A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez) and shared metadata carriage
+(A-014 / sst-wxu), and Microsoft Graph mail (A-024 / sst-1zu).
+The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
 
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
@@ -114,7 +116,7 @@ The frozen `GITHUB_READ_ONLY` profile and descriptor advertise zero send bytes,
 See the [GitHub notification API](https://docs.github.com/en/rest/activity/notifications)
 and [`gh api` manual](https://cli.github.com/manual/gh_api) for provider behavior.
 
-The remaining provider exports remain reserved for their own tasks. Packages
+Provider exports without a section above remain reserved for their own tasks. Packages
 remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
@@ -125,7 +127,7 @@ Ed25519 signatures, adversarial inputs, a loopback HTTP server and a Turtle gold
 `./email-mime` implements the pilot's bounded MIME inspection and provider-copy
 verification. The caller injects legacy-bridge's `parseEmail` function; this keeps
 its hardened parser and avoids reversing legacy-bridge's dependency on channels.
-`inspectEmail(raw, { parseEmail, recipient, ownAccounts, footer })` returns the
+`inspectEmail(raw, { parseEmail, recipient, ownAccounts, footer? })` returns the
 BridgeMessage, unverified structured proposal and parity result. The trusted
 receiving account selects STRICT parity when it is in `ownAccounts`, otherwise
 LENIENT parity. An unauthenticated `To` header cannot select a weaker mode.
@@ -135,12 +137,14 @@ Before returning a proposal, inspection checks every JSON-LD part and HTML scrip
 carrier in the bounded MIME tree, including copies omitted by the legacy parser's
 caps. Incomplete extraction or unparseable JSON-LD refuses the proposal in both modes.
 
-`./email-mime/send` exports `createEmailRenderer({ from, recipients, footer,
+`./email-mime/send` exports `createEmailRenderer({ from, recipients, footer?,
 verify, now? })`. `recipients` pins actor identifiers to single mailboxes; no
 inbound Reply-To or model-selected address is used. The pure local `verify`
 callback verifies the compact JWS, sender key and intended audience. Rendering
 preserves the pilot's deterministic synthetic-test summary and appends the
-configured single-line footer (normally `AGENT_FOOTER`). MIME has plain text,
+configured single-line footer (default `AGENT_FOOTER`, DESIGN §3.2's J2 wording).
+Send, inspect, Gmail ingest and provider-copy lookup all use that same default;
+a deployment overriding it must supply the same footer for STRICT parity. MIME has plain text,
 HTML with an inline JSON-LD carrier, a matching `application/ld+json` attachment,
 and `X-Agentic-Reply: 1`. Its date and boundaries are derived from protected
 content, so rendering and validation re-derive identical bytes. Validation checks
@@ -150,7 +154,7 @@ The pilot's 512 KiB local MIME ceiling remains stricter than email's advertised
 
 
 `./gmail` exports `ORIGINS` and `createGmailReader({ tokens, parseEmail, recipient,
-ownAccounts, footer, transport? })`. Reads use only `TokenProvider.read`. The
+ownAccounts, footer?, transport? })`. Reads use only `TokenProvider.read`. The
 binding fixes the API user to `me`, snapshots the allowed origins
 (`https://gmail.googleapis.com`, `https://www.googleapis.com`), and refuses
 redirects through `createOriginScopedFetch`. `transport` uses the same trusted
@@ -185,3 +189,86 @@ most ten raw candidates with `verifyProviderCopy`. Added provider headers are
 allowed; changed original headers, recipients, signed content or human copies
 are refused. Lookup works after message expiry and returns only `found` or
 `unknown`. Gmail never sets `finalAbsence`.
+
+The root exports pure DESIGN §3.2 envelope codecs. `encodeEnvelope(compactJws)`
+produces canonical JSON-LD with the inline context `{ agent: AGENT }`, type
+`agent:SignedMessage`, `agent:wireFormat: "jws-compact"`, and `agent:compactJws`.
+`decodeEnvelope(textOrBytes)` returns `{ text, compactJws }` after bounded UTF-8/JSON
+parsing and exact context/field checks. `encodeEnvelopeObject` and
+`decodeEnvelopeObject` provide the same contract for parsed objects, including
+Teams Adaptive Card `data`. Decoders reject remote contexts, extra fields and
+object accessors. They never fetch, verify signatures or grant authority.
+
+`encodeMetadataField` / `decodeMetadataField` wrap that envelope as Slack
+`{ event_type: ENVELOPE_KEY, event_payload: envelope }`. `encodeEventContent` /
+`decodeEventContent` use Matrix's `content[ENVELOPE_KEY]`, preserving unrelated
+`body`/`msgtype` fields on decode. `ENVELOPE_KEY` is `org.jeswr.agent.envelope`.
+These utilities cap the envelope at 64 KiB; provider bindings must also bound the
+complete message and add the required human footer. They implement no sends.
+
+The email contract keeps all three copies on every outbound MIME: deterministic
+plain text with the configured footer, HTML with that same text and an inline
+JSON-LD script, and an identical JSON-LD MIME attachment. `X-Agentic-Reply: 1`
+advertises carriage support; `List-Unsubscribe` is absent. The signed propose
+golden fixture in `test/fixtures/propose.eml` passes STRICT parity on its own output.
+Legacy-bridge's `detectBridgeCapability` consumes the parsed headers, JSON-LD
+blocks and text body to report unverified discovery hints; see its PROTOCOL.md.
+
+`./graph-mail` exports `ORIGINS` and `createGraphMailReader` with the same
+`{ tokens, parseEmail, recipient, ownAccounts, footer?, transport? }` options as Gmail.
+It resolves `/v1.0/me/mailFolders/inbox?$select=id` once per account and reader,
+then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows validated
+`@odata.nextLink` / `@odata.deltaLink` URLs, and retrieves each message's MIME via
+`/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
+Requests use immutable Graph IDs. Cursors bind the account and preserve pending
+IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
+tombstones are skipped; a MIME 404 skips a deleted item. HTTP 410 or a 4xx response
+with error code `syncStateNotFound` on a saved delta state restarts the initial
+inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512
+rows and cursors at 64 KiB.
+
+Continuation URLs accept slash and parenthesized folder keys, including lowercase
+`mailfolders`, for the inbox alias or the independently resolved inbox ID. They must stay on the inbox delta operation at
+`https://graph.microsoft.com`; credentials in URLs, fragments, duplicate query
+parameters, other operations and repeated next-page links are refused. The
+declared origins are `https://graph.microsoft.com` and
+`https://login.microsoftonline.com`. Origin sets cannot widen token destinations;
+redirects remain refused. OAuth is owned by agent-credentials. Composition adapts
+`StoreTokenProvider('microsoft', { store, transport, resource: 'mail' })`'s token
+strings to the channel's `{ access, accessToken }` grants, using its separate
+`read(account.id)` / `send(account.id)` methods (`Mail.Read` / `Mail.Send`). The
+channel never opens a credential store or acquires consent itself.
+
+`./graph-mail/send` exports `createGraphMailSend`, with the same options and owner
+approval contract as `createGmailSend`. It renders and validates the canonical
+§3.2 MIME, then projects those exact checked bodies, pinned mailboxes, subject and
+deterministic `internetMessageId` into Graph message JSON. `/me/sendMail` receives
+the HTML body with its inline JSON-LD, a matching `#microsoft.graph.fileAttachment`
+containing base64 JSON-LD, `internetMessageHeaders` containing `X-Agentic-Reply: 1`,
+and `saveToSentItems: true`. Graph's JSON API accepts one HTML body; Exchange
+generates the plain-text alternative. No weaker receiver parity mode is selected
+to accommodate provider rewriting.
+
+Real sends require `dryRun: false`, the configured account, verified current signed
+content, a send grant and approval bound to the reviewed MIME digest. Expiry is
+rechecked after token acquisition and approval. HTTP 202 is acceptance only and
+returns the deterministic Internet Message-ID as `providerRef` because Graph
+returns no object ID. HTTP 400 is a definitive rejection; other statuses and
+transport failures remain uncertain. The binding never retries sending.
+
+Lookup uses a read grant and an `internetMessageId eq '…'` filter on `/me/messages`,
+then verifies at most ten candidate MIME copies. Exchange-generated dates,
+boundaries and transfer encodings may differ. Sender and recipient headers must
+each contain exactly one pinned mailbox; bare addresses and quoted or unquoted
+display names with angle brackets are accepted. Subject, Message-ID and carriage
+header must still match exactly; duplicate headers and extra routing/reply
+destinations are refused. Exchange's `Content-Description` metadata is allowed on
+the JSON-LD attachment. STRICT parity checks every human and structured MIME
+copy and requires the original signed carrier. Lookup works after expiry and
+returns `found` only with positive evidence. Misses, rewritten human content or
+stripped carriers return `unknown`; mail never advertises `finalAbsence`.
+
+Graph tests use synthetic recorded response shapes and injected transports,
+including 202 responses with empty bodies. No live provider or credentials are used.
+Provider contracts: [delta](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0),
+[sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
