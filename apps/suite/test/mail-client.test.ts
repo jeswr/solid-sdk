@@ -553,8 +553,18 @@ describe("Round one client regressions", () => {
     const row = (await client.threads(account, inbox)).items[0]!;
     const message = (await client.thread(row.iri)).messages[0]!;
     expect((await pod.fetch(documentOf(message.iri), { method: "DELETE" })).ok).toBe(true);
-    await expect(client.folders(account)).rejects.toMatchObject({ code: "not-found" });
-    await expect(client.threads(account, inbox)).rejects.toMatchObject({ code: "not-found" });
+    // A dangling message reference no longer hides the folders or the folder's other threads.
+    expect((await client.folders(account)).length).toBeGreaterThan(0);
+    expect((await client.threads(account, inbox)).items.length).toBeGreaterThan(0);
+    // Other referenced-document failures still surface instead of being skipped.
+    const load = client.store.load.bind(client.store);
+    const spy = vi.spyOn(client.store, "load").mockImplementation(async (url, ...rest) => {
+      if (url !== documentOf(row.iri) && !url.includes("/folders/"))
+        throw new MailError("forbidden", 403);
+      return load(url, ...rest);
+    });
+    await expect(client.folders(account)).rejects.toMatchObject({ code: "forbidden" });
+    spy.mockRestore();
     const isolated = setup();
     const label = await isolated.client.createLabel(account, "Work");
     const list = isolated.client.store.list.bind(isolated.client.store);

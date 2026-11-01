@@ -26,16 +26,24 @@ export async function loadFolders(store: MailStore, root: string) {
     throw error;
   }
   const folders = await store.snapshot(children);
-  const messages = await store.snapshot(
+  // Counts tolerate dangling references (a deleted message, an interrupted thread merge):
+  // a missing document is skipped rather than hiding every folder.
+  const messages = await snapshotPresent(
+    store,
     [...folders.folders].flatMap((f) => [...f.messageIris].map(documentOf)),
   );
-  const threads = await store.snapshot(
+  const threads = await snapshotPresent(
+    store,
     [...messages.messages].flatMap((message) =>
       message.partOfThread ? [documentOf(message.partOfThread)] : [],
     ),
   );
-  const members = await store.snapshot(
-    [...threads.threads].flatMap((thread) => [...thread.messageIris].map(documentOf)),
+  const loaded = new Set([...messages.messages].map((message) => documentOf(message.value)));
+  const members = await snapshotPresent(
+    store,
+    [...threads.threads]
+      .flatMap((thread) => [...thread.messageIris].map(documentOf))
+      .filter((url) => !loaded.has(url)),
   );
   const combined = combine([folders, messages, members]);
   const all = [...combined.messages];
@@ -60,13 +68,16 @@ export async function loadFolders(store: MailStore, root: string) {
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
   const folder = await store.load(documentOf(folderIri));
-  const messages = await store.snapshot(
+  const messages = await snapshotPresent(
+    store,
     [...folder.mailbox.folder(folderIri).messageIris].map(documentOf),
   );
-  const threads = await store.snapshot(
+  const threads = await snapshotPresent(
+    store,
     [...messages.messages].flatMap((m) => (m.partOfThread ? [documentOf(m.partOfThread)] : [])),
   );
-  const members = await store.snapshot(
+  const members = await snapshotPresent(
+    store,
     [...threads.threads].flatMap((t) => [...t.messageIris].map(documentOf)),
   );
   return pageThreads(
@@ -78,10 +89,29 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
 }
 export async function loadThread(store: MailStore, threadIri: string) {
   const thread = await store.load(documentOf(threadIri));
-  const messages = await store.snapshot(
+  const messages = await snapshotPresent(
+    store,
     [...thread.mailbox.thread(threadIri).messageIris].map(documentOf),
   );
   return threadMessages(combine([thread.mailbox, messages]), threadIri);
+}
+/** Loads documents with bounded concurrency, skipping ones that no longer exist (404). */
+async function snapshotPresent(store: MailStore, urls: string[]): Promise<MailboxDataset> {
+  const unique = [...new Set(urls)];
+  const dataset = new Store();
+  let next = 0;
+  const worker = async () => {
+    while (next < unique.length) {
+      const url = unique[next++] as string;
+      try {
+        dataset.addQuads([...(await store.load(url)).mailbox]);
+      } catch (error) {
+        if (!(error instanceof MailError && error.code === "not-found")) throw error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, unique.length) }, worker));
+  return new MailboxDataset(dataset, DataFactory);
 }
 export function documentOf(iri: string): string {
   const url = new URL(iri);

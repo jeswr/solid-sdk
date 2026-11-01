@@ -281,13 +281,18 @@ export async function createRoom(
   storage: string,
   slug: string,
   input: RoomInput,
+  { resume = false }: { resume?: boolean } = {},
 ): Promise<ChatDocument> {
   const base = roomContainer(storage);
   const room = `${base}chat/rooms/${segment(slug)}/`;
   const dataset = buildRoom(room, input);
   await ensureContainer(fetch, base, `${base}chat/`);
   await ensureContainer(fetch, base, `${base}chat/rooms/`);
-  const response = checked(
+  // `resume` finishes a room in the caller's own storage whose creation was interrupted after
+  // the container was claimed: existing container, ACL or index are kept, never overwritten.
+  const tolerated = (response: Response) =>
+    resume && response.status === 412 ? response : checked(response);
+  const response = tolerated(
     await scoped(fetch, base)(room, {
       method: "PUT",
       headers: {
@@ -298,7 +303,7 @@ export async function createRoom(
       body: "",
     }),
   );
-  let aclRef = aclLink(response.headers.get("link"));
+  let aclRef = response.ok ? aclLink(response.headers.get("link")) : undefined;
   if (!aclRef) {
     // Solid advertises auxiliary resources on HEAD/GET; PUT may omit Link.
     const discovery = checked(await scoped(fetch, base)(room, { method: "HEAD" }));
@@ -306,10 +311,17 @@ export async function createRoom(
   }
   if (!aclRef) throw new ChatModelError("invalid-input");
   const aclUrl = assertWithinPodScope(base, new URL(aclRef, room).href);
-  await saveChat(fetch, base, aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members), {
-    ifNoneMatch: "*",
-  });
+  const create = async (target: string, data: Store) => {
+    try {
+      return await saveChat(fetch, base, target, data, { ifNoneMatch: "*" });
+    } catch (error) {
+      if (resume && error instanceof ChatIoError && error.status === 412) return null;
+      throw error;
+    }
+  };
+  await create(aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members));
   const url = roomIndex(room);
-  const etag = await saveChat(fetch, base, url, dataset, { ifNoneMatch: "*" });
+  const etag = await create(url, dataset);
+  if (etag === null && resume) return loadChat(fetch, base, url);
   return { url, dataset, etag };
 }

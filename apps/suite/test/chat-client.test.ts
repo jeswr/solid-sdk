@@ -424,8 +424,10 @@ it("fails clearly for a DM slug occupied by a different room or an unavailable i
     await expect(client.createDirect(BOB)).rejects.toMatchObject({ code: "direct-room-collision" });
   }
   await pod.fetch(index, { method: "DELETE" });
-  const failed = client.createDirect(BOB).catch((error: unknown) => error);
-  expect(await failed).toMatchObject({ code: "direct-room-collision" });
+  // An index that never appears in our own storage is an interrupted creation: finish it.
+  const resumed = await client.createDirect(BOB);
+  expect(resumed).toMatchObject({ url: dm.url, isDirect: true });
+  expect(resumed.members.sort()).toEqual([BOB, ME].sort());
   await pod.fetch(index, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
   await expect(client.createDirect(BOB)).rejects.toMatchObject({ code: "direct-room-collision" });
   const failing = new ChatClient(async () => new Response(null, { status: 503 }), ROOT, ME);

@@ -263,7 +263,21 @@ export class ChatClient {
       );
     } catch (error) {
       if (!(error instanceof ChatIoError && error.status === 412)) throw error;
-      room = await this.directWinner(url);
+      room = await this.directWinner(url).catch(async (failure: unknown) => {
+        // directWinner only fails with direct-room-collision. The DM lives in our own storage, so
+        // an index that never appears means an earlier creation was interrupted: finish it
+        // (never overwriting) instead of failing forever.
+        const document = await createModelRoom(
+          this.fetch,
+          this.storageUrl,
+          candidate,
+          { name: "", members: people, creator: this.webId, created: new Date() },
+          { resume: true },
+        );
+        const resumed = readRoom(url, document.dataset);
+        if (!resumed) throw failure;
+        return roomResult(url, resumed);
+      });
       if (!room.isDirect || !people.every((person) => room.members.includes(person)))
         throw new ChatClientError("direct-room-collision");
     }

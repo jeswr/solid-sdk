@@ -372,9 +372,36 @@ it("uses h1 on full threads, medium dates, compact labels and a bounded body's o
   expect(view.host.querySelector('.mail-chip[data-slot="badge"]')?.textContent).toBe("Inbox");
   expect(view.host.querySelector(".mail-chip button")).toBeNull();
   expect(view.host.querySelector(".mail-expand")?.textContent).toBe("Expand all");
-  expect(view.host.querySelector<HTMLAnchorElement>("a[download]")?.href).toBe(
-    "https://mail.example/original.eml",
-  );
+  // The original is fetched through the pod-scoped client, never a credential-less link.
+  expect(view.host.querySelector("a[download]")).toBeNull();
+  const fetched = vi
+    .spyOn(client, "binaryFetch")
+    .mockResolvedValueOnce(new Response("raw", { status: 200 }))
+    .mockResolvedValueOnce(new Response(null, { status: 404 }));
+  const created = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:original");
+  const revoked = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+  const saved = vi.spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    expect(this.download).toBe("original.eml");
+    expect(this.href).toBe("blob:original");
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  await click(button(view.host, "Download the original message"));
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
+  expect(fetched).toHaveBeenCalledWith("https://mail.example/original.eml");
+  expect(saved).toHaveBeenCalledOnce();
+  expect(revoked).toHaveBeenCalledWith("blob:original");
+  await click(button(view.host, "Download the original message"));
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
+  expect(mocks.error).toHaveBeenCalledOnce();
+  expect(created).toHaveBeenCalledOnce();
+  vi.useRealTimers();
+  for (const spy of [saved, created, revoked]) spy.mockRestore();
   await view.unmount();
 });
 it.each([

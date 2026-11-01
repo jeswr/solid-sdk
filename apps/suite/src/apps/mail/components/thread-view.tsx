@@ -21,6 +21,43 @@ import { useFolders, useMail, useMailActions, useThread } from "../state/mail-co
 import { MailAsync } from "./async";
 import { MailAttachment } from "./attachment";
 
+/**
+ * The raw .eml lives in the (access-controlled, cross-origin) pod, where a plain link would
+ * carry no credentials and `download` is ignored. Fetch it through the pod-scoped transport
+ * (which refuses URLs outside the storage) and save it from a blob URL.
+ */
+function OriginalDownload({ url }: { url: string }) {
+  const { client } = useMail();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="mail-action-link"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void client
+          .binaryFetch(url)
+          .then(async (response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const href = URL.createObjectURL(await response.blob());
+            const link = document.createElement("a");
+            link.href = href;
+            link.download = decodeURIComponent(
+              new URL(url).pathname.split("/").pop() || "message.eml",
+            );
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(href), 0);
+          })
+          .catch((error: unknown) => toast.error(mailErrorMessage(error)))
+          .finally(() => setBusy(false));
+      }}
+    >
+      Download the original message
+    </button>
+  );
+}
+
 function MessageCard({
   message,
   last,
@@ -118,11 +155,7 @@ function MessageCard({
           {message.truncated && (
             <p className="mail-muted">
               This message is shown as a plain-text preview.{" "}
-              {message.originalUrl && (
-                <a href={message.originalUrl} download>
-                  Download the original message
-                </a>
-              )}
+              {message.originalUrl && <OriginalDownload url={message.originalUrl} />}
             </p>
           )}
           {message.attachments.length > 0 && (
