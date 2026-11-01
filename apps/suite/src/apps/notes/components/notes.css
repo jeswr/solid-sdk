@@ -1,73 +1,42 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* Note colours are tints of suite hue tokens over the surface, so one rule set
+   serves light and dark themes (the tokens flip with the theme). */
 [data-note-colour] {
-  --note-bg: #fff;
-  --note-fg: #202124;
+  --note-tint: var(--surface);
+  --note-bg: color-mix(in oklch, var(--note-tint) 22%, var(--surface));
+  --note-fg: var(--foreground);
   background: var(--note-bg);
   color: var(--note-fg);
 }
 [data-note-colour="red"] {
-  --note-bg: #fce1df;
+  --note-tint: var(--destructive);
 }
 [data-note-colour="orange"] {
-  --note-bg: #ffe7cf;
+  --note-tint: var(--app-calendar);
 }
 [data-note-colour="yellow"] {
-  --note-bg: #fff2b5;
+  --note-tint: var(--warning);
 }
 [data-note-colour="green"] {
-  --note-bg: #dcecc9;
+  --note-tint: var(--app-tasks);
 }
 [data-note-colour="teal"] {
-  --note-bg: #d2efea;
+  --note-tint: var(--app-sheets);
 }
 [data-note-colour="blue"] {
-  --note-bg: #dce9fa;
+  --note-tint: var(--app-drive);
 }
 [data-note-colour="purple"] {
-  --note-bg: #e9dffa;
+  --note-tint: var(--app-docs);
 }
 [data-note-colour="pink"] {
-  --note-bg: #f9ddec;
+  --note-tint: var(--app-contacts);
 }
 [data-note-colour="brown"] {
-  --note-bg: #eadfce;
+  --note-tint: color-mix(in oklch, var(--app-calendar) 55%, var(--foreground-muted));
 }
 [data-note-colour="grey"] {
-  --note-bg: #e8eaed;
-}
-.dark [data-note-colour] {
-  --note-bg: #25262a;
-  --note-fg: #f3f4f5;
-}
-.dark [data-note-colour="red"] {
-  --note-bg: #532e2e;
-}
-.dark [data-note-colour="orange"] {
-  --note-bg: #523a26;
-}
-.dark [data-note-colour="yellow"] {
-  --note-bg: #4b4428;
-}
-.dark [data-note-colour="green"] {
-  --note-bg: #33452b;
-}
-.dark [data-note-colour="teal"] {
-  --note-bg: #254842;
-}
-.dark [data-note-colour="blue"] {
-  --note-bg: #2d3e55;
-}
-.dark [data-note-colour="purple"] {
-  --note-bg: #403450;
-}
-.dark [data-note-colour="pink"] {
-  --note-bg: #503249;
-}
-.dark [data-note-colour="brown"] {
-  --note-bg: #493e34;
-}
-.dark [data-note-colour="grey"] {
-  --note-bg: #3c3f43;
+  --note-tint: var(--foreground-subtle);
 }
 .notes-boot {
   min-height: 70vh;
@@ -139,7 +108,7 @@
   margin: 0 auto 40px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 2px 8px #00000012;
+  box-shadow: var(--shadow-1);
   padding: 8px 12px;
 }
 .notes-capture-collapsed {
@@ -222,7 +191,7 @@
 }
 .notes-card:hover,
 .notes-card:focus-within {
-  box-shadow: 0 3px 12px #0000001f;
+  box-shadow: var(--shadow-2);
 }
 .notes-card-body {
   display: block;
