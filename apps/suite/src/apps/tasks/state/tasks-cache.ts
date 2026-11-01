@@ -838,9 +838,9 @@ export class TasksCache {
       },
     );
   }
-  /** The caller preflights all trackers before enqueueing. Retry re-reads every member before writing. */
-  deleteLabel(project: StoredProject, labelIds: readonly string[], listed: StoredTask[]) {
-    let attempted = false;
+  /** Hold the mutation queue from the strict listing through task and class removal, on Retry too.
+   * Preflight items only identify saving indicators; queued writes may change the membership. */
+  deleteLabel(project: StoredProject, labelIds: readonly string[], preflight: StoredTask[]) {
     const clearTypes = (task: TaskItem) => {
       for (const id of labelIds) task.types.delete(id);
     };
@@ -852,10 +852,9 @@ export class TasksCache {
           const current = await this.store.readProject(project.url);
           if (current.tracker.stateStore !== project.tracker.stateStore)
             throw new ModelError(409, project.url);
-          const items = attempted
-            ? await this.store.listTasks(current.tracker.stateStore as string, { strict: true })
-            : listed;
-          attempted = true;
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
           const confirmed: StoredTask[] = [];
           for (const item of items)
             confirmed.push(
@@ -886,7 +885,7 @@ export class TasksCache {
         () => {
           void attempt();
         },
-        listed
+        preflight
           .filter((item) => labelIds.some((id) => item.task.types.has(id)))
           .map((item) => item.url),
       );
