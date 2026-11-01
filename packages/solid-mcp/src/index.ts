@@ -20,12 +20,12 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
-export { type FetchResult, fetchDocument } from "./fetch.js";
-export type { MemoryClientInfo } from "./memory-tools.js";
 // Shared by session capture; keep config, DPoP and WAC behavior identical to stdio.
 export { createChatPodPort } from "./chat-tools.js";
 export { type CliConfig, loadCliConfig } from "./cli-config.js";
 export { createCliFetch } from "./client-credentials.js";
+export { type FetchResult, fetchDocument } from "./fetch.js";
+export type { MemoryClientInfo } from "./memory-tools.js";
 export {
   listContainer,
   type PodChild,

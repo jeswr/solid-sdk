@@ -108,7 +108,9 @@ export function createStoragePodPort(
       return {
         body: await read.bytes(),
         contentType:
-          read.contentType === null ? "" : read.contentType.split(";", 1)[0]!.trim().toLowerCase(),
+          read.contentType === null
+            ? ""
+            : (read.contentType.split(";", 1)[0] ?? "").trim().toLowerCase(),
         etag: read.etag ?? undefined,
         url: requirePodScopedUrl(config, read.url),
         isContainer: read.kind === "container",
