@@ -129,6 +129,14 @@ describe("Home §5.3 provenance", () => {
         label: "someone else",
       });
     }
+    // A fragment on a non-web identifier (no WebID can be dereferenced) is not a WebID.
+    for (const agent of ["urn:example:agent#me", "did:example:123#key-1"]) {
+      const opaque = await rdf(`<#it> prov:wasAttributedTo <${agent}> .`);
+      expect(provenanceOf(opaque, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
     // A known name still wins.
     const bare = await rdf(`<#it> prov:wasAttributedTo <${person}> .`);
     expect(provenanceOf(bare, subject, STORAGE, context)).toEqual({ kind: "person", label: "Bob" });

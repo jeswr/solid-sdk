@@ -401,3 +401,74 @@ describe("fix round 3: stored addresses and nested inner values", () => {
     });
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5 — coverage round (Home forms)
+describe("coverage round: nested inner values, plain profile fields, locked fields", () => {
+  it.each([
+    [
+      "blank node with a nested inner value",
+      `<#me> <${VCARD}note> [ <${VCARD}value> [ <${VCARD}fn> "x" ] ].`,
+    ],
+    [
+      "named node with a nested inner value",
+      `<#me> <${VCARD}note> <#n>. <#n> <${VCARD}value> [ <${VCARD}fn> "x" ].`,
+    ],
+    [
+      "named node with two inner values",
+      `<#me> <${VCARD}hasEmail> <#e>. <#e> <${VCARD}value> <mailto:a@x.org>, <mailto:b@x.org>.`,
+    ],
+  ])("gives a %s no auto field (nothing single and plain to show)", async (_, body) => {
+    const dataset = await parse(`<#me> <${VCARD}fn> "Ada". ${body}`);
+    expect(autoFormFor(dataset, subject).map((field) => field.predicate)).toEqual([`${VCARD}fn`]);
+  });
+
+  it("labels plain email and telephone profile fields without adding vCard duplicates", async () => {
+    const dataset = await parse(
+      `<#me> <http://xmlns.com/foaf/0.1/name> "Ada"; <https://schema.org/email> "ada@example.org";
+        <https://schema.org/telephone> "+44 1234"; <http://www.w3.org/ns/pim/space#storage> </>.`,
+    );
+    const fields = itemEditFields({ url, dataset, subject: namedNode(subject) }, subject);
+    expect(fields.map((field) => [field.label, field.predicate, field.mode])).toEqual([
+      ["Name", "http://xmlns.com/foaf/0.1/name", "literal"],
+      // The document's literal form is kept, so a save writes the same kind of value back.
+      ["Email", "https://schema.org/email", "literal"],
+      ["Phone", "https://schema.org/telephone", "literal"],
+      ["Photo", `${VCARD}hasPhoto`, "iri"],
+      ["Pronouns", "https://schema.org/pronouns", "literal"],
+    ]);
+    const email = fields[1] as FieldSpec;
+    expect(readFieldValue(dataset, subject, email)).toBe("ada@example.org");
+    const saved = applyFieldEdits(dataset, subject, [email], { [email.id]: "ada@new.example" });
+    expect(
+      quads(saved)
+        .filter((q) => q.predicate.value === "https://schema.org/email")
+        .map((q) => [q.object.termType, q.object.value]),
+    ).toEqual([["Literal", "ada@new.example"]]);
+  });
+
+  it("leaves a field that is already read-only, and its own hint, untouched", async () => {
+    const dataset = await parse(
+      `<#me> <${VCARD}hasEmail> <mailto:a@example.org>, <mailto:b@example.org>.`,
+    );
+    const authored = { ...EMAIL, readOnly: true, hint: "Managed by your provider." };
+    const [locked] = lockUneditableFields([authored], dataset, subject);
+    expect(locked).toBe(authored);
+    expect(locked?.hint).toBe("Managed by your provider.");
+  });
+
+  it("keeps a shared structured value node when one subject clears its link to it", async () => {
+    const dataset = await parse(
+      `<#me> <${VCARD}fn> "Ada"; <${VCARD}hasEmail> <#work>.
+       <#colleague> <${VCARD}hasEmail> <#work>.
+       <#work> a <${VCARD}Work>; <${VCARD}value> <mailto:team@example.org>.`,
+    );
+    const cleared = applyFieldEdits(dataset, subject, [EMAIL], { [EMAIL.id]: "" });
+    expect(readFieldValue(cleared, subject, EMAIL)).toBe("");
+    // The colleague still links the node, so its type and value stay.
+    expect(readFieldValue(cleared, `${url}#colleague`, EMAIL)).toBe("team@example.org");
+    expect(
+      cleared.match(namedNode(`${url}#work`), namedNode(`${NS.RDF}type`), namedNode(`${VCARD}Work`))
+        .size,
+    ).toBe(1);
+  });
+});

@@ -17,37 +17,35 @@ import { type FieldSpec, normaliseField } from "./field-types";
 import { resolveForm } from "./resolve-form";
 import { lockUneditableFields } from "./subject-edit";
 
-/** Local names of the profile predicates the editor may show (any vocabulary). */
-export const PROFILE_FIELD_NAMES: readonly string[] = [
-  "name",
-  "fn",
-  "hasPhoto",
-  "img",
-  "pronouns",
-  "hasEmail",
-  "hasTelephone",
-  "email",
-  "telephone",
-];
+/**
+ * How each allowlisted profile predicate (by local name, any vocabulary) is shown. A
+ * `vcard:hasEmail`/`hasTelephone`/`hasPhoto` link is an IRI; a plain `email`/`telephone`
+ * keeps the value form the document already uses, so only its label changes.
+ */
+const PROFILE_OVERRIDES: ReadonlyMap<string, Partial<FieldSpec>> = new Map([
+  ["name", { label: "Name" }],
+  ["fn", { label: "Name" }],
+  ["hasPhoto", { label: "Photo", kind: "url", mode: "iri" }],
+  ["img", { label: "Photo", kind: "url", mode: "iri" }],
+  ["pronouns", { label: "Pronouns" }],
+  ["hasEmail", { label: "Email", kind: "email", mode: "mailto" }],
+  ["hasTelephone", { label: "Phone", kind: "tel", mode: "tel" }],
+  ["email", { label: "Email" }],
+  ["telephone", { label: "Phone" }],
+]);
 
-const localName = (predicate: string) => predicate.split(/[#/]/).at(-1) ?? "";
+/** Local names of the profile predicates the editor may show (any vocabulary). */
+export const PROFILE_FIELD_NAMES: readonly string[] = [...PROFILE_OVERRIDES.keys()];
+
+/** The text after the last `#` or `/` of a predicate IRI. */
+const localName = (predicate: string) => predicate.replace(/^.*[#/]/, "");
 
 /** Keep only allowlisted profile fields, label them plainly, and add the missing ones. */
 export function profileFields(resolved: readonly FieldSpec[]): FieldSpec[] {
-  const profile = resolved
-    .filter((field) => PROFILE_FIELD_NAMES.includes(localName(field.predicate)))
-    .map((field) => {
-      const local = localName(field.predicate);
-      if (["name", "fn"].includes(local)) return { ...field, label: "Name" };
-      if (local === "hasEmail")
-        return { ...field, label: "Email", kind: "email" as const, mode: "mailto" as const };
-      if (local === "hasTelephone")
-        return { ...field, label: "Phone", kind: "tel" as const, mode: "tel" as const };
-      if (["hasPhoto", "img"].includes(local))
-        return { ...field, label: "Photo", kind: "url" as const, mode: "iri" as const };
-      if (local === "pronouns") return { ...field, label: "Pronouns" };
-      return field;
-    });
+  const profile = resolved.flatMap((field) => {
+    const override = PROFILE_OVERRIDES.get(localName(field.predicate));
+    return override ? [{ ...field, ...override }] : [];
+  });
   for (const [label, predicate, kind, mode] of [
     ["Name", `${NS.FOAF}name`, "text", "literal"],
     ["Photo", `${NS.VCARD}hasPhoto`, "url", "iri"],

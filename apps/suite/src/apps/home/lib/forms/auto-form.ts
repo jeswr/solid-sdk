@@ -18,7 +18,7 @@
  * edit-map paths, so an auto-form round-trips through the same
  * preserve-unrelated-triples engine.
  */
-import type { DatasetCore, Quad, Term } from "@rdfjs/types";
+import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import {
   type FieldKind,
@@ -44,22 +44,24 @@ const VCARD = "http://www.w3.org/2006/vcard/ns#";
 
 /**
  * The term a field actually shows: a structured vCard value (`[ a vcard:Work; vcard:value
- * <mailto:…> ]`) shows its inner value. A nested node with no single plain value has
- * nothing a text field could show, so it gets no field (never its internal label).
+ * <mailto:…> ]`) shows its inner value. A nested node with no single plain value (none,
+ * several, or one that is itself a nested node) has nothing a text field could show, so it
+ * gets no field (never its internal label).
  */
-function displayedTerm(ds: DatasetCore, object: Quad["object"]): Quad["object"] | undefined {
+function displayedTerm(ds: DatasetCore, object: Quad["object"]): NamedNode | Literal | undefined {
+  let shown = object;
   if (object.termType === "BlankNode" || object.termType === "NamedNode") {
     const inner = [`${VCARD}hasValue`, `${VCARD}value`].flatMap((predicate) => [
       ...(ds.match(object, DataFactory.namedNode(predicate), null, null) as Iterable<Quad>),
     ]);
-    if (inner.length === 1) return (inner[0] as Quad).object;
-    if (inner.length > 1 || object.termType === "BlankNode") return undefined;
+    if (inner.length > 1) return undefined;
+    if (inner.length === 1) shown = (inner[0] as Quad).object;
   }
-  return object;
+  return shown.termType === "NamedNode" || shown.termType === "Literal" ? shown : undefined;
 }
 
-/** Infer (kind, mode, datatype) from an object term. */
-function inferWidget(object: Quad["object"]): {
+/** Infer (kind, mode, datatype) from the term a field shows. */
+function inferWidget(object: NamedNode | Literal): {
   kind: FieldKind;
   mode: ValueMode;
   datatype?: string;
@@ -69,30 +71,26 @@ function inferWidget(object: Quad["object"]): {
     if (object.value.startsWith("tel:")) return { kind: "tel", mode: "tel" };
     return { kind: "url", mode: "iri" };
   }
-  if (object.termType === "Literal") {
-    const dt = object.datatype.value;
-    switch (dt) {
-      case XSD_DATE:
-        return { kind: "date", mode: "literal", datatype: dt };
-      case XSD_DATETIME:
-        return { kind: "datetime", mode: "literal", datatype: dt };
-      case XSD_INTEGER:
-        return { kind: "number", mode: "literal", datatype: dt };
-      case XSD_DECIMAL:
-      case XSD_FLOAT:
-      case XSD_DOUBLE:
-        return { kind: "decimal", mode: "literal", datatype: dt };
-      case XSD_BOOLEAN:
-        return { kind: "boolean", mode: "literal", datatype: dt };
-      default: {
-        // A long literal gets a textarea; everything else a single line.
-        const long = object.value.length > 80 || object.value.includes("\n");
-        return { kind: long ? "textarea" : "text", mode: "literal" };
-      }
+  const dt = object.datatype.value;
+  switch (dt) {
+    case XSD_DATE:
+      return { kind: "date", mode: "literal", datatype: dt };
+    case XSD_DATETIME:
+      return { kind: "datetime", mode: "literal", datatype: dt };
+    case XSD_INTEGER:
+      return { kind: "number", mode: "literal", datatype: dt };
+    case XSD_DECIMAL:
+    case XSD_FLOAT:
+    case XSD_DOUBLE:
+      return { kind: "decimal", mode: "literal", datatype: dt };
+    case XSD_BOOLEAN:
+      return { kind: "boolean", mode: "literal", datatype: dt };
+    default: {
+      // A long literal gets a textarea; everything else a single line.
+      const long = object.value.length > 80 || object.value.includes("\n");
+      return { kind: long ? "textarea" : "text", mode: "literal" };
     }
   }
-  // Unreachable for nested nodes: autoFormFor gives them no field.
-  return { kind: "text", mode: "literal" };
 }
 
 /**
