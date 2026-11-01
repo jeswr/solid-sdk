@@ -16,6 +16,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/tasks/lib/model/**/*.ts",
+        "src/apps/tasks/lib/views/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
