@@ -17,6 +17,7 @@ import {
   runSavedImport,
 } from "../src/apps/home/components/connect/import-service";
 import { withRequiredScopes, withSelectedScopes } from "../src/apps/home/components/connect/scopes";
+import { isDemoImport } from "../src/apps/home/lib/connect";
 import {
   type ConnectionAction,
   connectionReducer,
@@ -35,6 +36,28 @@ async function setup() {
   return { pod, session };
 }
 describe("Connect uses the real package writer against the suite demo pod", () => {
+  it.each([
+    ["playlist-read-private", "Focus Flow", "Sunday Morning", "5ABHKGoOzxkaa28ttQV9sE"],
+    ["playlist-read-collaborative", "Sunday Morning", "Focus Flow", "37i9dQZF1DXcBWIGoYBM5M"],
+  ])("filters Spotify playlists independently for %s", async (scope, included, excluded, excludedId) => {
+    const { session } = await setup();
+    const source = fixtureTransport("spotify");
+    const report = await runImport({
+      adapter: withSelectedScopes(source.adapter, [scope]),
+      mode: "live",
+      sourceAuth: { fetch: source.fetch },
+      podWriter: createImportWriter(session, "spotify", new AbortController().signal),
+    });
+    expect(report.written).toHaveLength(1);
+    const written = report.written[0];
+    if (!written) throw new Error("Missing playlist document");
+    const body = await (await session.fetch(written.url)).text();
+    expect(body).toContain(included);
+    expect(body).not.toContain(excluded);
+    expect(source.fetch.mock.calls.some(([input]) => String(input).includes(excludedId))).toBe(
+      false,
+    );
+  });
   it("imports only selected Spotify collections and does not advance an omitted history checkpoint", async () => {
     const { session } = await setup();
     const original = createRegistry().adapterById("spotify");
@@ -177,11 +200,16 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-function preferencesPair() {
+function preferencesPair(onSet: () => void = () => {}) {
   const data = new Map<string, string>();
   const storage = {
     getItem: (key: string) => data.get(key) ?? null,
+    key: (index: number) => [...data.keys()][index] ?? null,
+    get length() {
+      return data.size;
+    },
     setItem: (key: string, value: string) => {
+      onSet();
       data.set(key, value);
     },
   };
@@ -191,7 +219,7 @@ function updater(store: ReturnType<typeof createConnectorPreferences>, id: strin
   return (action: ConnectionAction) => {
     const connections = store.read(DEMO_WEBID);
     const next = connectionReducer(connections[id], action);
-    store.write(DEMO_WEBID, { ...connections, [id]: next });
+    store.write(DEMO_WEBID, id, next);
     return next;
   };
 }
@@ -212,6 +240,141 @@ function fixtureTransport(id: string) {
 }
 
 describe("saved import transactions", () => {
+  it("keeps active records and checkpoints when different connectors persist concurrently in two tabs", async () => {
+    let interleave: (() => void) | undefined;
+    const [tab1, tab2] = preferencesPair(() => {
+      const callback = interleave;
+      interleave = undefined;
+      callback?.();
+    });
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const update1 = updater(tab1, "spotify");
+    const update2 = updater(tab2, "dropbox");
+    const url = `${DEMO_ROOT}integrations/dropbox/files.ttl`;
+    const report = (id: string): ImportReport => ({
+      adapterId: id,
+      mode: "live",
+      written: [],
+      categories: [],
+      indexUrl: `${DEMO_ROOT}index`,
+      cursor: `${id}-checkpoint`,
+    });
+    const dropbox = runSavedImport(
+      DEMO_ROOT,
+      "dropbox",
+      "live",
+      new AbortController().signal,
+      update2,
+      async () => {
+        entered.resolve();
+        await release.promise;
+        return report("dropbox");
+      },
+    );
+    await entered.promise;
+    await runSavedImport(
+      DEMO_ROOT,
+      "spotify",
+      "live",
+      new AbortController().signal,
+      update1,
+      async () => {
+        // Simulate another tab committing after this tab's read, before its setItem.
+        interleave = () => {
+          update2({ type: "written", url });
+        };
+        update1({ type: "written", url: `${DEMO_ROOT}integrations/spotify/music.ttl` });
+        expect(tab1.read(DEMO_WEBID).dropbox).toMatchObject({
+          lastOutcome: "incomplete",
+          resourceUrls: [url],
+        });
+        return report("spotify");
+      },
+    );
+    release.resolve();
+    await dropbox;
+    expect(tab1.read(DEMO_WEBID)).toMatchObject({
+      spotify: { cursor: "spotify-checkpoint", lastOutcome: "ok" },
+      dropbox: { cursor: "dropbox-checkpoint", lastOutcome: "ok", resourceUrls: [url] },
+    });
+  });
+
+  it("retains untouched demos after OAuth cancellation and replaces demo history before live merging", async () => {
+    const { session } = await setup();
+    const [store] = preferencesPair();
+    const source = fixtureTransport("spotify");
+    const update = updater(store, "spotify");
+    const run = (mode: "demo" | "live", transport = source.fetch as typeof fetch) =>
+      runSavedImport(
+        DEMO_ROOT,
+        "spotify",
+        mode,
+        new AbortController().signal,
+        update,
+        (cursor, connection) =>
+          runImport({
+            adapter: withSelectedScopes(
+              source.adapter,
+              mode === "demo" ? source.adapter.metadata.scopes : ["user-read-recently-played"],
+            ),
+            mode,
+            sourceAuth: { fetch: transport },
+            ...(cursor ? { cursor } : {}),
+            podWriter: createImportWriter(
+              session,
+              "spotify",
+              new AbortController().signal,
+              (url, doc) => {
+                if (doc.slug !== "_provenance.ttl") update({ type: "written", url });
+              },
+              mode === "demo" ? [] : connection.demoResourceUrls,
+            ),
+          }),
+      );
+    const demo = await run("demo");
+    const history = demo.written.find(({ url }) => url.endsWith("recently-played.ttl"))?.url;
+    const top = demo.written.find(({ url }) => url.endsWith("top-tracks.ttl"))?.url;
+    if (!history || !top) throw new Error("Missing demo documents");
+    const controller = new AbortController();
+    await expect(
+      runSavedImport(DEMO_ROOT, "spotify", "live", controller.signal, update, async () => {
+        controller.abort();
+        controller.signal.throwIfAborted();
+        throw new Error("unreachable");
+      }),
+    ).rejects.toThrow();
+    expect(isDemoImport(history, store.read(DEMO_WEBID))).toBe(true);
+    expect(isDemoImport(top, store.read(DEMO_WEBID))).toBe(true);
+    let sequence = 0;
+    const live: typeof fetch = async (input, init) => {
+      if (String(input).includes("recently-played")) {
+        sequence++;
+        return Response.json({
+          items: [
+            {
+              track: { id: `live-${sequence}`, name: `Live track ${sequence}` },
+              played_at: `2026-11-0${sequence}T12:00:00Z`,
+            },
+          ],
+        });
+      }
+      return source.fetch(input, init);
+    };
+    await run("live", live);
+    expect(isDemoImport(history, store.read(DEMO_WEBID))).toBe(false);
+    expect(isDemoImport(top, store.read(DEMO_WEBID))).toBe(true);
+    await run("live", live);
+    const body = await (await session.fetch(history)).text();
+    expect(body).toContain("Live track 1");
+    expect(body).toContain("Live track 2");
+    expect(body).not.toContain("Never Gonna Give You Up");
+    expect(body).not.toContain("2026-10-25");
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({
+      resourceUrls: [history],
+      lastOutcome: "ok",
+    });
+  });
   it("queues overlapping Discord snapshots through persistence, so the newer guild survives", async () => {
     const { session } = await setup();
     const [tab1, tab2] = preferencesPair();

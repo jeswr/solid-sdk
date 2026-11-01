@@ -21,9 +21,10 @@ import {
   scopeLabel,
   skippedCopy,
 } from "../../lib/connect/copy";
-import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
+import type { DataCategory } from "../../lib/model/domains";
 import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
+import { domainForWrittenDocument } from "./completion";
 import { entries, registry } from "./config";
 import {
   createImportWriter,
@@ -60,6 +61,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const [progress, setProgress] = useState<ImportProgress>();
   const [written, setWritten] = useState(0);
   const [report, setReport] = useState<ImportReport>();
+  const [importedDomains, setImportedDomains] = useState<readonly DataCategory[]>([]);
   const [failure, setFailure] = useState<unknown>();
   const [blockedHref, setBlockedHref] = useState<string>();
   const controller = useRef<AbortController | null>(null);
@@ -69,9 +71,6 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const mode: ConnectionMode =
     entry.status === "demo" ? "demo" : entry.tier === "C" ? "file" : "live";
   const destinations = destinationsFor(entry.id);
-  const domainId = destinations[0]?.domain ?? "other";
-  const domain =
-    [...DOMAINS, UNCATEGORISED].find((domain) => domain.id === domainId) ?? UNCATEGORISED;
 
   useEffect(
     () => () => {
@@ -94,8 +93,10 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
     setFailure(undefined);
     setBlockedHref(undefined);
     setWritten(0);
+    setImportedDomains([]);
     setProgress(undefined);
     setPhase(mode === "live" && adapter?.oauth ? "waiting" : "running");
+    const domainsByResource = new Map<string, DataCategory>();
     try {
       const result = await runSavedImport(
         session.storageUrl,
@@ -103,7 +104,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         mode,
         abort.signal,
         (action) => update(entry.id, action),
-        async (cursor) => {
+        async (cursor, connection) => {
           let sourceAuth: SourceAuth | undefined;
           if (mode === "live" && adapter?.oauth) {
             setPhase("waiting");
@@ -118,12 +119,21 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
           setBlockedHref(undefined);
           setStep(3);
           setPhase("running");
-          const writer = createImportWriter(session, entry.id, abort.signal, (url, doc) => {
-            if (doc.slug === "_provenance.ttl") return;
-            update(entry.id, { type: "written", url });
-            // Progress counts successful documents until the runner supplies item counts.
-            setWritten((count) => count + 1);
-          });
+          const writer = createImportWriter(
+            session,
+            entry.id,
+            abort.signal,
+            (url, doc) => {
+              if (doc.slug === "_provenance.ttl") return;
+              update(entry.id, { type: "written", url });
+              const domain = domainForWrittenDocument(doc);
+              if (domain) domainsByResource.set(url, domain);
+              else domainsByResource.delete(url);
+              // Progress counts successful documents until the runner supplies item counts.
+              setWritten((count) => count + 1);
+            },
+            mode === "demo" ? [] : connection.demoResourceUrls,
+          );
           const onProgress = (value: ImportProgress) => {
             abort.signal.throwIfAborted();
             setProgress(value);
@@ -146,6 +156,12 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               });
         },
       );
+      const completed = new Map<string, DataCategory>();
+      for (const { url } of result.written) {
+        const domain = domainsByResource.get(url);
+        if (domain) completed.set(domain.id, domain);
+      }
+      setImportedDomains([...completed.values()]);
       setReport(result);
       setPhase("done");
     } catch (error) {
@@ -207,19 +223,25 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
           ) : phase === "done" && report ? (
             <div className="hm-connect-result" role="status">
               <h2>
-                {addedCopy(report.state?.counts.items ?? report.written.length, domain.label)}
+                {addedCopy(
+                  report.state?.counts.items ?? report.written.length,
+                  importedDomains.map((domain) => domain.label).join(", ") || "your pod",
+                )}
               </h2>
               {!!report.skipped && <p>{skippedCopy(report.skipped)}</p>}
               {report.unsupported?.length ? (
                 <p>Some parts of this export aren't supported yet.</p>
               ) : null}
               <div className="hm-connect-actions">
-                <Link
-                  className="hm-connect-button"
-                  href={domainId === "personal" ? "/home" : `/home/${domainId}`}
-                >
-                  See in {domain.label}
-                </Link>
+                {importedDomains.map((domain) => (
+                  <Link
+                    key={domain.id}
+                    className="hm-connect-button"
+                    href={domain.id === "personal" ? "/home" : `/home/${domain.id}`}
+                  >
+                    See in {domain.label}
+                  </Link>
+                ))}
                 <button
                   type="button"
                   className="hm-connect-button hm-connect-secondary"

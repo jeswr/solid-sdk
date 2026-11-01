@@ -87,7 +87,27 @@ export function withSelectedScopes(
           const url = new URL(
             typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
           );
-          if (allowed(url.pathname, "request")) return ctx.api(input, init);
+          if (allowed(url.pathname, "request")) {
+            const response = await ctx.api(input, init);
+            if (
+              adapter.metadata.id !== "spotify" ||
+              !/\/me\/playlists$/.test(url.pathname) ||
+              !response.ok
+            )
+              return response;
+            // The list endpoint combines both permissions. Filter before the adapter
+            // creates playlist subjects or requests their contents, on every page.
+            const page = await response.json();
+            if (Array.isArray(page.items))
+              page.items = page.items.filter((playlist: { collaborative?: boolean } | null) =>
+                selected.includes(
+                  playlist?.collaborative === true
+                    ? "playlist-read-collaborative"
+                    : "playlist-read-private",
+                ),
+              );
+            return Response.json(page, { status: response.status, headers: response.headers });
+          }
           const empty =
             adapter.metadata.id === "github" ||
             adapter.metadata.id === "discord" ||

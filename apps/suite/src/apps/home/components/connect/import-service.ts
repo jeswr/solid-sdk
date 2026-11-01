@@ -6,6 +6,7 @@ import {
   type NormalisedDoc,
   type PodWriter,
 } from "@jeswr/pod-connectors";
+import { Store } from "n3";
 import type { PodSession } from "../../../../lib/session/pod-session";
 import type {
   ConnectionAction,
@@ -22,12 +23,12 @@ export function runSavedImport(
   mode: ConnectionMode,
   signal: AbortSignal,
   update: (action: ConnectionAction) => ConnectorConnection,
-  run: (cursor: string | undefined) => Promise<ImportReport>,
+  run: (cursor: string | undefined, connection: ConnectorConnection) => Promise<ImportReport>,
 ): Promise<ImportReport> {
   return withConnectorLock(storage, id, signal, async () => {
     const connection = update({ type: "start", at: new Date().toISOString(), mode });
     try {
-      const result = await run(mode === "live" ? connection.cursor : undefined);
+      const result = await run(mode === "live" ? connection.cursor : undefined, connection);
       signal.throwIfAborted();
       update({
         type: "success",
@@ -118,7 +119,9 @@ export function createImportWriter(
   adapterId: string,
   signal: AbortSignal,
   onWrite: (url: string, doc: NormalisedDoc) => void = () => {},
+  demoResourceUrls: readonly string[] = [],
 ): PodWriter {
+  const demos = new Set(demoResourceUrls);
   const profile = new URL(session.webId);
   profile.hash = "";
   const writer = createFetchPodWriter({
@@ -130,9 +133,17 @@ export function createImportWriter(
   });
   return {
     ...writer,
+    async read(slug) {
+      const stored = await writer.read(slug);
+      // Keep the ETag for replacement, but never merge demo subjects into live data.
+      return stored && demos.has(writer.resolve(slug))
+        ? { ...stored, dataset: new Store() }
+        : stored;
+    },
     async write(doc, conditions) {
       signal.throwIfAborted();
       const result = await writer.write(doc, conditions);
+      demos.delete(result.url);
       onWrite(result.url, doc);
       return result;
     },

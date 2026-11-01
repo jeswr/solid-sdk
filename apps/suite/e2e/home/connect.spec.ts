@@ -39,9 +39,11 @@ async function accessible(page: Page) {
 async function connection(page: Page, id: string) {
   return page.evaluate(
     (id) =>
-      JSON.parse(localStorage.getItem("suite.connectors.v1") ?? "{}")[
-        "https://alice.demo.pod/profile/card#me"
-      ]?.[id],
+      JSON.parse(
+        localStorage.getItem(
+          `suite.connectors.v2:${JSON.stringify(["https://alice.demo.pod/profile/card#me", id])}`,
+        ) ?? "null",
+      ),
     id,
   );
 }
@@ -109,7 +111,8 @@ test("Spotify demo writes real items, records demo provenance and syncing again 
   const first = await connection(page, "spotify");
   expect(first.mode).toBe("demo");
   expect(first.lastOutcome).toBe("ok");
-  expect(first.resourceUrls).toHaveLength(10);
+  expect(first.resourceUrls).toEqual([]);
+  expect(first.demoResourceUrls).toHaveLength(10);
   await accessible(page);
   await page.getByRole("button", { name: "Sync again" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -117,6 +120,7 @@ test("Spotify demo writes real items, records demo provenance and syncing again 
   await expect(page.getByRole("heading", { name: "Added 25 items to Media" })).toBeVisible();
   const second = await connection(page, "spotify");
   expect(second.resourceUrls).toEqual(first.resourceUrls);
+  expect(second.demoResourceUrls).toEqual(first.demoResourceUrls);
   expect(second.added).toBe(first.added);
   await page.goto("/connect");
   const card = page
@@ -159,6 +163,25 @@ test("Netflix accepts its CSV fixture, reports one malformed row and can retry a
   await accessible(page);
   await page.goto("/connect");
   await expect(page.getByText("Last sync incomplete", { exact: true })).toBeVisible();
+});
+
+test("Calendar-only Takeout reports Calendar and links to its Home domain", async ({ page }) => {
+  await page.goto("/connect/google-takeout");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel(/Export file/).setInputFiles({
+    name: "MyActivity.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([{ header: "Calendar", title: "Meeting", time: "2026-11-01T12:00:00Z" }]),
+    ),
+  });
+  await expect(page.getByRole("heading", { name: "Added 1 item to Calendar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "See in Calendar" })).toHaveAttribute(
+    "href",
+    "/home/calendar",
+  );
+  await expect(page.getByRole("link", { name: "See in Documents" })).toHaveCount(0);
+  await accessible(page);
 });
 
 test("offline catalogue disables every action and the flow is replaced until reconnection", async ({
