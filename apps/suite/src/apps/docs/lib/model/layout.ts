@@ -68,3 +68,15 @@ export function isDirectChild(resourceUrl: string, container: string): boolean {
     return false;
   }
 }
+
+/** Validate snapshot-selected logs before any authenticated discovery or replay. */
+export function documentUpdateLocation(document: {
+  url: string;
+  data: { updateLog?: string | undefined };
+}): string {
+  const layout = docContainerUrls(document.url);
+  const container = document.data.updateLog ?? layout.updateLog;
+  if (!container.endsWith("/") || !isDirectChild(container.slice(0, -1), layout.container))
+    throw new Error("Invalid update location");
+  return container;
+}

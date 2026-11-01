@@ -14,6 +14,7 @@
 import type { Quad } from "@rdfjs/types";
 import { Writer } from "n3";
 import { serializeJsonLd } from "./jsonld.js";
+import { injectionSafe, safePrefixes } from "./n3-safe.js";
 
 /**
  * The default RDF media type used when {@link SerializeOptions.format} is omitted.
@@ -48,7 +49,9 @@ export interface SerializeOptions {
   /**
    * The prefix declarations emitted in the output (for readability of Turtle /
    * TriG; ignored by JSON-LD and the line-based N-Triples / N-Quads formats), as a map of
-   * prefix label to namespace IRI passed straight to `n3.Writer`.
+   * prefix label to namespace IRI. Invalid labels reject with TypeError. Dotted
+   * labels, labels colliding with input IRI schemes, and namespaces unsafe for
+   * N3's regex are omitted; other namespaces are lexically escaped.
    *
    * Defaults to `{}` (no prefixes) so the caller supplies its vocab prefix map.
    *
@@ -84,11 +87,13 @@ export interface SerializeOptions {
  * JSON-LD relabels blank nodes per document and preserves literal lexical values.
  * It rejects malformed RDF terms and directional literals with a TypeError.
  * Contexts are never accepted, emitted or fetched.
+ * N3 formats rebuild validated RDF/JS terms, reject unsafe IRIs and language tags,
+ * relabel unsafe blank nodes consistently, and filter prefixes to preserve IRI identity.
  *
- * @param quads - The quads to serialise (passed verbatim to `Writer.addQuads` for N3 formats).
+ * @param quads - The RDF/JS quads to validate and serialise.
  * @param options - Optional {@link SerializeOptions}.
  * @returns A promise resolving to the serialised RDF string, or rejecting with
- *   a JSON-LD validation TypeError or the error `n3.Writer` reports on failure.
+ *   a validation TypeError or the error `n3.Writer` reports on failure.
  *
  * @example
  * ```ts
@@ -107,16 +112,16 @@ export function serialize(quads: readonly Quad[], options?: SerializeOptions): P
   const prefixes = options?.prefixes ?? {};
   const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
 
-  // An empty graph short-circuits to "" when requested: n3.Writer otherwise
-  // emits the prefix preamble even with no statements, producing a non-empty,
-  // content-free document — so a zero-quad input round-trips as truly empty.
-  if (emptyAsEmptyString && quads.length === 0) {
-    return Promise.resolve("");
-  }
-
   return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes });
-    writer.addQuads(quads as Quad[]);
+    const safe = injectionSafe(quads);
+    const checkedPrefixes = safePrefixes(safe, prefixes);
+    // Validate even an empty input's prefixes before omitting its content-free preamble.
+    if (emptyAsEmptyString && safe.length === 0) {
+      resolve("");
+      return;
+    }
+    const writer = new Writer({ format, prefixes: checkedPrefixes });
+    writer.addQuads(safe);
     writer.end((error: Error | null, result: string) => {
       if (error) {
         reject(error);

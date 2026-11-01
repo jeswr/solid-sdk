@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The authenticated resource fetch — DPoP-bound, origin-gated, fail-closed, with the
@@ -132,6 +133,8 @@ export async function authenticatedFetch(
         isUseDpopNonceChallenge(response) &&
         serverNonce
       ) {
+        // This response is discarded. Stop its stream before minting/sending the retry.
+        void response.body?.cancel().catch(() => {});
         response = await send(serverNonce);
         serverNonce = response.headers.get('dpop-nonce') ?? serverNonce;
       }

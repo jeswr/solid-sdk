@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test';
 
 /** The seeded CSS test WebID (see e2e/setup/seed.json). */
 export const TEST_WEBID = 'http://localhost:3000/test-pod/profile/card#me';
 export const WORK_WEBID = 'http://localhost:3000/work-pod/profile/card#me';
+/** The seeded pod whose profile links an SAI registry set and no matching Type Index entry. */
+export const SAI_WEBID = 'http://localhost:3000/sai-pod/profile/card#me';
 
 /**
  * Click a control whose handler closes its own window (Fill, Cancel, Share) and wait
@@ -51,6 +54,7 @@ export async function performLogin(
   context: BrowserContext,
   extensionId: string,
   webId: string = TEST_WEBID,
+  email?: string,
 ): Promise<void> {
   const popupPage = await context.newPage();
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
@@ -60,7 +64,7 @@ export async function performLogin(
 
   const loginPagePromise = context.waitForEvent('page');
   await popupPage.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await completeOidcLogin(await loginPagePromise);
+  await completeOidcLogin(await loginPagePromise, email);
 
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   await popupPage.locator('#signed-in').waitFor({ state: 'visible', timeout: 15_000 });

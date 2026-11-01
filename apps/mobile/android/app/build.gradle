@@ -52,6 +52,9 @@ dependencies {
     implementation "com.google.firebase:firebase-messaging:24.1.2"
     implementation "com.google.firebase:firebase-messaging-directboot:24.1.2"
     implementation project(':capacitor-android')
+    // SuiteMessageHandler extends Capacitor's MessageHandler, whose constructor names Cordova's
+    // PluginManager; Capacitor already ships Cordova at runtime, so this adds compile-time types only.
+    compileOnly "org.apache.cordova:framework:$cordovaAndroidVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
