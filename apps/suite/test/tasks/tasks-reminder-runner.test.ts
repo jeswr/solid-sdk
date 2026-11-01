@@ -67,6 +67,23 @@ function snapshot(
     ...extra,
   };
 }
+async function liveCache() {
+  const pod = new Pod();
+  const store = new TaskStore({
+    storage,
+    webId,
+    fetch: pod.fetch,
+    now: () => now,
+    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
+    ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
+  });
+  const cache = new TasksCache(store, vi.fn(), webId);
+  await cache.start();
+  const inbox = cache.getSnapshot().projects[0];
+  if (!inbox) throw new Error("Expected Inbox");
+  await cache.loadTasks(inbox);
+  return { cache, inbox, store };
+}
 const oneHourBefore = () => snapshot([view()], [stored(url, [{ offset: "-PT1H" }])]);
 afterEach(() => {
   vi.useRealTimers();
@@ -128,20 +145,7 @@ describe("reminder task mapping", () => {
     expect(result).toEqual({ tasks: [], errors: [failure] });
   });
   it("leaves hidden (pending delete) and completed cache tasks out", async () => {
-    const pod = new Pod();
-    const store = new TaskStore({
-      storage,
-      webId,
-      fetch: pod.fetch,
-      now: () => now,
-      ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
-      ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
-    });
-    const cache = new TasksCache(store, vi.fn(), webId);
-    await cache.start();
-    const inbox = cache.getSnapshot().projects[0];
-    if (!inbox) throw new Error("Expected Inbox");
-    await cache.loadTasks(inbox);
+    const { cache, inbox } = await liveCache();
     const due = new Date("2026-11-02T10:00:00Z");
     const kept = await cache.createTask(inbox, {
       title: "Kept",
@@ -193,11 +197,11 @@ describe("reminder tick", () => {
       tag: `${url}@2026-11-02T09:00:00.000Z`,
       body: "Due today 10:00",
     };
-    expect(first).toEqual({ delivered: [event], errors: [] });
+    expect(first).toEqual({ delivered: [event], errors: [], undelivered: [] });
     expect(notify).toHaveBeenCalledExactlyOnceWith(event);
     expect(
       await runReminderTick(oneHourBefore(), new Date(now.getTime() + 300_000), store, notify),
-    ).toEqual({ delivered: [], errors: [] });
+    ).toEqual({ delivered: [], errors: [], undelivered: [] });
     expect(notify).toHaveBeenCalledTimes(1);
   });
   it("applies offsets to all-day tasks from local midnight", async () => {
@@ -239,6 +243,83 @@ describe("reminder tick", () => {
     const result = await runReminderTick(broken, new Date("2026-11-02T10:00:00Z"), store, notify);
     expect(result.delivered).toEqual([]);
     expect(result.errors).toEqual([expect.any(TypeError), claimFailure, failure]);
+    expect(result.undelivered.map((event) => event.title)).toEqual(["Third"]);
+  });
+  it("does not fire again after the task moves to another project", async () => {
+    const { cache, inbox, store } = await liveCache();
+    const target = await store.createProject("Target");
+    await cache.refreshProjects();
+    await cache.loadTasks(target);
+    const task = await cache.createTask(inbox, {
+      title: "Call mum",
+      due: new Date("2026-11-02T10:00:00Z"),
+      reminders: [{ offset: "-PT1H" }],
+    });
+    if (!task) throw new Error("Expected task");
+    const fired = createMemoryFiredStore();
+    const notify = vi.fn();
+    expect((await runReminderTick(cache.getSnapshot(), now, fired, notify)).delivered).toHaveLength(
+      1,
+    );
+    const moved = await cache.moveTaskToProject(task, target);
+    expect(moved?.url).not.toBe(task.url);
+    expect(reminderTasks(cache.getSnapshot()).tasks.map((item) => item.url)).toEqual([moved?.url]);
+    const later = new Date(now.getTime() + 3600_000);
+    expect(await runReminderTick(cache.getSnapshot(), later, fired, notify)).toEqual({
+      delivered: [],
+      errors: [],
+      undelivered: [],
+    });
+    expect(notify).toHaveBeenCalledOnce();
+    // A different task with the same reminder still fires.
+    await cache.createTask(target, {
+      title: "Call dad",
+      due: new Date("2026-11-02T10:00:00Z"),
+      reminders: [{ offset: "-PT1H" }],
+    });
+    expect(
+      (await runReminderTick(cache.getSnapshot(), later, fired, notify)).delivered.map(
+        (event) => event.title,
+      ),
+    ).toEqual(["Call dad"]);
+  });
+  it("retries a failed delivery on the next tick while the task is still due", async () => {
+    const store = createMemoryFiredStore();
+    const notify = vi.fn().mockRejectedValueOnce(new Error("toast failed"));
+    const first = await runReminderTick(oneHourBefore(), now, store, notify);
+    expect(first.delivered).toEqual([]);
+    expect(first.undelivered).toHaveLength(1);
+    const second = await runReminderTick(oneHourBefore(), now, store, notify, {
+      retry: first.undelivered,
+    });
+    expect(second.delivered).toEqual(first.undelivered);
+    expect(second.undelivered).toEqual([]);
+    // Retries are dropped once the task is gone or the event leaves the 24-hour window.
+    const gone = await runReminderTick(snapshot([], []), now, store, notify, {
+      retry: first.undelivered,
+    });
+    const stale = await runReminderTick(
+      oneHourBefore(),
+      new Date(now.getTime() + 86400000),
+      store,
+      notify,
+      { retry: first.undelivered },
+    );
+    expect([gone.delivered, stale.delivered]).toEqual([[], []]);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+  it("stops delivering once inactive, keeping the rest undelivered", async () => {
+    const two = snapshot([view()], [stored(url, [{ offset: "-PT1H" }, { offset: "-PT2H" }])]);
+    let active = true;
+    const notify = vi.fn(() => {
+      active = false;
+    });
+    const result = await runReminderTick(two, now, createMemoryFiredStore(), notify, {
+      active: () => active,
+    });
+    expect(notify).toHaveBeenCalledOnce();
+    expect(result.delivered).toHaveLength(1);
+    expect(result.undelivered).toHaveLength(1);
   });
   it("reports an invalid clock", async () => {
     const result = await runReminderTick(
@@ -247,7 +328,7 @@ describe("reminder tick", () => {
       createMemoryFiredStore(),
       vi.fn(),
     );
-    expect(result).toEqual({ delivered: [], errors: [expect.any(RangeError)] });
+    expect(result).toEqual({ delivered: [], errors: [expect.any(RangeError)], undelivered: [] });
   });
 });
 
@@ -268,8 +349,8 @@ describe("fallback fired store", () => {
     fail = true;
     expect(await store.claim("x")).toBe(true);
     expect(await store.claim("x")).toBe(false);
-    expect(onError).toHaveBeenCalledTimes(2);
-    expect(onError).toHaveBeenCalledWith(failure);
+    // The fallback is reported once, not on every claim.
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
   });
 });
 
@@ -348,9 +429,68 @@ describe("reminder scheduler", () => {
     const [first, second] = await Promise.all([scheduler.tick(), scheduler.tick()]);
     // The load tick delivered it; the forced ticks find it already claimed.
     expect(notify).toHaveBeenCalledTimes(1);
-    expect(first).toEqual({ delivered: [], errors: [] });
-    expect(second).toEqual({ delivered: [], errors: [] });
+    expect(first).toEqual({ delivered: [], errors: [], undelivered: [] });
+    expect(second).toEqual({ delivered: [], errors: [], undelivered: [] });
     scheduler.stop();
+  });
+  it("skips claiming while it cannot deliver, then delivers when it can", async () => {
+    let canDeliver = false;
+    const store = createMemoryFiredStore();
+    const claim = vi.spyOn(store, "claim");
+    const notify = vi.fn();
+    const scheduler = startReminderScheduler({
+      source: new Source(oneHourBefore()),
+      store,
+      notify,
+      now: () => now,
+      canDeliver: () => canDeliver,
+    });
+    expect(await scheduler.tick()).toBeUndefined();
+    expect(claim).not.toHaveBeenCalled();
+    canDeliver = true;
+    expect((await scheduler.tick())?.delivered).toHaveLength(1);
+    expect(notify).toHaveBeenCalledOnce();
+    scheduler.stop();
+  });
+  it("retries failed deliveries and delivers nothing after stopping mid-tick", async () => {
+    const notify = vi.fn().mockRejectedValueOnce(new Error("toast failed"));
+    const source = new Source(snapshot([], [], { status: "loading" }));
+    const scheduler = startReminderScheduler({
+      source,
+      store: createMemoryFiredStore(),
+      notify,
+      now: () => now,
+      onError: vi.fn(),
+    });
+    source.value = oneHourBefore();
+    expect((await scheduler.tick())?.undelivered).toHaveLength(1);
+    expect((await scheduler.tick())?.delivered).toHaveLength(1);
+    expect(notify).toHaveBeenCalledTimes(2);
+    scheduler.stop();
+    // An account switch stops the old scheduler while its tick is still claiming.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const late = vi.fn();
+    const store: FiredReminderStore = {
+      claim: async () => {
+        await gate;
+        return true;
+      },
+    };
+    const switching = startReminderScheduler({
+      source: new Source(oneHourBefore()),
+      store,
+      notify: late,
+      now: () => now,
+    });
+    const pending = switching.tick();
+    await Promise.resolve();
+    switching.stop();
+    release();
+    await pending;
+    expect(late).not.toHaveBeenCalled();
   });
   it("skips ticks while loading and reports errors, even from a throwing reporter", async () => {
     const source = new Source(snapshot([], [], { status: "loading" }));

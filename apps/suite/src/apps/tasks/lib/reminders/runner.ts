@@ -29,7 +29,16 @@ export type ReminderNotifier = (event: ReminderEvent) => void | Promise<void>;
 export interface ReminderRun {
   delivered: ReminderEvent[];
   errors: unknown[];
+  /** Claimed but not delivered (failed or stopped); retried by the next tick. */
+  undelivered: ReminderEvent[];
 }
+export interface ReminderTickOptions {
+  /** Earlier undelivered events, kept while their task is still due-able and in the window. */
+  retry?: readonly ReminderEvent[];
+  /** Checked before each delivery, so a stopped scheduler delivers nothing more. */
+  active?: () => boolean;
+}
+const WINDOW = 86400000;
 
 /** True once the project list and every project's task load have settled. */
 export function remindersReady(snapshot: ReminderSnapshot): boolean {
@@ -63,6 +72,8 @@ export function reminderTasks(snapshot: ReminderSnapshot): {
         ...(view.allDay ? { allDay: view.allDay } : {}),
         reminders: item.task.reminders,
         state: "open",
+        // Moves keep the creation time and title, but not the URL or anonymous trigger ids.
+        ...(view.created ? { identity: `${view.created.toISOString()}|${view.title}` } : {}),
       });
     } catch (error) {
       errors.push(error);
@@ -81,6 +92,7 @@ export async function runReminderTick(
   now: Date,
   store: FiredReminderStore,
   notify: ReminderNotifier,
+  options: ReminderTickOptions = {},
 ): Promise<ReminderRun> {
   const { tasks, errors } = reminderTasks(snapshot);
   let due: DueReminder[] = [];
@@ -92,35 +104,51 @@ export async function runReminderTick(
     errors.push(error);
   }
   const byUrl = new Map(tasks.map((task) => [task.url, task]));
-  const delivered: ReminderEvent[] = [];
-  for (const reminder of due) {
-    const event: ReminderEvent = {
+  const events: ReminderEvent[] = [
+    ...(options.retry ?? []).filter(
+      (event) => byUrl.has(event.taskUrl) && event.fireTime.getTime() > now.getTime() - WINDOW,
+    ),
+    ...due.map((reminder) => ({
       ...reminder,
       tag: `${reminder.taskUrl}@${reminder.fireTime.toISOString()}`,
       body: reminderBody(byUrl.get(reminder.taskUrl) as ReminderTask, now),
-    };
+    })),
+  ];
+  const delivered: ReminderEvent[] = [];
+  const undelivered: ReminderEvent[] = [];
+  for (const event of events) {
+    if (options.active && !options.active()) {
+      undelivered.push(event);
+      continue;
+    }
     try {
       await notify(event);
       delivered.push(event);
     } catch (error) {
       errors.push(error);
+      undelivered.push(event);
     }
   }
-  return { delivered, errors };
+  return { delivered, errors, undelivered };
 }
 
-/** Keep reminders firing (deduplicated per tab only) when the durable store is unavailable. */
+/** Keep reminders firing (deduplicated per tab only) when the durable store is unavailable.
+ * Reports only the first failure; later claims still try the durable store first. */
 export function fallbackFiredStore(
   primary: FiredReminderStore,
   onError: (error: unknown) => void,
   fallback: FiredReminderStore = createMemoryFiredStore(),
 ): FiredReminderStore {
+  let reported = false;
   return {
     async claim(key) {
       try {
         return await primary.claim(key);
       } catch (error) {
-        onError(error);
+        if (!reported) {
+          reported = true;
+          onError(error);
+        }
         return fallback.claim(key);
       }
     },
@@ -134,11 +162,13 @@ export interface ReminderSchedulerOptions {
   now?: () => Date;
   onError?: (errors: unknown[]) => void;
   intervalMs?: number;
+  /** False skips a tick before claiming, e.g. in a hidden tab that could only show a toast. */
+  canDeliver?: () => boolean;
   /** Ticks when this document becomes visible again. */
   document?: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 }
 export interface ReminderScheduler {
-  /** Queue one tick; resolves undefined while tasks are loading or after stop. */
+  /** Queue one tick; resolves undefined while loading, unable to deliver, or after stop. */
   tick(): Promise<ReminderRun | undefined>;
   stop(): void;
 }
@@ -151,11 +181,17 @@ export function startReminderScheduler(options: ReminderSchedulerOptions): Remin
   let stopped = false;
   let loaded = false;
   let queue: Promise<unknown> = Promise.resolve();
+  let undelivered: ReminderEvent[] = [];
   const tick = (): Promise<ReminderRun | undefined> => {
     const run = queue.then(async () => {
       const snapshot = source.getSnapshot();
-      if (stopped || !remindersReady(snapshot)) return undefined;
-      const result = await runReminderTick(snapshot, now(), store, notify);
+      if (stopped || !remindersReady(snapshot) || options.canDeliver?.() === false)
+        return undefined;
+      const result = await runReminderTick(snapshot, now(), store, notify, {
+        retry: undelivered,
+        active: () => !stopped,
+      });
+      undelivered = result.undelivered;
       if (result.errors.length) options.onError?.(result.errors);
       return result;
     });
