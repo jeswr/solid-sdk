@@ -53,6 +53,19 @@ Validate with this package's `lint`, `build`, `typecheck` and `test` scripts.
 - Keep store logic independent of Android/Capacitor APIs, test it with JVM JUnit, and maintain
   mobile guard tests for registration, FileProvider scope, and Xcode App target source entries.
 
+## PDF preview handoff (MOB-P3 E5)
+
+- `openPdf(filesPlugin, name, bytes)` takes bytes the caller already read with a bounded reader
+  (Drive's `readLimited`); native code never fetches. It refuses files over
+  `PDF_PREVIEW_MAX_BYTES` (25 MiB) or without the `%PDF-` signature before anything crosses.
+- Native code repeats every check: the cap on the declared size and on each append, the
+  signature on the first bytes, one handle at a time (a new `pdfBegin` discards the old one), a
+  60 s idle expiry, and a `cache/pdf-preview/` directory emptied on launch. Android opens a
+  read-only FileProvider URI after `resolveActivity`; iOS presents QuickLook with editing off
+  and deletes the file when it closes. Keep `PdfPreviewStore` free of Capacitor and platform UI
+  so the JVM and XCTest suites cover it.
+- Import `@jeswr/suite-native/capacitor` lazily from web code, so only native builds load it.
+
 ## Refresh-token secure store (MOB-P4 S11/S12)
 
 Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before changing this seam.

@@ -123,6 +123,7 @@ export default defineConfig({
         "src/lib/demo-pod/{pod,seed,binaries}.ts",
         "src/lib/refs.ts",
         "src/lib/route-params.ts",
+        "src/lib/native/**/*.ts",
         "src/lib/urls.ts",
         "src/apps/drive/lib/client/**/*.ts",
         "src/apps/drive/lib/operations/**/*.ts",
