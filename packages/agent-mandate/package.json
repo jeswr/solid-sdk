@@ -45,9 +45,10 @@
     "test": "pnpm -w exec vitest run --root packages/agent-mandate --coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.16.0"
+    "@types/n3": "^1.16.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.1"
   },
   "dependencies": {
     "@jeswr/agent-authz-verifier": "workspace:*",
