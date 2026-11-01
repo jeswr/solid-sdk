@@ -48,7 +48,10 @@ newer validator or delete with '*'. Prefer compact(merged, StoredUpdate[]) over 
 URL-array form so each compactor carries its own exact validators. Concurrent appends survive.
 
 Keep streaming update byte caps, listing Entry-metadata budgets and canonical checked values.
-StorageClient owns raw listing parsing/transport byte limits and redirect refusal. Solid
+Pass `maxListingBytes` as `maxBytes` to StorageClient's `listAll`: each raw HTTP page must be
+stream-capped before RDF/JSON parsing, including memberless listings. Retain the aggregate
+Entry-metadata budget and propagate overflow or continuation failures before returning URLs.
+StorageClient owns raw listing parsing, cap enforcement and redirect refusal. Solid
 resources stay within the document container; LWS identifiers may be opaque, so preserve the
 container spelling and verify resource membership with parentOf inside storage scope.
 

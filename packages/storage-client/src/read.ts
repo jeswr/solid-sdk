@@ -5,6 +5,7 @@ import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
 import { StorageError } from "./errors.js";
 import {
+  boundedText,
   discard,
   failed,
   mediaTypeOf,
@@ -13,6 +14,7 @@ import {
   scoped,
   send,
 } from "./http.js";
+import { listingTooLarge } from "./internal.js";
 import type { AuthFetch, RdfReadResult, ReadResult, StorageClient } from "./types.js";
 
 /** RFC 6838 type/subtype without parameters. */
@@ -71,6 +73,8 @@ export async function acceptReadStatus(
 export async function rdfBody(
   result: ReadResult,
   code: "not-rdf" | "invalid-response",
+  maxBytes?: number,
+  signal?: AbortSignal,
 ): Promise<{ type: string; dataset: Awaited<ReturnType<typeof parseRdf>> }> {
   const type = mediaTypeOf(result.contentType) ?? "";
   if (!RDF_READABLE.has(type)) {
@@ -82,7 +86,10 @@ export async function rdfBody(
     });
   }
   // Body transport failures surface as `network` (from bytes()), not as a parse error.
-  const text = await result.text();
+  const text =
+    maxBytes === undefined
+      ? await result.text()
+      : await boundedText(result, maxBytes, listingTooLarge(result.url, maxBytes), signal);
   try {
     return { type, dataset: await parseRdf(text, result.contentType, { baseIRI: result.url }) };
   } catch (cause) {

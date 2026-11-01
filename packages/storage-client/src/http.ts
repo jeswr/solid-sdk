@@ -110,6 +110,44 @@ export function discard(body: ReadableStream<Uint8Array> | null): void {
 }
 
 /**
+ * Shared capped-body reader, extracted from LWS JSON collection. Count actual streamed bytes
+ * before decoding or parsing; never trust Content-Length. Cancellation must not delay rejection
+ * (tee'd bodies and hostile sources may never settle their cancellation promise).
+ */
+export async function boundedText(
+  result: Pick<ReadResult, "url" | "body">,
+  maxBytes: number,
+  overflow: StorageError,
+  signal?: AbortSignal,
+): Promise<string> {
+  let text = "";
+  let size = 0;
+  const decoder = new TextDecoder();
+  if (result.body) {
+    const reader = result.body.getReader();
+    const cancel = () => void reader.cancel(signal?.reason).catch(() => undefined);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      throwIfAborted("GET", result.url, signal);
+      for (;;) {
+        const chunk = await reader.read();
+        throwIfAborted("GET", result.url, signal);
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > maxBytes) throw overflow;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      cancel();
+      reader.releaseLock();
+    }
+  }
+  return text;
+}
+
+/**
  * Throw the mapped StorageError for a non-success response. An abort while its error body is
  * read becomes the non-retryable abort error, never a retryable server error.
  */

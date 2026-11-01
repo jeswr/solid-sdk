@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * `createMemoryStorage()`: a faithful in-memory StorageClient (ADR-003 §8) for unit tests and as
  * the conformance reference. It reproduces ETags (monotonic), 412/428 semantics, container
@@ -21,7 +22,15 @@ import { Resource } from "@solid/object/solid";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode } from "./errors.js";
 import { scoped } from "./http.js";
-import { isWithin, paginate, pathParent, throwIfAborted, toBytes } from "./internal.js";
+import {
+  isWithin,
+  listingTooLarge,
+  paginate,
+  pathParent,
+  throwIfAborted,
+  toBytes,
+  validateListingMaxBytes,
+} from "./internal.js";
 import { applyJsonPatch, type JsonPatchError } from "./json-patch.js";
 import {
   applyQuadPatch,
@@ -534,16 +543,19 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     touch(pathParent(parent, root));
   }
 
-  function listPage(url: string, cursor: PageCursor | undefined): Page<Entry> {
+  async function listPage(
+    url: string,
+    cursor: PageCursor | undefined,
+    maxBytes: number | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<Page<Entry>> {
     url = historyAliases.get(url) ?? url;
     const node = container("GET", url);
     const items = children(url);
-    if (!lws) {
-      if (cursor !== undefined)
-        throw fail("bad-request", "GET", cursor.url, 400, {
-          message: "Solid listings have one page",
-        });
-      return { items: items.map(entry), next: null, total: items.length, etag: node.etag };
+    if (!lws && cursor !== undefined) {
+      throw fail("bad-request", "GET", cursor.url, 400, {
+        message: "Solid listings have one page",
+      });
     }
     let page = 1;
     if (cursor !== undefined) {
@@ -554,12 +566,21 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       page = Number(match[2]);
     }
     const start = (page - 1) * pageSize;
-    const slice = items.slice(start, start + pageSize);
+    const slice = lws ? items.slice(start, start + pageSize) : items;
+    // Match the raw representation returned by read(), including empty-container overhead.
+    // Capture the result before serialisation yields, preserving the listing's snapshot.
+    const entries = slice.map(entry);
+    const etag = node.etag;
+    if (maxBytes !== undefined) {
+      const { bytes } = await representation(node, page);
+      throwIfAborted("GET", cursor?.url ?? url, signal);
+      if (bytes.byteLength > maxBytes) throw listingTooLarge(cursor?.url ?? url, maxBytes);
+    }
     return {
-      items: slice.map(entry),
-      next: start + pageSize < items.length ? { url: `${url}?page=${page + 1}` } : null,
+      items: entries,
+      next: lws && start + pageSize < items.length ? { url: `${url}?page=${page + 1}` } : null,
       total: items.length,
-      etag: node.etag,
+      etag,
     };
   }
 
@@ -615,15 +636,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async list(url, opts = {}) {
       begin("GET", url, opts.signal);
-      return listPage(url, opts.cursor);
+      validateListingMaxBytes(opts.maxBytes);
+      return listPage(url, opts.cursor, opts.maxBytes, opts.signal);
     },
 
     listAll(url, opts = {}) {
-      return paginate(
-        url,
-        async (cursor) => client.list(url, { cursor, signal: opts.signal }),
-        opts.signal,
-      );
+      return paginate(url, async (cursor) => client.list(url, { ...opts, cursor }), opts.signal);
     },
 
     async head(url, opts = {}) {

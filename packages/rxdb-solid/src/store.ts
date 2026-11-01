@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `SolidDocStore` — the StorageClient adapter for {@link ./replication.js | replicateSolid}.
@@ -402,7 +403,9 @@ export class SolidDocStore {
     let receivedEntry = false;
     try {
       const storage = await this.storage();
-      for await (const entry of storage.listAll(this.container)) {
+      for await (const entry of storage.listAll(this.container, {
+        maxBytes: this.maxResponseBytes,
+      })) {
         receivedEntry = true;
         const absolute = entry.url;
         if (entry.kind === "container" || isContainerUrl(absolute)) continue;

@@ -149,6 +149,15 @@ Solid read side (ADR-003 §6):
   from `dc:modified`, else `posix:mtime` (epoch seconds). Non-IRI `rdf:type` objects and malformed
   fields are dropped, never the member. Items are
   sorted by URL. A non-container is `method-not-allowed`.
+- `list` / `listAll` accept `ListingOptions.maxBytes`, a non-negative safe integer response-byte
+  cap per page. Invalid caps throw `TypeError` before fetching; zero is a real cap and exact limits
+  succeed. Both HTTP backends reuse `http.ts`'s `boundedText` reader (extracted from LWS JSON
+  collection), counting actual streamed bytes before decoding/parsing and cancelling overflow
+  without awaiting cancellation. Overflow is non-retryable `StorageError('payload-too-large')`
+  with the page URL and cap in its message; no entries from that page escape. Consumers of
+  `listAll` must propagate later-page failures even after receiving complete earlier pages.
+  Omitting the option keeps existing backend limits; raising it never raises LWS's 16 MiB hard cap.
+  Memory measures the same UTF-8 container representation as `read`, including empty listings.
 - `head`/`read` use `Link` (context = the response URL; anchored links ignored) for `type`,
   `describedby` → `metadataUrl`, WAC-Allow `user` → `allow`, and path arithmetic for `parent`.
   `read` sends Accept, If-None-Match and `Range: bytes=…` (206). Only 200, a requested 206 and a

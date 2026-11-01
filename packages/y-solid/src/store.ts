@@ -25,7 +25,7 @@ export interface SolidUpdateStoreOptions {
   storage: StorageClient;
   /** Includes the 16-byte wire header. */
   maxUpdateBytes?: number;
-  /** Budget for listed entry metadata; raw listing transport limits belong to StorageClient. */
+  /** Raw response byte cap per listing page, plus an aggregate listed-entry metadata budget. */
   maxListingBytes?: number;
   /** Maximum passes when concurrent compaction removes listed members. Default 5. */
   maxLoadRounds?: number;
@@ -113,7 +113,10 @@ export class SolidUpdateStore {
     const observations = [...this.observed];
     let size = 0;
     try {
-      for await (const entry of this.storage.listAll(this.container, { revalidate: true })) {
+      for await (const entry of this.storage.listAll(this.container, {
+        revalidate: true,
+        maxBytes: this.maxListingBytes,
+      })) {
         size += new TextEncoder().encode(JSON.stringify(entry)).byteLength;
         if (size > this.maxListingBytes) throw new Error("[y-solid] listing exceeds max size");
         if (entry.kind === "container") continue;

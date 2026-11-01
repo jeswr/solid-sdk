@@ -32,6 +32,13 @@ Read with [storage-client guidance](../SKILL.md) for shared contracts and Solid 
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
 - Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
   for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
+  `list` / `listAll` also accept `maxBytes` (non-negative safe integer, `TypeError` otherwise),
+  applying a caller's lower or equal byte cap separately to every page, including cursor requests.
+  The shared `boundedText` reader counts actual bytes before parsing, accepts exact limits and
+  cancels overflows without awaiting cancellation. Caller-cap overflow → non-retryable
+  `StorageError('payload-too-large')`, with the page URL and byte cap, and no entries from that
+  page. Previously completed pages may already have been yielded by `listAll`; propagate failures.
+  A larger caller cap cannot raise the independent 16 MiB hard limit; linkset limits are unchanged.
   Top level must be an object, type (string/array) includes Container or ContainerPage (compact or
   full https://www.w3.org/ns/lws# IRI), and items must be an array. sparq's ordinary pages all use
   Container; type-search pages use ContainerPage (`src/lws/index.rs:625-675`). Each item must be an

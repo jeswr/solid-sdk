@@ -348,15 +348,72 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     await expect(store.readUpdate(`${CONTAINER}u`)).rejects.toThrow(/max size/);
   });
 
-  it("refuses a container listing that exceeds maxListingBytes", async () => {
+  it("refuses a memberless container listing that exceeds maxListingBytes", async () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
       storage: pod.storage,
       maxListingBytes: 8,
     });
-    await store.appendUpdate(new Uint8Array([1]));
+    expect(pod.store.size).toBe(0);
     await expect(store.listUpdateUrls()).rejects.toThrow(/max size/);
+  });
+
+  it.each([
+    "solid",
+    "lws",
+  ] as const)("refuses a 1 MiB memberless %s listing before parsing", async (protocol) => {
+    const create = protocol === "solid" ? createSolidBackend : createLwsBackend;
+    const prefix = protocol === "solid" ? "" : JSON.stringify({ type: "Container", items: [] });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: create({
+        root: CONTAINER,
+        fetch: async () =>
+          new Response(prefix + " ".repeat(1024 * 1024 - prefix.length), {
+            headers: {
+              "content-type": protocol === "solid" ? "text/turtle" : "application/lws+json",
+            },
+          }),
+      }),
+      maxListingBytes: 8,
+    });
+    await expect(store.listUpdateUrls()).rejects.toMatchObject({
+      name: "StorageError",
+      code: "payload-too-large",
+    });
+  });
+
+  it("retains the aggregate entry-metadata budget across individually small LWS pages", async () => {
+    const maxListingBytes = new TextEncoder().encode(
+      JSON.stringify({
+        url: `${CONTAINER}a`,
+        kind: "resource",
+        contentType: null,
+        size: null,
+        modified: null,
+        types: [],
+      }),
+    ).byteLength;
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      maxListingBytes,
+      storage: createLwsBackend({
+        root: CONTAINER,
+        fetch: async (input) => {
+          const first = String(input) === CONTAINER;
+          const body = JSON.stringify({ type: "Container", items: [{ id: first ? "a" : "b" }] });
+          expect(new TextEncoder().encode(body).byteLength).toBeLessThan(maxListingBytes);
+          return new Response(body, {
+            headers: {
+              "content-type": "application/lws+json",
+              ...(first ? { link: '<?page=2>; rel="next"' } : {}),
+            },
+          });
+        },
+      }),
+    });
+    await expect(store.listUpdateUrls()).rejects.toThrow("[y-solid] listing exceeds max size");
   });
 
   it("a bad cap value (0/NaN) falls back to the default, not an accidentally-disabled cap", async () => {

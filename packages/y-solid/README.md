@@ -125,9 +125,12 @@ reported and skipped during ingestion; compaction refuses to retire any corrupt 
 The store uses storage-client's public methods only. StorageClient enforces transport redirects,
 storage scope and protocol listing parsing. The store additionally checks Solid document scope
 or LWS `parentOf` membership, and caps each streamed resource at 64 MiB, including its header.
-`maxListingBytes` bounds serialized Entry metadata accumulated from `listAll` (16 MiB by default);
-it is no longer a raw HTTP listing-body limit. Transport/parser listing limits belong to the
-StorageClient implementation. `listUpdateUrls()` returns URL-sorted membership; header ordering
+`maxListingBytes` (16 MiB by default) caps each raw HTTP listing page before RDF/JSON parsing,
+through StorageClient's `maxBytes`, and bounds serialized Entry metadata accumulated across
+`listAll`. Oversized bodies, including listings with no members, are cancelled and rejected
+with `StorageError.code === 'payload-too-large'`; exact response-byte limits are accepted.
+StorageClient's existing backend hard limits also apply. Incomplete listings reject without
+returning partial URL sets. `listUpdateUrls()` returns URL-sorted membership; header ordering
 is provided by `loadUpdates()`.
 
 ## License
