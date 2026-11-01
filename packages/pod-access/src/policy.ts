@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { modes, parent } from "./rdf.js";
+import { parent } from "./rdf.js";
 import type {
   AccessDocument,
   AccessSystem,
@@ -10,6 +10,9 @@ import type {
   PodImplementation,
   Subject,
 } from "./types.js";
+
+// Proof coverage and owner permissions must not depend on a caller-visible collection.
+const proofModes: readonly Mode[] = Object.freeze(["read", "append", "write", "control"]);
 /** Return a policy with no grants or denials. */
 export function emptyPolicy(): EffectivePolicy {
   return { grants: [], denials: [] };
@@ -69,7 +72,7 @@ export function ownerPolicy(webId: string, members = false): EffectivePolicy {
   return {
     grants: [
       {
-        modes: new Set(modes),
+        modes: new Set(proofModes),
         who: [[{ kind: "agent", webId }]],
         except: [],
         appliesTo: members ? "both" : "resource",
@@ -195,7 +198,7 @@ export function assertNotWider(
       }
     return true;
   }
-  for (const mode of modes) {
+  for (const mode of proofModes) {
     variables.clear();
     assignment.clear();
     budget = 65536;

@@ -61,7 +61,8 @@ export type GetCodeCallback = (authorizationUrl: URL, signal?: AbortSignal) => P
  * (the App-Store / Pod-Manager `#autologin/<webid>` launch contract). Supply
  * EITHER `webId` (its issuer is resolved from the profile, and the OP is then
  * PROVEN to have authenticated as it — fail-closed) OR a bare `oidcIssuer` (used
- * directly; the OP's returned WebID is accepted after an https-scheme check).
+ * directly; the OP's returned WebID is accepted only if it is https and its profile
+ * lists that issuer as a `solid:oidcIssuer` — fail-closed).
  */
 export interface BeginRedirectLoginOptions {
   /**
@@ -74,7 +75,8 @@ export interface BeginRedirectLoginOptions {
   /**
    * A pre-resolved OIDC issuer to use directly (skips WebID→issuer resolution).
    * Use when the caller already knows the issuer and has no WebID to bind to; the
-   * OP's returned WebID is accepted after an https-scheme check.
+   * OP's returned WebID is accepted only if it is https and its profile lists this
+   * issuer as a `solid:oidcIssuer`.
    */
   oidcIssuer?: string;
   /**

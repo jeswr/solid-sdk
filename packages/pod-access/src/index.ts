@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Dialect-aware WAC/ACP parsing, serialization, translation and narrowing proofs. */
 export {
   assertNotWider,
@@ -20,12 +21,11 @@ export {
   modes,
   parent,
   RDF,
-  RdfNode,
   readModes,
   safeIri,
   serialize,
 } from "./rdf.js";
-export { type AcpDialect, PolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
+export { type AcpDialect, isPolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
 export { readWac, writeWac } from "./systems/wac.js";
 export {
   optionDescriptions,

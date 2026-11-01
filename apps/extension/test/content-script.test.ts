@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -38,6 +39,7 @@ it('stamps origin and activation in ISOLATED, ignoring page-supplied authority a
     'SOLID_GET_STATE',
     'SOLID_REQUEST_ACCESS',
     'SOLID_LOGOUT',
+    'SOLID_DISCONNECT',
   ])
     post(type);
   for (const [message] of sendMessage.mock.calls)
@@ -57,6 +59,48 @@ it('stamps origin and activation in ISOLATED, ignoring page-supplied authority a
   post('SOLID_ORIGIN_GRANT_PROFILE');
   post('SOLID_ORIGIN_GRANT_REVOKE');
   expect(sendMessage).not.toHaveBeenCalled();
+});
+
+it.each([
+  { ok: true },
+  { ok: false },
+  { error: 'Origin refused' },
+])('relays the disconnect response %j with its request id', async (reply) => {
+  dom = new JSDOM('', { url: 'https://ungranted.example/app' });
+  const response = { requestId: 'disconnect-1', ...reply };
+  const sendMessage = vi.fn((_message: unknown, callback: (value: unknown) => void) =>
+    callback(response),
+  );
+  vi.stubGlobal('window', dom.window);
+  vi.stubGlobal('chrome', { runtime: { sendMessage, onMessage: { addListener: vi.fn() } } });
+  vi.resetModules();
+  await import('../src/content/content-script');
+  const post = vi.spyOn(dom.window, 'postMessage');
+  dom.window.dispatchEvent(
+    new dom.window.MessageEvent('message', {
+      source: dom.window,
+      data: {
+        channel: 'solid-browser-ext',
+        dir: 'to-content',
+        type: 'SOLID_DISCONNECT',
+        requestId: response.requestId,
+        origin: 'https://victim.example',
+        stampedOrigin: 'https://victim.example',
+      },
+    }),
+  );
+  expect(sendMessage).toHaveBeenCalledWith(
+    {
+      type: 'SOLID_DISCONNECT',
+      requestId: response.requestId,
+      stampedOrigin: dom.window.location.origin,
+    },
+    expect.any(Function),
+  );
+  expect(post).toHaveBeenCalledWith(
+    { channel: 'solid-browser-ext', dir: 'to-page', type: 'SOLID_ACCESS_RESPONSE', ...response },
+    dom.window.location.origin,
+  );
 });
 
 it('drops identity broadcasts for another origin or without an origin, including a late navigation', async () => {

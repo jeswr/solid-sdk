@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Store } from "n3";
@@ -14,6 +15,7 @@ import {
   SCHEMA_START_TIME,
 } from "../vocab.js";
 import { extractAgenticReply, extractAgenticReplyStructural } from "./agentic-reply.js";
+import { buildActionMetadata } from "./emit.js";
 import {
   PROPOSE_TIMES_PATTERN_HASH,
   PROPOSE_TIMES_PATTERN_IRI,
@@ -105,6 +107,25 @@ describe("extractAgenticReplyStructural (unverified — never auto-run)", () => 
     expect(out.patterns).toEqual([{ iri: "https://ok.example/p" }]); // hash dropped, IRI kept
   });
 
+  it("preserves self-reported Message envelopes without asserting an action or issuer", async () => {
+    const root = JSON.parse(ACCEPT_BLOCK);
+    root.credentialSubject.type = "Message";
+    const blocks = [JSON.stringify(root)];
+    const structural = extractAgenticReplyStructural(blocks, CTX);
+    expect(structural.interpretations.find((i) => i.predicate === SCHEMA_DATE_SENT)).toMatchObject({
+      calibration: "SelfReported",
+    });
+    expect(
+      structural.interpretations.find(
+        (i) => i.subject === `${CTX.docIri}#areply-1` && i.predicate === RDF_TYPE,
+      ),
+    ).toBeUndefined();
+    expect(
+      structural.interpretations.find((i) => i.predicate === PROV_WAS_ATTRIBUTED_TO),
+    ).toBeUndefined();
+    expect(await extractAgenticReply(blocks, CTX)).toEqual(structural);
+  });
+
   it("ignores non-AgenticReply blocks and malformed JSON", () => {
     const out = extractAgenticReplyStructural(
       ["{broken", JSON.stringify({ "@type": "Event" }), "[]"],
@@ -125,6 +146,13 @@ describe("extractAgenticReply (the injectable verifier seam)", () => {
     { type: ["AcceptAction", "schema:AcceptAction"] },
     { type: ["AcceptAction", "AcceptAction"] },
     { type: ["AcceptAction", ...Array(7).fill("Other"), "RejectAction"] },
+    { type: ["schema:AcceptAction", "https://schema.org/AcceptAction"] },
+    { type: ["https://schema.org/AcceptAction", "schema:AcceptAction"] },
+    { "@type": "AcceptAction", type: "RejectAction" },
+    { type: [...Array(8).fill("Other"), "AcceptAction", "RejectAction"] },
+    { type: ["Message", "AcceptAction", "RejectAction"] },
+    { type: ["RejectAction", "AcceptAction", "Message"] },
+    { type: "Message", "@type": "AcceptAction" },
     { type: "Other" },
     {},
   ])("rejects verified replies without exactly one unambiguous action: %j", async (types) => {
@@ -135,6 +163,13 @@ describe("extractAgenticReply (the injectable verifier seam)", () => {
       verify: () => ({ verified: true, issuer: "https://jeswr.org/agent" }),
     });
     expect(out).toEqual({ interpretations: [], patterns: [], verified: false });
+    if (Object.keys(types).length > 0 && types.type !== "Other") {
+      expect(extractAgenticReplyStructural([JSON.stringify(block)], CTX)).toEqual({
+        interpretations: [],
+        patterns: [],
+        verified: false,
+      });
+    }
   });
 
   it.each([
@@ -142,16 +177,21 @@ describe("extractAgenticReply (the injectable verifier seam)", () => {
     "schema:AcceptAction",
     "https://schema.org/AcceptAction",
   ])("accepts a single supported action spelling: %s", async (action) => {
-    const block = JSON.parse(ACCEPT_BLOCK);
-    block.credentialSubject.type = ["Other", action];
-    const out = await extractAgenticReply([JSON.stringify(block)], CTX, {
-      verify: () => ({ verified: true }),
-    });
-    expect(out.verified).toBe(true);
-    expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)?.object).toEqual({
-      kind: "iri",
-      value: SCHEMA_ACCEPT_ACTION,
-    });
+    for (const types of [
+      ["Other", action],
+      [action, "Other"],
+    ]) {
+      const block = JSON.parse(ACCEPT_BLOCK);
+      block.credentialSubject.type = types;
+      const out = await extractAgenticReply([JSON.stringify(block)], CTX, {
+        verify: () => ({ verified: true }),
+      });
+      expect(out.verified).toBe(true);
+      expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)?.object).toEqual({
+        kind: "iri",
+        value: SCHEMA_ACCEPT_ACTION,
+      });
+    }
   });
 
   it("verified block → Calibrated content + issuer asserted at Verified", async () => {
@@ -200,6 +240,74 @@ describe("extractAgenticReply (the injectable verifier seam)", () => {
     expect(out.verified).toBe(true);
     expect(out.issuer).toBeUndefined();
     expect(out.interpretations.find((i) => i.predicate === PROV_WAS_ATTRIBUTED_TO)).toBeUndefined();
+  });
+
+  it.each([
+    "Message",
+    "schema:Message",
+    "https://schema.org/Message",
+  ])("verifies supported %s envelopes without asserting an action", async (type) => {
+    const built = await buildActionMetadata({ sentAt: "2026-07-05T09:12:00Z" });
+    const subject = built.credential.credentialSubject as Record<string, unknown>;
+    subject.type = type;
+    const out = await extractAgenticReply([JSON.stringify(built.credential)], CTX, {
+      verify: () => ({ verified: true, issuer: "https://jeswr.org/agent" }),
+    });
+    expect(out.verified).toBe(true);
+    expect(out.issuer).toBe("https://jeswr.org/agent");
+    expect(out.interpretations.find((i) => i.predicate === SCHEMA_DATE_SENT)).toMatchObject({
+      object: { value: "2026-07-05T09:12:00.000Z" },
+      calibration: "Calibrated",
+    });
+    expect(out.patterns).toEqual([
+      { iri: SENT_AT_PATTERN_IRI, protocolHash: SENT_AT_PATTERN_HASH },
+    ]);
+    expect(out.interpretations.find((i) => i.predicate === PROV_WAS_ATTRIBUTED_TO)).toMatchObject({
+      object: { kind: "iri", value: "https://jeswr.org/agent" },
+      calibration: "Verified",
+    });
+    expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)).toBeUndefined();
+  });
+});
+
+describe("round-trip: buildActionMetadata → extractAgenticReply", () => {
+  it("preserves the signed Message timestamp, pattern and verified issuer", async () => {
+    const built = await buildActionMetadata({
+      sentAt: "2026-07-05T09:12:00Z",
+      issuer: "https://jeswr.org/agent",
+      sign: (credential) => ({ ...credential, proof: { type: "DataIntegrityProof" } }),
+    });
+    expect(built.signed).toBe(true);
+    const blocks = [built.mimePart.body];
+    const structural = extractAgenticReplyStructural(blocks, CTX);
+    for (const verify of [
+      undefined,
+      () => ({ verified: false }),
+      () => {
+        throw new Error("boom");
+      },
+    ]) {
+      expect(await extractAgenticReply(blocks, CTX, verify ? { verify } : undefined)).toEqual(
+        structural,
+      );
+    }
+    const out = await extractAgenticReply(blocks, CTX, {
+      verify: (credential) => ({ verified: true, issuer: credential.issuer as string }),
+    });
+    expect(out.verified).toBe(true);
+    expect(out.issuer).toBe("https://jeswr.org/agent");
+    expect(out.patterns).toEqual([
+      { iri: SENT_AT_PATTERN_IRI, protocolHash: SENT_AT_PATTERN_HASH },
+    ]);
+    expect(out.interpretations.find((i) => i.predicate === SCHEMA_DATE_SENT)).toMatchObject({
+      object: { value: "2026-07-05T09:12:00.000Z" },
+      calibration: "Calibrated",
+    });
+    expect(out.interpretations.find((i) => i.predicate === PROV_WAS_ATTRIBUTED_TO)).toMatchObject({
+      object: { kind: "iri", value: "https://jeswr.org/agent" },
+      calibration: "Verified",
+    });
+    expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)).toBeUndefined();
   });
 });
 

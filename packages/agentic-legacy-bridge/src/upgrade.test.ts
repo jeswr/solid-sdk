@@ -1,6 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
+import { Parser, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
+import { base64Url } from "./safe-iri.js";
 import {
   createGuardedUpgradeTransport,
   createPodRelationshipStore,
@@ -14,6 +17,8 @@ import {
   recordIdentityVerified,
   type UpgradeTransport,
 } from "./upgrade.js";
+import { serializeRelationship, transition } from "./upgrade-state.js";
+import { AGENTIC_OFFER_IRI_VERSION, AGENTIC_PERSON_IRI_VERSION } from "./vocab.js";
 
 const PERSON = "urn:agentic:person:c2xhY2s6VDpV";
 const WEBID = "https://bob.example/profile/card#me";
@@ -31,6 +36,17 @@ async function driveToCard(store: InMemoryRelationshipStore): Promise<void> {
   await recordBridgeDetected(store, PERSON, AT);
   await recordIdentityVerified(store, PERSON, WEBID, AT);
   await discoverCard(store, PERSON, async () => ({ agentCardUrl: CARD }), AT);
+}
+
+/** Reproduce an unversioned document written before lexical relationship keys. */
+async function legacyDocument(state: Parameters<typeof serializeRelationship>[0], url: string) {
+  const quads = new Parser().parse(await serializeRelationship(state, url));
+  return new Writer({ format: "text/turtle" }).quadsToString(
+    quads.filter(
+      (quad) =>
+        ![AGENTIC_PERSON_IRI_VERSION, AGENTIC_OFFER_IRI_VERSION].includes(quad.predicate.value),
+    ),
+  );
 }
 
 describe("InMemoryRelationshipStore — optimistic concurrency (CAS)", () => {
@@ -147,11 +163,11 @@ describe("orchestration — SSRF gating (verified endpoints only)", () => {
   });
 });
 
-describe("orchestration — persistence keys on the CANONICAL personIri", () => {
+describe("orchestration — persistence keys on the escaped lexical personIri", () => {
   it("progresses the ratchet when the caller uses a non-canonical HTTP personIri", async () => {
     const store = new InMemoryRelationshipStore();
-    // A default-port HTTP IRI canonicalises (safeHttpIri drops :443) — load + save MUST
-    // still resolve to the same key, or the state machine gets stuck re-creating initial.
+    // The shared guard preserves the default port as part of RDF identity. Load + save
+    // must resolve to the same lexical key so the state machine can advance.
     const nonCanonical = "https://carol.example:443/card#me";
     const b = await recordBridgeDetected(store, nonCanonical, AT);
     expect(b.ok).toBe(true);
@@ -161,8 +177,8 @@ describe("orchestration — persistence keys on the CANONICAL personIri", () => 
     expect(v.ok).toBe(true);
     const loaded = await store.load(nonCanonical);
     expect(loaded?.state.state).toBe("identity-verified");
-    // The persisted personIri is the canonical form.
-    expect(loaded?.state.personIri).toBe("https://carol.example/card#me");
+    // Persistence preserves the escaped lexical IRI, including its default port.
+    expect(loaded?.state.personIri).toBe(nonCanonical);
   });
 });
 
@@ -283,6 +299,231 @@ describe("createPodRelationshipStore — pod round-trip with CAS", () => {
       return new Response(null, { status: 405 });
     }) as typeof fetch;
   }
+
+  it.each([
+    ["https://protocol.example", "https://protocol.example/"],
+    ["https://PROTOCOL.example:443/a/../v1", "https://protocol.example/v1"],
+    ["https://bücher.example/日本語", "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E"],
+    ["https://protocol.example/a\\v1?x=|^`", "https://protocol.example/a/v1?x=%7C%5E%60"],
+  ])("retries an unversioned pending offer with its original normalization: %s", async (input, canonical) => {
+    const pod = new FakePod();
+    const mem = new InMemoryRelationshipStore();
+    await driveToCard(mem);
+    const original = { ...rdfOffer, protocolSource: canonical };
+    const pending = transition(
+      must(await mem.load(PERSON)).state,
+      { kind: "offer", offer: original },
+      AT,
+    );
+    if (!pending.ok) throw new Error(pending.reason);
+    const url = `${CONTAINER}rel-${base64Url(PERSON)}.ttl`;
+    pod.store.set(url, { body: await legacyDocument(pending.state, url), etag: "v7" });
+
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const loaded = must(await store.load(PERSON));
+    expect(loaded.state).toMatchObject({ pendingOffer: original, pendingOfferVersion: 1 });
+    await store.save(loaded.state, loaded.version);
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect((await reopened.load(PERSON))?.state.pendingOfferVersion).toBe(1);
+
+    const transport = vi.fn(async () => ({ accept: true, protocolHash: "h" }));
+    for (const changed of [
+      { ...original, protocolSource: "https://other.example/" },
+      { ...original, protocolHash: "other" },
+      { ...original, required: true },
+      { ...original, targetChannel: "a2a" as const },
+    ]) {
+      expect(await offerAndNegotiate(reopened, PERSON, changed, transport, AT)).toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/different/),
+      });
+    }
+    expect(transport).not.toHaveBeenCalled();
+
+    const retry = { ...rdfOffer, protocolSource: input };
+    const failing = vi.fn(async () => {
+      throw new Error("peer unavailable");
+    });
+    await expect(offerAndNegotiate(reopened, PERSON, retry, failing, AT)).rejects.toThrow(
+      /peer unavailable/,
+    );
+    expect(failing).toHaveBeenCalledWith({ target: CARD, payload: encodeUpgradeOffer(original) });
+    expect((await reopened.load(PERSON))?.state).toMatchObject({
+      state: "offer-pending",
+      pendingOffer: original,
+      pendingOfferVersion: 1,
+    });
+
+    const result = await offerAndNegotiate(reopened, PERSON, retry, transport, AT);
+    expect(result).toMatchObject({ ok: true, state: { state: "upgraded" } });
+    expect(transport).toHaveBeenCalledExactlyOnceWith({
+      target: CARD,
+      payload: encodeUpgradeOffer(original),
+    });
+  });
+
+  it("keeps lexical protocol bindings distinct for new pending offers after reopening", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const mem = new InMemoryRelationshipStore();
+    await driveToCard(mem);
+    await store.save(must(await mem.load(PERSON)).state);
+    const offer = { ...rdfOffer, protocolSource: "https://PROTOCOL.example:443" };
+    await expect(
+      offerAndNegotiate(
+        store,
+        PERSON,
+        offer,
+        async () => {
+          throw new Error("peer unavailable");
+        },
+        AT,
+      ),
+    ).rejects.toThrow(/peer unavailable/);
+
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect((await reopened.load(PERSON))?.state).toMatchObject({
+      pendingOfferVersion: 2,
+      pendingOffer: offer,
+    });
+    const transport = vi.fn(async () => ({ accept: true, protocolHash: "h" }));
+    expect(
+      await offerAndNegotiate(
+        reopened,
+        PERSON,
+        { ...offer, protocolSource: "https://protocol.example/" },
+        transport,
+        AT,
+      ),
+    ).toMatchObject({ ok: false, reason: expect.stringMatching(/different/) });
+    expect(transport).not.toHaveBeenCalled();
+    expect(await offerAndNegotiate(reopened, PERSON, offer, transport, AT)).toMatchObject({
+      ok: true,
+      state: { state: "upgraded" },
+    });
+    expect(transport).toHaveBeenCalledExactlyOnceWith({
+      target: CARD,
+      payload: encodeUpgradeOffer(offer),
+    });
+  });
+
+  it.each([
+    ["https://CAROL.example:443/a/../card#me", "https://carol.example/card#me"],
+    ["https://carol.example", "https://carol.example/"],
+    [
+      "https://bücher.example/日本語#me",
+      "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E#me",
+    ],
+    ["https://carol.example/a|b^c`d#me", "https://carol.example/a%7Cb%5Ec%60d#me"],
+    ["https://carol.example/a\\card#me", "https://carol.example/a/card#me"],
+    ["https://carol.example/a\ncard#me", "https://carol.example/acard#me"],
+  ])("resumes legacy canonical-key state for %s with CAS", async (personIri, legacyPersonIri) => {
+    const pod = new FakePod();
+    const legacyUrl = `${CONTAINER}rel-${base64Url(legacyPersonIri)}.ttl`;
+    const mem = new InMemoryRelationshipStore();
+    await recordBridgeDetected(mem, legacyPersonIri, AT);
+    const state = must(await mem.load(legacyPersonIri)).state;
+    // Seed the pre-migration resource independently of the current pod-store keying.
+    pod.store.set(legacyUrl, {
+      body: await legacyDocument(state, legacyUrl),
+      etag: "v7",
+    });
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const loaded = must(await store.load(personIri));
+    expect(loaded).toMatchObject({
+      state: { personIri: legacyPersonIri, personIriVersion: 1, state: "bridge-detected" },
+      version: "v7",
+    });
+
+    expect(await recordIdentityVerified(store, personIri, WEBID, AT)).toMatchObject({ ok: true });
+    expect(pod.store.size).toBe(1);
+    expect(pod.store.get(legacyUrl)?.etag).toBe("v8");
+    // A new store instance must still find the advanced state, and stale saves must fail.
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect(await reopened.load(personIri)).toMatchObject({
+      state: { personIriVersion: 1, state: "identity-verified" },
+      version: "v8",
+    });
+    await expect(reopened.save(loaded.state, loaded.version)).rejects.toBeInstanceOf(
+      RelationshipConflictError,
+    );
+  });
+
+  it.each([
+    ["https://CAROL.example:443/card#me", "https://carol.example/card#me"],
+    ["https://carol.example", "https://carol.example/"],
+    ["https://carol.example/a/../card#me", "https://carol.example/card#me"],
+    [
+      "https://bücher.example/日本語#me",
+      "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E#me",
+    ],
+  ])("does not reuse a new relationship for another lexical identity: %s", async (lexical, canonical) => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    await recordBridgeDetected(store, canonical, AT);
+    await recordIdentityVerified(store, canonical, WEBID, AT);
+    await discoverCard(store, canonical, async () => ({ agentCardUrl: CARD }), AT);
+    await offerAndNegotiate(
+      store,
+      canonical,
+      rdfOffer,
+      async () => ({ accept: true, protocolHash: "h" }),
+      AT,
+    );
+
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect(await reopened.load(lexical)).toBeUndefined();
+    const discover = vi.fn(async () => ({ agentCardUrl: CARD }));
+    const transport = vi.fn(async () => ({ accept: true }));
+    expect(await discoverCard(reopened, lexical, discover, AT)).toMatchObject({ ok: false });
+    expect(await offerAndNegotiate(reopened, lexical, rdfOffer, transport, AT)).toMatchObject({
+      ok: false,
+    });
+    expect(discover).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+
+    expect(await recordBridgeDetected(reopened, lexical, AT)).toMatchObject({ ok: true });
+    const separate = must(await reopened.load(lexical)).state;
+    expect(separate).toMatchObject({
+      personIri: lexical,
+      personIriVersion: 2,
+      state: "bridge-detected",
+    });
+    expect(separate.verifiedWebId).toBeUndefined();
+    expect((await reopened.load(canonical))?.state.state).toBe("upgraded");
+    expect(pod.store.size).toBe(2);
+  });
+
+  it("prefers lexical-key state when both lexical and legacy resources exist", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const lexical = "https://CAROL.example:443/card#me";
+    const legacy = "https://carol.example/card#me";
+    await recordBridgeDetected(store, legacy, AT);
+    await store.save({ ...must(await store.load(legacy)).state, personIri: lexical });
+    await recordIdentityVerified(store, lexical, WEBID, AT);
+
+    expect((await store.load(lexical))?.state).toMatchObject({
+      personIri: lexical,
+      state: "identity-verified",
+    });
+    expect((await store.load(legacy))?.state.state).toBe("bridge-detected");
+    expect(pod.store.size).toBe(2);
+  });
+
+  it("stores new HTTP relationships under their lexical key", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const personIri = "https://CAROL.example:443/a/../日本語#me";
+    await recordBridgeDetected(store, personIri, AT);
+    await recordIdentityVerified(store, personIri, WEBID, AT);
+
+    expect([...pod.store.keys()]).toEqual([`${CONTAINER}rel-${base64Url(personIri)}.ttl`]);
+    expect((await store.load(personIri))?.state).toMatchObject({
+      personIri,
+      state: "identity-verified",
+    });
+  });
 
   it("saves (create), loads with a version, and re-saves with If-Match", async () => {
     const pod = new FakePod();

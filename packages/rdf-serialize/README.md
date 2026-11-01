@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/rdf-serialize
 
@@ -57,6 +58,44 @@ reject with `TypeError` rather than losing information.
 
 Do not concatenate RDF strings by hand. Use `safeHttpIri` for untrusted HTTP(S) resource IRIs and
 drop the field when it returns `undefined`.
+
+## Typed graph helpers
+
+Import from `@jeswr/rdf-serialize/wrapper` to read and write through a
+`@rdfjs/wrapper` `TermWrapper` and its own factory and dataset:
+
+```ts
+import {
+  addHttpIriTriple,
+  addIriTriple,
+  addLiteralTriple,
+  objectTerms,
+} from "@jeswr/rdf-serialize/wrapper";
+import type { TermWrapper } from "@rdfjs/wrapper";
+
+function describe(node: TermWrapper, homepage: string) {
+  addIriTriple(node, "https://schema.org/identifier", "urn:example:alice");
+  addLiteralTriple(node, "https://schema.org/name", "Alice");
+  const homepageAdded = addHttpIriTriple(node, "https://schema.org/url", homepage);
+  const names = objectTerms(node, "https://schema.org/name");
+  return { homepageAdded, names };
+}
+```
+
+- `objectTerms(node, ...predicates)` keeps literal, IRI, and blank-node types. One predicate
+  returns a live set: dataset changes remain visible, and `add`, `delete`, and `clear` write
+  through. Multiple predicates return a detached union snapshot in argument order,
+  de-duplicated by RDF term equality with first-seen order. No predicates returns an empty set.
+- `addIriTriple` escapes object IRIs through `escapeIri`, accepting any scheme without URL
+  normalization. The caller supplies any additional validation required by the field.
+- `addHttpIriTriple` validates and escapes through `safeHttpIri`; it returns false and adds
+  nothing for unsafe objects, or true after adding a safe HTTP(S) object.
+- `addLiteralTriple(node, predicate, value, datatype?)` writes xsd:string by default, or
+  a typed literal through `LiteralFrom.datatypeTuple` when a datatype is supplied.
+
+Predicates and optional datatype IRIs must be trusted vocabulary constants. Subjects must
+already be safe. The helpers preserve lexical IRI identity and leave literal escaping to the
+RDF writer. Keep application-specific alias, validation, and reject/drop policies at the caller.
 
 ## Links
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The ISOLATED-world bridge between the page (MAIN-world `window.solid`) and the service
  * worker. It is the trust boundary: the page can only ASK; this script decides what to
@@ -151,9 +152,10 @@ window.addEventListener('message', (event) => {
       break;
 
     case 'SOLID_LIST_GRANTS':
+    case 'SOLID_DISCONNECT':
       chrome.runtime.sendMessage(
         {
-          type: 'SOLID_LIST_GRANTS',
+          type: data.type,
           requestId: data.requestId,
           stampedOrigin: window.location.origin,
         },

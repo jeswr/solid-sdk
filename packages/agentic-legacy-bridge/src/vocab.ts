@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Vocabulary — the IRI constants this package writes.
  *
@@ -170,6 +171,8 @@ export const AGENTIC_RELATIONSHIP = `${AGENTIC}Relationship`;
 export const AGENTIC_RELATIONSHIP_STATE = `${AGENTIC}relationshipState`;
 /** The counterparty person node this relationship tracks. */
 export const AGENTIC_COUNTERPARTY = `${AGENTIC}counterparty`;
+/** Counterparty key scheme: 1 = legacy URL canonicalization, 2 = lexical RDF identity. */
+export const AGENTIC_PERSON_IRI_VERSION = `${AGENTIC}personIriVersion`;
 /** The channel currently in use with the counterparty (`agentic:currentChannel`). */
 export const AGENTIC_CURRENT_CHANNEL = `${AGENTIC}currentChannel`;
 /** The verified agent-card URL discovered for the counterparty (only after IDENTITY-VERIFIED). */
@@ -180,6 +183,8 @@ export const AGENTIC_OFFERED_CHANNEL = `${AGENTIC}offeredChannel`;
 export const AGENTIC_OFFER_PROTOCOL_HASH = `${AGENTIC}offerProtocolHash`;
 /** The protocol-document IRI bound into a pending offer. */
 export const AGENTIC_OFFER_PROTOCOL_SOURCE = `${AGENTIC}offerProtocolSource`;
+/** Pending-offer normalization: 1 = legacy URL canonicalization, 2 = lexical IRIs. */
+export const AGENTIC_OFFER_IRI_VERSION = `${AGENTIC}offerIriVersion`;
 /** True when the pending offer is security-bearing (a decline ABORTS, never downgrades). */
 export const AGENTIC_OFFER_REQUIRED = `${AGENTIC}offerRequired`;
 /** The last transition time (`xsd:dateTime`). */

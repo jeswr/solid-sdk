@@ -35,6 +35,11 @@ tests with the implementation. Retain the migrator's conservative source reading
 readings, target ACP allowlist, bounded complexity, report IDs/options, and dialect behavior.
 Server implementation is a trusted caller assertion, never derived from editable access RDF.
 
+In-process callers are trusted code. Keep internal mode lists private and frozen and helper
+classes out of public exports; no export may let one caller alter another caller's proof.
+The public mode list is a frozen copy; returned policies and reports are caller-owned.
+Patching shared JavaScript built-ins or dependencies directly is outside this trust boundary.
+
 The migrator owns HTTP, public group snapshots, review decisions, effective target phase proofs,
 scope checks, conditional persistence, and execution. Run its tests when changing this core;
 serializing a translated policy alone does not establish safe migration.
