@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { RRule } from "rrule";
 import { describe, expect, it } from "vitest";
 import { NS, node, parse, SCHEMA, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import {
@@ -44,7 +46,7 @@ describe("recurrence expansion", () => {
       process.env.TZ = previousZone;
     }
   });
-  // Independent expected dates generated with rrule.js 2.8.1 (temporary tool, no app dependency).
+  // Floating wall-clock fixtures generated independently with rrule.js 2.8.1.
   it.each(
     rruleFixtures,
   )("matches ten rrule.js occurrences: $rule.frequency $rule.interval $due", (fixture) => {
@@ -54,6 +56,27 @@ describe("recurrence expansion", () => {
         `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`,
     );
     expect(localDates).toEqual(fixture.expected);
+    const rule = fixture.rule as RecurrenceRule;
+    const reference = new RRule({
+      freq: RRule[rule.frequency],
+      interval: rule.interval ?? 1,
+      dtstart: new Date(`${fixture.due}Z`),
+      ...(rule.byDay
+        ? {
+            byweekday: rule.byDay.map(
+              (day) =>
+                [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][
+                  weekdays.indexOf(day)
+                ] as typeof RRule.MO,
+            ),
+          }
+        : {}),
+      ...(rule.byMonthDay !== undefined ? { bymonthday: rule.byMonthDay } : {}),
+      ...(rule.count !== undefined ? { count: rule.count } : {}),
+    });
+    expect(
+      reference.all((_, index) => index < 10).map((date) => date.toISOString().slice(0, 19)),
+    ).toEqual(fixture.expected);
   });
   it("uses Monday-based interval weeks, deduplicates and orders byDay", () => {
     expect(
@@ -255,7 +278,7 @@ describe("recurrence export and copy", () => {
     expect(humanise({ frequency: "YEARLY" }, new Date(2026, 10, 3))).toBe("Every year on 3 Nov");
     expect(humanise({ frequency: "DAILY", count: 10 }, due)).toBe("Every day (10 times)");
     expect(humanise({ frequency: "DAILY", until: "2027-01-01" }, due)).toBe(
-      "Every day until 2027-01-01",
+      "Every day until 1 Jan 2027",
     );
     expect(humanise({ frequency: "DAILY", until: new Date(2027, 0, 1) }, due)).toBe(
       "Every day until 1 Jan 2027",
