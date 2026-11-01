@@ -222,6 +222,47 @@ describe("PodSessionProvider", () => {
     );
   });
 
+  it.each([
+    { targets: [] },
+    { targets: [{ url: "https://alice.example/file", kind: "instance" }] },
+    { targets: [{ url: "file:///pod/", kind: "container" }] },
+  ] as const)("shows no-storage recovery for a live grant with unusable targets: $targets", async ({
+    targets,
+  }) => {
+    grant();
+    grants = [{ ...storageGrant(), targets }];
+    const view = await render(true);
+    expect(state).toMatchObject({
+      status: "ready",
+      session: { mode: "demo" },
+      extensionError: { code: "no-storage" },
+    });
+    expect(view.host.textContent).toContain(
+      "Your storage grant has no usable root. Connect again to choose your pod.",
+    );
+    expect(view.host.textContent).not.toContain("No storage grant yet.");
+    expect(openExtensionSession).not.toHaveBeenCalled();
+    await focus();
+    expect(state.extensionError).toMatchObject({ code: "no-storage" });
+  });
+
+  it.each([
+    { missing: [] },
+    { missing: [{ ...storageGrant(), expiresAt: 0 }] },
+    { missing: [{ ...storageGrant(), modes: ["read"] }] },
+  ])("shows not-granted recovery without a live read/write storage grant: %j", async ({
+    missing,
+  }) => {
+    grant();
+    grants = missing;
+    const view = await render(true);
+    expect(state).toMatchObject({
+      session: { mode: "demo" },
+      extensionError: { code: "not-granted" },
+    });
+    expect(view.host.textContent).toContain("No storage grant yet. Connect to use your pod.");
+  });
+
   it("keeps an announced, unpopulated stub loading until delayed granted state arrives", async () => {
     const listGrants = api.listGrants;
     Object.assign(api, { listGrants: undefined });
@@ -448,6 +489,33 @@ describe("PodSessionProvider", () => {
     expect(options?.isCurrent?.(aliceGeneration)).toBe(false);
   });
 
+  it("silently skips Alice's active focus subscriber when the provider switches accounts", async () => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    await render();
+    if (state.status !== "ready") throw new Error("Expected Alice");
+    const listener = vi.fn();
+    const stop = state.session.subscribe(listener);
+    const errors = vi.fn();
+    window.addEventListener("error", errors);
+    try {
+      api.webId = "https://bob.example/profile#me";
+      await focus();
+      expect(state).toMatchObject({ session: { mode: "extension", webId: api.webId } });
+      grant();
+      await focus();
+      expect(listener).not.toHaveBeenCalled();
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      stop();
+      window.removeEventListener("error", errors);
+    }
+  });
+
   it("keeps Bob active when Alice's delayed public-profile opening finishes", async () => {
     const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
       "../src/lib/session/extension-pod-session",
@@ -558,6 +626,74 @@ describe("PodSessionProvider", () => {
       expect(disconnect).toHaveBeenCalledOnce();
       expect(api.revokeGrant).not.toHaveBeenCalled();
     } else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
+  });
+
+  it.each(
+    ["native", "class"].flatMap((method) =>
+      [true, false].map((acknowledgement) => ({ method, acknowledgement })),
+    ),
+  )("handles $method disconnect ack=$acknowledgement after a revocation broadcast", async ({
+    method,
+    acknowledgement,
+  }) => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    const reply = deferred<boolean>();
+    const disconnect = vi.fn(() => reply.promise);
+    if (method === "native") api.disconnect = disconnect;
+    else api.revokeGrant.mockReturnValueOnce(reply.promise);
+    await render();
+    if (state.status !== "ready" || state.session.mode !== "extension")
+      throw new Error("Expected Alice");
+    const session = state.session;
+    let closing!: Promise<void>;
+    await act(() => {
+      closing = session.disconnect();
+    });
+    if (method === "native") expect(disconnect).toHaveBeenCalledOnce();
+    else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
+    revoke();
+    await stateMessage();
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+    await act(async () => {
+      reply.resolve(acknowledgement);
+      if (acknowledgement) await expect(closing).resolves.toBeUndefined();
+      else await expect(closing).rejects.toMatchObject({ code: "stale" });
+    });
+    expect(state).toMatchObject({ session: { mode: "demo" } });
+  });
+
+  it.each([
+    "native",
+    "class",
+  ])("shows retry copy when a current %s disconnect is unacknowledged", async (method) => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    const disconnect = vi.fn(async () => false);
+    if (method === "native") api.disconnect = disconnect;
+    else api.revokeGrant.mockResolvedValueOnce(false);
+    const view = await render(true);
+    if (state.status !== "ready") throw new Error("Expected Alice");
+    const session = state.session;
+    const button = [...view.host.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === "Disconnect",
+    );
+    expect(button).toBeDefined();
+    await click(button as HTMLButtonElement);
+    expect(state).toMatchObject({ session: { mode: "extension", webId: WEBID } });
+    if (state.status !== "ready") throw new Error("Expected Alice");
+    expect(state.session).toBe(session);
+    expect(view.host.textContent).toContain("Couldn't disconnect. Please try again.");
+    if (method === "native") expect(disconnect).toHaveBeenCalledOnce();
+    else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
   });
 
   it("waits for detection before falling back to the demo when the extension is absent", async () => {

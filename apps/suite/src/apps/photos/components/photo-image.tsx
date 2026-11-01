@@ -1,0 +1,90 @@
+// AUTHORED-BY Codex GPT-6
+"use client";
+import { createPodScopedFetch } from "@jeswr/guarded-fetch";
+import { ImageOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { usePhotos } from "../state/photos-context";
+
+export function usePhotoUrl(url: string | undefined) {
+  const { session } = usePhotos();
+  const [state, setState] = useState<{
+    key: string;
+    url?: string;
+    size?: number;
+    error?: boolean;
+  }>();
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the same URL
+  useEffect(() => {
+    if (!url) return;
+    let live = true;
+    let objectUrl: string | undefined;
+    const controller = new AbortController();
+    const fetch = createPodScopedFetch(session.storageUrl, { fetch: session.fetch });
+    void fetch(url, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Image unavailable");
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) throw new Error("Not an image");
+        if (!live) return;
+        objectUrl = URL.createObjectURL(blob);
+        setState({ key: url, url: objectUrl, size: blob.size });
+      })
+      .catch(() => {
+        if (live) setState({ key: url, error: true });
+      });
+    return () => {
+      live = false;
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, session, attempt]);
+  return { ...(state?.key === url ? state : {}), retry: () => setAttempt((value) => value + 1) };
+}
+export function PhotoImage({ url, name }: { url: string | undefined; name: string }) {
+  const frame = useRef<HTMLSpanElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const node = frame.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setNear(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const image = usePhotoUrl(near ? url : undefined);
+  const [broken, setBroken] = useState<string>();
+  return (
+    <span className="pho-image" ref={frame}>
+      {image.url && broken !== image.url ? (
+        // biome-ignore lint/performance/noImgElement: authenticated object URLs must stay in this browser
+        <img
+          src={image.url}
+          alt={name}
+          loading="lazy"
+          draggable={false}
+          onError={() => setBroken(image.url)}
+        />
+      ) : (
+        <span
+          role="img"
+          className="pho-image-placeholder"
+          aria-label={image.error || broken ? `${name}: preview unavailable` : `Loading ${name}`}
+        >
+          <ImageOff size={24} aria-hidden="true" />
+        </span>
+      )}
+    </span>
+  );
+}

@@ -45,13 +45,13 @@
  *     the refusing fetch UNDER the guard: `createGuardedFetch({ fetch: refuseRedirects(authed) })`
  *     — the guard host-validates and the refusing underlying fetch rejects any redirect before
  *     the guard would follow it. (Because the guard wraps a THROWING underlying fetch, that
- *     refusal surfaces as an `SsrfError` whose `cause` is the `RedirectRefusedError` — the
- *     redirect is still refused, only the outer error class differs.)
+ *     refusal surfaces as an `SsrfError` with a sanitised diagnostic; the raw transport
+ *     error is discarded. The redirect is still refused, only the outer error class differs.)
  *
  * **Pure core, no platform:** only the WHATWG `fetch` / `Response` globals — browser-safe, no
  * `node:*` import. Exported from the default `.` entry and re-exported from `./node`.
  */
-import { isRedirect, redactUserinfo } from "./redirect.js";
+import { isRedirect, sanitizeUrl } from "./redirect.js";
 import { snapshotFetchInput } from "./request-snapshot.js";
 
 /**
@@ -61,7 +61,7 @@ import { snapshotFetchInput } from "./request-snapshot.js";
  * was allowed, but its response was a redirect the wrapper will not follow.
  */
 export class RedirectRefusedError extends Error {
-  /** The request URL that returned the refused redirect (userinfo redacted). */
+  /** The request URL that returned the refused redirect (userinfo, query and fragment removed). */
   readonly url: string;
   /**
    * The redirect status. `0` for a browser opaque-redirect, whose real 3xx status is masked by
@@ -69,8 +69,10 @@ export class RedirectRefusedError extends Error {
    */
   readonly status: number;
   /**
-   * The `Location` header (userinfo redacted), when readable — `undefined` for a browser
-   * opaque-redirect (whose headers are stripped) or a redirect with no `Location`.
+   * The `Location` reference with userinfo, query and fragment removed. Relative references
+   * remain relative for constructor compatibility. Malformed values
+   * use a constant placeholder. `undefined` for a browser opaque-redirect (whose headers
+   * are stripped) or a redirect with no `Location`.
    */
   readonly location: string | undefined;
   /** Backwards-compatible `SolidRedirectError` constructor. */
@@ -88,15 +90,30 @@ export class RedirectRefusedError extends Error {
       ? { url: messageOrUrl, status: detailOrStatus }
       : detailOrStatus;
     const message = legacy
-      ? `[unstorage-solid] refusing to follow a redirect (status ${detail.status}) from ${messageOrUrl} ` +
+      ? `[unstorage-solid] refusing to follow a redirect (status ${detail.status}) from ${sanitizeUrl(messageOrUrl)} ` +
         "(a redirected pod request could forward credentials off-origin — SSRF/credential-leak guard)"
       : messageOrUrl;
     super(message, detail.cause !== undefined ? { cause: detail.cause } : undefined);
     this.name = legacy ? "SolidRedirectError" : "RedirectRefusedError";
-    this.url = detail.url;
+    this.url = sanitizeUrl(detail.url);
     this.status = detail.status;
-    this.location = detail.location;
+    this.location =
+      detail.location === undefined ? undefined : sanitizeLocation(detail.location, detail.url);
   }
+}
+
+/** Keep safe relative references relative while retaining the shared diagnostic redaction. */
+function sanitizeLocation(location: string, base: string): string {
+  const safe = sanitizeUrl(location, base);
+  if (
+    safe.startsWith("(") ||
+    /^[a-z][a-z\d+.-]*:|^[\\/]{2}/i.test(location.trim()) ||
+    new URL(location, base).username ||
+    new URL(location, base).password
+  ) {
+    return safe;
+  }
+  return location.trim().split(/[?#]/)[0] ?? "";
 }
 
 /**
@@ -141,13 +158,13 @@ export function refuseRedirects(
       } catch {
         // Body already consumed / locked — fine.
       }
-      const safeUrl = redactUserinfo(url);
-      const safeLocation = location !== undefined ? redactUserinfo(location) : undefined;
+      const safeUrl = sanitizeUrl(url);
+      const safeLocation = location !== undefined ? sanitizeUrl(location, url) : undefined;
       const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
       const to = safeLocation !== undefined ? ` → ${safeLocation}` : "";
       throw new RedirectRefusedError(
         `Refusing to follow a redirect (${where}${to}) from ${safeUrl}: this fetch refuses redirects for credential safety. Use a follow-capable fetch if a redirect is an expected part of the protocol.`,
-        { url: safeUrl, status: res.status, location: safeLocation },
+        { url, status: res.status, location },
       );
     }
     return res;

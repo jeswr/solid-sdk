@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { PodScopeError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCalendar,
@@ -26,6 +28,25 @@ const mock = (handler: (url: string, init: RequestInit) => Response | Promise<Re
   vi.fn<typeof fetch>(async (input, init) => handler(String(input), init ?? {}));
 
 describe("injected calendar I/O", () => {
+  for (const operation of ["PUT", "DELETE"] as const) {
+    it.each([
+      303, 307,
+    ])(`refuses %s on ${operation} without false success or replay`, async (status) => {
+      const fetch = mock(() =>
+        fetch.mock.calls.length === 1
+          ? new Response(null, { status, headers: { location: "next.ttl" } })
+          : new Response(null, { status: 200 }),
+      );
+      const io = calendarIO(fetch, root);
+      await expect(
+        operation === "PUT"
+          ? io.saveEvent(url, event, { create: true })
+          : io.removeEvent(url, '"v1"'),
+      ).rejects.toBeInstanceOf(PodScopeError);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]?.[1]?.method).toBe(operation);
+    });
+  }
   it("loads relative event and calendar subjects using their final redirect URLs", async () => {
     const finalEvent = `${container}new.ttl`;
     const finalCalendar = `${root}calendar/new.ttl`;

@@ -2,7 +2,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { PodScopeError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { PhotoIoError, photoStorage } from "../../src/apps/photos/lib/model/io.js";
 import { purgePhoto, restorePhoto, trashPhoto } from "../../src/apps/photos/lib/model/trash.js";
 import type { ImageEncoder } from "../../src/apps/photos/lib/model/upload.js";
@@ -23,6 +23,41 @@ const encoder: ImageEncoder = {
   thumbnail: async () => new Blob(["webp"], { type: "image/webp" }),
   stripLocation: async (blob) => blob,
 };
+it("continues following in-scope photo reads", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async (): Promise<Response> =>
+      fetch.mock.calls.length === 1
+        ? new Response(null, { status: 307, headers: { location: "next.ttl" } })
+        : new Response("", { headers: { "content-type": "text/turtle", etag: '"v2"' } }),
+  );
+  expect((await photoStorage(fetch, storage).read(url)).etag).toBe('"v2"');
+  expect(fetch.mock.calls.map(([input]) => input)).toEqual([
+    url,
+    `${storage}photos/items/next.ttl`,
+  ]);
+});
+for (const operation of ["PUT", "container PUT", "DELETE"] as const) {
+  it.each([
+    303, 307,
+  ])(`refuses %s on photo ${operation} without false success or replay`, async (status) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async (): Promise<Response> =>
+        fetch.mock.calls.length === 1
+          ? new Response(null, { status, headers: { location: "next.ttl" } })
+          : new Response(null, { status: 200 }),
+    );
+    const io = photoStorage(fetch, storage);
+    await expect(
+      operation === "PUT"
+        ? io.savePhoto(url, photo, { create: true })
+        : operation === "container PUT"
+          ? io.ensureContainers([""])
+          : io.remove(url, '"v1"'),
+    ).rejects.toBeInstanceOf(PodScopeError);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe(operation === "DELETE" ? "DELETE" : "PUT");
+  });
+}
 it("loads/saves photo and album through typed parsing and conditional Turtle writes", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);

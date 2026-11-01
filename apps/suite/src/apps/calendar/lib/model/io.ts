@@ -68,6 +68,7 @@ export function calendarIO(fetch: typeof globalThis.fetch, podRoot: string) {
     }
     const response = await scoped(url, {
       method: "PUT",
+      redirect: "error",
       headers,
       body: await serializeDataset(dataset),
     });
@@ -117,7 +118,11 @@ export function calendarIO(fetch: typeof globalThis.fetch, podRoot: string) {
       document(url);
       if (!etag || etag === "*" || etag.startsWith("W/"))
         throw new TypeError("A strong ETag is required");
-      const response = await scoped(url, { method: "DELETE", headers: { "If-Match": etag } });
+      const response = await scoped(url, {
+        method: "DELETE",
+        redirect: "error",
+        headers: { "If-Match": etag },
+      });
       if (!response.ok) throw new CalendarHttpError(response.status, response.headers.get("etag"));
     },
     /** Register into an existing caller-selected index; preserve unrelated data and legacy aliases. */
