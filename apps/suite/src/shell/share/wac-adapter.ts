@@ -54,6 +54,8 @@ export class WacSharingAdapter implements SharingAdapter {
   readonly supportsGeneralCommenter = false;
   private fetch: typeof fetch;
   private snapshots = new Map<string, Snapshot>();
+  /** The comments ACL belongs to one document, so an adapter with one serves only that URL. */
+  private boundUrl: string | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private options: { fetch?: typeof fetch; webId: string; commentsUrl?: string }) {
     this.fetch = refuseRedirects(options.fetch ?? globalThis.fetch);
@@ -124,6 +126,14 @@ export class WacSharingAdapter implements SharingAdapter {
     };
   }
   async load(url: string, signal: AbortSignal): Promise<SharingState> {
+    // Folder sharing needs acl:default on every grant (members inherit it); this adapter
+    // writes acl:accessTo only, so a folder downgrade or removal would leave inherited
+    // access in place. Fail closed until default-aware writes exist.
+    if (new URL(this.url(url)).pathname.endsWith("/")) throw new ShareError("unsupported");
+    if (this.options.commentsUrl) {
+      if (this.boundUrl !== undefined && this.boundUrl !== url) throw new ShareError("unsupported");
+      this.boundUrl = url;
+    }
     try {
       const documents = [await this.document(url, signal)];
       if (this.options.commentsUrl)
@@ -140,8 +150,14 @@ export class WacSharingAdapter implements SharingAdapter {
         previous.state = { ...previous.state, readOnly: "forbidden" };
         return structuredClone(previous.state);
       }
+      // Unreachable storage is not a lost permission: lock writes as offline, and let the
+      // next successful load (a fresh snapshot) unlock them.
       if (previous && !signal.aborted)
-        previous.state = { ...previous.state, readOnly: "forbidden" };
+        previous.state = {
+          ...previous.state,
+          readOnly:
+            error instanceof ShareError && error.code !== "network" ? "forbidden" : "offline",
+        };
       throw error;
     }
   }
@@ -149,6 +165,7 @@ export class WacSharingAdapter implements SharingAdapter {
     const pending = this.queue.then(async () => {
       const snapshot = this.snapshots.get(url);
       if (!snapshot) throw new ShareError("unsupported");
+      if (snapshot.state.readOnly === "offline") throw new ShareError("network");
       if (!snapshot.state.canManage || snapshot.state.readOnly) throw new ShareError("forbidden");
       const input = this.input(snapshot.documents);
       const current = readSharing(input);

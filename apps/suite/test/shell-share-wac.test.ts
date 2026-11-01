@@ -259,3 +259,39 @@ describe("WAC sharing adapter", () => {
     });
   });
 });
+
+describe("WAC adapter scope limits (fail closed)", () => {
+  it("refuses folders, whose members inherit acl:default grants it would not change", async () => {
+    const { adapter, fetch } = await server();
+    const folder = `${new URL("./", FILE).href}`;
+    await expect(adapter.load(folder, signal())).rejects.toMatchObject({ code: "unsupported" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("locks writes as offline when storage is unreachable, then unlocks on the next load", async () => {
+    const { adapter, fetch } = await server();
+    await adapter.load(FILE, signal());
+    const working = fetch.getMockImplementation();
+    fetch.mockImplementation(async () => new Response(null, { status: 503 }));
+    await expect(adapter.load(FILE, signal())).rejects.toMatchObject({ code: "network" });
+    await expect(adapter.setPerson(FILE, BOB, "viewer")).rejects.toMatchObject({
+      code: "network",
+    });
+    if (working) fetch.mockImplementation(working);
+    expect((await adapter.load(FILE, signal())).readOnly).toBeUndefined();
+    await adapter.setPerson(FILE, BOB, "viewer");
+    expect(
+      (await adapter.load(FILE, signal())).people.find((person) => person.webId === BOB)?.role,
+    ).toBe("viewer");
+  });
+  it("an adapter with a comments ACL serves only its own document", async () => {
+    const adapter = new WacSharingAdapter({
+      fetch: vi.fn(async () => new Response(null, { status: 404 })),
+      webId: ALICE,
+      commentsUrl: COMMENTS,
+    });
+    await adapter.load(FILE, signal()).catch(() => undefined);
+    await expect(adapter.load(`${FILE}-other`, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+  });
+});
