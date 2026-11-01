@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The GOLDEN-MASTER end-to-end flow over doubled I/O (an in-memory pod + a mock Gmail):
  * untrusted email → Reader → owner-private pod → deterministic Actor proposal → ODRL-mandate-
@@ -577,6 +578,86 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     expect(result.sent).toBe(0);
     expect(recorder.sent.length).toBe(0);
     expect((await listProposals(pod.fetch, PROPOSALS))[0]?.proposal.status).toBe("pending");
+  });
+
+  it.each([
+    "sent-write-error",
+    "http-error",
+    "network-error",
+    "error-after-write",
+  ])("preserves a successful send when receipt finalization returns %s", async (failure) => {
+    const { pod } = await seededPod();
+    const recorder = new RecordingSender(() => FIXED);
+    const finalizations: string[] = [];
+    const writeFetch: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (
+        url.startsWith(OUTBOX) &&
+        url.endsWith(".ttl") &&
+        init?.method === "PUT" &&
+        !new Headers(init.headers).has("if-none-match")
+      ) {
+        finalizations.push(String(init.body));
+        if (failure === "sent-write-error") {
+          if (String(init.body).includes('"sent"')) return new Response(null, { status: 503 });
+          return pod.fetch(input, init);
+        }
+        if (failure === "http-error") return new Response(null, { status: 503 });
+        if (failure === "error-after-write") await pod.fetch(input, init);
+        throw new Error("fixture receipt persistence failure");
+      }
+      return pod.fetch(input, init);
+    };
+    const config = { ...outboxConfig(pod, scriptedVerifier(loosePolicy), recorder), writeFetch };
+    const result = await runOutboxOnce(config);
+    expect(result).toMatchObject({ sent: 1, failed: 0 });
+    expect(recorder.sent).toHaveLength(1);
+    expect(finalizations).toHaveLength(1);
+    expect(finalizations[0]).toContain('"sent"');
+    expect(finalizations[0]).toContain('"recorded-1"');
+    expect(finalizations[0]).not.toContain('"failed"');
+    expect(receiptBody(pod)).toContain(failure === "error-after-write" ? '"sent"' : '"claimed"');
+
+    // The original claim (or committed receipt) still prevents a second transmission.
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 0, skipped: 1 });
+    expect(recorder.sent).toHaveLength(1);
+    expect(finalizations).toHaveLength(1);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("reports a transmission failure even when failed-receipt persistence fails: %s", async (persistenceFails) => {
+    const { pod } = await seededPod();
+    const recorder = new RecordingSender(() => FIXED);
+    const sender = vi.fn(async () => {
+      throw new Error("fixture transmission failure");
+    });
+    const finalizations: string[] = [];
+    const writeFetch: typeof fetch = async (input, init) => {
+      if (
+        String(input).startsWith(OUTBOX) &&
+        String(input).endsWith(".ttl") &&
+        init?.method === "PUT" &&
+        !new Headers(init.headers).has("if-none-match")
+      ) {
+        finalizations.push(String(init.body));
+        if (persistenceFails) return new Response(null, { status: 503 });
+      }
+      return pod.fetch(input, init);
+    };
+    const config = {
+      ...outboxConfig(pod, scriptedVerifier(loosePolicy), recorder),
+      writeFetch,
+      senders: { email: sender },
+    };
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 1 });
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(finalizations).toHaveLength(1);
+    expect(finalizations[0]).toContain('"failed"');
+    expect(receiptBody(pod)).toContain(persistenceFails ? '"claimed"' : '"failed"');
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 0, skipped: 1 });
+    expect(sender).toHaveBeenCalledTimes(1);
   });
 
   it("FAIL-CLOSED: a mandate not issued by the owner is refused", async () => {
