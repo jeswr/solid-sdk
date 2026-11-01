@@ -85,9 +85,6 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
   const client: oauth.Client = {
     client_id: options.clientId,
     token_endpoint_auth_method: "none",
-    id_token_signed_response_alg: as.id_token_signing_alg_values_supported?.includes("ES256")
-      ? "ES256"
-      : "RS256",
   };
   const dpopKeyPair = options.dpopKeyPair ?? (await generateKey());
   const dpop = oauth.DPoP(client, dpopKeyPair.keys);
@@ -193,17 +190,27 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
       const body = await replayBody(request);
       if (!current) throw new Error("No pod credentials");
       // protectedResourceRequest retains nonce state on the handle and generates new proofs.
-      const send = () =>
-        oauth.protectedResourceRequest(
-          current!.accessToken,
-          request.method,
-          new URL(request.url),
-          new Headers(request.headers),
-          body,
-          { ...oauthOptions(http, request.signal), DPoP: dpop },
-        );
-      const response = await send();
-      if (response.status === 401 && response.headers.has("dpop-nonce")) {
+      let attempts = 0;
+      const send = async () => {
+        attempts++;
+        try {
+          return await oauth.protectedResourceRequest(
+            current!.accessToken,
+            request.method,
+            new URL(request.url),
+            new Headers(request.headers),
+            body,
+            { ...oauthOptions(http, request.signal), DPoP: dpop },
+          );
+        } catch (error) {
+          if (error instanceof oauth.WWWAuthenticateChallengeError)
+            await error.response.body?.cancel();
+          throw error;
+        }
+      };
+      const response = await withDPoPNonceRetry(send);
+      // Retain header-only challenges within the same two-attempt budget.
+      if (attempts === 1 && response.status === 401 && response.headers.has("dpop-nonce")) {
         await response.body?.cancel();
         return send();
       }

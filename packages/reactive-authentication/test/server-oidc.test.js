@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, expect, test, vi } from "vitest";
 // Shared offline issuer verifies PKCE, DPoP signatures, key binding and refresh rotation.
 import {
@@ -16,19 +17,120 @@ import {
 } from "../src/ServerOidcClient.js";
 
 afterEach(() => vi.restoreAllMocks());
-async function fixture() {
+async function fixture(wrapFetch = (fetcher) => fetcher) {
   const op = podIssuer();
   const options = {
     issuer: POD_ISSUER,
     clientId: POD_CLIENT,
     redirectUri: POD_CALLBACK,
-    fetch: op.fetch,
+    fetch: wrapFetch(op.fetch),
   };
   const client = await createServerOidcClient(options);
   const begin = await client.authorizationUrl();
   const login = () => client.handleCallback({ url: op.callback(begin.url) }, begin.state);
   return { op, options, client, begin, login };
 }
+
+test.each([
+  "once",
+  "always",
+  "invalid_token",
+  "mixed",
+  "no-body",
+  "header-first",
+])("bounds standard resource nonce challenges (%s) and releases rejected bodies", async (kind) => {
+  const cancellations = [];
+  let attempts = 0;
+  const f = await fixture((fetcher) => async (input, init) => {
+    const response = await fetcher(input, init);
+    if (!new Request(input, init).url.startsWith(POD_ROOT)) return response;
+    attempts++;
+    if (["once", "no-body"].includes(kind) && attempts > 1) return response;
+    const cancel = vi.fn();
+    cancellations.push(cancel);
+    return new Response(kind === "no-body" ? null : new ReadableStream({ cancel }), {
+      status: 401,
+      headers: {
+        "dpop-nonce": "fixture-resource-nonce",
+        ...((kind === "mixed" && attempts === 2) || (kind === "header-first" && attempts === 1)
+          ? {}
+          : {
+              "www-authenticate": `DPoP error="${kind === "invalid_token" ? kind : "use_dpop_nonce"}"`,
+            }),
+      },
+    });
+  });
+  await f.login();
+  const result = f.client.fetch(`${POD_ROOT}notes`, { method: "PUT", body: "same bytes" });
+  if (["once", "no-body"].includes(kind)) {
+    expect(await (await result).json()).toEqual({ ok: true, nonce: "fixture-resource-nonce" });
+  } else if (kind === "mixed") {
+    const response = await result;
+    expect(response.status).toBe(401);
+    expect(cancellations[1]).not.toHaveBeenCalled();
+    await response.body.cancel();
+  } else {
+    await expect(result).rejects.toMatchObject({ name: "WWWAuthenticateChallengeError" });
+  }
+  expect(attempts).toBe(kind === "invalid_token" ? 1 : 2);
+  for (const cancel of cancellations) {
+    if (kind === "no-body") expect(cancel).not.toHaveBeenCalled();
+    else expect(cancel).toHaveBeenCalledOnce();
+  }
+  const requests = f.op.captured.filter((r) => r.url.startsWith(POD_ROOT));
+  expect(requests.map((r) => r.body)).toEqual(Array(attempts).fill("same bytes"));
+  if (attempts === 2) {
+    const proofs = requests.map((r) => decodeJwt(r.headers.get("dpop")));
+    expect(proofs[1].nonce).toBe("fixture-resource-nonce");
+    expect(proofs[1].jti).not.toBe(proofs[0].jti);
+  }
+});
+
+test("does not retry unrelated resource transport errors", async () => {
+  const failure = new Error("fixture transport failure");
+  let attempts = 0;
+  const f = await fixture((fetcher) => async (input, init) => {
+    if (new Request(input, init).url.startsWith(POD_ROOT)) {
+      attempts++;
+      throw failure;
+    }
+    return fetcher(input, init);
+  });
+  await f.login();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toBe(failure);
+  expect(attempts).toBe(1);
+});
+
+test.each([
+  [["RS256", "ES256"], "RS256", true],
+  [["RS256", "ES256"], "ES256", true],
+  [["ES256"], "RS256", false],
+  [undefined, "RS256", true],
+  [undefined, "ES256", false],
+])("validates advertised ID-token algorithms (%j, %s)", async (advertised, alg, accepted) => {
+  const keys = await generateKeyPair(alg);
+  const publicJwk = { ...(await exportJWK(keys.publicKey)), kid: "test-signing-key", alg };
+  const f = await fixture((fetcher) => async (input, init) => {
+    const response = await fetcher(input, init);
+    const url = new Request(input, init).url;
+    if (url.endsWith("/.well-known/openid-configuration")) {
+      const metadata = await response.json();
+      metadata.id_token_signing_alg_values_supported = advertised;
+      return Response.json(metadata);
+    }
+    if (url === `${POD_ISSUER}jwks`) return Response.json({ keys: [publicJwk] });
+    if (url === `${POD_ISSUER}token`) {
+      const tokens = await response.json();
+      tokens.id_token = await new SignJWT(decodeJwt(tokens.id_token))
+        .setProtectedHeader({ alg, kid: publicJwk.kid })
+        .sign(keys.privateKey);
+      return Response.json(tokens);
+    }
+    return response;
+  });
+  if (accepted) expect((await f.login()).webId).toBe(f.op.controls.webId);
+  else await expect(f.login()).rejects.toThrow('unexpected JWT "alg"');
+});
 
 test("split server authorization imports non-extractable keys and restores the original proof binding", async () => {
   const f = await fixture();
