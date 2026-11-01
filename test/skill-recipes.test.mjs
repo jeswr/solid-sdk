@@ -8,9 +8,6 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as guardedFetch from "../packages/guarded-fetch/src/index.ts";
-import { createNotifications } from "../packages/pod-notifications/src/index.ts";
-import { FakeTimers } from "../packages/pod-notifications/src/testing.ts";
-import { createMemoryStorage } from "../packages/storage-client/dist/memory.js";
 
 // Reuse existing package dependencies; the workspace root needs no new dependency.
 const packageRequire = createRequire(
@@ -417,53 +414,6 @@ describe("reviewed recipe failure boundaries", () => {
     expect(reportError).not.toHaveBeenCalled();
   });
 
-  it("reconciles a change absorbed by the real polling baseline without another mutation", async () => {
-    const code = blocks("pod-notifications", "ts")[0];
-    const timers = new FakeTimers(100);
-    const storage = createMemoryStorage();
-    const { watchCollection } = await execute(
-      code,
-      {},
-      {
-        "@jeswr/pod-notifications": {
-          createNotifications: (deps) => createNotifications({ ...deps, timers, now: timers.now }),
-        },
-      },
-      "({ watchCollection })",
-    );
-    let cached;
-    const reconcile = vi.fn(async () => {
-      const members = [];
-      for await (const entry of storage.listAll(storage.root)) members.push(entry.url);
-      cached = members;
-    });
-    const invalidate = vi.fn();
-    const reportError = vi.fn();
-    const cleanup = await watchCollection(
-      vi.fn(),
-      storage,
-      `${storage.root}missing`,
-      invalidate,
-      reconcile,
-      reportError,
-    );
-    expect(cached).toEqual([]);
-    const child = await storage.create(storage.root, "new", {
-      contentType: "text/plain",
-      name: "new",
-    });
-    // The first poll absorbs this mutation into its quiet baseline.
-    await timers.advanceBy(0);
-    await vi.waitFor(() => expect(cached).toEqual([child.url]));
-    expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
-    await timers.advanceBy(30_000);
-    expect(invalidate).not.toHaveBeenCalled();
-    expect(reconcile).toHaveBeenCalledTimes(2);
-    expect(reportError).not.toHaveBeenCalled();
-    await cleanup();
-    expect(timers.pending).toBe(0);
-  });
-
   it("reconciles changes during push setup on first live without waiting for resync", async () => {
     const { watch, transition } = await notificationRecipe();
     let authoritative = "initial";
@@ -566,6 +516,85 @@ describe("reviewed recipe failure boundaries", () => {
     expect(cached).toBe(authoritative);
     expect(reconcile.mock.calls).toEqual([[new Date(0)], [first], [second]]);
     await cleanup();
+  });
+
+  it("fences event reads queued before cleanup and ignores late callbacks", async () => {
+    const { watch, handlers, transition, subscription, reportError } = await notificationRecipe();
+    const reconcile = vi.fn();
+    const cleanup = await watch(reconcile);
+    const lateResync = handlers.get("resync");
+    lateResync(new Date());
+    transition("live");
+    await cleanup();
+    // A callback already dispatched before listener removal can still reach the queue.
+    lateResync(new Date());
+    await cleanup();
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { readFails: false, closeFails: false },
+    { readFails: true, closeFails: false },
+    { readFails: false, closeFails: true },
+    { readFails: true, closeFails: true },
+  ])("drains the active read on cleanup (readFails=$readFails, closeFails=$closeFails)", async ({
+    readFails,
+    closeFails,
+  }) => {
+    const { watch, handlers, transition, subscription, reportError } = await notificationRecipe();
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const readFailure = new Error("Read failed during cleanup");
+    const closeFailure = new Error("Subscription cleanup failed");
+    let cached = "initial";
+    const reconcile = vi
+      .fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementation(async () => {
+        started.resolve();
+        await release.promise;
+        if (readFails) throw readFailure;
+        cached = "updated";
+      });
+    const cleanup = await watch(reconcile);
+    handlers.get("resync")(new Date());
+    await started.promise;
+    handlers.get("resync")(new Date());
+    transition("live");
+    if (closeFails) subscription.close.mockRejectedValue(closeFailure);
+    const settled = vi.fn();
+    const closing = Promise.allSettled([cleanup(), cleanup()]).then((outcomes) => {
+      settled();
+      return outcomes;
+    });
+    // Flush promise continuations while the application read remains outstanding.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).not.toHaveBeenCalled();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    release.resolve();
+    expect(await closing).toEqual(
+      Array.from({ length: 2 }, () =>
+        closeFails
+          ? { status: "rejected", reason: closeFailure }
+          : { status: "fulfilled", value: undefined },
+      ),
+    );
+    expect(cached).toBe(readFails ? "initial" : "updated");
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    if (readFails) {
+      await vi.waitFor(() =>
+        expect(reportError).toHaveBeenCalledWith(closeFails ? closeFailure : readFailure),
+      );
+      for (const [error] of reportError.mock.calls) {
+        expect(error).toBe(closeFails ? closeFailure : readFailure);
+      }
+    } else {
+      expect(reportError).not.toHaveBeenCalled();
+    }
   });
 
   it("reconciles an already-live subscription after registering every listener", async () => {

@@ -31,9 +31,13 @@ export async function watchCollection(
     pollIntervalMs: 30_000,
   });
   const stopChanges = subscription.on('change', event => invalidate(event.object));
+  let closed = false;
+  let closing: Promise<void> | undefined;
   let reconciliation = Promise.resolve();
   const reconcileSerially = (since: Date) => {
-    reconciliation = reconciliation.then(() => reconcile(since));
+    reconciliation = reconciliation.then(() => {
+      if (!closed) return reconcile(since);
+    });
     return reconciliation;
   };
   const reconcileAfterEvent = async (since: Date) => {
@@ -54,11 +58,15 @@ export async function watchCollection(
       void reconcileAfterEvent(new Date(0)).catch(reportError);
     }
   });
-  const close = async () => {
-    stopChanges();
-    stopResync();
-    stopState();
-    await subscription.close();
+  const close = () => {
+    if (!closing) {
+      closed = true;
+      stopChanges();
+      stopResync();
+      stopState();
+      closing = subscription.close().finally(() => reconciliation.catch(() => {}));
+    }
+    return closing;
   };
   try {
     // Seed immediately; polling resync and first live cover their setup gaps.
@@ -74,6 +82,8 @@ export async function watchCollection(
 Own the returned async cleanup in the application lifecycle, including logout. `subscribe`
 also accepts an abort signal. Alternatively iterate the subscription with `for await`; ending
 an iterator detaches that iterator, so still close the subscription itself.
+Cleanup fences queued reconciliation and waits for any running read to settle, even if closing
+the subscription fails. Await it before clearing application state on logout.
 
 `subscribe()` can return while push is still connecting. The first `live` transition does
 not emit `resync`, so refresh again then to cover changes during setup. Polling emits a full

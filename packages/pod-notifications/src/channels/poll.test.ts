@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { readFileSync } from "node:fs";
 import type { AuthFetch } from "@jeswr/storage-client";
 import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import ts from "typescript";
 import { expect, test, vi } from "vitest";
+import { createNotifications } from "../index.js";
 import { FakeTimers } from "../testing.js";
-import type { ChangeEvent } from "../types.js";
+import type { ChangeEvent, NotificationsDependencies } from "../types.js";
 import { createPollChannel } from "./poll.js";
 
 test("polling revalidates cacheable HEADs and all listing pages to observe changes", async () => {
@@ -122,5 +125,58 @@ test("setup resync waits for a complete baseline and emits only once after a fai
   expect(resync).toHaveBeenCalledOnce();
   expect(changes).not.toHaveBeenCalled();
   await sub.close();
+  expect(timers.pending).toBe(0);
+});
+
+test("the recipe reconciles a change absorbed by the polling baseline without another mutation", async () => {
+  const markdown = readFileSync(new URL("../../SKILL.md", import.meta.url), "utf8");
+  const code = /```ts\n([\s\S]*?)```/.exec(markdown)?.[1];
+  if (!code) throw new Error("Missing notification recipe");
+  const { outputText } = ts.transpileModule(code, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  });
+  const timers = new FakeTimers(100);
+  const storage = createMemoryStorage();
+  const watchCollection = new Function(
+    "require",
+    "exports",
+    `${outputText}\nreturn exports.watchCollection;`,
+  )((specifier: string) => {
+    expect(specifier).toBe("@jeswr/pod-notifications");
+    return {
+      createNotifications: (deps: NotificationsDependencies) =>
+        createNotifications({ ...deps, timers, now: timers.now }),
+    };
+  }, {});
+  let cached: string[] = [];
+  const reconcile = vi.fn(async () => {
+    const members = [];
+    for await (const entry of storage.listAll(storage.root)) members.push(entry.url);
+    cached = members;
+  });
+  const invalidate = vi.fn();
+  const reportError = vi.fn();
+  const cleanup = await watchCollection(
+    vi.fn(),
+    storage,
+    `${storage.root}missing`,
+    invalidate,
+    reconcile,
+    reportError,
+  );
+  expect(cached).toEqual([]);
+  const child = await storage.create(storage.root, "new", {
+    contentType: "text/plain",
+    name: "new",
+  });
+  // The first poll absorbs this mutation into its quiet baseline.
+  await timers.advanceBy(0);
+  await vi.waitFor(() => expect(cached).toEqual([child.url]));
+  expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
+  await timers.advanceBy(30_000);
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(reconcile).toHaveBeenCalledTimes(2);
+  expect(reportError).not.toHaveBeenCalled();
+  await cleanup();
   expect(timers.pending).toBe(0);
 });
