@@ -208,6 +208,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       onState: (state: ConnectorState) => {
         next = state;
       },
+      ...(options.signal && { signal: options.signal }),
     };
     try {
       if (file) await runFileImport({ ...shared, adapter: fileAdapter as FileImportAdapter, file });
@@ -217,7 +218,6 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           adapter: adapter as NonNullable<typeof adapter>,
           mode: "live",
           sourceAuth,
-          ...(options.signal && { signal: options.signal }),
         });
     } catch {
       if (next) {

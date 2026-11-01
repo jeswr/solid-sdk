@@ -22,6 +22,7 @@
  * write an unbounded pod document. Writes are confined to the adapter's own
  * container under the user's pod root (the slug-escape guard below).
  */
+import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
@@ -81,6 +82,8 @@ export interface FileImportContext {
   skip(): void;
   /** Shared row cap so adapters bound their own loops consistently. */
   readonly maxRows: number;
+  /** The run's cancellation signal (see `RunFileImportOptions.signal`). */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -123,6 +126,15 @@ export interface RunFileImportOptions extends ConnectorStateOptions {
   file: ImportFile;
   podWriter: PodWriter;
   onProgress?: (p: ImportProgress) => void;
+  /**
+   * Cancels the run, exactly as `RunImportOptions.signal` does for OAuth imports: once it
+   * aborts, the runner starts no further Pod read or write, progress report, Type Index
+   * registration or provenance write, and rejects with its reason. The check runs at the
+   * PodWriter boundary, immediately before each port call, so a cancel during a pending read
+   * still stops the write that follows. Pass the same signal to `createFetchPodWriter`. A
+   * cancelled run records no activity and reports an error state that advances nothing.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -141,8 +153,15 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     );
   }
 
+  // Cancellation is enforced at the writer boundary, as in runImport: session-internal reads
+  // and writes (including finalisation's provenance read and write) cannot slip past a cancel.
+  const signal = opts.signal;
+  const checked = <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
+    unlessAborted(signal, step);
+  const podWriter = abortablePodWriter(opts.podWriter, signal);
+  signal?.throwIfAborted();
   const session = createImportSession(
-    opts.podWriter,
+    podWriter,
     id,
     `urn:solid:connector:${encodeURIComponent(id)}:export`,
     opts,
@@ -155,16 +174,21 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       webId: opts.podWriter.webId,
       maxRows: MAX_ROWS,
       resolve: (slug) => opts.podWriter.resolve(slug),
-      progress: (p) => opts.onProgress?.(p),
-      read: session.read,
+      progress: (p) => {
+        signal?.throwIfAborted();
+        opts.onProgress?.(p);
+      },
+      read: checked(session.read),
       skip: () => skipped++,
-      write: session.write,
-      writeBinary: session.writeBinary,
-      remove: async (slug) => {
+      write: checked(session.write),
+      writeBinary: checked(session.writeBinary),
+      remove: checked(async (slug: string) => {
         await session.remove(slug);
         removed = true;
-      },
+      }),
+      signal,
     });
+    signal?.throwIfAborted();
     skipped += outcome?.skipped ?? 0;
     if (
       session.written.length === 0 &&
@@ -177,7 +201,8 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         "No importable records were found in that file. Double-check you selected the right export file.",
       );
     }
-    const { indexUrl } = await opts.podWriter.registerType(session.registrations());
+    const { indexUrl } = await podWriter.registerType(session.registrations());
+    signal?.throwIfAborted();
     await session.finish();
     const state = session.state({ skipped });
     opts.onState?.(state);
@@ -192,13 +217,16 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       unsupported: outcome?.unsupported,
     };
   } catch (error) {
-    // Partial writes already link to this run. Record it when storage is available,
-    // preserving the original failure if the provenance write also fails.
-    try {
-      await session.finish();
-    } catch {
-      /* Original failure takes priority. */
-    }
+    // Partial writes already link to this run. Record it when storage is available and the
+    // run was not cancelled, preserving the original failure if the provenance write fails.
+    // A cancelled run starts no further Pod I/O (documented on RunImportOptions.signal).
+    if (signal?.aborted) session.release();
+    else
+      try {
+        await session.finish();
+      } catch {
+        /* Original failure takes priority. */
+      }
     opts.onState?.(session.state());
     throw error;
   }

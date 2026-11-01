@@ -180,6 +180,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 file: fileWithSignal(file, abort.signal),
                 podWriter: writer,
                 onProgress,
+                signal: abort.signal,
               })
             : await runImport({
                 adapter: withSelectedScopes(adapter as NonNullable<typeof adapter>, selectedScopes),

@@ -27,7 +27,11 @@ export interface FetchPodWriterOptions {
   readonly signal?: AbortSignal;
 }
 
-/** Create a fetch-backed storage port. Source API credentials never enter this transport. */
+/**
+ * Create a fetch-backed storage port. Source API credentials never enter this transport.
+ * Pass the same `signal` as the run whenever the run is cancellable, or the requests inside a
+ * port (Type Index and profile updates, the binary HEAD) are not guarded.
+ */
 export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter {
   const { adapterId, webId, podRoot } = options;
   if (!/^[a-z0-9-]+$/.test(adapterId))

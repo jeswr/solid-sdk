@@ -179,6 +179,7 @@ export function createImportWriter(
     profileDocumentUrl: profile.href,
     podRoot: session.storageUrl,
     fetch: fetchWithSignal(session.fetch, signal),
+    signal,
   });
   return {
     ...writer,
