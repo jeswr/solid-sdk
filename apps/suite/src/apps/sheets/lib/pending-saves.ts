@@ -24,6 +24,8 @@ export function createPendingSaves() {
   function createEntry(service: WorkbookService, initial: OpenedWorkbook) {
     let opened = initial;
     let title = initial.metadata.title;
+    let storedTitle = title;
+    let dropped = false;
     let local = initial.snapshot;
     let read = () => local;
     const listeners = new Set<() => void>();
@@ -31,7 +33,7 @@ export function createPendingSaves() {
       for (const listener of listeners) listener();
     };
     const releaseIdle = () => {
-      if (listeners.size === 0 && !queue.dirty) {
+      if (!dropped && listeners.size === 0 && !queue.dirty) {
         entries.delete(initial.container);
         prune();
       }
@@ -41,13 +43,19 @@ export function createPendingSaves() {
       onStatus: publish,
       isConflict: (error) => error instanceof WorkbookConflictError,
       async save(snapshot, force) {
+        if (dropped) return;
+        const savingTitle = title;
         try {
           const result = await service.save(initial.container, snapshot, opened.version, {
             force,
-            title,
+            ...(savingTitle === storedTitle ? {} : { title: savingTitle }),
           });
+          if (dropped) return;
           opened = { ...opened, ...result, snapshot };
+          storedTitle = result.metadata.title;
+          if (title === savingTitle) title = storedTitle;
         } catch (error) {
+          if (dropped) return;
           if (error instanceof WorkbookPartialSaveError)
             opened = { ...opened, version: error.version };
           throw error;
@@ -92,6 +100,7 @@ export function createPendingSaves() {
       reset(next: OpenedWorkbook) {
         opened = next;
         title = next.metadata.title;
+        storedTitle = title;
         local = next.snapshot;
         read = () => local;
         queue.reset();
@@ -100,6 +109,11 @@ export function createPendingSaves() {
       discard() {
         queue.reset();
         releaseIdle();
+      },
+      drop() {
+        dropped = true;
+        queue.reset();
+        listeners.clear();
       },
       flush,
       retry: (force = false) => queue.retry(force).then(releaseIdle),
@@ -112,6 +126,11 @@ export function createPendingSaves() {
 
   return {
     get: (container: string) => entries.get(container),
+    drop(container: string) {
+      entries.get(container)?.drop();
+      entries.delete(container);
+      prune();
+    },
     acquire(service: WorkbookService, opened: OpenedWorkbook) {
       let entry = entries.get(opened.container);
       if (!entry) {

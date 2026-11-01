@@ -3,6 +3,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenedWorkbook, Snapshot } from "../lib/contract";
+import { WorkbookNotFoundError } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 
@@ -22,10 +23,10 @@ export function useWorkbook(container: string) {
     setWorkbook(null);
     setError(undefined);
     pendingSaves.connect(window, () => navigator.onLine);
-    const pending = pendingSaves.get(container);
-    void (pending ? Promise.resolve(pending.workbook) : service.open(container)).then(
+    void service.open(container).then(
       (opened) => {
         if (!live) return;
+        const pending = pendingSaves.get(container);
         const entry = pendingSaves.acquire(service, pending?.workbook ?? opened);
         writer.current = entry;
         const update = () => {
@@ -36,7 +37,9 @@ export function useWorkbook(container: string) {
         update();
       },
       (failure: unknown) => {
-        if (live) setError(failure);
+        if (!live) return;
+        if (failure instanceof WorkbookNotFoundError) pendingSaves.drop(container);
+        setError(failure);
       },
     );
     const flush = () => {
@@ -59,9 +62,17 @@ export function useWorkbook(container: string) {
 
   const scheduleSave = useCallback((read: () => Snapshot) => writer.current?.schedule(read), []);
   const reload = async () => {
-    const opened = await service.open(container);
-    writer.current?.reset(opened);
-    return opened.snapshot;
+    try {
+      const opened = await service.open(container);
+      writer.current?.reset(opened);
+      return opened.snapshot;
+    } catch (failure) {
+      if (failure instanceof WorkbookNotFoundError) {
+        pendingSaves.drop(container);
+        setError(failure);
+      }
+      throw failure;
+    }
   };
   return {
     workbook,

@@ -28,25 +28,24 @@ describe("Sheets publication and recovery", () => {
     ).rejects.toBeInstanceOf(WorkbookConflictError);
   });
 
-  it("never deletes a competing client's projections before a failed index publication", async () => {
+  it("skips all stale cleanup once a newer save publishes after our publication", async () => {
     const h = await harness();
     const book = await h.service.create({ title: "Race", snapshot: snapshot(CSV, true) });
     let competing = false;
     h.setHook(async (call) => {
-      if (!competing && call.method === "PUT" && call.url.endsWith("index.ttl")) {
+      if (!competing && call.method === "HEAD" && call.url.endsWith("2.csv")) {
         competing = true;
         expect(h.calls.some((c) => c.method === "DELETE")).toBe(false);
         const remote = await h.service.open(book.container);
         await h.service.save(book.container, snapshot("Remote\nvalues", true), remote.version);
       }
     });
-    await expect(h.service.save(book.container, snapshot(), book.version)).rejects.toBeInstanceOf(
-      WorkbookConflictError,
-    );
+    await expect(h.service.save(book.container, snapshot(), book.version)).resolves.toBeDefined();
     expect((await h.service.open(book.container)).metadata.sheets).toHaveLength(2);
     const second = workbookLayout(book.container).sheet(2);
     expect(h.pod.has(second.csv)).toBe(true);
     expect(h.pod.has(second.descriptor)).toBe(true);
+    expect(h.calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 
   it.each([
@@ -86,7 +85,7 @@ describe("Sheets publication and recovery", () => {
     "workbook.json",
     "sheets/1.jsonld",
     "index.ttl",
-  ])("removes its reserved container after failed creation at %s and reuses the slug", async (resource) => {
+  ])("removes only its written resources after failed creation at %s and reuses the slug", async (resource) => {
     const h = await harness();
     h.setHook((call) =>
       call.method === "PUT" &&
@@ -97,7 +96,11 @@ describe("Sheets publication and recovery", () => {
     );
     await expect(h.service.create({ title: "Ghost", snapshot: snapshot() })).rejects.toThrow();
     expect(await h.service.list()).toEqual([]);
-    expect(h.pod.has(`${ROOT}ghost/`)).toBe(false);
+    expect(h.pod.has(`${ROOT}ghost/index.ttl`)).toBe(false);
+    expect(h.pod.has(`${ROOT}ghost/workbook.json`)).toBe(false);
+    expect(
+      h.calls.filter((c) => c.method === "DELETE").every((c) => !c.url.endsWith("/sheets/")),
+    ).toBe(true);
     h.setHook(() => undefined);
     expect((await h.service.create({ title: "Ghost" })).container).toBe(`${ROOT}ghost/`);
   });

@@ -51,7 +51,7 @@ describe("Sheets failure and scope handling", () => {
     );
   });
 
-  it("reports a conflict on the final create index update and never overwrites existing derived files on create", async () => {
+  it("reports a conflict on the final create index update and names failed derived writes", async () => {
     const h = await harness();
     h.setHook((c) =>
       c.method === "PUT" && c.url.endsWith("index.ttl") && c.headers.has("if-match")
@@ -64,12 +64,12 @@ describe("Sheets failure and scope handling", () => {
     h.calls.length = 0;
     h.setHook((c) =>
       c.method === "PUT" && c.url.endsWith(".csv")
-        ? new Response(null, { status: 412 })
+        ? new Response(null, { status: 503 })
         : undefined,
     );
     await expect(
       h.service.create({ title: "Existing derived", snapshot: snapshot() }),
-    ).rejects.toMatchObject({ status: 412 });
+    ).rejects.toThrow("1.csv");
     expect(h.calls.filter((c) => c.url.endsWith(".csv"))).toHaveLength(1);
   });
 
@@ -102,29 +102,19 @@ describe("Sheets failure and scope handling", () => {
     expect((await h.storage.loadIndex(book.container)).value.title).toBe("Partial");
   });
 
-  it("does not overwrite a known stale derived ETag or retry a second lazy conflict", async () => {
+  it("repairs missing projections and ignores their stale validators", async () => {
     const h = await harness();
     const book = await h.service.create({ title: "Derived conflict", snapshot: snapshot() });
     const url = workbookLayout(book.container).sheet(1).csv;
-    h.setHook((c) =>
-      c.method === "PUT" && c.url === url ? new Response(null, { status: 412 }) : undefined,
-    );
-    await expect(
-      h.service.save(book.container, book.snapshot, book.version),
-    ).rejects.toBeInstanceOf(WorkbookConflictError);
-    let opened = await h.service.open(book.container);
+    await h.pod.fetch(url, { method: "DELETE" });
     h.calls.length = 0;
-    await expect(
-      h.service.save(book.container, book.snapshot, opened.version),
-    ).rejects.toBeInstanceOf(WorkbookConflictError);
-    expect(h.calls.filter((c) => c.url === url && c.method === "PUT")).toHaveLength(2);
-    opened = await h.service.open(book.container);
-    h.setHook((c) =>
-      c.url === url ? new Response(null, { status: c.method === "PUT" ? 412 : 404 }) : undefined,
-    );
-    await expect(h.service.save(book.container, book.snapshot, opened.version)).rejects.toThrow(
-      url,
-    );
+    const result = await h.service.save(book.container, book.snapshot, book.version);
+    expect(h.pod.has(url)).toBe(true);
+    expect(result.version.derived[url]).not.toBe(book.version.derived[url]);
+    expect(h.calls.filter((c) => c.url === url).map((c) => c.method)).toEqual(["PUT"]);
+    const put = h.calls.find((c) => c.url === url);
+    expect(put?.headers.has("if-match")).toBe(false);
+    expect(put?.headers.has("if-none-match")).toBe(false);
   });
 
   it("learns validators via GET when successful PUT responses omit them", async () => {

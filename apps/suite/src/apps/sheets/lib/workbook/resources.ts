@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { WorkbookConflictError } from "../contract";
 import { type createSheetStorage, type Precondition, SheetStorageError } from "../model";
 
@@ -28,27 +29,19 @@ export function resources(storage: Storage) {
         throw error;
       }
     },
-    async derived(
-      url: string,
-      known: string | undefined,
-      write: (condition: Precondition) => Promise<string | null>,
-    ): Promise<string> {
+    async derived(url: string, write: () => Promise<string | null>): Promise<string | undefined> {
+      let result: string | null;
       try {
-        let result: string | null;
-        try {
-          result = await write(known === undefined ? { ifNoneMatch: "*" } : { ifMatch: known });
-        } catch (error) {
-          if (known !== undefined || !hasStatus(error, 412)) throw error;
-          result = await write({ ifMatch: await etag(url, null) });
-        }
-        return await etag(url, result);
+        result = await write();
       } catch (cause) {
         throw new Error(`Could not write spreadsheet resource: ${url}`, { cause });
       }
+      // Projections are unguarded and repairable; validator discovery is best effort.
+      return etag(url, result).catch(() => undefined);
     },
-    async remove(url: string): Promise<void> {
+    async remove(url: string, condition?: Precondition): Promise<void> {
       try {
-        await storage.deleteResource(url);
+        await storage.deleteResource(url, condition);
       } catch (cause) {
         throw new Error(`Could not delete spreadsheet resource: ${url}`, { cause });
       }

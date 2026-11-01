@@ -37,6 +37,7 @@ import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
 import { type SheetEngine, type Snapshot, WorkbookNotFoundError } from "../lib/contract";
 import { loadEngine } from "../lib/engine";
+import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 import "@univerjs/preset-sheets-core/lib/index.css";
@@ -164,6 +165,17 @@ export function SheetEditor({ container }: { container: string }) {
   const [dialog, setDialog] = useState<"import" | "delete">();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
   const [busy, setBusy] = useState(false);
+  const [returnConflictFocus, setReturnConflictFocus] = useState(false);
+  const [grid, setGrid] = useState<{ container: string; snapshot: Snapshot; revision: number }>();
+  if (state.workbook?.container === container && grid?.container !== container)
+    setGrid({ container, snapshot: state.workbook.snapshot, revision: 0 });
+  useEffect(() => {
+    if (returnConflictFocus && !busy && state.status !== "conflict" && fileTrigger.current) {
+      if (fileTrigger.current.disabled) return;
+      fileTrigger.current.focus();
+      setReturnConflictFocus(false);
+    }
+  }, [returnConflictFocus, busy, state.status]);
   const title = state.metadata?.title ?? "Untitled spreadsheet";
   const action = async (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -276,7 +288,8 @@ export function SheetEditor({ container }: { container: string }) {
         <h1 className="sr-only">{title}</h1>
         {state.workbook ? (
           <Grid
-            snapshot={state.workbook.snapshot}
+            key={grid?.revision ?? 0}
+            snapshot={grid?.snapshot ?? state.workbook.snapshot}
             onChange={state.scheduleSave}
             engineRef={engine}
           />
@@ -376,7 +389,7 @@ export function SheetEditor({ container }: { container: string }) {
                 void action(async () => {
                   await state.flush();
                   await service.remove(container);
-                  state.discard();
+                  pendingSaves.drop(container);
                   router.push("/sheets");
                 });
               }}
@@ -394,7 +407,7 @@ export function SheetEditor({ container }: { container: string }) {
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            fileTrigger.current?.focus();
+            setReturnConflictFocus(true);
           }}
         >
           <AlertDialogHeader>
@@ -411,7 +424,13 @@ export function SheetEditor({ container }: { container: string }) {
                 event.preventDefault();
                 void action(async () => {
                   const snapshot = await state.reload();
-                  engine.current?.load(snapshot);
+                  if (engine.current) engine.current.load(snapshot);
+                  else
+                    setGrid((current) => ({
+                      container,
+                      snapshot,
+                      revision: (current?.revision ?? 0) + 1,
+                    }));
                 });
               }}
             >

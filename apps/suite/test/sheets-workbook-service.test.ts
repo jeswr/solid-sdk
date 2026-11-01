@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { CellValueType, type IWorkbookData } from "@univerjs/core";
 import { DataFactory } from "n3";
 import { assert, describe, expect, it } from "vitest";
@@ -33,7 +34,8 @@ describe("Sheets workbook service", () => {
       "sheets/1.jsonld",
       "index.ttl",
     ]);
-    expect(writes.slice(0, 4).every((c) => c.headers.get("if-none-match") === "*")).toBe(true);
+    expect(writes.slice(0, 2).every((c) => c.headers.get("if-none-match") === "*")).toBe(true);
+    expect(writes.slice(2, 4).every((c) => !c.headers.has("if-none-match"))).toBe(true);
     expect(writes[4]?.headers.get("if-match")).toMatch(/^"demo-/);
     expect((await h.storage.loadDescriptor(book.container, 1)).value.columns).toEqual([
       { name: "", type: "text", format: "text" },
@@ -138,7 +140,7 @@ describe("Sheets workbook service", () => {
     });
   });
 
-  it("learns derived ETags lazily after open and creates newly added sheets", async () => {
+  it("writes derived resources unconditionally after open and creates newly added sheets", async () => {
     const h = await harness();
     const book = await h.service.create({ title: "Lazy", snapshot: snapshot() });
     const opened = await h.service.open(book.container);
@@ -152,11 +154,7 @@ describe("Sheets workbook service", () => {
       h.calls
         .filter((c) => c.url === csv)
         .map((c) => [c.method, c.headers.get("if-none-match"), c.headers.get("if-match")]),
-    ).toEqual([
-      ["PUT", "*", null],
-      ["GET", null, null],
-      ["PUT", null, book.version.derived[csv]],
-    ]);
+    ).toEqual([["PUT", null, null]]);
     expect(Object.keys(saved.version.derived)).toHaveLength(4);
   });
 

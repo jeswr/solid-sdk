@@ -190,6 +190,122 @@ describe("pending workbook saves", () => {
     await entry.flush();
   });
 
+  it("omits unchanged titles, adopts a racing remote rename, and sends only local renames", async () => {
+    const { h, book, entry } = await setup();
+    const detach = entry.subscribe(() => {});
+    const save = vi.spyOn(h.service, "save");
+    let renamed = false;
+    h.setHook(async (call) => {
+      if (!renamed && call.method === "PUT" && call.url.endsWith("workbook.json")) {
+        renamed = true;
+        await h.service.rename(book.container, "Remote title", book.version);
+      }
+    });
+    entry.schedule(() => snapshot("First\nedit"));
+    await entry.flush();
+    expect(save.mock.calls[0]?.[3]).toEqual({ force: false });
+    expect(entry.workbook.metadata.title).toBe("Remote title");
+    entry.rename("Local title");
+    await entry.flush();
+    expect(save.mock.calls[1]?.[3]?.title).toBe("Local title");
+    entry.schedule(() => snapshot("Second\nedit"));
+    await entry.flush();
+    expect(save.mock.calls[2]?.[3]).toEqual({ force: false });
+    detach();
+    await entry.flush();
+  });
+
+  it("preserves a rename made while a save is awaiting its result", async () => {
+    const { h, entry } = await setup();
+    const detach = entry.subscribe(() => {});
+    let finish = () => {};
+    const paused = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const original = h.service.save.bind(h.service);
+    const save = vi.spyOn(h.service, "save").mockImplementationOnce(async (...args) => {
+      await paused;
+      return original(...args);
+    });
+    entry.schedule(() => snapshot("Cells\nchanged"));
+    const saving = entry.flush();
+    await Promise.resolve();
+    entry.rename("Renamed during save");
+    finish();
+    await saving;
+    await entry.flush();
+    expect(save.mock.calls[0]?.[3]?.title).toBeUndefined();
+    expect(save.mock.calls[1]?.[3]?.title).toBe("Renamed during save");
+    expect(entry.workbook.metadata.title).toBe("Renamed during save");
+    detach();
+    await entry.flush();
+  });
+
+  it("drops detached offline edits and removes their unload and reconnect listeners", async () => {
+    const { h, book, entry, registry, events, setOnline } = await setup(false);
+    const remove = vi.spyOn(events, "removeEventListener");
+    const save = vi.spyOn(h.service, "save");
+    const detach = entry.subscribe(() => {});
+    entry.schedule(() => snapshot("Offline\nedit"));
+    detach();
+    await h.service.remove(book.container);
+    registry.drop(book.container);
+    expect(entry.dirty).toBe(false);
+    expect(registry.get(book.container)).toBeUndefined();
+    const closing = new Event("beforeunload", { cancelable: true });
+    events.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(false);
+    expect(remove).toHaveBeenCalledTimes(3);
+    setOnline(true);
+    await vi.runAllTimersAsync();
+    expect(save).not.toHaveBeenCalled();
+    registry.drop(book.container);
+  });
+
+  it("drops a queued save before its writer starts", async () => {
+    const { h, book, entry, registry } = await setup();
+    const save = vi.spyOn(h.service, "save");
+    entry.schedule(() => snapshot("Deleted\nedit"));
+    const saving = entry.flush();
+    registry.drop(book.container);
+    await saving;
+    expect(save).not.toHaveBeenCalled();
+    expect(entry.dirty).toBe(false);
+    expect(registry.get(book.container)).toBeUndefined();
+  });
+
+  it.each([
+    true,
+    false,
+  ])("ignores an in-flight save settling after drop (success %s)", async (success) => {
+    const { h, book, entry, registry } = await setup();
+    const detach = entry.subscribe(() => {});
+    let finish = () => {};
+    const paused = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const save = vi.spyOn(h.service, "save").mockImplementation(async () => {
+      await paused;
+      if (!success) throw new WorkbookConflictError(book.container);
+      return book;
+    });
+    entry.schedule(() => snapshot("First\nedit"));
+    const saving = entry.flush();
+    await Promise.resolve();
+    registry.drop(book.container);
+    const replacement = registry.acquire(h.service, book);
+    const close = replacement.subscribe(() => {});
+    finish();
+    await saving;
+    detach();
+    await entry.flush();
+    expect(registry.get(book.container)).toBe(replacement);
+    expect(save).toHaveBeenCalledOnce();
+    close();
+    await replacement.flush();
+    expect(registry.get(book.container)).toBeUndefined();
+  });
+
   it("holds independent containers and retries a detached transient failure on online", async () => {
     const { h, book, entry, registry, setOnline } = await setup();
     const other = await h.service.create({ title: "Other", snapshot: snapshot() });

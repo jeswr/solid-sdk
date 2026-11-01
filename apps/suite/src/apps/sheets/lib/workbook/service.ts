@@ -14,13 +14,7 @@ import {
   WorkbookNotFoundError,
   WorkbookPartialSaveError,
 } from "../contract";
-import {
-  createSheetStorage,
-  type Precondition,
-  type Snapshot,
-  type WorkbookMetadata,
-  workbookLayout,
-} from "../model";
+import { createSheetStorage, type Snapshot, type WorkbookMetadata, workbookLayout } from "../model";
 import { assertWorkbook, directChild, slug } from "./layout";
 import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
@@ -37,24 +31,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   async function writeSheets(
     container: string,
     sheets: ProjectedSheet[],
-    base?: Readonly<Record<string, string>>,
-    derived: Record<string, string> = {},
+    derived: Record<string, string>,
+    written?: Set<string>,
   ): Promise<Record<string, string>> {
     for (const sheet of sheets) {
       const urls = workbookLayout(container).sheet(sheet.number);
-      const writes: [string, (condition: Precondition) => Promise<string | null>][] = [
-        [urls.csv, (condition) => storage.saveCsv(container, sheet.number, sheet.csv, condition)],
-        [
-          urls.descriptor,
-          (condition) =>
-            storage.saveDescriptor(container, sheet.number, sheet.descriptor, condition),
-        ],
+      const writes: [string, () => Promise<string | null>][] = [
+        [urls.csv, () => storage.saveCsv(container, sheet.number, sheet.csv)],
+        [urls.descriptor, () => storage.saveDescriptor(container, sheet.number, sheet.descriptor)],
       ];
       for (const [url, write] of writes) {
-        derived[url] =
-          base === undefined
-            ? await io.etag(url, await write({ ifNoneMatch: "*" }))
-            : await io.derived(url, base[url], write);
+        const etag = await io.derived(url, async () => {
+          const result = await write();
+          written?.add(url);
+          return result;
+        });
+        if (etag !== undefined) derived[url] = etag;
       }
     }
     return derived;
@@ -76,22 +68,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     for (let attempt = 1; attempt <= 50; attempt++) {
       const container = new URL(`${stem}${attempt === 1 ? "" : `-${attempt}`}/`, root).href;
       const layout = workbookLayout(container);
+      const written = new Set<string>();
       let reservation: string;
       try {
-        reservation = await io.etag(
-          layout.index,
-          await storage.saveIndex(container, initial, { ifNoneMatch: "*" }),
-        );
+        const etag = await storage.saveIndex(container, initial, { ifNoneMatch: "*" });
+        written.add(layout.index);
+        reservation = await io.etag(layout.index, etag);
       } catch (error) {
         if (hasStatus(error, 412)) continue;
+        await rollback();
         throw error;
       }
       try {
-        const snapshotEtag = await io.etag(
-          layout.snapshot,
-          await storage.saveSnapshot(container, snapshot, { ifNoneMatch: "*" }),
-        );
-        const derived = await writeSheets(container, sheets);
+        const etag = await storage.saveSnapshot(container, snapshot, { ifNoneMatch: "*" });
+        written.add(layout.snapshot);
+        const snapshotEtag = await io.etag(layout.snapshot, etag);
+        const derived = await writeSheets(container, sheets, {}, written);
         const metadata = {
           ...initial,
           sheets: sheets.map(({ number, name }) => ({ number, name })),
@@ -105,9 +97,18 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         await register();
         return { container, metadata, snapshot, version: { snapshotEtag, indexEtag, derived } };
       } catch (error) {
-        // This slug was reserved by us. Do not leave an unreadable workbook behind.
-        await remove(container).catch(() => {});
+        if (!written.has(layout.snapshot) && hasStatus(error, 412)) {
+          await io.remove(layout.index).catch(() => {});
+          continue;
+        }
+        await rollback();
         throw error;
+      }
+
+      async function rollback() {
+        // Reserving an index does not establish ownership of its container.
+        for (const url of written) await io.remove(url).catch(() => {});
+        await io.remove(container).catch(() => {});
       }
     }
     throw new Error("Could not allocate a spreadsheet slug after 50 attempts");
@@ -161,8 +162,8 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         storage.saveSnapshot(container, snapshot, { ifMatch: snapshotMatch }),
       ),
     );
-    const derived = { ...(saveOptions.force ? {} : base.derived) };
-    const metadata: WorkbookMetadata = {
+    const derived: Record<string, string> = {};
+    let metadata: WorkbookMetadata = {
       ...previous.value,
       // index.ttl owns the title once created (rename writes it there); the engine
       // snapshot's own name is not kept in sync, so it never overrides a rename.
@@ -172,18 +173,29 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     };
     let indexEtag = previousIndexEtag;
     try {
-      await writeSheets(container, sheets, saveOptions.force ? {} : base.derived, derived);
-      const indexMatch = saveOptions.force ? await io.etag(layout.index, null) : base.indexEtag;
-      indexEtag = await io.etag(
-        layout.index,
-        await io.authoritative(container, () =>
-          storage.saveIndex(container, metadata, { ifMatch: indexMatch }),
-        ),
-      );
+      await writeSheets(container, sheets, derived);
+      for (let attempt = 0; ; attempt++) {
+        let published: string | null;
+        try {
+          published = await storage.saveIndex(container, metadata, { ifMatch: indexEtag });
+        } catch (error) {
+          if (!hasStatus(error, 412) || attempt === 3) throw error;
+          // Our snapshot is already stored. Reconcile a racing index-only rename
+          // instead of reporting a conflict whose "remote" snapshot is our own.
+          const fresh = await storage.loadIndex(container);
+          indexEtag = strongEtag(fresh.etag, layout.index);
+          metadata = {
+            ...fresh.value,
+            title: saveOptions.title ?? fresh.value.title,
+            sheets: metadata.sheets,
+            modified: now(),
+          };
+          continue;
+        }
+        indexEtag = await io.etag(layout.index, published);
+        break;
+      }
     } catch (error) {
-      if (error instanceof WorkbookConflictError) throw error;
-      if (error instanceof Error && hasStatus(error.cause, 412))
-        throw new WorkbookConflictError(container);
       throw new WorkbookPartialSaveError({ snapshotEtag, indexEtag, derived }, error);
     }
     // Listing also finds leftovers from a previous save whose cleanup failed.
@@ -194,18 +206,23 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         for (const child of children) {
           if (child.isContainer || !directChild(sheetRoot, child.id)) continue;
           const match = /^(\d+)\.(csv|jsonld)$/.exec(child.id.slice(sheetRoot.length));
-          if (match && Number(match[1]) > sheets.length) await io.remove(child.id).catch(() => {});
+          if (!match || Number(match[1]) <= sheets.length) continue;
+          try {
+            const etag = strongEtag(await storage.headEtag(child.id), child.id);
+            const current = await storage.loadIndex(container);
+            if (current.etag !== indexEtag) return;
+            // A newer save can write a projection before HEAD and publish after
+            // this index read. That projection may be briefly missing; the next
+            // save restores it. If-Match protects writes made after HEAD.
+            await io.remove(child.id, { ifMatch: etag });
+          } catch {
+            // Includes vanished resources and 412s from a newer projection.
+          }
         }
       },
       () => {},
     );
-    const active = Object.fromEntries(
-      sheets.flatMap(({ number }) => {
-        const urls = layout.sheet(number);
-        return [urls.csv, urls.descriptor].map((url) => [url, derived[url] as string]);
-      }),
-    );
-    return { metadata, version: { snapshotEtag, indexEtag, derived: active } };
+    return { metadata, version: { snapshotEtag, indexEtag, derived } };
   }
 
   async function rename(

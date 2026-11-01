@@ -41,7 +41,7 @@ export interface WorkbookSummary {
 export interface WorkbookVersion {
   readonly snapshotEtag: string;
   readonly indexEtag: string;
-  /** ETags of the derived per-sheet CSV/descriptor resources, keyed by URL. */
+  /** Best-effort ETags of derived CSVs/descriptors, keyed by URL; never used to guard writes. */
   readonly derived: Readonly<Record<string, string>>;
 }
 
@@ -112,11 +112,14 @@ export interface WorkbookService {
   open(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
-   * when `force`), then the derived CSVs/descriptors, then `index.ttl` (modified date,
-   * `title` when given else the stored title, sheet list). Checks the index version
-   * before writing; stale projections are removed only after publishing the index.
-   * A WorkbookPartialSaveError carries the retry version after a partial write. Throws
-   * `WorkbookConflictError` on a 412 from a conditional write.
+   * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
+   * descriptors are then PUT unconditionally, repairing missing projections. Finally
+   * publishes `index.ttl` (modified date, `title` only for a local rename, sheet list),
+   * retrying racing index changes with the latest stored title up to three times.
+   * Checks the index version before writing. Stale cleanup requires this publication
+   * to still be current and deletes with each resource's freshly read ETag.
+   * A WorkbookPartialSaveError carries the retry version after a partial write.
+   * Throws WorkbookConflictError for a stale baseline or a rejected snapshot write.
    */
   save(
     container: string,

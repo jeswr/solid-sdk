@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenedWorkbook, WorkbookService } from "../src/apps/sheets/lib/contract";
-import { WorkbookConflictError } from "../src/apps/sheets/lib/contract";
+import { WorkbookConflictError, WorkbookNotFoundError } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
@@ -43,7 +43,7 @@ describe("workbook editor lifecycle", () => {
     await first.unmount();
     alive = false;
     const second = await mount(h(Editor, { container: book.container }));
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(state.workbook?.snapshot).toEqual(local);
     expect(state.status).toBe("offline");
     await second.unmount();
@@ -161,5 +161,59 @@ describe("workbook editor lifecycle", () => {
     open.mockResolvedValue(book);
     expect(await state.reload()).toEqual(book.snapshot);
     expect(pendingSaves.get(book.container)).toBeUndefined();
+  });
+
+  it("validates pending entries on reopen and drops deleted workbooks instead of showing cached data", async () => {
+    const { service, book } = await setup(false);
+    const editor = await mount(h(Editor, { container: book.container }));
+    await act(() => state.scheduleSave(() => snapshot("Offline\nedit")));
+    await editor.unmount();
+    expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+    await service.remove(book.container);
+    const reopened = await mount(h(Editor, { container: book.container }));
+    expect(state.error).toBeInstanceOf(WorkbookNotFoundError);
+    expect(state.workbook).toBeNull();
+    expect(pendingSaves.get(book.container)).toBeUndefined();
+    const save = vi.spyOn(service, "save");
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+    window.dispatchEvent(new Event("online"));
+    const closing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    await reopened.unmount();
+  });
+
+  it("ignores stale not-found responses after another editor has acquired pending data", async () => {
+    const { service, book } = await setup(false);
+    const waiting = deferred<OpenedWorkbook>();
+    vi.spyOn(service, "open").mockReturnValueOnce(waiting.promise);
+    const editor = await mount(h(Editor, { container: book.container }));
+    await editor.unmount();
+    const entry = pendingSaves.acquire(service, book);
+    entry.setOnline(false);
+    entry.schedule(() => snapshot("Newer\nedit"));
+    await act(() => waiting.reject(new WorkbookNotFoundError(book.container)));
+    expect(pendingSaves.get(book.container)).toBe(entry);
+    pendingSaves.drop(book.container);
+  });
+
+  it("drops pending data if loading their version discovers deletion, while retaining other read failures", async () => {
+    const { service, book } = await setup();
+    const editor = await mount(h(Editor, { container: book.container }));
+    const open = vi.spyOn(service, "open");
+    const transient = new Error("Read failed");
+    open.mockRejectedValueOnce(transient);
+    await act(async () => {
+      await expect(state.reload()).rejects.toBe(transient);
+    });
+    expect(pendingSaves.get(book.container)).toBeDefined();
+    await service.remove(book.container);
+    await act(async () => {
+      await expect(state.reload()).rejects.toBeInstanceOf(WorkbookNotFoundError);
+    });
+    expect(state.error).toBeInstanceOf(WorkbookNotFoundError);
+    expect(pendingSaves.get(book.container)).toBeUndefined();
+    await editor.unmount();
   });
 });

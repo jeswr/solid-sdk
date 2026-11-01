@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   AlertDialog,
@@ -30,6 +31,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import type { WorkbookSummary } from "../lib/contract";
+import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 
@@ -254,7 +256,11 @@ export function SheetsList() {
               disabled={busy}
               onClick={(event) => {
                 event.preventDefault();
-                if (dialog) void mutate(() => service.remove(dialog.row.container));
+                if (dialog)
+                  void mutate(async () => {
+                    await service.remove(dialog.row.container);
+                    pendingSaves.drop(dialog.row.container);
+                  });
               }}
             >
               Delete
