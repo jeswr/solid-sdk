@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 /** Build-time settings: public links and client identity always retain their deployed https URL. */
-export const PUBLIC_SUITE_URL = (
-  process.env.NEXT_PUBLIC_PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app"
-).replace(/\/+$/, "");
+import { publicBaseUrl } from "./public-url";
+
+export const PUBLIC_SUITE_URL = publicBaseUrl(
+  process.env.NEXT_PUBLIC_PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app",
+);
 export const CLIENT_ID_URL =
   process.env.NEXT_PUBLIC_CLIENT_ID_URL ??
   `${PUBLIC_SUITE_URL}/.well-known/solid-client-id-mobile.jsonld`;

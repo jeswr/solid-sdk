@@ -38,6 +38,31 @@ it("rejects absent, duplicate or unsafe policies and missing HTML head", () => {
   ).toThrow("Unsafe native CSP");
 });
 
+it.each([
+  'data-src="bootstrap"',
+  "x-src='bootstrap'",
+  'data-note="src=bootstrap > still a value"',
+  "data-src=bootstrap",
+])("hashes inline scripts with %s and detects a removed hash", (attributes) => {
+  const body = "window.booted = true;";
+  const result = addCsp(`<html><head></head><script ${attributes}>${body}</script></html>`);
+  const digest = createHash("sha256").update(body).digest("base64");
+  expect(result).toContain(`'sha256-${digest}'`);
+  expect(() => assertCspHashes(result.replace(`'sha256-${digest}'`, ""))).toThrow(
+    "Missing inline-script CSP hash",
+  );
+});
+
+it.each([
+  'SRC="/_next/static/a.js"',
+  "src='/_next/static/a.js'",
+  "src=/_next/static/a.js",
+])("recognizes an exact external-script attribute %s", (attributes) => {
+  const result = addCsp(`<html><head><script ${attributes}></script></head></html>`);
+  expect(result).not.toContain("sha256-");
+  expect(() => assertCspHashes(result)).not.toThrow();
+});
+
 it("checks all exported pages, fixture markers and the actual byte budget", async () => {
   const root = await mkdtemp(join(tmpdir(), "suite-csp-"));
   try {

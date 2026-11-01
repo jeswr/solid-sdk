@@ -56,9 +56,22 @@ export async function checkServerFeatures(
         ),
     );
     const visit = (node) => {
+      // Biome's importNames restriction does not cover dynamic module namespaces.
+      // Require static named imports so useParams cannot bypass the routing hook.
+      if (
+        ts.isCallExpression(node) &&
+        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+          node.expression.getText(source) === "require") &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0]) &&
+        node.arguments[0].text === "next/navigation"
+      )
+        throw new Error(
+          `Native routing forbids dynamic next/navigation imports; use useRouteParams: ${path}`,
+        );
       if (
         (ts.isStringLiteral(node) && node.text === "use server") ||
-        (ts.isStringLiteral(node) && node.text === "next/headers") ||
+        (ts.isStringLiteralLike(node) && node.text === "next/headers") ||
         (ts.isCallExpression(node) && /^(headers|cookies)$/.test(node.expression.getText(source)))
       )
         throw new Error(`Native export forbids server-only features: ${path}`);

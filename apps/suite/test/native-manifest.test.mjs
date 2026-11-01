@@ -110,6 +110,12 @@ it.each([
   ["src/app/actions.ts", '"use server"; export async function action() {}'],
   ["src/app/page.tsx", 'import { headers as h } from "next/headers";'],
   ["src/app/page.tsx", 'import * as h from "next/headers";'],
+  [
+    "src/app/page.tsx",
+    'export const dynamic = "force-static"; const { cookies: readCookies } = await import(`next/headers`);',
+  ],
+  ["src/app/page.tsx", "const { headers: readHeaders } = require(`next/headers`);"],
+  ["src/app/page.tsx", 'const h = await import("next/headers");'],
   ["src/app/page.tsx", "export default function Page() { cookies(); }"],
   ["src/app/page.tsx", "export default function Page() { headers(); }"],
 ])("rejects forbidden server features in %s", async (path, source) => {

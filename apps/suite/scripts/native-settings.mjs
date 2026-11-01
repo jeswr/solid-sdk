@@ -1,10 +1,10 @@
 // AUTHORED-BY Codex GPT-6
+import { publicBaseUrl } from "../src/lib/public-url.ts";
+
 export function nativeSettings(env) {
-  const publicSuiteUrl = (
-    env.NEXT_PUBLIC_PUBLIC_SUITE_URL ??
-    env.PUBLIC_SUITE_URL ??
-    "https://solid-suite.vercel.app"
-  ).replace(/\/+$/, "");
+  const publicSuiteUrl = publicBaseUrl(
+    env.NEXT_PUBLIC_PUBLIC_SUITE_URL ?? env.PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app",
+  );
   const clientIdUrl =
     env.NEXT_PUBLIC_CLIENT_ID_URL ??
     env.CLIENT_ID_URL ??

@@ -15,7 +15,9 @@ Native settings are baked into Next's client code and `www/build-info.json`:
 | `NEXT_PUBLIC_CLIENT_ID_URL` (or `CLIENT_ID_URL`) | public URL + `/.well-known/solid-client-id-mobile.jsonld` | `clientIdUrl` |
 
 The app origin must be `https://localhost` or `capacitor://localhost`. Public and Client ID URLs
-must be https. `appBaseUrl()` uses the live local scheme in the WebView so both platforms can
+must be https. Public bases reject userinfo, queries and fragments, and are canonicalized
+without a trailing slash before navigation and Client ID paths are appended.
+`appBaseUrl()` uses the live local scheme in the WebView so both platforms can
 consume the same bundle. Shared links use the public URL. The CSP permits executable assets
 only under `/_next/static/` at those two local origins and hashes each page's inline scripts.
 
@@ -43,3 +45,14 @@ run `apps/mobile/test/vectors/routes.json`, including the Flight and backtrackin
 `pnpm --filter @jeswr/app-suite check:native` scans every exported file for fixture markers,
 checks every HTML page's inline-script hashes, and reports uncompressed bundle bytes. CI
 runs the export and this independent check, failing above 40,000,000 bytes.
+
+`pnpm --filter @jeswr/app-suite test:native-browser` checks startup of `www/`, then builds an
+isolated export in `.native-stage/browser/www/` with a fixed in-memory pod session and page-local
+navigation controls around the real Drive folder view. The E3 static server uses
+`route-resolver.mjs` for HTML, Flight and prefetch files. Playwright proxies only the TCP
+transport to that server: the browser sees `https://localhost` and the export's unchanged final
+CSP. External requests, CSP violations, browser errors and document reloads fail the run.
+Tests cover cold deep links, Link navigation, router.push, prefetch, parameter changes retaining
+page state, and back/forward. CI installs Chromium; local runs use an existing installation.
+The fixture export never replaces `www/`. The web build also checks its emitted chunks for
+native calendar component exports.

@@ -16,29 +16,37 @@ function useWebRouteParams<T extends Params>(): T {
 function useNativeRouteParams<T extends Params>(pattern: string): T | undefined {
   const pathname = usePathname();
   if (!pathname) return undefined;
-  const parts = pathname.split("/").filter(Boolean);
   const segments = pattern.split("/").filter(Boolean);
   const result: Params = {};
   let index = 0;
   try {
+    if (
+      !pathname.startsWith("/") ||
+      new TextEncoder().encode(pathname).length > 2048 ||
+      /[\\\0?#]/.test(pathname)
+    )
+      return;
+    const raw = pathname.split("/").slice(1);
+    if (raw.at(-1) === "") raw.pop();
+    const parts = raw.map(decodeURIComponent);
+    if (parts.some((part) => !part || part === "." || part === ".." || /[\\/\0]/.test(part)))
+      return;
     for (const segment of segments) {
       const catchAll = /^\[\[?\.\.\.(.+?)\]\]?$/.exec(segment);
       if (catchAll) {
-        const values = parts.slice(index).map(decodeURIComponent);
+        const values = parts.slice(index);
         if ((!values.length && !segment.startsWith("[[")) || values.includes("__")) return;
         result[catchAll[1] as string] = values;
         index = parts.length;
       } else if (segment.startsWith("[")) {
         const value = parts[index++];
         if (!value || value === "__") return;
-        const decoded = decodeURIComponent(value);
-        if (decoded === "__") return;
-        result[segment.slice(1, -1)] = decoded;
+        result[segment.slice(1, -1)] = value;
       } else if (parts[index++] !== segment) return;
     }
+    if (index !== parts.length) return undefined;
   } catch {
     return undefined;
   }
-  if (index !== parts.length) return undefined;
   return result as T;
 }

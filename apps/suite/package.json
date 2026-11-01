@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @jeswr/suite-ui run build && next dev --webpack -p 3210",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/check-web.mjs",
     "start": "next start -p 3210",
     "lint": "biome check src test e2e scripts *.ts *.mjs",
     "typecheck": "tsc --noEmit",
@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "coverage:music": "vitest run --coverage",
     "build:native": "node scripts/build-native.mjs",
-    "check:native": "node scripts/check-native.mjs www"
+    "check:native": "node scripts/check-native.mjs www",
+    "test:native-browser": "node test/native-browser/run.mjs"
   },
   "dependencies": {
     "@jeswr/pod-connectors": "workspace:*",

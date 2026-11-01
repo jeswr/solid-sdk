@@ -108,7 +108,7 @@
               "options": {
                 "paths": {
                   "next/navigation": {
-                    "importNames": ["useParams"],
+                    "importNames": ["useParams", "*"],
                     "message": "Use useRouteParams from @/lib/route-params for native routing."
                   }
                 }

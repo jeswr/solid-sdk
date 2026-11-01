@@ -7,10 +7,13 @@ import { checkNative } from "./check-native.mjs";
 import { writeCsp } from "./csp-hashes.mjs";
 import { nativeSettings } from "./native-settings.mjs";
 import { checkServerFeatures, filesUnder, writeManifest } from "./route-manifest.mjs";
+import { stageCalendarRoutes } from "./stage-native.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const stage = join(root, ".native-stage");
-const www = join(root, "www");
+// Browser instrumentation and its in-memory session never enter the distributable export.
+const browserTest = process.argv.includes("--browser-test");
+const stage = join(root, ".native-stage", ...(browserTest ? ["browser"] : []));
+const www = browserTest ? join(stage, "www") : join(root, "www");
 const info = nativeSettings(process.env);
 const adaptations = [
   "dev/ routes excluded from the native build graph",
@@ -20,11 +23,12 @@ const adaptations = [
 ];
 await rm(stage, { recursive: true, force: true });
 await rm(www, { recursive: true, force: true });
-await mkdir(stage);
+await mkdir(stage, { recursive: true });
 await cp(join(root, "src"), join(stage, "src"), {
   recursive: true,
   filter: (path) => path !== join(root, "src/app/dev"),
 });
+await stageCalendarRoutes(join(stage, "src"));
 // The web deployment has no / route; the local WebView starts at /.
 await writeFile(
   join(stage, "src/app/page.tsx"),
@@ -39,6 +43,26 @@ await cp(
   join(root, "src/lib/session/native-session.tsx"),
   join(stage, "src/lib/session/pod-session.tsx"),
 );
+if (browserTest) {
+  await mkdir(join(stage, "src/lib/demo-pod"));
+  await cp(join(root, "src/lib/demo-pod/pod.ts"), join(stage, "src/lib/demo-pod/pod.ts"));
+  await cp(
+    join(root, "test/native-browser/session.tsx"),
+    join(stage, "src/lib/session/pod-session.tsx"),
+  );
+  await cp(
+    join(root, "test/native-browser/probe.tsx"),
+    join(stage, "src/lib/native-browser-probe.tsx"),
+  );
+  const page = join(stage, "src/app/(suite)/drive/f/[ref]/page.tsx");
+  await writeFile(
+    page,
+    `import { NativeRouteProbe } from "@/lib/native-browser-probe";\n${await readFile(page, "utf8")}`.replace(
+      "<FolderRefView />",
+      "<NativeRouteProbe><FolderRefView /></NativeRouteProbe>",
+    ),
+  );
+}
 for (const file of ["next.config.ts", "postcss.config.mjs", "tsconfig.json", "package.json"])
   await cp(join(root, file), join(stage, file));
 await cp(join(root, "public"), join(stage, "public"), {

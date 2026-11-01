@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
+import "../lib/zod-csp";
 import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect } from "react";
 
