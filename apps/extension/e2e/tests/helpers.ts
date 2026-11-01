@@ -1,8 +1,28 @@
-import { type BrowserContext, expect, type Page } from '@playwright/test';
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test';
 
 /** The seeded CSS test WebID (see e2e/setup/seed.json). */
 export const TEST_WEBID = 'http://localhost:3000/test-pod/profile/card#me';
 export const WORK_WEBID = 'http://localhost:3000/work-pod/profile/card#me';
+/** The seeded pod whose profile links an SAI registry set and no matching Type Index entry. */
+export const SAI_WEBID = 'http://localhost:3000/sai-pod/profile/card#me';
+
+/**
+ * Click a control whose handler closes its own window (Fill, Cancel, Share) and wait
+ * for that window to close. The window can close while Playwright is still finishing
+ * the click, which rejects with "Target page, context or browser has been closed" even
+ * though the click landed. Only that error is tolerated, and the close event is still
+ * required, so a click on an already-closed window or a no-op control fails the test.
+ */
+export async function clickClosingControl(page: Page, target: Locator): Promise<void> {
+  await Promise.all([
+    page.waitForEvent('close'),
+    target.click().catch((error: Error) => {
+      if (!/Target page, context or browser has been closed/.test(error.message)) throw error;
+    }),
+  ]);
+}
 
 /**
  * Complete the CSS OIDC login + consent flow on the window
@@ -34,6 +54,7 @@ export async function performLogin(
   context: BrowserContext,
   extensionId: string,
   webId: string = TEST_WEBID,
+  email?: string,
 ): Promise<void> {
   const popupPage = await context.newPage();
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
@@ -43,7 +64,7 @@ export async function performLogin(
 
   const loginPagePromise = context.waitForEvent('page');
   await popupPage.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await completeOidcLogin(await loginPagePromise);
+  await completeOidcLogin(await loginPagePromise, email);
 
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   await popupPage.locator('#signed-in').waitFor({ state: 'visible', timeout: 15_000 });
@@ -82,13 +103,18 @@ export async function grantOrigin(
   context: BrowserContext,
   page: Page,
   profile?: ConsentProfile,
+  access = {
+    classIRI: 'https://schema.org/TextDigitalDocument',
+    modes: ['read'],
+    targetUrl: '/private/notes',
+  },
 ): Promise<void> {
   await page.waitForFunction(
     () =>
       typeof (window as unknown as { solid?: { requestAccess?: unknown } }).solid?.requestAccess ===
       'function',
   );
-  await page.evaluate(() => {
+  await page.evaluate(({ classIRI, modes }) => {
     const button = document.createElement('button');
     button.id = 'grant-origin-fixture';
     button.textContent = 'Grant origin access';
@@ -100,8 +126,8 @@ export async function grantOrigin(
       ).solid;
       void solid
         .requestAccess({
-          classes: ['https://schema.org/TextDigitalDocument'],
-          modes: ['read'],
+          classes: [classIRI],
+          modes,
           duration: 'P1D',
         })
         .then((result) => {
@@ -109,7 +135,7 @@ export async function grantOrigin(
         });
     });
     document.body.appendChild(button);
-  });
+  }, access);
   const consentPromise = context.waitForEvent('page');
   await page.getByRole('button', { name: 'Grant origin access' }).click();
   const consent = await consentPromise;
@@ -122,8 +148,8 @@ export async function grantOrigin(
     await expect(consent.locator('#webid')).toHaveText(profile.label);
     await expect(consent.locator('.targets')).toHaveText(profile.targetUrl);
   } else {
-    await expect(consent.locator('.targets')).toContainText('/private/notes');
+    await expect(consent.locator('.targets')).toContainText(access.targetUrl);
   }
-  await consent.getByRole('button', { name: 'Share', exact: true }).click();
+  await clickClosingControl(consent, consent.getByRole('button', { name: 'Share', exact: true }));
   await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');
 }

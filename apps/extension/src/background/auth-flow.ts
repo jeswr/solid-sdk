@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * The Solid-OIDC authorization-code + PKCE + DPoP login, adapted for the MV3 service
@@ -279,7 +280,9 @@ async function completeLogin(
 export async function refreshSession(
   session: StoredSession,
   keyPair: CryptoKeyPair,
+  signal?: AbortSignal,
 ): Promise<StoredSession> {
+  signal?.throwIfAborted();
   if (!session.refreshToken) throw new Error('No refresh token; re-login required.');
   if (!session.dpopJkt || session.dpopJkt !== (await dpopThumbprint(keyPair.publicKey))) {
     throw new Error('Session does not match the profile DPoP key.');
@@ -292,6 +295,7 @@ export async function refreshSession(
       htu: session.tokenEndpoint,
       nonce,
     });
+    signal?.throwIfAborted();
     return fetch(session.tokenEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', DPoP: proof },
@@ -301,13 +305,17 @@ export async function refreshSession(
         client_id: session.clientId,
         scope: SCOPE,
       }),
+      signal,
     });
   };
 
   let response = await grant();
   if (response.status === 400 || response.status === 401) {
     const nonce = response.headers.get('dpop-nonce');
-    if (nonce) response = await grant(nonce);
+    if (nonce) {
+      void response.body?.cancel().catch(() => {});
+      response = await grant(nonce);
+    }
   }
   if (!response.ok) {
     throw new Error(`Token refresh failed (${response.status}).`);
@@ -318,6 +326,7 @@ export async function refreshSession(
     refresh_token?: string;
     expires_in?: number;
   };
+  signal?.throwIfAborted();
 
   const updated: StoredSession = {
     ...session,

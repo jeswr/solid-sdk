@@ -12,8 +12,8 @@ reference implementation into a reusable package.
   from the token WebID → your handler.
 - `resolveAuthorizedPod(webid, config)` — the bidirectional `pim:storage`
   binding: forward profile claim + operator origin allowlist (exactly one
-  survivor, never pick-first) + the pod's owner-only-writable backward
-  acknowledgment.
+  survivor, never pick-first) + a storage-root check (`pim:Storage` type link)
+  + the pod's owner-only-writable backward acknowledgment.
 - `createServicePodFetch(options)` — a DPoP-bound `client_credentials` service
   identity for WAC-protected pod IO (cached token, fresh single-use proof per
   request, redirect-refusing, secret never echoed).

@@ -18,6 +18,8 @@ import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } 
 export interface TaskLoad {
   status: "loading" | "ready" | "error";
   items: StoredTask[];
+  /** Cached rows stay visible, but this load is incomplete until revalidation settles. */
+  refreshing?: boolean;
   /** Invalid RDF tasks skipped while projecting this project's last load. */
   warningCount?: number;
   error?: unknown;
@@ -88,6 +90,7 @@ function replaceTask(
       ...state.tasks,
       [projectUrl]: {
         status: "ready",
+        refreshing: previous?.refreshing ?? false,
         warningCount: previous?.warningCount ?? 0,
         items: [
           ...(previous?.items ?? []).filter((item) => item.url !== url),
@@ -289,6 +292,8 @@ export class TasksCache {
         ...this.baseline.tasks,
         [project.url]: {
           status: previous?.status === "ready" ? "ready" : "loading",
+          refreshing: true,
+          warningCount: previous?.warningCount ?? 0,
           items: previous?.items ?? [],
         },
       },
@@ -706,6 +711,17 @@ export class TasksCache {
   ): Promise<CompletionPlan | undefined> {
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
+    const project = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    const orphans = (project && this.snapshot.tasks[project.url]?.items)?.filter(
+      (copy) =>
+        copy.task.state === "closed" &&
+        copy.task.clonedFrom === item.task.id &&
+        copy.task.completionOperations.has(copy.url) &&
+        !item.task.completionOperations.has(copy.url),
+    );
+    if (project && orphans?.length) return this.recoverCompletion(project, item, orphans, now);
     const plan = planComplete(item, this.snapshot.views, now, options);
     if (plan.kind === "advance") return this.advanceTask(item, plan);
     return this.updateTask(item, (task) => {
@@ -891,6 +907,100 @@ export class TasksCache {
       return running;
     };
     this.undoOperations.set(plan, run);
+    return run();
+  }
+  /** A persisted occurrence without its original's marker is the same completion after reload. */
+  private recoverCompletion(
+    project: StoredProject,
+    item: StoredTask,
+    orphans: StoredTask[],
+    now: Date,
+  ): Promise<CompletionPlan | undefined> {
+    const recent = orphans.toSorted(
+      (a, b) => (b.task.endedAt?.getTime() ?? 0) - (a.task.endedAt?.getTime() ?? 0),
+    );
+    const orphan =
+      recent.find((copy) =>
+        item.task.allDay !== undefined
+          ? copy.task.allDay === item.task.allDay
+          : copy.task.allDay === undefined &&
+            copy.task.dueDate?.getTime() === item.task.dueDate?.getTime(),
+      ) ?? (recent[0] as StoredTask);
+    const excluded = new Set(orphans.map((copy) => copy.url));
+    const replan = (current: StoredTask, views: readonly TaskView[]): CompletionPlan => ({
+      ...planComplete(
+        current,
+        views.filter((view) => !excluded.has(view.url)),
+        now,
+      ),
+      copyUrl: orphan.url,
+    });
+    let plan = replan(
+      item,
+      this.snapshot.views.filter((view) => view.projectUrl === project.url),
+    );
+    const change = (task: TaskItem) => {
+      if (plan.kind === "advance") {
+        task.dueDate = plan.original.dueDate;
+        task.allDay = plan.original.allDay;
+        task.reminders = plan.original.reminders ?? [];
+      } else {
+        task.state = "closed";
+        task.endedAt = now;
+      }
+      task.completionOperations.add(orphan.url);
+    };
+    let running: Promise<CompletionPlan | undefined> | undefined;
+    const run = (refresh = false): Promise<CompletionPlan | undefined> => {
+      running ??= this.mutate(
+        (state) => {
+          const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+          return current && !current.task.completionOperations.has(orphan.url)
+            ? replaceTask(state, project.url, item.url, changeTask(current, change))
+            : state;
+        },
+        async () => {
+          this.project(project.url);
+          let current = refresh
+            ? await this.store.readTask(item.url)
+            : this.task(project.url, item.url);
+          if (refresh && !current.task.completionOperations.has(orphan.url)) {
+            // A conflict means the task changed; plan from its fresh scheduling inputs.
+            const currentProject = this.project(project.url);
+            const siblings = await this.store.listTasks(
+              currentProject.tracker.stateStore as string,
+            );
+            plan = replan(current, projectTasks(currentProject, siblings).views);
+          }
+          if (!current.task.completionOperations.has(orphan.url)) {
+            try {
+              current = await this.store.updateTask(current, change);
+            } catch (error) {
+              if (!(error instanceof ModelError && [409, 412].includes(error.status))) throw error;
+              const latest = await this.store.readTask(item.url);
+              if (!latest.task.completionOperations.has(orphan.url)) throw error;
+              current = latest;
+            }
+          }
+          return {
+            result: plan,
+            commit: (state) => replaceTask(state, project.url, item.url, current),
+          };
+        },
+        () => {
+          void resume();
+        },
+        [item.url, orphan.url],
+      ).then((result) => {
+        running = undefined;
+        if (result && this.unresolvedCompletions.get(item.url) === resume)
+          this.unresolvedCompletions.delete(item.url);
+        return result;
+      });
+      return running;
+    };
+    const resume = () => run(true);
+    this.unresolvedCompletions.set(item.url, resume);
     return run();
   }
   /** Retain the copy reservation until both writes or its compensation are confirmed. */
@@ -1160,6 +1270,59 @@ export class TasksCache {
             void attempt(true);
           }),
         [project.url],
+      );
+    return attempt();
+  }
+  /** Hold the mutation queue from the strict listing through task and class removal, on Retry too.
+   * Preflight items only identify saving indicators; queued writes may change the membership. */
+  deleteLabel(project: StoredProject, labelIds: readonly string[], preflight: StoredTask[]) {
+    const clearTypes = (task: TaskItem) => {
+      for (const id of labelIds) task.types.delete(id);
+    };
+    const attempt = (): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => state,
+        async () => {
+          // Always read back the tracker, including after a lost class-removal response.
+          const current = await this.store.readProject(project.url);
+          if (current.tracker.stateStore !== project.tracker.stateStore)
+            throw new ModelError(409, project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const confirmed: StoredTask[] = [];
+          for (const item of items)
+            confirmed.push(
+              labelIds.some((id) => item.task.types.has(id))
+                ? await this.store.updateTask(item, clearTypes)
+                : item,
+            );
+          // Conditional task writes must all succeed before the conditional tracker write.
+          const hasClass = labelIds.some(
+            (id) => current.dataset.match(DataFactory.namedNode(id)).size > 0,
+          );
+          const result = hasClass
+            ? await this.store.updateProject(current, (tracker) => {
+                for (const id of labelIds)
+                  for (const quad of tracker.dataset.match(DataFactory.namedNode(id)))
+                    tracker.dataset.delete(quad);
+              })
+            : current;
+          return {
+            result,
+            commit: (state) => {
+              let next = replaceProject(state, result);
+              for (const item of confirmed) next = replaceTask(next, project.url, item.url, item);
+              return next;
+            },
+          };
+        },
+        () => {
+          void attempt();
+        },
+        preflight
+          .filter((item) => labelIds.some((id) => item.task.types.has(id)))
+          .map((item) => item.url),
       );
     return attempt();
   }

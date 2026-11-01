@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * The Drive screens' storage seam. Screens and operations only see
  * {@link DriveClient}; this module implements it over Solid LDP with an
@@ -12,7 +13,6 @@ import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
-
 import { resolveContentType } from "../files/resolve-content-type";
 import { DriveResource } from "../model/model";
 import {
@@ -87,6 +87,8 @@ export interface DriveItem {
 
 export interface WriteOptions {
   readonly contentType: string;
+  /** Rewritten restore: install the archived source ACL before any payload. */
+  readonly restoreFrom?: ResourceIdentity;
   /** `"*"`: fail with {@link DriveConflictError} when the target exists. */
   readonly ifNoneMatch?: "*";
   /** Overwrite only this version. */
@@ -860,6 +862,7 @@ export function createSolidDriveClient(options: {
         readonly retainOnFailure?: boolean;
       } = {},
     required?: OwnAccess,
+    provisioned = false,
   ): Promise<Response> => {
     access.assertContentDestination(url);
     for (
@@ -868,7 +871,8 @@ export function createSolidDriveClient(options: {
       target = parentOf(target)
     )
       await deletion.guard(target);
-    await provision.guard(url, creating, new Headers(init.headers).get("if-none-match") === "*");
+    if (!provisioned)
+      await provision.guard(url, creating, new Headers(init.headers).get("if-none-match") === "*");
     if (!creating && !verifyAccess && new Headers(init.headers).get("if-none-match") === "*") {
       const current = await http(url, { method: "HEAD" });
       if (current.ok) throw errorFor(412, url);
@@ -1179,7 +1183,7 @@ export function createSolidDriveClient(options: {
     opts: WriteOptions,
     policy: WritePolicy,
     verifyAccess?: () => Promise<void>,
-    scope?: AccessScope,
+    scope: AccessScope = new Set(),
     effects?: Omit<CommitEffects, "onCommit"> &
       Pick<CommitChecks, "verifyHeaders"> & {
         readonly onWritten?: (response: Response) => void;
@@ -1188,6 +1192,106 @@ export function createSolidDriveClient(options: {
   ): Promise<{ etag?: string }> => {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
     access.assertContentDestination(url);
+    if (opts.restoreFrom) {
+      const source = await snapshot(opts.restoreFrom.url, true, opts.restoreFrom.verifyHeaders);
+      if (source.etag !== opts.restoreFrom.etag) throw new DriveError("conflict", 412, source.url);
+      const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
+      await provision.guard(url, true);
+      const binding = await bindAccess(access, source.url, url);
+      const resource: CreatedResource = { url, source, etag: undefined };
+      let cleanup: Awaited<ReturnType<typeof rollback>> | undefined;
+      const compensation = new Compensation(async () => {
+        cleanup = await rollback([resource], binding, recoveryOwner);
+        if (cleanup.pending) throw cleanup.pending;
+      });
+      const check = { binding, compensation, until: source.url };
+      const verifyRestore = async () => {
+        await (source.binding as AccessBinding).recheck();
+        await binding.recheck();
+        await recheckScope(scope);
+      };
+      await preparePolicies(source, source.url, url, undefined, undefined, verifyRestore, scope);
+      const restorePolicy = source.demo
+        ? undefined
+        : (source.targetAccess ??
+          requireAccess(
+            source.access.status === "known" ? source.access : await access.effective(source.url),
+            source.url,
+          ));
+      await verifyRestore();
+      const existing = await http(url, { method: "HEAD" });
+      if (existing.ok) {
+        // Docs may reconcile a retry by comparing the already-written bytes.
+        // Verify the intended audience first, and retain the binding through DELETE.
+        if (
+          restorePolicy &&
+          accessGains(access.forResource(restorePolicy, source.url), binding.destination).length
+        )
+          throw new DriveAccessError("Existing restored snapshot grants wider access");
+        scope.add({ binding });
+        throw errorFor(412, url);
+      }
+      if (existing.status !== 404)
+        throw new DriveAccessError("Restore destination could not be checked");
+      try {
+        if (!source.demo) {
+          // Resolve history before entering the file's provisioning flight.
+          const provisioned = await provision.file(
+            url,
+            restorePolicy,
+            source.url,
+            () =>
+              rawPut(url, "", {
+                "content-type": opts.contentType,
+                "if-none-match": "*",
+              }),
+            (response) => {
+              captureResource(resource, response.headers.get("etag"), response.headers);
+            },
+            verifyRestore,
+            { arm: [compensation] },
+          );
+          resource.protection = provisioned.policy as OwnAccess;
+          binding.installed(provisioned.policy as OwnAccess);
+        }
+        scope.add(check);
+        try {
+          return await write(
+            url,
+            body,
+            {
+              contentType: opts.contentType,
+              ...(source.demo
+                ? { ifNoneMatch: "*" as const }
+                : { ifMatch: validator(url, resource.etag) }),
+            },
+            policy,
+            verifyRestore,
+            scope,
+            {
+              arm: [compensation],
+              onWritten: (response) => {
+                captureResource(resource, response.headers.get("etag"), response.headers);
+              },
+            },
+          );
+        } finally {
+          // Recheck even after response loss; identical bytes cannot settle access.
+          await verifyRestore();
+        }
+      } catch (error) {
+        // A lost payload acknowledgement leaves the placeholder receipt stale.
+        // Keep the private copy and its binding for Docs' byte reconciliation;
+        // cleanup must never use that receipt to secure a newer representation.
+        if (error instanceof TypeError) compensation.disarm();
+        else await compensation.rollback();
+        // A lost acknowledgement can leave a payload that Docs reconciles by
+        // reading its bytes. Keep its access binding until source retirement.
+        if (cleanup && !cleanup.retained.length) scope.delete(check);
+        else scope.add(check);
+        throw error;
+      }
+    }
     if (opts.ifMatch !== undefined) validator(url, opts.ifMatch);
     let required: OwnAccess | undefined;
     let protectedEtag: string | undefined;
@@ -1265,6 +1369,8 @@ export function createSolidDriveClient(options: {
     body: "",
     headers: PayloadWrite["headers"],
   ): Promise<Response> => {
+    // The provisioner already guards ancestors before holding this flight.
+    // Re-entering it would wait on its own work or reverse the lock order.
     return guardedWrite(
       target,
       {
@@ -1272,6 +1378,11 @@ export function createSolidDriveClient(options: {
         body,
         headers,
       },
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
   };

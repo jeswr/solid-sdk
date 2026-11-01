@@ -51,6 +51,12 @@ percent signs (`%25`) remain supported.
   `SolidRedirectError` alias of `@jeswr/guarded-fetch`’s `RedirectRefusedError`.
 
 Container listings use `@jeswr/ldp-container` for RDF parsing and per-entry scope filtering.
+Members must be strict descendants of the container being listed, even when the driver's
+base is broader. Recursive prefix clear skips sibling resources and containers, preventing
+deletes outside the cleared prefix and sibling-container cycles. Literal and blank-node
+members are skipped.
+Listing reads stream through the shared helper with a 16 MiB byte limit and the parser's
+default quad limit; exceeding either rejects with `RdfFetchError.code === "PARSE_LIMIT"`.
 The local `listContainer(containerUrl, base, fetchImpl)` wrapper keeps its signature and
 returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually; request
 headers, recursion, key mapping, and the existing stricter scope/redirect checks stay local.

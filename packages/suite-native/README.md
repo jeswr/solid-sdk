@@ -14,8 +14,9 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | `share(content, { native, web })` | Native share sheet, else Web Share, else `ShareUnavailableError`. |
 | `stageFile(blob, { name, mimeType? }, plugin, limits?)`, `shareFiles(files, content, { staging, native })` | Stage already fetched bytes in bounded chunks, then share native file URIs. |
 | `createShareInbox(plugin)`, `validateShareBatch()` | Validated `ShareBatch`es from other apps, chunked size-checked file reads, acknowledgement. |
+| `createSecureStore(plugin)`, `refreshTokenKey({ issuer, webId, clientId })` | Validated native refresh-token storage, versioned writes, cancellable unlocks and session identity keys (MOB-P4 S11/S12). |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
-| `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `Share`). Import only inside the app shell. |
+| `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
 
 ```ts
 import { createNativeCodeDriver, isNativeApp, MOBILE_REDIRECT_URI } from "@jeswr/suite-native";
@@ -65,6 +66,42 @@ committed files to keep at most 20 files and 100 MiB total. Active uploads canno
 evicted for capacity, and nor can the files `shareFiles` has already staged for the same
 share (it passes their ids as `keep`); a new upload fails when those fill the cache. On iOS
 the shell replaces the `Share` plugin with one that shares only committed share-out files.
+
+Store only refresh tokens through the injected `SuiteSecureStore` plugin:
+
+```ts
+import { createSecureStore, refreshTokenKey } from "@jeswr/suite-native";
+import { secureStorePlugin } from "@jeswr/suite-native/capacitor";
+
+const store = createSecureStore(secureStorePlugin);
+const key = await refreshTokenKey({ issuer, webId, clientId });
+const status = await store.status(); // No prompt.
+const entry = await store.get(key, signal); // Optional AbortSignal; gated reads prompt.
+const committed = await store.set(key, refreshToken, {
+  userPresence: status.userPresence && unlockEnabled,
+  version: entry.version,
+});
+// Keep committed.version beside the in-memory token for the next rotation.
+// await store.delete(key); // Sign out one account.
+// await store.clear(); // Sign out all accounts in this origin's namespace.
+// await store.cancel(); // Abandon a pending unlock.
+```
+
+Keys match `^[a-z0-9][a-z0-9:._-]{0,127}$`; values are strings of at most 16 KiB
+of UTF-8. `get` returns `{ value: string | null, version }` and `set` returns
+`{ version }`. Versions are non-negative safe integers, start at zero for an unwritten
+key, and increase on native mutations, including removal and clear. `delete`, `clear`
+and `cancel` resolve with no value. All native responses are validated; malformed
+responses reject with `SecureStoreError` whose `code` and message are `failed`.
+Other codes are `cancelled`, `background`, `lockout`, `unavailable`, `stale`, `full`
+and `invalid`; native messages are never forwarded. Invalid arguments reject before
+the bridge. Aborting `get` rejects immediately with `cancelled` and requests native
+cancellation; an already-aborted signal never calls native code.
+
+`refreshTokenKey` uses WebCrypto SHA-256 of `JSON.stringify([issuer, webId, clientId])`,
+prefixed with `pod-auth:refresh:` and encoded as lowercase hex, without normalising
+the identity strings. There is no web fallback: off native, keep the existing IndexedDB
+path. pod-auth integration waits for its storage seam (T-031 / MOB-06).
 
 Private at 0.1.0. From the workspace root:
 

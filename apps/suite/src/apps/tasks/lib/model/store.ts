@@ -85,8 +85,8 @@ export class TaskStore {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
         else {
           try {
-            for (const url of await this.io.list(reg.location))
-              if (url.endsWith(".ttl")) urls.add(url);
+            const listed = await this.io.list(reg.location);
+            for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
           } catch (error) {
             if (!onError) throw error;
             onError(reg.location, error);
@@ -339,12 +339,18 @@ export class TaskStore {
     if (!task.isTask) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task };
   }
-  async listTasks(stateStore: string): Promise<StoredTask[]> {
+  /** Strict listings are mutation gates: no missing, unreadable or invalid task may be skipped. */
+  async listTasks(stateStore: string, { strict = false } = {}): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
-    for (const url of await this.io.list(stateStore)) {
+    for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
-      const resource = await this.readListedResource(url);
+      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
       if (!resource) continue;
+      if (strict) {
+        const data = taskDetails(resource.url, resource.dataset);
+        if (!data) throw new TypeError("Expected a wf:Task.");
+        validateTask(data);
+      }
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }

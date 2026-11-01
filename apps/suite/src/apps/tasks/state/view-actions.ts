@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { toast } from "@jeswr/suite-ui";
-import { DataFactory, NS, node, requireTitle } from "../lib/model/rdf";
-import type { StoredProject } from "../lib/model/store";
+import { NS, node, requireTitle } from "../lib/model/rdf";
+import type { StoredProject, StoredTask } from "../lib/model/store";
 import { runBulk } from "../lib/views/bulk";
 import type { TaskView } from "../lib/views/types";
 import { rescheduleToDay } from "../lib/views/upcoming";
@@ -55,9 +55,35 @@ export function labelTargets(key: string, projects: readonly StoredProject[]) {
   });
 }
 
+/** Check all targets before writing. Renames only change metadata; deletion needs every task. */
+function labelLoadFailure(
+  key: string,
+  targets: ReturnType<typeof labelTargets>,
+  tasks: TasksContextValue,
+  action: "rename" | "delete",
+) {
+  const incomplete = targets.filter(({ project }) => {
+    const load = tasks.tasks[project.url];
+    return (
+      load?.refreshing ||
+      (action === "delete" && (load?.status !== "ready" || (load.warningCount ?? 0) > 0))
+    );
+  });
+  if (incomplete.length) {
+    const error = new Error(
+      `Couldn't ${action} @${key}. Reload all tasks in ${incomplete.map(({ project }) => project.tracker.title ?? "Project").join(", ")} and fix any loading errors before ${action === "delete" ? "deleting" : "renaming"} the label.`,
+    );
+    toast.error(error.message);
+    return { done: [], failed: incomplete.map((item) => ({ item, error })) };
+  }
+}
+
 export async function renameLabel(key: string, name: string, tasks: TasksContextValue) {
   requireTitle(name);
-  return runBulk(labelTargets(key, tasks.projects), async ({ project, labelIds }) => {
+  const targets = labelTargets(key, tasks.projects);
+  const failure = labelLoadFailure(key, targets, tasks, "rename");
+  if (failure) return failure;
+  return runBulk(targets, async ({ project, labelIds }) => {
     saved(
       await tasks.updateProject(project, (tracker) => {
         for (const id of labelIds)
@@ -70,37 +96,22 @@ export async function renameLabel(key: string, name: string, tasks: TasksContext
 /** At most four projects write at once. Clear all task references before removing a class. */
 export async function deleteLabel(key: string, tasks: TasksContextValue) {
   const targets = labelTargets(key, tasks.projects);
-  // Check the entire operation before its first write: skipped tasks can retain the label type.
-  const incomplete = targets.filter(({ project }) => {
-    const load = tasks.tasks[project.url];
-    return load?.status !== "ready" || (load.warningCount ?? 0) > 0;
-  });
-  if (incomplete.length) {
-    const error = new Error(
-      `Couldn't delete @${key}. Reload all tasks in ${incomplete.map(({ project }) => project.tracker.title ?? "Project").join(", ")} and fix any loading errors before deleting the label.`,
+  const failure = labelLoadFailure(key, targets, tasks, "delete");
+  if (failure) return failure;
+  const listings = new Map<string, StoredTask[]>();
+  const preflight = await runBulk(targets, async ({ project }) => {
+    listings.set(
+      project.url,
+      await tasks.cache.store.listTasks(project.tracker.stateStore as string, { strict: true }),
     );
-    toast.error(error.message);
-    return { done: [], failed: incomplete.map((item) => ({ item, error })) };
+  });
+  if (preflight.failed.length) {
+    toast.error(
+      `Couldn't delete @${key}. Couldn't read all tasks in ${preflight.failed.map(({ item }) => item.project.tracker.title ?? "Project").join(", ")}. Check your connection and access, then try again.`,
+    );
+    return { done: [], failed: preflight.failed };
   }
   return runBulk(targets, async ({ project, labelIds }) => {
-    const load = tasks.tasks[project.url];
-    if (!load) throw new Error("Load this project's tasks before deleting its label");
-    const failed: string[] = [];
-    for (const item of load.items.filter((item) =>
-      labelIds.some((id) => item.task.types.has(id)),
-    )) {
-      const result = await tasks.updateTask(item, (task) => {
-        for (const id of labelIds) task.types.delete(id);
-      });
-      if (!result) failed.push(item.task.title ?? item.url);
-    }
-    if (failed.length) throw new Error(`Couldn't remove the label from: ${failed.join(", ")}`);
-    saved(
-      await tasks.updateProject(project, (tracker) => {
-        for (const id of labelIds)
-          for (const quad of tracker.dataset.match(DataFactory.namedNode(id)))
-            tracker.dataset.delete(quad);
-      }),
-    );
+    saved(await tasks.cache.deleteLabel(project, labelIds, listings.get(project.url) ?? []));
   });
 }

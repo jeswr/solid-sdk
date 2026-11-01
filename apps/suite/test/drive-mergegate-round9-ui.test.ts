@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -13,10 +14,6 @@ import { act, deferred, h, mount } from "./drive-ui-dom";
 import { aclBody, DRIVE, OWNER, ROOT, turtle, WacFields, wacPod } from "./drive-wac-pod";
 
 const navigation = vi.hoisted(() => ({ params: new URLSearchParams({ q: "report" }) }));
-vi.mock(
-  "@/apps/docs/lib/model/type-index",
-  async () => import("../src/apps/docs/lib/model/type-index"),
-);
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
   "@/components/interim-shell/suite-frame",

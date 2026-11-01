@@ -529,14 +529,14 @@ export class DpopApiVerifier {
     }
 
     // 2. DPoP proof: crypto + htm/htu/iat/ath/jti + cnf.jkt binding.
-    const proofJti = await this.verifyDpopProof(normalized, dpopHeader, parsed.token, cnfJkt);
+    const proof = await this.verifyDpopProof(normalized, dpopHeader, parsed.token, cnfJkt);
 
     // 3. WebID claim.
     const webId = this.extractWebId(claims);
 
     // 4. Replay check (cheap, O(1)) BEFORE the bidirectional network fetch — a replayed proof
     //    must never drive the expensive WebID dereference.
-    await this.checkReplay(proofJti);
+    await this.checkReplay(proof);
 
     // 5. Bidirectional WebID↔issuer check (SSRF-guarded; defence-in-depth).
     await this.checkBidirectionalIssuer(webId, claimedIssuer);
@@ -616,7 +616,7 @@ export class DpopApiVerifier {
     proof: string,
     accessToken: string,
     cnfJkt: string,
-  ): Promise<string> {
+  ): Promise<{ jti: string; iat: number }> {
     let payload: JWTPayload;
     let header: { typ?: string; alg?: string; jwk?: JWK };
     try {
@@ -659,10 +659,9 @@ export class DpopApiVerifier {
     if (typeof payload.iat !== "number") {
       throw this.challenge("invalid_token", "DPoP proof is missing iat.", true);
     }
-    const nowSec = Math.floor(this.now() / 1000);
-    if (Math.abs(nowSec - payload.iat) > DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec) {
-      throw this.challenge("invalid_token", "DPoP proof iat is not recent enough.", true);
-    }
+    // A proof may be up to MAX_AGE old, but only clock-tolerance in the future: a proof
+    // dated further ahead would outlive the replay window its jti is remembered for.
+    this.assertProofFresh(payload.iat);
     // `jti` — must be present (the replay cache consumes it).
     if (typeof payload.jti !== "string" || payload.jti.length === 0) {
       throw this.challenge("invalid_token", "DPoP proof is missing a jti.", true);
@@ -685,17 +684,39 @@ export class DpopApiVerifier {
         true,
       );
     }
-    return payload.jti;
+    return { jti: payload.jti, iat: payload.iat };
   }
 
-  /** Consume the proof's `jti` against the replay store (a repeat within the window = replay). */
-  private async checkReplay(jti: string): Promise<void> {
-    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec;
-    const result = await this.replayStore.mark(jti, ttlSeconds);
+  /**
+   * A proof may be up to MAX_AGE (+ tolerance) old, but only clock-tolerance in the future: a
+   * proof dated further ahead would outlive the replay window its jti is remembered for.
+   */
+  private assertProofFresh(iat: number): void {
+    const nowSec = Math.floor(this.now() / 1000);
+    if (
+      nowSec - iat > DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec ||
+      iat - nowSec > this.clockToleranceSec
+    ) {
+      throw this.challenge("invalid_token", "DPoP proof iat is not recent enough.", true);
+    }
+  }
+
+  /**
+   * Consume the proof's `jti` against the replay store (a repeat within the window = replay).
+   * Freshness is re-checked AFTER the mark: the store may have forgotten an old jti while this
+   * request awaited earlier checks, but a proof still fresh at mark time is covered by the TTL.
+   */
+  private async checkReplay(proof: { jti: string; iat: number }): Promise<void> {
+    // Accepted iat spans [now - MAX_AGE - tolerance, now + tolerance] in whole seconds, so a
+    // proof stays acceptable for up to MAX_AGE + 2 * tolerance seconds after it is marked, plus
+    // under a second of rounding (iat and now are floored). Remember the jti one second longer.
+    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + 2 * this.clockToleranceSec + 1;
+    const result = await this.replayStore.mark(proof.jti, ttlSeconds);
     if (result === "replay") {
       this.log.warn({ event: "api-auth.replay.detected" }, "DPoP jti replay detected — rejecting.");
       throw this.challenge("invalid_token", "DPoP proof has already been used (replay).", true);
     }
+    this.assertProofFresh(proof.iat);
   }
 
   /** The `webid` claim — must be present and an `https:` URL without userinfo. */

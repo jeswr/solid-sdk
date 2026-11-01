@@ -21,6 +21,7 @@ export function completedGroups(
     .filter(
       (task) =>
         task.state === "closed" &&
+        (task.completedAt === undefined || Number.isFinite(task.completedAt.getTime())) &&
         (options.projectUrl === undefined || task.projectUrl === options.projectUrl),
     )
     .sort(

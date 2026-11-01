@@ -25,7 +25,10 @@ describe("JSON-LD context policy", () => {
     const dataset = await parseRdf(body, "application/ld+json", { documentLoader: { load } });
     expect(dataset.size).toBe(1);
     expect([...dataset][0]?.object.value).toBe("Alice");
-    expect(load).toHaveBeenCalledWith(contextUrl);
+    expect(load).toHaveBeenCalledWith(
+      contextUrl,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("loads allowed contexts only through the injected transport, with redirects refused", async () => {
@@ -41,6 +44,7 @@ describe("JSON-LD context policy", () => {
     expect(transport).toHaveBeenCalledExactlyOnceWith(contextUrl, {
       headers: new Headers({ accept: "application/ld+json" }),
       redirect: "error",
+      signal: expect.any(AbortSignal),
     });
     expect(globalFetch).not.toHaveBeenCalled();
   });
@@ -218,7 +222,10 @@ describe("JSON-LD context policy", () => {
       documentLoader: { load },
     });
     expect(result.dataset.size).toBe(1);
-    expect(load).toHaveBeenCalledWith(contextUrl);
+    expect(load).toHaveBeenCalledWith(
+      contextUrl,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(transport).toHaveBeenCalledTimes(2);
   });
 });

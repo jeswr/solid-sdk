@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Public types for `@jeswr/solid-openid-client`.
@@ -151,4 +152,8 @@ export interface CreateSolidOidcClientOptions {
    * buffered, so the cap does not apply to them.
    */
   readonly maxReplayBodyBytes?: number;
+  /** Whole discovery/token HTTP request deadline, including response consumption. Default 30 s. */
+  readonly requestTimeoutMs?: number;
+  /** Streamed discovery/token/JWKS response cap. Default 1 MiB. */
+  readonly maxResponseBytes?: number;
 }
