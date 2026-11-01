@@ -286,7 +286,7 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
       result.push(...records((await read(url)).document, kind));
     return result;
   }
-  async function importGpx(key: string, xml: string) {
+  async function importGpx(key: string, xml: string, onRouteSaved?: () => void) {
     const path = `workouts/${id(key)}/`;
     const iri = `${resolve(path)}index.ttl#it`;
     const { document, workout } = gpxToWorkout(xml, { workoutIri: iri, patient: owner });
@@ -305,6 +305,7 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
       const route = checked(await transport(resolve(`${path}route.gpx`)), "read GPX");
       if ((await route.text()) !== xml) throw error;
     }
+    onRouteSaved?.();
     await write(`${path}index.ttl`, document, { create: true });
     return workout;
   }

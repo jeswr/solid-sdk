@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
 import { DRIVE_ROOT_CLASS } from "../src/apps/drive/lib/constants";
 import { encodeRef } from "../src/lib/refs";
@@ -7,7 +8,7 @@ import { act, click, h, key, mount } from "./drive-ui-dom";
 import { OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ ref: "", params: new URLSearchParams() }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   // Metadata/view fixtures have a registered root. Hidden read discovery must
   // not force an unrelated root-creation mutation during these read-only tests.
   discoverProfileRegistrations: vi.fn(async () => [

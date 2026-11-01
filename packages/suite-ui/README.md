@@ -88,32 +88,38 @@ Import `SignInCard` and its presentation types from `@jeswr/suite-ui/sign-in`, a
 load `@jeswr/suite-ui/styles/sign-in.css` after the token, theme, density and component
 styles. Tailwind consumers must scan this package's source, as for the primitives.
 
-Pass ordered `providers` (home provider first), optional `recentAccounts` and
-`recentProviders`, and `onWebId`, `onProvider`, `onCustomProvider`, and `onAccount`
-callbacks. Fields submit trimmed non-empty strings, including provider URLs pasted
-into the WebID field. The host resolves addresses and owns authentication, validation,
-remembered accounts and provider history; the card has no auth dependency or network
-transport. Host-supplied `signUpUrl`, `iconUrl`, and `photoUrl` must be absolute HTTP(S)
-URLs; unsafe values are ignored. Provider monogram colours cycle through six app tones
-in list order. The home provider is the single filled action; form submits use outlines.
+Remembered `recentAccounts` open a single account list. “Use another account” moves to
+WebID entry and provider pills; Back restores focus to that row. With no accounts the
+sign-in step opens directly. `defaultView` (`"accounts"` or `"sign-in"`) sets only the initial view.
+`accountsTitle` defaults to “Choose an account”; `title` applies to sign-in (default “Sign in”).
+`subtitle` is optional. Pass ordered `providers` (home first), `recentProviders`, and
+`onWebId`, `onProvider`, `onCustomProvider`, `onAccount` callbacks. Forms submit trimmed,
+non-empty strings, including provider URLs pasted into WebID. The host owns validation,
+authentication and history; the card has no auth dependency or network transport.
 
-`pending={{ kind, key }}` disables actions and marks the matching control with
-“Signing in with {name}…” or “Signing in as {name}…” while keeping its icon and details;
-forms show “Signing in…”. Use the provider ID (or issuer URL), account WebID, or
-submitted form input as the key. Supply `onCancel` to offer cancellation. `error` renders one alert
-associated with the last submitted input. Set `allowCustomProvider={false}` to hide
-custom entry. `defaultCustomProviderOpen` initially expands custom entry; later prop
-changes do not override the user's choice. `webIdHelpHref` replaces the built-in WebID
-explanation sheet with a native link when it is an absolute HTTP(S) URL or a local path
-starting with a single `/`; unsafe values use the built-in explanation. `footer` adds
-host content and becomes inert while pending.
+Provider pills show `label ?? name`; `description` is deprecated and no longer displayed.
+`PROVIDER_BRANDS` maps issuer origins to colours and bundled Solid / Inrupt logos.
+Other providers use monograms and a stable colour from `FALLBACK_BRAND_COLORS`.
+`color` overrides the fill only when it is a six-digit `#rrggbb`; text uses WCAG contrast
+to select white or near-black. `iconUrl` opts into a custom logo. It, `photoUrl` and
+`signUpUrl` require absolute HTTP(S) URLs; unsafe values are ignored. No default logos
+are fetched remotely. Neutral colours follow the light/dark theme.
 
-The subpath also exports the pure `monogramFor`, `toneAt`, `toneFor` (retained for stable
-issuer-based colours), `safeHref`, `hostOf`, and `signUpTarget` helpers. `safeHref` trims
-outer whitespace, rejects embedded whitespace and backslashes, and accepts local paths
-only when its second argument is `true`. Interactive states are at
-`/dev/components/sign-in`, optionally filtered with
-`?state=default|recent|pending|error|custom`; the fixture includes a density selector.
+`pending={{ kind, key }}` forces the matching step, disables actions, and shows a spinner
+and “Signing in…” on the matching account, provider or form. Keys are provider ID (or
+issuer URL), account WebID or submitted form input. Supply `onCancel` for cancellation.
+`error` stays with the last action: on accounts, under the submitted input, or above
+providers. `allowCustomProvider={false}` hides custom entry; `defaultCustomProviderOpen`
+sets its initial expansion. `webIdHelpHref` replaces the WebID explanation sheet with
+a native link for an absolute HTTP(S) URL or a single-slash local path. Footer links
+keep 44px targets and are disabled while pending; host `footer` content becomes inert.
+
+The subpath also exports `monogramFor`, `toneAt`, `toneFor` (legacy app-tone helpers),
+`safeHref`, `hostOf`, `signUpTarget`, `providerBrandFor`, `validColor`,
+`relativeLuminance`, `contrastRatio`, and `foregroundFor`. `safeHref` trims outer
+whitespace and rejects embedded whitespace and backslashes; local paths require its
+second argument to be `true`. Fixtures at `/dev/components/sign-in` accept
+`?state=accounts|default|pending|error|account-error|custom` and a density selector.
 
 ## DS-02 primitives and atoms
 

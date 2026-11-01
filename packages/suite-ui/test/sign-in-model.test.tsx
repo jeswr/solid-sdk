@@ -1,15 +1,118 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import {
+  contrastRatio,
+  FALLBACK_BRAND_COLORS,
+  foregroundFor,
   hostOf,
   monogramFor,
+  PROVIDER_BRANDS,
+  providerBrandFor,
+  relativeLuminance,
   safeHref,
   signUpTarget,
   toneAt,
   toneFor,
+  validColor,
 } from "../src/sign-in/index.js";
 
 describe("sign-in presentation helpers", () => {
+  it("calculates WCAG luminance and symmetric contrast from known reference values", () => {
+    expect(relativeLuminance("#000000")).toBe(0);
+    expect(relativeLuminance("#ffffff")).toBe(1);
+    expect(relativeLuminance("#ff0000")).toBeCloseTo(0.2126, 8);
+    expect(relativeLuminance("#00ff00")).toBeCloseTo(0.7152, 8);
+    expect(relativeLuminance("#0000ff")).toBeCloseTo(0.0722, 8);
+    expect(relativeLuminance("#080808")).toBeCloseTo(8 / 255 / 12.92, 8);
+    expect(contrastRatio("#000000", "#ffffff")).toBe(21);
+    expect(contrastRatio("#ffffff", "#000000")).toBe(21);
+    expect(contrastRatio("#7c4dff", "#ffffff")).toBeCloseTo(4.813678, 5);
+    expect(contrastRatio("#abcdef", "#abcdef")).toBe(1);
+    expect(() => relativeLuminance("red")).toThrow(TypeError);
+  });
+
+  it("chooses white only when it reaches the 4.5:1 threshold", () => {
+    expect(foregroundFor("#000000")).toBe("#ffffff");
+    expect(foregroundFor("#ffffff")).toBe("#111111");
+    expect(foregroundFor("#767676")).toBe("#ffffff");
+    expect(foregroundFor("#777777")).toBe("#111111");
+    expect(foregroundFor("#F5A623")).toBe("#111111");
+  });
+
+  it("accepts only a literal six-digit RGB colour", () => {
+    for (const value of [
+      undefined,
+      "",
+      "red",
+      "#123",
+      "#11223344",
+      "#12345g",
+      " #112233",
+      "#112233\n",
+      "var(--primary)",
+    ]) {
+      expect(validColor(value)).toBeUndefined();
+    }
+    expect(validColor("#Ab12EF")).toBe("#Ab12EF");
+  });
+
+  it("gives every registry and fallback colour at least 4.5:1 text contrast", () => {
+    expect(Object.keys(PROVIDER_BRANDS)).toEqual([
+      "https://solidcommunity.net",
+      "https://login.inrupt.com",
+      "https://solidweb.org",
+      "https://teamid.live",
+    ]);
+    expect(FALLBACK_BRAND_COLORS).toHaveLength(6);
+    expect(new Set(FALLBACK_BRAND_COLORS).size).toBe(6);
+    for (const color of [
+      ...Object.values(PROVIDER_BRANDS).map((brand) => brand.color),
+      ...FALLBACK_BRAND_COLORS,
+    ]) {
+      expect(contrastRatio(color, foregroundFor(color))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("looks up brands by origin, preserves logos on colour override and resists lookalike hosts", () => {
+    expect(
+      providerBrandFor({ issuer: "https://SOLIDCOMMUNITY.NET:443/issuer?foo=bar#fragment" }),
+    ).toEqual(PROVIDER_BRANDS["https://solidcommunity.net"]);
+    expect(providerBrandFor({ issuer: "https://login.inrupt.com/oidc", color: "#AABBCC" })).toEqual(
+      { ...PROVIDER_BRANDS["https://login.inrupt.com"], color: "#AABBCC" },
+    );
+    expect(providerBrandFor({ issuer: "https://solidcommunity.net/", color: "red" }).color).toBe(
+      "#7C4DFF",
+    );
+    for (const issuer of [
+      "https://solidcommunity.net.evil.example/",
+      "https://solidcommunity.net:8080/",
+      "http://solidcommunity.net/",
+      "https://solidcommunity.net@evil.example/",
+      "not a URL",
+      "__proto__",
+      "constructor",
+      "toString",
+      "",
+    ]) {
+      const brand = providerBrandFor({ issuer });
+      expect(brand.Logo).toBeUndefined();
+      expect(FALLBACK_BRAND_COLORS).toContain(brand.color);
+    }
+  });
+
+  it("hashes unknown issuer origins stably across paths and reordering using all six colours", () => {
+    const issuers = Array.from({ length: 30 }, (_, i) => `https://provider-${i}.example`);
+    const colors = issuers.map((issuer) => providerBrandFor({ issuer }).color);
+    expect(
+      [...issuers]
+        .reverse()
+        .map((issuer) => providerBrandFor({ issuer: `${issuer}/oidc` }).color)
+        .reverse(),
+    ).toEqual(colors);
+    expect(new Set(colors).size).toBe(6);
+    for (const color of colors) expect(FALLBACK_BRAND_COLORS).toContain(color);
+  });
+
   it.each([
     ["Solid community", "S"],
     ["  alice  ", "A"],

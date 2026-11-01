@@ -1,14 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Recurrence fixtures exercise browser-local calendar arithmetic over UK DST changes.
 process.env.TZ = "Europe/London";
 export default defineConfig({
+  // Match Next's Yjs singleton when testing the workspace persistence provider.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      yjs: fileURLToPath(new URL("./node_modules/yjs/dist/yjs.mjs", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
+    server: { deps: { inline: ["@jeswr/y-solid"] } },
     include: ["test/**/*.test.ts"],
-    setupFiles: ["test/drive-locks.setup.ts"],
+    setupFiles: ["test/drive-locks.setup.ts", "test/setup-web-crypto.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
     coverage: {
@@ -19,10 +28,13 @@ export default defineConfig({
         "src/shell/search/local-source.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
+        "src/apps/calendar/state/*.{ts,tsx}",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
+        "src/apps/docs/lib/editor/**/*.ts",
+        "src/apps/docs/lib/convert/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
         "src/apps/health/lib/fhir/**/*.ts",
@@ -40,6 +52,7 @@ export default defineConfig({
         "src/apps/contacts/lib/phone/**/*.ts",
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
+        "src/apps/contacts/state/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/money/lib/model/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
@@ -115,7 +128,12 @@ export default defineConfig({
         "src/apps/drive/lib/operations/**/*.ts",
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
+        "src/apps/health/lib/data/**/*.ts",
+        "src/apps/money/lib/data/**/*.ts",
+        "src/apps/photos/lib/data/**/*.ts",
+        "src/lib/session/extension-pod-session.ts",
       ],
+      exclude: ["src/apps/contacts/state/**/*.tsx"],
       reporter: ["text", "json", "json-summary"],
       thresholds: {
         perFile: true,

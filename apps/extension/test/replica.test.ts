@@ -197,14 +197,14 @@ function scriptedEgress(responses: Array<() => Response>): EgressPort & {
     url: string;
     method: string;
     headers: Record<string, string>;
-    body: string | null;
+    body: string | Uint8Array<ArrayBuffer> | null;
   }>;
 } {
   const calls: Array<{
     url: string;
     method: string;
     headers: Record<string, string>;
-    body: string | null;
+    body: string | Uint8Array<ArrayBuffer> | null;
   }> = [];
   let i = 0;
   return {
