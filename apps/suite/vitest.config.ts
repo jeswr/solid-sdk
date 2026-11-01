@@ -35,6 +35,7 @@ export default defineConfig({
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
+        "src/apps/home/lib/permissions/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/editor/**/*.ts",
         "src/apps/docs/lib/convert/**/*.ts",

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * The demo pod's starting content: Alice's profile, an owner-only root ACL, an
  * empty private Type Index, and a small Drive tree that matches the Drive
@@ -12,6 +13,7 @@ import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
+import { seedPermissions } from "./seed-permissions";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -105,6 +107,7 @@ export async function buildDemoSeed(
     "",
   ].join("\n");
   const files: DemoSeedFile[] = [
+    ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
       path: "settings/privateTypeIndex.ttl",

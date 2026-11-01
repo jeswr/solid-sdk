@@ -16,6 +16,7 @@ import {
   FileText,
   HardDrive,
   HeartPulse,
+  House,
   Images,
   Menu,
   Music,
@@ -31,6 +32,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
 export type SuiteAppId =
+  | "home"
   | "drive"
   | "docs"
   | "calendar"
@@ -44,6 +46,7 @@ export type SuiteAppId =
   | "sheets";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
+  { id: "home", label: "Home", href: "/home", icon: House },
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
