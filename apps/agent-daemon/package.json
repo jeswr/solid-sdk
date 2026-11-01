@@ -24,7 +24,8 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "bin"
   ],
   "scripts": {
     "build": "pnpm -w exec tsc -p apps/agent-daemon/tsconfig.json",
@@ -56,5 +57,8 @@
     "@solid/community-server": "7.2.0",
     "componentsjs": "5.5.1",
     "@jeswr/guarded-fetch": "workspace:*"
+  },
+  "bin": {
+    "awp": "./bin/awp.mjs"
   }
 }
