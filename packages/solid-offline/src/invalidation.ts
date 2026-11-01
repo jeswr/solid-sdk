@@ -12,6 +12,7 @@ import {
   resLike,
 } from './cache-coherence.js';
 import { classifyResponse, computeVaryKey, keyRequest, type RequestLike } from './cache-policy.js';
+import { nextPages } from './listing-pages.js';
 import type { MetadataStore } from './metadata-store.js';
 import { policyResponse } from './storage.js';
 import type { Broadcaster, ByteCache } from './swr.js';
@@ -324,27 +325,6 @@ async function refreshListing(
   return { kind: 'skipped' };
 }
 
-/** Resolve next-page links without splitting commas inside targets or quoted parameters. */
-function nextPages(url: string, header: string | null): string[] {
-  const pages: string[] = [];
-  for (const link of (header ?? '').matchAll(/<([^<>]*)>((?:[^<",]|"(?:[^"\\]|\\.)*")*)/g)) {
-    const params = new Map<string, string>();
-    for (const param of (link[2] ?? '').matchAll(
-      /;\s*([^=;\s]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))/g,
-    )) {
-      const name = param[1]?.toLowerCase() ?? '';
-      if (!params.has(name)) params.set(name, (param[2] ?? param[3] ?? '').replace(/\\(.)/g, '$1'));
-    }
-    if (!params.get('rel')?.toLowerCase().split(/\s+/).includes('next')) continue;
-    const anchor = params.get('anchor');
-    if (anchor !== undefined && (!URL.canParse(anchor, url) || new URL(anchor, url).href !== url))
-      continue;
-    const target = link[1];
-    if (target !== undefined && URL.canParse(target, url)) pages.push(new URL(target, url).href);
-  }
-  return pages;
-}
-
 /** Evict every cached cursor variant; cached Link chains associate pages with their listing. */
 async function evictListingPages(
   container: string,
@@ -357,8 +337,12 @@ async function evictListingPages(
     const page = pending[index];
     if (!page) continue;
     for (const record of page.records) {
-      const cached = await deps.cache.match(keyRequest(page.url, record.varyKey), IGNORE_VARY);
-      for (const next of nextPages(page.url, cached?.headers.get('link') ?? null)) {
+      // Legacy records predate nextPages; their cached headers remain usable.
+      const cached = record.nextPages
+        ? undefined
+        : await deps.cache.match(keyRequest(page.url, record.varyKey), IGNORE_VARY);
+      for (const next of record.nextPages ??
+        nextPages(page.url, cached?.headers.get('link') ?? null)) {
         if (seen.has(next) || !deps.storage.isWithinStorage(next)) continue;
         seen.add(next);
         pending.push({ url: next, records: await deps.meta.getByUrl(next) });

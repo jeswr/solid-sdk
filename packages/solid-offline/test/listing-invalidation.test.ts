@@ -86,11 +86,23 @@ async function harness() {
     offline: () => {
       online = false;
     },
+    online: () => {
+      online = true;
+    },
   };
 }
 
 describe('paginated listing invalidation', () => {
-  it.each(['Add', 'Remove'] as const)('evicts all cached cursor pages on %s', async (type) => {
+  it.each([
+    { type: 'Add', evicted: false, legacy: false },
+    { type: 'Remove', evicted: false, legacy: false },
+    { type: 'Remove', evicted: true, legacy: false },
+    { type: 'Remove', evicted: false, legacy: true },
+  ] as const)('evicts cursor pages on $type (evicted=$evicted, legacy=$legacy)', async ({
+    type,
+    evicted,
+    legacy,
+  }) => {
     const h = await harness();
     h.change();
     const second = (await h.deps.meta.getByUrl(SECOND))[0];
@@ -112,6 +124,19 @@ describe('paginated listing invalidation', () => {
     last.headers.append('link', `<${unrelated}>; rel=next; anchor="${ROOT}other"`);
     last.headers.append('link', `<${foreign}>; rel=next`);
     h.deps.cache.seed(keyRequest(THIRD, third.varyKey), last);
+    if (evicted) {
+      expect(second.nextPages).toEqual([THIRD]);
+      await h.deps.cache.delete(keyRequest(SECOND, second.varyKey));
+      await h.deps.cache.delete(keyRequest(SECOND, extra.varyKey));
+    }
+    if (legacy) {
+      for (const url of [CONTAINER, SECOND]) {
+        for (const record of await h.deps.meta.getByUrl(url)) {
+          delete record.nextPages;
+          await h.deps.meta.put(record);
+        }
+      }
+    }
     h.requests.length = 0;
 
     expect(await handleNotification({ type, object: REMOVED, target: CONTAINER }, h.deps)).toEqual({
@@ -135,5 +160,11 @@ describe('paginated listing invalidation', () => {
       for await (const entry of h.storage.listAll(CONTAINER)) after.push(entry.url);
     }).rejects.toThrow(); // An evicted page is an offline miss, never stale members.
     expect(after).toEqual([KEPT]);
+
+    h.online();
+    const refreshed: string[] = [];
+    for await (const entry of h.storage.listAll(CONTAINER, { revalidate: true }))
+      refreshed.push(entry.url);
+    expect(refreshed).toEqual([KEPT]);
   });
 });

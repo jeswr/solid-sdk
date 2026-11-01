@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Shared byte-cache ↔ metadata COHERENCE primitives (internal).
  *
@@ -45,6 +46,7 @@ import {
   type RequestLike,
   type ResponseLike,
 } from './cache-policy.js';
+import { nextPages } from './listing-pages.js';
 import type { CacheMetadata } from './types.js';
 
 /**
@@ -82,6 +84,7 @@ export function metadataFromResponse(
   negative: boolean,
   lastState?: string,
 ): CacheMetadata {
+  const pages = nextPages(req.url, res.headers.get('link'));
   return {
     key: computeCacheKey(req, res),
     url: req.url,
@@ -92,6 +95,7 @@ export function metadataFromResponse(
     vary: res.headers.get('vary') ?? undefined,
     aclStatus: aclStatusFor(res.status),
     status: res.status,
+    ...(pages.length ? { nextPages: pages } : {}),
     ...(lastState !== undefined ? { lastState } : {}),
     ...(negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}),
   };

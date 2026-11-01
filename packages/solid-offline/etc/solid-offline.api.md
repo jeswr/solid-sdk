@@ -464,6 +464,8 @@ interface CacheMetadata {
     fetchedAt: number;
     /** The response `Vary` header value, verbatim. */
     vary?: string;
+    /** Next cursor URLs belonging to this listing, retained even if its bytes are evicted. */
+    nextPages?: string[];
     /**
      * ACL outcome marker for no-leak parity:
      * 'ok' (2xx) | 'forbidden' (403) | 'not-found' (404).
