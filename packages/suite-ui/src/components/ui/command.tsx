@@ -2,7 +2,7 @@
 // Adapted from shadcn/ui (MIT), new-york-v4 registry. See THIRD_PARTY_NOTICES.md.
 "use client";
 
-import { Command as CommandPrimitive } from "cmdk";
+import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { SearchIcon } from "lucide-react";
 import type * as React from "react";
 import { cn } from "../../lib/utils.js";
@@ -111,15 +111,22 @@ function CommandGroup({
   );
 }
 
+// cmdk's Separator hard-codes role="separator", which a listbox may not contain
+// (axe aria-required-children, critical). Same markup and search hiding, presentational role.
 function CommandSeparator({
   className,
+  alwaysRender = false,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
+  const searching = useCommandState((state) => state.search !== "");
+  if (searching && !alwaysRender) return null;
   return (
-    <CommandPrimitive.Separator
+    <div
+      {...props}
+      role="none"
+      cmdk-separator=""
       data-slot="command-separator"
       className={cn("-mx-1 h-px bg-border", className)}
-      {...props}
     />
   );
 }
