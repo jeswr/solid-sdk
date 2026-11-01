@@ -58,13 +58,13 @@ export function CollectionNotice({ rows }: { rows: readonly unknown[] }) {
   const metadata = rows as unknown as CollectionMetadata;
   if (!isComplete(rows)) return <p role="alert">{metadata.incompleteMessage}</p>;
   if (!isTruncated(rows)) return null;
-  const shown = Math.min(rows.length, MEMBER_LIMIT);
+  const shown = Math.min(rows.filter((row) => isLoaded(row as Row<unknown>)).length, MEMBER_LIMIT);
   return (
     <p role="status">
       {metadata.newest
         ? `Showing the newest ${shown}`
         : metadata.totalIsLowerBound
-          ? `Showing ${shown}. There are more records than this app checks at once.`
+          ? `Showing ${shown}. Some accounts weren't checked, so there may be more.`
           : `Showing ${shown} of ${metadata.total}`}
     </p>
   );

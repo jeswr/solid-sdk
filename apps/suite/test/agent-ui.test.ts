@@ -514,7 +514,7 @@ it("never presents a lower-bound total as exact", async () => {
     }),
   );
   expect(view.host.textContent).toContain(
-    "Showing 0. There are more records than this app checks at once.",
+    "Showing 0. Some accounts weren't checked, so there may be more.",
   );
   expect(view.host.textContent).not.toContain("of 200");
   await view.unmount();
