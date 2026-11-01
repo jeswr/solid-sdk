@@ -26,6 +26,7 @@ export default defineConfig({
         "src/apps/health/lib/fhir/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
+        "src/apps/sheets/lib/autosave.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/docs/lib/find/**/*.ts",
