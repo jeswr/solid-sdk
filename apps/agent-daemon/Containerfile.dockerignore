@@ -23,5 +23,8 @@
 **/*.pem
 **/*.key
 **/credentials
+# Workspace source modules named credentials hold code, not secrets.
+!packages/*/src/credentials/
+!packages/*/src/credentials/**
 **/grants
 **/providers/*.json
