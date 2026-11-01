@@ -86,6 +86,8 @@ export function createDemoNotificationSource(now = new Date()): NotificationSour
       return () => listeners.delete(listener);
     },
     async markRead(ids) {
+      // Announce only real changes; a no-op write must not wake every listener.
+      if (!items.some((item) => ids.includes(item.id) && !item.read)) return;
       items = items.map((item) => (ids.includes(item.id) ? { ...item, read: true } : item));
       changed();
     },

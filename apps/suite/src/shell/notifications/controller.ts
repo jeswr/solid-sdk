@@ -40,7 +40,8 @@ export function createNotificationsController(
     snapshot = { items, unread: unreadCount(items), loading, error };
     for (const listener of listeners) listener();
   };
-  const refresh = async () => {
+  /** Resolves true only when this listing finished and was not superseded. */
+  const refresh = async (): Promise<boolean> => {
     const current = ++revision;
     request?.abort();
     const controller = new AbortController();
@@ -49,7 +50,7 @@ export function createNotificationsController(
     const responses = await Promise.allSettled(
       sources.map((source) => source.list(controller.signal)),
     );
-    if (controller.signal.aborted || current !== revision) return;
+    if (controller.signal.aborted || current !== revision) return false;
     let failed = false;
     responses.forEach((response, index) => {
       const source = sources[index];
@@ -64,6 +65,7 @@ export function createNotificationsController(
     }
     // A failed initial load must not turn the first successful listing into desktop spam.
     if (!failed) initialized = true;
+    return true;
   };
   const markRead = async (ids: string[]) => {
     overlay = markNotificationsRead(overlay, ids);
@@ -89,7 +91,9 @@ export function createNotificationsController(
       };
     },
     refresh: async () => {
-      await refresh();
+      // A superseded refresh must not retry: its write can announce a change, which starts
+      // another refresh that supersedes this one again (a microtask loop that hangs the page).
+      if (!(await refresh())) return;
       // Retry pending read writes too, including sources that previously failed.
       if (overlay.read.size) await markRead([...overlay.read]);
     },

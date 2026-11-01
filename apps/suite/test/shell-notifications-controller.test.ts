@@ -119,3 +119,31 @@ it("announces only new unread events after the initial listing", async () => {
   await controller.refresh();
   expect(onNew).toHaveBeenCalledTimes(3);
 });
+it("a superseded refresh does not retry pending reads", async () => {
+  const item = { ...demoNotifications()[0]!, read: false };
+  const deferred: ((items: SuiteNotification[]) => void)[] = [];
+  let slow = false;
+  const markRead = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined);
+  const source: NotificationSource = {
+    id: "live",
+    list: () => (slow ? new Promise((resolve) => deferred.push(resolve)) : Promise.resolve([item])),
+    markRead,
+  };
+  const controller = createNotificationsController([source]);
+  await controller.refresh();
+  // A failed write leaves the read pending, so a finished refresh would retry it.
+  await controller.markRead(item.id);
+  expect(markRead).toHaveBeenCalledTimes(1);
+  slow = true;
+  const first = controller.refresh();
+  const second = controller.refresh();
+  // The first listing returns after the second started: superseded, so it must not write
+  // (its write could announce a change that starts yet another refresh, endlessly).
+  deferred[0]?.([item]);
+  await first;
+  expect(markRead).toHaveBeenCalledTimes(1);
+  deferred[1]?.([item]);
+  await second;
+  expect(markRead).toHaveBeenCalledTimes(2);
+  controller.stop();
+});
