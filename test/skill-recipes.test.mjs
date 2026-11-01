@@ -402,8 +402,8 @@ describe("reviewed recipe failure boundaries", () => {
       pollIntervalMs: 30_000,
     });
     expect(reconcile).toHaveBeenCalledWith(new Date(0));
-    handlers.get("change")({ object: hotResource, raw: { untrusted: true } });
-    expect(invalidate).toHaveBeenCalledWith(hotResource);
+    handlers.get("change")({ type: "Update", object: hotResource, raw: { untrusted: true } });
+    expect(invalidate.mock.calls).toEqual([[hotResource]]);
     const since = new Date("2026-10-01T00:00:00Z");
     handlers.get("resync")(since);
     await vi.waitFor(() => expect(reconcile).toHaveBeenLastCalledWith(since));
@@ -412,6 +412,45 @@ describe("reviewed recipe failure boundaries", () => {
     expect(subscription.close).toHaveBeenCalledOnce();
     expect(handlers.size).toBe(0);
     expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Create", { target: "incoming/" }],
+    ["Delete", { origin: "outgoing/" }],
+    ["Move", { target: "incoming/", origin: "outgoing/" }],
+    ["Add", { target: "incoming/" }],
+    ["Remove", { origin: "outgoing/" }],
+  ])("invalidates affected collections for %s with or without container hints", async (type, hints) => {
+    const { watch, handlers, storage, hotResource, invalidate, reportError } =
+      await notificationRecipe("live");
+    const reconcile = vi.fn();
+    const cleanup = await watch(reconcile);
+    const containers = Object.fromEntries(
+      Object.entries(hints).map(([field, path]) => [field, `${storage.root}${path}`]),
+    );
+    handlers.get("change")({
+      type,
+      object: hotResource,
+      ...containers,
+      raw: { target: "https://foreign.example/", origin: "https://foreign.example/" },
+    });
+    expect(invalidate.mock.calls).toEqual(
+      [hotResource, storage.root, ...Object.values(containers)].map((url) => [url]),
+    );
+    invalidate.mockClear();
+    handlers.get("change")({ type, object: hotResource });
+    expect(invalidate.mock.calls).toEqual([[hotResource], [storage.root]]);
+    invalidate.mockClear();
+    handlers.get("change")({
+      type,
+      object: storage.root,
+      target: storage.root,
+      origin: storage.root,
+    });
+    expect(invalidate.mock.calls).toEqual([[storage.root]]);
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
   });
 
   it("reconciles changes during push setup on first live without waiting for resync", async () => {

@@ -30,7 +30,15 @@ export async function watchCollection(
     hot: [hotResource],
     pollIntervalMs: 30_000,
   });
-  const stopChanges = subscription.on('change', event => invalidate(event.object));
+  const stopChanges = subscription.on('change', event => {
+    const affected = new Set([event.object]);
+    if (event.type !== 'Update') {
+      affected.add(storage.root);
+      if (event.target) affected.add(event.target);
+      if (event.origin) affected.add(event.origin);
+    }
+    for (const url of affected) invalidate(url);
+  });
   let closed = false;
   let closing: Promise<void> | undefined;
   let reconciliation = Promise.resolve();
@@ -78,6 +86,11 @@ export async function watchCollection(
   return close;
 }
 ```
+
+Membership changes (`Create`, `Delete`, `Move`, `Add`, `Remove`) invalidate the object,
+normalized `target`/`origin` containers and the watched root. The root covers missing
+container hints; URL-keyed listings must refresh even when container ETags are absent.
+`Update` invalidates its object. Each affected URL is invalidated once per event.
 
 Own the returned async cleanup in the application lifecycle, including logout. `subscribe`
 also accepts an abort signal. Alternatively iterate the subscription with `for await`; ending

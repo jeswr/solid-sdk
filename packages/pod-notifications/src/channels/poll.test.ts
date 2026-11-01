@@ -128,26 +128,29 @@ test("setup resync waits for a complete baseline and emits only once after a fai
   expect(timers.pending).toBe(0);
 });
 
-test("the recipe reconciles a change absorbed by the polling baseline without another mutation", async () => {
+function notificationRecipe(timers: FakeTimers) {
   const markdown = readFileSync(new URL("../../SKILL.md", import.meta.url), "utf8");
   const code = /```ts\n([\s\S]*?)```/.exec(markdown)?.[1];
   if (!code) throw new Error("Missing notification recipe");
   const { outputText } = ts.transpileModule(code, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   });
+  return new Function("require", "exports", `${outputText}\nreturn exports.watchCollection;`)(
+    (specifier: string) => {
+      expect(specifier).toBe("@jeswr/pod-notifications");
+      return {
+        createNotifications: (deps: NotificationsDependencies) =>
+          createNotifications({ ...deps, timers, now: timers.now }),
+      };
+    },
+    {},
+  );
+}
+
+test("the recipe reconciles a change absorbed by the polling baseline without another mutation", async () => {
   const timers = new FakeTimers(100);
   const storage = createMemoryStorage();
-  const watchCollection = new Function(
-    "require",
-    "exports",
-    `${outputText}\nreturn exports.watchCollection;`,
-  )((specifier: string) => {
-    expect(specifier).toBe("@jeswr/pod-notifications");
-    return {
-      createNotifications: (deps: NotificationsDependencies) =>
-        createNotifications({ ...deps, timers, now: timers.now }),
-    };
-  }, {});
+  const watchCollection = notificationRecipe(timers);
   let cached: string[] = [];
   const reconcile = vi.fn(async () => {
     const members = [];
@@ -173,6 +176,65 @@ test("the recipe reconciles a change absorbed by the polling baseline without an
   await timers.advanceBy(0);
   await vi.waitFor(() => expect(cached).toEqual([child.url]));
   expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
+  await timers.advanceBy(30_000);
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(reconcile).toHaveBeenCalledTimes(2);
+  expect(reportError).not.toHaveBeenCalled();
+  await cleanup();
+  expect(timers.pending).toBe(0);
+});
+
+test("the recipe invalidates URL-keyed listings on membership changes without container ETags", async () => {
+  const timers = new FakeTimers(100);
+  const storage = createMemoryStorage();
+  const head = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation(async (...args) => ({
+    ...(await head(...args)),
+    etag: null,
+  }));
+  const cache = new Map<string, string[]>();
+  const readListing = async (url: string) => {
+    if (!cache.has(url)) {
+      const members = [];
+      for await (const entry of storage.listAll(url)) members.push(entry.url);
+      cache.set(url, members);
+    }
+    return cache.get(url);
+  };
+  const reconcile = vi.fn(async () => {
+    cache.delete(storage.root);
+    await readListing(storage.root);
+  });
+  const invalidate = vi.fn((url: string) => cache.delete(url));
+  const reportError = vi.fn();
+  const cleanup = await notificationRecipe(timers)(
+    vi.fn(),
+    storage,
+    `${storage.root}missing`,
+    invalidate,
+    reconcile,
+    reportError,
+  );
+  await timers.advanceBy(0);
+  await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+  expect(await readListing(storage.root)).toEqual([]);
+  const child = await storage.create(storage.root, "new", {
+    contentType: "text/plain",
+    name: "new",
+  });
+  cache.set(child.url, []);
+  await timers.advanceBy(30_000);
+  expect(invalidate.mock.calls).toEqual([[child.url], [storage.root]]);
+  expect(cache.has(child.url)).toBe(false);
+  expect(cache.has(storage.root)).toBe(false);
+  expect(await readListing(storage.root)).toEqual([child.url]);
+  invalidate.mockClear();
+  await storage.delete(child.url, { ifMatch: child.etag });
+  await timers.advanceBy(30_000);
+  expect(invalidate.mock.calls).toEqual([[child.url], [storage.root]]);
+  expect(cache.has(storage.root)).toBe(false);
+  expect(await readListing(storage.root)).toEqual([]);
+  invalidate.mockClear();
   await timers.advanceBy(30_000);
   expect(invalidate).not.toHaveBeenCalled();
   expect(reconcile).toHaveBeenCalledTimes(2);
