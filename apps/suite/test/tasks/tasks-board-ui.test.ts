@@ -270,3 +270,96 @@ describe("keyboard reorder and multi-select", () => {
     expect(host.querySelector(".tsk-bulk")).toBeNull();
   });
 });
+
+describe("touch selection and board completion", () => {
+  function touch(target: Element, type: string, point?: { x: number; y: number }) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "touches", {
+      value: point ? [{ clientX: point.x, clientY: point.y }] : [],
+    });
+    target.dispatchEvent(event);
+  }
+
+  it("selects a row from its ⋯ menu, the explicit equivalent of a long-press", async () => {
+    await project(["a", "b"]);
+    const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));
+    const trigger = row(host, "b").querySelector<HTMLElement>(
+      "button[aria-label=\"Actions for 'b'\"]",
+    ) as HTMLElement;
+    await key(trigger, "Enter");
+    await act(async () => byText('[role="menuitem"]', "Select").click());
+    expect(host.querySelector(".tsk-bulk-count")?.textContent).toBe("1 selected");
+    expect(row(host, "b").querySelector(".tsk-select")?.getAttribute("aria-pressed")).toBe("true");
+    await key(trigger, "Enter");
+    await act(async () => byText('[role="menuitem"]', "Deselect").click());
+    expect(host.querySelector(".tsk-bulk")).toBeNull();
+  });
+
+  it("long-presses an item that cannot be dragged to select it, and cancels on movement", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await project(["a"]);
+      const onLongPress = vi.fn();
+      const { useTaskDrag } = await import("../../src/apps/tasks/components/dnd/use-task-drag");
+      function Probe() {
+        const drag = useTaskDrag(viewOf("a"), undefined, { onLongPress });
+        return h("div", { "data-probe": "", ...drag.touch });
+      }
+      const { host } = await mount(h(Probe));
+      const probe = host.querySelector("[data-probe]") as HTMLElement;
+      await act(() => touch(probe, "touchstart", { x: 10, y: 10 }));
+      await act(() => touch(probe, "touchmove", { x: 30, y: 10 }));
+      await act(() => vi.advanceTimersByTime(400));
+      expect(onLongPress).not.toHaveBeenCalled();
+      await act(() => touch(probe, "touchstart", { x: 10, y: 10 }));
+      await act(() => touch(probe, "touchmove", { x: 12, y: 11 }));
+      await act(() => vi.advanceTimersByTime(300));
+      expect(onLongPress).toHaveBeenCalledOnce();
+      await act(() => touch(probe, "touchstart", { x: 10, y: 10 }));
+      await act(() => touch(probe, "touchend"));
+      await act(() => vi.advanceTimersByTime(400));
+      expect(onLongPress).toHaveBeenCalledOnce();
+      const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+      Object.defineProperty(menu, "pointerType", { value: "touch" });
+      probe.dispatchEvent(menu);
+      expect(menu.defaultPrevented).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats a touch drag released in place as a long-press", async () => {
+    const { isStationaryTouch } = await import("../../src/apps/tasks/components/dnd/tasks-dnd");
+    const touchStart = Object.assign(new Event("touchstart"), { touches: [] });
+    expect(isStationaryTouch({ activatorEvent: touchStart, delta: { x: 3, y: 4 } })).toBe(true);
+    expect(isStationaryTouch({ activatorEvent: touchStart, delta: { x: 6, y: 8 } })).toBe(false);
+    expect(
+      isStationaryTouch({ activatorEvent: new Event("pointerdown"), delta: { x: 0, y: 0 } }),
+    ).toBe(false);
+  });
+
+  it("completes a board card from its circle with an Undo toast", async () => {
+    const { inbox, store } = await project(["Pay rent"]);
+    const { host } = await mount(h("main", null, h(BoardView, { projectUrl: inbox.url })));
+    const check = host.querySelector<HTMLInputElement>(
+      ".tsk-card input[aria-label=\"Complete 'Pay rent'\"]",
+    ) as HTMLInputElement;
+    expect(check.type).toBe("checkbox");
+    await act(async () => check.click());
+    await act(async () => {
+      await vi.waitFor(() => expect(toast.success).toHaveBeenCalled(), { timeout: 3000 });
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      "Completed 'Pay rent'",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }),
+    );
+    const url = viewOf("Pay rent").url;
+    expect((await store.readTask(url)).task.state).toBe("closed");
+    const options = vi.mocked(toast.success).mock.calls.at(-1)?.[1] as unknown as {
+      action: { onClick: () => void };
+    };
+    await act(async () => options.action.onClick());
+    await settle();
+    expect((await store.readTask(url)).task.state).toBe("open");
+  });
+});

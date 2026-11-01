@@ -1,48 +1,67 @@
 /* AUTHORED-BY Claude Opus 5.5 */
-/* Selection circles (06-tasks §4.5): hover-revealed on fine pointers, a column once selecting. */
+/*
+ * Selection checkbox (06-tasks §4.5): an 18px rounded square inside a row-height hit area, set
+ * apart from the round completion check. Fine pointers reveal it on row hover/focus; touch shows
+ * it once a long-press (or the ⋯ menu's Select) starts selecting.
+ */
 .tsk-select-cell {
   display: none;
   flex-shrink: 0;
   padding: 0;
 }
 .tsk-row[data-selecting] .tsk-select-cell {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: calc(var(--row-h, 44px) - 1px);
+  display: block;
 }
 .tsk-select {
   display: grid;
-  place-content: center;
+  place-items: center;
   box-sizing: border-box;
-  width: 20px;
-  height: 20px;
-  margin: 0;
+  width: 32px;
+  height: calc(var(--row-h, 44px) - 1px);
+  min-height: 0;
+  /* The completion circle's 12px gap less 4px: about 19px between the two visuals. */
+  margin: 0 -4px 0 0;
   padding: 0;
-  border: 2px solid var(--border-strong);
-  border-radius: var(--radius-full);
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--primary-foreground);
   cursor: pointer;
 }
-.tsk-select[aria-pressed="true"] {
+.tsk-select::before {
+  content: "";
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.tsk-select[aria-pressed="true"]::before {
   border-color: var(--primary);
   background: var(--primary);
 }
 .tsk-select[aria-pressed="true"]::after {
   content: "";
-  width: 6px;
-  height: 10px;
+  grid-area: 1 / 1;
+  width: 5px;
+  height: 9px;
   margin-top: -2px;
-  border: solid var(--primary-foreground);
+  border: solid currentColor;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+.tsk-select::before,
+.tsk-select::after {
+  grid-area: 1 / 1;
+}
+.tsk-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -4px;
+}
 @media (hover: hover) and (pointer: fine) {
   .tsk-row .tsk-select-cell {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: calc(var(--row-h, 44px) - 1px);
+    display: block;
     opacity: 0;
   }
   .tsk-row:hover .tsk-select-cell,
@@ -52,8 +71,9 @@
   }
 }
 @media (pointer: coarse) {
-  .tsk-row[data-selecting] .tsk-select-cell {
+  .tsk-select {
     width: 44px;
+    height: 44px;
   }
 }
 
@@ -118,6 +138,10 @@
   color: var(--foreground-muted);
 }
 @media (max-width: 767px) {
+  /* Keep the last rows reachable above the fixed toolbar. */
+  .tsk-content:has(.tsk-bulk) {
+    padding-bottom: 96px;
+  }
   .tsk-bulk {
     position: fixed;
     inset: auto 8px calc(var(--tsk-tabbar-h, 56px) + env(safe-area-inset-bottom, 0px) + 8px);

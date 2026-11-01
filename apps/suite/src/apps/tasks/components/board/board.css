@@ -97,7 +97,8 @@
   text-decoration: underline;
 }
 .tsk-card .tsk-meta {
-  padding-inline-start: 28px;
+  /* Under the title: past the grip (24px) and the completion circle (24px) and their gaps. */
+  padding-inline-start: 56px;
 }
 .tsk-board-column .tsk-add-row {
   margin: 0;
@@ -113,11 +114,36 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.tsk-card .tsk-check-target {
+  margin-top: 4px;
+}
+.tsk-card[data-closed] .tsk-card-title {
+  color: var(--foreground-muted);
+  text-decoration: line-through;
+}
+.tsk-card[data-completing] {
+  animation: tsk-complete-fade 400ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tsk-card[data-completing] {
+    animation: none;
+  }
+}
 @media (pointer: coarse) {
-  .tsk-card .tsk-card-handle,
+  /* Touch drags by long-pressing the card itself; the grip is for mice and the keyboard. */
+  .tsk-card .tsk-card-handle {
+    display: none;
+  }
+  /* The card is the touch target; the title keeps its line box so the circle lines up with it. */
+  .tsk-card-title {
+    min-height: 0;
+  }
   .tsk-card-top > button {
     min-width: 44px;
     min-height: 44px;
+  }
+  .tsk-card .tsk-meta {
+    padding-inline-start: 28px;
   }
 }
 @media (min-width: 1024px) {

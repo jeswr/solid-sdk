@@ -3,13 +3,60 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   type KeyboardEventHandler,
+  type MouseEvent,
   type PointerEventHandler,
+  type TouchEvent,
   type TouchEventHandler,
   useCallback,
+  useEffect,
+  useRef,
 } from "react";
 import type { DropContainer } from "../../lib/dnd/types";
 import type { TaskView } from "../../lib/views/types";
-import { type DragData, type DropData, useDropHint } from "./tasks-dnd";
+import {
+  type DragData,
+  type DropData,
+  LONG_PRESS_MS,
+  LONG_PRESS_SLOP,
+  useDropHint,
+} from "./tasks-dnd";
+
+/**
+ * Touch long-press without dnd-kit, for items that cannot be dragged (label and completed views,
+ * pending rows): hold still for the delay to fire, move or lift early to cancel.
+ */
+function useLongPress(onLongPress: (() => void) | undefined) {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const origin = useRef({ x: 0, y: 0 });
+  const cancel = useCallback(() => clearTimeout(timer.current), []);
+  useEffect(() => cancel, [cancel]);
+  if (!onLongPress) return undefined;
+  return {
+    onTouchStart: (event: TouchEvent) => {
+      const touch = event.touches[0];
+      cancel();
+      if (!touch || event.touches.length > 1) return;
+      origin.current = { x: touch.clientX, y: touch.clientY };
+      timer.current = setTimeout(onLongPress, LONG_PRESS_MS);
+    },
+    onTouchMove: (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (
+        touch &&
+        Math.hypot(touch.clientX - origin.current.x, touch.clientY - origin.current.y) >
+          LONG_PRESS_SLOP
+      )
+        cancel();
+    },
+    onTouchEnd: cancel,
+    onTouchCancel: cancel,
+  };
+}
+
+/** A touch long-press must not open the browser's context menu (Android) over the item. */
+const noTouchMenu = (event: MouseEvent) => {
+  if ((event.nativeEvent as PointerEvent).pointerType === "touch") event.preventDefault();
+};
 
 /**
  * A task row or board card as both draggable and drop target. Fine pointers
@@ -19,12 +66,16 @@ import { type DragData, type DropData, useDropHint } from "./tasks-dnd";
 export function useTaskDrag(
   task: TaskView,
   container: DropContainer | undefined,
-  { disabled = false, allowChild = false }: { disabled?: boolean; allowChild?: boolean } = {},
+  {
+    disabled = false,
+    allowChild = false,
+    onLongPress,
+  }: { disabled?: boolean; allowChild?: boolean; onLongPress?: (() => void) | undefined } = {},
 ) {
   const id = `task:${task.url}`;
   const drag = useDraggable({
     id,
-    data: container ? ({ kind: "task", task, container } satisfies DragData) : {},
+    data: container ? ({ kind: "task", task, container, onLongPress } satisfies DragData) : {},
     disabled: disabled || !container,
   });
   const drop = useDroppable({
@@ -45,6 +96,7 @@ export function useTaskDrag(
     [setDragNode, setDropNode],
   );
   const enabled = Boolean(container) && !disabled;
+  const fallback = useLongPress(enabled ? undefined : onLongPress);
   // dnd-kit types its activator map loosely; these are the three sensors' React events.
   const listeners = drag.listeners as
     | {
@@ -67,8 +119,13 @@ export function useTaskDrag(
           onKeyDown: listeners?.onKeyDown,
         }
       : undefined,
-    /** Spread on the item itself: touch long-press anywhere on it. */
-    touch: enabled ? { onTouchStart: listeners?.onTouchStart } : undefined,
+    /**
+     * Spread on the item itself: touch long-press anywhere on it drags once it moves, and selects
+     * (onLongPress) when released in place.
+     */
+    touch: enabled
+      ? { onTouchStart: listeners?.onTouchStart, onContextMenu: noTouchMenu }
+      : fallback && { ...fallback, onContextMenu: noTouchMenu },
     /** Board cards: fine pointers may also grab the whole card (distance-activated). */
     pointer: enabled ? { onPointerDown: listeners?.onPointerDown } : undefined,
   };

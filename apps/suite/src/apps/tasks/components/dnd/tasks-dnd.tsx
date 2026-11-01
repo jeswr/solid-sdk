@@ -53,6 +53,21 @@ export interface DragData {
   kind: "task";
   task: TaskView;
   container: DropContainer;
+  /** A touch long-press released without moving selects instead of dropping. */
+  onLongPress?: (() => void) | undefined;
+}
+/** The touch long-press delay: the TouchSensor's activation and the selection fallback. */
+export const LONG_PRESS_MS = 250;
+/** How far (px) a touch drag may wander and still count as a long-press. */
+export const LONG_PRESS_SLOP = 8;
+/** A touch-activated drag that ended where it started: a long-press, not a move. */
+export function isStationaryTouch(event: {
+  activatorEvent: Event;
+  delta: { x: number; y: number };
+}) {
+  return (
+    "touches" in event.activatorEvent && Math.hypot(event.delta.x, event.delta.y) < LONG_PRESS_SLOP
+  );
 }
 /** Data carried by droppables; rows/cards add their container and nesting rule. */
 export type DropData =
@@ -183,7 +198,7 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const plan = useRef<DropPlan>({ kind: "none" });
   const sensors = useSensors(
     useSensor(FinePointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: LONG_PRESS_MS, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const projects = () => projectNames(tasks.projects);
@@ -245,6 +260,10 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           track(event);
           const task = taskOf(event.active);
           reset();
+          if (isStationaryTouch(event)) {
+            target.current = undefined;
+            (event.active.data.current as DragData | undefined)?.onLongPress?.();
+          }
           if (!task || !target.current) {
             plan.current = { kind: "none" };
             return;

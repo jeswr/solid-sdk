@@ -19,14 +19,7 @@ import {
 import { Bell, CalendarDays, Ellipsis, GripVertical, Pencil, Repeat2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DropContainer } from "../lib/dnd/types";
 import { formatDue, isOverdue } from "../lib/format/due";
@@ -36,7 +29,6 @@ import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
 import { completeTasks } from "../state/bulk-actions";
 import { useNow } from "../state/clock";
-import { completionVisuals } from "../state/completion-visuals";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
@@ -44,6 +36,7 @@ import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { useTaskDrag } from "./dnd/use-task-drag";
 import { MoveMenuItems, useTaskMoves } from "./move-menu";
 import { RowProperties } from "./row-properties";
+import { TaskCheck, useCompleting } from "./task-check";
 import { ReschedulePopover } from "./views/reschedule-popover";
 import "./views/views.css";
 import "./selection.css";
@@ -65,12 +58,7 @@ export function TaskRow({
   container,
 }: TaskRowProps) {
   const tasks = useTasks();
-  const visuals = completionVisuals(tasks.cache);
-  const completing = useSyncExternalStore(
-    visuals.subscribe,
-    visuals.getSnapshot,
-    visuals.getSnapshot,
-  ).has(task.url);
+  const completing = useCompleting(task);
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
@@ -105,9 +93,24 @@ export function TaskRow({
   const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const now = useNow();
   const moves = useTaskMoves(task);
+  const toggleSelected = () => {
+    if (!focus) return;
+    focus.toggleSelection(task.url);
+    focus.announce(
+      focus.selection.has(task.url) ? `Deselected '${task.title}'` : `Selected '${task.title}'`,
+    );
+  };
+  /** A long-press selects; the click its release may fire must not open the task. */
+  const longPressed = useRef(0);
   const drag = useTaskDrag(task, container, {
     disabled: pending || completing || editing,
     allowChild: container?.kind === "section",
+    onLongPress: focus
+      ? () => {
+          longPressed.current = Date.now();
+          toggleSelected();
+        }
+      : undefined,
   });
   const { ref: dragRef } = drag;
   const rowRef = useCallback(
@@ -147,13 +150,7 @@ export function TaskRow({
     if (command.type === "clear") return focus?.clearSelection();
     if (command.type === "selectAll") return focus?.selectAll();
     if (command.type === "extend") return focus?.extendSelection(task.url, command.direction);
-    if (command.type === "select") {
-      focus?.toggleSelection(task.url);
-      focus?.announce(
-        focus.selection.has(task.url) ? `Deselected '${task.title}'` : `Selected '${task.title}'`,
-      );
-      return;
-    }
+    if (command.type === "select") return toggleSelected();
     if (command.type === "menu") return setMenuOpen(true);
     if (pending) return;
     if (command.type === "complete") {
@@ -198,6 +195,12 @@ export function TaskRow({
       aria-selected={selected}
       ref={rowRef}
       onKeyDown={onKeyDown}
+      onClickCapture={(event) => {
+        if (Date.now() - longPressed.current > 700) return;
+        longPressed.current = 0;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       {...drag.touch}
     >
       <td className="tsk-drag-cell">
@@ -227,22 +230,7 @@ export function TaskRow({
         />
       </td>
       <td className="tsk-completion-cell">
-        <label className="tsk-check-target">
-          <input
-            className="tsk-check"
-            data-priority={task.priority}
-            type="checkbox"
-            tabIndex={-1}
-            checked={task.state === "closed" || completing}
-            disabled={pending || completing}
-            aria-label={`${task.state === "closed" ? "Reopen" : "Complete"} '${task.title}'`}
-            onChange={() => {
-              void (task.state === "closed"
-                ? reopenTask(task, tasks)
-                : completeTask(task, tasks, { animate: true }));
-            }}
-          />
-        </label>
+        <TaskCheck task={task} pending={pending} completing={completing} />
       </td>
       <td className="tsk-row-body">
         {editing ? (
@@ -439,6 +427,11 @@ export function TaskRow({
                 >
                   Edit title
                 </DropdownMenuItem>
+                {focus && (
+                  <DropdownMenuItem onSelect={toggleSelected}>
+                    {selected ? "Deselect" : "Select"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   disabled={pending || completing}
                   onSelect={() => setPanel("labels")}

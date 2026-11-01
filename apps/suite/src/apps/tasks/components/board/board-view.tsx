@@ -31,6 +31,7 @@ import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
 import { useTaskDrag } from "../dnd/use-task-drag";
 import { MoveMenuItems } from "../move-menu";
+import { TaskCheck, useCompleting } from "../task-check";
 import { SectionEnd, SectionHeader } from "../task-list";
 import { ProjectError } from "../views/project-error";
 import "./board.css";
@@ -49,10 +50,11 @@ function BoardCard({
   const pathname = usePathname();
   const params = useSearchParams();
   const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
+  const completing = useCompleting(task);
   const drag = useTaskDrag(
     task,
     { kind: "section", projectUrl: project.url, sectionId },
-    { disabled: pending },
+    { disabled: pending || completing },
   );
   const query = new URLSearchParams(params.toString());
   query.set("task", encodeRef(task.url));
@@ -68,6 +70,8 @@ function BoardCard({
       data-priority={task.priority}
       data-dragging={drag.dragging || undefined}
       data-drop={drag.hint}
+      data-closed={task.state === "closed" || completing || undefined}
+      data-completing={completing || undefined}
       {...drag.pointer}
       {...drag.touch}
     >
@@ -82,6 +86,7 @@ function BoardCard({
             <GripVertical size={16} aria-hidden="true" />
           </button>
         )}
+        <TaskCheck task={task} pending={pending} completing={completing} tabIndex={0} />
         <Link className="tsk-card-title" href={href} draggable={false}>
           {task.title}
         </Link>
@@ -95,23 +100,25 @@ function BoardCard({
             <DropdownMenuItem asChild>
               <Link href={href}>Edit</Link>
             </DropdownMenuItem>
+            {task.state === "open" && (
+              <DropdownMenuItem
+                disabled={pending || completing}
+                onSelect={() => {
+                  void completeTask(task, tasks, { animate: true });
+                }}
+              >
+                Complete
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
-              disabled={pending}
-              onSelect={() => {
-                void completeTask(task, tasks);
-              }}
-            >
-              Complete
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={pending}
+              disabled={pending || completing}
               onSelect={() => {
                 void deleteTask(task, tasks);
               }}
             >
               Delete
             </DropdownMenuItem>
-            <MoveMenuItems task={task} disabled={pending} nesting={false} />
+            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
