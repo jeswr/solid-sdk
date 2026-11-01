@@ -145,6 +145,8 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Extract<ReviewError, { kind: "error" }>>();
   const done = useRef(false);
+  // One decision at a time, even for clicks that land before the disabled state renders.
+  const busy = useRef(false);
   const allId = useId();
 
   const expiresAt = caps.grantExpiry ? expiresAtFor(duration, new Date()) : undefined;
@@ -154,7 +156,8 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
     onDone(outcome);
   };
   const run = async (approve: boolean) => {
-    if (saving) return;
+    if (busy.current) return;
+    busy.current = true;
     setSaving(true);
     setError(undefined);
     try {
@@ -179,6 +182,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
         return;
       }
       setError(failure);
+      busy.current = false;
       setSaving(false);
     }
   };

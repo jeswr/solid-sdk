@@ -344,3 +344,13 @@ it("offers Change account only with more than one account, and dismisses on Esca
   expect(onDone).toHaveBeenCalledWith("dismissed");
   expect(onDone).toHaveBeenCalledTimes(1);
 });
+
+it("sends one decision for a double click", async () => {
+  await review();
+  const share = button(dialog(), "Share");
+  await act(async () => {
+    share.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    share.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
+});
