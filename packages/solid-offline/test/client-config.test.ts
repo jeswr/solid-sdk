@@ -184,6 +184,146 @@ describe('createOfflineClient config posting + lifecycle', () => {
   });
 });
 
+describe('first-install automatic warming', () => {
+  it.each([
+    'solid',
+    'lws',
+  ] as const)('waits for a configured %s controller, then warms children and derives topics once', async (protocol) => {
+    const { active, swContainer, controllerListeners } = stubBrowser();
+    const installing = makeInstallingWorker();
+    installing.postMessage = active.postMessage;
+    swContainer.register.mockResolvedValue({
+      active: null,
+      installing,
+      waiting: null,
+    } as unknown as ServiceWorkerRegistration);
+    (swContainer as { controller: unknown }).controller = null;
+    const idle: Array<() => void> = [];
+    vi.stubGlobal('requestIdleCallback', (task: () => void) => idle.push(task));
+    const storage = createMemoryStorage({ protocol, root: 'https://alice.example/' });
+    const child = (await storage.create(storage.root, 'child bytes', { contentType: 'text/plain' }))
+      .url;
+    const read = vi.spyOn(storage, 'read');
+    const { notificationsClient } = notificationHarness();
+    const client = createOfflineClient({
+      storage,
+      webId: `${storage.root}profile#me`,
+      warm: { seeds: [storage.root] },
+      notifications: true,
+      notificationsClient,
+    });
+    try {
+      await client.register();
+      expect(idle).toHaveLength(0);
+      expect(read).not.toHaveBeenCalled();
+      // Activation alone does not make page fetches interceptable.
+      installing.state = 'activated';
+      installing.fireStateChange();
+      await vi.waitFor(() => expect(active.postMessage).toHaveBeenCalled());
+      expect(idle).toHaveLength(0);
+
+      swContainer.controller = installing;
+      const changed = () => {
+        for (const listener of controllerListeners.get('controllerchange') ?? []) listener();
+      };
+      changed();
+      await vi.waitFor(() => expect(idle).toHaveLength(1));
+      changed();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(idle).toHaveLength(1);
+      expect(read).not.toHaveBeenCalled();
+      expect(active.postMessage.mock.calls.every(([message]) => message.type === 'config')).toBe(
+        true,
+      );
+      idle[0]?.();
+      await vi.waitFor(() => expect(notificationsClient.subscribe).toHaveBeenCalledOnce());
+      expect(read.mock.calls.filter(([url]) => url === child)).toHaveLength(1);
+      expect(notificationsClient.subscribe).toHaveBeenCalledWith([storage.root], expect.anything());
+    } finally {
+      client.close();
+    }
+  });
+
+  it('keeps automatic warming disabled when control arrives with warmOnLogin false', async () => {
+    const { active, swContainer, controllerListeners } = stubBrowser();
+    (swContainer as { controller: unknown }).controller = null;
+    const idle = vi.fn();
+    vi.stubGlobal('requestIdleCallback', idle);
+    const storage = createMemoryStorage({ protocol: 'solid', root: 'https://alice.example/' });
+    const read = vi.spyOn(storage, 'read');
+    const client = createOfflineClient({
+      storage,
+      webId: `${storage.root}profile#me`,
+      warm: { seeds: [storage.root], warmOnLogin: false },
+    });
+    try {
+      await client.register();
+      swContainer.controller = active;
+      for (const listener of controllerListeners.get('controllerchange') ?? []) listener();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(idle).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+      expect((await client.warm())?.warmed).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it.each([
+    false,
+    true,
+  ])('waits for controller configuration (closed during discovery: %s)', async (closeDuringDiscovery) => {
+    const { active, swContainer, controllerListeners } = stubBrowser();
+    (swContainer as { controller: unknown }).controller = null;
+    swContainer.register.mockResolvedValue({ active: null } as ServiceWorkerRegistration);
+    const idle = vi.fn();
+    vi.stubGlobal('requestIdleCallback', idle);
+    const storage = createMemoryStorage({ protocol: 'lws', root: 'https://alice.example/' });
+    let finish: (() => void) | undefined;
+    const head = storage.head.bind(storage);
+    vi.spyOn(storage, 'head').mockImplementation(async (url, opts) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return head(url, opts);
+    });
+    const read = vi.spyOn(storage, 'read');
+    const client = createOfflineClient({
+      storage,
+      webId: `${storage.root}profile#me`,
+      warm: { seeds: [storage.root] },
+    });
+    try {
+      await client.register();
+      const listener = [...(controllerListeners.get('controllerchange') ?? [])][0];
+      swContainer.controller = active;
+      listener?.();
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+      expect(idle).not.toHaveBeenCalled();
+      expect(active.postMessage).not.toHaveBeenCalled();
+      if (closeDuringDiscovery) client.close();
+      finish?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (closeDuringDiscovery) {
+        listener?.(); // A queued lifecycle callback must also respect close().
+        expect(idle).not.toHaveBeenCalled();
+        expect(active.postMessage).not.toHaveBeenCalled();
+      } else {
+        expect(idle).toHaveBeenCalledOnce();
+        expect(active.postMessage).toHaveBeenCalledOnce();
+        expect(active.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'config' }),
+        );
+      }
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      client.close();
+    }
+  });
+});
+
 describe('pod-notifications integration', () => {
   it('forwards normalized changes and resync, and strips page clients from worker config', async () => {
     const { active } = stubBrowser();

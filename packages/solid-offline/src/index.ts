@@ -279,6 +279,33 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     return warmer;
   }
 
+  /** Defer the initial crawl until page reads can use the worker's listing guard. */
+  function startAutomaticWarmer(): void {
+    if (closed || warmer || !navigator.serviceWorker.controller) return;
+    const w = startWarmer();
+    const autoWarmOff =
+      config.warm !== undefined &&
+      config.warm !== true &&
+      config.warm !== false &&
+      (config.warm as WarmConfig).warmOnLogin === false;
+    if (
+      w &&
+      !autoWarmOff &&
+      config.notifications &&
+      !hasExplicitNotificationTopics(notificationsConfig())
+    ) {
+      // Reuse the scheduled crawl for topic discovery, including on first install.
+      void w
+        .result()
+        .then((result) => {
+          void startNotifications(containersFromWarm(result));
+        })
+        .catch(() => {
+          // A failed/stopped crawl can still be retried with a manual warm().
+        });
+    }
+  }
+
   function ensureChannel(): BroadcastChannel | undefined {
     if (channel) return channel;
     if (typeof BroadcastChannel === 'undefined') return undefined;
@@ -337,6 +364,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     target.postMessage(message);
   }
 
+  async function configureController(alreadyConfigured?: ServiceWorker | null): Promise<void> {
+    const controller = navigator.serviceWorker.controller;
+    if (controller !== alreadyConfigured) await postConfig(controller);
+    // Control may change again (or close() may run) during backend discovery.
+    if (controller && controller === navigator.serviceWorker.controller) startAutomaticWarmer();
+  }
+
   async function register(): Promise<ServiceWorkerRegistration | undefined> {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
       // Non-browser / unsupported context: no-op, the app still works online.
@@ -378,13 +412,14 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // after logout must NOT re-post the departed identity's config).
     if (!onControllerChange) {
       onControllerChange = () => {
-        void postConfig(navigator.serviceWorker.controller);
+        void configureController();
       };
       navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
     }
 
-    // P2: kick off the page-driven warmer (it self-schedules on idle).
-    startWarmer();
+    // An active worker need not control this page yet on first installation.
+    // controllerchange resumes automatic warming after configuring its controller.
+    await configureController(active);
 
     // P3: start the page-side notifications client (decision 5: socket in the page).
     // If explicit containers are configured, start immediately; otherwise derive
@@ -398,31 +433,6 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
         // for a resources-only config, which previously never started when
         // auto-warm was off/unavailable.
         void startNotifications(nCfg.containers ?? []);
-      } else {
-        // #13: do NOT force a fresh full crawl here. `startWarmer()` already
-        // scheduled the post-login idle warm; REUSE its result via `result()` so
-        // we don't trigger a duplicate crawl. And if auto-warm is OFF
-        // (`warm.warmOnLogin === false`), there is no scheduled warm to ride on —
-        // forcing one would be a surprise full crawl, so we require explicit
-        // `notifications.containers` instead of crawling.
-        const w = startWarmer();
-        const autoWarmOff =
-          config.warm !== undefined &&
-          config.warm !== true &&
-          config.warm !== false &&
-          (config.warm as WarmConfig).warmOnLogin === false;
-        if (w && !autoWarmOff) {
-          void w
-            .result()
-            .then((result) => {
-              void startNotifications(containersFromWarm(result));
-            })
-            .catch(() => {
-              // The scheduled warm failed/was stopped before producing topics.
-              // Notifications simply don't auto-start; an explicit `containers`
-              // config or a later manual `warm()` still wires them.
-            });
-        }
       }
     }
 
