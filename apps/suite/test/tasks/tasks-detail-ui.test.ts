@@ -12,6 +12,7 @@ let cache: TasksCache;
 let route = { pathname: "/tasks/inbox", query: "" };
 const routeListeners = new Set<() => void>();
 const router = { replace: vi.fn(), push: vi.fn() };
+let dismissDetails: (() => void) | undefined;
 function useRoute() {
   return useSyncExternalStore(
     (listener) => {
@@ -35,8 +36,18 @@ vi.mock("@/lib/session/pod-session", () => ({
   usePodSessionState: () => ({ status: "ready", session: { webId } }),
 }));
 vi.mock("@/components/interim-shell/suite-frame", () => ({
-  SuiteFrame: ({ children, details }: { children: ReactNode; details: ReactNode }) =>
-    h("main", null, children, details),
+  SuiteFrame: ({
+    children,
+    details,
+    onDetailsClose,
+  }: {
+    children: ReactNode;
+    details: ReactNode;
+    onDetailsClose?: () => void;
+  }) => {
+    dismissDetails = onDetailsClose;
+    return h("main", null, children, details);
+  },
 }));
 vi.mock("../../src/apps/tasks/components/sidebar", () => ({ TasksSidebar: () => null }));
 vi.mock("../../src/apps/tasks/components/sort-menu", () => ({ SortMenu: () => null }));
@@ -133,10 +144,138 @@ beforeEach(() => {
   router.replace.mockClear();
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("detail edits", () => {
+  it("keeps the detail open when a Sheet captures the sub-task composer's Escape", async () => {
+    await setup();
+    const { host } = await mount(h(TasksApp, null, "List"));
+    const trigger = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Add sub-task",
+    );
+    if (!trigger) throw new Error("Missing Add sub-task");
+    await click(trigger);
+    const field = host.querySelector<HTMLInputElement>('input[aria-label="Sub-task title"]');
+    if (!field) throw new Error("Missing Sub-task title");
+    await act(() => field.focus());
+    const captureEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismissDetails?.();
+    };
+    document.addEventListener("keydown", captureEscape, true);
+    try {
+      await key(field, "Escape");
+    } finally {
+      document.removeEventListener("keydown", captureEscape, true);
+    }
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+  });
+  it("expands one sub-task row, adds on Enter, and collapses on Escape", async () => {
+    const { parent, store, inbox } = await setup();
+    const { host } = await mount(h(Detail, { url: parent.url }));
+    const add = () =>
+      [...host.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Add sub-task",
+      );
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+    const trigger = add();
+    if (!trigger) throw new Error("Missing Add sub-task");
+    await click(trigger);
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Sub-task title"]');
+    if (!input) throw new Error("Missing Sub-task title");
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(add()).toBeUndefined();
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "Buy soil",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // jsdom does not synthesize a form's implicit Enter submission.
+    await act(() =>
+      input.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect(host.textContent).toContain("0/1");
+    expect(
+      (await store.listTasks(inbox.tracker.stateStore as string)).find(
+        (task) => task.task.title === "Buy soil",
+      )?.task.parent,
+    ).toBe(parent.task.id);
+    await key(input, "Escape");
+    expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(add()));
+  });
+  it("keeps the all-day calendar day when disabling All day in another timezone", async () => {
+    const { parent, store } = await setup();
+    const previous = process.env.TZ;
+    try {
+      process.env.TZ = "Asia/Tokyo";
+      await cache.updateTask(parent, (task) => {
+        task.allDay = "2026-11-03";
+      });
+      expect((await store.readTask(parent.url)).task.dueDate?.toISOString()).toBe(
+        "2026-11-02T15:00:00.000Z",
+      );
+      process.env.TZ = "America/Los_Angeles";
+      const { host } = await mount(h(Detail, { url: parent.url }));
+      const toggle = host.querySelector('[role="switch"]');
+      if (!toggle) throw new Error("Missing All day switch");
+      await click(toggle);
+      await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+      const task = (await store.readTask(parent.url)).task;
+      expect(task.allDay).toBeUndefined();
+      expect(task.dueDate).toEqual(new Date("2026-11-03T00:00:00-08:00"));
+    } finally {
+      process.env.TZ = previous;
+    }
+  });
+  it.each([
+    "Due date",
+    "Custom reminder",
+  ])("refreshes the clock for an idle %s edit", async (label) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T10:00:00Z"));
+    const { parent, store } = await setup();
+    await cache.updateTask(parent, (task) => {
+      task.dueDate = new Date("2026-11-10T17:00:00Z");
+    });
+    const { host } = await mount(h(Detail, { url: parent.url }));
+    if (label === "Custom reminder") {
+      const add = [...host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Add reminder",
+      );
+      if (!add) throw new Error("Missing Add reminder");
+      await click(add);
+      const custom = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Custom…",
+      );
+      if (!custom) throw new Error("Missing Custom reminder");
+      await click(custom);
+    }
+    vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
+    const fieldLabel = [...document.querySelectorAll("label")].find(
+      (element) => element.textContent === label,
+    );
+    const field = fieldLabel && document.getElementById(fieldLabel.htmlFor);
+    if (!(field instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
+    await act(() => field.focus());
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        field,
+        label === "Due date" ? "tomorrow" : "tomorrow 9am",
+      );
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(() => field.blur());
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    const task = (await store.readTask(parent.url)).task;
+    if (label === "Due date") expect(task.allDay).toBe("2026-11-03");
+    else expect(task.reminders[0]?.time).toEqual(new Date(2026, 10, 3, 9));
+  });
   it("saves yearly recurrence and humanises the date-only marker after a zone change", async () => {
     const { parent, store } = await setup();
     const previous = process.env.TZ;

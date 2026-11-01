@@ -64,11 +64,17 @@ function subscribeMobile(callback: () => void) {
   media.addEventListener("change", callback);
   return () => media.removeEventListener("change", callback);
 }
+type TaskSave = () => Promise<{ task: StoredTask; project: StoredProject } | undefined>;
 interface PasteBatch {
   entries: PasteEntry[];
   index: number;
   created: Map<number, { task: StoredTask; project: StoredProject }>;
-  save?: (() => Promise<{ task: StoredTask; project: StoredProject } | undefined>) | undefined;
+  save?: TaskSave | undefined;
+}
+interface DraftSave {
+  revision: number;
+  draft: ComposeResult;
+  save?: TaskSave | undefined;
 }
 const parseFailure = "Couldn't interpret this task. Edit the text and try again.";
 
@@ -92,7 +98,7 @@ export function Composer({
     () => false,
   );
   const [now, setNow] = useState(() => new Date());
-  const [defaults, setDefaults] = useState<ComposeContext["defaults"]>(() => ({
+  const [defaults] = useState<ComposeContext["defaults"]>(() => ({
     projectUrl: project.url,
     ...(sectionId
       ? {
@@ -114,6 +120,7 @@ export function Composer({
   const busyRef = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
+  const preparedSave = useRef<DraftSave | undefined>(undefined);
   const requestCloseRef = useRef<() => void>(() => {});
   const id = useId();
   const [labelName, setLabelName] = useState("");
@@ -228,34 +235,36 @@ export function Composer({
       onRetry,
     );
     const destination = target;
+    let announced = false;
     return async () => {
       const task = await create();
       if (!task) return undefined;
-      if (destination.url !== project.url) toast.success(`Added to ${destination.tracker.title}`);
+      if (!announced && destination.url !== project.url)
+        toast.success(`Added to ${destination.tracker.title}`);
+      announced = true;
       return { task, project: destination };
     };
   }
   async function submit() {
     if (parseError || !result.canSubmit || busyRef.current || batch) return;
+    if (preparedSave.current?.revision !== revision.current)
+      preparedSave.current = { revision: revision.current, draft: result };
+    await saveDraft(preparedSave.current);
+  }
+  async function saveDraft(prepared: DraftSave) {
+    if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
-    const submittedRevision = revision.current;
     try {
-      const save = await prepareSave(result);
-      const saved = await save?.();
-      if (saved && revision.current === submittedRevision) {
-        setDefaults({
-          projectUrl: saved.project.url,
-          ...(result.sectionId
-            ? {
-                sectionId: result.sectionId,
-                sectionName:
-                  saved.project.tracker.sections.find((section) => section.id === result.sectionId)
-                    ?.name ?? "Section",
-              }
-            : {}),
-          ...(due ? { due } : {}),
-        });
+      prepared.save ??= await prepareSave(
+        prepared.draft,
+        undefined,
+        () => void saveDraft(prepared),
+      );
+      const saved = await prepared.save?.();
+      if (saved && revision.current === prepared.revision) {
+        revision.current++;
+        preparedSave.current = undefined;
         setText("");
         setKeepText(new Set());
         setControls({});

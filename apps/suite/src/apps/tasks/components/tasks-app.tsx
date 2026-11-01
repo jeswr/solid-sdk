@@ -86,6 +86,8 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const closeDetails = useCallback(() => {
     // A Sheet dismisses on document capture, before a TagInput can consume Escape.
     if (document.querySelector('.tsk-detail input[role="combobox"][aria-expanded="true"]')) return;
+    // The sub-task composer consumes Escape to collapse its own row first.
+    if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
     router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });

@@ -43,6 +43,7 @@ function CommitDateField({
   disabled?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
+  const [referenceDate, setReferenceDate] = useState(() => new Date());
   const editing = useRef(false);
   const signature = JSON.stringify(value);
   useEffect(() => {
@@ -56,6 +57,7 @@ function CommitDateField({
     <form
       className="tsk-detail-date"
       onFocus={() => {
+        if (!editing.current) setReferenceDate(new Date());
         editing.current = true;
       }}
       onBlur={(event) => {
@@ -70,6 +72,7 @@ function CommitDateField({
         label={label}
         locale="en-GB"
         value={draft}
+        referenceDate={referenceDate}
         onChange={setDraft}
         disabled={disabled}
       />
@@ -211,7 +214,7 @@ function LabelsField({
         disabled={busy}
       />
       <form
-        className="tsk-detail-inline"
+        className="tsk-detail-inline tsk-detail-label-create"
         onSubmit={(event) => {
           event.preventDefault();
           const label = name.trim();
@@ -363,41 +366,44 @@ export function TaskProperties({
                 updateDue(
                   checked
                     ? { kind: "date", date: localDate(view.due) }
-                    : { kind: "dateTime", dateTime: view.due.toISOString() },
+                    : {
+                        kind: "dateTime",
+                        dateTime: new Date(`${view.allDay}T00:00:00`).toISOString(),
+                      },
                 );
               }}
             />
             <label htmlFor={allDayId}>All day</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost" disabled={!view.due}>
+                  <Repeat2 size={16} aria-hidden="true" />
+                  Repeat
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="tsk-detail-popover" align="end">
+                <RecurrenceEditor
+                  locale="en-GB"
+                  value={toEditorRule(rule)}
+                  startDate={localDate(anchor)}
+                  onChange={(value) => {
+                    try {
+                      const recurrence = fromEditorRule(value, anchor);
+                      setRepeatError("");
+                      void tasks.updateTask(stored, (task) => {
+                        if (task.dueDate) task.recurrence = recurrence;
+                      });
+                    } catch (error) {
+                      setRepeatError(
+                        error instanceof Error ? error.message : "Choose another repeat pattern.",
+                      );
+                    }
+                  }}
+                />
+                {repeatError && <p role="alert">{repeatError}</p>}
+              </PopoverContent>
+            </Popover>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost" disabled={!view.due}>
-                <Repeat2 size={16} aria-hidden="true" />
-                Repeat
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="tsk-detail-popover" align="end">
-              <RecurrenceEditor
-                locale="en-GB"
-                value={toEditorRule(rule)}
-                startDate={localDate(anchor)}
-                onChange={(value) => {
-                  try {
-                    const recurrence = fromEditorRule(value, anchor);
-                    setRepeatError("");
-                    void tasks.updateTask(stored, (task) => {
-                      if (task.dueDate) task.recurrence = recurrence;
-                    });
-                  } catch (error) {
-                    setRepeatError(
-                      error instanceof Error ? error.message : "Choose another repeat pattern.",
-                    );
-                  }
-                }}
-              />
-              {repeatError && <p role="alert">{repeatError}</p>}
-            </PopoverContent>
-          </Popover>
           {rule && <span className="tsk-chip">{humanise(rule, anchor)}</span>}
         </div>
       </div>
