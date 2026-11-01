@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { TooltipProvider } from "@jeswr/suite-ui";
+import { TooltipProvider, tokens } from "@jeswr/suite-ui";
 import { Editor } from "@tiptap/react";
 import { createRef, createElement as h, type ReactElement, useEffect, useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -588,6 +588,11 @@ it.each([
   expect(close).toHaveBeenCalled();
   fireEvent.click(button("Reset"));
   expect(editor.getAttributes("textStyle")[kind] ?? null).toBeNull();
+  fireEvent.click(screen.getByRole("gridcell", { name: "Black" }));
+  // Black text is the page's default ink; black highlight is an explicit colour.
+  expect(editor.getAttributes("textStyle")[kind] ?? null).toBe(
+    kind === "color" ? null : `rgb${"("}0, 0, 0)`,
+  );
   key(document.activeElement as Element, "Escape");
   expect(close).toHaveBeenCalled();
   view.unmount();
@@ -633,6 +638,19 @@ it("scales and reserves page geometry as content grows and bounds zoom to 50–2
   expect(scale.style.getPropertyValue("--docs-zoom")).toBe("2");
   view.rerender(h(PageCanvas, { zoom: 0, title: "" }, null));
   expect(scale.style.getPropertyValue("--docs-zoom")).toBe("0.5");
+});
+
+it("keeps the page on the light paper palette in every theme", () => {
+  document.documentElement.classList.add("dark");
+  const view = render(h(PageCanvas, { zoom: 100, title: "Paper" }, h("p", null, "Ink")));
+  const page = screen.getByRole("article", { name: "Document page" });
+  for (const token of tokens.filter((token) => token.category === "colour"))
+    expect(page.style.getPropertyValue(token.name)).toBe(token.light);
+  expect(page.style.getPropertyValue("--surface")).not.toBe(
+    tokens.find((token) => token.name === "--surface")?.dark,
+  );
+  view.unmount();
+  document.documentElement.classList.remove("dark");
 });
 
 it("keeps the default page height where ResizeObserver is unavailable", () => {
