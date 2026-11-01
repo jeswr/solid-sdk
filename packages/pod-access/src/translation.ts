@@ -53,7 +53,7 @@ export function reportItem(
     resourceUrl,
     title: kind.replaceAll("-", " "),
     explanation,
-    sourceRuleTurtle,
+    ...(sourceRuleTurtle !== undefined ? { sourceRuleTurtle } : {}),
     options: options.map((id) => ({
       id,
       label: id.replaceAll("-", " "),

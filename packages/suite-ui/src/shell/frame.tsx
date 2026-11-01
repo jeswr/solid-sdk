@@ -40,6 +40,11 @@ export interface ShellFrameProps {
   children: ReactNode;
   /** Root layouts may supply the suite-wide skip link instead. */
   skipLink?: boolean;
+  /**
+   * Single-character `[` / `]` pane shortcuts (WCAG 2.1.4). Hosts with a "turn off
+   * single-key shortcuts" setting pass false; the toggle buttons stay. Default true.
+   */
+  characterShortcuts?: boolean;
 }
 
 /** Owns the page's one h1, main scroll container, landmarks and responsive overlays. */
@@ -54,6 +59,7 @@ export function ShellFrame({
   onPreferencesChange,
   children,
   skipLink = true,
+  characterShortcuts = true,
 }: ShellFrameProps) {
   const frame = useRef<HTMLDivElement>(null);
   const sidebarRegion = useRef<HTMLDivElement>(null);
@@ -131,6 +137,7 @@ export function ShellFrame({
   }, [pageTitle, topBar.appName]);
 
   useEffect(() => {
+    if (!characterShortcuts) return;
     const onKey = (event: KeyboardEvent) => {
       if (!isShellShortcut(event, event.target)) return;
       // Other dialogs/editors own their keyboard paths; only our shell sheets opt in.
@@ -170,13 +177,19 @@ export function ShellFrame({
       </div>
       <TopBar
         {...topBar}
-        sidebarToggle={{ open: sidebarExpanded, controls: sidebarId, onToggle: toggleSidebar }}
+        sidebarToggle={{
+          open: sidebarExpanded,
+          controls: sidebarId,
+          onToggle: toggleSidebar,
+          keyShortcut: characterShortcuts,
+        }}
         {...(details
           ? {
               detailsToggle: {
                 open: detailsExpanded,
                 controls: detailsId,
                 onToggle: toggleDetails,
+                keyShortcut: characterShortcuts,
               },
             }
           : {})}

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, EditableText, EmptyState, Input } from "@jeswr/suite-ui";
+import { Button, EditableText, EmptyState, IconButton, Input } from "@jeswr/suite-ui";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { deleteCategory, reparent, saveCategories } from "../lib/data/categories";
@@ -119,10 +119,9 @@ export function CategoriesScreen() {
       >
         <div className="mon-tree-row">
           {node.children.length ? (
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
-              aria-label={`${collapsed.has(node.id) ? "Expand" : "Collapse"} ${node.label}`}
+              label={`${collapsed.has(node.id) ? "Expand" : "Collapse"} ${node.label}`}
               onClick={() =>
                 setCollapsed((current) => {
                   const next = new Set(current);
@@ -137,7 +136,7 @@ export function CategoriesScreen() {
               ) : (
                 <ChevronDown aria-hidden="true" size={16} />
               )}
-            </Button>
+            </IconButton>
           ) : (
             <span className="mon-tree-spacer" aria-hidden="true" />
           )}
