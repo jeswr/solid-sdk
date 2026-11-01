@@ -98,7 +98,12 @@ describe('resolver internal capability', () => {
         ? new Response('complete')
         : new Response(null, { status: 302, headers: { location: urls[urls.indexOf(url) + 1] } }),
     );
-    expect(await h.read.fetch(webId, false)).toEqual({ ok: true, text: 'complete', url: urls[3] });
+    expect(await h.read.fetch(webId, false)).toEqual({
+      ok: true,
+      text: 'complete',
+      url: urls[3],
+      contentType: 'text/plain;charset=UTF-8',
+    });
     expect(h.send).toHaveBeenCalledTimes(4);
     expect(h.budget.truncated).toBe(false);
   });
@@ -220,6 +225,7 @@ describe('Preferences discovery', () => {
       [`${prefs}#first`, true],
       [publicIndex, false],
       [privateIndex, true],
+      [`${pod}/contacts/`, true],
     ]);
   });
 
@@ -242,6 +248,7 @@ describe('Preferences discovery', () => {
       webId,
       `${pod}/prefs`,
       `${pod}/private`,
+      `${pod}/contacts/`,
     ]);
   });
 
@@ -254,6 +261,7 @@ describe('Preferences discovery', () => {
     expect(h.send.mock.calls.map(([url, auth]) => [url, auth])).toEqual([
       [webId, false],
       [`${pod}/index`, false],
+      [`${pod}/contacts/`, true],
     ]);
   });
 
@@ -267,7 +275,11 @@ describe('Preferences discovery', () => {
       truncated: false,
       targets: [{ url: `${pod}/contacts/` }],
     });
-    expect(h.send.mock.calls.map(([url]) => url)).toEqual([webId, `${pod}/private`]);
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([
+      webId,
+      `${pod}/private`,
+      `${pod}/contacts/`,
+    ]);
   });
 
   it.each([
@@ -455,6 +467,7 @@ it('reuses an already read redirect destination without a second document fetch'
   expect(await h.read.fetch(webId, false)).toEqual({
     ok: true,
     text: 'cached document',
+    contentType: 'text/plain;charset=UTF-8',
     url: `${pod}/index`,
   });
   expect(h.send).toHaveBeenCalledTimes(2);

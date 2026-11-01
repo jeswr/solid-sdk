@@ -151,7 +151,8 @@ export function createInternalRead(options: {
             text += decoder.decode();
           }
           if (!budget.active() || controller.signal.aborted) return failed;
-          return { ok: true, text, url: current };
+          const contentType = response.headers.get('content-type');
+          return { ok: true, text, url: current, ...(contentType ? { contentType } : {}) };
         }
       } catch {
         return failed;

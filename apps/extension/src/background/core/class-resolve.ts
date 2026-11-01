@@ -9,7 +9,7 @@
  * mitigation, design §6.2). SAI registrations run first, followed by the ubiquitous rung — the
  * **Solid Type Index** (`solid:publicTypeIndex` / `solid:privateTypeIndex` →
  * `solid:TypeRegistration` `solid:forClass` → `solid:instance` / `solid:instanceContainer`).
- * SAI class matching lives in class-resolve-sai.ts; SHACL member sampling remains a follow-up.
+ * SAI class matching lives in class-resolve-sai.ts; C4 sampling follows discovery.
  * The built-in pim:Storage class instead pins the WebID's advertised pim:storage containers.
  *
  * RDF is parsed with N3.js (the house rule — never regex over Turtle). The pure parse helpers
@@ -30,6 +30,7 @@ import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
 import { ResolutionBudget } from './class-resolution-budget';
+import { checkClassCandidates } from './class-resolve-check';
 import type { InternalRead } from './class-resolve-read';
 import {
   type ClassResolution,
@@ -52,13 +53,14 @@ export type ResolveFetch = (
   url: string,
   authenticated: boolean,
   method?: 'GET' | 'HEAD',
-) => Promise<{ ok: boolean; text: string; url: string }>;
+) => Promise<{ ok: boolean; text: string; url: string; contentType?: string }>;
 
 export interface ResolveOptions {
   /** The active session's WebID (the profile document to read the type-index refs from). */
   readonly webId: string;
   /** The injected fetch, with credential use explicit for each document. */
   readonly fetch: ResolveFetch;
+  /** Worker-owned confinement; required for sampling. Fetch-only fixtures discover unchecked targets. */
   readonly read?: InternalRead;
   readonly budget?: ResolutionBudget;
   readonly signal?: AbortSignal;
@@ -244,7 +246,24 @@ export async function resolveClassTargets(
       ({ truncated } = await resolveSaiTargets(classIRI, options, profile, found));
     }
     await resolveTypeIndexTargets(classIRI, options, (target) => found.add(target, 'type-index'));
-    return { targets: found.targets, truncated: truncated || budget.truncated };
+    // The worker supplies this capability. Legacy discovery-only callers cannot perform
+    // pre-consent member reads through an unconstrained transport.
+    const checked =
+      opts.read && classIRI !== PIM_STORAGE_CLASS
+        ? await checkClassCandidates(
+            classIRI,
+            found.targets,
+            found.shapes,
+            opts.read,
+            budget,
+            opts.signal,
+          )
+        : { targets: found.targets, shape: null };
+    return {
+      targets: checked.targets,
+      ...(checked.shape ? { shape: checked.shape } : {}),
+      truncated: truncated || budget.truncated,
+    };
   } finally {
     if (ownsBudget) budget.dispose();
   }
