@@ -5,6 +5,11 @@ import {
 } from "@jeswr/suite-ui/date-time/model";
 import { type RecurrenceRule, validateRule } from "../model/recurrence";
 
+/** Date-only markers retain their calendar day when opened in another browser zone. */
+export function recurrenceAnchor(due: Date, allDay?: string): Date {
+  return allDay ? new Date(`${allDay}T00:00:00`) : due;
+}
+
 /** DS-08 supports more patterns than the Tasks wire model. Never truncate a pattern. */
 export function fromEditorRule(rule: EditorRule | null, due: Date): RecurrenceRule | undefined {
   if (!rule) return undefined;

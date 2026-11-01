@@ -19,7 +19,7 @@ import {
 import { DateTimeField, type DateTimeValue, RecurrenceEditor } from "@jeswr/suite-ui/date-time";
 import { Flag, Repeat2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { fromEditorRule, toEditorRule } from "../../lib/detail/recurrence-map";
+import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail/recurrence-map";
 import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
@@ -313,6 +313,7 @@ export function TaskProperties({
       ? { kind: "dateTime", dateTime: view.due.toISOString() }
       : null;
   const rule = stored.task.recurrence;
+  const anchor = recurrenceAnchor(view.due ?? new Date(), view.allDay);
   const reminders = stored.task.reminders;
   const updateDue = (value: DateTimeValue | null) => {
     void tasks.updateTask(stored, (task) => {
@@ -379,10 +380,10 @@ export function TaskProperties({
               <RecurrenceEditor
                 locale="en-GB"
                 value={toEditorRule(rule)}
-                startDate={view.allDay ?? localDate(view.due ?? new Date())}
+                startDate={localDate(anchor)}
                 onChange={(value) => {
                   try {
-                    const recurrence = fromEditorRule(value, view.due ?? new Date());
+                    const recurrence = fromEditorRule(value, anchor);
                     setRepeatError("");
                     void tasks.updateTask(stored, (task) => {
                       if (task.dueDate) task.recurrence = recurrence;
@@ -397,7 +398,7 @@ export function TaskProperties({
               {repeatError && <p role="alert">{repeatError}</p>}
             </PopoverContent>
           </Popover>
-          {rule && <span className="tsk-chip">{humanise(rule, view.due ?? new Date())}</span>}
+          {rule && <span className="tsk-chip">{humanise(rule, anchor)}</span>}
         </div>
       </div>
       <div className="tsk-detail-property">

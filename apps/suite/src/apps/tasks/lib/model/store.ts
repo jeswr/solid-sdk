@@ -4,6 +4,7 @@
 import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
+import { TaskMove } from "./move";
 import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
@@ -338,7 +339,42 @@ export class TaskStore {
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
   }
-  /** Create first, then conditionally delete; a stale source must never lose data. */
+  /** Prepare once so Retry uses the same data, destination and child revisions. */
+  prepareTaskMove(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): TaskMove {
+    const container = target.tracker.stateStore;
+    if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
+    const url = `${container}${id}.ttl`;
+    const now = this.now();
+    const dataset = createTask(url, {
+      ...projectMoveData(item, source, target),
+      created: item.task.created ?? now,
+      modified: now,
+    });
+    return new TaskMove(
+      this.io,
+      item,
+      { url, dataset },
+      async () => {
+        // Children can remain in a different project after being moved individually.
+        const projects = new Map(
+          [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
+        );
+        const children = new Map<string, StoredTask>();
+        for (const project of projects.values())
+          for (const child of await this.listTasks(project.tracker.stateStore as string))
+            if (child.task.parent === item.task.id) children.set(child.url, child);
+        return [...children.values()];
+      },
+      now,
+    );
+  }
+  /** Create, remap child links, then delete, reconciling before any compensation. */
   async moveTaskToProject(
     item: StoredTask,
     source: StoredProject,
@@ -346,21 +382,7 @@ export class TaskStore {
     id = this.uuid(),
   ): Promise<StoredTask> {
     if (source.url === target.url) return item;
-    const moved = await this.createTask(target, projectMoveData(item, source, target), id);
-    try {
-      await this.deleteTask(item);
-    } catch (error) {
-      try {
-        await this.deleteTask(moved);
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          "Couldn't finish moving the task; both copies were retained.",
-        );
-      }
-      throw error;
-    }
-    return moved;
+    return this.prepareTaskMove(item, source, target, id).run();
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);
