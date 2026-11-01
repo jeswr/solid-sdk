@@ -770,7 +770,6 @@ it.each([
   ["alice..-smith@remote.example", "alice..-smith@remote.example"],
   ["alice@bücher.example", "alice@xn--bcher-kva.example"],
   ["alice@XN--BCHER-KVA.EXAMPLE", "alice@xn--bcher-kva.example"],
-  ["alice@bücher.example:8443", "alice@xn--bcher-kva.example:8443"],
   ["local.user-name", "local.user-name"],
 ])("normalizes federated handle %s for ingest and pinned recipients", async (acct, normalized) => {
   expect(handle(acct)).toBe(normalized);
@@ -795,6 +794,30 @@ it.each([
     providerRef: "600",
   });
   expect(JSON.parse(s.requests[0]?.body ?? "null").status.split("\n")[0]).toBe(`@${normalized}`);
+});
+
+it.each([
+  ["alice@remote.example:8443", "alice@remote.example:8443"],
+  ["alice@bücher.example:8443", "alice@xn--bcher-kva.example:8443"],
+  ["alice@remote.example:443", "alice@remote.example"],
+  ["alice@remote.example:00443", "alice@remote.example"],
+])("ingests %s but rejects its partial outbound mention before acquiring send authority", async (acct, normalized) => {
+  const row = { ...fixtures.notification, account: { acct } };
+  const r = reader([[row], []]);
+  const result = await r.binding.ingest.list(account, undefined, bounds);
+  expect(r.binding.ingest.parse(result.items[0] as InboundRawMessage).sender?.handle).toBe(
+    normalized,
+  );
+  const s = sender();
+  expect(() =>
+    createMastodonSend({
+      ...s.config,
+      recipients: new Map([[message.to?.actor as string, acct]]),
+    }),
+  ).toThrow("recipient cannot be rendered as a complete mention");
+  expect(s.tokens.calls).toEqual([]);
+  expect(s.verifyApproval).not.toHaveBeenCalled();
+  expect(s.requests).toEqual([]);
 });
 
 it.each([

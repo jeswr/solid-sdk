@@ -181,7 +181,10 @@ links remain unverified observations; no structured proposal is extracted.
 
 `./mastodon/send` exports executor-only `createMastodonSend({ instance?, account,
 recipients, verify, verifyApproval, now?, transport? })`. Actor-to-acct pins are
-snapshotted. Rendering builds one recipient mention, a deterministic kind/body
+snapshotted and must round-trip through Mastodon's outbound mention grammar after
+domain normalization. Pins with ports (including explicit `:443`) are rejected at
+construction because the mention parser consumes only the account before the port.
+Rendering builds one recipient mention, a deterministic kind/body
 summary and `AGENT_FOOTER`, refusing statuses over the existing 256-byte local
 ceiling. Body `@` characters become `＠` so they cannot add recipients. Visibility
 is always `direct`. Longer logical messages must use another carriage; the binding

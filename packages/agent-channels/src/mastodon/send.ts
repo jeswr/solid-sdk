@@ -15,10 +15,10 @@ import { AGENT_FOOTER, MASTODON_FOOTER } from "../profiles.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
 import {
   DEFAULT_INSTANCE,
-  handle,
   id,
   instanceOrigin,
   mastodonRest,
+  recipientHandle,
   record,
   responseJson,
 } from "./rest.js";
@@ -63,7 +63,7 @@ export function createMastodonSend(
   const origin = instanceOrigin(options.instance ?? DEFAULT_INSTANCE);
   const account = Object.freeze({ id: accountId(options.account) });
   const recipients = new Map(options.recipients);
-  for (const [actor, recipient] of recipients) recipients.set(actor, handle(recipient));
+  for (const [actor, recipient] of recipients) recipients.set(actor, recipientHandle(recipient));
   const verify = options.verify;
   const verifyApproval = options.verifyApproval;
   const now = options.now ?? Date.now;

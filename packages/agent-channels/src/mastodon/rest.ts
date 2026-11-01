@@ -57,6 +57,17 @@ export function handle(value: unknown): string {
     throw new ChannelParseError("invalid Mastodon account handle");
   }
 }
+export function recipientHandle(value: string): string {
+  const normalized = handle(value);
+  // Account::MENTION_RE, restricted to the ASCII host produced by URL/IDNA normalization.
+  // It cannot consume ports, including explicit default ports removed by URL normalization.
+  if (
+    !/^[a-z0-9_]+(?:[.-]+[a-z0-9_]+)*(?:@[a-z0-9_]+(?:[.-]+[a-z0-9_]+)*)?$/iu.test(normalized) ||
+    value.includes(":")
+  )
+    throw new ChannelParseError("Mastodon recipient cannot be rendered as a complete mention");
+  return normalized;
+}
 export async function responseJson(response: Response): Promise<unknown> {
   if (!response.ok) throw new Error(`Mastodon read failed: HTTP ${response.status}`);
   try {
