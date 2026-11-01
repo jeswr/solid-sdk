@@ -301,6 +301,46 @@ test("refresh preserves nonrotating credentials and allows omitted ID tokens and
 });
 
 test.each([
+  false,
+  true,
+])("clears an absent refresh token on new authorization (account switch: %s)", async (switchAccount) => {
+  const f = await fixture();
+  const previous = await f.login();
+  expect(previous.tokens.refreshToken).not.toBe("");
+  f.op.controls.issueRefresh = false;
+  if (switchAccount) f.op.controls.webId = "https://bob.example/profile#me";
+  const next = await f.client.authorizationUrl();
+  const session = await f.client.handleCallback({ url: f.op.callback(next.url) }, next.state);
+  expect(session.webId).toBe(f.op.controls.webId);
+  expect(session.tokens.accessToken).not.toBe(previous.tokens.accessToken);
+  expect(session.tokens.refreshToken).toBe("");
+  expect(f.client.currentWebId()).toBe(session.webId);
+  expect((await f.client.fetch(`${POD_ROOT}notes`)).status).toBe(200);
+});
+
+test.each([
+  false,
+  true,
+])("binds refresh-token fallback to the supplied grant (rotation: %s)", async (rotateRefresh) => {
+  const f = await fixture();
+  const previous = await f.login();
+  const next = await f.client.authorizationUrl();
+  const current = await f.client.handleCallback({ url: f.op.callback(next.url) }, next.state);
+  expect(current.tokens.refreshToken).not.toBe(previous.tokens.refreshToken);
+  f.op.controls.rotateRefresh = rotateRefresh;
+  const refreshed = await f.client.refresh(previous.tokens.refreshToken);
+  const request = f.op.captured.filter((r) => r.url.endsWith("/token")).at(-1);
+  expect(new URLSearchParams(request.body).get("refresh_token")).toBe(previous.tokens.refreshToken);
+  if (rotateRefresh) {
+    expect(refreshed.refreshToken).not.toBe("");
+    expect(refreshed.refreshToken).not.toBe(previous.tokens.refreshToken);
+    expect(refreshed.refreshToken).not.toBe(current.tokens.refreshToken);
+  } else expect(refreshed.refreshToken).toBe(previous.tokens.refreshToken);
+  expect((await f.client.fetch(`${POD_ROOT}notes`)).status).toBe(200);
+  expect(f.op.captured.at(-1).headers.get("authorization")).toBe(`DPoP ${refreshed.accessToken}`);
+});
+
+test.each([
   "origin",
   "fragment",
   "credentials",

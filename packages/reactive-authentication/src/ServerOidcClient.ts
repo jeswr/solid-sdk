@@ -149,7 +149,11 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
             return reactive.fetch(new Request(request, { headers }));
           },
         };
-  const tokens = async (response: Response, authorization?: ServerAuthorizationState) => {
+  const tokens = async (
+    response: Response,
+    authorization?: ServerAuthorizationState,
+    refreshToken = "",
+  ) => {
     const processed =
       authorization === undefined
         ? await oauth.processRefreshTokenResponse(as, client, response)
@@ -173,11 +177,10 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
     idTokenExpiresAt = (claims?.exp ?? 0) * 1000;
     idTokenSubject = claims?.sub ?? "";
     idTokenClient = claims?.azp;
-    const refreshToken = processed.refresh_token ?? current?.refreshToken;
-    // Restored refreshes may omit rotation. The caller supplies the original below.
     current = {
       accessToken: processed.access_token,
-      refreshToken: refreshToken ?? "",
+      // Only refresh grants retain the token supplied to that operation.
+      refreshToken: processed.refresh_token ?? refreshToken,
       ...(processed.id_token === undefined ? {} : { idToken: processed.id_token }),
       ...(processed.expires_in === undefined ? {} : { expiresIn: processed.expires_in }),
     };
@@ -239,16 +242,16 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
       return { webId: webId as string, issuer: options.issuer, tokens: result };
     },
     async refresh(refreshToken: string) {
-      const result = await withDPoPNonceRetry(async () =>
+      return withDPoPNonceRetry(async () =>
         tokens(
           await oauth.refreshTokenGrantRequest(as, client, oauth.None(), refreshToken, {
             ...oauthOptions(http),
             DPoP: dpop,
           }),
+          undefined,
+          refreshToken,
         ),
       );
-      if (!result.refreshToken) result.refreshToken = refreshToken;
-      return result;
     },
     currentWebId: () => webId,
     async fetch(input: RequestInfo | URL, init?: RequestInit) {
