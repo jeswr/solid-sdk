@@ -20,6 +20,14 @@
  * re-hydrated on wake (the in-memory caches below are best-effort accelerators only).
  */
 
+import {
+  base64ToBytes,
+  encodeResponseBody,
+  MAX_BODY_BYTES,
+  RESPONSE_BODY_LIMIT_ERROR,
+  readBodyBounded,
+  validateBodyFields,
+} from '../shared/body-codec';
 import type {
   AccessResponse,
   ActionResult,
@@ -54,6 +62,7 @@ import {
   type PinnedTarget,
   pruneExpiredGrants,
 } from './core/class-grant';
+import { safePathUrl } from './core/class-path';
 import { normaliseAccessRequest } from './core/class-request';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
@@ -686,6 +695,11 @@ async function handleProfileFetch(
       };
     }
 
+    // Independently validate the untrusted wire body even if the bridge was bypassed.
+    validateBodyFields(message.body, message.bodyBase64);
+    const requestBody =
+      message.bodyBase64 !== undefined ? base64ToBytes(message.bodyBase64) : (message.body ?? null);
+    const bufferedBodies = new WeakMap<Response, Uint8Array<ArrayBuffer>>();
     const origin = originOf(message.url);
     const db = await getReplicaDb();
     const cache = await getReplicaCache();
@@ -727,14 +741,17 @@ async function handleProfileFetch(
         // Chrome exposes an empty body stream on a 304 revalidation, but the Response
         // constructor rejects any body for null-body statuses.
         const responseBody =
-          result.response.body && !NULL_BODY_STATUSES.has(result.response.status)
-            ? await cancellable(signal, () => result.response.arrayBuffer())
+          method.toUpperCase() !== 'HEAD' &&
+          result.response.body &&
+          !NULL_BODY_STATUSES.has(result.response.status)
+            ? await readResponseBodyBounded(result.response, signal)
             : null;
         const response = new Response(responseBody, {
           status: result.response.status,
           statusText: result.response.statusText,
           headers: result.response.headers,
         });
+        if (responseBody) bufferedBodies.set(response, responseBody);
         return { response, nonce: result.nonce, url: result.url };
       },
     };
@@ -760,7 +777,7 @@ async function handleProfileFetch(
     const isRead = READ_METHODS.has(message.method.toUpperCase());
     const result = isRead
       ? await replica.read(message.url, message.method, message.headers, nonce)
-      : await replica.write(message.url, message.method, message.headers, message.body, nonce);
+      : await replica.write(message.url, message.method, message.headers, requestBody, nonce);
 
     if ('deny' in result) {
       // The gate denied (incl. on a would-be cache hit). The replica touched NEITHER the pod
@@ -805,6 +822,18 @@ async function handleProfileFetch(
     // Response.url identifies the fetched document and excludes any fragment.
     const finalUrl = new URL(result.url ?? message.url);
     finalUrl.hash = '';
+    const wireBody =
+      isHead || NULL_BODY_STATUSES.has(result.response.status)
+        ? { body: undefined }
+        : encodeResponseBody(
+            bufferedBodies.get(result.response) ??
+              (await readResponseBodyBounded(result.response, signal)),
+            result.response.headers.get('content-type'),
+          );
+    // A cached body read can yield too; recheck authority before delivering bytes.
+    const relayDecision = await gateAll();
+    if ('deny' in relayDecision)
+      return { requestId: message.requestId, status: 403, error: await relayDecision.deny.text() };
     return {
       requestId: message.requestId,
       status: result.response.status,
@@ -814,14 +843,30 @@ async function handleProfileFetch(
       // actual redirect hops, including a return to the original URL; nonce retries dedupe.
       redirected: sent.size > 1,
       headers,
-      body: isHead ? undefined : await cancellable(signal, () => result.response.text()),
+      ...wireBody,
     };
   } catch (err) {
     return {
       requestId: message.requestId,
+      ...(err instanceof Error && err.message === RESPONSE_BODY_LIMIT_ERROR ? { status: 502 } : {}),
       error: err instanceof Error ? err.message : 'Fetch failed',
     };
   }
+}
+
+/** Content-Length can reject early; the stream bound also applies when it lies or is absent. */
+async function readResponseBodyBounded(
+  response: Response,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const length = response.headers.get('content-length');
+  if (length && /^\d+$/.test(length) && Number(length) > MAX_BODY_BYTES) {
+    const error = new Error(RESPONSE_BODY_LIMIT_ERROR);
+    void response.body?.cancel(error).catch(() => {});
+    signal.throwIfAborted();
+    throw error;
+  }
+  return readBodyBounded(response.body, MAX_BODY_BYTES, RESPONSE_BODY_LIMIT_ERROR, signal);
 }
 
 /** A small Response carrying a gate-deny reason, for the replica's injected gate port. */
@@ -1276,6 +1321,8 @@ function makeResolveFetch(
       const authenticated = useCredentials && url !== webId;
       const fetchImpl: typeof fetch = (input, init) =>
         cancellable(signal, async () => {
+          // Validate every direct send, including the destination exposed by a redirect probe.
+          if (!safePathUrl(input.toString())) throw new Error('Ambiguous discovery path denied');
           await beforeRequest(input.toString(), authenticated);
           signal.throwIfAborted();
           if (isTokenEndpoint(input.toString(), session.tokenEndpoint))
@@ -1399,7 +1446,7 @@ async function handleRequestAccess(
           const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
           const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: null }>();
           for (const cls of spec.classes) {
-            const targets = await resolveClassTargets(cls, {
+            const { targets } = await resolveClassTargets(cls, {
               webId: ctx.session.webId,
               fetch: makeResolveFetch(
                 { ...session, allowedOrigins },
@@ -1696,7 +1743,7 @@ async function handleResolveClass(
         const allowedOrigins = new Set(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
-        const targets = await resolveClassTargets(message.classIRI, {
+        const { targets } = await resolveClassTargets(message.classIRI, {
           webId: ctx.session.webId,
           fetch: makeResolveFetch(
             { ...fetchSession, allowedOrigins },
