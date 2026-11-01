@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6
-import type { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory, Writer } from "n3";
+import { DataFactory, type Store, Writer } from "n3";
 import { ResourceReadError, readBody } from "./resource-body.js";
 import type { Mode, PodHttp } from "./types.js";
 export const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -66,9 +65,9 @@ export async function parse(
   http?: Pick<PodHttp, "get">,
   signal?: AbortSignal,
   securityRelevant = false,
-): Promise<Awaited<ReturnType<typeof parseRdf>>> {
+): Promise<Store> {
   return (await readBody(response, url, { http, signal, semantic: true, securityRelevant }))
-    .dataset as Awaited<ReturnType<typeof parseRdf>>;
+    .dataset as Store;
 }
 export function requireRepresentation(response: Response): Response {
   if (response.status !== 200)
