@@ -20,7 +20,16 @@ import { ChatOutbox, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
 
-export type ChatSession = Omit<PodSession, "subscribe"> & { subscribe?: PodSession["subscribe"] };
+/** A pod session whose change feed may be absent (the polling path); distributes over session modes. */
+export type ChatSession = PodSession extends infer S
+  ? S extends PodSession
+    ? Omit<S, "subscribe"> & { subscribe?: PodSession["subscribe"] }
+    : never
+  : never;
+/** Extension sessions provide a credential-free fetch for other people's public profiles. */
+function publicFetchOf(session: ChatSession): typeof globalThis.fetch {
+  return session.mode === "extension" ? session.publicFetch : globalThis.fetch;
+}
 export interface AsyncResult<T> {
   status: "loading" | "ready" | "error";
   data: T | undefined;
@@ -46,9 +55,10 @@ interface ChatContextValue {
 }
 const Context = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ session, children }: { session: ChatSession; children: ReactNode }) {
+  const publicFetch = publicFetchOf(session);
   const client = useMemo(
-    () => new ChatClient(session.fetch, session.storageUrl, session.webId),
-    [session.fetch, session.storageUrl, session.webId],
+    () => new ChatClient(session.fetch, session.storageUrl, session.webId, publicFetch),
+    [session.fetch, session.storageUrl, session.webId, publicFetch],
   );
   const [revision, setRevision] = useState(0);
   const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);

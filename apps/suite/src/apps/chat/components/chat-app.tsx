@@ -262,12 +262,19 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="chat-state" role="alert">
         <h1>Can't open your Chat</h1>
-        <p>This browser couldn't open the demo pod's storage.</p>
+        <p>
+          {state.mode === "extension"
+            ? "This browser couldn't open your pod through the Solid extension."
+            : "This browser couldn't open the demo pod's storage."}
+        </p>
         <Button onClick={() => location.reload()}>Retry</Button>
       </div>
     );
   return (
-    <ChatProvider session={state.session}>
+    <ChatProvider
+      key={JSON.stringify([state.session.mode, state.session.webId, state.session.storageUrl])}
+      session={state.session}
+    >
       <Chrome>{children}</Chrome>
     </ChatProvider>
   );

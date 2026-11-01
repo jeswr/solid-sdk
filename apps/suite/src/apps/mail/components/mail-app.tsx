@@ -37,12 +37,19 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="mail-boot" role="alert">
         <h1>Can't open your Mail</h1>
-        <p>This browser couldn't open the demo pod's storage.</p>
+        <p>
+          {state.mode === "extension"
+            ? "This browser couldn't open your pod through the Solid extension."
+            : "This browser couldn't open the demo pod's storage."}
+        </p>
         <Button onClick={() => location.reload()}>Retry</Button>
       </div>
     );
   return (
-    <MailProvider session={state.session}>
+    <MailProvider
+      key={JSON.stringify([state.session.mode, state.session.webId, state.session.storageUrl])}
+      session={state.session}
+    >
       <MailChrome>{children}</MailChrome>
     </MailProvider>
   );
