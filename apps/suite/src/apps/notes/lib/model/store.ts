@@ -287,9 +287,10 @@ export class NotesStore {
     try {
       await this.remove(note.url, sourceEtag);
     } catch (error) {
-      // An HTTP failure is definitive. Only a lost response needs verification.
-      if (typeof (error as { status?: unknown } | null)?.status !== "number") {
-        // A lost DELETE response does not establish whether the server committed it.
+      const status = (error as { status?: unknown } | null)?.status;
+      // Only explicit precondition/auth refusals establish that DELETE did not commit.
+      if (status !== 412 && status !== 401 && status !== 403) {
+        // Gateway/server failures can also hide a committed DELETE.
         // A different validator belongs to a replacement at the same slug. Keep
         // the original's destination; existence alone cannot justify rollback.
         try {

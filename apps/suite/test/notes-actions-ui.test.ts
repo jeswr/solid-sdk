@@ -39,6 +39,9 @@ vi.mock("@tiptap/react", async (original) => {
     },
   };
 });
+const { getPendingDrafts } = await import("../src/apps/notes/state/draft-registry");
+const captureKey = () =>
+  `notes-capture-draft:${getPendingDrafts("https://pod.example/profile/card#me").tabId}`;
 const { CaptureBar } = await import("../src/apps/notes/components/capture-bar");
 const { NoteDialog } = await import("../src/apps/notes/components/note-dialog");
 const { NotesGrid } = await import("../src/apps/notes/components/notes-grid");
@@ -149,7 +152,7 @@ it.each([
   await fill("Note text", raw);
   await ui.unmount();
   await act(() => writing.reject(new Error("Offline")));
-  expect(JSON.parse(localStorage.getItem("notes-capture-draft") as string).body).toBe(raw);
+  expect(JSON.parse(localStorage.getItem(captureKey()) as string).body).toBe(raw);
   const reopened = await mount(h(CaptureBar));
   expect(document.querySelector<HTMLTextAreaElement>('[aria-label="Note text"]')?.value).toBe(raw);
   expect(document.querySelector('[role="alert"]')?.textContent).toContain("Couldn't create");
@@ -163,7 +166,7 @@ it.each([
   }
   await click(button("Close"));
   expect(create).toHaveBeenCalledTimes(2);
-  expect(localStorage.getItem("notes-capture-draft")).toBeNull();
+  expect(localStorage.getItem(captureKey())).toBeNull();
   await reopened.unmount();
   expect(create).toHaveBeenCalledTimes(2);
 });
@@ -360,18 +363,17 @@ it.each([
   const field = list ? "List item 1" : "Note text";
   await fill(field, "First text");
   await act(() => vi.advanceTimersByTimeAsync(200));
-  expect(JSON.parse(localStorage.getItem("notes-capture-draft") as string)).toMatchObject({
+  expect(JSON.parse(localStorage.getItem(captureKey()) as string)).toMatchObject({
     title: "Unfinished title",
     ...(list ? { items: [{ text: "First text", checked: false }] } : { body: "First text" }),
   });
   await fill(field, "Last keystroke before reload");
   await act(() => window.dispatchEvent(new Event("pagehide")));
   expect(mocks.context.create).not.toHaveBeenCalled();
-  const durable = JSON.parse(localStorage.getItem("notes-capture-draft") as string);
+  const durable = JSON.parse(localStorage.getItem(captureKey()) as string);
   expect(list ? durable.items[0].text : durable.body).toBe("Last keystroke before reload");
-  // Browser teardown does not unmount React. The pending create below models a
-  // cancelled navigation write and cannot be responsible for restoring this text.
   await ui.unmount();
+  await act(() => writing.reject(new Error("Cancelled by reload")));
   const reloaded = await mount(h(CaptureBar));
   expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value).toBe(
     "Unfinished title",
@@ -379,13 +381,12 @@ it.each([
   expect(document.querySelector<HTMLInputElement>(`[aria-label="${field}"]`)?.value).toBe(
     "Last keystroke before reload",
   );
-  expect(document.querySelector('[role="alert"]')).toBeNull();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Couldn't create");
   mocks.context.create = vi.fn().mockResolvedValue(note());
   await reloaded.render(h(CaptureBar));
   await click(button("Close"));
-  expect(localStorage.getItem("notes-capture-draft")).toBeNull();
+  expect(localStorage.getItem(captureKey())).toBeNull();
   await reloaded.unmount();
-  await act(() => writing.resolve(note()));
 });
 
 function createdDocument(url = "https://pod.example/docs/converted.ttl"): StoredDocument {

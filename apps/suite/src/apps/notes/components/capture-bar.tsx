@@ -8,10 +8,15 @@ import { z } from "zod";
 import type { ChecklistItem } from "../lib/capture";
 import { NoteColour } from "../lib/model/prefs";
 import { captureTitle, captureToNote, escapeHtml } from "../lib/ui/capture";
+import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 import { ColourPicker, LabelChips, LabelPicker } from "./controls";
 
-const captureKey = "notes-capture-draft";
+const capturePrefix = "notes-capture-draft";
+const submitting = new Set<string>();
+const recovering = new Set<string>();
+const captureSettled = "notes-capture-settled";
+const captureRetry = "notes-capture-retry";
 const captureDraft = z.object({
   webId: z.string(),
   title: z.string(),
@@ -21,10 +26,17 @@ const captureDraft = z.object({
   pinned: z.boolean(),
   colour: NoteColour,
   error: z.string().optional(),
+  tabId: z.string().optional(),
+  updatedAt: z.number().finite().optional(),
+  submitting: z.boolean().optional(),
 });
 
 export function CaptureBar({ label }: { label?: string }) {
   const { create, session } = useNotesContext();
+  const createNote = useRef(create);
+  createNote.current = create;
+  const { tabId } = getPendingDrafts(session.webId);
+  const captureKey = `${capturePrefix}:${tabId}`;
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -32,13 +44,24 @@ export function CaptureBar({ label }: { label?: string }) {
   const [labels, setLabels] = useState<string[]>(label ? [label] : []);
   const [pinned, setPinned] = useState(false);
   const [colour, setColour] = useState<NoteColour>("default");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(() => submitting.has(captureKey));
   const [error, setError] = useState<string>();
   const recovery = useRef<string | null>(null);
   const captureSnapshot = useRef<string | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const captureText = expanded
-    ? JSON.stringify({ webId: session.webId, title, body, items, labels, pinned, colour, error })
+    ? JSON.stringify({
+        webId: session.webId,
+        title,
+        body,
+        items,
+        labels,
+        pinned,
+        colour,
+        error,
+        tabId,
+        submitting: busy,
+      })
     : null;
   captureSnapshot.current = captureText;
   const persistCapture = useCallback(() => {
@@ -46,19 +69,24 @@ export function CaptureBar({ label }: { label?: string }) {
     const text = captureSnapshot.current;
     if (text === null) return;
     try {
-      localStorage.setItem(captureKey, text);
-      recovery.current = text;
+      const record = JSON.stringify({
+        ...JSON.parse(text),
+        updatedAt: Date.now(),
+        submitting: submitting.has(captureKey),
+      });
+      localStorage.setItem(captureKey, record);
+      recovery.current = record;
     } catch {
       // The mounted form still retains its text if browser storage is full.
     }
-  }, []);
+  }, [captureKey]);
   const submitted = useRef(false);
   const mounted = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const opening = useRef<HTMLInputElement>(null);
   const latestClose = useRef(() => {});
   const finish = async () => {
-    if (submitted.current) return;
+    if (submitted.current || submitting.has(captureKey)) return;
     let input: ReturnType<typeof captureToNote>;
     try {
       input = captureToNote(title, body, items);
@@ -81,6 +109,7 @@ export function CaptureBar({ label }: { label?: string }) {
     if (input) {
       const saved = { ...input, labels };
       submitted.current = true;
+      submitting.add(captureKey);
       persistCapture();
       if (mounted.current) setBusy(true);
       try {
@@ -97,6 +126,9 @@ export function CaptureBar({ label }: { label?: string }) {
             pinned,
             colour,
             error: message,
+            tabId,
+            updatedAt: Date.now(),
+            submitting: false,
           });
           localStorage.setItem(captureKey, text);
           recovery.current = text;
@@ -104,13 +136,23 @@ export function CaptureBar({ label }: { label?: string }) {
           // The mounted form still retains its text if browser storage is full.
         }
         submitted.current = false;
+        submitting.delete(captureKey);
         if (mounted.current) {
           setBusy(false);
           setError(message);
         }
         toast.error(message, {
-          action: { label: "Retry", onClick: () => void latestClose.current() },
+          action: {
+            label: "Retry",
+            onClick: () =>
+              window.dispatchEvent(
+                new CustomEvent(captureRetry, {
+                  detail: { key: captureKey, webId: session.webId },
+                }),
+              ),
+          },
         });
+        window.dispatchEvent(new CustomEvent(captureSettled, { detail: captureKey }));
         return;
       }
       captureSnapshot.current = null;
@@ -121,6 +163,8 @@ export function CaptureBar({ label }: { label?: string }) {
       } catch {
         // A successful pod write does not depend on browser storage cleanup.
       }
+      submitting.delete(captureKey);
+      window.dispatchEvent(new CustomEvent(captureSettled, { detail: captureKey }));
     }
     if (!mounted.current) return;
     setExpanded(false);
@@ -136,24 +180,135 @@ export function CaptureBar({ label }: { label?: string }) {
   };
   latestClose.current = finish;
   useEffect(() => {
-    try {
-      const text = localStorage.getItem(captureKey);
-      const saved = captureDraft.parse(JSON.parse(text ?? "null"));
-      if (saved.webId === session.webId) {
-        recovery.current = text;
-        setTitle(saved.title);
-        setBody(saved.body);
-        setItems(saved.items);
-        setLabels(saved.labels);
-        setPinned(saved.pinned);
-        setColour(saved.colour);
-        setError(saved.error);
-        setExpanded(true);
+    const removeExact = (key: string, text: string) => {
+      if (localStorage.getItem(key) === text) localStorage.removeItem(key);
+    };
+    const restore = () => {
+      const inFlight = submitting.has(captureKey);
+      setBusy(inFlight);
+      if (inFlight) return;
+      try {
+        // Migrate once to a durable orphan slot without overwriting this tab's draft.
+        const legacy = localStorage.getItem(capturePrefix);
+        let legacyDraft = captureDraft.safeParse(undefined);
+        try {
+          legacyDraft = captureDraft.safeParse(JSON.parse(legacy ?? "null"));
+        } catch {
+          // Invalid legacy text must not hide per-tab drafts.
+        }
+        if (legacyDraft.success && legacyDraft.data.webId === session.webId) {
+          const id = crypto.randomUUID();
+          localStorage.setItem(
+            `${capturePrefix}:${id}`,
+            JSON.stringify({
+              ...legacyDraft.data,
+              tabId: id,
+              updatedAt: 0,
+            }),
+          );
+          removeExact(capturePrefix, legacy as string);
+        }
+        const drafts: { key: string; text: string; saved: z.infer<typeof captureDraft> }[] = [];
+        for (const key of Object.keys(localStorage)) {
+          if (!key.startsWith(`${capturePrefix}:`) || submitting.has(key) || recovering.has(key))
+            continue;
+          try {
+            const text = localStorage.getItem(key) as string;
+            const saved = captureDraft.parse(JSON.parse(text));
+            if (saved.webId !== session.webId || key !== `${capturePrefix}:${saved.tabId}`)
+              continue;
+            const last = localStorage.getItem(`suite.notes.heartbeat:${saved.tabId}`);
+            if (
+              key !== captureKey &&
+              last !== null &&
+              Number.isFinite(Number(last)) &&
+              Date.now() - Number(last) <= 30_000
+            )
+              continue;
+            drafts.push({ key, text, saved });
+          } catch {
+            // A damaged or foreign draft cannot hide valid captures.
+          }
+        }
+        drafts.sort((a, b) => (b.saved.updatedAt ?? 0) - (a.saved.updatedAt ?? 0));
+        const newest = drafts.shift();
+        if (newest) {
+          const { saved } = newest;
+          const own = drafts.find((draft) => draft.key === captureKey);
+          if (own) {
+            // Free this tab's slot only after its older text has a durable home.
+            const id = crypto.randomUUID();
+            const key = `${capturePrefix}:${id}`;
+            const text = JSON.stringify({ ...own.saved, tabId: id });
+            localStorage.setItem(key, text);
+            removeExact(own.key, own.text);
+            own.key = key;
+            own.text = text;
+          }
+          // Copy before removing an orphan so the restored form remains durable.
+          const text = JSON.stringify({ ...saved, tabId, submitting: false });
+          localStorage.setItem(captureKey, text);
+          if (newest.key !== captureKey) removeExact(newest.key, newest.text);
+          recovery.current = text;
+          setTitle(saved.title);
+          setBody(saved.body);
+          setItems(saved.items);
+          setLabels(saved.labels);
+          setPinned(saved.pinned);
+          setColour(saved.colour);
+          setError(saved.error);
+          setExpanded(true);
+        }
+        for (const orphan of drafts) {
+          recovering.add(orphan.key);
+          // Preserve checklist syntax literally; recovery must not reject unique text.
+          const raw = [
+            orphan.saved.title,
+            orphan.saved.body,
+            ...(orphan.saved.items ?? []).map(
+              (item) => `${item.checked ? "[x]" : "[ ]"} ${item.text}`,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n");
+          void createNote
+            .current(
+              {
+                title: captureTitle(raw.split(/\r?\n/)[0] as string),
+                body: raw
+                  .split(/\r?\n/)
+                  .map((line) => `<p>${escapeHtml(line)}</p>`)
+                  .join(""),
+                labels: orphan.saved.labels,
+              },
+              orphan.saved.pinned,
+              orphan.saved.colour,
+            )
+            .then(() => removeExact(orphan.key, orphan.text))
+            .catch(() => {
+              /* Keep failed recoveries for the next mount. */
+            })
+            .finally(() => recovering.delete(orphan.key));
+        }
+      } catch {
+        // Empty, invalid or unavailable storage leaves a fresh capture form.
       }
-    } catch {
-      // Empty, invalid or unavailable storage leaves a fresh capture form.
-    }
-  }, [session.webId]);
+    };
+    restore();
+    const settled = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === captureKey) restore();
+    };
+    const retry = (event: Event) => {
+      const { key, webId } = (event as CustomEvent<{ key: string; webId: string }>).detail;
+      if (key === captureKey && webId === session.webId) void latestClose.current();
+    };
+    window.addEventListener(captureSettled, settled);
+    window.addEventListener(captureRetry, retry);
+    return () => {
+      window.removeEventListener(captureSettled, settled);
+      window.removeEventListener(captureRetry, retry);
+    };
+  }, [session.webId, captureKey, tabId]);
   useEffect(() => {
     if (captureText === null) return;
     persistTimer.current = setTimeout(persistCapture, 200);
@@ -250,12 +405,14 @@ export function CaptureBar({ label }: { label?: string }) {
       {!expanded ? (
         <div className="notes-capture-collapsed">
           <Input
+            disabled={busy}
             ref={opening}
             aria-label="Take a note"
             placeholder="Take a note…"
             onFocus={() => setExpanded(true)}
           />
           <IconButton
+            disabled={busy}
             label="New list"
             variant="ghost"
             onClick={() => {

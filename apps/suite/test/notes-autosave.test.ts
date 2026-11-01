@@ -205,7 +205,7 @@ it("opens a note with the newest orphan draft and saves the other orphan through
   const registry = (id: string) =>
     createDraftRegistry("https://pod.example/#me", {
       storage: localStorage,
-      tabStorage: { getItem: () => id, setItem: vi.fn() },
+      tabId: id,
       now: () => clock,
     });
   const a = registry("a");

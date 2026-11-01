@@ -401,6 +401,73 @@ describe("notes store", () => {
   });
 
   it.each([
+    401, 403,
+  ])("rolls back definite source DELETE refusals (%s) without verification", async (status) => {
+    const s = await fixture();
+    const note = await s.store.create();
+    s.intercept(async (url, init) =>
+      url === note.url && init?.method === "DELETE" ? new Response(null, { status }) : undefined,
+    );
+    await expect(s.store.archive(note)).rejects.toMatchObject({
+      name: "ResourceDeleteError",
+      status,
+    });
+    expect(s.pod.has(note.url)).toBe(true);
+    expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
+    expect(s.calls.filter((call) => call.url === note.url && call.method === "GET")).toEqual([]);
+  });
+
+  it.each([
+    404, 410, 502,
+  ])("keeps the destination when source DELETE commits but reports %s", async (status) => {
+    const s = await fixture();
+    const note = await s.store.create({ body: "Only surviving copy" });
+    s.intercept(async (url, init) => {
+      if (url !== note.url || init?.method !== "DELETE") return;
+      await s.pod.fetch(url, init);
+      return new Response(null, { status });
+    });
+    const moved = await s.store.archive(note);
+    expect(s.pod.has(note.url)).toBe(false);
+    expect((await s.store.read(moved.url))?.body).toBe("Only surviving copy");
+    expect(s.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+
+  it.each([
+    408,
+    429,
+    409,
+    500,
+    502,
+    "transport",
+  ])("verifies the original validator before rolling back an ambiguous DELETE (%s)", async (status) => {
+    const s = await fixture();
+    const note = await s.store.create();
+    s.intercept(async (url, init) => {
+      if (url !== note.url || init?.method !== "DELETE") return;
+      if (typeof status === "string") throw new TypeError("Offline");
+      return new Response(null, { status });
+    });
+    await expect(s.store.archive(note)).rejects.toThrow();
+    expect(s.pod.has(note.url)).toBe(true);
+    expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
+    expect(s.calls.filter((call) => call.url === note.url && call.method === "GET")).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps both copies when a 502 cannot be verified", async () => {
+    const s = await fixture();
+    const note = await s.store.create();
+    s.intercept(async (url) =>
+      url === note.url ? new Response(null, { status: 502 }) : undefined,
+    );
+    await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteMoveUncertainError);
+    expect(s.pod.has(note.url)).toBe(true);
+    expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(true);
+  });
+
+  it.each([
     "new-etag",
     "same-etag",
     "no-etag",
@@ -710,9 +777,7 @@ it.each([
         ? RedirectRefusedError
         : ResourceDeleteError,
   );
-  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(
-    failure === "transport" ? 1 : 0,
-  );
+  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(failure === "http" ? 0 : 1);
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
 });

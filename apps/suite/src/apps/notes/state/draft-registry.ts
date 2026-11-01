@@ -35,20 +35,20 @@ const snapshot = z.object({
 type RegistryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 interface RegistrySeams {
   storage: RegistryStorage;
-  tabStorage: Pick<Storage, "getItem" | "setItem">;
+  tabId?: string;
   now: () => number;
+}
+
+let pageTabId: string | undefined;
+function getTabId(): string {
+  // Duplicated tabs copy sessionStorage, so identity must live only in this document.
+  pageTabId ??= crypto.randomUUID();
+  return pageTabId;
 }
 
 /** Independent tabs own independent durable snapshots, including for the same note. */
 export function createDraftRegistry(webId: string, seams: RegistrySeams) {
-  const { storage, tabStorage, now } = seams;
-  let tabId: string;
-  try {
-    tabId = tabStorage.getItem("suite.notes.tab-id") || crypto.randomUUID();
-    tabStorage.setItem("suite.notes.tab-id", tabId);
-  } catch {
-    tabId = crypto.randomUUID();
-  }
+  const { storage, now, tabId = getTabId() } = seams;
   const key = `suite.notes.pending-drafts.${webId}`;
   const prefix = `${key}:`;
   const heartbeatKey = (id: string) => `suite.notes.heartbeat:${id}`;
@@ -208,6 +208,7 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
     if (running) return running;
     const work = async () => {
       const orphans: { storageKey: string; text: string; record: z.infer<typeof envelope> }[] = [];
+      const sources = new Set<string>();
       try {
         for (const storageKey of storageKeys()) {
           if (!storageKey.startsWith(prefix)) continue;
@@ -221,6 +222,8 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
               storageKey !== `${prefix}${note.url}:${record.tabId}`
             )
               continue;
+            for (const claim of record.claims ?? [])
+              sources.add(`${claim.key}\u0000${claim.revision}`);
             const last = storage.getItem(heartbeatKey(record.tabId));
             if (last !== null && Number.isFinite(Number(last)) && now() - Number(last) <= 30_000)
               continue;
@@ -233,15 +236,38 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
         return;
       }
       orphans.sort((a, b) => b.record.updatedAt - a.record.updatedAt);
-      if (!pending.get(note.url) && orphans.length) {
-        const newest = orphans.shift() as (typeof orphans)[number];
-        claimed.set(note.url, new Map([[newest.storageKey, newest.record.revision]]));
+      // A recovered snapshot can itself become orphaned on reload. Its sources
+      // are the same edits, not extra drafts to turn into separate notes.
+      const independent = orphans.filter(
+        ({ storageKey, record }) => !sources.has(`${storageKey}\u0000${record.revision}`),
+      );
+      if (!pending.get(note.url) && independent.length) {
+        const newest = independent.shift() as (typeof orphans)[number];
+        claimed.set(
+          note.url,
+          new Map([
+            ...(newest.record.claims ?? [])
+              .filter((claim) => claim.key.startsWith(`${prefix}${note.url}:`))
+              .map(({ key, revision }) => [key, revision] as const),
+            [newest.storageKey, newest.record.revision],
+          ]),
+        );
         pending.restore(newest.record.snapshot);
       }
-      for (const orphan of orphans) {
+      for (const orphan of independent) {
         try {
           const { draft } = orphan.record.snapshot;
           await create({ ...draft, title: `${draft.title} (recovered)` });
+          for (const claim of orphan.record.claims ?? []) {
+            if (!claim.key.startsWith(`${prefix}${note.url}:`)) continue;
+            try {
+              const text = storage.getItem(claim.key);
+              if (text && envelope.parse(JSON.parse(text)).revision === claim.revision)
+                removeExact(claim.key, text);
+            } catch {
+              // Damaged sources must not make a successful creation run twice.
+            }
+          }
           removeExact(orphan.storageKey, orphan.text);
         } catch {
           // Leave failed recoveries durable for the next open/retry.
@@ -253,7 +279,7 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
     void promise.finally(() => recovering.delete(note.url));
     return promise;
   };
-  return { ...pending, heartbeat, recover };
+  return { ...pending, tabId, heartbeat, recover };
 }
 export type DraftRegistry = ReturnType<typeof createDraftRegistry>;
 const registries = new Map<string, DraftRegistry>();
@@ -274,10 +300,6 @@ export function getPendingDrafts(webId: string): DraftRegistry {
   };
   const pending = createDraftRegistry(webId, {
     storage,
-    tabStorage: {
-      getItem: (key) => sessionStorage.getItem(key),
-      setItem: (key, value) => sessionStorage.setItem(key, value),
-    },
     now: Date.now,
   });
   const retry = () => void pending.retry();

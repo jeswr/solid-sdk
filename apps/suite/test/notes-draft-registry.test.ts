@@ -21,7 +21,9 @@ const events = new Map<string, EventListener>();
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
-  sessionStorage.setItem("suite.notes.tab-id", "tab-a");
+  vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
+    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
+  );
   vi.useFakeTimers();
   events.clear();
   vi.spyOn(window, "addEventListener").mockImplementation((name, listener) => {
@@ -56,6 +58,9 @@ it("durably records before the debounce; reload recovers the latest draft and it
   });
   expect(localStorage.getItem(key)).toBeNull();
   vi.resetModules();
+  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
+    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
+  );
   const reloaded = await registry();
   expect(reloaded.get(note.url)).toEqual(stored.snapshot);
   const saved = { ...note, ...draft, etag: '"v2"' };
@@ -133,7 +138,7 @@ async function independent(tabId: string, now = () => 1_000) {
   const { createDraftRegistry } = await import("../src/apps/notes/state/draft-registry");
   return createDraftRegistry(webId, {
     storage: localStorage,
-    tabStorage: { getItem: () => tabId, setItem: vi.fn() },
+    tabId,
     now,
   });
 }
@@ -295,6 +300,9 @@ it("prefers per-note recovery to a legacy envelope and ignores damaged or miskey
   localStorage.setItem(`${key}:bad`, "{");
   localStorage.setItem(`${key}:wrong-url`, latest);
   vi.resetModules();
+  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
+    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
+  );
   expect((await registry()).all()).toEqual([{ note, draft, status: "saving" }]);
   expect(localStorage.getItem(noteKey)).toBe(latest);
   expect(localStorage.getItem(key)).toBeNull();
@@ -309,6 +317,9 @@ it("migrates valid legacy recovery over a damaged per-note key", async () => {
   expect((await registry()).get(note.url)).toMatchObject({ draft, status: "failed" });
   expect(localStorage.getItem(key)).toBeNull();
   vi.resetModules();
+  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
+    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
+  );
   expect((await registry()).get(note.url)).toMatchObject({ draft, status: "failed" });
 });
 
@@ -356,6 +367,98 @@ it("keeps an orphan claim across reload and removes its source only after the no
     vi.fn(async () => ({ ...note, ...draft, etag: '"v2"' })),
   );
   expect(localStorage.getItem(noteKey)).toBeNull();
+  expect(localStorage.getItem(`${key}:${note.url}:receiver`)).toBeNull();
+});
+
+it("gives duplicated session storage a fresh page ID and recovers B's conflict without A overwriting it", async () => {
+  sessionStorage.setItem("suite.notes.tab-id", "copied-tab-id");
+  const a = await registry();
+  const unloadA = events.get("beforeunload");
+  const save = vi.fn(async () => ({ ...note, ...draft, etag: '"v2"' }));
+  a.change(note, draft, save);
+  await a.flush(note, save);
+  vi.resetModules();
+  const b = await registry();
+  expect(b.tabId).not.toBe(a.tabId);
+  expect(sessionStorage.getItem("suite.notes.tab-id")).toBe("copied-tab-id");
+  const bDraft = { ...draft, body: "B's unique unresolved conflict" };
+  const { NoteConflictError } = await import("../src/apps/notes/lib/model/errors");
+  const conflict = vi.fn().mockRejectedValue(new NoteConflictError(note.url));
+  b.change(note, bDraft, conflict);
+  await b.retry();
+  const offline = vi.fn().mockRejectedValue(new Error("Offline"));
+  a.change(note, { ...draft, body: "A's later failing edit" }, offline);
+  await a.retry();
+  unloadA?.(new Event("beforeunload", { cancelable: true }));
+  await a.retry();
+  events.get("beforeunload")?.(new Event("beforeunload", { cancelable: true }));
+  await b.retry();
+  const bKey = `${key}:${note.url}:${b.tabId}`;
+  expect(JSON.parse(localStorage.getItem(bKey) as string).snapshot.draft).toEqual(bDraft);
+  // B reloads; A stays live while B's old heartbeat becomes stale.
+  vi.resetModules();
+  const reloaded = await registry();
+  expect(reloaded.tabId).not.toBe(b.tabId);
+  await vi.advanceTimersByTimeAsync(30_001);
+  a.heartbeat();
+  // Fake timers keep the old page's interval alive; simulate its teardown.
+  localStorage.setItem(`suite.notes.heartbeat:${b.tabId}`, String(Date.now() - 30_001));
+  const create = vi.fn();
+  await reloaded.recover(note, create);
+  expect(reloaded.get(note.url)).toMatchObject({ draft: bDraft, status: "conflict" });
+  expect(create).not.toHaveBeenCalled();
+  expect(JSON.parse(localStorage.getItem(noteKey) as string).snapshot.draft.body).toBe(
+    "A's later failing edit",
+  );
+});
+
+it("preserves an orphan's claims when its recovering page reloads with a new ID", async () => {
+  let clock = 1_000;
+  const now = () => clock;
+  const a = await independent("tab-a", now);
+  a.change(note, draft, vi.fn());
+  clock = 31_001;
+  const receiver = await independent("receiver", now);
+  const create = vi.fn();
+  await receiver.recover(note, create);
+  clock = 61_002;
+  const reloaded = await independent("new-page", now);
+  await reloaded.recover(note, create);
+  expect(reloaded.get(note.url)?.draft).toEqual(draft);
+  expect(create).not.toHaveBeenCalled();
+  await reloaded.flush(
+    note,
+    vi.fn(async () => ({ ...note, ...draft, etag: '"v2"' })),
+  );
+  expect(localStorage.getItem(noteKey)).toBeNull();
+  expect(localStorage.getItem(`${key}:${note.url}:receiver`)).toBeNull();
+});
+
+it.each([
+  false,
+  true,
+])("does not recover a live page's claimed orphan and clears it after extra recovery (damaged source=%s)", async (damaged) => {
+  let clock = 1_000;
+  const now = () => clock;
+  const a = await independent("tab-a", now);
+  a.change(note, draft, vi.fn());
+  clock = 31_001;
+  const receiver = await independent("receiver", now);
+  const create = vi.fn().mockResolvedValue(note);
+  await receiver.recover(note, create);
+  const other = await independent("other", now);
+  await other.recover(note, create);
+  expect(other.get(note.url)).toBeUndefined();
+  expect(create).not.toHaveBeenCalled();
+  clock++;
+  other.change(note, { ...draft, body: "Newest unique draft" }, vi.fn());
+  if (damaged) localStorage.setItem(noteKey, "{");
+  clock = 61_003;
+  const reopened = await independent("new-page", now);
+  await reopened.recover(note, create);
+  expect(reopened.get(note.url)?.draft.body).toBe("Newest unique draft");
+  expect(create).toHaveBeenCalledExactlyOnceWith({ ...draft, title: `${draft.title} (recovered)` });
+  expect(localStorage.getItem(noteKey)).toBe(damaged ? "{" : null);
   expect(localStorage.getItem(`${key}:${note.url}:receiver`)).toBeNull();
 });
 
