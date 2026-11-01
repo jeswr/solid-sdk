@@ -695,9 +695,10 @@ export class DpopApiVerifier {
 
   /** Consume the proof's `jti` against the replay store (a repeat within the window = replay). */
   private async checkReplay(jti: string): Promise<void> {
-    // Accepted iat spans [now - MAX_AGE - tolerance, now + tolerance], so a proof stays
-    // acceptable for at most MAX_AGE + 2 * tolerance after first use.
-    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + 2 * this.clockToleranceSec;
+    // Accepted iat spans [now - MAX_AGE - tolerance, now + tolerance] in whole seconds, so a
+    // proof stays acceptable for up to MAX_AGE + 2 * tolerance seconds after first use, plus
+    // under a second of rounding (iat and now are floored). Remember the jti one second longer.
+    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + 2 * this.clockToleranceSec + 1;
     const result = await this.replayStore.mark(jti, ttlSeconds);
     if (result === "replay") {
       this.log.warn({ event: "api-auth.replay.detected" }, "DPoP jti replay detected — rejecting.");

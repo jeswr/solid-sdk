@@ -402,20 +402,25 @@ describe("DpopApiVerifier — authentication failures (401)", () => {
     expect(err.message).toMatch(/iat/i);
   });
 
-  it("remembers a jti for as long as its proof stays acceptable", async () => {
-    let clock = Date.now();
+  it.each([
+    0, 999,
+  ])("remembers a jti for as long as its proof stays acceptable (start +%ims into a second)", async (fraction) => {
+    const start = Math.floor(Date.now() / 1000) * 1000 + fraction;
+    let clock = start;
     const verifier = makeVerifier({
       now: () => clock,
       replayStore: new InProcessReplayStore({ now: () => clock }),
     });
     const token = await mintAccessToken({ exp: nowSec() + 3600 });
-    const proof = await mintProof({ accessToken: token, iat: Math.floor(clock / 1000) + 5 });
+    const proof = await mintProof({ accessToken: token, iat: Math.floor(start / 1000) + 5 });
     const request = () => mkRequest({ authorization: `DPoP ${token}`, dpop: proof });
     await verifier.authorizeOwner(request());
-    // Last second at which the proof's iat is still inside the accepted window.
-    clock += (300 + 5 + 5 - 1) * 1000;
-    const err = await expectStatus(verifier.authorizeOwner(request()), 401);
-    expect(err.message).toMatch(/replay/i);
+    // Up to the last instant the floored iat window still accepts the proof (+310.999 s).
+    for (const offsetMs of [309_000, 310_000, 310_999 - fraction]) {
+      clock = start + offsetMs;
+      const err = await expectStatus(verifier.authorizeOwner(request()), 401);
+      expect(err.message).toMatch(/replay/i);
+    }
   });
 
   it("401: proof missing iat (presence enforced, not only range)", async () => {
