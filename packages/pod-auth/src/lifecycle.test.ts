@@ -673,31 +673,33 @@ test.each(["solid", "lws"])("issuers without ES256 are refused through %s", asyn
   expect(f.op.stats.tokens).toBe(0);
 });
 
-test("an implicit session restores its verified storage context after automatic boundary mappings are lost", async () => {
+test("restore reloads profile storages after automatic boundary mappings are lost", async () => {
   const f = fixture();
   f.options.boundary = {};
   const first = f.load();
+  await first.login();
   expect((await first.fetch(f.op.root + "private")).status).toBe(200);
   const restored = f.load();
   expect((await restored.restore())?.webId).toBe(f.op.webId);
   expect((await restored.fetch(f.op.root + "different")).status).toBe(200);
-  expect(f.op.stats.authorizations).toBe(1);
+  expect(f.op.stats.authorizations).toBe(2);
   expect(f.op.stats.refreshes).toBe(1);
 });
 
 test.each([
   false,
   true,
-])("restore pins a chosen issuer after metadata loss and preserves credential context; implicit=%s", async (implicit) => {
+])("restore pins a chosen issuer after metadata loss and preserves credential context; automatic=%s", async (automatic) => {
   const f = fixture({ issuers: ["https://other.example/", "https://op.example/"] });
   const chooseIssuer = vi.fn(async () => f.op.issuer);
   f.options.ui.chooseIssuer = chooseIssuer;
-  if (implicit) f.options.boundary = {};
+  if (automatic) f.options.boundary = {};
   const first = f.load();
-  if (implicit) {
+  if (automatic) {
+    await first.login();
     expect((await first.fetch(`${f.op.root}private`)).status).toBe(200);
   } else await first.login({ webId: f.op.webId });
-  expect(chooseIssuer).toHaveBeenCalledOnce();
+  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
   const [credentialKey] = f.record();
   const pointer = () =>
     [...f.values.entries()].find(([key]) => JSON.parse(key)[1] === "active")?.[1];
@@ -706,7 +708,7 @@ test.each([
   expect(before).not.toHaveProperty("selected.issuer");
   f.options.storage!.caches = createMemoryStore();
   // Restoration must work without a chooser and must never invoke an available chooser.
-  if (implicit) delete f.options.ui.chooseIssuer;
+  if (automatic) delete f.options.ui.chooseIssuer;
   else chooseIssuer.mockRejectedValueOnce(new Error("Issuer chooser must not open during restore"));
   const restored = f.load();
   await expect(restored.restore()).resolves.toMatchObject({
@@ -719,9 +721,9 @@ test.each([
     selected: { issuer: f.op.issuer },
   });
   expect(f.op.stats.refreshes).toBe(1);
-  expect(f.op.stats.authorizations).toBe(1);
-  expect(chooseIssuer).toHaveBeenCalledOnce();
-  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(implicit ? 1 : 0);
+  expect(f.op.stats.authorizations).toBe(automatic ? 2 : 1);
+  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
+  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(automatic ? 2 : 0);
   expect((await restored.fetch(`${f.op.root}private`)).status).toBe(200);
   await expect(f.load().restore()).resolves.toMatchObject({ webId: f.op.webId });
   expect(f.op.stats.refreshes).toBe(2);

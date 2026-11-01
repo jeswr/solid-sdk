@@ -44,6 +44,29 @@ matcher. Credentials only attach within static roots or automatically verified s
 Set `boundary.automatic: false` for a static-only boundary. `boundary.eligible` restricts both static
 and discovered roots. Public and excluded resources never prompt; unverified 401s remain 401s.
 
+Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
+or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots
+load during `login()` and `restore()`; call one before fetching when no static roots are configured.
+Without a WebID, configure roots explicitly. Neither the WebID document's origin nor the OIDC issuer's
+origin is implicitly a resource grant. Profile-linked non-container storage identifiers may resolve to
+LWS descriptions (`id`, `Storage`, `StorageRoot.serviceEndpoint`) or Solid descriptions (`pim:Storage`).
+Description requests omit credentials and reject redirects. Profile redirects locate the public
+document; assertions must still name the original WebID. Invalid assertions grant nothing.
+
+A target's `Link` headers, `pim:Storage` type, ancestor responses, storage description, or
+`WWW-Authenticate` challenge never adds a credential root. UMA/LWS authorization servers and exchange
+endpoints must use an already granted storage origin or an explicitly configured AS origin; configure
+such an AS using `boundary.roots`. LWS realms must fit a grant, or identify a description whose root
+contains the resource within that grant. A challenge cannot expand the token audience beyond it.
+These checks apply to both OIDC ID-token and CID subject-token exchanges. An untrusted target receives
+no SDK Authorization header, token-bound DPoP proof, UMA claim token, or LWS subject token.
+
+Credentialed fetch attempts use manual redirects. Each visible hop rechecks the same boundary and
+creates credentials only for an authorized destination; foreign hops receive no SDK credentials.
+Browser `opaqueredirect` responses remain opaque. Exchange requests reject redirects. Logout and
+session supersession clear automatic roots and fence pending profile discovery; restore reloads roots
+from the profile rather than trusting remembered resource URLs or cached response hints.
+
 Client Identifier Documents require HTTPS. `{ dynamicRegistration: true }` is permitted only with a
 loopback callback outside production. Plain HTTP additionally requires `allowInsecureLoopback: true`;
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
@@ -176,7 +199,8 @@ so UI hooks are unused; configuration without a signing key fails closed. CID UR
 Agent credentials, access tokens and keys stay in memory. `restore()` returns an existing live identity
 or null; `remembered()` is empty. Logout fences outstanding work, clears token caches, and requires
 CID resolution again on the next login. The caller owns provisioning and retention of the signing key.
-Node factories require explicit static roots; the core CID configuration also supports the normal boundary options.
+Node factories require explicit static roots. Core CID mode also needs configured roots for authenticated
+resource access: a CID subject does not implicitly authorize storage origins.
 
 React consumers mount one provider and read `usePodAuth()` from `@jeswr/pod-auth/react`:
 

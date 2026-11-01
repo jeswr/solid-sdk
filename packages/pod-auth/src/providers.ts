@@ -159,7 +159,7 @@ export function createAgentProviders(
           resolved = undefined;
         },
       },
-      { http, fence },
+      { http: boundary.exchangeHttp, fence, trustAuthorizationServer: boundary.trustLws },
     );
     identity = {
       webId: null,
@@ -460,7 +460,12 @@ export function createProviders(
     codeProvider,
     asProvider,
     clientProvider,
-    { ...sessionOptions, session: umaSession },
+    {
+      ...sessionOptions,
+      http: boundary.exchangeHttp,
+      session: umaSession,
+      trustAuthorizationServer: boundary.trustAuthorizationServer,
+    },
   );
   const lwsContexts = new Map<
     string,
@@ -516,7 +521,14 @@ export function createProviders(
           return credential;
         },
       };
-      binding = { provider: new LwsTokenProvider(source, { http, fence }), validate };
+      binding = {
+        provider: new LwsTokenProvider(source, {
+          http: boundary.exchangeHttp,
+          fence,
+          trustAuthorizationServer: boundary.trustLws,
+        }),
+        validate,
+      };
       lwsContexts.set(key, binding);
     }
     return binding;
@@ -619,6 +631,7 @@ export function createProviders(
       return claims;
     },
     logout: async () => {
+      boundary.clear();
       const failures: unknown[] = [];
       // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
       try {
