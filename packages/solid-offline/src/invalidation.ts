@@ -221,6 +221,8 @@ async function revalidateResource(
     const decision = classifyResponse(rl, resLike(fresh));
     const newEtag = fresh.headers.get('etag') ?? undefined;
     if (decision.cacheable) {
+      // Follow the old cursor chain before replacing its bytes and pagination metadata.
+      await evictListingPages(url, records, deps);
       // Replace the whole resource: drop stale OTHER variants before writing the
       // new canonical one (so lookup can't keep matching an old Vary row).
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);

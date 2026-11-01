@@ -45,7 +45,13 @@ async function harness() {
     const request = new Request(input, init);
     requests.push(request);
     if (!online) throw new Error('offline');
-    if (request.url === CONTAINER) return listing([KEPT], SECOND);
+    if (request.url === CONTAINER) {
+      const etag = changed ? 'listing-v2' : 'listing';
+      if (request.headers.get('if-none-match') === etag) return new Response(null, { status: 304 });
+      const response = listing([KEPT], SECOND);
+      response.headers.set('etag', etag);
+      return response;
+    }
     if (request.url === SECOND) return listing(changed ? [] : [REMOVED], THIRD);
     if (request.url === THIRD) return listing([]);
     return listing([]);
@@ -98,6 +104,9 @@ describe('paginated listing invalidation', () => {
     { type: 'Remove', evicted: false, legacy: false },
     { type: 'Remove', evicted: true, legacy: false },
     { type: 'Remove', evicted: false, legacy: true },
+    { type: 'Update', evicted: false, legacy: false },
+    { type: 'Update', evicted: true, legacy: false },
+    { type: 'Update', evicted: false, legacy: true },
   ] as const)('evicts cursor pages on $type (evicted=$evicted, legacy=$legacy)', async ({
     type,
     evicted,
@@ -139,10 +148,15 @@ describe('paginated listing invalidation', () => {
     }
     h.requests.length = 0;
 
-    expect(await handleNotification({ type, object: REMOVED, target: CONTAINER }, h.deps)).toEqual({
-      kind: 'listing-refreshed',
-    });
+    const frame =
+      type === 'Update'
+        ? { type, object: CONTAINER, state: 'listing-v2' }
+        : { type, object: REMOVED, target: CONTAINER };
+    expect(await handleNotification(frame, h.deps)).toEqual(
+      type === 'Update' ? { kind: 'updated', etag: 'listing-v2' } : { kind: 'listing-refreshed' },
+    );
     expect(h.requests.map((request) => request.url)).toEqual([CONTAINER]);
+    expect(h.requests[0]?.headers.get('if-none-match')).toBe(type === 'Update' ? 'listing' : null);
     for (const url of [SECOND, THIRD]) {
       expect(await h.deps.meta.getByUrl(url)).toEqual([]);
       expect(await h.deps.cache.match(keyRequest(url, second.varyKey))).toBeUndefined();
@@ -151,7 +165,7 @@ describe('paginated listing invalidation', () => {
     expect(await h.deps.cache.match(keyRequest(unrelated, second.varyKey))).toBeDefined();
     expect(await h.deps.cache.match(keyRequest(foreign, second.varyKey))).toBeDefined();
     expect(h.deps.broadcast.messages).toEqual([
-      { url: CONTAINER, event: 'updated', etag: 'listing' },
+      { url: CONTAINER, event: 'updated', etag: 'listing-v2' },
     ]);
 
     h.offline();
@@ -166,5 +180,33 @@ describe('paginated listing invalidation', () => {
     for await (const entry of h.storage.listAll(CONTAINER, { revalidate: true }))
       refreshed.push(entry.url);
     expect(refreshed).toEqual([KEPT]);
+  });
+
+  it.each([
+    { state: 'listing', kind: 'short-circuit' },
+    { state: 'intermediate', kind: '304-confirmed' },
+  ])('retains unchanged cursor pages on $kind', async ({ state, kind }) => {
+    const h = await harness();
+    h.requests.length = 0;
+
+    expect(await handleNotification({ type: 'Update', object: CONTAINER, state }, h.deps)).toEqual({
+      kind,
+    });
+    expect(h.requests.map((request) => request.url)).toEqual(
+      kind === 'short-circuit' ? [] : [CONTAINER],
+    );
+    expect(h.deps.broadcast.messages).toEqual([]);
+    for (const url of [SECOND, THIRD]) {
+      const records = await h.deps.meta.getByUrl(url);
+      expect(records).toHaveLength(1);
+      const record = records[0];
+      if (!record) throw new Error('missing cached cursor fixture');
+      expect(await h.deps.cache.match(keyRequest(url, record.varyKey))).toBeDefined();
+    }
+
+    h.offline();
+    const unchanged: string[] = [];
+    for await (const entry of h.storage.listAll(CONTAINER)) unchanged.push(entry.url);
+    expect(unchanged).toEqual([KEPT, REMOVED]);
   });
 });
