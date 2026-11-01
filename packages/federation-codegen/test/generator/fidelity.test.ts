@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,19 +16,15 @@ import {
 import { flat } from "../helpers.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const exampleDir = join(here, "..", "..", "examples", "bookmark");
+const packageDir = join(here, "..", "..", "..", "solid-bookmark");
 
 const config = JSON.parse(
-  readFileSync(join(exampleDir, "codegen.config.json"), "utf8"),
+  readFileSync(join(packageDir, "codegen.config.json"), "utf8"),
 ) as CodegenConfig;
 const shapes = parseShapes(
-  readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"), "utf8"),
+  readFileSync(join(packageDir, "bookmark.shacl.ttl"), "utf8"),
   config.shapesBase,
-  owlRdfsAdapter.adapt(
-    parseTurtle(
-      readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"), "utf8"),
-    ),
-  ),
+  owlRdfsAdapter.adapt(parseTurtle(readFileSync(join(packageDir, "bookmark.ttl"), "utf8"))),
 );
 
 describe("fidelity assertion (the P0 exit criterion)", () => {

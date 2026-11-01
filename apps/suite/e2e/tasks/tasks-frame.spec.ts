@@ -128,13 +128,17 @@ test("view links resolve, invalid refs show a not-found state, and rows support 
   await expect(page).toHaveURL(/\?task=/);
   for (const [view, empty] of [
     ["today", "Nothing due today"],
-    ["upcoming", "Nothing upcoming"],
     ["completed", "Nothing completed yet"],
     ["l/bills", "No tasks with @bills"],
   ] as const) {
     await page.goto(`/tasks/${view}`);
     await expect(page.getByRole("heading", { name: empty, exact: true })).toBeVisible();
   }
+  await page.goto("/tasks/upcoming");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Upcoming", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".tsk-day-cell")).toHaveCount(7);
   await page.goto("/tasks/p/invalid!");
   await expect(page.locator('[data-category="not-found"]')).toBeVisible();
 });

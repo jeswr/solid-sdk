@@ -18,6 +18,8 @@ import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } 
 export interface TaskLoad {
   status: "loading" | "ready" | "error";
   items: StoredTask[];
+  /** Cached rows stay visible, but this load is incomplete until revalidation settles. */
+  refreshing?: boolean;
   /** Invalid RDF tasks skipped while projecting this project's last load. */
   warningCount?: number;
   error?: unknown;
@@ -84,6 +86,7 @@ function replaceTask(
       ...state.tasks,
       [projectUrl]: {
         status: "ready",
+        refreshing: previous?.refreshing ?? false,
         warningCount: previous?.warningCount ?? 0,
         items: [
           ...(previous?.items ?? []).filter((item) => item.url !== url),
@@ -277,6 +280,8 @@ export class TasksCache {
         ...this.baseline.tasks,
         [project.url]: {
           status: previous?.status === "ready" ? "ready" : "loading",
+          refreshing: true,
+          warningCount: previous?.warningCount ?? 0,
           items: previous?.items ?? [],
         },
       },
@@ -1029,6 +1034,59 @@ export class TasksCache {
             void attempt(true);
           }),
         [project.url],
+      );
+    return attempt();
+  }
+  /** Hold the mutation queue from the strict listing through task and class removal, on Retry too.
+   * Preflight items only identify saving indicators; queued writes may change the membership. */
+  deleteLabel(project: StoredProject, labelIds: readonly string[], preflight: StoredTask[]) {
+    const clearTypes = (task: TaskItem) => {
+      for (const id of labelIds) task.types.delete(id);
+    };
+    const attempt = (): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => state,
+        async () => {
+          // Always read back the tracker, including after a lost class-removal response.
+          const current = await this.store.readProject(project.url);
+          if (current.tracker.stateStore !== project.tracker.stateStore)
+            throw new ModelError(409, project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const confirmed: StoredTask[] = [];
+          for (const item of items)
+            confirmed.push(
+              labelIds.some((id) => item.task.types.has(id))
+                ? await this.store.updateTask(item, clearTypes)
+                : item,
+            );
+          // Conditional task writes must all succeed before the conditional tracker write.
+          const hasClass = labelIds.some(
+            (id) => current.dataset.match(DataFactory.namedNode(id)).size > 0,
+          );
+          const result = hasClass
+            ? await this.store.updateProject(current, (tracker) => {
+                for (const id of labelIds)
+                  for (const quad of tracker.dataset.match(DataFactory.namedNode(id)))
+                    tracker.dataset.delete(quad);
+              })
+            : current;
+          return {
+            result,
+            commit: (state) => {
+              let next = replaceProject(state, result);
+              for (const item of confirmed) next = replaceTask(next, project.url, item.url, item);
+              return next;
+            },
+          };
+        },
+        () => {
+          void attempt();
+        },
+        preflight
+          .filter((item) => labelIds.some((id) => item.task.types.has(id)))
+          .map((item) => item.url),
       );
     return attempt();
   }
