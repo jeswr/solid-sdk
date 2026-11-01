@@ -4,14 +4,27 @@
 import { Button, IconButton, Input, toast } from "@jeswr/suite-ui";
 import { ListTodo, Pin, PinOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { ChecklistItem } from "../lib/capture";
-import type { NoteColour } from "../lib/model/prefs";
-import { captureToNote } from "../lib/ui/capture";
+import { NoteColour } from "../lib/model/prefs";
+import { captureTitle, captureToNote, escapeHtml } from "../lib/ui/capture";
 import { useNotesContext } from "../state/notes-context";
 import { ColourPicker, LabelChips, LabelPicker } from "./controls";
 
+const captureKey = "notes-capture-draft";
+const captureDraft = z.object({
+  webId: z.string(),
+  title: z.string(),
+  body: z.string(),
+  items: z.array(z.object({ text: z.string(), checked: z.boolean() })).optional(),
+  labels: z.array(z.string()),
+  pinned: z.boolean(),
+  colour: NoteColour,
+  error: z.string(),
+});
+
 export function CaptureBar({ label }: { label?: string }) {
-  const { create } = useNotesContext();
+  const { create, session } = useNotesContext();
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -20,6 +33,8 @@ export function CaptureBar({ label }: { label?: string }) {
   const [pinned, setPinned] = useState(false);
   const [colour, setColour] = useState<NoteColour>("default");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const recovery = useRef<string | null>(null);
   const submitted = useRef(false);
   const mounted = useRef(false);
   const root = useRef<HTMLDivElement>(null);
@@ -31,8 +46,20 @@ export function CaptureBar({ label }: { label?: string }) {
     try {
       input = captureToNote(title, body, items);
     } catch {
-      toast.error("Couldn't capture this text. Check the checklist markers and try again.");
-      return;
+      if (mounted.current) {
+        toast.error("Couldn't capture this text. Check the checklist markers and try again.");
+        return;
+      }
+      // Navigation has removed the form. Preserve unsupported syntax literally
+      // in the HTML-backed note rather than asking for an inaccessible edit.
+      const raw = title ? `${title}\n${body}` : body;
+      input = {
+        title: captureTitle(raw.split(/\r?\n/)[0] as string),
+        body: raw
+          .split(/\r?\n/)
+          .map((line) => `<p>${escapeHtml(line)}</p>`)
+          .join(""),
+      };
     }
     if (input) {
       const saved = { ...input, labels };
@@ -41,12 +68,38 @@ export function CaptureBar({ label }: { label?: string }) {
       try {
         await create(saved, pinned, colour);
       } catch {
+        const message = "Couldn't create your note. Your text has been kept.";
+        try {
+          const text = JSON.stringify({
+            webId: session.webId,
+            title,
+            body,
+            items,
+            labels,
+            pinned,
+            colour,
+            error: message,
+          });
+          localStorage.setItem(captureKey, text);
+          recovery.current = text;
+        } catch {
+          // The mounted form still retains its text if browser storage is full.
+        }
         submitted.current = false;
-        if (mounted.current) setBusy(false);
-        toast.error("Couldn't create your note. Your text has been kept.", {
+        if (mounted.current) {
+          setBusy(false);
+          setError(message);
+        }
+        toast.error(message, {
           action: { label: "Retry", onClick: () => void latestClose.current() },
         });
         return;
+      }
+      try {
+        if (recovery.current !== null && localStorage.getItem(captureKey) === recovery.current)
+          localStorage.removeItem(captureKey);
+      } catch {
+        // A successful pod write does not depend on browser storage cleanup.
       }
     }
     if (!mounted.current) return;
@@ -58,9 +111,29 @@ export function CaptureBar({ label }: { label?: string }) {
     setPinned(false);
     setColour("default");
     setBusy(false);
+    setError(undefined);
     submitted.current = false;
   };
   latestClose.current = finish;
+  useEffect(() => {
+    try {
+      const text = localStorage.getItem(captureKey);
+      const saved = captureDraft.parse(JSON.parse(text ?? "null"));
+      if (saved.webId === session.webId) {
+        recovery.current = text;
+        setTitle(saved.title);
+        setBody(saved.body);
+        setItems(saved.items);
+        setLabels(saved.labels);
+        setPinned(saved.pinned);
+        setColour(saved.colour);
+        setError(saved.error);
+        setExpanded(true);
+      }
+    } catch {
+      // Empty, invalid or unavailable storage leaves a fresh capture form.
+    }
+  }, [session.webId]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -155,6 +228,7 @@ export function CaptureBar({ label }: { label?: string }) {
         </div>
       ) : (
         <>
+          {error && <p role="alert">{error}</p>}
           <Input
             disabled={busy}
             className="notes-title-input"

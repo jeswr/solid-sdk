@@ -74,6 +74,7 @@ async function fill(label: string, value: string) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   const save = vi.fn(async (baseline, input) => ({ ...baseline, ...input, etag: '"v2"' }));
   mocks.context = {
     labels: ["A", "B"],
@@ -109,6 +110,78 @@ it("submits a nonempty capture on keyboard navigation unmount, once", async () =
     false,
     "default",
   );
+});
+
+it("captures unsupported checklist markers literally when keyboard navigation removes the form", async () => {
+  const ui = await mount(h(CaptureBar));
+  await act(() => document.querySelector<HTMLInputElement>('[aria-label="Take a note"]')?.focus());
+  await fill("Note text", "[X] Done\nKeep <this> & that");
+  await ui.unmount();
+  expect(mocks.context.create).toHaveBeenCalledExactlyOnceWith(
+    {
+      title: "[X] Done",
+      body: "<p>[X] Done</p><p>Keep &lt;this&gt; &amp; that</p>",
+      labels: [],
+    },
+    false,
+    "default",
+  );
+});
+
+it.each([
+  "Plain capture",
+  "[X] Done",
+])("restores raw capture text and its error after an unmounted create fails (%s)", async (raw) => {
+  const writing = deferred<StoredNote>();
+  const create = vi.fn().mockReturnValueOnce(writing.promise).mockResolvedValueOnce(note());
+  mocks.context.create = create;
+  const ui = await mount(h(CaptureBar));
+  await act(() => document.querySelector<HTMLInputElement>('[aria-label="Take a note"]')?.focus());
+  await fill("Note text", raw);
+  await ui.unmount();
+  await act(() => writing.reject(new Error("Offline")));
+  expect(JSON.parse(localStorage.getItem("notes-capture-draft") as string).body).toBe(raw);
+  const reopened = await mount(h(CaptureBar));
+  expect(document.querySelector<HTMLTextAreaElement>('[aria-label="Note text"]')?.value).toBe(raw);
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Couldn't create");
+  if (raw.startsWith("[X]")) {
+    await click(button("Close"));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.error).toHaveBeenLastCalledWith(
+      expect.stringContaining("checklist markers"),
+    );
+    await fill("Note text", "[x] Done");
+  }
+  await click(button("Close"));
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(localStorage.getItem("notes-capture-draft")).toBeNull();
+  await reopened.unmount();
+  expect(create).toHaveBeenCalledTimes(2);
+});
+
+it("restores a creation that started before navigation and then failed", async () => {
+  const writing = deferred<StoredNote>();
+  mocks.context.create = vi.fn().mockReturnValue(writing.promise);
+  const ui = await mount(h(CaptureBar));
+  await click(button("New list"));
+  await fill("Note title", "Keep my list");
+  await fill("List item 1", "First item");
+  await click(button("Pin note"));
+  await click(button("Close"));
+  await ui.unmount();
+  expect(mocks.context.create).toHaveBeenCalledTimes(1);
+  await act(() => writing.reject(new Error("Offline")));
+  const reopened = await mount(h(CaptureBar));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value).toBe(
+    "Keep my list",
+  );
+  expect(document.querySelector<HTMLInputElement>('[aria-label="List item 1"]')?.value).toBe(
+    "First item",
+  );
+  expect(button("Unpin note").getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Couldn't create");
+  mocks.context.create = vi.fn().mockResolvedValue(note());
+  await reopened.unmount();
 });
 
 it("keeps a failed capture editable, and does not resubmit an unfinished Close on unmount", async () => {
@@ -221,6 +294,31 @@ it("unlocks the draft when document conversion fails", async () => {
   );
   expect(mocks.editor?.isEditable).toBe(true);
   expect(mocks.context.move).not.toHaveBeenCalled();
+});
+
+it("reuses the created document after trashing fails, including after dismissing confirmation", async () => {
+  const documentUrl = "https://pod.example/docs/converted.ttl";
+  mocks.createDoc.mockResolvedValue({ url: documentUrl });
+  const move = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce(note());
+  mocks.context.move = move;
+  const original = note();
+  await mount(h(NoteDialog, { note: original }));
+  await click(button("Open in Docs"));
+  await click(button("Open in Docs?"));
+  expect(move).toHaveBeenCalledTimes(1);
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.editor?.isEditable).toBe(true);
+  await click(button("Open in Docs"));
+  await click(button("Cancel"));
+  await click(button("Open in Docs"));
+  await click(button("Open in Docs?"));
+  expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
+    title: original.title,
+    body: original.body,
+    format: "text/html",
+  });
+  expect(move).toHaveBeenCalledTimes(2);
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("/docs/d/"));
 });
 
 it("confirms an existing destination before merging labels", async () => {

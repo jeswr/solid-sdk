@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { createPodScopedFetch, normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
+import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { documentSubject, type Revision } from "../../../docs/lib/model/document";
@@ -13,9 +13,9 @@ import {
 import { isDirectChild, toSlug } from "../../../docs/lib/model/layout";
 import { deleteRdf, readRdf, writeRdf } from "../../../docs/lib/model/rdf-io";
 import {
+  discoverProfileLinks,
   discoverRegistrations,
   ensureTypeRegistrations,
-  ProfileTypeIndexAnchor,
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { deleteLabel, mergeLabels } from "../organise/labels";
@@ -131,16 +131,15 @@ export class NotesStore {
       )
     )
       return;
-    const anchor = new ProfileTypeIndexAnchor(this.webId, profile, DataFactory);
-    let advertised = anchor.privateIndexes.size > 0;
-    const scoped = createPodScopedFetch(this.podRoot, { fetch: this.fetchImpl });
-    for (const url of anchor.preferencesFiles) {
-      const { dataset } = await readRdf(url, scoped);
-      advertised ||=
-        new ProfileTypeIndexAnchor(this.webId, dataset, DataFactory).privateIndexes.size > 0;
-    }
+    const { privateIndexes } = await discoverProfileLinks(
+      this.webId,
+      profile,
+      this.fetchImpl,
+      this.podRoot,
+      true,
+    );
     // Notes does not create a missing index or modify the profile/preferences.
-    if (!advertised) return;
+    if (!privateIndexes.length) return;
     await ensureTypeRegistrations({
       webId: this.webId,
       podRoot: this.podRoot,
@@ -254,6 +253,7 @@ export class NotesStore {
     );
     if (state.status === note.location) return note;
     this.validator(note.url, note.etag);
+    const sourceEtag = note.etag;
     await this.ensureContainers();
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
     const moved = await this.allocate(this.containers[state.status], filename, (url) => {
@@ -278,12 +278,19 @@ export class NotesStore {
       return dataset;
     });
     try {
-      await this.remove(note.url, note.etag);
+      await this.remove(note.url, sourceEtag);
     } catch (error) {
       // A lost DELETE response does not establish whether the server committed it.
-      // Only roll back once a revalidated read proves the source still exists.
+      // A different validator belongs to a replacement at the same slug. Keep
+      // the original's destination; existence alone cannot justify rollback.
       try {
-        await readRdf(note.url, this.fetchImpl);
+        const source = await readRdf(note.url, this.fetchImpl);
+        if (
+          (source.etag !== null && source.etag !== sourceEtag) ||
+          new NoteDoc(documentSubject(note.url), source.dataset, DataFactory).body !== note.body
+        )
+          return moved;
+        this.validator(note.url, source.etag);
       } catch (verification) {
         if (
           verification instanceof RdfFetchError &&

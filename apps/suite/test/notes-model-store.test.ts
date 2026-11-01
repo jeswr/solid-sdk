@@ -36,7 +36,9 @@ const ROOT = `${POD}notes/`;
 const NOW = new Date("2026-11-01T12:00:00Z");
 type Intercept = (url: string, init: RequestInit | undefined) => Promise<Response | undefined>;
 
-async function fixture(registration: "none" | "profile" | "preferences" = "none") {
+async function fixture(
+  registration: "none" | "profile" | "preferences" | "extended" | "extended-preferences" = "none",
+) {
   let time = NOW;
   const pod = createDemoPod({ root: POD });
   const profile = new Store();
@@ -47,6 +49,26 @@ async function fixture(registration: "none" | "profile" | "preferences" = "none"
     const preferences = new Store();
     new ProfileTypeIndexAnchor(WEBID, preferences, DataFactory).privateIndex = INDEX;
     await writeRdf(PREFS, preferences, { createOnly: true, fetchImpl: pod.fetch });
+  }
+  if (registration.startsWith("extended")) {
+    const extended = `${POD}profile/extended`;
+    const { NamedNodeAs, NamedNodeFrom, SetFrom } = await import("@rdfjs/wrapper");
+    SetFrom.subjectPredicate(
+      anchor,
+      "http://www.w3.org/2000/01/rdf-schema#seeAlso",
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    ).add(extended);
+    const dataset = new Store();
+    const linked = new ProfileTypeIndexAnchor(WEBID, dataset, DataFactory);
+    if (registration === "extended") linked.privateIndex = INDEX;
+    else {
+      linked.preferencesFiles.add(PREFS);
+      const preferences = new Store();
+      new ProfileTypeIndexAnchor(WEBID, preferences, DataFactory).privateIndex = INDEX;
+      await writeRdf(PREFS, preferences, { createOnly: true, fetchImpl: pod.fetch });
+    }
+    await writeRdf(extended, dataset, { createOnly: true, fetchImpl: pod.fetch });
   }
   await writeRdf(WEBID.split("#")[0] as string, profile, {
     createOnly: true,
@@ -119,6 +141,8 @@ describe("notes store", () => {
   it.each([
     "profile",
     "preferences",
+    "extended",
+    "extended-preferences",
   ] as const)("registers once alongside Docs via %s, without bootstrapping an absent index", async (location) => {
     const s = await fixture(location);
     await Promise.all([s.store.create({ title: "First" }), s.store.create({ title: "Second" })]);
@@ -374,6 +398,74 @@ describe("notes store", () => {
     expect(s.pod.has(moved.url)).toBe(true);
     expect(moved.body).toBe("Only copy");
     expect(s.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+
+  it.each([
+    "new-etag",
+    "same-etag",
+    "no-etag",
+  ])("keeps the original destination when another tab replaces the deleted slug (%s)", async (validator) => {
+    const s = await fixture();
+    const note = await s.store.create({ body: "Original body" });
+    s.intercept(async (url, init) => {
+      if (url !== note.url) return;
+      if (init?.method === "DELETE") {
+        await s.pod.fetch(url, init);
+        await writeRdf(
+          url,
+          buildNote(url, { title: "Replacement", body: "Unrelated replacement" }),
+          {
+            createOnly: true,
+            fetchImpl: s.pod.fetch,
+          },
+        );
+        throw new TypeError("Lost DELETE response");
+      }
+      if (validator === "new-etag") return;
+      const response = await s.pod.fetch(url, init);
+      const headers = new Headers(response.headers);
+      if (validator === "same-etag") headers.set("etag", note.etag as string);
+      else headers.delete("etag");
+      return new Response(await response.text(), { headers });
+    });
+    const moved = await s.store.archive(note);
+    expect((await s.store.read(note.url))?.body).toBe("Unrelated replacement");
+    expect((await s.store.read(moved.url))?.body).toBe("Original body");
+    expect(s.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+
+  it("treats a missing verification validator as uncertain when the body is unchanged", async () => {
+    const s = await fixture();
+    const note = await s.store.create({ body: "Original body" });
+    s.intercept(async (url, init) => {
+      if (url !== note.url) return;
+      if (init?.method === "DELETE") throw new TypeError("Lost response");
+      const response = await s.pod.fetch(url, init);
+      const headers = new Headers(response.headers);
+      headers.delete("etag");
+      return new Response(await response.text(), { headers });
+    });
+    await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteMoveUncertainError);
+    expect(s.pod.has(note.url)).toBe(true);
+    expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(true);
+  });
+
+  it("never rolls back a destination that another tab has modified", async () => {
+    const s = await fixture();
+    const note = await s.store.create({ body: "Original body" });
+    const destination = `${ROOT}archive/note.ttl`;
+    s.intercept(async (url, init) => {
+      if (url !== note.url || init?.method !== "DELETE") return;
+      const moved = await s.store.read(destination);
+      assert(moved);
+      await s.store.save(moved, { body: "Newer destination edit" }, moved.etag);
+      return new Response(null, { status: 412 });
+    });
+    await expect(s.store.archive(note)).rejects.toBeInstanceOf(AggregateError);
+    expect((await s.store.read(destination))?.body).toBe("Newer destination edit");
+    const deletion = s.calls.find((call) => call.url === destination && call.method === "DELETE");
+    expect(deletion?.headers.get("if-match")).toBeTruthy();
+    expect(deletion?.headers.get("if-match")).not.toBe((await s.store.read(destination))?.etag);
   });
 
   it.each([

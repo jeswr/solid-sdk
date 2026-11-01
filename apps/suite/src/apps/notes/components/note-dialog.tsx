@@ -55,6 +55,8 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   );
   const [busy, setBusy] = useState(false);
   const actionPending = useRef(false);
+  // Keep the destination across failed moves and dismissed confirmations.
+  const conversions = useRef(new Map<string, string>());
   const [confirmDocs, setConfirmDocs] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [url, setUrl] = useState("");
@@ -432,18 +434,24 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           close={() => setConfirmDocs(false)}
           confirm={() =>
             act(async (saved) => {
-              const docs = createDocsStore({
-                fetchImpl: session.fetch,
-                podRoot: session.storageUrl,
-                webId: session.webId,
-              });
-              const document = await docs.create({
-                title: saved.title || "Untitled document",
-                body: saved.body,
-                format: "text/html",
-              });
+              let documentUrl = conversions.current.get(saved.url);
+              if (!documentUrl) {
+                const docs = createDocsStore({
+                  fetchImpl: session.fetch,
+                  podRoot: session.storageUrl,
+                  webId: session.webId,
+                });
+                const document = await docs.create({
+                  title: saved.title || "Untitled document",
+                  body: saved.body,
+                  format: "text/html",
+                });
+                documentUrl = document.url;
+                conversions.current.set(saved.url, documentUrl);
+              }
               await move(saved, "trash");
-              router.push(`/docs/d/${encodeRef(document.url)}`);
+              router.push(`/docs/d/${encodeRef(documentUrl)}`);
+              conversions.current.delete(saved.url);
             })
           }
         />
