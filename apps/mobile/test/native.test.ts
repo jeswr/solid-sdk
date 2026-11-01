@@ -350,6 +350,28 @@ describe("iOS project", () => {
     expect(read("ios/App/Shared/ShareOutStore.swift")).not.toMatch(/import (Capacitor|UIKit)/);
   });
 
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the iOS PDF handoff, which previews read-only and deletes the file on close", () => {
+    expect(read("ios/App/App/MainViewController.swift")).toContain(
+      "bridge.registerPluginInstance(SuiteFilesPlugin())",
+    );
+    const source = read("ios/App/App/SuiteFilesPlugin.swift");
+    expect(source).toContain('jsName = "SuiteFiles"');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen"]) {
+      expect(source).toContain(`CAPPluginMethod(name: "${method}"`);
+    }
+    expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
+    expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
+    expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);
+    const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const file of [
+      "PdfPreviewStore.swift",
+      "SuiteFilesPlugin.swift",
+      "PdfPreviewStoreTests.swift",
+    ])
+      expect(pbxproj).toContain(`/* ${file} in Sources */`);
+  });
+
   test("replaces @capacitor/share on iOS so only committed staged files can be shared", () => {
     const main = read("ios/App/App/MainViewController.swift");
     // Registered after the staging plugin, and after Capacitor's own plugins have loaded.
@@ -450,7 +472,10 @@ describe("Android project", () => {
     const entries = [...paths.matchAll(/<([a-z-]+)\s+name="([^"]+)"\s+path="([^"]+)"\s*\/>/g)].map(
       (match) => match.slice(1),
     );
-    expect(entries).toEqual([["cache-path", "share_out", "share-out/"]]);
+    expect(entries).toEqual([
+      ["cache-path", "share_out", "share-out/"],
+      ["cache-path", "pdf_preview", "pdf-preview/"],
+    ]);
     expect(paths).not.toMatch(/<(?:external|root|files)-path/);
     expect(manifest).toContain('android:resource="@xml/file_paths"');
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Android manifest placeholder is literal.
@@ -461,6 +486,26 @@ describe("Android project", () => {
       expect(source).toContain(`public void ${method}(PluginCall call)`);
     }
     expect(source).toContain('result.put("uri", Uri.fromFile(file).toString())');
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the PDF handoff, which opens a read-only FileProvider URI after a viewer check", () => {
+    expect(read("android/app/src/main/java/org/jeswr/suite/MainActivity.java")).toContain(
+      "registerPlugin(SuiteFilesPlugin.class)",
+    );
+    const source = read("android/app/src/main/java/org/jeswr/suite/SuiteFilesPlugin.java");
+    expect(source).toContain('@CapacitorPlugin(name = "SuiteFiles")');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen"]) {
+      expect(source).toContain(`public void ${method}(PluginCall call)`);
+    }
+    expect(source).toContain('setDataAndType(uri, "application/pdf")');
+    expect(source).toContain("addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)");
+    expect(source).not.toContain("FLAG_GRANT_WRITE_URI_PERMISSION");
+    expect(source.indexOf("resolveActivity")).toBeLessThan(source.indexOf("startActivity"));
+    expect(source).toContain('"pdf-preview"');
+    expect(manifest).toMatch(
+      /<queries>\s*<intent>\s*<action android:name="android.intent.action.VIEW" \/>\s*<data android:mimeType="application\/pdf" \/>\s*<\/intent>\s*<\/queries>/,
+    );
   });
 
   test("disables backup and cleartext in the main manifest", () => {
