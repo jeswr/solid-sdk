@@ -154,8 +154,19 @@ After committing, requester inbox discovery and ActivityStreams `Accept`/`Reject
 effort and happen only when the caller passes an unauthenticated `publicFetch` (forced to
 `credentials: "omit"` and `redirect: "error"`); global fetch is never used, since an application
 may have patched it with authentication. Requester profile and inbox URLs must be public HTTPS:
-loopback, private, link-local and local-name hosts are refused. Failures and a missing
-`publicFetch` return `notified: false` without rollback.
+loopback, private, link-local and local-name hosts are refused. That check reads only the URL: a
+public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
+such as `createGuardedFetch()` from `@jeswr/guarded-fetch` as `publicFetch`; in a browser, where
+names cannot be resolved, the URL check is the only guard. Failures and a missing `publicFetch`
+return `notified: false` without rollback.
+
+Grant records, consent receipts and each approval's pinned decision live in
+`<storage>settings/access-records/`. Before writing there, `decide` creates the folder with an
+owner-only ACL, or checks that its existing ACL names only the owner (with Control); a shared
+folder stops the decision. Approval first pins its decision (targets, modes, expiry) in a
+create-only record in that folder, then moves the request to Approving. A retry resumes only from
+that record: a notification that claims to be Approving or Approved without one was written by the
+requester, so `decide` refuses to approve it (it can still be denied).
 
 Every document the pipeline writes back (including the requester-authored request during CAS) is
 serialised with regenerated blank-node labels, validated language tags and no named graphs, so a

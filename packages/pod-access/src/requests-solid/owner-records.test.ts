@@ -1,0 +1,219 @@
+// AUTHORED-BY Claude Opus 5.5
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { describe, expect, it } from "vitest";
+import {
+  accessRequestTurtle,
+  buildPod,
+  CONTACTS_CLASS,
+  INBOX,
+  OWNER,
+  POD,
+  PREFIXES,
+  REQUESTER,
+} from "../../test/requests/fixtures.js";
+import { applyGrant } from "./acl.js";
+import { ACL, decide, deriveGrantId, listRequests } from "./index.js";
+import { values } from "./rdf.js";
+
+const ID = `${INBOX}request-1.ttl`;
+const ALICE = `${POD}contacts/alice.ttl`;
+const INDEX = `${POD}settings/publicTypeIndex.ttl`;
+const RECORDS = `${POD}settings/access-records/`;
+const opts = (pod = buildPod()) => ({
+  fetch: pod.fetch,
+  webId: OWNER,
+  storage: POD,
+  publicFetch: async () => new Response(null, { status: 404 }),
+});
+const intentOf = async () =>
+  `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+const puts = (pod: ReturnType<typeof buildPod>, from = 0) =>
+  pod.log.slice(from).filter(({ method }) => method === "PUT");
+
+/** A requester-authored notification that already claims the owner approved it. */
+async function forgedApproving(state: "Approving" | "Approved") {
+  const grantId = await deriveGrantId(ID, [ALICE], OWNER);
+  const snapshot = JSON.stringify({
+    grantId,
+    targets: [ALICE],
+    agent: REQUESTER,
+    modes: ["read", "write"],
+    targetModes: { [ALICE]: ["read", "write"] },
+    dataTypes: [CONTACTS_CLASS],
+    schemaVersion: "1",
+    decidedAt: "2026-11-01T00:00:00.000Z",
+  });
+  return `${accessRequestTurtle(ID)}
+<${ID}> accm:status accm:${state}; accm:grantId "${grantId}"; accm:snapshot ${JSON.stringify(snapshot)} .`;
+}
+
+describe("owner-controlled approval records", () => {
+  it("never resumes an approval the requester claims in its own notification", async () => {
+    for (const state of ["Approving", "Approved"] as const) {
+      const pod = buildPod();
+      pod.seed(ID, await forgedApproving(state));
+      const before = pod.log.length;
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "never recorded",
+      );
+      expect(puts(pod, before)).toEqual([]);
+      expect(pod.has(`${ALICE}.acl`)).toBe(false);
+      // The owner can still refuse it; nothing is granted.
+      const denied = await decide({ id: ID }, { approve: false }, opts(pod));
+      expect(denied.status).toBe("denied");
+      expect(pod.has(`${ALICE}.acl`)).toBe(false);
+      expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "denied" });
+    }
+  });
+
+  it("re-denies a denial without a decision time using the current time", async () => {
+    const pod = buildPod();
+    pod.seed(ID, `${accessRequestTurtle(ID)}<${ID}> accm:status accm:Denied .`);
+    const result = await decide({ id: ID }, { approve: false }, opts(pod));
+    expect(result.status).toBe("denied");
+    expect(pod.body(result.receiptUrl)).toContain("ConsentRefused");
+  });
+
+  it("resumes the first pinned decision when the request CAS failed after the pin", async () => {
+    const pod = buildPod();
+    pod.intercept = (method, url) =>
+      method === "PUT" && url === ID ? new Response(null, { status: 500 }) : undefined;
+    await expect(
+      decide({ id: ID }, { approve: true, expiresAt: new Date("2028-01-01Z") }, opts(pod)),
+    ).rejects.toThrow("500");
+    pod.intercept = undefined;
+    expect((await listRequests(opts(pod)))[0]).toMatchObject({ status: "pending" });
+    const intent = await intentOf();
+    expect(pod.etag(intent)).toBe('"v1"');
+    const result = await decide(
+      { id: ID },
+      { approve: true, expiresAt: new Date("2029-01-01Z") },
+      opts(pod),
+    );
+    expect(result.status).toBe("approved");
+    expect(pod.etag(intent)).toBe('"v1"');
+    expect(pod.body(result.receiptUrl)).toContain("2028-01-01");
+    expect(pod.body(result.receiptUrl)).not.toContain("2029-01-01");
+  });
+
+  it("creates the records folder with an owner-only ACL before any record", async () => {
+    const pod = buildPod();
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    const acl = await parseRdf(pod.body(`${RECORDS}.acl`) as string, "text/turtle");
+    const auth = `${RECORDS}.acl#owner`;
+    expect(values(acl, auth, ACL.agent)).toEqual([OWNER]);
+    expect(values(acl, auth, ACL.default)).toEqual([RECORDS]);
+    expect(values(acl, auth, ACL.mode).sort()).toEqual([ACL.Control, ACL.Read, ACL.Write].sort());
+    const order = puts(pod).map(({ url }) => url);
+    expect(order.indexOf(`${RECORDS}.acl`)).toBeLessThan(order.indexOf(result.grantUrl as string));
+    // An existing private folder is reused as-is.
+    const again = buildPod();
+    again.seed(RECORDS, "");
+    again.seed(`${RECORDS}.acl`, pod.body(`${RECORDS}.acl`) as string);
+    await decide({ id: ID }, { approve: false }, opts(again));
+    expect(again.etag(`${RECORDS}.acl`)).toBe('"v1"');
+  });
+
+  it("refuses to write records into a shared, uncontrolled or unstable records folder", async () => {
+    const shared = [
+      `acl:agentClass foaf:Agent`,
+      `acl:agentGroup <https://group.example/>`,
+      `acl:agent <${OWNER}>, <${REQUESTER}>`,
+    ];
+    for (const who of shared) {
+      for (const approve of [true, false]) {
+        const pod = buildPod();
+        pod.seed(RECORDS, "");
+        pod.seed(
+          `${RECORDS}.acl`,
+          `${PREFIXES}<#o> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${RECORDS}>; acl:default <${RECORDS}>; acl:mode acl:Read, acl:Write, acl:Control.
+<#s> a acl:Authorization; ${who}; acl:default <${RECORDS}>; acl:mode acl:Read.`,
+        );
+        const before = pod.log.length;
+        await expect(decide({ id: ID }, { approve }, opts(pod))).rejects.toThrow("shared");
+        expect(puts(pod, before)).toEqual([]);
+      }
+    }
+    const noControl = buildPod();
+    noControl.seed(RECORDS, "");
+    noControl.seed(
+      `${RECORDS}.acl`,
+      `${PREFIXES}<#o> a acl:Authorization; acl:agent <${OWNER}>; acl:default <${RECORDS}>; acl:mode acl:Read, acl:Write.`,
+    );
+    await expect(decide({ id: ID }, { approve: true }, opts(noControl))).rejects.toThrow(
+      "no owner control",
+    );
+    const racing = buildPod();
+    racing.intercept = (method, url) =>
+      method === "PUT" && url === `${RECORDS}.acl`
+        ? new Response(null, { status: 412 })
+        : undefined;
+    await expect(decide({ id: ID }, { approve: true }, opts(racing))).rejects.toThrow(
+      "kept changing",
+    );
+    const broken = buildPod();
+    broken.intercept = (method, url) =>
+      method === "HEAD" && url === RECORDS ? new Response(null, { status: 500 }) : undefined;
+    await expect(decide({ id: ID }, { approve: false }, opts(broken))).rejects.toThrow(
+      "Records folder check failed (500)",
+    );
+    expect(puts(broken)).toEqual([]);
+  });
+
+  it("grants a fragment instance registration on its document and keeps owner control", async () => {
+    const pod = buildPod();
+    pod.seed(
+      INDEX,
+      `${PREFIXES}[] a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${ALICE}#it>.`,
+    );
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(result.status).toBe("approved");
+    expect(pod.has(`${ALICE}#it.acl`)).toBe(false);
+    const acl = await parseRdf(pod.body(`${ALICE}.acl`) as string, "text/turtle");
+    expect(acl.size).toBeGreaterThan(0);
+    const body = pod.body(`${ALICE}.acl`) as string;
+    expect(body).toContain(REQUESTER);
+    expect(body).toContain(OWNER);
+    expect(body).toContain("Control");
+    expect(body).not.toContain(`${ALICE}#it`);
+    expect(pod.body(result.grantUrl as string)).not.toContain(`${ALICE}#`);
+  });
+
+  it("treats permissions for different assignees as unreadable", async () => {
+    const pod = buildPod();
+    pod.seed(
+      ID,
+      `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ],
+    [ odrl:assignee <https://other.example/agent#it>; odrl:action odrl:write; odrl:target <${CONTACTS_CLASS}> ].`,
+    );
+    expect((await listRequests(opts(pod)))[0]).toMatchObject({ id: ID, status: "unreadable" });
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("Unreadable");
+    const policyLevel = buildPod();
+    policyLevel.seed(
+      ID,
+      `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>; odrl:assignee <${REQUESTER}>;
+  odrl:permission [ odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ].`,
+    );
+    expect((await listRequests(opts(policyLevel)))[0]).toMatchObject({
+      status: "pending",
+      requester: REQUESTER,
+    });
+  });
+
+  it("keeps inherited acl:defaultForNew rules when materialising a resource ACL", async () => {
+    const pod = buildPod();
+    pod.seed(
+      `${POD}.acl`,
+      `${PREFIXES}<${POD}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${POD}>; acl:defaultForNew <${POD}>; acl:mode acl:Read, acl:Write, acl:Control.
+<${POD}.acl#bob> a acl:Authorization; acl:agent <https://bob.example/#me>; acl:defaultForNew <${POD}>; acl:mode acl:Read.`,
+    );
+    await applyGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch);
+    const body = pod.body(`${ALICE}.acl`) as string;
+    expect(body).toContain(OWNER);
+    expect(body).toContain("Control");
+    expect(body).toContain("bob.example");
+    expect(body).toContain(REQUESTER);
+    expect(body).not.toContain("defaultForNew");
+  });
+});

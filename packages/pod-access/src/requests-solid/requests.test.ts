@@ -18,6 +18,7 @@ import {
   ACL,
   DPV,
   decide,
+  deriveGrantId,
   listRequests,
   MAX_MEMBERS,
   MAX_NOTIFICATION_BYTES,
@@ -187,6 +188,16 @@ describe("decision state machine", () => {
       options(pod),
     );
     expect(result).toMatchObject({ status: "approved", notified: false, expiryEnforced: false });
+    // The owner-only records folder and the owner's intent record precede the request CAS.
+    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+    expect(writes.slice(0, 3).map((write) => write.url)).toEqual([
+      RECORDS,
+      `${RECORDS}.acl`,
+      intent,
+    ]);
+    expect(writes[2]?.headers.get("if-none-match")).toBe("*");
+    expect(pod.body(`${RECORDS}.acl`)).not.toContain(REQUESTER);
+    writes.splice(0, 3);
     expect(writes[0]).toMatchObject({ url: ID });
     expect(writes[0]?.headers.get("if-match")).toBe('"v1"');
     expect(writes[0]?.body).toContain("Approving");
@@ -268,7 +279,7 @@ describe("decision state machine", () => {
       (outcome) => outcome.status === "rejected",
     ) as PromiseRejectedResult;
     expect(loser.reason).toBeInstanceOf(RequestConflictError);
-    expect(loser.reason.current).toBe("approving");
+    expect(["approving", "approved"]).toContain(loser.reason.current);
     const grantWrites = pod.log.filter(
       ({ method, url }) => method === "PUT" && url.startsWith(`${RECORDS}grant-`),
     );
@@ -279,14 +290,17 @@ describe("decision state machine", () => {
   it("recovers after records but before ACLs, without resolving again or duplicating records", async () => {
     const pod = buildPod();
     pod.intercept = (method, url) => {
-      if (method === "PUT" && url.endsWith(".acl")) throw new Error("crash before ACL write");
+      if (method === "PUT" && url.endsWith(".acl") && !url.startsWith(RECORDS))
+        throw new Error("crash before ACL write");
     };
     await expect(
       decide({ id: ID }, { approve: true, expiresAt: new Date("2028-01-01Z") }, options(pod)),
     ).rejects.toThrow("crash");
     expect(await entry(pod)).toMatchObject({ status: "approving" });
     const persisted = pod.body(ID) as string;
-    expect(persisted).toContain(ALICE);
+    expect(persisted).not.toContain(ALICE);
+    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+    expect(pod.body(intent)).toContain(ALICE);
     pod.seed(`${POD}settings/publicTypeIndex.ttl`, "corrupted index @@@");
     pod.seed(`${POD}contacts/new.ttl`, "<urn:new> a <urn:Contact>.");
     pod.intercept = undefined;
@@ -313,7 +327,11 @@ describe("decision state machine", () => {
     expect(result.status).toBe("denied");
     expect(pod.body(result.receiptUrl)).toContain("ConsentRefused");
     expect(await decide({ id: ID }, { approve: false }, options(pod))).toEqual(result);
-    expect(pod.log.some(({ method, url }) => method === "PUT" && url.endsWith(".acl"))).toBe(false);
+    expect(
+      pod.log.some(
+        ({ method, url }) => method === "PUT" && url.endsWith(".acl") && url !== `${RECORDS}.acl`,
+      ),
+    ).toBe(false);
     await expect(decide({ id: ID }, { approve: true }, options(pod))).rejects.toThrow(
       "Cannot approve",
     );

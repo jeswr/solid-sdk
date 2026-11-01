@@ -46,6 +46,8 @@ const LOCAL_NAMES: readonly string[] = Object.freeze([
 /**
  * A requester-supplied URL the owner's browser may contact without credentials: HTTPS only, and
  * never a loopback, private, link-local or local-name host (no requests into the owner's network).
+ * This only classifies the URL; it cannot see what a public name resolves to, so server callers
+ * must also pass a DNS-checking `publicFetch` (for example from `@jeswr/guarded-fetch`).
  */
 export function publicHttpsUrl(url: string): string {
   const parsed = new URL(httpUrl(url));
@@ -123,6 +125,13 @@ export async function read(url: string, fetchFn: typeof fetch) {
   }
 }
 
+/** Throws unless `etag` is a strong validator, so callers can refuse before any other write. */
+export function requireStrongEtag(etag: string | null): void {
+  if (etag === null || !/^"[^"\r\n]*"$/.test(etag)) {
+    throw new Error("A strong ETag is required for a conditional update");
+  }
+}
+
 /** Existing documents always require a strong validator. 412 is returned for reconciliation. */
 export async function put(
   url: string,
@@ -131,9 +140,7 @@ export async function put(
   etag: string | null,
   create = false,
 ): Promise<boolean> {
-  if (!create && (etag === null || !/^"[^"\r\n]*"$/.test(etag))) {
-    throw new Error("A strong ETag is required for a conditional update");
-  }
+  if (!create) requireStrongEtag(etag);
   const response = await fetchFn(url, {
     method: "PUT",
     headers: {

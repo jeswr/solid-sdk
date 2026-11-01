@@ -8,7 +8,12 @@ import { policyToRdf } from "@jeswr/solid-odrl";
 import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { Store } from "n3";
-import { accessModel, applyGrant, UnsupportedAccessModelError } from "./acl.js";
+import {
+  accessModel,
+  applyGrant,
+  ensureOwnerOnlyContainer,
+  UnsupportedAccessModelError,
+} from "./acl.js";
 import {
   httpUrl,
   MAX_MEMBERS,
@@ -17,6 +22,7 @@ import {
   put,
   RequestConflictError,
   read,
+  requireStrongEtag,
   scoped,
   transport,
 } from "./http.js";
@@ -45,7 +51,9 @@ export interface DecideOptions {
    * Unauthenticated transport for requester discovery and delivery, and for an owner profile
    * hosted outside storage; forced to `credentials: "omit"` and `redirect: "error"`. Without
    * it the requester is not notified (`notified: false`). Requester profile and inbox URLs must
-   * be public HTTPS (no loopback, private or local-name hosts).
+   * be public HTTPS (no loopback, private or local-name hosts). That check reads only the URL,
+   * so in Node pass a fetch that also checks resolved addresses, such as `createGuardedFetch()`
+   * from `@jeswr/guarded-fetch`.
    */
   publicFetch?: typeof fetch;
   now?: () => Date;
@@ -111,12 +119,52 @@ async function cas(request: ParsedRequest, fetchFn: typeof fetch): Promise<void>
   }
 }
 
+function recordsFolder(storage: string): string {
+  return new URL("settings/access-records/", storage).href;
+}
+
 function urls(storage: string, id: string) {
-  const base = new URL("settings/access-records/", storage).href;
+  const base = recordsFolder(storage);
   return {
     grantUrl: scoped(storage, `${base}grant-${id}.ttl`),
     receiptUrl: scoped(storage, `${base}receipt-${id}.ttl`),
   };
+}
+
+/**
+ * The owner's own record of an approval in progress. Inbox notifications are authored by the
+ * requester, so a claimed `Approving` state or snapshot inside one proves nothing: recovery only
+ * ever resumes from this create-only document in the owner-only records folder.
+ */
+async function intentUrl(storage: string, id: string, owner: string): Promise<string> {
+  const key = await deriveGrantId(id, [], owner, "intent-1");
+  return scoped(storage, `${recordsFolder(storage)}intent-${key}.ttl`);
+}
+
+async function readIntent(
+  url: string,
+  id: string,
+  fetchFn: typeof fetch,
+): Promise<Snapshot | undefined> {
+  const doc = await read(url, fetchFn);
+  if (!doc) return undefined;
+  const stored = values(doc.dataset, url, `${ACCM.ns}snapshot`)[0];
+  if (values(doc.dataset, url, ACCM.requestRef)[0] !== id || stored === undefined)
+    throw new Error("Approval record does not match this request");
+  return JSON.parse(stored) as Snapshot;
+}
+
+async function writeIntent(
+  url: string,
+  id: string,
+  snapshot: Snapshot,
+  fetchFn: typeof fetch,
+): Promise<boolean> {
+  const dataset = new Store();
+  set(dataset, url, ACCM.requestRef, id, true);
+  set(dataset, url, ACCM.grantId, snapshot.grantId);
+  set(dataset, url, `${ACCM.ns}snapshot`, JSON.stringify(snapshot));
+  return put(url, await turtle(dataset), fetchFn, null, true);
 }
 
 async function receipt(
@@ -177,7 +225,8 @@ async function validateSnapshot(
   httpUrl(snapshot.agent);
   for (const target of snapshot.targets) {
     scoped(options.storage, target);
-    if (/\.(acl|acr)(?:[?#]|$)/i.test(target)) throw new Error("Invalid snapshot target");
+    if (/\.(acl|acr)(?:[?#]|$)/i.test(target) || target.includes("#"))
+      throw new Error("Invalid snapshot target");
   }
 }
 
@@ -310,11 +359,19 @@ export async function decide(
   const request = await current(id, fetchFn);
   const parsed = request.entry;
   const now = (options.now ?? (() => new Date()))().toISOString();
+  const records = recordsFolder(storage);
+  const intent = await intentUrl(storage, id, options.webId);
+  const resuming = parsed.status === "approving" || parsed.status === "approved";
+  const recorded = resuming ? await readIntent(intent, id, fetchFn) : undefined;
+  // A claimed approval with no owner record was written by the requester: it can still be denied.
+  const claimed = resuming && recorded === undefined;
   if (!decision.approve) {
-    if (parsed.status !== "pending" && parsed.status !== "denied")
+    if (parsed.status !== "pending" && parsed.status !== "denied" && !claimed)
       throw new Error("Cannot deny an approval");
-    const decidedAt = parsed.decidedAt ?? now;
-    if (parsed.status === "pending") {
+    if (parsed.status !== "denied") requireStrongEtag(request.etag);
+    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
+    const decidedAt = parsed.status === "denied" ? (parsed.decidedAt ?? now) : now;
+    if (parsed.status !== "denied") {
       set(request.dataset, id, ACCM.status, ACCM.Denied, true);
       set(request.dataset, id, `${ACCM.ns}decidedAt`, decidedAt);
       await cas(request, fetchFn);
@@ -336,6 +393,8 @@ export async function decide(
     };
   }
   if (parsed.status === "denied") throw new Error("Cannot approve a denial");
+  if (claimed) throw new Error("This request claims an approval that was never recorded");
+  if (parsed.status !== "approved") requireStrongEtag(request.etag);
   let snapshot: Snapshot;
   if (parsed.status === "pending") {
     const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)];
@@ -383,17 +442,25 @@ export async function decide(
       ...(parsed.purpose !== undefined && { purpose: parsed.purpose }),
       ...(decision.expiresAt !== undefined && { expiresAt: decision.expiresAt.toISOString() }),
     };
+    // Records (including this pin) only ever live in a folder only the owner can read.
+    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
+    // Pin the decision in the owner's records first. If an earlier attempt already pinned one,
+    // resume that decision (forward-only) and ignore this call's overrides.
+    if (!(await writeIntent(intent, id, snapshot, fetchFn))) {
+      snapshot = (await readIntent(intent, id, fetchFn)) as Snapshot;
+    }
+    await validateSnapshot(snapshot, id, options);
     // Ignore all requester-supplied grant/receipt/snapshot IRIs and persist our own tuple.
     set(request.dataset, id, ACCM.status, ACCM.Approving, true);
     set(request.dataset, id, ACCM.grantId, snapshot.grantId);
     set(request.dataset, id, ACCM.grantRef, undefined, true);
-    set(request.dataset, id, `${ACCM.ns}snapshot`, JSON.stringify(snapshot));
-    set(request.dataset, id, `${ACCM.ns}decidedAt`, now);
+    set(request.dataset, id, `${ACCM.ns}snapshot`, undefined);
+    set(request.dataset, id, `${ACCM.ns}decidedAt`, snapshot.decidedAt);
     await cas(request, fetchFn);
   } else {
-    const stored = values(request.dataset, id, `${ACCM.ns}snapshot`)[0];
-    if (stored === undefined) throw new Error("Missing persisted approval snapshot");
-    snapshot = JSON.parse(stored) as Snapshot;
+    // Resume only from the owner's record, never from the requester-authored notification.
+    snapshot = recorded as Snapshot;
+    await ensureOwnerOnlyContainer(records, storage, options.webId, fetchFn);
   }
   await validateSnapshot(snapshot, id, options);
   const locations =

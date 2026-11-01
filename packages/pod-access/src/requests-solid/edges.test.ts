@@ -402,16 +402,20 @@ describe("conditional ACL grant port", () => {
 });
 
 describe("forward-only approval reconciliation", () => {
+  /** Crash after the Approving CAS, before grant records; returns the owner's intent record. */
   async function orphan(pod: ReturnType<typeof buildPod>) {
     pod.intercept = (method, url) => {
-      if (method === "PUT" && url.startsWith(RECORDS)) throw new Error("crash");
+      if (method === "PUT" && /access-records\/(grant|receipt)-/.test(url))
+        throw new Error("crash");
     };
     await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("crash");
     pod.intercept = undefined;
-    const dataset = await graph(pod.body(ID) as string);
+    const intent = `${RECORDS}intent-${await deriveGrantId(ID, [], OWNER, "intent-1")}.ttl`;
+    const dataset = await graph(pod.body(intent) as string);
     return {
+      intent,
       dataset,
-      snapshot: JSON.parse(values(dataset, ID, `${ACCM.ns}snapshot`)[0] as string),
+      snapshot: JSON.parse(values(dataset, intent, `${ACCM.ns}snapshot`)[0] as string),
     };
   }
 
@@ -456,7 +460,7 @@ describe("forward-only approval reconciliation", () => {
 
   it("rejects corrupt or missing persisted snapshots before records or ACL writes", async () => {
     const pod = buildPod();
-    const { dataset, snapshot } = await orphan(pod);
+    const { intent, dataset, snapshot } = await orphan(pod);
     for (const change of [
       { schemaVersion: "2" },
       { targets: [] },
@@ -479,17 +483,31 @@ describe("forward-only approval reconciliation", () => {
         forged.grantId = await deriveGrantId(ID, forged.targets, OWNER);
         forged.targetModes = { [change.targets[0] as string]: ["read"] };
       }
-      set(dataset, ID, `${ACCM.ns}snapshot`, JSON.stringify(forged));
-      pod.seed(ID, await turtle(dataset));
+      set(dataset, intent, `${ACCM.ns}snapshot`, JSON.stringify(forged));
+      pod.seed(intent, await turtle(dataset));
       const before = pod.log.length;
       await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow();
       expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
     }
-    set(dataset, ID, `${ACCM.ns}snapshot`, undefined);
-    pod.seed(ID, await turtle(dataset));
+    set(dataset, intent, `${ACCM.ns}snapshot`, undefined);
+    pod.seed(intent, await turtle(dataset));
     await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
-      "Missing persisted",
+      "does not match",
     );
+    set(dataset, intent, `${ACCM.ns}snapshot`, JSON.stringify(snapshot));
+    set(dataset, intent, ACCM.requestRef, `${INBOX}other.ttl`, true);
+    pod.seed(intent, await turtle(dataset));
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "does not match",
+    );
+    // Without the owner's record, an Approving notification is a requester claim: approval refuses
+    // it before any write.
+    pod.delete(intent);
+    const before = pod.log.length;
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "never recorded",
+    );
+    expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
     pod.delete(ID);
     await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
       "no longer exists",

@@ -7,6 +7,12 @@ import { members } from "./inbox.js";
 import { values } from "./rdf.js";
 import { RDF, SOLID } from "./vocab.js";
 
+function documentOf(url: string): string {
+  const parsed = new URL(url);
+  parsed.hash = "";
+  return parsed.href;
+}
+
 /** Resolve only owner-advertised registrations. Every credentialed link stays in storage. */
 export async function resolveTargets(
   dataTypes: readonly string[],
@@ -61,8 +67,9 @@ export async function resolveTargets(
       );
       if (classes.length === 0) continue;
       for (const value of classes) matched.add(value);
+      // ACLs govern documents: a fragment-bearing instance IRI names its containing document.
       for (const value of values(index, id, SOLID.instance))
-        targets.add(scoped(options.storage, value));
+        targets.add(scoped(options.storage, documentOf(value)));
       for (const value of values(index, id, SOLID.instanceContainer))
         containers.add(scoped(options.storage, value));
     }
@@ -82,7 +89,7 @@ export async function resolveTargets(
     const children = members(listing.dataset, container);
     if (children.length >= MAX_MEMBERS) throw new RangeError("Target resolution exceeds limit");
     for (const child of children) {
-      const target = scoped(options.storage, child);
+      const target = scoped(options.storage, documentOf(child));
       if (target.endsWith("/")) queue.push(target);
       else targets.add(target);
     }

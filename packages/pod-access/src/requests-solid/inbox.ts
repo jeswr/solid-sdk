@@ -95,12 +95,13 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
     const modes = new Set<RequestMode>();
     const rules: { mode: RequestMode; target: string }[] = [];
     const targets = new Set<string>();
-    let requester = policy.assignee;
+    const assignees = new Set<string>();
     let purpose: string | undefined;
     let expiresAt: string | undefined;
     let requestedDuration: string | undefined;
     for (const rule of policy.permissions ?? []) {
-      requester ??= rule.assignee;
+      const assignee = rule.assignee ?? policy.assignee;
+      if (assignee !== undefined) assignees.add(assignee);
       const mode = ACTIONS[rule.action];
       if (rule.target !== undefined) targets.add(httpUrl(rule.target));
       if (mode !== undefined) {
@@ -125,7 +126,9 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
           expiresAt = constraint.rightOperand;
       }
     }
-    if (!requester || modes.size === 0 || targets.size === 0) return unreadable;
+    // One request, one recipient: rules naming different assignees cannot be merged into one grant.
+    if (assignees.size !== 1 || modes.size === 0 || targets.size === 0) return unreadable;
+    const requester = [...assignees][0] as string;
     httpUrl(requester);
     const statusValues = values(dataset, id, ACCM.status);
     const status =

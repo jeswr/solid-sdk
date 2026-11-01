@@ -128,14 +128,23 @@ export async function applyGrant(
         const acl = new AclResource(parent.dataset, DataFactory);
         for (const auth of acl.authorizations) {
           const subject = authSubject(auth);
-          if (!values(parent.dataset, subject, ACL.default).includes(current)) continue;
+          const inherits = [
+            ...values(parent.dataset, subject, ACL.default),
+            ...values(parent.dataset, subject, ACL.defaultForNew),
+          ];
+          if (!inherits.includes(current)) continue;
           const copy = new Authorization(
             `${ownUrl}#inherited-${dataset.size}`,
             dataset,
             DataFactory,
           );
           for (const q of parent.dataset.match(subject)) {
-            if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
+            if (
+              q.predicate.value === ACL.accessTo ||
+              q.predicate.value === ACL.default ||
+              q.predicate.value === ACL.defaultForNew
+            )
+              continue;
             dataset.add(DataFactory.quad(DataFactory.namedNode(copy.value), q.predicate, q.object));
           }
           copy.accessTo = target;
@@ -158,4 +167,53 @@ export async function applyGrant(
     if (await put(ownUrl, await turtle(dataset), fetchFn, null, true)) return;
   }
   throw new Error("ACL kept changing after three conditional attempts");
+}
+
+/**
+ * Make sure a records container is readable by the owner alone before anything is written into
+ * it. A missing container is created empty first (nothing is exposed while it inherits), then
+ * given an owner-only ACL create-only. An existing ACL must name no one but the owner; otherwise
+ * the decision stops, because grant records and receipts list recipients, purposes and targets.
+ */
+export async function ensureOwnerOnlyContainer(
+  container: string,
+  storage: string,
+  owner: string,
+  fetchFn: typeof fetch,
+): Promise<void> {
+  scoped(storage, container);
+  const head = await fetchFn(container, { method: "HEAD" });
+  if (head.status === 404) await put(container, "", fetchFn, null, true);
+  else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
+  const url = await aclUrl(container, storage, fetchFn);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const existing = await read(url, fetchFn);
+    if (existing) {
+      const acl = new AclResource(existing.dataset, DataFactory);
+      let ownerControl = false;
+      for (const auth of acl.authorizations) {
+        const subject = authSubject(auth);
+        const agents = values(existing.dataset, subject, ACL.agent);
+        if (
+          agents.some((agent) => agent !== owner) ||
+          values(existing.dataset, subject, ACL.agentClass).length > 0 ||
+          values(existing.dataset, subject, ACL.agentGroup).length > 0
+        ) {
+          throw new Error("The access records folder is shared; make it private first");
+        }
+        if (agents.includes(owner) && auth.mode.has(ACL.Control)) ownerControl = true;
+      }
+      if (!ownerControl) throw new Error("The access records folder has no owner control");
+      return;
+    }
+    const dataset = new Store();
+    const auth = new Authorization(`${url}#owner`, dataset, DataFactory);
+    auth.type.add(ACL.Authorization);
+    auth.agent.add(owner);
+    auth.accessTo = container;
+    auth.default = container;
+    for (const mode of [ACL.Read, ACL.Write, ACL.Control]) auth.mode.add(mode);
+    if (await put(url, await turtle(dataset), fetchFn, null, true)) return;
+  }
+  throw new Error("The access records folder ACL kept changing");
 }

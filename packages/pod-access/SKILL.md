@@ -41,7 +41,10 @@ Keep parsing lenient, byte/member work bounded, and requester metadata notificat
 Keep one internal `applyGrant` seam for SDK-APP-04. Reject ACP/unknown materialisation with the typed
 error. WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
 Delivery through unauthenticated `publicFetch` is best effort and cannot roll back committed decisions;
-it never falls back to global fetch, and requester URLs must be public HTTPS. Each approved data type
+it never falls back to global fetch, and requester URLs must be public HTTPS (a URL check only: in
+Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr/guarded-fetch`).
+Records live in an owner-only `settings/access-records/` folder (created or verified before any
+write); resume only from the owner's pinned decision there, never from the requester's notification. Each approved data type
 grants only its own requested modes (`modesByType`).
 Request/record documents must be owner-write-only; retries are explicit user-confirmed recovery.
 Internal RDF wrappers remain private; the request subpath exports only its typed error classes.

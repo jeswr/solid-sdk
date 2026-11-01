@@ -13,6 +13,8 @@ export const ACL = Object.freeze({
   Authorization: "http://www.w3.org/ns/auth/acl#Authorization",
   accessTo: "http://www.w3.org/ns/auth/acl#accessTo",
   default: "http://www.w3.org/ns/auth/acl#default",
+  /** Legacy NSS spelling of acl:default; inherited exactly like it. */
+  defaultForNew: "http://www.w3.org/ns/auth/acl#defaultForNew",
   agent: "http://www.w3.org/ns/auth/acl#agent",
   agentClass: "http://www.w3.org/ns/auth/acl#agentClass",
   agentGroup: "http://www.w3.org/ns/auth/acl#agentGroup",
