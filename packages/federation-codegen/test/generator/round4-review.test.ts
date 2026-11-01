@@ -267,11 +267,19 @@ it("H1/M2: walks every production writer and quad emission call site in both pac
     const root = resolve(packages, pkg);
     // Also cover helpers/tests/scripts: an aliased Writer import must not hide a
     // second boundary. Dependency builds and generated output are not source.
-    for (const file of readdirSync(root, { recursive: true, encoding: "utf8" }).filter(
-      (f) =>
-        /\.(?:ts|js|mjs)$/.test(f) &&
-        !f.split("/").some((part) => ["dist", "node_modules", "generated"].includes(part)),
-    )) {
+    // Walk without descending into dot-directories: sibling tests create and delete
+    // `.tmp-*` fixtures concurrently, and a recursive readdir would race them.
+    const walk = (dir: string, rel = ""): string[] =>
+      readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
+        const file = rel ? `${rel}/${entry.name}` : entry.name;
+        if (entry.isDirectory())
+          return entry.name.startsWith(".") ||
+            ["dist", "node_modules", "generated"].includes(entry.name)
+            ? []
+            : walk(file, file);
+        return /\.(?:ts|js|mjs)$/.test(entry.name) ? [file] : [];
+      });
+    for (const file of walk("")) {
       const path = resolve(root, file);
       const source = ts.createSourceFile(
         path,
