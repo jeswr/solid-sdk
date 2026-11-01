@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
-import { ArrowDownToLine, LayoutDashboard, ListTree, Plus, Wallet } from "lucide-react";
+import { ArrowDownToLine, BarChart3, LayoutDashboard, ListTree, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -19,6 +19,7 @@ function Chrome({ children }: { children: ReactNode }) {
   const links = [
     { href: "/money", label: "Overview", Icon: LayoutDashboard },
     { href: "/money/accounts", label: "Accounts", Icon: Wallet },
+    { href: "/money/reports", label: "Reports", Icon: BarChart3 },
     { href: "/money/categories", label: "Categories", Icon: ListTree },
     { href: "/money/import", label: "Import", Icon: ArrowDownToLine },
   ];

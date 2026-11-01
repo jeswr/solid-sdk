@@ -278,3 +278,41 @@ test("transaction entry, searching, validation and refusing a transfer leg", asy
     .analyze();
   expect(result.violations).toEqual([]);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+test("reports compare periods and break spending down by category and month", async ({
+  page,
+}, info) => {
+  await page.goto("/money/reports");
+  await expect(page.getByRole("heading", { level: 1, name: "Reports", exact: true })).toBeVisible();
+  const period = page.getByRole("group", { name: "Period", exact: true });
+  await expect(period.getByRole("radio", { name: "This month", exact: true })).toBeChecked();
+  await period.getByRole("radio", { name: "Last 90 days", exact: true }).check();
+  await expect(period.getByRole("radio", { name: "Last 90 days", exact: true })).toBeChecked();
+  await expect(page.getByText(/^4 Aug 2026 to 1 Nov 2026, compared with/)).toBeVisible();
+  for (const name of ["Money in", "Spending", "Net"])
+    await expect(
+      page.getByRole("region", { name, exact: true }).getByText(/^Previous period:/),
+    ).toBeVisible();
+  const categories = page.getByRole("region", { name: "Spending by category", exact: true });
+  await expect(categories.getByRole("listitem").first()).toBeVisible();
+  await expect(categories.getByText("Food", { exact: true })).toBeVisible();
+  await expect(categories.getByText("Groceries", { exact: true })).toHaveCount(0);
+  const months = page.getByRole("region", { name: "Spending by month", exact: true });
+  const bars = months
+    .getByRole("list", { name: "Spending by month", exact: true })
+    .getByRole("button");
+  await expect(bars).toHaveCount(4);
+  await bars.nth(1).focus();
+  await expect(months.getByRole("tooltip")).toContainText("September 2026");
+  await shot(page, info, "reports");
+  await categories.getByLabel("Include subcategories in their parent", { exact: true }).uncheck();
+  await expect(categories.getByText("Groceries", { exact: true })).toBeVisible();
+  await expect(categories.getByText("Food", { exact: true })).toHaveCount(0);
+  await months.getByRole("button", { name: "Show as table", exact: true }).click();
+  await expect(months.getByRole("row")).toHaveCount(5);
+  await expect(months.getByRole("cell", { name: "September 2026", exact: true })).toBeVisible();
+  await categories.getByRole("button", { name: "Show as table", exact: true }).click();
+  await expect(categories.getByRole("columnheader", { name: "Share", exact: true })).toBeVisible();
+  await shot(page, info, "reports-tables");
+});
