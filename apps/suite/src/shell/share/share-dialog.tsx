@@ -430,8 +430,11 @@ function SharingContent({
                             disabled={disabled}
                             onBlur={(event) => {
                               const value = event.target.value;
-                              if (!value || value === event.target.defaultValue) return;
                               const remount = () => setExpiryRevision((value) => value + 1);
+                              if (value === event.target.defaultValue) return;
+                              // A cleared field shows the stored date again; removing the end
+                              // date is the explicit "Remove end date" action.
+                              if (!value) return remount();
                               try {
                                 const expires = grantExpires("custom", value, new Date());
                                 if (!expires) return remount();
@@ -458,6 +461,16 @@ function SharingContent({
                             onClick={() =>
                               void act(person.webId, () =>
                                 adapter.setPerson(url, person.webId, person.role as ShareRole, {}),
+                              ).then(() =>
+                                // On success this button unmounts; keep focus in the row.
+                                requestAnimationFrame(() => {
+                                  if (
+                                    document.activeElement &&
+                                    document.activeElement !== document.body
+                                  )
+                                    return;
+                                  document.getElementById(`${id}-expiry-${person.webId}`)?.focus();
+                                }),
                               )
                             }
                           >

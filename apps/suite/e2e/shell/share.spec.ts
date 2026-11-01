@@ -163,3 +163,20 @@ test("keyboard-only add and reflow at 320px", async ({ page }, info) => {
   );
   await audit(page, "keyboard-320", info.project.name);
 });
+
+test("clearing an end date restores it and Remove end date keeps focus in the row", async ({
+  page,
+}) => {
+  const dialog = await open(page);
+  const person = dialog.getByRole("listitem", { name: "Wren Hale", exact: true });
+  const date = person.getByLabel("Access ends for Wren Hale", { exact: true });
+  await expect(date).toHaveValue("2027-06-01");
+  await date.fill("");
+  await date.blur();
+  await expect(date).toHaveValue("2027-06-01");
+  await expect(person.getByText(/^Expires/)).toBeVisible();
+  await person.getByRole("button", { name: "Remove end date for Wren Hale" }).click();
+  await expect(person.getByText(/^Expires/)).toHaveCount(0);
+  await expect(date).toHaveValue("");
+  await expect(date).toBeFocused();
+});
