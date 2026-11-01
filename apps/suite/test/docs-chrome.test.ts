@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { TooltipProvider } from "@jeswr/suite-ui";
 import { Editor } from "@tiptap/react";
-import { createRef, createElement as h, type ReactElement } from "react";
+import { createRef, createElement as h, type ReactElement, useEffect, useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorMenubar, type EditorMenubarProps } from "../src/apps/docs/components/editor-menubar";
 import { CountPopover } from "../src/apps/docs/components/editor-popovers";
@@ -144,52 +144,75 @@ function props(editor: Editor, overrides: Partial<EditorMenubarProps> = {}): Edi
   };
 }
 
-it("renames on Enter/blur, cancels with Escape and protects an in-progress title from remote updates", async () => {
+it("stages typing, commits on Enter/blur and restores the focused title with Escape", () => {
+  const stage = vi.fn();
   const commit = vi.fn();
   const done = vi.fn();
   const cancel = vi.fn();
   const inputRef = createRef<HTMLInputElement>();
-  const base = { title: "Original", readOnly: false, inputRef, commit, done, cancel };
-  const view = render(h(InlineTitle, base));
+  // The parent owns the title: staging updates it, and runtime renames arrive as props.
+  function Harness({ remote, readOnly = false }: { remote: string; readOnly?: boolean }) {
+    const [title, setTitle] = useState(remote);
+    useEffect(() => setTitle(remote), [remote]);
+    return h(InlineTitle, {
+      title,
+      readOnly,
+      inputRef,
+      stage: (value: string) => {
+        stage(value);
+        setTitle(value);
+      },
+      commit,
+      done,
+      cancel,
+    });
+  }
+  const view = render(h(Harness, { remote: "Original" }));
   const input = screen.getByRole("textbox", { name: "Document title" }) as HTMLInputElement;
   fireEvent.blur(input);
   expect(commit).not.toHaveBeenCalled();
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "  Renamed  " } });
+  expect(stage).toHaveBeenLastCalledWith("  Renamed  ");
   key(input, "Enter");
-  expect(commit).toHaveBeenLastCalledWith("Renamed");
+  expect(commit).toHaveBeenLastCalledWith("  Renamed  ");
   expect(done).toHaveBeenCalledOnce();
   fireEvent.blur(input);
   expect(commit).toHaveBeenCalledTimes(1);
+  view.rerender(h(Harness, { remote: "Renamed" }));
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "Cancel me" } });
   key(input, "Escape");
-  fireEvent.blur(input);
-  expect(input.value).toBe("Original");
+  expect(stage).toHaveBeenLastCalledWith("Renamed");
+  expect(input.value).toBe("Renamed");
   expect(cancel).toHaveBeenCalledOnce();
-  expect(commit).toHaveBeenCalledTimes(1);
-  fireEvent.focus(input);
-  fireEvent.change(input, { target: { value: "" } });
   fireEvent.blur(input);
-  expect(commit).toHaveBeenLastCalledWith("Untitled document");
-  view.rerender(h(InlineTitle, { ...base, title: "Remote" }));
+  expect(commit).toHaveBeenLastCalledWith("Renamed");
+  // An untouched focused title follows remote renames, and Escape stages nothing.
+  fireEvent.focus(input);
+  view.rerender(h(Harness, { remote: "Remote" }));
   expect(input.value).toBe("Remote");
-  fireEvent.focus(input);
-  fireEvent.change(input, { target: { value: "Local draft" } });
-  view.rerender(h(InlineTitle, { ...base, title: "New remote" }));
-  expect(input.value).toBe("Local draft");
-  key(input, "a");
+  const staged = stage.mock.calls.length;
   key(input, "Escape");
-  expect(input.value).toBe("New remote");
-  view.rerender(h(InlineTitle, { ...base, title: "New remote", readOnly: true }));
-  fireEvent.focus(input);
+  expect(stage).toHaveBeenCalledTimes(staged);
   fireEvent.blur(input);
-  expect(commit).toHaveBeenCalledTimes(2);
-  view.rerender(h(InlineTitle, { ...base, title: "" }));
+  expect(commit).toHaveBeenLastCalledWith("Remote");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Temporary" } });
+  fireEvent.change(input, { target: { value: "Remote" } });
+  const typed = stage.mock.calls.length;
+  key(input, "Escape");
+  expect(stage).toHaveBeenCalledTimes(typed);
+  fireEvent.blur(input);
+  view.rerender(h(Harness, { remote: "Remote", readOnly: true }));
+  const commits = commit.mock.calls.length;
+  fireEvent.focus(input);
+  key(input, "Escape");
+  fireEvent.blur(input);
+  expect(commit).toHaveBeenCalledTimes(commits);
+  expect(stage).toHaveBeenCalledTimes(typed);
+  view.rerender(h(Harness, { remote: "" }));
   expect(input.title).toBe("Untitled document");
-  fireEvent.focus(input);
-  fireEvent.change(input, { target: { value: "Original" } });
-  fireEvent.blur(input);
   expect(input.getAttribute("maxlength")).toBe("200");
 });
 

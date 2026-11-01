@@ -348,7 +348,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     runtime.readOnly,
   );
   const commitTitle = (value: string) => {
-    runtime.rename(value);
+    const committed = value.trim() || "Untitled document";
+    if (committed !== runtime.title) runtime.rename(committed);
+    else void runtime.flush();
     setTitle(runtime.title);
   };
   const act = async (task: () => Promise<void>) => {
@@ -393,6 +395,10 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               title={title}
               readOnly={runtime.readOnly}
               inputRef={titleRef}
+              stage={(value) => {
+                setTitle(value);
+                runtime.stageTitle(value);
+              }}
               commit={commitTitle}
               done={() => {
                 if (editor) focusDocument(editor);
