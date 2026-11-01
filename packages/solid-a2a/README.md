@@ -66,11 +66,12 @@ const protocol = await buildProtocolDocument({
 - `validateIntent` never throws: an Intent the writers refuse, or a shape the validator
   cannot compile, is `conforms: false`. Shapes using `sh:pattern` are refused, because a
   peer's pinned Protocol Document is not vetted and a backtracking regex cannot be timed out.
-  For the same reason a shapes graph is refused before validation when its shape references
-  (`sh:node`, `sh:property`, `sh:not`, `sh:qualifiedValueShape`, `sh:and`/`sh:or`/`sh:xone`
-  lists) form a cycle or unfold to more than 1024 shape evaluations, or when it uses
-  `sh:qualifiedValueShapesDisjoint`; the validator does not memoise, so a small graph whose
-  shapes each name the next twice would otherwise cost 2^depth.
+  For the same reason a validation is refused before it starts when its cost is not bounded:
+  SHACL outside the Core subset (no `sh:pattern`, `sh:qualifiedValueShapesDisjoint` or SPARQL),
+  `rdfs:subClassOf` in the shapes or the intent graph, a looping, branching or long RDF list, a
+  property path that unfolds past 64 nodes or inverts anything but a predicate, a shape reference
+  cycle, an oversized graph, or more than 2000 shape evaluations over this intent (counted the way
+  the validator, which does not memoise, spends them).
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.
