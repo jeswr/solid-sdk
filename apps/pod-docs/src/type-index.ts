@@ -24,6 +24,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
+import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import {
   REVALIDATE_HEADERS,
@@ -150,12 +151,27 @@ async function resolveTypeIndexLinks(
   const links = typeIndexLinks(webId, profile);
   const preferences = new ProfileTypeIndexAnchor(webId, profile, DataFactory).preferencesFile;
   if (!preferences) return links;
-  const client = storage ?? (await storageFor(webId, fetchImpl));
-  if (!client.isWithinStorage(preferences))
-    throw new StorageError("scope", { url: preferences, method: "GET" });
+  // Account metadata can live in another pod. Only this WebID's storage claims
+  // vouch for additional roots; never discover storage from the identity document.
+  const roots = [...new Agent(webId, profile, DataFactory).storageUrls];
+  const requireVouched = (url: string) => {
+    const target = new URL(identityDocumentUrl(url));
+    const vouched =
+      storage?.isWithinStorage(url) ||
+      roots.some((root) => {
+        const base = new URL(identityDocumentUrl(root));
+        const path = base.pathname.replace(/\/?$/, "/");
+        return (
+          target.origin === base.origin &&
+          (target.pathname === path.slice(0, -1) || target.pathname.startsWith(path))
+        );
+      });
+    if (!vouched) throw new StorageError("scope", { url, method: "GET" });
+  };
+  requireVouched(preferences);
   // Unreadable, missing or malformed linked preferences are not proof that no private
   // index exists. Propagate the failure rather than registering in the public index.
-  const { dataset } = await readRdf(preferences, fetchImpl, client);
+  const { dataset } = await readIdentityRdf(preferences, fetchImpl, storage);
   const anchor = new ProfileTypeIndexAnchor(webId, dataset, DataFactory);
   const indexes = [
     ...SetFrom.subjectPredicate(
@@ -168,8 +184,7 @@ async function resolveTypeIndexLinks(
   if (indexes.length > 1) throw new StorageError("conflict", { url: preferences, method: "GET" });
   const privateIndex = indexes[0];
   if (privateIndex) {
-    if (!client.isWithinStorage(privateIndex))
-      throw new StorageError("scope", { url: privateIndex, method: "GET" });
+    requireVouched(privateIndex);
     if (links.privateIndex && documentUrl(links.privateIndex) !== documentUrl(privateIndex))
       throw new StorageError("conflict", { url: preferences, method: "GET" });
     links.privateIndex = privateIndex;
@@ -201,6 +216,39 @@ function documentUrl(webId: string): string {
   const u = new URL(webId);
   u.hash = "";
   return u.toString();
+}
+
+/** Identity metadata must use an unambiguous HTTPS URL before attaching credentials. */
+function identityDocumentUrl(url: string): string {
+  const target = new URL(url);
+  if (
+    target.protocol !== "https:" ||
+    target.username ||
+    target.password ||
+    target.href !== url ||
+    /%2f|%5c/i.test(target.pathname)
+  )
+    throw new StorageError("scope", { url, method: "GET" });
+  return documentUrl(url);
+}
+
+/** Profiles, preferences and indexes are identity documents, not storage discovery targets. */
+async function readIdentityRdf(url: string, fetchImpl = globalThis.fetch, storage?: StorageClient) {
+  const target = identityDocumentUrl(url);
+  if (storage?.isWithinStorage(target)) return readRdf(target, fetchImpl, storage);
+  return fetchRdf(target, {
+    headers: REVALIDATE_HEADERS,
+    fetch: async (input, init) => {
+      const response = await fetchImpl(input, { ...init, redirect: "manual" });
+      // An injected/authenticated fetch may ignore redirect mode. Do not accept
+      // metadata or validators from a different document in that case either.
+      if (response.redirected || (response.url && response.url !== target)) {
+        void response.body?.cancel();
+        throw new StorageError("scope", { url: target, method: "GET" });
+      }
+      return response;
+    },
+  });
 }
 
 /** External profiles and indexes are RDF documents, independent of storage discovery. */
@@ -282,12 +330,11 @@ export async function ensureTypeRegistrations(opts: {
   const profileUrl = documentUrl(webId);
   const profileStorage = storage.isWithinStorage(profileUrl) ? storage : undefined;
   // A WebID can live outside every pod. It is an RDF document, not a storage root.
-  const { dataset: profileDs, etag: profileEtag } = profileStorage
-    ? await readRdf(webId, fetchImpl, profileStorage)
-    : await fetchRdf(profileUrl, {
-        fetch: fetchImpl ?? globalThis.fetch,
-        headers: REVALIDATE_HEADERS,
-      });
+  const { dataset: profileDs, etag: profileEtag } = await readIdentityRdf(
+    webId,
+    fetchImpl,
+    profileStorage,
+  );
   const links = await resolveTypeIndexLinks(webId, profileDs, fetchImpl, storage);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
@@ -314,12 +361,11 @@ export async function ensureTypeRegistrations(opts: {
 
   const indexStorage = storage.isWithinStorage(indexUrl) ? storage : undefined;
   const indexDocument = documentUrl(indexUrl);
-  const { dataset: indexDs, etag: indexEtag } = indexStorage
-    ? await readRdf(indexUrl, fetchImpl, indexStorage)
-    : await fetchRdf(indexDocument, {
-        fetch: fetchImpl ?? globalThis.fetch,
-        headers: REVALIDATE_HEADERS,
-      });
+  const { dataset: indexDs, etag: indexEtag } = await readIdentityRdf(
+    indexUrl,
+    fetchImpl,
+    indexStorage,
+  );
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -374,12 +420,7 @@ export async function discoverRegistrations(
   for (const url of urls) {
     try {
       // Indexes are RDF documents; cold reads need no storage-discovery headers.
-      const { dataset } = storage?.isWithinStorage(url)
-        ? await readRdf(url, fetchImpl, storage)
-        : await fetchRdf(documentUrl(url), {
-            fetch: fetchImpl ?? globalThis.fetch,
-            headers: REVALIDATE_HEADERS,
-          });
+      const { dataset } = await readIdentityRdf(url, fetchImpl, storage);
       out.push(...new TypeIndexDataset(dataset, DataFactory).all());
     } catch (e) {
       if (

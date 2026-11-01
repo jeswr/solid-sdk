@@ -8,11 +8,112 @@ import { describe, expect, it, vi } from "vitest";
 import { OutOfScopeError } from "./errors.js";
 import { deleteRdf, requireEtag, writeRdf } from "./rdf-io.js";
 import { createDocsStore } from "./store.js";
+import { mockFetch, turtleToStore } from "./test-helpers.js";
 import { discoverRegistrations, TypeIndexDataset } from "./type-index.js";
 import { DOCUMENT_CLASS } from "./vocab.js";
 
 const ROOT = "https://docs.example/";
 const WEBID = `${ROOT}card#me`;
+
+it.each([
+  "https://docs.example/primary/",
+  "https://primary.example/primary/",
+])("creates documents in the selected pod while registering privately in %s", async (primary) => {
+  const selected = `${ROOT}selected/`;
+  const webId = "https://identity.example/alice#me";
+  const profileUrl = "https://identity.example/alice";
+  const preferences = `${primary}prefs.ttl`;
+  const privateIndex = `${primary}private.ttl`;
+  const publicIndex = `${primary}public.ttl`;
+  const storage = createMemoryStorage({ root: selected });
+  const profile = `<${webId}>
+      <http://www.w3.org/ns/pim/space#storage> <${primary}>, <${selected}>;
+      <http://www.w3.org/ns/pim/space#preferencesFile> <${preferences}>;
+      <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${publicIndex}>.`;
+  const { fetch, calls } = mockFetch({
+    [`GET ${profileUrl}`]: { body: profile },
+    [`GET ${preferences}`]: {
+      body: `<${webId}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${privateIndex}>.`,
+    },
+    [`GET ${privateIndex}`]: { body: "", etag: '"private-v1"' },
+    [`PUT ${privateIndex}`]: { status: 205 },
+  });
+  const transport = vi.fn(fetch);
+  const store = createDocsStore({ podRoot: selected, webId, storage, fetchImpl: transport });
+  const created = await store.create({ title: "Selected pod document" });
+  expect(storage.isWithinStorage(created.url)).toBe(true);
+  expect((await store.read(created.url))?.data.title).toBe("Selected pod document");
+  const writes = calls.filter((call) => call.method !== "GET");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({
+    url: privateIndex,
+    method: "PUT",
+    headers: { "if-match": '"private-v1"', "content-type": "text/turtle" },
+  });
+  expect(
+    new TypeIndexDataset(turtleToStore(writes[0]?.body ?? "", privateIndex), DataFactory).locate(
+      DOCUMENT_CLASS,
+    ),
+  ).toEqual([{ forClass: DOCUMENT_CLASS, container: store.container, instance: undefined }]);
+  expect(calls.map((call) => call.url)).toEqual([
+    profileUrl,
+    preferences,
+    privateIndex,
+    privateIndex,
+  ]);
+  expect(transport.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+});
+
+it.each([
+  401, 403, 404, 500,
+])("refuses document creation when another pod's preferences return %s", async (status) => {
+  const primary = `${ROOT}primary/`;
+  const selected = `${ROOT}selected/`;
+  const preferences = `${primary}prefs.ttl`;
+  const publicIndex = `${primary}public.ttl`;
+  const storage = createMemoryStorage({ root: selected });
+  const { fetch, calls } = mockFetch({
+    [`GET ${WEBID.split("#")[0]}`]: {
+      body: `<${WEBID}>
+          <http://www.w3.org/ns/pim/space#storage> <${primary}>, <${selected}>;
+          <http://www.w3.org/ns/pim/space#preferencesFile> <${preferences}>;
+          <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${publicIndex}>.`,
+    },
+    [`GET ${preferences}`]: { status },
+  });
+  const store = createDocsStore({ podRoot: selected, webId: WEBID, storage, fetchImpl: fetch });
+  await expect(store.create({ title: "Must stay private" })).rejects.toMatchObject({ status });
+  expect(calls.map((call) => call.url)).toEqual([WEBID.split("#")[0], preferences]);
+  expect(await store.list()).toEqual([]);
+});
+
+it.each([
+  "preferences",
+  "index",
+])("refuses an unadvertised sibling pod's %s before public registration", async (target) => {
+  const primary = `${ROOT}primary/`;
+  const selected = `${ROOT}selected/`;
+  const foreign = `${ROOT}primary-evil/private.ttl`;
+  const preferences = target === "preferences" ? foreign : `${primary}prefs.ttl`;
+  const storage = createMemoryStorage({ root: selected });
+  const { fetch, calls } = mockFetch({
+    [`GET ${WEBID.split("#")[0]}`]: {
+      body: `<${WEBID}>
+          <http://www.w3.org/ns/pim/space#storage> <${primary}>, <${selected}>;
+          <http://www.w3.org/ns/pim/space#preferencesFile> <${preferences}>;
+          <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${primary}public.ttl>.`,
+    },
+    [`GET ${primary}prefs.ttl`]: {
+      body: `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${foreign}>.`,
+    },
+  });
+  const store = createDocsStore({ podRoot: selected, webId: WEBID, storage, fetchImpl: fetch });
+  await expect(store.create({ title: "Must stay private" })).rejects.toMatchObject({
+    code: "scope",
+  });
+  expect(calls.some((call) => call.url === foreign || call.method !== "GET")).toBe(false);
+  expect(await store.list()).toEqual([]);
+});
 
 it("keeps document registration private when the profile links its private index via preferences", async () => {
   const storage = createMemoryStorage({ root: ROOT });
