@@ -1,0 +1,691 @@
+/* AUTHORED-BY Codex GPT-6 */
+.mon-page {
+  padding: var(--space-6);
+  max-width: 1600px;
+  margin: 0 auto;
+  color: var(--foreground);
+  min-width: 0;
+}
+.mon-page h1 {
+  font-size: var(--text-2xl);
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.mon-page h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.mon-page h3 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.mon-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+.mon-eyebrow {
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-2);
+}
+.mon-subtitle {
+  color: var(--foreground-muted);
+  margin-top: var(--space-2);
+  font-size: var(--text-base);
+}
+.mon-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mon-hint {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.mon-save {
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+  white-space: nowrap;
+}
+.mon-sidebar {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+}
+.mon-brand {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  padding: var(--space-2);
+}
+.mon-sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mon-sidebar a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+.mon-sidebar a:hover {
+  background: var(--surface-2);
+}
+.mon-sidebar a[aria-current] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-weight: 600;
+}
+.mon-private {
+  margin-top: auto;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  padding: var(--space-2);
+}
+.mon-worth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.mon-worth {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+.mon-worth h2 {
+  font-size: var(--text-2xl);
+  margin: var(--space-3) 0;
+}
+.mon-worth > p:last-child {
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.mon-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+.mon-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  min-width: 0;
+  overflow: hidden;
+}
+.mon-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.mon-account-list,
+.mon-recent,
+.mon-spend-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mon-account-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.mon-account-list li:last-child,
+.mon-recent li:last-child {
+  border-bottom: 0;
+}
+.mon-account-list li > div {
+  flex: 1;
+  min-width: 0;
+}
+.mon-account-list a,
+.mon-recent a {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.mon-account-list a:hover,
+.mon-recent a:hover {
+  text-decoration: underline;
+}
+.mon-account-list p,
+.mon-recent p {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+}
+.mon-account-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.mon-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.mon-negative {
+  color: var(--destructive);
+}
+.mon-recent li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.mon-recent li > div {
+  min-width: 0;
+}
+.mon-spend-list li {
+  padding: var(--space-3) 0;
+}
+.mon-spend-list li > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.mon-bar-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.mon-bar-track span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+}
+.mon-soft-empty {
+  padding: var(--space-6) 0;
+  color: var(--foreground-muted);
+}
+.mon-field,
+.mon-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+.mon-field > [role="combobox"] {
+  width: 100%;
+  min-width: 0;
+}
+.mon-form {
+  display: grid;
+  gap: var(--space-4);
+}
+.mon-form input {
+  width: 100%;
+}
+.mon-form [role="alert"] {
+  color: var(--destructive);
+  font-size: var(--text-sm);
+}
+.mon-dialog {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+.mon-dialog h2 {
+  padding-right: var(--space-6);
+}
+.mon-two-fields,
+.mon-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.mon-filter-row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: end;
+  flex-wrap: wrap;
+}
+.mon-filter-row > .mon-field {
+  flex: 1;
+  min-width: 160px;
+}
+.mon-ledger {
+  padding: 0;
+}
+.mon-filters {
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.mon-filters .suite-chip-row {
+  flex-wrap: wrap;
+}
+.mon-back {
+  color: var(--foreground-muted);
+  display: inline-block;
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+  text-decoration: underline;
+}
+.mon-row-open {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  width: 100%;
+  font-size: var(--text-sm);
+}
+.mon-row-open:hover {
+  text-decoration: underline;
+}
+.mon-transfer-label,
+.mon-duplicate-label {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+  margin-top: var(--space-1);
+}
+.mon-desktop .mon-field > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.mon-desktop .mon-field [role="combobox"] {
+  height: 32px;
+  font-size: var(--text-sm);
+}
+.mon-desktop [role="gridcell"]:has(.mon-amount) {
+  justify-content: flex-end;
+  text-align: right;
+}
+.mon-bulk {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.mon-bulk .mon-field {
+  min-width: 180px;
+}
+.mon-cards {
+  display: none;
+}
+.mon-simple-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.mon-simple-table th {
+  text-align: left;
+  color: var(--foreground-muted);
+  font-weight: 500;
+  background: var(--surface-2);
+}
+.mon-simple-table th,
+.mon-simple-table td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3);
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.mon-simple-table td:last-child,
+.mon-simple-table th:last-child {
+  text-align: right;
+}
+.mon-tree-hint {
+  margin-bottom: var(--space-4);
+}
+.mon-tree-item {
+  border-radius: var(--radius-md);
+  outline-offset: -2px;
+}
+.mon-tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.mon-tree-name {
+  flex: 1;
+  min-width: 100px;
+}
+.mon-tree-name > span {
+  display: block;
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+}
+.mon-tree-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.mon-tree [role="group"] {
+  margin-left: var(--space-5);
+}
+.mon-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.mon-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.mon-steps li > span {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mon-steps li[aria-current] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.mon-steps li[aria-current] > span {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+.mon-import-panel {
+  max-width: 1000px;
+}
+.mon-import-panel > h2 {
+  margin-bottom: var(--space-4);
+}
+.mon-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 260px;
+  padding: var(--space-6);
+  margin-top: var(--space-6);
+  border: 2px dashed var(--input);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  text-align: center;
+}
+.mon-file-picker {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.mon-file-picker input {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  font-size: var(--text-sm);
+}
+.mon-file-picker input::file-selector-button {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  margin-right: var(--space-2);
+  cursor: pointer;
+}
+.mon-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+.mon-page input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.mon-wizard-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+}
+.mon-mapping-grid {
+  margin-bottom: var(--space-6);
+}
+.mon-preview-list {
+  overflow: auto;
+  max-height: 520px;
+  margin-top: var(--space-4);
+}
+.mon-preview-list .mon-field label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.mon-preview-list .mon-field {
+  min-width: 150px;
+}
+.mon-preview-list table {
+  min-width: 660px;
+}
+.mon-duplicate {
+  background: var(--surface-2);
+}
+.mon-inline-error {
+  padding: var(--space-4);
+  color: var(--destructive);
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+.mon-inline-error p {
+  margin-bottom: var(--space-3);
+}
+.mon-import-progress,
+.mon-import-done {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+.mon-import-progress progress {
+  accent-color: var(--primary);
+  width: 100%;
+  max-width: 440px;
+}
+.mon-page :focus-visible,
+.mon-dialog :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (max-width: 1100px) {
+  .mon-columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .mon-page {
+    padding: var(--space-4);
+  }
+  .mon-heading {
+    gap: var(--space-4);
+  }
+  .mon-heading h1 {
+    font-size: var(--text-xl);
+  }
+  .mon-actions {
+    width: 100%;
+  }
+  .mon-panel {
+    padding: var(--space-4);
+  }
+  .mon-panel.mon-ledger {
+    padding: 0;
+  }
+  .mon-save {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .mon-tree-actions {
+    width: 100%;
+    margin-left: var(--space-6);
+  }
+  .mon-tree-actions button {
+    flex: 1;
+  }
+  .mon-steps {
+    gap: var(--space-2);
+  }
+  .mon-steps li {
+    font-size: var(--text-xs);
+  }
+  .mon-steps li:not([aria-current]) {
+    font-size: 0;
+    gap: 0;
+  }
+  .mon-steps li > span {
+    font-size: var(--text-xs);
+  }
+}
+@media (max-width: 599px) {
+  .mon-desktop {
+    display: none;
+  }
+  .mon-cards {
+    display: block;
+  }
+  .mon-ledger-card {
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+  .mon-card-top {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .mon-card-top .mon-row-open {
+    flex: 1;
+    font-weight: 500;
+  }
+  .mon-card-bottom {
+    margin-top: var(--space-3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+  .mon-card-bottom > .mon-field {
+    max-width: 160px;
+  }
+  .mon-card-bottom .mon-field label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .mon-card-bottom [role="combobox"] {
+    height: 32px;
+  }
+  .mon-card-balance {
+    text-align: right;
+    font-size: var(--text-xs);
+    color: var(--foreground-muted);
+    margin-top: var(--space-2);
+  }
+  .mon-select-all {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+  }
+  .mon-mapping-grid,
+  .mon-two-fields {
+    grid-template-columns: 1fr;
+  }
+  .mon-map-sample {
+    table-layout: fixed;
+  }
+  .mon-map-sample td,
+  .mon-map-sample th {
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+  }
+  .mon-dialog {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    max-width: 100%;
+    width: 100%;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mon-page *,
+  .mon-dialog * {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* The statement wizard supplies its own labelled, single-file picker. */
+.mon-import-panel .su-drop-actions {
+  display: none;
+}
+.mon-tree fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
