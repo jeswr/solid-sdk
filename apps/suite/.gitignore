@@ -2,5 +2,3 @@
 .next/
 next-env.d.ts
 *.tsbuildinfo
-# The local Playwright entry point is a shared, portable config alias.
-!playwright.local.config.ts
