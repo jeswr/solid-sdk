@@ -3558,6 +3558,184 @@ describe('worker-owned class discovery', () => {
     await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
   }
 
+  it.each(
+    ['refresh failure', 'logout', 'remove'].flatMap((ending) =>
+      ['stream', 'nonce retry'].map((race) => ({ ending, race })),
+    ),
+  )('cancels a $race before $ending replica cleanup finishes', async ({ ending, race }) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    const url = `${pod}/race`;
+    const cancel = vi.fn();
+    let releaseResponse!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async (target) => {
+      if (target === 'https://idp.example/token') return new Response(null, { status: 401 });
+      if (fetchCalls.filter((call) => call.url === url).length > 1)
+        return new Response('credentialed retry reached the pod', { status: 403 });
+      if (race === 'nonce retry') {
+        await new Promise<void>((resolve) => {
+          releaseResponse = resolve;
+          entered();
+        });
+        return new Response(new ReadableStream({ cancel }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      }
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          cancel,
+          start(controller) {
+            let released = false;
+            releaseResponse = () => {
+              if (released || cancel.mock.calls.length) return;
+              released = true;
+              controller.enqueue(new TextEncoder().encode(secret));
+              controller.close();
+            };
+          },
+          pull() {
+            entered();
+          },
+        }),
+        // A cold error response has no replica commit to queue behind the held purge.
+        { status: 403 },
+      );
+    };
+    let completed = false;
+    const pending = sendFetch({ url, stampedOrigin: APPX.origin }, APPX).finally(() => {
+      completed = true;
+    });
+    await started;
+    const signal = fetchCalls.find((call) => call.url === url)?.init?.signal;
+    expect(new Headers(fetchCalls[0].init?.headers).get('Authorization')).toBe(
+      'DPoP access-token-xyz',
+    );
+    let releasePurge!: () => void;
+    let purging!: () => void;
+    const purgeStarted = new Promise<void>((resolve) => {
+      purging = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      releasePurge = resolve;
+    });
+    const remove = FakeReplicaDb.prototype.deleteMetadataByWebId;
+    const purge = vi
+      .spyOn(FakeReplicaDb.prototype, 'deleteMetadataByWebId')
+      .mockImplementationOnce(async function (this: FakeReplicaDb, webId) {
+        purging();
+        await held;
+        return remove.call(this, webId);
+      });
+    const clearNonces = vi.spyOn(FakeReplicaDb.prototype, 'clearNonces');
+    if (ending === 'refresh failure')
+      profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    const teardown =
+      ending === 'refresh failure'
+        ? request()
+        : send(
+            { type: ending === 'logout' ? 'SOLID_LOGOUT' : 'SOLID_PROFILE_REMOVE', profileId: '1' },
+            EXT_SENDER,
+          );
+    try {
+      await purgeStarted;
+      expect(profileDb.state.records[0]).toMatchObject({ session: null, keyPair: null });
+      expect(clearNonces).not.toHaveBeenCalled();
+      // Deliver bytes/challenge while cleanup is still held. Neither may reach the page
+      // or redeem the captured credentials, even if the transport ignores its signal.
+      releaseResponse();
+      await vi.waitFor(() =>
+        expect(completed || fetchCalls.filter((call) => call.url === url).length > 1).toBe(true),
+      );
+      expect(fetchCalls.filter((call) => call.url === url)).toHaveLength(1);
+      expect(await pending).toMatchObject({ requestId: 'r1', error: 'Fetch cancelled' });
+      expect(signal?.aborted).toBe(true);
+      expect(createdWindows).toHaveLength(0);
+      releasePurge();
+      await teardown;
+      await pending;
+      await vi.waitFor(() => {
+        expect(clearNonces).toHaveBeenCalledOnce();
+        expect(storage.get('solid:origin-grants')).toEqual([]);
+      });
+      expect(cacheStore.size).toBe(0);
+      expect(idbMeta.size).toBe(0);
+    } finally {
+      releaseResponse();
+      releasePurge();
+      await teardown;
+      purge.mockRestore();
+      clearNonces.mockRestore();
+    }
+  });
+
+  it.each([
+    'form-fill revocation',
+    'profile persistence',
+  ])('finishes validated refresh teardown after cancelling its waiter during %s', async (stage) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    profileDb.state.records[0].session = { ...profileDb.state.records[0].session!, expiresAt: 0 };
+    fetchImpl = async () => new Response(null, { status: 401 });
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const set = chrome.storage.local.set.bind(chrome.storage.local);
+    const storageWrite = vi.spyOn(chrome.storage.local, 'set').mockImplementation(async (items) => {
+      if (stage === 'form-fill revocation' && 'solid:formfill-grants' in items) {
+        entered();
+        await held;
+      }
+      return set(items);
+    });
+    const write = profileDb.write.bind(profileDb);
+    const profileWrite = vi
+      .spyOn(profileDb, 'write')
+      .mockImplementationOnce(async (state, signal) => {
+        if (stage === 'profile persistence') {
+          entered();
+          await held;
+        }
+        return write(state, signal);
+      });
+    const pending = request([dataClass], { ...APPX, tab: { id: 75, url: APPX.url } });
+    try {
+      await started;
+      // Cancellation must already have detached this refresh's own operation, before
+      // either persistence seam finishes, without aborting the validated teardown.
+      await vi.waitFor(() => expect(fetchCalls[0].init?.signal?.aborted).toBe(true));
+      expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+      expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
+      release();
+      await vi.waitFor(() => {
+        expect(profileDb.state.records[0]).toMatchObject({
+          profile: { sessionState: 'signed-out' },
+          session: null,
+          keyPair: null,
+        });
+        expect(storage.get('solid:origin-grants')).toEqual([]);
+      });
+      expect(fetchCalls).toHaveLength(1);
+      expect(createdWindows).toHaveLength(0);
+    } finally {
+      release();
+      await pending;
+      storageWrite.mockRestore();
+      profileWrite.mockRestore();
+    }
+  });
+
   it.each([
     'close tab',
     'deadline',

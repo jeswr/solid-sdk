@@ -445,13 +445,15 @@ async function refreshOnce(id: string, signal: AbortSignal): Promise<StoredSessi
                 current.session.refreshToken === ctx.session.refreshToken &&
                 current.session.dpopJkt === ctx.session.dpopJkt
               ) {
+                // Validation commits us to teardown. Cancel every existing operation before
+                // awaiting persistence or purges, including this refresh's own waiter. From
+                // here cleanup must finish under the lifecycle lock independently of its signal.
+                cancelProfileOperations(id);
                 try {
                   try {
                     await formFill.revokeProfile(id);
-                    refreshSignal.throwIfAborted();
                     await store.signOut(id);
                   } finally {
-                    cancelProfileOperations(id);
                     await syncOriginGrants();
                   }
                 } finally {
