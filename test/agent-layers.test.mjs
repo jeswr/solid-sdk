@@ -55,6 +55,22 @@ function scan(path, source) {
 }
 
 describe("agent layer boundaries (DESIGN §2.2)", () => {
+  it("permits the gh child-process edge only in the GitHub binding", () => {
+    const source = 'import { execFile } from "child_process";';
+    expect(scan("packages/agent-channels/src/github.ts", source)).toEqual([]);
+    for (const path of [
+      "packages/agent-channels/src/reader.ts",
+      "packages/agent-channels/src/github/other.ts",
+      "packages/agent-model-gateway/src/github.ts",
+      "packages/agent-executor/src/github.ts",
+    ])
+      expect(scan(path, source).join("\n")).toContain("outside DESIGN");
+    for (const target of ["child_process/other", "node:child_process", "fs", "openai"])
+      expect(
+        scan("packages/agent-channels/src/github.ts", `import "${target}";`).length,
+      ).toBeGreaterThan(0);
+  });
+
   it("rejects type-only ./gmail/send imports outside the executor", () => {
     expect(
       scan(

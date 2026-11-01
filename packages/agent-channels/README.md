@@ -64,6 +64,59 @@ There is no LinkedIn or X send binding. See [LinkedIn and X limits](../../docs/b
 for the mailbox rule, OAuth 2 PKCE read scopes, configured cost bounds and
 process-local counter lifetime.
 
+`./github` exports `createGithubReader({ account, now? })` (A-033 / sst-cq2).
+It ingests notification metadata with `gh api /notifications` and
+`/notifications/threads/{id}`. Install `gh` and authenticate it separately with
+`gh auth`; the binding never obtains tokens or calls `TokenProvider`. The daemon
+must associate the opaque `account.id` with that process's active GitHub account,
+keep the auth context fixed during pulls, and use a separate context for each
+account. Requests explicitly select `github.com` and GET, use `execFile` with an
+argument array and `shell: false`, and cap output at 1 MiB with a 30-second deadline.
+Provider URLs are never followed. Child-process errors discard stdout/stderr.
+
+```ts
+import { createGithubReader } from '@jeswr/agent-channels/github';
+
+const account = { id: 'github-personal' };
+const reader = createGithubReader({ account });
+const page = await reader.ingest.list(account, savedCursor, {
+  maxItems: 20,
+  maxBytes: 256 * 1024,
+});
+for (const item of page.items) {
+  const message = reader.ingest.parse(item);
+  // Persist the message before advancing the saved cursor to page.next.
+}
+```
+
+One list call reads at most one 50-item provider page and fetches thread details
+until either caller bound is reached. Cursors bind to the configured account,
+retain pending thread IDs from the fetched page and the polling window. Completed
+windows overlap one second; consumers must deduplicate stable message IDs. A
+nonempty result may have another page, and an empty result may complete a window.
+Continue from `page.next` on subsequent scheduled pulls. Pending IDs are drained
+without re-fetching the list.
+Concurrent updates can shift records between provider pages, so multi-page windows
+are replayed until two complete ID scans agree before advancing the completed
+watermark. Scans use bounded fingerprints rather than retaining the entire window;
+continued provider changes can require additional pulls and replays. Legacy offset
+cursors conservatively replay their window from page one. No read/done mutations
+are made (`all=true` includes already-read notifications).
+
+Parsing uses the exact thread response bytes for provenance, enforces the shared
+64 KiB/depth/node/string caps, strips controls from metadata, and ignores `native`.
+The subject title becomes plain text; repository, reason and subject type become
+low-trust signals. Thread metadata identifies no sender and provides no issue or
+comment body. Updates have distinct message IDs (`github:<id>:<updated_at>`) and
+share a conversation key (`github:<id>`). Malformed items raise `ChannelParseError`.
+The frozen `GITHUB_READ_ONLY` profile and descriptor advertise zero send bytes,
+`sendSupported: false`, and no structured payload. There is no `./github/send`.
+See the [GitHub notification API](https://docs.github.com/en/rest/activity/notifications)
+and [`gh api` manual](https://cli.github.com/manual/gh_api) for provider behavior.
+
+The remaining provider exports remain reserved for their own tasks. Packages
+remain private per ADR-001 D5.
+
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
 
 Tests enforce 100% coverage per source file in every metric, with real local

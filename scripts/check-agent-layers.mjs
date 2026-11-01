@@ -224,7 +224,15 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     name !== (ctx.packageName ?? `@jeswr/${ctx.project}`);
   if (external && !ctx.test) {
     const allowlist = allowed[ctx.project];
-    if (allowlist && !allowlist.has(name) && !(ctx.project === "agent-executor" && send))
+    // A-033 delegates read-only GitHub requests to gh; no other production module gets this edge.
+    const githubProcess =
+      ctx.path === "packages/agent-channels/src/github.ts" && target === "child_process";
+    if (
+      allowlist &&
+      !allowlist.has(name) &&
+      !(ctx.project === "agent-executor" && send) &&
+      !githubProcess
+    )
       failures.push(`${ctx.project} dependency is outside DESIGN §2.2`);
     if (ctx.project === "agent-executor" && name === agent("channels") && !send && !manifest)
       failures.push("executor may import channel send subpaths only");

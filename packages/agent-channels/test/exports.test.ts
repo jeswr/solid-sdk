@@ -106,6 +106,7 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./gmail",
       "./gmail/send",
       "./x",
+      "./github",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -118,6 +119,9 @@ it("keeps send factories out of root and reader exports", () => {
   expect(entry17).not.toHaveProperty("createDirectSend");
   expect(entry32).toHaveProperty("createDirectSend");
   expect(entry1).toHaveProperty("createInMemoryDirectBinding");
+  expect(entry11).toHaveProperty("createGithubReader");
+  expect(entry11).not.toHaveProperty("send");
+  expect(manifest.exports).not.toHaveProperty("./github/send");
 });
 
 it("keeps Gmail send and MIME render factories out of read surfaces", () => {

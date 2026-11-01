@@ -20,6 +20,12 @@ exclusively in channel send subpaths, importable only by agent-executor and chan
 tests. The guard permits only testing.ts's direct/send factory re-export for
 test composition. Read credentials come only from TokenProvider.read; send
 credentials come only from TokenProvider.send. Sending defaults to dry-run.
+Exception: the read-only GitHub binding (A-033) delegates authentication entirely
+to `gh auth` and never consumes a TokenProvider. Keep its executable, host, GET
+method and endpoint families fixed; invoke with an argument array and no shell.
+Never follow notification URLs or expose child-process stdout/stderr in errors.
+The daemon binds each reader's opaque account to a fixed active gh auth context.
+There is no GitHub send half; the descriptor must keep sendSupported false.
 The direct verifier is injected, local and pure; parsing never verifies signatures.
 Reuse agent-model's capability record mapping rather than minting duplicate terms.
 Only agent-model-gateway may
