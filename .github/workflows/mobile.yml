@@ -280,6 +280,8 @@ jobs:
           retention-days: 7
 
   ios-e2e:
+    needs: scope
+    if: ${{ !cancelled() && !(needs.scope.result == 'success' && needs.scope.outputs.run == 'false') }}
     runs-on: macos-15
     timeout-minutes: 45
     env:

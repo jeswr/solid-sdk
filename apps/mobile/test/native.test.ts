@@ -477,6 +477,9 @@ describe("mobile CI iOS fixture guardrails", () => {
     expect(job).toContain('MOBILE_DEBUG: "1"');
     expect(job).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
     expect(job).toContain("node apps/mobile/e2e/ios-e2e.mjs");
+    // Lockfile-only PRs that leave the mobile closure unchanged skip it, like the other native jobs.
+    expect(job).toContain("needs: scope");
+    expect(job).toContain("needs.scope.outputs.run == 'false'");
   });
 
   test("requires a Release build to reject fixture ATS and restores production preparation", () => {
