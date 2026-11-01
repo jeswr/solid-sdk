@@ -404,9 +404,9 @@ describe("signed-content reading is order- and accessor-independent", () => {
     for (const q of policyToRdf(forged)) {
       const id = term(q.subject as Term)["@id"] as string;
       const node = nodes.get(id) ?? { "@id": id };
-      ((node[q.predicate.value] as unknown[] | undefined) ?? (node[q.predicate.value] = [])).push(
-        term(q.object as Term),
-      );
+      const values = (node[q.predicate.value] as unknown[] | undefined) ?? [];
+      values.push(term(q.object as Term));
+      node[q.predicate.value] = values;
       nodes.set(id, node);
     }
     const content = JSON.stringify({ "@graph": [...nodes.values()] });
