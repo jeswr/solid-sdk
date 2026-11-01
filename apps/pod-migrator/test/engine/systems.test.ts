@@ -1,12 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { detectAccessSystem, readAccess, writeAccess } from "../../src/engine/access.js";
 import { emptyPolicy, ownerPolicy } from "../../src/engine/policy.js";
-import { ACL, ACP, aclLink } from "../../src/engine/rdf.js";
+import { ACL, ACP, aclLink, RdfNode } from "../../src/engine/rdf.js";
 import { pods } from "./helpers.js";
 
 const resource = "https://pod.example/folder/";
+it("rejects literal objects when traversing local RDF fixture nodes", async () => {
+  const dataset = await parseRdf('<urn:node> <urn:predicate> "literal".', "text/turtle");
+  const node = new RdfNode("urn:node", dataset, DataFactory);
+  expect(() => node.nodes("urn:predicate")).toThrow("RDF node required");
+});
+
 describe("access HTTP safety", () => {
   it("rejects ambiguous and out-of-scope ACL advertisements and ignores anchored links", () => {
     expect(() =>

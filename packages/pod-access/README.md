@@ -257,7 +257,7 @@ const turtle = await writeAcp(policy, targetResource, targetAcrUrl, "css");
 
 The root entry point exports:
 
-- `readWac` / `writeWac`, `readAcp` / `writeAcp`, `AcpDialect`, and `PolicyTooComplex`.
+- `readWac` / `writeWac`, `readAcp` / `writeAcp`, `AcpDialect`, and `isPolicyTooComplex(error)`.
 - `translatePolicy`, `TranslationContext`, `reportItem`, and `optionDescriptions`. Report IDs,
   explanations, options, and default decisions retain Pod Migrator's behavior. Translation scopes
   output to the resource and requires normalized input; callers select scopes and restore member
@@ -265,9 +265,14 @@ The root entry point exports:
 - `emptyPolicy`, `scopePolicy`, `unionPolicies`, `ownerPolicy`, `effectivePolicy`,
   `effectiveMembers`, `assertNotWider`, `policiesEqual`, `ProofContext`, and `subjectKey`.
 - The extracted policy/report types and shared RDF helpers (`ACL`, `ACP`, `RDF`, `FOAF`,
-  `modes`, `modeIri`, `readModes`, `safeIri`, `RdfNode`, `serialize`, `parent`).
+  `modes` (a frozen copy), `modeIri`, `readModes`, `safeIri`, `serialize`, `parent`).
 
 `@jeswr/pod-access/testing` remains reserved and exports nothing.
+
+In-process callers are trusted code. Internal mode lists are private and frozen, and public
+exports expose no reader or error classes, so one caller cannot alter another caller's proof
+through exported state or helper prototypes. Returned policies and reports are caller-owned.
+Patching shared JavaScript built-ins or dependencies directly is outside this trust boundary.
 
 Server dialects are trusted caller assertions, never inferred from editable RDF. Source readers
 retain conservative permissions; target readers use the widest established interpretation and refuse
