@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, IconButton, Input, toast } from "@jeswr/suite-ui";
 import { ListTodo, Pin, PinOff } from "lucide-react";
@@ -10,7 +11,7 @@ import { useNotesContext } from "../state/notes-context";
 import { ColourPicker, LabelChips, LabelPicker } from "./controls";
 
 export function CaptureBar({ label }: { label?: string }) {
-  const { create, attempt } = useNotesContext();
+  const { create } = useNotesContext();
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -18,10 +19,14 @@ export function CaptureBar({ label }: { label?: string }) {
   const [labels, setLabels] = useState<string[]>(label ? [label] : []);
   const [pinned, setPinned] = useState(false);
   const [colour, setColour] = useState<NoteColour>("default");
+  const [busy, setBusy] = useState(false);
+  const submitted = useRef(false);
+  const mounted = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const opening = useRef<HTMLInputElement>(null);
   const latestClose = useRef(() => {});
-  const finish = () => {
+  const finish = async () => {
+    if (submitted.current) return;
     let input: ReturnType<typeof captureToNote>;
     try {
       input = captureToNote(title, body, items);
@@ -31,8 +36,20 @@ export function CaptureBar({ label }: { label?: string }) {
     }
     if (input) {
       const saved = { ...input, labels };
-      attempt(() => create(saved, pinned, colour), "Couldn't create your note");
+      submitted.current = true;
+      if (mounted.current) setBusy(true);
+      try {
+        await create(saved, pinned, colour);
+      } catch {
+        submitted.current = false;
+        if (mounted.current) setBusy(false);
+        toast.error("Couldn't create your note. Your text has been kept.", {
+          action: { label: "Retry", onClick: () => void latestClose.current() },
+        });
+        return;
+      }
     }
+    if (!mounted.current) return;
     setExpanded(false);
     setTitle("");
     setBody("");
@@ -40,8 +57,17 @@ export function CaptureBar({ label }: { label?: string }) {
     setLabels(label ? [label] : []);
     setPinned(false);
     setColour("default");
+    setBusy(false);
+    submitted.current = false;
   };
   latestClose.current = finish;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      void latestClose.current();
+    };
+  }, []);
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -130,6 +156,7 @@ export function CaptureBar({ label }: { label?: string }) {
       ) : (
         <>
           <Input
+            disabled={busy}
             className="notes-title-input"
             aria-label="Note title"
             placeholder="Title"
@@ -141,6 +168,7 @@ export function CaptureBar({ label }: { label?: string }) {
               {items.map((item, index) => (
                 <div key={`capture-row-${index.toString()}`}>
                   <input
+                    disabled={busy}
                     type="checkbox"
                     aria-label={`Complete item ${index + 1}`}
                     checked={item.checked}
@@ -153,6 +181,7 @@ export function CaptureBar({ label }: { label?: string }) {
                     }
                   />
                   <Input
+                    disabled={busy}
                     aria-label={`List item ${index + 1}`}
                     placeholder="List item"
                     value={item.text}
@@ -184,6 +213,7 @@ export function CaptureBar({ label }: { label?: string }) {
                 </div>
               ))}
               <Button
+                disabled={busy}
                 variant="ghost"
                 onClick={() => setItems([...items, { text: "", checked: false }])}
               >
@@ -192,6 +222,7 @@ export function CaptureBar({ label }: { label?: string }) {
             </div>
           ) : (
             <textarea
+              disabled={busy}
               className="notes-capture-body"
               aria-label="Note text"
               placeholder="Take a note…"
@@ -202,6 +233,7 @@ export function CaptureBar({ label }: { label?: string }) {
           <LabelChips links={false} labels={labels} />
           <div className="notes-capture-footer">
             <IconButton
+              disabled={busy}
               label={pinned ? "Unpin note" : "Pin note"}
               variant="ghost"
               aria-pressed={pinned}
@@ -213,9 +245,14 @@ export function CaptureBar({ label }: { label?: string }) {
                 <Pin size={18} aria-hidden="true" />
               )}
             </IconButton>
-            <ColourPicker value={colour} onChange={setColour} />
-            <LabelPicker value={labels} onChange={setLabels} />
-            <Button variant="ghost" className="notes-close-capture" onClick={finish}>
+            <ColourPicker value={colour} onChange={setColour} disabled={busy} />
+            <LabelPicker value={labels} onChange={setLabels} disabled={busy} />
+            <Button
+              variant="ghost"
+              className="notes-close-capture"
+              disabled={busy}
+              onClick={() => void finish()}
+            >
               Close
             </Button>
           </div>

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
@@ -25,6 +26,27 @@ async function capture(page: Page, title: string, body: string) {
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(card(page, title)).toHaveAttribute("aria-busy", "false");
 }
+
+test("keyboard folder navigation saves an unfinished capture", async ({ page }) => {
+  await page.goto("/notes");
+  await page.getByRole("textbox", { name: "Take a note", exact: true }).focus();
+  await page
+    .getByRole("textbox", { name: "Note text", exact: true })
+    .fill("Keyboard capture\nKeep every word");
+  const archive = page
+    .getByRole("navigation", { name: "Notes folders", exact: true })
+    .getByRole("link", { name: "Archive", exact: true })
+    .filter({ visible: true });
+  if (!(await archive.count()))
+    await page.getByRole("button", { name: "Open navigation", exact: true }).press("Enter");
+  await archive.press("Enter");
+  await expect(page).toHaveURL(/\/notes\/archive$/);
+  await navigate(page, "Notes");
+  await expect(card(page, "Keyboard capture")).toHaveAttribute("aria-busy", "false");
+  await expect(card(page, "Keyboard capture")).toContainText("Keep every word");
+  await page.reload();
+  await expect(card(page, "Keyboard capture")).toBeVisible();
+});
 
 test("Notes capture, checklist, labels, archive, trash, search and persistence are accessible", async ({
   page,

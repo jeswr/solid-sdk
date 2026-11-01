@@ -1,9 +1,34 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
-import { captureToNote, escapeHtml, taskListHtml } from "../src/apps/notes/lib/ui/capture";
+import {
+  captureTitle,
+  captureToNote,
+  escapeHtml,
+  taskListHtml,
+} from "../src/apps/notes/lib/ui/capture";
 import { checklistItems, toggleChecklistItem } from "../src/apps/notes/lib/ui/checklist";
 
 describe("quick capture HTML", () => {
+  it("caps derived titles at a grapheme and nearby word boundary, keeping the full line in the body", () => {
+    expect(captureTitle("a".repeat(200))).toBe("a".repeat(200));
+    expect(captureTitle("a".repeat(201))).toBe(`${"a".repeat(199)}…`);
+    expect(captureTitle(`${"a".repeat(180)} longword${"b".repeat(30)}`)).toBe(
+      `${"a".repeat(180)}…`,
+    );
+    expect(captureTitle(`a ${"b".repeat(200)}`)).toBe(`a ${"b".repeat(197)}…`);
+    expect(captureTitle(` ${"b".repeat(200)}`)).toBe(` ${"b".repeat(198)}…`);
+    for (const cluster of ["🌱", "e\u0301", "👨‍👩‍👧‍👦"]) {
+      const title = captureTitle(cluster.repeat(201));
+      expect(title.length).toBeLessThanOrEqual(200);
+      expect(title.slice(0, -1).length % cluster.length).toBe(0);
+    }
+    const line = "a".repeat(201);
+    expect(captureToNote("", `${line}\nRest`)).toEqual({
+      title: `${"a".repeat(199)}…`,
+      body: `<p>${line}</p><p>Rest</p>`,
+    });
+  });
   it("escapes markup and preserves Unicode", () => {
     expect(escapeHtml(`&<>"'🌱`)).toBe("&amp;&lt;&gt;&quot;&#39;🌱");
     expect(captureToNote("A title", "Hello <world>\nNext & last")).toEqual({
@@ -12,7 +37,7 @@ describe("quick capture HTML", () => {
     });
     expect(captureToNote("", "First line\nBody\n\nLast")).toEqual({
       title: "First line",
-      body: "<p>Body</p><p>Last</p>",
+      body: "<p>First line</p><p>Body</p><p>Last</p>",
     });
     expect(captureToNote("Title only", "")).toEqual({ title: "Title only", body: "" });
   });

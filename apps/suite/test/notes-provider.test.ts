@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
+import { getPendingDrafts } from "../src/apps/notes/state/draft-registry";
 import { NotesProvider, useNotesContext } from "../src/apps/notes/state/notes-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
@@ -102,4 +104,33 @@ it("carries pin and colour preferences through archive, trash and restore URL ch
     expect(s.value.prefs.colours[oldUrl]).toBeUndefined();
     expect(s.value.notes.find((item) => item.url === note.url)?.body).toBe("<p>Keep me</p>");
   }
+});
+
+it("flushes an unmounted dialog's pending draft before a card moves its URL", async () => {
+  const s = await fixture();
+  let note!: Awaited<ReturnType<typeof s.value.create>>;
+  await act(async () => {
+    note = await s.value.create(
+      { title: "Pending move", body: "<p>Pod copy</p>" },
+      false,
+      "default",
+    );
+  });
+  const pending = getPendingDrafts(s.value.session.webId);
+  await act(() => {
+    pending.change(
+      note,
+      { title: "Latest title", body: "<p>Latest text</p>", labels: ["A"] },
+      (...args) => s.value.store.save(...args),
+    );
+  });
+  expect(s.value.notes.find((item) => item.url === note.url)?.title).toBe("Latest title");
+  let moved!: typeof note;
+  await act(async () => {
+    moved = await s.value.move(note, "archive");
+  });
+  expect(moved).toMatchObject({ title: "Latest title", body: "<p>Latest text</p>", labels: ["A"] });
+  expect(await s.value.store.read(moved.url)).toEqual(moved);
+  expect(pending.get(note.url)).toBeUndefined();
+  expect(s.value.notes.some((item) => item.url === note.url)).toBe(false);
 });

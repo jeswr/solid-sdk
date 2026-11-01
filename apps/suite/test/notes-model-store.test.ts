@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { DataFactory, Store } from "n3";
 import { assert, describe, expect, it } from "vitest";
@@ -19,6 +20,7 @@ import {
   buildNote,
   createNotesStore,
   NoteConflictError,
+  NoteMoveUncertainError,
   NotesStore,
   parseNote,
   type StoredNote,
@@ -352,6 +354,54 @@ describe("notes store", () => {
     await expect(s.store.archive(note)).rejects.toBeInstanceOf(AggregateError);
   });
 
+  it.each([
+    404, 410,
+  ])("keeps the destination when a committed DELETE loses its response (%s)", async (status) => {
+    const s = await fixture();
+    const note = await s.store.create({ body: "Only copy" });
+    let deleted = false;
+    s.intercept(async (url, init) => {
+      if (url !== note.url) return;
+      if (init?.method === "DELETE") {
+        await s.pod.fetch(url, init);
+        deleted = true;
+        throw new TypeError("Lost response");
+      }
+      if (deleted) return new Response(null, { status });
+    });
+    const moved = await s.store.archive(note);
+    expect(s.pod.has(note.url)).toBe(false);
+    expect(s.pod.has(moved.url)).toBe(true);
+    expect(moved.body).toBe("Only copy");
+    expect(s.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+
+  it.each([
+    "transport",
+    "http",
+  ])("preserves both possible copies if the verification read fails (%s)", async (failure) => {
+    const s = await fixture();
+    const note = await s.store.create();
+    s.intercept(async (url, init) => {
+      if (url !== note.url) return;
+      if (init?.method === "DELETE") throw new TypeError("Lost response");
+      if (failure === "transport") throw new TypeError("Offline");
+      return new Response(null, { status: 503 });
+    });
+    await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteMoveUncertainError);
+    await expect(s.store.archive(note)).rejects.toMatchObject({
+      name: "NoteMoveUncertainError",
+      source: note.url,
+      destination: `${ROOT}archive/note-2.ttl`,
+      message: expect.stringContaining("may exist twice"),
+    });
+    expect(s.pod.has(note.url)).toBe(true);
+    expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(true);
+    expect(
+      s.calls.filter((call) => call.method === "DELETE").every((call) => call.url === note.url),
+    ).toBe(true);
+  });
+
   it("purges older than 30 days, retains 29-day and unstamped trash, and reports failures", async () => {
     const s = await fixture();
     const urls: string[] = [];
@@ -409,9 +459,6 @@ describe("notes store", () => {
     expect((await s.store.read(archive.url))?.labels).toEqual(["after"]);
     expect((await s.store.read(trash.url))?.labels).toEqual(["before"]);
     expect(await s.store.renameLabelEverywhere("after", "after")).toEqual([]);
-    await expect(s.store.renameLabelEverywhere("after", "other")).rejects.toMatchObject({
-      code: "invalid-transition",
-    });
     s.intercept(async (url, init) =>
       url === archive.url && init?.method === "PUT"
         ? new Response(null, { status: 412 })
@@ -421,6 +468,31 @@ describe("notes store", () => {
     expect(failures).toEqual([{ url: archive.url, error: expect.any(NoteConflictError) }]);
     expect((await s.store.read(active.url))?.labels).toEqual(["other"]);
     expect((await s.store.read(archive.url))?.labels).toEqual(["after"]);
+  });
+
+  it("merges existing labels without duplicates and retries a partially failed rename", async () => {
+    const s = await fixture();
+    const active = await s.store.create({ title: "Active", labels: ["A", "B", "keep"] });
+    const archived = await s.store.archive(
+      await s.store.create({ title: "Archived", labels: ["A"] }),
+    );
+    const destination = await s.store.create({ title: "Destination", labels: ["B"] });
+    let fail = true;
+    s.intercept(async (url, init) =>
+      url === archived.url && init?.method === "PUT" && fail
+        ? new Response(null, { status: 412 })
+        : undefined,
+    );
+    expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([
+      { url: archived.url, error: expect.any(NoteConflictError) },
+    ]);
+    expect((await s.store.read(active.url))?.labels).toEqual(["B", "keep"]);
+    expect((await s.store.read(archived.url))?.labels).toEqual(["A"]);
+    fail = false;
+    expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
+    expect((await s.store.read(archived.url))?.labels).toEqual(["B"]);
+    expect(await s.store.read(destination.url)).toEqual(destination);
+    expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
   });
 
   it("guards every URL argument and note/location pairing before I/O and refuses redirects", async () => {

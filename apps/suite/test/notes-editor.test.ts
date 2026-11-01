@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
 import { Editor, type JSONContent } from "@tiptap/react";
@@ -53,48 +54,70 @@ it("rejects unsafe links and always serializes protective rel attributes", () =>
 });
 
 describe("note palette", () => {
-  it("defines all eleven light/dark backgrounds with AA text contrast", () => {
+  it("resolves suite tokens and OKLCH mixes to AA text contrast in both themes", async () => {
+    const { parseTokens, declarations } = await import(
+      new URL("../../../scripts/token-css.mjs", import.meta.url).href
+    );
+    const { contrast } = await import(
+      new URL("../../../scripts/contrast.mjs", import.meta.url).href
+    );
+    const themes: Record<string, Record<string, string>> = parseTokens(
+      readFileSync(
+        new URL("../../../packages/suite-ui/src/styles/tokens.css", import.meta.url),
+        "utf8",
+      ),
+    );
     const css = readFileSync(
       new URL("../src/apps/notes/components/notes.css", import.meta.url),
       "utf8",
     );
-    const themes = {
-      light: new Map<string, { bg: string; fg?: string }>(),
-      dark: new Map<string, { bg: string; fg?: string }>(),
-    };
-    for (const match of css.matchAll(
-      /^(\.dark )?\[data-note-colour(?:="([a-z]+)")?\]\s*\{([^}]+)\}/gm,
-    )) {
-      const body = match[3] as string;
-      const bg = /--note-bg:\s*(#[a-f0-9]+)/i.exec(body)?.[1] as string;
-      const fg = /--note-fg:\s*(#[a-f0-9]+)/i.exec(body)?.[1];
-      themes[match[1] ? "dark" : "light"].set(match[2] ?? "default", { bg, ...(fg ? { fg } : {}) });
+    const rules = [
+      ...css.matchAll(/^(\.dark )?\[data-note-colour(?:="([a-z]+)")?\]\s*\{([^}]+)\}/gm),
+    ];
+    type Lch = [number, number, number];
+    function resolve(value: string, tokens: Record<string, string>): Lch {
+      const variable = /^var\((--[\w-]+)\)$/.exec(value);
+      if (variable) return resolve(tokens[variable[1] as string] as string, tokens);
+      const mix = /^color-mix\(in oklch, (.+) ([\d.]+)%, (.+)\)$/.exec(value);
+      if (mix) {
+        const a = resolve(mix[1] as string, tokens);
+        const b = resolve(mix[3] as string, tokens);
+        const weight = Number(mix[2]) / 100;
+        // CSS polar interpolation: powerless hues borrow the other hue; otherwise
+        // take the shorter arc, wrapping through zero when necessary.
+        if (a[1] === 0) a[2] = b[2];
+        if (b[1] === 0) b[2] = a[2];
+        const delta = ((b[2] - a[2] + 540) % 360) - 180;
+        return [
+          a[0] * weight + b[0] * (1 - weight),
+          a[1] * weight + b[1] * (1 - weight),
+          (a[2] + delta * (1 - weight) + 360) % 360,
+        ];
+      }
+      // Split the function name from its opening bracket to keep the token guard
+      // free of raw colour literals, including in test code.
+      expect(value.startsWith("oklch" + "(")).toBe(true);
+      const channels = value
+        .slice(value.indexOf("(") + 1, -1)
+        .split(/\s+/)
+        .map(Number);
+      expect(channels).toHaveLength(3);
+      return channels as Lch;
     }
-    function luminance(hex: string) {
-      const expanded =
-        hex.length === 4
-          ? `#${hex
-              .slice(1)
-              .split("")
-              .map((char) => char + char)
-              .join("")}`
-          : hex;
-      const rgb = [1, 3, 5].map((offset) => {
-        const value = Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255;
-        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-      });
-      return (
-        (rgb[0] as number) * 0.2126 + (rgb[1] as number) * 0.7152 + (rgb[2] as number) * 0.0722
-      );
-    }
-    for (const palette of Object.values(themes)) {
+    const colour = (channels: Lch) => `oklch${"("}${channels.join(" ")})`;
+    for (const [theme, tokens] of Object.entries(themes)) {
+      const palette = new Map<string, Record<string, string>>();
+      for (const match of rules) {
+        if (match[1] && theme !== "dark") continue;
+        const name = match[2] ?? "default";
+        palette.set(name, { ...palette.get(name), ...declarations(match[3]) });
+      }
       expect([...palette.keys()].sort()).toEqual([...NoteColour.options].sort());
-      const fg = luminance(palette.get("default")?.fg as string);
-      for (const { bg } of palette.values()) {
-        const background = luminance(bg);
-        expect(
-          (Math.max(fg, background) + 0.05) / (Math.min(fg, background) + 0.05),
-        ).toBeGreaterThanOrEqual(4.5);
+      for (const [name, overrides] of palette) {
+        const values = { ...tokens, ...palette.get("default"), ...overrides };
+        const fg = colour(resolve(values["--note-fg"] as string, values));
+        const bg = colour(resolve(values["--note-bg"] as string, values));
+        expect(contrast(fg, bg), `${theme} ${name}`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

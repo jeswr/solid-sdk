@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
 import type { NotesStore, StoredNote } from "../src/apps/notes/lib/model/store";
+import { createPendingDrafts, type PendingDrafts } from "../src/apps/notes/state/pending-drafts";
 import { useNoteDraft } from "../src/apps/notes/state/use-note-draft";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 
@@ -20,12 +22,13 @@ const original: StoredNote = {
 async function setup(
   save = vi.fn(async (_note, change) => ({ ...original, ...change, etag: '"v2"' })),
   read = vi.fn(async () => ({ ...original, body: "<p>Remote</p>", etag: '"remote"' })),
+  pending: PendingDrafts = createPendingDrafts({ initial: [], persist: vi.fn() }),
 ) {
   let draft!: ReturnType<typeof useNoteDraft>;
   const refresh = vi.fn(async () => {});
   const store = { save, read } as unknown as NotesStore;
   function Harness() {
-    draft = useNoteDraft(original, store, refresh);
+    draft = useNoteDraft(original, store, refresh, pending);
     return null;
   }
   const rendered = await mount(h(Harness));
@@ -146,5 +149,51 @@ describe("Notes autosave", () => {
       { title: "Before leaving", body: original.body, labels: [] },
       '"v1"',
     );
+  });
+
+  it("reopens during an unfinished save with the newest pending draft and drains it after unmount", async () => {
+    const pending = createPendingDrafts({ initial: [], persist: vi.fn() });
+    const saving = deferred<StoredNote>();
+    const save = vi
+      .fn()
+      .mockReturnValueOnce(saving.promise)
+      .mockImplementation(async (_note, input) => ({ ...original, ...input, etag: '"v3"' }));
+    const ui = await setup(save, undefined, pending);
+    await act(() => ui.draft.change({ title: "Before leaving" }));
+    await act(() => {
+      void ui.draft.flush();
+    });
+    await act(() => ui.draft.change({ title: "Last keystroke" }));
+    await ui.unmount();
+    const reopened = await setup(save, undefined, pending);
+    expect(reopened.draft.draft.title).toBe("Last keystroke");
+    await act(async () => {
+      saving.resolve({ ...original, title: "Before leaving", etag: '"v2"' });
+      await reopened.draft.flush();
+    });
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etag: '"v2"' }),
+      { title: "Last keystroke", body: original.body, labels: [] },
+      '"v2"',
+    );
+    expect(reopened.draft.status).toBe("saved");
+  });
+
+  it("reopens a retained conflict over the stale pod note and exposes conflict resolution", async () => {
+    const pending = createPendingDrafts({ initial: [], persist: vi.fn() });
+    const save = vi.fn().mockRejectedValue(new NoteConflictError(original.url));
+    const ui = await setup(save, undefined, pending);
+    await act(() => ui.draft.change({ title: "Retained title" }));
+    await act(async () => {
+      await expect(ui.draft.flush()).rejects.toBeInstanceOf(NoteConflictError);
+    });
+    await ui.unmount();
+    const reopened = await setup(save, undefined, pending);
+    expect(reopened.draft.status).toBe("conflict");
+    expect(reopened.draft.draft.title).toBe("Retained title");
+    await act(() => reopened.draft.resolve(false));
+    expect(reopened.draft.draft.title).toBe("Title");
+    expect(reopened.draft.status).toBe("saved");
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });

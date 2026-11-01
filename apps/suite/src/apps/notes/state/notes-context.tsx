@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -14,8 +15,10 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
+import { isDirectChild } from "../../docs/lib/model/layout";
 import { type NoteColour, rekeyPreferences, togglePinned } from "../lib/model/prefs";
 import { createNotesStore, type NoteChanges, type StoredNote } from "../lib/model/store";
+import { getPendingDrafts } from "./draft-registry";
 import { useNotesMutations } from "./mutations";
 import { useNotesPreferences } from "./prefs";
 import { useNotes } from "./use-notes";
@@ -34,11 +37,38 @@ function useNotesValue(session: PodSession) {
     await Promise.all([active.refresh(), archived.refresh(), trashed.refresh()]);
   }, [active.refresh, archived.refresh, trashed.refresh]);
   const mutations = useNotesMutations(store, refresh);
-  const notes = mutations.project([
+  const pending = getPendingDrafts(session.webId);
+  const [, redrawDrafts] = useState(0);
+  useEffect(() => {
+    const unsubscribe = pending.subscribe((_url, saved) => {
+      redrawDrafts((value) => value + 1);
+      if (saved) void refresh();
+    });
+    for (const entry of pending.all()) {
+      if (
+        Object.values(store.containers).some((container) =>
+          isDirectChild(entry.note.url, container),
+        )
+      )
+        pending.bind(entry.note, (...args) => store.save(...args));
+    }
+    void pending.retry();
+    return unsubscribe;
+  }, [pending, store, refresh]);
+  const projected = mutations.project([
     ...(active.data ?? []),
     ...(archived.data ?? []),
     ...(trashed.data ?? []),
   ]);
+  const recovered = pending
+    .all()
+    .filter((entry) =>
+      Object.values(store.containers).some((container) => isDirectChild(entry.note.url, container)),
+    );
+  const notes = [
+    ...projected.filter((note) => !recovered.some((entry) => entry.note.url === note.url)),
+    ...recovered.map(({ note, draft }) => ({ ...note, ...draft })),
+  ];
   const router = useRouter();
   const pathname = usePathname();
   const query = useSearchParams().toString();
@@ -96,7 +126,10 @@ function useNotesValue(session: PodSession) {
   const colour = (url: string, value: NoteColour) =>
     updatePrefs((prefs) => ({ ...prefs, colours: { ...prefs.colours, [url]: value } }));
   const move = async (note: StoredNote, action: "archive" | "unarchive" | "trash" | "restore") => {
-    const moved = await mutations[action](note);
+    // Cards can act on a draft whose dialog has already unmounted. Finish that
+    // writer before moving its URL, so it cannot recreate the old source later.
+    const saved = await pending.flush(note, (...args) => store.save(...args));
+    const moved = await mutations[action](saved);
     updatePrefs((value) => rekeyPreferences(value, note.url, moved.url));
     return moved;
   };

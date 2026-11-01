@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -15,11 +16,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useNotesContext } from "../state/notes-context";
+import { ConfirmDialog } from "./controls";
 
 function LabelRow({ label }: { label: string }) {
   const { store, refresh, labels, persistLabels } = useNotesContext();
   const [name, setName] = useState(label);
   const [busy, setBusy] = useState(false);
+  const [merging, setMerging] = useState(false);
   const edit = async (remove: boolean) => {
     setBusy(true);
     try {
@@ -42,35 +45,47 @@ function LabelRow({ label }: { label: string }) {
     }
   };
   return (
-    <form
-      className="notes-label-row"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void edit(false);
-      }}
-    >
-      <Tag size={16} aria-hidden="true" />
-      <Input
-        aria-label={`Rename ${label}`}
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <Button
-        type="submit"
-        variant="ghost"
-        disabled={busy || !name.trim() || name.trim() === label}
+    <>
+      <form
+        className="notes-label-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (labels.includes(name.trim())) setMerging(true);
+          else void edit(false);
+        }}
       >
-        Rename
-      </Button>
-      <IconButton
-        label={`Delete label ${label}`}
-        variant="ghost"
-        disabled={busy}
-        onClick={() => void edit(true)}
-      >
-        <Trash2 size={16} aria-hidden="true" />
-      </IconButton>
-    </form>
+        <Tag size={16} aria-hidden="true" />
+        <Input
+          disabled={busy || merging}
+          aria-label={`Rename ${label}`}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <Button
+          type="submit"
+          variant="ghost"
+          disabled={busy || !name.trim() || name.trim() === label}
+        >
+          Rename
+        </Button>
+        <IconButton
+          label={`Delete label ${label}`}
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void edit(true)}
+        >
+          <Trash2 size={16} aria-hidden="true" />
+        </IconButton>
+      </form>
+      {merging && (
+        <ConfirmDialog
+          title={`Merge “${label}” into “${name.trim()}”?`}
+          description="Notes with either label will use the destination label."
+          confirm={() => edit(false)}
+          close={() => setMerging(false)}
+        />
+      )}
+    </>
   );
 }
 export function NotesSidebar() {

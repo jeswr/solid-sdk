@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -38,29 +39,38 @@ import { createDocsStore } from "@/apps/docs/lib/model/store";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
 import type { StoredNote } from "../lib/model/store";
+import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 import { useNoteDraft } from "../state/use-note-draft";
-import { ColourPicker, LabelChips, LabelPicker } from "./controls";
+import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
-  const { store, refresh, session, prefs, pin, colour, closeNote, opener, move, attempt } =
+  const { store, refresh, session, prefs, pin, colour, closeNote, opener, move } =
     useNotesContext();
-  const { draft, change, flush, resolve, status, modified } = useNoteDraft(note, store, refresh);
+  const { draft, change, flush, resolve, status, modified } = useNoteDraft(
+    note,
+    store,
+    refresh,
+    getPendingDrafts(session.webId),
+  );
   const [busy, setBusy] = useState(false);
+  const actionPending = useRef(false);
+  const [confirmDocs, setConfirmDocs] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const titleInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const readOnly = note.location === "trashed";
+  const trashed = note.location === "trashed";
+  const readOnly = trashed || busy;
   const handler = useRef(change);
   handler.current = change;
   const editor = useEditor(
     {
       immediatelyRender: false,
       extensions: notesExtensions(),
-      content: note.body,
+      content: draft.body,
       editable: !readOnly,
       editorProps: {
         attributes: {
@@ -70,10 +80,15 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           spellcheck: "true",
         },
       },
-      onUpdate: ({ editor }) => handler.current({ body: editor.getHTML() }),
+      onUpdate: ({ editor }) => {
+        if (!actionPending.current) handler.current({ body: editor.getHTML() });
+      },
     },
     [note.url],
   );
+  useEffect(() => {
+    editor?.setEditable(!readOnly, false);
+  }, [editor, readOnly]);
   useEffect(() => {
     if (editor && draft.body !== editor.getHTML())
       editor.commands.setContent(draft.body, { emitUpdate: false });
@@ -82,25 +97,56 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const close = async () => {
-    if (busy) return;
+  const lock = () => {
+    if (actionPending.current) return false;
+    actionPending.current = true;
+    // Apply the DOM/editor lock synchronously, before flush can take its snapshot.
+    if (titleInput.current) titleInput.current.readOnly = true;
+    editor?.setEditable(false, false);
     setBusy(true);
+    return true;
+  };
+  const unlock = () => {
+    actionPending.current = false;
+    if (titleInput.current) titleInput.current.readOnly = trashed;
+    editor?.setEditable(!trashed, false);
+    setBusy(false);
+  };
+  const close = async () => {
+    if (!lock()) return;
     try {
       await flush();
       closeNote();
     } catch {
-      setBusy(false);
+      unlock();
     }
   };
   const act = (work: (saved: StoredNote) => Promise<unknown>) => {
-    if (busy) return;
-    setBusy(true);
-    void flush()
+    if (!lock()) return Promise.resolve();
+    return flush()
       .then(work)
       .catch(() => {
         toast.error("Couldn't complete that action. Your note is still here.");
-      })
-      .finally(() => setBusy(false));
+        unlock();
+      });
+  };
+  const review = async (keepMine: boolean) => {
+    if (!lock()) return;
+    try {
+      await resolve(keepMine);
+    } finally {
+      unlock();
+    }
+  };
+  const retry = async () => {
+    if (!lock()) return;
+    try {
+      await flush();
+    } catch {
+      // The save status retains the error and draft for another retry.
+    } finally {
+      unlock();
+    }
   };
   const age = Math.max(0, Math.floor((now - Date.parse(modified ?? "")) / 60_000));
   const relative =
@@ -199,7 +245,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           placeholder="Title"
           value={draft.title}
           readOnly={readOnly}
-          onChange={(event) => change({ title: event.target.value })}
+          onChange={(event) => {
+            if (!actionPending.current) change({ title: event.target.value });
+          }}
         />
         {!readOnly && <Toolbar label="Note formatting" actions={actions} />}
         <Popover open={linkOpen} onOpenChange={setLinkOpen}>
@@ -258,16 +306,18 @@ export function NoteDialog({ note }: { note: StoredNote }) {
         {status === "conflict" && (
           <div role="alert" className="notes-conflict">
             <p>This note changed somewhere else</p>
-            <Button variant="outline" onClick={() => void resolve(false)}>
+            <Button variant="outline" disabled={busy} onClick={() => void review(false)}>
               Load latest
             </Button>
-            <Button onClick={() => void resolve(true)}>Keep mine</Button>
+            <Button disabled={busy} onClick={() => void review(true)}>
+              Keep mine
+            </Button>
           </div>
         )}
         <footer className="notes-dialog-footer">
           <LabelChips links={false} labels={draft.labels} />
           <div className="notes-dialog-actions">
-            {readOnly ? (
+            {trashed ? (
               <Button
                 variant="outline"
                 disabled={busy}
@@ -282,10 +332,15 @@ export function NoteDialog({ note }: { note: StoredNote }) {
               </Button>
             ) : (
               <>
-                <LabelPicker value={draft.labels} onChange={(labels) => change({ labels })} />
+                <LabelPicker
+                  disabled={busy}
+                  value={draft.labels}
+                  onChange={(labels) => change({ labels })}
+                />
                 <IconButton
                   label={prefs.pinned.includes(note.url) ? "Unpin note" : "Pin note"}
                   variant="ghost"
+                  disabled={busy}
                   aria-pressed={prefs.pinned.includes(note.url)}
                   onClick={() => pin(note.url)}
                 >
@@ -296,6 +351,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                   )}
                 </IconButton>
                 <ColourPicker
+                  disabled={busy}
                   value={prefs.colours[note.url] ?? "default"}
                   onChange={(value) => colour(note.url, value)}
                 />
@@ -333,35 +389,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                   className="notes-open-docs"
                   variant="ghost"
                   disabled={busy}
-                  onClick={() =>
-                    act(async (saved) => {
-                      const docs = createDocsStore({
-                        fetchImpl: session.fetch,
-                        podRoot: session.storageUrl,
-                        webId: session.webId,
-                      });
-                      const document = await docs.create({
-                        title: saved.title || "Untitled document",
-                        body: saved.body,
-                        format: "text/html",
-                      });
-                      try {
-                        const trashed = await move(saved, "trash");
-                        toast.success("Moved to Docs", {
-                          action: {
-                            label: "Undo",
-                            onClick: () =>
-                              attempt(() => move(trashed, "restore"), "Couldn't restore the note"),
-                          },
-                        });
-                        router.push(`/docs/d/${encodeRef(document.url)}`);
-                      } catch {
-                        toast.error(
-                          "Created a document, but couldn't move the note to Trash. Both copies are safe.",
-                        );
-                      }
-                    })
-                  }
+                  onClick={() => setConfirmDocs(true)}
                 >
                   <FileText size={16} aria-hidden="true" />
                   Open in Docs
@@ -385,7 +413,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                     ? "Changes need review"
                     : "Couldn't save — "}
               {status === "failed" && (
-                <Button variant="link" onClick={() => void flush().catch(() => {})}>
+                <Button variant="link" disabled={busy} onClick={() => void retry()}>
                   Retry
                 </Button>
               )}
@@ -397,6 +425,29 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </div>
         </footer>
       </DialogContent>
+      {confirmDocs && (
+        <ConfirmDialog
+          title="Open in Docs?"
+          description="This note moves to Trash in Notes, and you can restore it from there."
+          close={() => setConfirmDocs(false)}
+          confirm={() =>
+            act(async (saved) => {
+              const docs = createDocsStore({
+                fetchImpl: session.fetch,
+                podRoot: session.storageUrl,
+                webId: session.webId,
+              });
+              const document = await docs.create({
+                title: saved.title || "Untitled document",
+                body: saved.body,
+                format: "text/html",
+              });
+              await move(saved, "trash");
+              router.push(`/docs/d/${encodeRef(document.url)}`);
+            })
+          }
+        />
+      )}
     </Dialog>
   );
 }

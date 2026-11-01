@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch, normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container, ContainerDataset } from "@solid/object";
@@ -17,9 +18,9 @@ import {
   ProfileTypeIndexAnchor,
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
-import { deleteLabel, renameLabel } from "../organise/labels";
+import { deleteLabel, mergeLabels } from "../organise/labels";
 import { type NoteAction, reduceNoteState } from "../state";
-import { NoteConflictError } from "./errors";
+import { NoteConflictError, NoteMoveUncertainError } from "./errors";
 import {
   type BuildNoteInput,
   buildNote,
@@ -279,6 +280,20 @@ export class NotesStore {
     try {
       await this.remove(note.url, note.etag);
     } catch (error) {
+      // A lost DELETE response does not establish whether the server committed it.
+      // Only roll back once a revalidated read proves the source still exists.
+      try {
+        await readRdf(note.url, this.fetchImpl);
+      } catch (verification) {
+        if (
+          verification instanceof RdfFetchError &&
+          (verification.status === 404 || verification.status === 410)
+        )
+          return moved;
+        throw new NoteMoveUncertainError(note.url, moved.url, {
+          cause: new AggregateError([error, verification]),
+        });
+      }
       try {
         await this.remove(moved.url, moved.etag);
       } catch (cleanup) {
@@ -348,7 +363,7 @@ export class NotesStore {
   }
 
   renameLabelEverywhere(from: string, to: string): Promise<NoteFailure[]> {
-    return this.labels((notes) => renameLabel(notes, from, to));
+    return this.labels((notes) => mergeLabels(notes, from, to));
   }
   deleteLabelEverywhere(label: string): Promise<NoteFailure[]> {
     return this.labels((notes) => deleteLabel(notes, label));

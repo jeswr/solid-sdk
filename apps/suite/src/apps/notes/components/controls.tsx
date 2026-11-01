@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -174,7 +175,7 @@ export function ConfirmDialog({
       >
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
-        {failed && <p role="alert">Couldn't delete. Please try again.</p>}
+        {failed && <p role="alert">Couldn't complete this action. Please try again.</p>}
         <div className="notes-confirm-actions">
           <Button id="notes-cancel-delete" variant="outline" disabled={busy} onClick={close}>
             Cancel
@@ -190,7 +191,7 @@ export function ConfirmDialog({
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Deleting…" : title}
+            {busy ? "Working…" : title}
           </Button>
         </div>
       </DialogContent>
