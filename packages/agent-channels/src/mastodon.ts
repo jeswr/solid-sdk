@@ -7,6 +7,7 @@ import { ChannelParseError } from "./errors.js";
 import { parseRecord, rawId, type Source } from "./mastodon/records.js";
 import {
   DEFAULT_INSTANCE,
+  handle,
   id,
   instanceOrigin,
   JSON_LIMITS,
@@ -28,6 +29,8 @@ export const MASTODON_SCOPES = Object.freeze({
 });
 export interface MastodonReaderOptions {
   readonly instance?: string;
+  /** Trusted LOCAL_DOMAIN for local accts; defaults to the API instance host. */
+  readonly accountDomain?: string;
   readonly tokens: TokenProvider;
   readonly transport?: OriginFetchOptions;
 }
@@ -74,6 +77,8 @@ function nextPath(response: Response, origin: string, source: Source): string | 
 /** Read-only instance binding. Re-pulls use stable IDs; conversation snapshots may repeat. */
 export function createMastodonReader(options: MastodonReaderOptions): ChannelBinding {
   const origin = instanceOrigin(options.instance ?? DEFAULT_INSTANCE);
+  // Validate and normalize the trusted bare account domain independently of the API origin.
+  const accountDomain = handle(`_@${options.accountDomain ?? new URL(origin).host}`).slice(2);
   const tokens = options.tokens;
   const rest = mastodonRest(origin, options.transport);
   return {
@@ -171,7 +176,7 @@ export function createMastodonReader(options: MastodonReaderOptions): ChannelBin
         }
         return { items, next: canonicalJson(state) };
       },
-      parse: (item) => parseRecord(origin, item),
+      parse: (item) => parseRecord(origin, item, accountDomain),
       threadKey: (message) => message.threadId,
     },
   };

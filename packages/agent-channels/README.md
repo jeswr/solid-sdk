@@ -150,7 +150,7 @@ golden fixture in `test/fixtures/propose.eml` passes STRICT parity on its own ou
 Legacy-bridge's `detectBridgeCapability` consumes the parsed headers, JSON-LD
 blocks and text body to report unverified discovery hints; see its PROTOCOL.md.
 
-`./mastodon` exports `createMastodonReader({ instance?, tokens, transport? })`,
+`./mastodon` exports `createMastodonReader({ instance?, accountDomain?, tokens, transport? })`,
 `MASTODON_SCOPES` and default-instance `ORIGINS`. Register the OAuth app on the
 configured HTTPS instance (default `https://mastodon.social`), with
 `read:notifications read:statuses write:statuses`; provision separate read and
@@ -170,8 +170,12 @@ remains at the cursor for the next call; if it cannot fit alone, the call refuse
 Completed scans restart on the next poll. Stable IDs allow the importer to deduplicate
 repeated notifications and conversation last-status snapshots. This conservative
 poller does not reconstruct all historical turns from a conversation snapshot.
-Deleted last statuses are skipped. Local acct handles are qualified by the pinned
-instance host. Parsing ignores `native`, projects HTML to plain
+Deleted last statuses are skipped. Local acct handles are qualified by the trusted,
+snapshotted `accountDomain` (a bare domain, defaulting to the instance host). Set it to
+the server's `LOCAL_DOMAIN` when its API is served on a separate `WEB_DOMAIN`, as in
+[Mastodon's split-domain configuration](https://docs.joinmastodon.org/admin/config/#web_domain).
+Fully qualified remote accts retain their own domain; account domains never change
+the allowed API origin or trigger requests. Parsing ignores `native`, projects HTML to plain
 text, strips controls and retains raw-byte provenance. Sender claims and footer
 links remain unverified observations; no structured proposal is extracted.
 

@@ -705,6 +705,66 @@ it("qualifies local sender handles with their configured instance", () => {
 });
 
 it.each([
+  "notifications",
+  "conversations",
+] as const)("qualifies local %s senders with the snapshotted account domain on split-domain instances", async (source) => {
+  const row = structuredClone(
+    source === "notifications" ? fixtures.notification : fixtures.conversation,
+  );
+  const senderAccount = source === "notifications" ? row.account : row.last_status.account;
+  senderAccount.acct = "alice";
+  senderAccount.url = "https://untrusted.example/@alice";
+  const f = fake(source === "notifications" ? [[row], []] : [[], [row]]);
+  const options = {
+    instance,
+    accountDomain: "Accounts.Example",
+    tokens: f.tokens,
+    transport: f.options,
+  };
+  const binding = createMastodonReader(options);
+  options.accountDomain = "changed.example";
+  const result = await binding.ingest.list(account, undefined, bounds);
+  const item = result.items[0] as InboundRawMessage;
+  expect(binding.ingest.parse(item).sender?.handle).toBe("alice@accounts.example");
+  expect(item.id.startsWith(`${instance}:${source}:`)).toBe(true);
+  expect(binding.origins).toEqual(new Set([instance]));
+  expect(f.requests).toHaveLength(2);
+  expect(f.requests.every((request) => request.url.origin === instance)).toBe(true);
+  expect(f.tokens.calls.map((call) => call.access)).toEqual(["read", "read"]);
+  senderAccount.acct = "alice@remote.example";
+  expect(binding.ingest.parse(incoming(source, row)).sender?.handle).toBe("alice@remote.example");
+});
+
+it("normalizes trusted Unicode account domains", () => {
+  const binding = createMastodonReader({
+    instance,
+    accountDomain: "BÜCHER.example",
+    tokens: new RecordingTokenProvider(),
+  });
+  const row = { ...fixtures.notification, account: { acct: "alice" } };
+  expect(binding.ingest.parse(incoming("notifications", row)).sender?.handle).toBe(
+    "alice@xn--bcher-kva.example",
+  );
+});
+
+it.each([
+  "",
+  "https://accounts.example",
+  "alice@accounts.example",
+  "accounts.example/path",
+  "accounts.example?query",
+  "accounts.example#fragment",
+  "accounts.example\n",
+])("rejects invalid trusted account domain %j before acquiring credentials or making requests", (accountDomain) => {
+  const f = fake();
+  expect(() =>
+    createMastodonReader({ instance, accountDomain, tokens: f.tokens, transport: f.options }),
+  ).toThrow("invalid Mastodon account handle");
+  expect(f.tokens.calls).toEqual([]);
+  expect(f.requests).toEqual([]);
+});
+
+it.each([
   ["alice.smith@remote.example", "alice.smith@remote.example"],
   ["alice-smith@remote.example", "alice-smith@remote.example"],
   ["alice..-smith@remote.example", "alice..-smith@remote.example"],

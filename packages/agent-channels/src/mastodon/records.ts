@@ -32,7 +32,11 @@ function htmlText(value: unknown): string {
     ).replaceAll("\u00a0", " "),
   ).trim();
 }
-export function parseRecord(origin: string, item: InboundRawMessage): BridgeMessage {
+export function parseRecord(
+  origin: string,
+  item: InboundRawMessage,
+  accountDomain?: string,
+): BridgeMessage {
   try {
     const raw = typeof item.raw === "string" ? Buffer.from(item.raw) : item.raw;
     if (raw.byteLength > MAX_RECORD_BYTES)
@@ -54,7 +58,9 @@ export function parseRecord(origin: string, item: InboundRawMessage): BridgeMess
       throw new ChannelParseError("Mastodon conversation is not direct");
     const sender = record(source === "conversations" ? status?.account : row.account);
     const acct = handle(sender.acct);
-    const senderHandle = acct.includes("@") ? acct : `${acct}@${new URL(origin).host}`;
+    const senderHandle = acct.includes("@")
+      ? acct
+      : handle(`${acct}@${accountDomain ?? new URL(origin).host}`);
     const signals: Record<string, string> = Object.create(null);
     let textBody: string;
     if (source === "notifications") {
