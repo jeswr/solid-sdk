@@ -7,27 +7,33 @@ import type { Editor } from "@tiptap/react";
 export async function clipboardAction(editor: Editor, action: "cut" | "copy" | "paste") {
   try {
     if (action === "paste") {
+      let html = "";
+      let text = "";
+      const files: File[] = [];
       if (navigator.clipboard.read) {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          if (item.types.includes("text/html")) {
-            const html = await (await item.getType("text/html")).text();
-            editor.commands.focus();
-            editor.view.pasteHTML(html);
-            return;
+        for (const item of await navigator.clipboard.read())
+          for (const type of item.types) {
+            if (type === "text/html" && !html) html = await (await item.getType(type)).text();
+            else if (type === "text/plain" && !text) text = await (await item.getType(type)).text();
+            else if (type.startsWith("image/"))
+              files.push(new File([await item.getType(type)], "pasted-image", { type }));
           }
-          if (item.types.includes("text/plain")) {
-            const text = await (await item.getType("text/plain")).text();
-            editor.commands.focus();
-            editor.view.pasteText(text);
-            return;
-          }
-        }
-      } else {
-        const text = await navigator.clipboard.readText();
-        editor.commands.focus();
-        editor.view.pasteText(text);
-      }
+      } else text = await navigator.clipboard.readText();
+      if (!html && !text && !files.length) return;
+      // Route through the editor's paste handling with the clipboard's data attached, so
+      // images take the same upload path as a keyboard paste instead of being dropped.
+      const event = new ClipboardEvent("paste");
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          files,
+          types: [...(html ? ["text/html"] : []), ...(text ? ["text/plain"] : [])],
+          getData: (type: string) =>
+            type === "text/html" ? html : type === "text/plain" ? text : "",
+        },
+      });
+      editor.commands.focus();
+      if (html) editor.view.pasteHTML(html, event);
+      else editor.view.pasteText(text, event);
       return;
     }
     const { from, to } = editor.state.selection;

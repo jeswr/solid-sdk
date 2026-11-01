@@ -97,8 +97,8 @@ it("pastes plain clipboard items, text-only browsers and empty item lists", asyn
   const e = editor();
   clipboard({
     read: async () => [
-      { types: ["image/png"] },
       { types: ["text/plain"], getType: async () => ({ text: async () => "Plain text" }) },
+      { types: ["text/plain"], getType: async () => ({ text: async () => "Second item" }) },
     ],
   });
   await clipboardAction(e, "paste");
@@ -110,6 +110,52 @@ it("pastes plain clipboard items, text-only browsers and empty item lists", asyn
   clipboard({ read: async () => [] });
   await clipboardAction(e, "paste");
   expect(e.getText()).toBe("Fallback text");
+});
+
+it("hands clipboard images to the editor's paste handling, as a keyboard paste does", async () => {
+  vi.stubGlobal("ClipboardEvent", window.Event);
+  const handlePaste = vi.fn((_view: unknown, event: ClipboardEvent) =>
+    Boolean(event.clipboardData?.files.length),
+  );
+  const e = new Editor({
+    extensions: baseExtensions(vi.fn()),
+    content: "<p>Before</p>",
+    editorProps: { handlePaste },
+  });
+  editors.push(e);
+  const png = new Blob(["png"], { type: "image/png" });
+  clipboard({ read: async () => [{ types: ["image/png"], getType: async () => png }] });
+  await clipboardAction(e, "paste");
+  const data = handlePaste.mock.calls[0]?.[1].clipboardData;
+  expect(data?.files).toHaveLength(1);
+  expect(data?.files[0]).toMatchObject({ name: "pasted-image", type: "image/png" });
+  expect(data?.types).toEqual([]);
+  expect(data?.getData("text/plain")).toBe("");
+  expect(data?.getData("text/uri-list")).toBe("");
+  expect(e.getText()).toBe("Before");
+  // Rich HTML and its plain text travel with the image, for the handler to choose between.
+  clipboard({
+    read: async () => [
+      {
+        types: ["text/html", "text/plain", "image/png"],
+        getType: async (type: string) =>
+          type === "image/png"
+            ? png
+            : { text: async () => (type === "text/html" ? "<p>Rich</p>" : "Rich") },
+      },
+      // Later rich parts and unrelated types don't replace the first ones.
+      {
+        types: ["text/html", "application/x-other"],
+        getType: async () => ({ text: async () => "<p>Later</p>" }),
+      },
+    ],
+  });
+  await clipboardAction(e, "paste");
+  const rich = handlePaste.mock.calls[1]?.[1].clipboardData;
+  expect(rich?.types).toEqual(["text/html", "text/plain"]);
+  expect(rich?.getData("text/html")).toBe("<p>Rich</p>");
+  expect(rich?.getData("text/plain")).toBe("Rich");
+  expect(rich?.files).toHaveLength(1);
 });
 
 it("reports clipboard permission failures while preserving the document", async () => {
