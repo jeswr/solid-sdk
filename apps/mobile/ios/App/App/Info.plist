@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- AUTHORED-BY Codex GPT-6.1-Sol: push-only Keychain groups and background challenges. -->
+    <key>SuitePushKeychainGroup</key><string>$(AppIdentifierPrefix)org.jeswr.suite.push</string>
+    <key>SuitePushSigningGroup</key><string>$(AppIdentifierPrefix)org.jeswr.suite</string>
+    <key>UIBackgroundModes</key><array><string>remote-notification</string></array>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>

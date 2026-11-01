@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * Session-half unit tests with an injected transport (no CSS, no network). Cover the
@@ -19,11 +20,11 @@ import {
   type SolidSessionState,
 } from "../src/index.js";
 
-const creds: ClientCredentials = { issuer: "http://idp.example/", id: "cid", secret: "csec" };
-const TOKEN_ENDPOINT = "http://idp.example/token";
+const creds: ClientCredentials = { issuer: "https://idp.example/", id: "cid", secret: "csec" };
+const TOKEN_ENDPOINT = "https://idp.example/token";
 
 function discoveryResponse(): Response {
-  return new Response(JSON.stringify({ token_endpoint: TOKEN_ENDPOINT }), {
+  return new Response(JSON.stringify({ issuer: creds.issuer, token_endpoint: TOKEN_ENDPOINT }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

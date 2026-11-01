@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
@@ -109,6 +110,12 @@ Presence can also be detected using the `solid-extension:ready` event or the sti
 Requests the worker does not authorize fall back to the page's captured native fetch
 with normal CORS behavior.
 Explicit `solid.fetch` calls retain the worker's denial response.
+
+Both fetch APIs accept `Request` inputs and text, `ArrayBuffer`, typed-array/DataView,
+Blob/File, and `URLSearchParams` bodies. Binary requests and responses preserve their
+bytes through the bridge. Each request or response body is limited to 25 MiB raw.
+Explicit `solid.fetch` rejects FormData and ReadableStream bodies; the global fetch
+patch leaves those bodies on native fetch.
 
 ## Auth + session
 
@@ -260,14 +267,34 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   repeated call), and remains callable on an ungranted stub.
 - **`resolveClass`** first walks the WebID's SAI registry set → data registries → data
   registrations, then its public/private Solid Type Indexes for `solid:forClass`. It merges
-  and deduplicates container/instance targets by kind and URL on allowed pod origins.
+  index links from the profile, following authenticated `pim:preferencesFile` documents
+  only when the profile lacks a usable NamedNode HTTP(S) `solid:privateTypeIndex`. It
+  deduplicates container/instance targets by kind and URL on allowed pod origins.
   SAI registrations must be containers strictly inside their registry on the same origin.
   Their shape tree must match the class through the reviewed shipped table (currently
   `vcard:Individual` via ActivityPods' profile tree) or an explicit SHACL `sh:NodeShape` with
   `sh:targetClass`. Other ShEx-only trees do not match. SAI discovery is bounded to four
   registries, 64 registrations and 16 public tree/shape documents per resolution; the internal
-  result reports truncation. Documents are memoised per resolution. Registry reads use
-  credentials only on authenticated pod origins; profile and tree/shape reads are public.
+  result reports truncation. One request-wide budget covers all requested classes and rungs:
+  128 network document reads (including redirect hops and nonce retries), 10 seconds,
+  three redirects per document, 1 MiB per streamed body and 50,000 quads per document.
+  The deadline and request cancellation also cover session refresh, profile-queue waits and
+  final authority lookups. RDF discovery uses linear deduplication and checks the deadline
+  while traversing links and targets; parsed documents are reused within the request.
+  Cancelled token writes abort their IndexedDB transaction. A completed refresh whose write
+  was aborted is held only in worker memory, bound to its predecessor session, for the next
+  live request to persist without redeeming the spent predecessor again. Losing the worker
+  before that retry may require sign-in. If commit wins the abort race, the durable rotated
+  chain is preserved for later requests; the cancelled request still fails and receives no
+  refreshed session. Cancellation never triggers a rollback to a spent refresh token.
+  Exhaustion preserves already discovered targets as unchecked and shows
+  “Some data could not be checked” in consent. Documents are memoised within the request.
+  The worker supplies a document-confined internal GET/HEAD capability, cancelled on session
+  changes, revocation, or the requesting tab closing or leaving its origin. Every redirect hop
+  must be explicitly confined and path-safe; opaque redirects are refused without follow probes.
+  Internal bytes never enter the replica or page responses. Registry, preferences and private
+  index reads use credentials only on authenticated pod origins; profile, tree/shape and public
+  index reads omit credentials, including public indexes hosted on foreign origins.
   It requires a verified, granted origin and an active session. Class-only origins can
   resolve only classes they currently hold beneath their parent origin grant.
   It returns `shape: null` today: SHACL member sampling remains a follow-up, and all discovered

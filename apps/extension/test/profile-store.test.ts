@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticatedFetch } from '../src/background/core/authenticated-fetch';
 import { dpopThumbprint, generateDpopKeyPair } from '../src/background/core/dpop';
@@ -222,6 +223,81 @@ describe('ProfileStore lifecycle and adversarial isolation', () => {
     await store.updateSession(a.profile.id, { ...a.session, accessToken: 'fixture-rotated' });
     expect((await store.session(a.profile.id))?.session.accessToken).toBe('fixture-rotated');
     expect((await store.session(b.profile.id))?.session.accessToken).toBe(b.session.accessToken);
+  });
+
+  it.each([
+    'queue',
+    'read',
+    'key validation',
+  ])('fences a cancelled token update after %s', async (phase) => {
+    const a = await login();
+    const before = structuredClone(db.state);
+    const controller = new AbortController();
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let blocker: Promise<void> | undefined;
+    if (phase === 'queue') {
+      blocker = store.capabilities(a.profile.id, async () => {
+        entered();
+        await held;
+      });
+      await started;
+    } else if (phase === 'read') {
+      const read = db.read.bind(db);
+      vi.spyOn(db, 'read').mockImplementationOnce(async () => {
+        entered();
+        await held;
+        return read();
+      });
+    } else {
+      const exportKey = crypto.subtle.exportKey.bind(crypto.subtle);
+      vi.spyOn(crypto.subtle, 'exportKey').mockImplementationOnce(async (...args) => {
+        entered();
+        await held;
+        return exportKey(...args);
+      });
+    }
+    const pending = store.updateSession(
+      a.profile.id,
+      { ...a.session, accessToken: 'late' },
+      controller.signal,
+    );
+    const rejected = expect(pending).rejects.toThrow();
+    if (phase !== 'queue') await started;
+    controller.abort();
+    release();
+    await rejected;
+    await blocker;
+    expect(db.state).toEqual(before);
+    // A valid signal still allows the update through all fences.
+    await store.updateSession(a.profile.id, a.session, new AbortController().signal);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('rejects cancellation during persistence (commit won=%s)', async (committed) => {
+    const a = await login();
+    const controller = new AbortController();
+    const updated = { ...a.session, accessToken: 'rotated', refreshToken: 'rotated-refresh' };
+    const write = db.write.bind(db);
+    vi.spyOn(db, 'write').mockImplementationOnce(async (state, signal) => {
+      expect(signal).toBe(controller.signal);
+      // Model abort before commit, and commit winning just before abort delivery.
+      if (committed) await write(state);
+      controller.abort();
+      if (!committed) await write(state, signal);
+    });
+    await expect(store.updateSession(a.profile.id, updated, controller.signal)).rejects.toThrow();
+    expect((await store.session(a.profile.id))?.session).toEqual(committed ? updated : a.session);
+    // A cancelled waiter cannot poison the profile writer or roll back a committed chain.
+    await store.rename(a.profile.id, 'Still usable');
   });
 
   it('enforces eight profiles under concurrent additions and permits re-login at the limit', async () => {

@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6
 import type { ProfilePersistence, ProfileRecord, ProfileSnapshot } from './core/profile-store';
 
 const RECORDS = 'profiles';
@@ -49,14 +50,28 @@ export class ProfileDb implements ProfilePersistence {
     };
   }
 
-  async write({ records, ...meta }: ProfileSnapshot): Promise<void> {
+  async write({ records, ...meta }: ProfileSnapshot, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const tx = this.db.transaction([RECORDS, META], 'readwrite');
     const done = complete(tx);
-    const store = tx.objectStore(RECORDS);
-    store.clear();
-    for (const record of records) store.put(record, record.profile.id);
-    tx.objectStore(META).put(meta, 'state');
-    await done;
+    const abort = () => {
+      try {
+        tx.abort();
+      } catch {
+        // IndexedDB cannot roll back a transaction that has already committed.
+      }
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const store = tx.objectStore(RECORDS);
+      store.clear();
+      for (const record of records) store.put(record, record.profile.id);
+      tx.objectStore(META).put(meta, 'state');
+      await done;
+      signal?.throwIfAborted();
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   close(): void {

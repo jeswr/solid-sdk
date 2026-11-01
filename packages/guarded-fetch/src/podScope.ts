@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The POD-SCOPE guard — the suite's ONE reviewed home for "is this URL within the
  * configured pod (sub-)container?", consolidating the ~8 bespoke `assertWithinBase` /
@@ -49,11 +50,13 @@
  * **Pure core, no platform:** only the WHATWG `URL` global — browser-safe, no `node:*`.
  */
 import {
+  cancelBody,
   isRedirect,
   normalizeRequest,
-  redactUserinfo,
   rewriteInitForRedirect,
   sameOrigin,
+  sanitizeUrl,
+  validateLimit,
 } from "./redirect.js";
 
 // `redactUserinfo` lives in the shared `./redirect.js` machinery (used by both guards + the
@@ -115,7 +118,7 @@ export function normalizePodBase(base: string): string {
     url = new URL(base.trim());
   } catch {
     throw new PodScopeError(
-      `pod base URL must be an absolute http(s) URL, got: ${redactUserinfo(base)}`,
+      `pod base URL must be an absolute http(s) URL, got: ${sanitizeUrl(base)}`,
     );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -127,7 +130,7 @@ export function normalizePodBase(base: string): string {
   }
   if (ENCODED_DELIMITER.test(url.pathname)) {
     throw new PodScopeError(
-      `pod base URL contains an encoded path delimiter (%2F/%5C): ${redactUserinfo(base)}`,
+      `pod base URL contains an encoded path delimiter (%2F/%5C): ${sanitizeUrl(base)}`,
     );
   }
   if (!url.pathname.endsWith("/")) {
@@ -162,7 +165,7 @@ export function assertWithinPodScope(base: string, url: string, options?: PodSco
   // path — refuse it before the parser can resolve it onto the base's scheme.
   if (trimmed.startsWith("//")) {
     throw new PodScopeError(
-      `target URL must not be scheme-relative ("//..."): ${redactUserinfo(url)} (refused)`,
+      `target URL must not be scheme-relative ("//..."): ${sanitizeUrl(url)} (refused)`,
     );
   }
   let resolved: URL;
@@ -171,7 +174,7 @@ export function assertWithinPodScope(base: string, url: string, options?: PodSco
     // base. Either way the RESOLVED (dot-segment-collapsed) result is what gets validated.
     resolved = new URL(trimmed, root);
   } catch {
-    throw new PodScopeError(`target URL is invalid: ${redactUserinfo(url)}`);
+    throw new PodScopeError(`target URL is invalid: ${sanitizeUrl(url)}`);
   }
   if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
     throw new PodScopeError(
@@ -188,7 +191,7 @@ export function assertWithinPodScope(base: string, url: string, options?: PodSco
   const b = new URL(root);
   if (resolved.origin !== b.origin) {
     throw new PodScopeError(
-      `target URL ${redactUserinfo(resolved.toString())} escapes pod origin ${b.origin} (refused)`,
+      `target URL ${sanitizeUrl(resolved.toString())} escapes pod origin ${b.origin} (refused)`,
     );
   }
   // Defence in depth: refuse ENCODED path delimiters. The WHATWG parser leaves `%2F`/`%5C`
@@ -199,7 +202,7 @@ export function assertWithinPodScope(base: string, url: string, options?: PodSco
   // trusting every server's decode order (fail-closed).
   if (ENCODED_DELIMITER.test(resolved.pathname)) {
     throw new PodScopeError(
-      `target URL ${redactUserinfo(resolved.toString())} contains an encoded path delimiter (%2F/%5C) (refused)`,
+      `target URL ${sanitizeUrl(resolved.toString())} contains an encoded path delimiter (%2F/%5C) (refused)`,
     );
   }
   // The base path is slash-terminated (normalizePodBase), so `startsWith` IS a real
@@ -214,12 +217,12 @@ export function assertWithinPodScope(base: string, url: string, options?: PodSco
     (basePath !== "/" && resolved.pathname === basePath.slice(0, -1));
   if (!isRoot && !resolved.pathname.startsWith(basePath)) {
     throw new PodScopeError(
-      `target URL ${redactUserinfo(resolved.toString())} escapes pod path ${basePath} (refused)`,
+      `target URL ${sanitizeUrl(resolved.toString())} escapes pod path ${basePath} (refused)`,
     );
   }
   if (isRoot && options?.allowRoot === false) {
     throw new PodScopeError(
-      `target URL ${redactUserinfo(resolved.toString())} is the pod base itself, not a resource under it (refused; allowRoot is false)`,
+      `target URL ${sanitizeUrl(resolved.toString())} is the pod base itself, not a resource under it (refused; allowRoot is false)`,
     );
   }
   return resolved.toString();
@@ -283,7 +286,10 @@ export function isContainerUrl(url: string): boolean {
  *
  * This wrapper enforces SCOPE, not host safety — the base is trusted config. To also
  * apply the SSRF policy, pass a guarded fetch: `createPodScopedFetch(base, { fetch:
- * createGuardedFetch(opts) })`.
+ * createGuardedFetch(opts) })`. The inner guard honours our `redirect: "manual"`;
+ * this outer wrapper alone follows each scope-checked hop. Both wrappers honour the caller's
+ * captured redirect mode: `manual` returns the first redirect, `error` refuses it, and
+ * `follow` (the default) re-validates each hop. The transport must honour manual redirects.
  *
  * @throws PodScopeError from the returned fetch when a request or redirect leaves the scope.
  */
@@ -293,68 +299,86 @@ export function createPodScopedFetch(
 ): typeof globalThis.fetch {
   const root = normalizePodBase(base); // throw at config time, not first call
   const fetcher = options.fetch ?? globalThis.fetch;
-  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  const { maxRedirects = DEFAULT_MAX_REDIRECTS } = options;
+  validateLimit("maxRedirects", maxRedirects, true);
   const scopeOptions: PodScopeOptions = { allowRoot: options.allowRoot ?? true };
 
   const scoped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const { url: startUrl, init: effectiveInit } = normalizeRequest(input, init);
-    let currentUrl = assertWithinPodScope(root, startUrl, scopeOptions);
-    let currentInit: RequestInit = { ...(effectiveInit ?? {}) };
-    const seen = new Set<string>();
-    for (let hop = 0; hop <= maxRedirects; hop += 1) {
-      if (seen.has(currentUrl)) {
-        throw new PodScopeError(`redirect loop detected at ${currentUrl}.`);
+    const controller = new AbortController();
+    const callerSignal = effectiveInit?.signal;
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, controller.signal])
+      : controller.signal;
+    const redirectMode = effectiveInit?.redirect ?? "follow";
+    try {
+      let currentUrl = assertWithinPodScope(root, startUrl, scopeOptions);
+      let currentInit: RequestInit = { ...(effectiveInit ?? {}) };
+      const seen = new Set<string>();
+      for (let hop = 0; hop <= maxRedirects; hop += 1) {
+        if (seen.has(currentUrl)) {
+          throw new PodScopeError(`redirect loop detected at ${sanitizeUrl(currentUrl)}.`);
+        }
+        seen.add(currentUrl);
+        const res = await fetcher(currentUrl, {
+          ...currentInit,
+          // Every hop is re-checked by US, so the underlying fetch must NOT auto-follow.
+          redirect: "manual",
+          signal,
+        });
+        if (!isRedirect(res.status) || redirectMode === "manual") {
+          return res;
+        }
+        if (redirectMode === "error") {
+          cancelBody(res);
+          throw new PodScopeError(
+            `redirect refused for ${sanitizeUrl(currentUrl)} (redirect mode "error").`,
+          );
+        }
+        const location = res.headers.get("location");
+        if (!location) {
+          // A 3xx with no Location is not followable — return it with its body intact.
+          return res;
+        }
+        try {
+          // Apply the SAME pre-parse guard `assertWithinPodScope` applies to an initial URL, on
+          // the RAW Location BEFORE resolution: a scheme-relative Location (`//host/…`) resolves
+          // against the current hop's scheme and — when it names the pod's own host — would land
+          // back in scope, silently bypassing the documented "scheme-relative refused" rule. The
+          // form itself is refused here so a poisoned resource cannot re-point the origin via a
+          // `//`-Location even to an in-scope host. (Other refused forms — non-http(s) scheme,
+          // embedded credentials, out-of-scope origin/path — are caught post-resolution by
+          // `assertWithinPodScope` below, since resolution preserves them.)
+          if (location.trim().startsWith("//")) {
+            throw new PodScopeError(
+              `redirect Location must not be scheme-relative ("//..."): ${sanitizeUrl(location)} (refused)`,
+            );
+          }
+          let nextUrl: string;
+          try {
+            nextUrl = new URL(location, currentUrl).toString();
+          } catch {
+            throw new PodScopeError(
+              `redirect to a malformed Location (${sanitizeUrl(location)}) from ${sanitizeUrl(currentUrl)} (refused)`,
+            );
+          }
+          // THE guard: a redirect that leaves the pod scope throws instead of being followed.
+          const checkedNext = assertWithinPodScope(root, nextUrl, scopeOptions);
+          currentInit = rewriteInitForRedirect(
+            currentInit,
+            res.status,
+            !sameOrigin(currentUrl, checkedNext),
+          );
+          currentUrl = checkedNext;
+        } finally {
+          cancelBody(res);
+        }
       }
-      seen.add(currentUrl);
-      const res = await fetcher(currentUrl, {
-        ...currentInit,
-        // Every hop is re-checked by US, so the underlying fetch must NOT auto-follow.
-        redirect: "manual",
-      });
-      if (!isRedirect(res.status)) {
-        return res;
-      }
-      const location = res.headers.get("location");
-      if (!location) {
-        // A 3xx with no Location is not followable — return it as-is.
-        return res;
-      }
-      // Apply the SAME pre-parse guard `assertWithinPodScope` applies to an initial URL, on
-      // the RAW Location BEFORE resolution: a scheme-relative Location (`//host/…`) resolves
-      // against the current hop's scheme and — when it names the pod's own host — would land
-      // back in scope, silently bypassing the documented "scheme-relative refused" rule. The
-      // form itself is refused here so a poisoned resource cannot re-point the origin via a
-      // `//`-Location even to an in-scope host. (Other refused forms — non-http(s) scheme,
-      // embedded credentials, out-of-scope origin/path — are caught post-resolution by
-      // `assertWithinPodScope` below, since resolution preserves them.)
-      if (location.trim().startsWith("//")) {
-        throw new PodScopeError(
-          `redirect Location must not be scheme-relative ("//..."): ${redactUserinfo(location)} (refused)`,
-        );
-      }
-      let nextUrl: string;
-      try {
-        nextUrl = new URL(location, currentUrl).toString();
-      } catch {
-        throw new PodScopeError(
-          `redirect to a malformed Location (${redactUserinfo(location)}) from ${currentUrl} (refused)`,
-        );
-      }
-      // THE guard: a redirect that leaves the pod scope throws instead of being followed.
-      const checkedNext = assertWithinPodScope(root, nextUrl, scopeOptions);
-      currentInit = rewriteInitForRedirect(
-        currentInit,
-        res.status,
-        !sameOrigin(currentUrl, checkedNext),
-      );
-      try {
-        await res.body?.cancel();
-      } catch {
-        // Body already consumed/closed — fine.
-      }
-      currentUrl = checkedNext;
+      throw new PodScopeError(`too many redirects (> ${maxRedirects}) within pod scope ${root}.`);
+    } catch (error) {
+      controller.abort();
+      throw error;
     }
-    throw new PodScopeError(`too many redirects (> ${maxRedirects}) within pod scope ${root}.`);
   };
   return scoped as typeof globalThis.fetch;
 }
