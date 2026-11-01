@@ -236,7 +236,24 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
             try {
               native = JSON.stringify(await crypto.decrypt(event, event.room_id as string));
             } catch {
-              throw new MatrixRoomError(event.room_id as string);
+              try {
+                // A later to-device key can unblock buffered ciphertext. Apply only
+                // crypto changes: room timelines must still be read from state.since
+                // once pending delivery drains, even if the server ignores this filter.
+                const params = new URLSearchParams({
+                  since: state.since,
+                  timeout: "0",
+                  filter: JSON.stringify({ room: { rooms: [] }, presence: { types: [] } }),
+                });
+                const sync = await responseBody(
+                  await rest(`/sync?${params}`, account, tokens, "read"),
+                );
+                syncToken(sync.next_batch);
+                await crypto.receiveSync(sync);
+                native = JSON.stringify(await crypto.decrypt(event, event.room_id as string));
+              } catch {
+                throw new MatrixRoomError(event.room_id as string);
+              }
             }
           }
           items.push({ id: event.event_id as string, raw, native });

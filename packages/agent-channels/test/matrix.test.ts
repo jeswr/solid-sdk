@@ -305,14 +305,91 @@ it.each([
 
 it("reports a decryption failure with room context, leaving the checkpoint reusable", async () => {
   const pending = { ...event(), type: "m.room.encrypted" };
-  const r = reader([]);
-  r.crypto.decrypt.mockRejectedValueOnce(new Error("must not escape"));
+  const r = reader([sync([])]);
+  r.crypto.decrypt
+    .mockRejectedValueOnce(new Error("must not escape"))
+    .mockRejectedValueOnce(new Error("key still missing"));
   await expect(
     r.binding.ingest.list(account, cursor({ pending: [pending] }), limits),
   ).rejects.toBeInstanceOf(MatrixRoomError);
   expect(
     (await r.binding.ingest.list(account, cursor({ pending: [pending] }), limits)).items,
   ).toHaveLength(1);
+});
+
+it("receives delayed keys while preserving pending ciphertext and replaying later timelines", async () => {
+  const cipher = {
+    ...event("$cipher"),
+    type: "m.room.encrypted",
+    content: { algorithm: "m.megolm.v1.aes-sha2", ciphertext: "synthetic-fixture" },
+  };
+  const later = event("$later");
+  let keyAvailable = false;
+  const crypto = {
+    async receiveSync(value: Record<string, unknown>) {
+      if (value.to_device) keyAvailable = true;
+    },
+    async decrypt(value: Record<string, unknown>) {
+      if (!keyAvailable) throw new Error("key has not arrived");
+      return { ...value, type: "m.room.message", content: { msgtype: "m.text", body: "unlocked" } };
+    },
+  };
+  const r = reader(
+    [
+      direct,
+      sync([event(), cipher, event("$three")]),
+      sync([], { next_batch: "s2" }),
+      // Even if the server ignores the crypto-only filter, these events must be
+      // read again from s1 after the original pending page has drained.
+      sync([later], {
+        next_batch: "s3",
+        to_device: { events: [{ type: "m.room_key", content: { synthetic: true } }] },
+      }),
+      direct,
+      sync([later], { next_batch: "s3" }),
+    ],
+    { crypto },
+  );
+  const first = await r.binding.ingest.list(account, undefined, { ...limits, maxItems: 1 });
+  expect(first.items.map((item) => item.id)).toEqual(["$one"]);
+  const previous = required(first.next);
+  await expect(r.binding.ingest.list(account, previous, limits)).rejects.toMatchObject({ roomId });
+  expect(JSON.parse(previous)).toMatchObject({ since: "s1", pending: [cipher, event("$three")] });
+  const unlocked = await r.binding.ingest.list(account, previous, { ...limits, maxItems: 1 });
+  expect(unlocked.items.map((item) => item.id)).toEqual(["$cipher"]);
+  expect(required(unlocked.items[0]).raw).toBe(JSON.stringify(cipher));
+  expect(r.binding.ingest.parse(required(unlocked.items[0])).textBody).toBe("unlocked");
+  expect(JSON.parse(unlocked.next)).toMatchObject({ since: "s1", pending: [event("$three")] });
+  const drained = await r.binding.ingest.list(account, unlocked.next, limits);
+  expect(drained.items.map((item) => item.id)).toEqual(["$three"]);
+  expect(r.requests).toHaveLength(4);
+  const next = await r.binding.ingest.list(account, drained.next, limits);
+  expect(next.items.map((item) => item.id)).toEqual(["$later"]);
+  expect(JSON.parse(next.next)).toMatchObject({ since: "s3", pending: [] });
+  for (const index of [2, 3, 5])
+    expect(required(r.requests[index]).url.searchParams.get("since")).toBe("s1");
+  for (const index of [2, 3]) {
+    const filter = JSON.parse(required(required(r.requests[index]).url.searchParams.get("filter")));
+    expect(filter.room.rooms).toEqual([]);
+  }
+  expect(r.tokens.calls.every((call) => call.access === "read")).toBe(true);
+});
+
+it.each([
+  new Error("synthetic transport failure"),
+  new Response(null, { status: 500 }),
+  { next_batch: "" },
+])("retains pending delivery when crypto synchronization fails", async (reply) => {
+  const pending = { ...event(), type: "m.room.encrypted" };
+  const r = reader([reply]);
+  r.crypto.decrypt.mockRejectedValueOnce(new Error("missing key"));
+  const previous = cursor({ pending: [pending] });
+  await expect(r.binding.ingest.list(account, previous, limits)).rejects.toBeInstanceOf(
+    MatrixRoomError,
+  );
+  const retry = await r.binding.ingest.list(account, previous, limits);
+  expect(retry.items.map((item) => item.id)).toEqual(["$one"]);
+  expect(JSON.parse(retry.next)).toMatchObject({ since: "s0", pending: [] });
 });
 
 it.each([

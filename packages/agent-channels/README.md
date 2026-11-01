@@ -168,6 +168,10 @@ item and aggregate byte bounds are drained. It never advances past a failed decr
 malformed/truncated DM timeline: `MatrixRoomError.roomId` identifies the failed room,
 and the caller must retain its previous cursor. A limited timeline requires explicit
 history recovery; this binding does not silently accept gaps or auto-backfill history.
+Joined and left DM timelines share these checks; a room delta without a timeline is empty.
+On decryption failure, the reader synchronizes crypto changes and retries once, retaining
+the pending ciphertext and delivery checkpoint. Any timelines returned during that crypto
+sync are read again after pending delivery drains, so later key delivery cannot skip messages.
 
 The host initializes the Rust SDK's `OlmMachine` with the provisioned device identity
 and private persistent crypto-store path, then supplies `await createMatrixCrypto(machine)`.
