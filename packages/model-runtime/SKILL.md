@@ -29,15 +29,18 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   whose fidelity assertion proves every field traces to `shapes.ttl` or the committed config.
 - Keep generated artifacts data-only. A manifest must never carry code, regex source,
   templates or path expressions; `validateManifest` rejects unknown keys and enforces caps.
-- Prefix names must follow Turtle `PN_PREFIX` (the empty default prefix is allowed).
-  Validate at manifest admission and recheck immediately before `n3.Writer` on both
-  `serialize` and `storeToTurtle`, since the validated manifest is mutable.
+- All emission goes through `src/rdf.ts`'s `serializeTurtle`, after alias migration.
+  Immediately before `n3.Writer`, reject unsafe NamedNodes in subject, predicate,
+  object and graph positions, literal datatype IRIs, prefix namespaces, and prefix
+  labels outside Turtle `PN_PREFIX` (the empty default prefix is allowed).
+  Recheck mutable manifests; never escape or canonicalize an unsafe identity.
 - Resource URLs and every derived subject pass `isSafeAbsoluteIri` without rewriting
   their lexical identity. `subject`, `build`, `serialize`, and direct `Wrapper`
   construction throw `TypeError` on an unsafe or relative IRI; `parse` and
   `parseDocument` return `undefined` (before parsing an unsafe document base).
   Wrappers accept strings or safe absolute NamedNodes; other term kinds throw `TypeError`.
-  `storeToTurtle` also throws `TypeError` for unsafe NamedNode subjects.
+  `storeToTurtle` also throws `TypeError` for unsafe NamedNodes and datatype IRIs
+  anywhere in the emitted graph. Public `types.add` rejects unsafe IRIs before insertion.
   The exported `subjectIri(resourceUrl, fragment?)` validates both the resource and
   the minted subject; flat, composite, and generated per-node handles use it.
   Reject instead of escaping: `rdf-serialize`'s `escapeIri` percent-encodes forbidden

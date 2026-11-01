@@ -549,6 +549,21 @@ function assertCompositeFidelity(
  * is projected inside that composite, never also as a flat entity).
  */
 export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult): void {
+  // Independently mirror the compiler's pre-projection satisfiability checks.
+  for (const shape of shapes.nodeShapes) {
+    for (const c of shape.properties) {
+      if (c.kind === "iri" && c.datatype !== undefined) {
+        throw new FidelityError(
+          `property ${c.shapeIri} has an incompatible datatype and IRI node kind`,
+        );
+      }
+      if (c.minCount !== undefined && c.maxCount !== undefined && c.minCount > c.maxCount) {
+        throw new FidelityError(
+          `property ${c.shapeIri} has impossible cardinality: minCount > maxCount`,
+        );
+      }
+    }
+  }
   const composites = compiled.manifest.entities.filter(isCompositeEntity);
   const claimed = new Set<string>();
   for (const composite of composites) {

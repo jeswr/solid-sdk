@@ -43,8 +43,10 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   canonical/alternativePath-member overlaps, in either order. Do not conjoin them
   or overwrite one shape's constraints with another's.
 - Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
-  Runtime manifest validation checks config prefixes, and shape serialization
-  rechecks names before `n3.Writer`. Generated per-node `subject()` handles call
+  Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
+  emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
+  literal datatypes, prefix names and namespace IRIs immediately before `n3.Writer`.
+  Generated per-node `subject()` handles call
   runtime `subjectIri`, rejecting unsafe resources with `TypeError` and preserving
   exact lexical identity for safe resources and derived fragment IRIs.
 - `iriScheme: "https"` is the HTTPS-only guard compiled from `sh:pattern "^https://"`;
@@ -60,6 +62,8 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
 - Config may add guards (defaults, trims, sort, http(s) scheme) but never contradict the
   shape; the fidelity assertion fails if a required guard is missing or disagrees with SHACL.
   Config defaults on Violation `minCount >= 1` fields are rejected.
+  Compilation and fidelity independently reject IRI properties carrying `sh:datatype`
+  and every impossible `minCount > maxCount`, before projecting fields or nested links.
 - Aliases come only from SHACL: multiple `sh:targetClass` values select the unique explicit
   ontology `owl:Class` as canonical and emit the sorted extras as `aliasTypeIris`; a flat
   2–4 IRI `sh:alternativePath` list selects the unique ontology property as canonical and
@@ -76,6 +80,9 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   `generateModel` supplies both (legacy third-argument quads use the OWL/RDFS adapter).
   Preserve complex-path roots as blank nodes with deterministic
   labels: skolemizing a path root silently changes its SHACL meaning to a predicate.
+- Mint skolem IRIs from full shape/class/path identities using stable hashes and
+  readable suffixes. Check every minted identity against all named IRIs in the
+  input profile and other minted identities; collisions fail closed.
 - `skos:closeMatch`/`exactMatch` are not substitutions and NEVER create aliases.
 - Consumers keep a hand-written facade (target 150 lines or fewer) that maps the generated
   entity onto their public API. The parity bar is the package's existing tests run verbatim
