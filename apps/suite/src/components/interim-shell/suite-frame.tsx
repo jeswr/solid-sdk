@@ -36,7 +36,8 @@ export type SuiteAppId =
   | "photos"
   | "money"
   | "health"
-  | "tasks";
+  | "tasks"
+  | "music";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
