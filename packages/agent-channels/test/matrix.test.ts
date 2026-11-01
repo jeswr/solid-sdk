@@ -40,6 +40,7 @@ it("filters sync to m.direct rooms, bounds pages and commits the baseline only a
   expect(first.items.map((m) => m.id)).toEqual(["$one"]);
   const filter = JSON.parse(required(required(r.requests[1]).url.searchParams.get("filter")));
   expect(filter.room.rooms).toEqual([roomId]);
+  expect(filter.room.include_leave).toBe(true);
   expect(filter.room.timeline.types).toEqual(["m.room.message", "m.room.encrypted"]);
   expect(r.crypto.receiveSync).toHaveBeenCalledTimes(1);
   const second = await r.binding.ingest.list(account, first.next, limits);
@@ -72,13 +73,19 @@ it("filters sync to m.direct rooms, bounds pages and commits the baseline only a
   expect(r.binding.origins).toEqual(new Set([homeserver]));
 });
 
-it("retains ciphertext provenance while decrypting after crypto sync", async () => {
+it.each([
+  "join",
+  "leave",
+])("retains %s ciphertext provenance while decrypting after crypto sync", async (membership) => {
   const cipher = {
     ...event(),
     type: "m.room.encrypted",
     content: { algorithm: "m.megolm.v1.aes-sha2", ciphertext: "synthetic-fixture" },
   };
-  const r = reader([direct, sync([cipher])]);
+  const r = reader([
+    direct,
+    sync([], { rooms: { [membership]: { [roomId]: { timeline: { events: [cipher] } } } } }),
+  ]);
   const page = await r.binding.ingest.list(account, undefined, limits);
   expect(r.crypto.receiveSync.mock.invocationCallOrder[0]).toBeLessThan(
     required(r.crypto.decrypt.mock.invocationCallOrder[0]),
@@ -206,12 +213,15 @@ it.each([
   expect(r.requests).toHaveLength(0);
 });
 
-it("locally rejects non-DM rooms and same-sync removals, even if the server ignores the filter", async () => {
+it.each([
+  "join",
+  "leave",
+])("locally rejects %s non-DM rooms and same-sync removals, even if the server ignores the filter", async (membership) => {
   const r = reader([
     direct,
     sync([], {
       rooms: {
-        join: {
+        [membership]: {
           "!public:example.org": { timeline: { events: [event()], limited: true } },
           [roomId]: { timeline: { events: [event()] } },
         },
@@ -224,16 +234,73 @@ it("locally rejects non-DM rooms and same-sync removals, even if the server igno
   expect((await empty.binding.ingest.list(account, undefined, limits)).items).toEqual([]);
 });
 
+it("drains left DM timelines without losing pre-departure events or accepting non-DMs", async () => {
+  const left = {
+    next_batch: "s1",
+    rooms: {
+      leave: {
+        [roomId]: { timeline: { events: [event(), event("$two")] } },
+        "!public:example.org": { timeline: { events: [event("$public")], limited: true } },
+      },
+    },
+  };
+  const r = reader([direct, left, direct, sync([], { next_batch: "s2" })]);
+  const first = await r.binding.ingest.list(account, cursor(), { ...limits, maxItems: 1 });
+  expect(first.items.map((item) => item.id)).toEqual(["$one"]);
+  expect(JSON.parse(first.next).pending.map((item: { event_id: string }) => item.event_id)).toEqual(
+    ["$two"],
+  );
+  const second = await r.binding.ingest.list(account, first.next, limits);
+  expect(second.items.map((item) => item.id)).toEqual(["$two"]);
+  expect(r.requests).toHaveLength(2);
+  const third = await r.binding.ingest.list(account, second.next, limits);
+  expect(third.items).toEqual([]);
+  expect(required(r.requests[3]).url.searchParams.get("since")).toBe("s1");
+  expect(JSON.parse(third.next).since).toBe("s2");
+});
+
+it.each(["join", "leave"])("accepts %s room updates without a timeline", async (membership) => {
+  const r = reader([
+    direct,
+    sync([], {
+      rooms: { [membership]: { [roomId]: { account_data: { events: [] } } } },
+    }),
+  ]);
+  const page = await r.binding.ingest.list(account, cursor(), limits);
+  expect(page.items).toEqual([]);
+  expect(JSON.parse(page.next)).toMatchObject({ since: "s1", pending: [] });
+});
+
 it.each([
-  {},
-  { timeline: { events: [], limited: true } },
-  { timeline: { events: null } },
-  { timeline: { events: [null] } },
-  { timeline: { events: [event("bad")] } },
-  { timeline: { events: [{ ...event(), room_id: "!other:example.org" }] } },
-])("reports failed/truncated DM rooms %j", async (data) => {
-  const r = reader([direct, sync([], { rooms: { join: { [roomId]: data } } })]);
-  await expect(r.binding.ingest.list(account, undefined, limits)).rejects.toMatchObject({ roomId });
+  "join",
+  "leave",
+])("reports failed/truncated %s DM rooms and preserves retries", async (membership) => {
+  for (const data of [
+    null,
+    { timeline: null },
+    { timeline: [] },
+    { timeline: {} },
+    { timeline: { events: [], limited: true } },
+    { timeline: { events: null } },
+    { timeline: { events: [null] } },
+    { timeline: { events: [event("bad")] } },
+    { timeline: { events: [{ ...event(), room_id: "!other:example.org" }] } },
+  ]) {
+    const r = reader([
+      direct,
+      sync([], { rooms: { [membership]: { [roomId]: data } } }),
+      direct,
+      sync([], { rooms: { [membership]: { [roomId]: { timeline: { events: [event()] } } } } }),
+    ]);
+    const previous = cursor();
+    await expect(r.binding.ingest.list(account, previous, limits)).rejects.toMatchObject({
+      roomId,
+    });
+    const retry = await r.binding.ingest.list(account, previous, limits);
+    expect(retry.items.map((item) => item.id)).toEqual(["$one"]);
+    expect(required(r.requests[1]).url.searchParams.get("since")).toBe("s0");
+    expect(required(r.requests[3]).url.searchParams.get("since")).toBe("s0");
+  }
 });
 
 it("reports a decryption failure with room context, leaving the checkpoint reusable", async () => {
@@ -330,6 +397,8 @@ it("caps aggregate rooms/events even when each individual array is within its bo
     rooms: {
       join: {
         [roomId]: { timeline: { events: Array.from({ length: 256 }, (_, i) => event(`$a${i}`)) } },
+      },
+      leave: {
         [room2]: {
           timeline: {
             events: Array.from({ length: 257 }, (_, i) => ({ ...event(`$b${i}`), room_id: room2 })),

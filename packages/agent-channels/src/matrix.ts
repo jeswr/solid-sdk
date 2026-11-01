@@ -174,6 +174,7 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
           const filter = {
             room: {
               rooms: [...rooms],
+              include_leave: true,
               timeline: { limit: 512, types: ["m.room.message", "m.room.encrypted"] },
               state: { types: [] },
               ephemeral: { types: [] },
@@ -196,20 +197,24 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
           for (const room of rooms) if (!requestedRooms.has(room)) throw new MatrixRoomError(room);
           await crypto.receiveSync(sync);
           const pending: Record<string, unknown>[] = [];
-          const joined = record(record(sync.rooms ?? {}).join ?? {});
-          for (const [roomId, data] of Object.entries(joined)) {
-            if (!rooms.has(roomId)) continue;
-            try {
-              const timeline = record(record(data).timeline);
-              if (timeline.limited === true || !Array.isArray(timeline.events)) throw new Error();
-              for (const value of timeline.events) {
-                const event = record(value);
-                identifier(event.event_id, "$");
-                if (event.room_id !== undefined && event.room_id !== roomId) throw new Error();
-                pending.push({ ...event, room_id: roomId });
+          const roomUpdates = record(sync.rooms ?? {});
+          for (const membership of ["join", "leave"]) {
+            for (const [roomId, data] of Object.entries(record(roomUpdates[membership] ?? {}))) {
+              if (!rooms.has(roomId)) continue;
+              try {
+                const room = record(data);
+                if (!Object.hasOwn(room, "timeline")) continue;
+                const timeline = record(room.timeline);
+                if (timeline.limited === true || !Array.isArray(timeline.events)) throw new Error();
+                for (const value of timeline.events) {
+                  const event = record(value);
+                  identifier(event.event_id, "$");
+                  if (event.room_id !== undefined && event.room_id !== roomId) throw new Error();
+                  pending.push({ ...event, room_id: roomId });
+                }
+              } catch {
+                throw new MatrixRoomError(roomId);
               }
-            } catch {
-              throw new MatrixRoomError(roomId);
             }
           }
           if (pending.length > 512) throw new ChannelParseError("Matrix sync item cap exceeded");
