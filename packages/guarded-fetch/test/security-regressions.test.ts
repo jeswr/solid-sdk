@@ -278,11 +278,16 @@ describe("DNS deadlines and cancellation", () => {
           }),
       );
       const fetch = vi.fn(async () => new Response("too late"));
+      const cancel = vi.fn(() => new Promise<void>(() => {}));
+      const pull = vi.fn();
+      const body = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
       const ac = new AbortController();
       if (abort === "already aborted") ac.abort();
       let outcome: unknown;
       const pending = createGuardedFetch({ fetch, dnsLookup: lookup, timeoutMs: 10 })(BASE, {
         signal: ac.signal,
+        method: "POST",
+        body,
       }).catch((e: unknown) => {
         outcome = e;
       });
@@ -294,6 +299,9 @@ describe("DNS deadlines and cancellation", () => {
       resolveLookup?.(PUBLIC);
       await vi.advanceTimersByTimeAsync(0);
       expect(fetch).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(pull).not.toHaveBeenCalled();
+      expect(body.locked).toBe(false);
       await pending;
     });
   }
@@ -383,9 +391,7 @@ describe("error URL sanitisation", () => {
       )(`${BASE}item`).catch((e: unknown) => e)) as RedirectRefusedError;
       expectSafe(error);
       expect(error.location).not.toMatch(/password|oauth-secret|access-token/);
-      expect(error.location).toBe(
-        location === malformed ? "(invalid URL)" : "https://pod.example/callback",
-      );
+      expect(error.location).toBe(location === malformed ? "(invalid URL)" : "../callback");
     }
   });
   it("sanitises the legacy redirect error constructor", () =>

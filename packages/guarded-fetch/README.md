@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/guarded-fetch
@@ -98,7 +99,8 @@ used by unstorage-solid's identical `SolidRedirectError` alias. The legacy form 
 the `SolidRedirectError` name; shared refusals retain `RedirectRefusedError`.
 Diagnostic URLs, including `.url` and `.location` on redirect refusals, omit userinfo,
 query strings and fragments. Relative redirect locations are resolved against the
-request URL for diagnostics; unparseable values use a constant placeholder.
+request URL in messages; the `.location` field preserves relative paths for constructor
+compatibility. Unparseable values use a constant placeholder.
 
 ## Links
 

@@ -19,6 +19,33 @@ import {
 
 const URL_A = "https://api.example/resource";
 
+it.each([
+  ["/next", "/next"],
+  ["next", "next"],
+  ["../next?token=secret#secret", "../next"],
+  ["/next?token=secret#secret", "/next"],
+  ["https://user:secret@api.example/next?token=secret#secret", "https://api.example/next"],
+  ["ht\ttps://user:secret@api.example/next", "https://api.example/next"],
+  ["https://user:secret@ho st/next", "(invalid URL)"],
+])("preserves the shared constructor's safe Location reference for %s", (location, safe) => {
+  const cause = new Error("fixture cause");
+  const error = new RedirectRefusedError("fixture message", {
+    url: URL_A,
+    status: 307,
+    location,
+    cause,
+  });
+  expect(error).toMatchObject({
+    name: "RedirectRefusedError",
+    message: "fixture message",
+    url: URL_A,
+    status: 307,
+    location: safe,
+    cause,
+  });
+  expect(error.location).not.toContain("secret");
+});
+
 /** A real (Node/undici-shaped) manual-redirect response: readable 3xx status + Location. */
 function movedTo(location: string, status = 302): Response {
   return new Response(null, { status, headers: { location } });

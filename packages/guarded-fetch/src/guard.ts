@@ -364,6 +364,10 @@ class SsrfGuard {
       return await this.fetchGuarded(startUrl, effectiveInit, controller);
     } catch (error) {
       controller.abort();
+      // Early abort/DNS refusal can bypass the transport that normally cancels the upload.
+      if (effectiveInit?.body instanceof ReadableStream) {
+        void effectiveInit.body.cancel().catch(() => {});
+      }
       throw error;
     } finally {
       clearTimeout(timer);

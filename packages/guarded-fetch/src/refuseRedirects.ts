@@ -69,7 +69,8 @@ export class RedirectRefusedError extends Error {
    */
   readonly status: number;
   /**
-   * The resolved `Location` URL with userinfo, query and fragment removed. Malformed values
+   * The `Location` reference with userinfo, query and fragment removed. Relative references
+   * remain relative for constructor compatibility. Malformed values
    * use a constant placeholder. `undefined` for a browser opaque-redirect (whose headers
    * are stripped) or a redirect with no `Location`.
    */
@@ -97,8 +98,22 @@ export class RedirectRefusedError extends Error {
     this.url = sanitizeUrl(detail.url);
     this.status = detail.status;
     this.location =
-      detail.location === undefined ? undefined : sanitizeUrl(detail.location, detail.url);
+      detail.location === undefined ? undefined : sanitizeLocation(detail.location, detail.url);
   }
+}
+
+/** Keep safe relative references relative while retaining the shared diagnostic redaction. */
+function sanitizeLocation(location: string, base: string): string {
+  const safe = sanitizeUrl(location, base);
+  if (
+    safe.startsWith("(") ||
+    /^[a-z][a-z\d+.-]*:|^[\\/]{2}/i.test(location.trim()) ||
+    new URL(location, base).username ||
+    new URL(location, base).password
+  ) {
+    return safe;
+  }
+  return location.trim().split(/[?#]/)[0] ?? "";
 }
 
 /**

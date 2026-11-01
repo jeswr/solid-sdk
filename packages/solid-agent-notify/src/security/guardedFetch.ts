@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * guardedFetch.ts — THE SINGLE EGRESS CHOKEPOINT for solid-agent-notify.
  *
@@ -204,7 +205,8 @@ export async function guardedFetch(
       method,
       headers,
       ...(method === "POST" && opts.body !== undefined ? { body: opts.body } : {}),
-      redirect: "manual",
+      // GET follows through the library's per-hop guard; POST retains explicit refusal below.
+      redirect: method === "GET" ? "follow" : "manual",
     });
   } catch (error: unknown) {
     throw classifyGuardError(error, rawUrl, method);
