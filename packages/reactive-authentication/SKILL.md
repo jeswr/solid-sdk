@@ -1,6 +1,6 @@
 ---
 name: reactive-authentication
-description: Maintain the imported @jeswr/reactive-authentication protocol engine, token providers, credential boundaries, persistent caches, browser elements and service-worker bridge.
+description: Use when maintaining the imported @jeswr/reactive-authentication protocol engine, token providers, credential boundaries, persistent caches, browser elements and service-worker bridge.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
