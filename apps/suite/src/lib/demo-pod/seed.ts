@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The demo pod's starting content: Alice's profile, an owner-only root ACL, an
@@ -9,6 +10,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { buildAgentSeed } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 
@@ -57,6 +59,21 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     [
       quad(index, RDF_TYPE, namedNode(`${SOLID}TypeIndex`)),
       quad(index, RDF_TYPE, namedNode(`${SOLID}UnlistedDocument`)),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        RDF_TYPE,
+        namedNode(`${SOLID}TypeRegistration`),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}forClass`),
+        namedNode("https://jeswr.org/ns/agent#AgentWorkspace"),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}instance`),
+        namedNode(`${DEMO_ROOT}agent/`),
+      ),
     ],
     { solid: SOLID },
   );
@@ -92,6 +109,7 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     "",
   ].join("\n");
   return [
+    ...(await buildAgentSeed(now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
       path: "settings/privateTypeIndex.ttl",

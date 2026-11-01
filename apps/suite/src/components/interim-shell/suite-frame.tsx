@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
@@ -10,16 +11,17 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { FileText, HardDrive, Menu, Search } from "lucide-react";
+import { Bot, FileText, HardDrive, Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs";
+export type SuiteAppId = "drive" | "docs" | "agent";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "agent", label: "Agent", href: "/agent", icon: Bot },
 ];
 
 export interface SuiteFrameProps {
