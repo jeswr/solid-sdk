@@ -44,7 +44,7 @@ export function createGateway(options: GatewayOptions): Gateway {
           const local = schema.safeParse(known);
           if (local.success) return { data: local.data, calls };
           const prompt = dataBlock({ message: input, deterministic: known });
-          const instructions = `${READER_INSTRUCTIONS}. Return only JSON matching this schema: ${JSON.stringify(z.toJSONSchema(schema, { unrepresentable: "any" }))}. Extract only missing fields; deterministic fields are fixed.`;
+          const instructions = `${READER_INSTRUCTIONS}. Return only JSON matching this schema: ${JSON.stringify(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))}. Extract only missing fields; deterministic fields are fixed.`;
           let text: string;
           if (config.provider === "openai") {
             const response = responseSchema.parse(

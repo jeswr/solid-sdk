@@ -363,6 +363,30 @@ describe("Reader deterministic first and hostile input", () => {
     const s = setup({}, [response(output(["one"]))]);
     expect((await s.gateway.reader.extract(message, z.array(z.string()))).data).toEqual(["one"]);
   });
+  it.each([
+    "openai",
+    "anthropic",
+  ] as const)("advertises pipeline input and returns transformed output for %s", async (provider) => {
+    const data = { value: "42" };
+    const s = setup({ provider }, [
+      provider === "openai"
+        ? response(output(data))
+        : Response.json({
+            content: [{ type: "text", text: JSON.stringify(data) }],
+            stop_reason: "end_turn",
+            usage,
+          }),
+    ]);
+    const result = await s.gateway.reader.extract(
+      message,
+      z.object({ value: z.string().pipe(z.coerce.number()) }),
+    );
+    expect(result.data).toEqual({ value: 42 });
+    expect(s.requests).toHaveLength(1);
+    const body = JSON.parse(String(s.requests[0]?.init?.body));
+    const instructions = provider === "openai" ? body.instructions : body.system;
+    expect(instructions).toContain('"value":{"type":"string"}');
+  });
   it("uses Anthropic Messages without tools and validates output", async () => {
     const s = setup({ provider: "anthropic" }, [
       Response.json({
