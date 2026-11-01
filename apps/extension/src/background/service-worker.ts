@@ -56,7 +56,9 @@ import {
 } from './core/class-grant';
 import { safePathUrl } from './core/class-path';
 import { normaliseAccessRequest } from './core/class-request';
+import { ResolutionBudget } from './core/class-resolution-budget';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
+import { createInternalRead } from './core/class-resolve-read';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
 import { fetchWithRedirects } from './core/manual-redirect';
 import {
@@ -1179,6 +1181,10 @@ type ConsentChoice = {
   respond?: (result: AccessResponse) => void;
 };
 const consentResolvers = new Map<string, (choice: ConsentChoice) => void>();
+const consentDiscovery = new Map<
+  string,
+  { origin: string; controller: AbortController; tabId?: number }
+>();
 const CONSENT_TIMEOUT_MS = 5 * 60_000;
 const CONSENT_EXPIRED = 'This access request has expired. Please request access again.';
 const originRevocationVersions = new Map<string, number>();
@@ -1187,9 +1193,23 @@ function originRevocationVersion(origin: string): number {
   return originRevocationVersions.get(origin) ?? 0;
 }
 
+function cancelTabDiscovery(tabId: number, url?: string): void {
+  for (const request of consentDiscovery.values()) {
+    if (request.tabId === tabId && (url === undefined || originOf(url) !== request.origin))
+      request.controller.abort();
+  }
+}
+chrome.tabs.onRemoved?.addListener((tabId) => cancelTabDiscovery(tabId));
+chrome.tabs.onUpdated?.addListener((tabId, change) => {
+  if (change.url) cancelTabDiscovery(tabId, change.url);
+});
+
 /** Also fences discovery and approvals that have already left the pending-consent maps. */
 function invalidateOriginConsents(origin: string): void {
   originRevocationVersions.set(origin, originRevocationVersion(origin) + 1);
+  for (const request of consentDiscovery.values()) {
+    if (request.origin === origin) request.controller.abort();
+  }
   for (const [consentId, choices] of pendingConsents) {
     if (![...choices.values()].some((choice) => choice.pending.origin === origin)) continue;
     pendingConsents.delete(consentId);
@@ -1265,8 +1285,8 @@ async function podOriginsFor(
   });
 }
 
-/** Public discovery never carries credentials; private indexes use scoped DPoP reads. */
-function makeResolveFetch(
+/** Existing form-fill discovery has its own lifecycle and redirect policy. */
+function makeFormFillFetch(
   session: FetchSession,
   webId: string,
   signal = new AbortController().signal,
@@ -1315,6 +1335,54 @@ function makeResolveFetch(
   };
 }
 
+/** Internal discovery bypasses the page gate and replica; each direct send rechecks authority. */
+function makeResolveRead(
+  session: FetchSession,
+  webId: string,
+  budget: ResolutionBudget,
+  signal: AbortSignal,
+  beforeRequest: (url: string, authenticated: boolean) => Promise<void>,
+) {
+  return createInternalRead({
+    webId,
+    authenticatedOrigins: session.allowedOrigins,
+    allowedOrigins: session.allowedOrigins,
+    budget,
+    signal,
+    send: async (url, authenticated, method, readSignal) => {
+      const fetchImpl: typeof fetch = async (input, init) => {
+        // authenticatedFetch's opaque-redirect probe must never escape this boundary.
+        if (init?.redirect !== 'manual') throw new Error('Opaque discovery redirect denied');
+        const target = input.toString();
+        if (!safePathUrl(target) || !isValidClientIdUrl(target))
+          throw new Error('Unsafe discovery URL');
+        if (isTokenEndpoint(target, session.tokenEndpoint))
+          throw new Error('Token endpoint fetch denied');
+        await beforeRequest(target, authenticated);
+        readSignal.throwIfAborted();
+        return fetch(input, {
+          ...init,
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: readSignal,
+        });
+      };
+      if (authenticated) {
+        const result = await authenticatedFetch(session, {
+          url,
+          method,
+          headers: { Accept: 'text/turtle' },
+          body: null,
+          fetchImpl,
+          signal: readSignal,
+        });
+        return result.response;
+      }
+      return fetchImpl(url, { method, headers: { Accept: 'text/turtle' }, redirect: 'manual' });
+    },
+  });
+}
+
 /** Open the consent window and resolve with the approved class IRIs (or [] on deny/timeout). */
 function openConsentAndAwait(consentId: string): Promise<ConsentChoice> {
   return new Promise<ConsentChoice>((resolve) => {
@@ -1343,7 +1411,7 @@ function openConsentAndAwait(consentId: string): Promise<ConsentChoice> {
 
 async function handleRequestAccess(
   message: RequestAccessRequest,
-  sender: MessageSender | undefined,
+  sender: (MessageSender & { readonly tab?: { readonly id?: number } }) | undefined,
 ): Promise<AccessResponse> {
   const requestId = message.requestId;
   const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
@@ -1380,64 +1448,88 @@ async function handleRequestAccess(
   const ordered = [...profiles].sort(
     (a, b) => Number(b.id === defaultProfileId) - Number(a.id === defaultProfileId),
   );
-  for (const profile of ordered) {
-    try {
-      const choice = await withProfileOperation(
-        profile.id,
-        async (signal) => {
-          const ctx = await ensureSession(profile.id);
-          signal.throwIfAborted();
-          if (!ctx) return null;
-          const checkAuthority = async () => {
-            if (revocationVersion !== originRevocationVersion(requestingOrigin))
-              throw new Error(CONSENT_EXPIRED);
-            await checkProfileSession(ctx, signal);
-            const latest = await originGrantFor(requestingOrigin);
+  const discoveryController = new AbortController();
+  const budget = new ResolutionBudget(discoveryController.signal);
+  consentDiscovery.set(consentId, {
+    origin: requestingOrigin,
+    controller: discoveryController,
+    tabId: sender?.tab?.id,
+  });
+  try {
+    for (const profile of ordered) {
+      try {
+        const choice = await withProfileOperation(
+          profile.id,
+          async (signal) => {
+            const ctx = await ensureSession(profile.id);
             signal.throwIfAborted();
-            // Initial consent needs no parent. An existing binding must remain live and unchanged.
-            if (latest?.profileId !== parent?.profileId || latest?.createdAt !== parent?.createdAt)
-              throw new Error('Origin grant changed.');
-          };
-          const session = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
-          const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
-          const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: null }>();
-          for (const cls of spec.classes) {
-            const { targets } = await resolveClassTargets(cls, {
-              webId: ctx.session.webId,
-              fetch: makeResolveFetch(
-                { ...session, allowedOrigins },
-                ctx.session.webId,
-                signal,
-                checkAuthority,
-              ),
-              authenticatedOrigins: allowedOrigins,
-              allowedOrigins,
-            });
-            await checkAuthority();
-            resolved.set(cls, { targets, shape: null });
-          }
-          return {
-            ctx,
-            label: profile.label,
-            pending: buildPendingConsent(
-              consentId,
-              requestingOrigin,
+            if (!ctx) return null;
+            const checkAuthority = async () => {
+              discoveryController.signal.throwIfAborted();
+              if (revocationVersion !== originRevocationVersion(requestingOrigin))
+                throw new Error(CONSENT_EXPIRED);
+              await checkProfileSession(ctx, signal);
+              const latest = await originGrantFor(requestingOrigin);
+              signal.throwIfAborted();
+              // Initial consent needs no parent. An existing binding must remain live and unchanged.
+              if (
+                latest?.profileId !== parent?.profileId ||
+                latest?.createdAt !== parent?.createdAt
+              )
+                throw new Error('Origin grant changed.');
+            };
+            const session = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
+            const allowedOrigins = await podOriginsFor(ctx.session, ctx.profileId);
+            const read = makeResolveRead(
+              { ...session, allowedOrigins },
               ctx.session.webId,
-              spec,
-              resolved,
-              now,
-            ),
-          };
-        },
-        requestingOrigin,
-      );
-      if (choice) choices.set(profile.id, choice);
-    } catch {
-      // A signed-out, replaced or revoked session cannot contribute a consent choice.
+              budget,
+              signal,
+              checkAuthority,
+            );
+            const resolved = new Map<
+              string,
+              { targets: readonly PinnedTarget[]; shape: null; truncated: boolean }
+            >();
+            for (const cls of spec.classes) {
+              const { targets, truncated } = await resolveClassTargets(cls, {
+                webId: ctx.session.webId,
+                fetch: read.fetch,
+                read,
+                budget,
+                authenticatedOrigins: allowedOrigins,
+                allowedOrigins,
+              });
+              await checkAuthority();
+              resolved.set(cls, { targets, shape: null, truncated });
+            }
+            return {
+              ctx,
+              label: profile.label,
+              pending: buildPendingConsent(
+                consentId,
+                requestingOrigin,
+                ctx.session.webId,
+                spec,
+                resolved,
+                now,
+              ),
+            };
+          },
+          requestingOrigin,
+        );
+        if (choice) choices.set(profile.id, choice);
+      } catch {
+        // A signed-out, replaced or revoked session cannot contribute a consent choice.
+      }
     }
+  } finally {
+    budget.dispose();
+    consentDiscovery.delete(consentId);
   }
   if (revocationVersion !== originRevocationVersion(requestingOrigin))
     return { requestId, error: CONSENT_EXPIRED };
+  if (discoveryController.signal.aborted) return { requestId, error: 'Discovery cancelled' };
   if (!choices.size) return { requestId, error: 'Not authenticated' };
   pendingConsents.set(consentId, choices);
   let decision: ConsentChoice;
@@ -1554,6 +1646,7 @@ function handleGetPendingConsent(
       expiresAt: c.expiresAt,
       targets: c.targets.map((t) => ({ url: t.url, kind: t.kind })),
       shape: c.shape,
+      ...(c.truncated ? { truncated: true } : {}),
     })),
   };
 }
@@ -1699,11 +1792,13 @@ async function handleResolveClass(
         const allowedOrigins = new Set(
           [...profilePods].filter((pod) => current.scope.pods.includes(pod)),
         );
-        const { targets } = await resolveClassTargets(message.classIRI, {
-          webId: ctx.session.webId,
-          fetch: makeResolveFetch(
+        const budget = new ResolutionBudget(signal);
+        let targets: Awaited<ReturnType<typeof resolveClassTargets>>['targets'];
+        try {
+          const read = makeResolveRead(
             { ...fetchSession, allowedOrigins },
             ctx.session.webId,
+            budget,
             signal,
             async (url, authenticated) => {
               const latest = await checkGrant();
@@ -1716,10 +1811,18 @@ async function handleResolveClass(
               )
                 throw new Error('Out of grant scope');
             },
-          ),
-          authenticatedOrigins: allowedOrigins,
-          allowedOrigins,
-        });
+          );
+          ({ targets } = await resolveClassTargets(message.classIRI, {
+            webId: ctx.session.webId,
+            fetch: read.fetch,
+            read,
+            budget,
+            authenticatedOrigins: allowedOrigins,
+            allowedOrigins,
+          }));
+        } finally {
+          budget.dispose();
+        }
         const latest = await checkGrant();
         return {
           requestId,
@@ -1928,7 +2031,7 @@ const formFill = new FormFillWorker({
       const current = () => checkProfileSession(ctx, signal);
       const pods = await podOriginsFor(ctx.session, profileId);
       const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, profileId);
-      const read = makeResolveFetch(
+      const read = makeFormFillFetch(
         { ...fetchSession, allowedOrigins: pods },
         ctx.session.webId,
         signal,

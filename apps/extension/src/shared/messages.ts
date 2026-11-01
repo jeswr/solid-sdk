@@ -213,6 +213,7 @@ export interface PendingConsentView {
     readonly expiresAt: number;
     readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
     readonly shape: string | null;
+    readonly truncated?: boolean;
   }>;
 }
 

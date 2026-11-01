@@ -146,6 +146,8 @@ let messageListeners: MessageListener[];
 let fetchCalls: Array<{ url: string; init?: RequestInit }>;
 let fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
 let createdWindows: string[];
+let removedTab: (tabId: number) => void;
+let updatedTab: (tabId: number, change: { url?: string }) => void;
 let registrations: Map<string, chrome.scripting.RegisteredContentScript>;
 let alarmListener: (alarm: { name: string }) => void;
 
@@ -206,7 +208,22 @@ function installChrome(): void {
         },
       },
     },
-    tabs: { query: async () => [], sendMessage: async () => {} },
+    tabs: {
+      query: async () => [],
+      sendMessage: async () => {},
+      onRemoved: {
+        addListener: (fn: typeof removedTab) => {
+          removedTab = fn;
+        },
+        removeListener: () => {},
+      },
+      onUpdated: {
+        addListener: (fn: typeof updatedTab) => {
+          updatedTab = fn;
+        },
+        removeListener: () => {},
+      },
+    },
     action: {
       setIcon: async () => {},
       setBadgeText: async () => {},
@@ -2569,7 +2586,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
         init?.redirect === 'follow'
           ? redirectProbe(unsafe)
           : url === redirected
-            ? opaqueRedirect()
+            ? new Response(null, { status: 302, headers: { location: unsafe } })
             : new Response(docs[url === unsafe ? redirected : url] ?? '');
       const result = await send(
         {
@@ -2585,11 +2602,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       const probe = fetchCalls.at(-1);
       expect(probe?.url).toBe(redirected);
       expect(probe?.init).toMatchObject({
-        method: 'HEAD',
-        redirect: 'follow',
+        method: 'GET',
+        redirect: 'manual',
         credentials: 'omit',
       });
-      expect(new Headers(probe?.init?.headers).has('Authorization')).toBe(false);
+      expect(new Headers(probe?.init?.headers).has('Authorization')).toBe(true);
     }
   });
 
@@ -2603,9 +2620,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       init?.redirect === 'follow'
         ? redirectProbe(`${index}/`)
         : url === WEBID
-          ? new Response(`<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}> .`)
+          ? new Response(
+              `<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}>, <${index}/> .`,
+            )
           : url === index
-            ? opaqueRedirect()
+            ? new Response(null, { status: 302, headers: { location: `${index}/` } })
             : new Response(`<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
               <http://www.w3.org/ns/solid/terms#instanceContainer> <finance/> .`);
     const result = await send(
@@ -2618,7 +2637,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: `${index}/finance/`, kind: 'container' }]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, `${index}/`]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`]);
     for (const call of fetchCalls) {
       const probing = call.init?.redirect === 'follow';
       expect(call.init).toMatchObject({
@@ -2657,7 +2676,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, final]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index]);
     for (const call of fetchCalls) {
       expect(call.init?.credentials).toBe('omit');
       expect(new Headers(call.init?.headers).has('Authorization')).toBe(false);
@@ -2666,7 +2685,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
   });
 
   it.each([
-    ['https://public.example/profile', true],
+    ['https://public.example/profile', false],
     ['http://alice.pod.example/profile', false],
     ['https://idp.example/token', false],
     ['data:text/plain,profile', false],
@@ -2688,9 +2707,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual(
-      allowed ? [WEBID, WEBID, target] : target === 'opaque' ? [WEBID] : [WEBID, WEBID],
-    );
+    expect(fetchCalls.map((c) => c.url)).toEqual(allowed ? [WEBID, target] : [WEBID]);
     for (const call of fetchCalls) {
       expect(call.init).toMatchObject({ credentials: 'omit' });
       if (call.init?.redirect === 'follow')
@@ -2722,7 +2739,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index]);
   });
 
   it('ignores standalone class/login grants and client-id declarations without a parent', async () => {
@@ -3510,5 +3527,135 @@ describe('separate form-fill consent wired into the worker', () => {
       });
     expect(fetchCalls).toHaveLength(0);
     expect(createdWindows).toHaveLength(0);
+  });
+});
+
+describe('worker-owned class discovery', () => {
+  const pod = 'https://alice.pod.example';
+  const solid = 'http://www.w3.org/ns/solid/terms#';
+  const prefs = `${pod}/settings/prefs`;
+  const privateIndex = `${pod}/settings/private`;
+  const secret = 'internal RDF bytes must stay inside the resolver';
+  const dataClass = classGrant().dataClass;
+  function request(classes = [dataClass], sender = APPX) {
+    return send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'internal',
+        classes,
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: sender.origin,
+        userActivated: true,
+      },
+      sender,
+    );
+  }
+  async function deny() {
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
+  }
+
+  it('reads preferences before first consent, authenticates only pod documents, and exposes no bytes to page or replica', async () => {
+    await seedSession();
+    await loadWorker();
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> <${prefs}> .`,
+      [prefs]: `<${WEBID}> <${solid}privateTypeIndex> <${privateIndex}>; <${solid}publicTypeIndex> <https://public.example/index> .\n<> <https://example.test/secret> "${secret}" .`,
+      [privateIndex]: `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      'https://public.example/index': '',
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url] ?? '', { headers: { 'dpop-nonce': 'internal-nonce' } });
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      expect(await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, APPX)).toBeNull();
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { targets: [{ url: `${pod}/finance/`, kind: 'container' }] },
+      ]);
+      for (const call of fetchCalls) {
+        expect(call.init).toMatchObject({
+          method: 'GET',
+          redirect: 'manual',
+          credentials: 'omit',
+          cache: 'no-store',
+        });
+        expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+          call.url === prefs || call.url === privateIndex,
+        );
+      }
+      expect(cacheStore.size).toBe(0);
+      expect(idbMeta.size).toBe(0);
+      expect(idbNonces.size).toBe(0);
+      expect(JSON.stringify([...storage.values(), view])).not.toContain(secret);
+      expect(JSON.stringify([...storage.values(), view])).not.toContain('internal-nonce');
+    } finally {
+      await deny();
+    }
+    expect(await pending).toEqual({ requestId: 'internal', ok: false, grants: [] });
+  });
+
+  it.each([
+    'revoke',
+    'close tab',
+    'navigate tab',
+  ])('cancels a stalled first-consent discovery on %s', async (change) => {
+    await seedSession();
+    await loadWorker();
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    fetchImpl = async () => {
+      started();
+      return new Promise(() => {});
+    };
+    const sender = { ...APPX, tab: { id: 75, url: `${APPX.origin}/app` } };
+    const pending = request([dataClass], sender);
+    await entered;
+    if (change === 'revoke')
+      await send({ type: 'SOLID_DISCONNECT', stampedOrigin: APPX.origin }, APPX);
+    else if (change === 'close tab') removedTab(75);
+    else {
+      updatedTab(75, { url: `${APPX.origin}/same-origin` });
+      expect(fetchCalls[0].init?.signal?.aborted).toBe(false);
+      updatedTab(75, { url: 'https://other.example/' });
+    }
+    expect(await pending).toMatchObject({ requestId: 'internal', error: expect.any(String) });
+    expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
+    expect(fetchCalls).toHaveLength(1);
+    expect(createdWindows).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('shares the request budget and document cache across classes and still opens truncated consent', async () => {
+    await seedSession();
+    await loadWorker();
+    const classes = [dataClass, 'https://example.test/Second'];
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <${solid}publicTypeIndex> ${Array.from({ length: 130 }, (_, i) => `<${pod}/index${i}>`).join(', ')} .`
+          : `<#r> <${solid}forClass> <${dataClass}>; <${solid}instanceContainer> <${pod}/finance/> .`,
+      );
+    const pending = request(classes);
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    try {
+      const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+      const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+      expect(view.classes).toMatchObject([
+        { dataClass, truncated: true, targets: [{ url: `${pod}/finance/` }] },
+        { dataClass: classes[1], truncated: true, targets: [] },
+      ]);
+      expect(fetchCalls).toHaveLength(128);
+      expect(fetchCalls.filter((call) => call.url === WEBID)).toHaveLength(1);
+      expect(cacheStore.size).toBe(0);
+    } finally {
+      await deny();
+    }
+    expect((await pending).ok).toBe(false);
   });
 });

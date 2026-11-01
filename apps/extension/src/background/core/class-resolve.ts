@@ -29,6 +29,8 @@ import { DataFactory, Parser, Store } from 'n3';
 import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
+import { ResolutionBudget } from './class-resolution-budget';
+import type { InternalRead } from './class-resolve-read';
 import {
   type ClassResolution,
   memoiseResolveFetch,
@@ -42,12 +44,14 @@ const PRIVATE_TYPE_INDEX = `${SOLID}privateTypeIndex`;
 const FOR_CLASS = `${SOLID}forClass`;
 const INSTANCE = `${SOLID}instance`;
 const INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
+const PREFERENCES_FILE = 'http://www.w3.org/ns/pim/space#preferencesFile';
 const PIM_STORAGE = 'http://www.w3.org/ns/pim/space#storage';
 
 /** Public documents must never carry credentials; `url` is the final post-redirect RDF base. */
 export type ResolveFetch = (
   url: string,
   authenticated: boolean,
+  method?: 'GET' | 'HEAD',
 ) => Promise<{ ok: boolean; text: string; url: string }>;
 
 export interface ResolveOptions {
@@ -55,6 +59,9 @@ export interface ResolveOptions {
   readonly webId: string;
   /** The injected fetch, with credential use explicit for each document. */
   readonly fetch: ResolveFetch;
+  readonly read?: InternalRead;
+  readonly budget?: ResolutionBudget;
+  readonly signal?: AbortSignal;
   /** Origins permitted for private-index reads. Omit to discover public documents only. */
   readonly authenticatedOrigins?: ReadonlySet<string>;
   /**
@@ -64,7 +71,8 @@ export interface ResolveOptions {
   readonly allowedOrigins?: ReadonlySet<string>;
 }
 
-function parse(baseUrl: string, turtle: string): Store {
+function parse(baseUrl: string, turtle: string, budget?: ResolutionBudget): Store {
+  if (budget) return budget.parse(baseUrl, turtle);
   const parser = new Parser({ baseIRI: baseUrl.split('#')[0] });
   const store = new Store();
   store.addQuads(parser.parse(turtle));
@@ -88,8 +96,9 @@ export function parseTypeIndexRefs(
   webId: string,
   profileTurtle: string,
   profileUrl = webId,
+  budget?: ResolutionBudget,
 ): Array<{ url: string; authenticated: boolean }> {
-  const store = parse(profileUrl, profileTurtle);
+  const store = parse(profileUrl, profileTurtle, budget);
   const out: Array<{ url: string; authenticated: boolean }> = [];
   for (const pred of [PUBLIC_TYPE_INDEX, PRIVATE_TYPE_INDEX]) {
     for (const q of store.getQuads(
@@ -119,8 +128,9 @@ export function parseTargetsForClass(
   typeIndexTurtle: string,
   classIRI: string,
   allowedOrigins?: ReadonlySet<string>,
+  budget?: ResolutionBudget,
 ): PinnedTarget[] {
-  const store = parse(typeIndexUrl, typeIndexTurtle);
+  const store = parse(typeIndexUrl, typeIndexTurtle, budget);
   const seen = new Set<string>();
   const out: PinnedTarget[] = [];
 
@@ -165,8 +175,9 @@ function parseStorageTargets(
   profileTurtle: string,
   profileUrl: string,
   allowedOrigins?: ReadonlySet<string>,
+  budget?: ResolutionBudget,
 ): PinnedTarget[] {
-  const store = parse(profileUrl, profileTurtle);
+  const store = parse(profileUrl, profileTurtle, budget);
   const roots = new Set<string>();
   for (const q of store.getQuads(
     DataFactory.namedNode(webId),
@@ -193,17 +204,31 @@ export async function resolveClassTargets(
   classIRI: string,
   opts: ResolveOptions,
 ): Promise<ClassResolution> {
-  const fetch = memoiseResolveFetch(opts.fetch);
-  const options = { ...opts, fetch };
-  if (classIRI === PIM_STORAGE_CLASS)
-    return mergeClassTargets(
-      { targets: [], truncated: false },
-      await resolveTypeIndexTargets(classIRI, options),
-    );
-  const profile = await fetch(opts.webId, false);
-  const sai = await resolveSaiTargets(classIRI, options, profile);
-  const indexed = await resolveTypeIndexTargets(classIRI, options);
-  return mergeClassTargets(sai, indexed);
+  const budget = opts.budget ?? opts.read?.budget ?? new ResolutionBudget(opts.signal);
+  const ownsBudget = !opts.budget && !opts.read;
+  const fetch = memoiseResolveFetch(
+    opts.read
+      ? opts.read.fetch
+      : async (url, authenticated) => {
+          if (!budget.document()) return { ok: false, text: '', url };
+          const body = await budget.run(() => opts.fetch(url, authenticated));
+          budget.checkText(body.text);
+          return body;
+        },
+  );
+  const options = { ...opts, fetch, budget };
+  try {
+    if (classIRI === PIM_STORAGE_CLASS) {
+      const targets = await resolveTypeIndexTargets(classIRI, options);
+      return mergeClassTargets({ targets: [], truncated: budget.truncated }, targets);
+    }
+    const profile = await fetch(opts.webId, false);
+    const sai = await resolveSaiTargets(classIRI, options, profile);
+    const indexed = await resolveTypeIndexTargets(classIRI, options);
+    return mergeClassTargets({ ...sai, truncated: sai.truncated || budget.truncated }, indexed);
+  } finally {
+    if (ownsBudget) budget.dispose();
+  }
 }
 
 async function resolveTypeIndexTargets(
@@ -216,15 +241,51 @@ async function resolveTypeIndexTargets(
   let refs: ReturnType<typeof parseTypeIndexRefs>;
   try {
     if (classIRI === PIM_STORAGE_CLASS)
-      return parseStorageTargets(opts.webId, profile.text, profile.url, opts.allowedOrigins);
-    refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url);
+      return parseStorageTargets(
+        opts.webId,
+        profile.text,
+        profile.url,
+        opts.allowedOrigins,
+        opts.budget,
+      );
+    refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url, opts.budget);
+    const store = parse(profile.url, profile.text, opts.budget);
+    for (const q of store.getQuads(
+      DataFactory.namedNode(opts.webId),
+      DataFactory.namedNode(PREFERENCES_FILE),
+      null,
+      null,
+    )) {
+      if (q.object.termType !== 'NamedNode' || !opts.budget?.active()) continue;
+      const url = q.object.value;
+      if (!opts.authenticatedOrigins || !isAllowedOrigin(url, opts.authenticatedOrigins)) continue;
+      opts.read?.allowDocument(url, true);
+      const preferences = await safeFetch(opts.fetch, url, true);
+      if (!preferences) continue;
+      try {
+        refs.push(
+          ...parseTypeIndexRefs(opts.webId, preferences.text, preferences.url, opts.budget),
+        );
+      } catch {
+        /* An unreadable/malformed preferences document contributes nothing. */
+      }
+    }
+    // Public declarations take precedence across profile + preferences, including fragments.
+    const documents = new Map<string, { url: string; authenticated: boolean }>();
+    for (const ref of refs) {
+      const key = new URL(ref.url).href.split('#')[0];
+      if (!documents.has(key) || !ref.authenticated) documents.set(key, ref);
+    }
+    refs = [...documents.values()];
   } catch {
     return [];
   }
 
   const seen = new Set<string>();
   const out: PinnedTarget[] = [];
+  for (const ref of refs) opts.read?.allowDocument(ref.url, ref.authenticated);
   for (const ref of refs) {
+    if (!opts.budget?.active()) break;
     // Public indexes may live beside the WebID or on any other http(s) host. Only
     // private-index egress is confined to authenticated origins; targets are filtered below.
     if (
@@ -236,7 +297,13 @@ async function resolveTypeIndexTargets(
     if (body === null) continue;
     let targets: PinnedTarget[];
     try {
-      targets = parseTargetsForClass(body.url, body.text, classIRI, opts.allowedOrigins);
+      targets = parseTargetsForClass(
+        body.url,
+        body.text,
+        classIRI,
+        opts.allowedOrigins,
+        opts.budget,
+      );
     } catch {
       continue;
     }
@@ -244,6 +311,8 @@ async function resolveTypeIndexTargets(
       const dedupe = `${t.kind} ${t.url}`;
       if (seen.has(dedupe)) continue;
       seen.add(dedupe);
+      if (!opts.budget?.active()) break;
+      opts.read?.allowTarget(t);
       out.push(t);
     }
   }

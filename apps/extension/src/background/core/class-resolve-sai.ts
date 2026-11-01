@@ -4,6 +4,7 @@
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
+import type { ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
 
@@ -75,12 +76,14 @@ export function memoiseResolveFetch(fetch: ResolveFetch): ResolveFetch {
   };
 }
 
-function parse(body: Document): ParsedDocument | null {
+function parse(body: Document, budget?: ResolutionBudget): ParsedDocument | null {
   if (!body.ok) return null;
   try {
     return {
       url: body.url,
-      store: new Store(new Parser({ baseIRI: documentUrl(body.url) }).parse(body.text)),
+      store: budget
+        ? budget.parse(body.url, body.text)
+        : new Store(new Parser({ baseIRI: documentUrl(body.url) }).parse(body.text)),
     };
   } catch {
     return null;
@@ -167,11 +170,15 @@ export async function resolveSaiTargets(
     const key = documentUrl(httpUrl(url)?.href ?? url);
     const cached = shapeDocuments.get(key);
     if (cached) return cached;
-    if (shapeDocuments.size >= MAX_SHAPE_DOCUMENTS) {
+    if (
+      shapeDocuments.size >= MAX_SHAPE_DOCUMENTS ||
+      (opts.budget && !opts.budget.saiDocument('shapes', key, MAX_SHAPE_DOCUMENTS))
+    ) {
       truncated = true;
       return null;
     }
-    const read = opts.fetch(url, false).then(parse);
+    opts.read?.allowDocument(url, false);
+    const read = opts.fetch(url, false).then((body) => parse(body, opts.budget));
     shapeDocuments.set(key, read);
     return read;
   };
@@ -189,17 +196,24 @@ export async function resolveSaiTargets(
   };
   const privateDocument = async (url: string): Promise<ParsedDocument | null> => {
     if (!isAuthenticated(url, opts)) return null;
-    const doc = parse(await opts.fetch(url, true));
+    opts.read?.allowDocument(url, true);
+    const doc = parse(await opts.fetch(url, true), opts.budget);
     return doc && isAuthenticated(doc.url, opts) ? doc : null;
   };
-  const profileDoc = parse(profile);
+  const profileDoc = parse(profile, opts.budget);
   if (!profileDoc) return { targets, truncated };
   for (const set of refs(profileDoc, opts.webId, `${INTEROP}hasRegistrySet`)) {
+    if (opts.budget && !opts.budget.active()) break;
     const setDoc = await privateDocument(set);
     if (!setDoc) continue;
     for (const registry of refs(setDoc, set, `${INTEROP}hasDataRegistry`)) {
+      if (opts.budget && !opts.budget.active()) break;
       if (!isAuthenticated(registry, opts) || registries.has(registry)) continue;
-      if (registries.size >= MAX_REGISTRIES) {
+      if (
+        registries.size >= MAX_REGISTRIES ||
+        (opts.budget &&
+          !opts.budget.saiDocument('registries', documentUrl(registry), MAX_REGISTRIES))
+      ) {
         truncated = true;
         continue;
       }
@@ -207,9 +221,13 @@ export async function resolveSaiTargets(
       const registryDoc = await privateDocument(registry);
       if (!registryDoc) continue;
       for (const registration of refs(registryDoc, registry, `${INTEROP}hasDataRegistration`)) {
+        if (opts.budget && !opts.budget.active()) break;
         const url = registrationTarget(registry, registration, opts);
         if (!url || registrations.has(url)) continue;
-        if (registrations.size >= MAX_REGISTRATIONS) {
+        if (
+          registrations.size >= MAX_REGISTRATIONS ||
+          (opts.budget && !opts.budget.saiDocument('registrations', url, MAX_REGISTRATIONS))
+        ) {
           truncated = true;
           continue;
         }
@@ -217,7 +235,8 @@ export async function resolveSaiTargets(
         const doc = await privateDocument(registration);
         if (!doc || !registrationTarget(registry, doc.url, opts)) continue;
         for (const tree of refs(doc, registration, `${INTEROP}registeredShapeTree`)) {
-          if (await treeMatches(tree)) {
+          if ((await treeMatches(tree)) && (!opts.budget || opts.budget.active())) {
+            opts.read?.allowTarget({ url, kind: 'container' });
             targets.push({
               url,
               kind: 'container',
