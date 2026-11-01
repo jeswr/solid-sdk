@@ -72,6 +72,7 @@ function stubBrowser() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('createOfflineClient config posting + lifecycle', () => {
@@ -181,7 +182,7 @@ describe('pod-notifications integration', () => {
       notifications: { resources: [`${storage.root}doc`] },
     });
     await client.register();
-    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(3));
     const posted = active.postMessage.mock.calls[0]?.[0];
     expect(posted.config.storageRoot).toBe(storage.root);
     expect(posted.config.storage).toBeUndefined();
@@ -252,7 +253,7 @@ describe('pod-notifications integration', () => {
     });
     await client.register();
     await client.register();
-    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(3));
     expect(notificationsClient.subscribe).toHaveBeenCalledOnce();
     expect(notificationsClient.subscribe).toHaveBeenCalledWith(
       [storage.root, `${storage.root}doc`],
@@ -271,7 +272,7 @@ describe('pod-notifications integration', () => {
       notifications: { resources },
     });
     await client.register();
-    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(3));
     expect(notificationsClient.subscribe).toHaveBeenCalledWith(resources.slice(0, 50), {
       pollIntervalMs: 60_000,
       signal: expect.any(AbortSignal),
@@ -298,10 +299,106 @@ describe('pod-notifications integration', () => {
     await client.register();
     expect(read).not.toHaveBeenCalled();
     await client.warm();
-    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(3));
     expect(notificationsClient.subscribe).toHaveBeenCalledWith([storage.root], expect.anything());
     expect(read.mock.calls.filter(([url]) => url === storage.root)).toHaveLength(1);
     client.close();
+  });
+
+  it('sweeps while push connects or degrades, stops while live, and releases its timer on close', async () => {
+    vi.useFakeTimers();
+    const { active } = stubBrowser();
+    const { storage, notificationsClient, subscription, emit } = notificationHarness();
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { containers: [storage.root], pollIntervalMs: 100 },
+    });
+    await client.register();
+    expect(subscription.on).toHaveBeenCalledTimes(3);
+    active.postMessage.mockClear();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(active.postMessage.mock.calls.map(([message]) => message)).toEqual([{ type: 'poll' }]);
+    emit('state', 'degraded');
+    emit('state', 'degraded');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(active.postMessage).toHaveBeenCalledTimes(2);
+    emit('state', 'live');
+    expect(active.postMessage).toHaveBeenLastCalledWith({ type: 'resync' });
+    active.postMessage.mockClear();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(active.postMessage).not.toHaveBeenCalled();
+    emit('state', 'degraded');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(active.postMessage).toHaveBeenCalledOnce();
+    expect(active.postMessage).toHaveBeenLastCalledWith({ type: 'poll' });
+    client.close();
+    emit('state', 'degraded');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(active.postMessage).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    'connecting',
+    'live',
+  ] as const)('sweeps on first live even when subscribe resolves %s', async (initial) => {
+    const { active } = stubBrowser();
+    const { storage, notificationsClient, subscription, emit } = notificationHarness();
+    Object.assign(subscription, { state: initial });
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { resources: [`${storage.root}doc`] },
+    });
+    await client.register();
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(3));
+    if (initial === 'connecting') {
+      expect(
+        active.postMessage.mock.calls.filter(([message]) => message.type === 'resync'),
+      ).toHaveLength(0);
+      emit('state', 'live');
+    }
+    expect(
+      active.postMessage.mock.calls.filter(([message]) => message.type === 'resync'),
+    ).toHaveLength(1);
+    emit('state', 'degraded');
+    emit('state', 'live');
+    emit('resync', new Date());
+    expect(
+      active.postMessage.mock.calls.filter(([message]) => message.type === 'resync'),
+    ).toHaveLength(2);
+    client.close();
+  });
+
+  it('honors disabled polling and stops polling when a subscription closes', async () => {
+    vi.useFakeTimers();
+    const { active } = stubBrowser();
+    const { storage, notificationsClient, emit } = notificationHarness();
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { containers: [storage.root], pollIntervalMs: 0 },
+    });
+    await client.register();
+    active.postMessage.mockClear();
+    emit('state', 'degraded');
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(active.postMessage).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    client.close();
+
+    const fallback = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { containers: [storage.root] },
+    });
+    await fallback.register();
+    emit('state', 'degraded');
+    expect(vi.getTimerCount()).toBe(1);
+    emit('state', 'closed');
+    expect(vi.getTimerCount()).toBe(0);
+    fallback.close();
   });
 
   it('uses the shared polling client even when no browser push transport exists', async () => {
@@ -321,6 +418,7 @@ describe('pod-notifications integration', () => {
 function notificationHarness() {
   const handlers = new Map<string, (value: unknown) => void>();
   const subscription = {
+    state: 'connecting',
     on: vi.fn((name: string, handler: (value: unknown) => void) => {
       handlers.set(name, handler);
       return () => handlers.delete(name);
@@ -335,6 +433,9 @@ function notificationHarness() {
     storage: createMemoryStorage({ protocol: 'lws', root: 'https://alice.example/' }),
     notificationsClient,
     subscription,
-    emit: (name: string, value: unknown) => handlers.get(name)?.(value),
+    emit: (name: string, value: unknown) => {
+      if (name === 'state') Object.assign(subscription, { state: value });
+      handlers.get(name)?.(value);
+    },
   };
 }

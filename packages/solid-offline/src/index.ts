@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** @jeswr/solid-offline — credential-free worker + authenticated page-side storage. */
-import { createNotifications, type Subscription } from '@jeswr/pod-notifications';
+import {
+  createNotifications,
+  type Subscription,
+  type SubscriptionState,
+} from '@jeswr/pod-notifications';
 import { type PurgeResult, purgeForWebId } from './logout.js';
 import { createStatusSurface, type OfflineStatusSurface } from './status.js';
 import type {
@@ -132,6 +136,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let notifications: Subscription | undefined;
   let startingNotifications = false;
   let notificationsAbort: AbortController | undefined;
+  let notificationPoll: ReturnType<typeof setInterval> | undefined;
   let status: OfflineStatusSurface | undefined;
   // The `controllerchange` listener `register()` adds. Kept so `close()` can
   // remove it — otherwise a delayed controllerchange after logout/account-switch
@@ -173,7 +178,12 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     target?.postMessage(message);
   }
 
-  /** Shared pod-notifications owns discovery, transports, polling and reconnect. */
+  function stopNotificationPoll(): void {
+    if (notificationPoll !== undefined) clearInterval(notificationPoll);
+    notificationPoll = undefined;
+  }
+
+  /** Shared pod-notifications owns discovery/transports; sweep while push is unavailable. */
   async function startNotifications(containers: string[]): Promise<void> {
     if (
       closed ||
@@ -206,6 +216,20 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
         return;
       }
       notifications = subscription;
+      let firstLive = false;
+      const observeState = (state: SubscriptionState) => {
+        if (closed || abort.signal.aborted) return;
+        if (state === 'live' || state === 'closed') stopNotificationPoll();
+        else if (notificationPoll === undefined && (nCfg.pollIntervalMs ?? 60_000) > 0) {
+          notificationPoll = setInterval(() => {
+            if (!closed && !abort.signal.aborted) postToWorker({ type: 'poll' });
+          }, nCfg.pollIntervalMs ?? 60_000);
+        }
+        if (state === 'live' && !firstLive) {
+          firstLive = true;
+          postToWorker({ type: 'resync' });
+        }
+      };
       subscription.on('change', (change) => {
         if (!closed && !abort.signal.aborted) {
           const { type, object, target, origin, state } = change;
@@ -215,6 +239,8 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       subscription.on('resync', () => {
         if (!closed && !abort.signal.aborted) postToWorker({ type: 'resync' });
       });
+      subscription.on('state', observeState);
+      observeState(subscription.state);
     } catch {
       // Registration and reads remain usable if notifications are unavailable.
     } finally {
@@ -452,6 +478,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     warmer?.stop();
     warmer = undefined;
     notificationsAbort?.abort();
+    stopNotificationPoll();
     notificationsAbort = undefined;
     startingNotifications = false;
     void notifications?.close().catch(() => undefined);
