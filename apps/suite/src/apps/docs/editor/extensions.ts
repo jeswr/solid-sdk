@@ -23,24 +23,42 @@ import { privateImage } from "./private-image";
 const SafeStarterKit = StarterKit.extend({
   addExtensions() {
     return (this.parent?.() ?? []).map((extension) =>
-      extension.name === "link"
+      extension.name === "orderedList"
         ? extension.extend({
-            addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
-              const attrs = this.parent?.() ?? {};
+            addAttributes(this: { parent: () => Record<string, Attribute> }) {
+              const attrs = this.parent();
               return {
                 ...attrs,
-                rel: {
-                  ...attrs.rel,
-                  parseHTML: (element: HTMLElement) =>
-                    protectiveLinkRel(element.getAttribute("rel")),
-                  renderHTML: (attrs: Record<string, unknown>) => ({
-                    rel: protectiveLinkRel(attrs.rel),
+                type: {
+                  ...attrs.type,
+                  // HTML's type selector is case insensitive. A data attribute
+                  // lets CSS distinguish a/A and i/I across browser engines.
+                  renderHTML: (attributes: Record<string, unknown>) => ({
+                    type: attributes.type,
+                    "data-list-type": attributes.type,
                   }),
                 },
               };
             },
           })
-        : extension,
+        : extension.name === "link"
+          ? extension.extend({
+              addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
+                const attrs = this.parent?.() ?? {};
+                return {
+                  ...attrs,
+                  rel: {
+                    ...attrs.rel,
+                    parseHTML: (element: HTMLElement) =>
+                      protectiveLinkRel(element.getAttribute("rel")),
+                    renderHTML: (attrs: Record<string, unknown>) => ({
+                      rel: protectiveLinkRel(attrs.rel),
+                    }),
+                  },
+                };
+              },
+            })
+          : extension,
     );
   },
 });

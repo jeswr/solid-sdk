@@ -6,10 +6,11 @@ import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageDestination } from "../editor/destination";
+import { type DocxBlockMetadata, identifyDocxBlocks } from "./docx-metadata";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
 import { type QuoteAncestor, quotePaths, readQuoteStyle } from "./docx-quotes";
-import { descendants, readXml, WORD, child as xmlChild } from "./docx-xml";
+import { WORD } from "./docx-xml";
 import { sanitiseImport } from "./sanitise";
 import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skipped";
 
@@ -88,16 +89,15 @@ function taskChecked(paragraph: DocxElement, styleName: string | undefined) {
 function mapLists(
   document: DocxElement,
   styleMap: string[],
-  numbering: ReturnType<typeof readNumbering>,
-  tableIndents: number[],
+  blocks: ReadonlyMap<string, DocxBlockMetadata>,
 ) {
-  let paragraphIndex = 0;
-  let tableIndex = 0;
   function container(element: DocxElement) {
     const ancestors: { path: string; key: string; list: string }[] = [];
     let previousQuotes: readonly QuoteAncestor[] = [];
     for (const child of element.children ?? []) {
-      const metadata = child.type === "paragraph" ? numbering[paragraphIndex++] : undefined;
+      const identity = blocks.get(child.styleId ?? "");
+      if (identity) child.styleId = identity.styleId;
+      const metadata = identity?.type === "paragraph" ? identity.numbering : undefined;
       if (child.type === "paragraph" && metadata) {
         // Use the same effective style/direct numbering as the counter. Explicit
         // numId=0 suppresses inherited numbering, including Mammoth's fallback.
@@ -115,7 +115,8 @@ function mapLists(
       const task = checked !== undefined;
       const table = child.type === "table";
       const indentLevel = Math.round(
-        (table ? Number(tableIndents[tableIndex++]) : Number(child.indent?.start)) / 720 -
+        (table ? (identity?.type === "table" ? identity.indent : 0) : Number(child.indent?.start)) /
+          720 -
           1 -
           quotes.length,
       );
@@ -262,27 +263,26 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
   }
   const inspected = stripUnsupported(await archive.read("word/document.xml", "utf-8"));
   reportSkipped(inspected.skipped, DOCX_FORMATTING_WARNING);
-  const tableIndents = descendants(readXml(inspected.xml), "tbl").map((table) => {
-    const properties = xmlChild(table, "tblPr");
-    const indent = properties && xmlChild(properties, "tblInd");
-    return Number(indent?.attrs.w ?? 0);
-  });
+  const styles = archive.exists("word/styles.xml")
+    ? await archive.read("word/styles.xml", "utf-8")
+    : "";
   const numbering = readNumbering(
     inspected.xml,
     archive.exists("word/numbering.xml")
       ? await archive.read("word/numbering.xml", "utf-8")
       : `<w:numbering xmlns:w="${WORD}"/>`,
-    archive.exists("word/styles.xml") ? await archive.read("word/styles.xml", "utf-8") : "",
+    styles,
   );
-  archive.write("word/document.xml", inspected.xml);
+  const identified = identifyDocxBlocks(inspected.xml, styles, numbering);
+  archive.write("word/document.xml", identified.xml);
+  archive.write("word/styles.xml", identified.styles);
   const images: { data: ArrayBuffer; contentType: string; placeholder: string }[] = [];
   const styleMap = [...DOCX_STYLE_MAP];
   const result = await mammoth.convertToHtml(
     { arrayBuffer: await archive.toArrayBuffer() },
     {
       styleMap,
-      transformDocument: (document: DocxElement) =>
-        mapLists(document, styleMap, numbering, tableIndents),
+      transformDocument: (document: DocxElement) => mapLists(document, styleMap, identified.blocks),
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       ignoreEmptyParagraphs: false,

@@ -14,6 +14,18 @@ export function insertionAnchor(editor: Editor) {
     get selection() {
       return bookmark.resolve(editor.state.doc);
     },
+    insert(run: () => void) {
+      // The saved target owns the insertion, while the live caret owns later
+      // typing. Map that caret through every insertion/appended transaction.
+      const current = insertionAnchor(editor);
+      try {
+        editor.view.dispatch(editor.state.tr.setSelection(bookmark.resolve(editor.state.doc)));
+        run();
+      } finally {
+        editor.view.dispatch(editor.state.tr.setSelection(current.selection));
+        current.release();
+      }
+    },
     release: () => {
       editor.off("transaction", map);
     },
