@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   CAPABILITIES,
@@ -12,15 +13,19 @@ import {
   checkTextShare,
   checkTextShareDelivery,
   FRAME_PROBES,
+  GATED_NOT_AUTOMATABLE_REASONS,
   IOS_FRAME_PROBES,
   parseDevtoolsSockets,
   quoteAndroidShell,
   SECURE_STORE_PROBES,
 } from "../e2e/checks.ts";
 import {
+  assertUnsecuredEmulator,
   attemptGatedUnwrap,
+  clearEmulatorPin,
   enrollFingerprint,
   fingerprintEnrolled,
+  gatedUnwrapPreflight,
   uiTarget,
 } from "../e2e/secure-store-probes.ts";
 import { verifyRejectedShare, waitForTextShare } from "../e2e/share-probes.ts";
@@ -736,15 +741,38 @@ describe("secure-store evidence", () => {
       evidence: { stage: "done", value, committed: { version: 1 }, read: { value, version: 1 } },
     };
     expect(checkGatedUnwrap(verdict)).toEqual([]);
-    expect(
-      checkGatedUnwrap({ status: "not automatable", reason: "fingerprint enrollment unavailable" }),
-    ).toEqual([]);
+    for (const reason of GATED_NOT_AUTOMATABLE_REASONS)
+      expect(checkGatedUnwrap({ status: "not automatable", reason })).toEqual([]);
     for (const invalid of [
       null,
       {},
       { status: "failed", reason: "crypto failure" },
       { status: "not automatable" },
       { status: "not automatable", reason: " " },
+      { status: "not automatable", reason: "native status reports user presence unavailable" },
+      {
+        status: "not automatable",
+        reason: "native callback never resolved after confirmed authentication",
+      },
+      { status: "not automatable", reason: "lane did not reach gated probes" },
+      ...["authenticationAttempted", "authenticationSent", "authenticationConfirmed"].map(
+        (key) => ({
+          status: "not automatable",
+          reason: "system prompt never appeared",
+          [key]: true,
+        }),
+      ),
+      {
+        status: "not automatable",
+        reason: "system prompt never appeared",
+        evidence: { stage: "error" },
+      },
+      {
+        status: "not automatable",
+        reason: "system prompt never appeared",
+        evidence: verdict.evidence,
+      },
+      { status: "failed", reason: "native callback never resolved after confirmed authentication" },
       { ...verdict, promptObserved: false },
       { ...verdict, authenticationSent: false },
       { ...verdict, evidence: null },
@@ -884,7 +912,7 @@ describe("Android gated prompt automation", () => {
       .mockResolvedValue(completed());
     expect((await attemptGatedUnwrap("fingerprint", io)).status).toBe("failed");
   });
-  test("unknown prompt, failed automation and uncompleted system input stay manual", async () => {
+  test("unknown prompts and unavailable UI before authentication stay manual", async () => {
     const io = driver();
     io.ui.mockResolvedValue("");
     expect(await attemptGatedUnwrap("credential", io)).toMatchObject({
@@ -892,13 +920,205 @@ describe("Android gated prompt automation", () => {
       authenticationSent: false,
     });
     io.ui.mockRejectedValueOnce(new Error("uiautomator unavailable"));
-    expect((await attemptGatedUnwrap("fingerprint", io)).reason).toContain(
-      "uiautomator unavailable",
-    );
-    io.ui.mockResolvedValue(fingerprintUI);
     expect(await attemptGatedUnwrap("fingerprint", io)).toMatchObject({
       status: "not automatable",
-      authenticationSent: true,
+      reason: "system prompt controls unavailable before authentication",
+      evidence: { automationError: "Error: uiautomator unavailable" },
     });
+    expect(checkGatedUnwrap(await attemptGatedUnwrap("credential", io))).toEqual([]);
+  });
+  test.each([
+    "fingerprint",
+    "credential",
+  ] as const)("%s never-reply fails after the OS prompt dismisses on authentication", async (path) => {
+    const io = driver();
+    io.ui
+      .mockResolvedValueOnce(path === "fingerprint" ? fingerprintUI : pinUI)
+      .mockResolvedValue('<hierarchy><node package="org.jeswr.suite" /></hierarchy>');
+    // The native get never replies, even though the host observes successful system input.
+    const verdict = await attemptGatedUnwrap(path, io);
+    expect(verdict).toMatchObject({
+      status: "failed",
+      reason: "native callback never resolved after confirmed authentication",
+      promptObserved: true,
+      authenticationSent: true,
+      authenticationConfirmed: true,
+      evidence: { stage: "waiting" },
+    });
+    expect(checkGatedUnwrap(verdict).length).toBeGreaterThan(0);
+  });
+  test.each([
+    "fingerprint",
+    "credential",
+  ] as const)("%s input without confirmed dismissal still fails rather than skipping", async (path) => {
+    const io = driver();
+    io.ui.mockResolvedValue(path === "fingerprint" ? fingerprintUI : pinUI);
+    expect(await attemptGatedUnwrap(path, io)).toMatchObject({
+      status: "failed",
+      authenticationSent: true,
+      authenticationConfirmed: false,
+    });
+  });
+  test("authentication command failures cannot become runner skips", async () => {
+    const io = driver();
+    io.finger.mockRejectedValue(new Error("finger touch timed out"));
+    expect(await attemptGatedUnwrap("fingerprint", io)).toMatchObject({
+      status: "failed",
+      authenticationAttempted: true,
+    });
+    io.ui.mockResolvedValue(pinUI);
+    io.shell.mockRejectedValue(new Error("PIN input timed out"));
+    expect(await attemptGatedUnwrap("credential", io)).toMatchObject({
+      status: "failed",
+      authenticationAttempted: true,
+    });
+  });
+  test("empty or unreadable UI after input does not confirm authentication or permit skipping", async () => {
+    for (const xml of [
+      "",
+      '<node package="com.android.systemui" />',
+      `<node package="org.jeswr.suite" />${pinUI.replace("bounds=", 'enabled="false" bounds=')}`,
+    ]) {
+      const io = driver();
+      io.ui.mockResolvedValueOnce(fingerprintUI).mockResolvedValue(xml);
+      expect(await attemptGatedUnwrap("fingerprint", io)).toMatchObject({
+        status: "failed",
+        authenticationConfirmed: false,
+      });
+    }
+    const io = driver();
+    io.ui.mockResolvedValueOnce(fingerprintUI).mockRejectedValue(new Error("UI dump failed"));
+    expect((await attemptGatedUnwrap("fingerprint", io)).status).toBe("failed");
+  });
+});
+
+describe("Android gated runner capability", () => {
+  const capable = { pinVerified: true, fingerprintEnrolled: true };
+  const status = { available: true, userPresence: true, hardwareBacked: false };
+  test.each([
+    "fingerprint",
+    "credential",
+  ] as const)("%s rejects contradictory or malformed native status", (path) => {
+    expect(gatedUnwrapPreflight(path, capable, status)).toBeUndefined();
+    expect(
+      gatedUnwrapPreflight(path, capable, { ...status, hardwareBacked: true }),
+    ).toBeUndefined();
+    for (const nativeStatus of [
+      null,
+      [],
+      {},
+      { ...status, available: false },
+      { ...status, userPresence: false },
+      { ...status, available: undefined },
+      { ...status, userPresence: undefined },
+      { ...status, available: "true" },
+      { ...status, userPresence: "true" },
+      { ...status, hardwareBacked: undefined },
+      { ...status, hardwareBacked: "false" },
+    ]) {
+      const verdict = gatedUnwrapPreflight(path, capable, nativeStatus);
+      expect(verdict?.status).toBe("failed");
+      expect(checkGatedUnwrap(verdict).length).toBeGreaterThan(0);
+    }
+  });
+  test("only independently established setup limitations skip", () => {
+    for (const [path, runner, reason] of [
+      ["fingerprint", { ...capable, pinVerified: false }, "PIN setup failed"],
+      ["credential", { ...capable, pinVerified: false }, "PIN setup failed"],
+      ["fingerprint", { ...capable, fingerprintEnrolled: false }, "fingerprint enrollment failed"],
+    ] as const) {
+      const verdict = gatedUnwrapPreflight(path, runner, status);
+      expect(verdict).toMatchObject({ status: "not automatable", reason });
+      expect(checkGatedUnwrap(verdict)).toEqual([]);
+    }
+    expect(
+      gatedUnwrapPreflight("credential", { ...capable, fingerprintEnrolled: false }, status),
+    ).toBeUndefined();
+    expect(
+      gatedUnwrapPreflight(
+        "credential",
+        { ...capable, pinVerified: false },
+        { ...status, userPresence: false },
+      )?.status,
+    ).toBe("not automatable");
+    expect(gatedUnwrapPreflight("credential", { ...capable, pinVerified: false }, {})?.status).toBe(
+      "failed",
+    );
+  });
+});
+
+describe("Android disposable PIN cleanup", () => {
+  const verified = "Lock credential verified successfully";
+  test.each([
+    "true",
+    "false",
+  ])("verifies no old credential even when get-disabled is %s", async (disabled) => {
+    const shell = vi.fn(async (...args: string[]) =>
+      args[1] === "get-disabled" ? disabled : verified,
+    );
+    await assertUnsecuredEmulator(shell);
+    expect(shell).toHaveBeenCalledWith("locksettings", "verify");
+    shell.mockImplementation(async (...args) =>
+      args[1] === "get-disabled" ? disabled : "Old password '' didn't match",
+    );
+    await expect(assertUnsecuredEmulator(shell)).rejects.toThrow();
+  });
+  test("reconciles successful cleanup and an already absent credential", async () => {
+    for (const clear of [
+      "Lock credential cleared",
+      "Old password provided but user has no password",
+      "No credential set",
+    ]) {
+      const shell = vi.fn(async (...args: string[]) =>
+        args[1] === "clear" ? clear : args[1] === "get-disabled" ? "false" : verified,
+      );
+      await clearEmulatorPin(shell);
+      expect(shell).toHaveBeenCalledWith("locksettings", "clear", "--old", "1234");
+      expect(shell).toHaveBeenCalledWith("locksettings", "verify");
+    }
+    const shell = vi.fn(async (...args: string[]) => {
+      if (args[1] === "clear")
+        throw Object.assign(new Error("adb failed"), {
+          stdout: "Old password provided but user has no password",
+        });
+      return args[1] === "get-disabled" ? "false" : verified;
+    });
+    await clearEmulatorPin(shell);
+    expect(shell).toHaveBeenCalledWith("locksettings", "verify");
+  });
+  test("cleanup fails on unknown errors or a credential that remains installed", async () => {
+    for (const output of [
+      "",
+      "Old password '1234' didn't match",
+      "Request throttled",
+      "Lock credential cleared\nPermission denied",
+    ]) {
+      await expect(clearEmulatorPin(vi.fn(async () => output))).rejects.toThrow();
+    }
+    await expect(
+      clearEmulatorPin(
+        vi.fn(async () => {
+          throw new Error("adb timed out");
+        }),
+      ),
+    ).rejects.toThrow("adb timed out");
+    await expect(
+      clearEmulatorPin(
+        vi.fn(async () => {
+          throw Object.assign(new Error("adb failed"), {
+            stdout: "Old password provided but user has no password",
+            stderr: "Permission denied",
+          });
+        }),
+      ),
+    ).rejects.toThrow("adb failed");
+    const shell = vi.fn(async (...args: string[]) =>
+      args[1] === "clear"
+        ? "Lock credential cleared"
+        : args[1] === "get-disabled"
+          ? "false"
+          : "Old password '' didn't match",
+    );
+    await expect(clearEmulatorPin(shell)).rejects.toThrow();
   });
 });

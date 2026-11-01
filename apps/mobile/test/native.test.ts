@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -459,8 +460,13 @@ describe("mobile CI emulator guardrails", () => {
     expect(driver).toContain("window.__e2eSecureStore.cleanup()");
     const finalCleanup = driver.slice(driver.lastIndexOf("} finally {"));
     expect(finalCleanup).toContain("if (pinInstalled)");
-    expect(finalCleanup).toContain("/Lock credential cleared/i.test(cleared)");
-    expect(finalCleanup).toContain('shell("locksettings", "clear", "--old", "1234")');
+    expect(finalCleanup).toContain("clearEmulatorPin(shell)");
+    const unsecured = driver.indexOf("await assertUnsecuredEmulator(shell)");
+    const armed = driver.indexOf("pinInstalled = true");
+    const mutation = driver.indexOf('shell("locksettings", "set-pin", "1234")');
+    expect(unsecured).toBeGreaterThan(-1);
+    expect(armed).toBeGreaterThan(unsecured);
+    expect(mutation).toBeGreaterThan(armed);
     expect(job).toMatch(
       /- if: always\(\)\n\s+uses: actions\/upload-artifact@v4\n\s+with:\n\s+name: android-e2e-diagnostics/,
     );

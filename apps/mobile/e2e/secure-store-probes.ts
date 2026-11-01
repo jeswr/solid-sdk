@@ -1,5 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { checkGatedUnwrap, type GatedUnwrapVerdict } from "./checks.ts";
+// AUTHORED-BY Codex GPT-6
+import {
+  checkGatedUnwrap,
+  checkSecureStoreStatus,
+  type GATED_NOT_AUTOMATABLE_REASONS,
+  type GatedUnwrapVerdict,
+} from "./checks.ts";
 
 interface AndroidProbe {
   shell: (...args: string[]) => Promise<string>;
@@ -9,7 +15,66 @@ interface AndroidProbe {
   pause: () => Promise<unknown>;
 }
 const row = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+const noCredential =
+  /^(?:Old password provided but user has no password|No (?:lock )?credential(?: set| configured)?[.!]?)$/i;
+
+/** get-disabled alone cannot distinguish an unsecured swipe lock from a credential. */
+export async function assertUnsecuredEmulator(shell: AndroidProbe["shell"]): Promise<void> {
+  const disabled = await shell("locksettings", "get-disabled");
+  if (!/^(?:true|false)$/.test(disabled))
+    throw new Error(`Cannot inspect emulator lock state: ${disabled}`);
+  const verified = await shell("locksettings", "verify");
+  if (!/^Lock credential verified successfully$/.test(verified))
+    throw new Error(`Emulator must start without a lock credential: ${verified}`);
+}
+
+export async function clearEmulatorPin(shell: AndroidProbe["shell"]): Promise<void> {
+  let cleared: string;
+  try {
+    cleared = await shell("locksettings", "clear", "--old", "1234");
+  } catch (error) {
+    // execFile puts a nonzero command's stdout on the error, not in its message.
+    const output = [row(error).stdout, row(error).stderr, row(error).message].find(
+      (part) => typeof part === "string" && part.trim(),
+    );
+    cleared = typeof output === "string" ? output.trim() : String(error);
+    const stderr = row(error).stderr;
+    if (
+      !noCredential.test(cleared) ||
+      (typeof stderr === "string" && stderr.trim() && !noCredential.test(stderr.trim()))
+    )
+      throw error;
+  }
+  if (!/^Lock credential cleared$/i.test(cleared.trim()) && !noCredential.test(cleared.trim()))
+    throw new Error(`PIN cleanup did not confirm success: ${cleared}`);
+  // Reconcile even an already-absent credential; an ambiguous/failed clear must not pass.
+  await assertUnsecuredEmulator(shell);
+}
+
+/** The harness proves capability; the plugin cannot opt itself out of these tests. */
+export function gatedUnwrapPreflight(
+  path: "fingerprint" | "credential",
+  runner: { pinVerified: boolean; fingerprintEnrolled: boolean },
+  status: unknown,
+): GatedUnwrapVerdict | undefined {
+  const evidence = { runner, status };
+  if (checkSecureStoreStatus(status).length)
+    return { status: "failed", reason: "Invalid native secure-store status", evidence };
+  if (!runner.pinVerified)
+    return { status: "not automatable", reason: "PIN setup failed", evidence };
+  if (row(status).userPresence !== true)
+    return {
+      status: "failed",
+      reason: "Native user presence unavailable despite verified runner PIN",
+      evidence,
+    };
+  if (path === "fingerprint" && !runner.fingerprintEnrolled)
+    return { status: "not automatable", reason: "fingerprint enrollment failed", evidence };
+  return undefined;
+}
 
 /** Only tap visible system controls with a matching label/id and concrete screen bounds. */
 export function uiTarget(xml: string, match: RegExp): [string, string] | undefined {
@@ -72,26 +137,47 @@ export async function attemptGatedUnwrap(
   io: AndroidProbe,
 ): Promise<GatedUnwrapVerdict> {
   let promptObserved = false;
+  let authenticationAttempted = false;
   let authenticationSent = false;
+  let authenticationConfirmed = false;
+  let promptAfterInput: string | undefined;
   const snapshot = () => io.evaluate("window.__e2eSecureStore.gated()");
-  const skipped = (reason: string, evidence: unknown): GatedUnwrapVerdict => ({
+  const skipped = (
+    reason: (typeof GATED_NOT_AUTOMATABLE_REASONS)[number],
+    evidence: unknown,
+  ): GatedUnwrapVerdict => ({
     status: "not automatable",
     reason,
     promptObserved,
+    authenticationAttempted,
     authenticationSent,
+    authenticationConfirmed,
     evidence,
   });
   const failed = (reason: string, evidence: unknown): GatedUnwrapVerdict => ({
     status: "failed",
     reason,
     promptObserved,
+    authenticationAttempted,
     authenticationSent,
-    evidence,
+    authenticationConfirmed,
+    evidence: { ...row(evidence), ...(promptAfterInput === undefined ? {} : { promptAfterInput }) },
   });
-  const unautomatable = async (reason: string) => {
+  const unautomatable = async (
+    reason: (typeof GATED_NOT_AUTOMATABLE_REASONS)[number],
+    error?: unknown,
+  ) => {
     const evidence = await snapshot();
+    if (authenticationAttempted)
+      return failed(
+        `System authentication automation failed after input attempt: ${String(error)}`,
+        evidence,
+      );
     return row(evidence).stage === "waiting"
-      ? skipped(reason, evidence)
+      ? skipped(reason, {
+          ...row(evidence),
+          ...(error === undefined ? {} : { automationError: String(error) }),
+        })
       : failed("Native get settled while system authentication could not be automated", evidence);
   };
   // Bridge errors and early unwraps are product failures, never runner skips.
@@ -112,6 +198,7 @@ export async function attemptGatedUnwrap(
       if (path === "fingerprint") {
         if (/Unlock Solid Suite/.test(xml)) {
           promptObserved = true;
+          authenticationAttempted = true;
           await io.finger();
           authenticationSent = true;
           break;
@@ -120,6 +207,7 @@ export async function attemptGatedUnwrap(
         const pin = uiTarget(xml, /pinEntry|password_entry|passwordEntry|EditText/);
         if (pin && /(?:com\.android\.systemui|com\.android\.settings)/.test(xml)) {
           promptObserved = true;
+          authenticationAttempted = true;
           await io.shell("input", "tap", ...pin);
           await io.shell("input", "text", "1234");
           await io.shell("input", "keyevent", "66");
@@ -130,15 +218,20 @@ export async function attemptGatedUnwrap(
           xml,
           /^(?:Use PIN|Use screen lock|Use device credential|PIN)\|/i,
         );
+        if (/Unlock Solid Suite/.test(xml) || credential) promptObserved = true;
         if (credential) await io.shell("input", "tap", ...credential);
       }
       await io.pause();
     }
   } catch (error) {
-    return unautomatable(`system prompt automation: ${String(error)}`);
+    return unautomatable("system prompt controls unavailable before authentication", error);
   }
   if (!authenticationSent)
-    return unautomatable(`${path} system prompt/control could not be identified`);
+    return unautomatable(
+      promptObserved
+        ? "system prompt controls unavailable before authentication"
+        : "system prompt never appeared",
+    );
   for (let attempt = 0; attempt < 40; attempt++) {
     evidence = await snapshot();
     if (row(evidence).stage === "error")
@@ -147,16 +240,35 @@ export async function attemptGatedUnwrap(
       const verdict: GatedUnwrapVerdict = {
         status: "passed",
         promptObserved,
+        authenticationAttempted,
         authenticationSent,
+        authenticationConfirmed,
         evidence,
       };
       return checkGatedUnwrap(verdict).length
         ? failed("Gated value/version mismatch", evidence)
         : verdict;
     }
+    if (!authenticationConfirmed) {
+      try {
+        promptAfterInput = await io.ui();
+        authenticationConfirmed =
+          /<node\b[^>]*\bpackage="org\.jeswr\.suite"/.test(promptAfterInput) &&
+          !/Unlock Solid Suite/.test(promptAfterInput) &&
+          !/pinEntry|password_entry|passwordEntry/.test(promptAfterInput);
+      } catch (error) {
+        return failed(
+          `Cannot confirm system authentication after input: ${String(error)}`,
+          evidence,
+        );
+      }
+    }
     await io.pause();
   }
-  return unautomatable(
-    `${path} input sent but the system did not complete authentication within the observation window`,
+  return failed(
+    authenticationConfirmed
+      ? "native callback never resolved after confirmed authentication"
+      : "System authentication did not dismiss after input within the observation window",
+    evidence,
   );
 }

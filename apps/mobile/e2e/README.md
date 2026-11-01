@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY GPT-5.6 Codex -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Mobile native WebView fixture harness (MOB-07a / MOB-07b)
 
 ## Android emulator
@@ -64,17 +65,32 @@ Checks require explicit evidence and exit nonzero on failure:
   call must remain without a native reply over at least two seconds; unexpected errors,
   exposed native transports and replies delivered into the main document fail.
 - Two independent gated set/get attempts drive the real system authentication UI. The host
-  sets and verifies disposable PIN `1234`, opens `android.settings.FINGERPRINT_ENROLL`, advances
+  first inspects `locksettings get-disabled` and verifies with no old credential, refusing to
+  change an already secured emulator. It arms PIN cleanup **before** attempting to set disposable
+  PIN `1234`, then verifies that PIN, opens `android.settings.FINGERPRINT_ENROLL`, advances
   recognized setup controls and sends repeated `adb emu finger touch 1` events. Fingerprint
   enrollment must be confirmed by `dumpsys fingerprint` before that path is attempted.
   One get is unlocked with a sensor touch; the other selects the device credential control
   and enters the PIN with `input text 1234` and `input keyevent 66`. A pass requires an
   observed prompt, authentication input and the exact decrypted value and committed version.
-  Returning before input, native errors and mismatched values fail. Missing enrollment,
-  unavailable user presence, unrecognized system UI or input that the runner cannot complete
-  records `not automatable` with a reason, printed as `not automatable on this runner: ...`.
+  Returning before input, native errors and mismatched values fail. The complete native
+  `status()` response must have `available === true` and boolean `userPresence` / `hardwareBacked`
+  fields. Runner capability comes from verified PIN setup and confirmed enrollment, independently
+  of the plugin. A false `userPresence` despite a verified PIN, an unavailable store, or malformed
+  status fails; the plugin cannot suppress its own gated tests.
+  Only capability limitations established before attempting authentication record `not automatable`.
+  The allowed reasons are `PIN setup failed`, `fingerprint enrollment failed`,
+  `system prompt never appeared`, and `system prompt controls unavailable before authentication`.
+  Details remain in setup/prompt evidence; the verdict is printed as
+  `not automatable on this runner: ...`. Every error or timeout after an authentication attempt
+  fails. A UI dump showing the app again with the authentication prompt dismissed confirms the
+  sent input; if the native get still never replies, the failure reason is
+  `native callback never resolved after confirmed authentication`.
   Both paths are reported separately; a skip never counts as a passing unwrap. Pending prompts
-  are cancelled and the store cleared between attempts; the PIN is cleared in `finally`.
+  are cancelled and the store cleared between attempts. In `finally`, every attempted PIN setup
+  triggers `locksettings clear --old 1234`, even if setup timed out or its reply was ambiguous.
+  Cleanup accepts an already absent credential, then verifies no old credential is needed;
+  other errors or a credential that remains installed fail the run.
 - A unique ACTION_SEND text (including quotes and shell metacharacters) must appear as exactly
   one item in one pending batch. A document identity token recorded before sending requires
   exactly one matching listener event when the original document survives; pending alone
@@ -92,10 +108,11 @@ Checks require explicit evidence and exit nonzero on failure:
 
 `e2e/artifacts/report.json` records every step, fixture evidence, share results and the explicit
 real-suite deferral. Its `secureStore` member contains `ungated`, `disk` (file paths, byte counts
-and plaintext absence), `cleanup`, `setup`, and independent `gated.fingerprint` / `gated.credential`
-verdicts (`passed`, `failed`, or `not automatable` with `reason` and available prompt evidence).
-Only a real failure fails the gated step. CI uploads the report on success as well as failure,
-so runner limitations remain reviewable; `logcat.txt` is collected on driver failure.
+and plaintext absence), `cleanup`, `setup`, post-setup native `status`, and independent
+`gated.fingerprint` / `gated.credential` verdicts (`passed`, `failed`, or `not automatable` with
+`reason` and available prompt evidence). Only the allowed capability reasons before authentication
+may skip the gated step. CI uploads the report on success as well as failure, so runner limitations
+remain reviewable; `logcat.txt` is collected on driver failure.
 CI also uploads emulator logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
 the AVD using SDK tools directly. Native compilation, emulator/CDP behavior and actual bridge
 isolation are verified there; they cannot be verified in the cloud development container.

@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -15,7 +16,13 @@ import {
   quoteAndroidShell,
 } from "./checks.ts";
 import { fixturePorts, startFixtureServer } from "./fixture-server.mjs";
-import { attemptGatedUnwrap, enrollFingerprint } from "./secure-store-probes.ts";
+import {
+  assertUnsecuredEmulator,
+  attemptGatedUnwrap,
+  clearEmulatorPin,
+  enrollFingerprint,
+  gatedUnwrapPreflight,
+} from "./secure-store-probes.ts";
 import { verifyRejectedShare, waitForTextShare } from "./share-probes.ts";
 
 const execute = promisify(execFile);
@@ -30,8 +37,8 @@ const artifacts = new URL("artifacts/", import.meta.url);
 const secureStoreReport = {
   ungated: null,
   gated: {
-    fingerprint: { status: "not automatable", reason: "lane did not reach gated probes" },
-    credential: { status: "not automatable", reason: "lane did not reach gated probes" },
+    fingerprint: { status: "failed", reason: "lane did not reach gated probes" },
+    credential: { status: "failed", reason: "lane did not reach gated probes" },
   },
 };
 const report = {
@@ -340,11 +347,14 @@ async function run() {
     };
     let pin = "not automatable on this runner: PIN setup did not finish";
     let fingerprint = "not automatable on this runner: no PIN";
+    // Refuse an existing credential before arming cleanup or changing the lock.
+    await assertUnsecuredEmulator(shell);
     try {
       // This lane already owns a disposable emulator. Never change a physical device's lock.
+      // A timed-out/ambiguous set-pin may still mutate the emulator, so arm cleanup first.
+      pinInstalled = true;
       const output = await shell("locksettings", "set-pin", "1234");
       if (!/PIN set/i.test(output)) throw new Error(`set-pin did not confirm success: ${output}`);
-      pinInstalled = true;
       const verified = await shell("locksettings", "verify", "--old", "1234");
       if (!/successfully/i.test(verified)) throw new Error("PIN verification failed");
       pin = "installed and verified";
@@ -356,20 +366,20 @@ async function run() {
     console.log(`e2e secure-store setup: ${pin}; fingerprint: ${fingerprint}`);
     await shell("input", "keyevent", "3");
     await shell("am", "start", "-W", "-n", MAIN);
-    const status = await cdp.evaluate("window.__e2eSecureStore.status()");
+    try {
+      secureStoreReport.status = await cdp.evaluate("window.__e2eSecureStore.status()");
+    } catch (error) {
+      secureStoreReport.status = { error: String(error) };
+    }
+    const runner = {
+      pinVerified: pin === "installed and verified",
+      fingerprintEnrolled: fingerprint === "enrolled",
+    };
     for (const path of ["fingerprint", "credential"]) {
-      const reason =
-        pin !== "installed and verified"
-          ? pin
-          : path === "fingerprint" && fingerprint !== "enrolled"
-            ? fingerprint
-            : status?.userPresence !== true
-              ? "native status reports user presence unavailable on this emulator"
-              : null;
       try {
-        secureStoreReport.gated[path] = reason
-          ? { status: "not automatable", reason }
-          : await attemptGatedUnwrap(path, io);
+        secureStoreReport.gated[path] =
+          gatedUnwrapPreflight(path, runner, secureStoreReport.status) ??
+          (await attemptGatedUnwrap(path, io));
       } catch (error) {
         secureStoreReport.gated[path] = {
           status: "failed",
@@ -473,12 +483,7 @@ try {
 } finally {
   if (pinInstalled) {
     try {
-      const cleared = await shell("locksettings", "clear", "--old", "1234");
-      assertChecks(
-        /Lock credential cleared/i.test(cleared)
-          ? []
-          : [`PIN cleanup did not confirm success: ${cleared}`],
-      );
+      await clearEmulatorPin(shell);
       report.pinCleanup = "passed";
     } catch (error) {
       report.pinCleanup = String(error);

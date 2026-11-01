@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 /** Pure assertions shared by the Node 24 driver and Vitest. Missing evidence always fails. */
 export const CAPABILITIES = ["secureContext", "cryptoSubtle", "locks", "serviceWorker"] as const;
 export const FRAME_PROBES = [
@@ -13,12 +14,20 @@ export const IOS_OBSERVATION_MS = 2000;
 export const SECURE_STORE_PROBES = FRAME_PROBES.flatMap((channel) =>
   ["get", "set"].map((method) => `${channel}.${method}`),
 );
+export const GATED_NOT_AUTOMATABLE_REASONS = [
+  "PIN setup failed",
+  "fingerprint enrollment failed",
+  "system prompt never appeared",
+  "system prompt controls unavailable before authentication",
+] as const;
 
 export type GatedUnwrapVerdict = {
   status: "passed" | "failed" | "not automatable";
   reason?: string;
   promptObserved?: boolean;
+  authenticationAttempted?: boolean;
   authenticationSent?: boolean;
+  authenticationConfirmed?: boolean;
   evidence?: unknown;
 };
 
@@ -28,6 +37,7 @@ export interface SecureStoreReport {
   disk?: { files: { path: string; bytes: number }[]; plaintextAbsent: true };
   cleanup?: unknown;
   setup?: { pin: string; fingerprint: string };
+  status?: unknown;
   gated: { fingerprint: GatedUnwrapVerdict; credential: GatedUnwrapVerdict };
 }
 
@@ -154,18 +164,20 @@ const sameRead = (value: unknown, expected: unknown, committed: unknown) =>
   record(value).value === expected &&
   record(value).version === record(committed).version;
 
+export function checkSecureStoreStatus(value: unknown): string[] {
+  const status = record(value);
+  return status.available === true &&
+    typeof status.userPresence === "boolean" &&
+    typeof status.hardwareBacked === "boolean"
+    ? []
+    : ["SuiteSecureStore.status failed"];
+}
+
 export function checkSecureStoreFixture(value: unknown): string[] {
   const fixture = record(value);
   const result = record(fixture.secureStore);
-  const status = record(result.status);
   const marker = result.marker;
-  const failures: string[] = [];
-  if (
-    status.available !== true ||
-    typeof status.userPresence !== "boolean" ||
-    typeof status.hardwareBacked !== "boolean"
-  )
-    failures.push("SuiteSecureStore.status failed");
+  const failures = checkSecureStoreStatus(result.status);
   if (typeof marker !== "string" || !/^p4-e2e-plaintext-marker-[a-z0-9-]+$/.test(marker))
     failures.push("Missing secure-store plaintext marker");
   if (
@@ -244,13 +256,18 @@ export function checkSecureStoreFiles(
 
 export function checkGatedUnwrap(value: unknown): string[] {
   const verdict = record(value);
+  const evidence = record(verdict.evidence);
   if (
     verdict.status === "not automatable" &&
-    typeof verdict.reason === "string" &&
-    verdict.reason.trim()
+    GATED_NOT_AUTOMATABLE_REASONS.some((reason) => reason === verdict.reason) &&
+    [
+      verdict.authenticationAttempted,
+      verdict.authenticationSent,
+      verdict.authenticationConfirmed,
+    ].every((flag) => flag === undefined || flag === false) &&
+    (evidence.stage === undefined || evidence.stage === "waiting")
   )
     return [];
-  const evidence = record(verdict.evidence);
   return verdict.status === "passed" &&
     verdict.promptObserved === true &&
     verdict.authenticationSent === true &&
