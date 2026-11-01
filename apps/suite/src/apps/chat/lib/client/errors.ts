@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+
 /** Interim translation to suite-ui recovery categories until the SDK façade lands. */
 export function classifyChatError(error: unknown) {
+  if (error instanceof RdfFetchError && error.cause instanceof TypeError) return "unreachable";
   const status =
     typeof error === "object" && error !== null && "status" in error ? error.status : undefined;
   switch (status) {

@@ -1,4 +1,19 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
+.chat-sidebar a.chat-new-room {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  display: inline-flex;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.chat-sidebar a.chat-new-room:hover {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.chat-message-actions {
+  max-width: calc(100vw - var(--space-8));
+}
 .chat-app-title {
   font-weight: var(--weight-lg);
 }

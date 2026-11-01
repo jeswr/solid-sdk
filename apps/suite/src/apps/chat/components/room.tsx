@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   AlertDialog,
@@ -56,7 +57,18 @@ function TaskDialog({
   const id = useId();
   return (
     <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <DialogContent className="chat-dialog">
+      <DialogContent
+        className="chat-dialog"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const article = [...document.querySelectorAll<HTMLElement>("[data-message-id]")].find(
+            (node) => node.dataset.messageId === message.id,
+          );
+          (
+            article?.querySelector<HTMLButtonElement>('[aria-label="Message actions"]') ?? article
+          )?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Turn into task</DialogTitle>
           <DialogDescription>
@@ -124,7 +136,7 @@ function MemberAvatar({ webId }: { webId: string }) {
 export function RoomView({ url }: { url: string }) {
   const room = useRoom(url);
   const joined = useRooms();
-  const messages = useMessages(url);
+  const messages = useMessages(url, room.data?.created);
   const send = useSend(url);
   const actions = useChatActions();
   const { session, client, details, setDetails, setCurrentRoom } = useChat();
@@ -134,6 +146,7 @@ export function RoomView({ url }: { url: string }) {
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const read = useRef(0);
+  const [renderedAt, setRenderedAt] = useState(0);
   const member = room.data?.members.includes(session.webId);
   const isJoined = joined.data?.some((room) => room.url === url);
   useEffect(() => {
@@ -147,14 +160,11 @@ export function RoomView({ url }: { url: string }) {
         document.visibilityState !== "visible" ||
         !document.hasFocus() ||
         !isJoined ||
-        !messages.data
+        !messages.data ||
+        !room.data
       )
         return;
-      const newest = messages.data.messages.reduce(
-        (at, message) => Math.max(at, Date.parse(message.published ?? "1970-01-01")),
-        0,
-      );
-      const at = Math.max(newest, read.current === 0 ? Date.now() : 0);
+      const at = renderedAt;
       if (at <= read.current) return;
       read.current = at;
       void actions.markRead(url, new Date(at)).catch(() => {
@@ -169,7 +179,7 @@ export function RoomView({ url }: { url: string }) {
       removeEventListener("focus", mark);
       document.removeEventListener("visibilitychange", mark);
     };
-  }, [actions, url, isJoined, messages.data]);
+  }, [actions, url, isJoined, messages.data, room.data, renderedAt]);
   const copy = () => {
     void navigator.clipboard.writeText(client.inviteLink(url, location.origin)).then(
       () => toast.success("Invite link copied"),
@@ -193,6 +203,7 @@ export function RoomView({ url }: { url: string }) {
       </div>
     );
   const data = room.data;
+  const canRewrite = data.creator === session.webId;
   const list = messages.data?.messages ?? [];
   const lastOwn = [...list]
     .reverse()
@@ -227,8 +238,10 @@ export function RoomView({ url }: { url: string }) {
           <Info size={20} aria-hidden="true" />
         </IconButton>
       </header>
-      {messages.status === "error" ? (
-        <ChatFailure error={messages.error} retry={messages.retry} />
+      {room.status === "error" && <ChatFailure error={room.error} retry={room.retry} />}
+      {messages.status === "error" && <ChatFailure error={messages.error} retry={messages.retry} />}
+      {!messages.data && messages.status === "error" ? (
+        <div className="chat-timeline" />
       ) : !messages.data ? (
         <LoadingSkeleton preset="list" label="Loading messages" />
       ) : (
@@ -238,6 +251,8 @@ export function RoomView({ url }: { url: string }) {
           outgoing={send.data}
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
+          canRewrite={canRewrite}
+          onRendered={setRenderedAt}
           loadOlder={messages.loadOlder}
           onEdit={setEditing}
           onDelete={(message) => {
@@ -249,7 +264,10 @@ export function RoomView({ url }: { url: string }) {
           discard={send.discard}
         />
       )}
-      {joined.status === "error" ? (
+      {joined.status === "error" && joined.data && (
+        <ChatFailure error={joined.error} retry={joined.retry} />
+      )}
+      {joined.status === "error" && !joined.data ? (
         <ChatFailure error={joined.error} retry={joined.retry} />
       ) : !isJoined || !member ? (
         <div className="chat-join">
@@ -277,7 +295,7 @@ export function RoomView({ url }: { url: string }) {
           send={send.send}
           editing={editing}
           onEdit={setEditing}
-          lastOwn={lastOwn}
+          lastOwn={canRewrite ? lastOwn : undefined}
           disabledReason={
             !member
               ? "You aren't a member of this room. Ask its creator for posting access."
@@ -326,6 +344,7 @@ export function RoomView({ url }: { url: string }) {
   );
 }
 export function RoomRoute({ reference }: { reference: string }) {
+  const { client } = useChat();
   let url: string;
   try {
     url = roomContainer(decodeRef(reference));
@@ -338,5 +357,16 @@ export function RoomRoute({ reference }: { reference: string }) {
       </div>
     );
   }
+  if (!client.canOpen(url))
+    return (
+      <div className="chat-state" role="alert">
+        <h1>This conversation is in another pod</h1>
+        <p>
+          This conversation is in another pod. Opening conversations in other pods arrives with
+          sign-in.
+        </p>
+        <a href="/chat">Back to Chat</a>
+      </div>
+    );
   return <RoomView key={url} url={url} />;
 }

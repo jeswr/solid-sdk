@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChatClient, Message } from "../lib/client";
 import { messageSubject } from "../lib/model";
+import { ChatLocalState } from "./local-state";
 export interface Outgoing extends Message {
   status?: "sending" | "failed" | undefined;
   localId: string;
@@ -17,20 +19,61 @@ export class ChatOutbox {
   constructor(
     private client: Pick<ChatClient, "send" | "webId">,
     private online: () => boolean,
-  ) {}
+    private local = new ChatLocalState(client.webId),
+  ) {
+    for (const room of local.pendingRooms()) {
+      const stored = local.read("outbox", room);
+      if (!Array.isArray(stored)) continue;
+      for (const entry of stored) {
+        if (
+          !entry ||
+          typeof entry.localId !== "string" ||
+          typeof entry.at !== "string" ||
+          typeof entry.draft !== "string" ||
+          !["sending", "failed"].includes(entry.status)
+        )
+          continue;
+        try {
+          this.entries.push(
+            this.outgoing(room, entry.draft, entry.localId, new Date(entry.at), entry.status),
+          );
+        } catch {
+          /* Ignore invalid IDs/timestamps, never send a corrupt intent. */
+        }
+      }
+    }
+  }
   snapshot = (): Outgoing[] => this.entries;
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
   private update(entries: Outgoing[]) {
+    const rooms = new Set([...this.entries, ...entries].map((entry) => entry.room));
+    for (const room of rooms)
+      this.local.write(
+        "outbox",
+        room,
+        entries
+          .filter((entry) => entry.room === room && entry.status)
+          .map(({ localId, at, draft, status }) => ({
+            localId,
+            at: at.toISOString(),
+            draft,
+            status,
+          })),
+      );
     this.entries = entries;
     for (const listener of this.listeners) listener();
   }
-  send = (room: string, draft: string): void => {
-    const localId = crypto.randomUUID();
-    const at = new Date();
-    const item: Outgoing = {
+  private outgoing(
+    room: string,
+    draft: string,
+    localId: string,
+    at: Date,
+    status: "sending" | "failed",
+  ): Outgoing {
+    return {
       id: messageSubject(room, at, localId),
       localId,
       at,
@@ -44,8 +87,11 @@ export class ChatOutbox {
       tombstone: false,
       deleted: false,
       edited: false,
-      status: "sending",
+      status,
     };
+  }
+  send = (room: string, draft: string): void => {
+    const item = this.outgoing(room, draft, crypto.randomUUID(), new Date(), "sending");
     this.update([...this.entries, item]);
     this.attempt(item);
   };

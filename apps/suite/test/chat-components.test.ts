@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Message } from "../src/apps/chat/lib/client";
-import { ChatProvider, type ChatSession } from "../src/apps/chat/state/chat-context";
+import { PreferencesStore } from "../src/apps/chat/lib/client/preferences-store";
+import { ChatProvider, type ChatSession, useChat } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { encodeRef } from "../src/lib/refs";
 import { act, click, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
@@ -18,12 +21,13 @@ vi.mock("../src/apps/chat/components/chat-app", () => ({
   ChatFailure: () => h("p", { role: "alert" }, "Can't open this room"),
   ChatEmpty: () => h("p", null, "No conversations yet"),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+const routing = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => routing }));
 
 import { Composer } from "../src/apps/chat/components/composer";
 import { MessageText } from "../src/apps/chat/components/message-text";
 import { NewRoomPage } from "../src/apps/chat/components/new-room";
-import { RoomView } from "../src/apps/chat/components/room";
+import { RoomRoute, RoomView } from "../src/apps/chat/components/room";
 import { Timeline } from "../src/apps/chat/components/timeline";
 
 const ROOT = "https://alice.example/";
@@ -61,6 +65,7 @@ function message(id: string, author = ME, at = new Date()): Message {
 }
 const noop = () => {};
 const timelineProps = {
+  canRewrite: true,
   url: ROOM,
   outgoing: [],
   loading: false,
@@ -72,6 +77,10 @@ const timelineProps = {
   retry: noop,
   discard: noop,
 };
+beforeEach(() => {
+  localStorage.clear();
+  routing.replace.mockClear();
+});
 afterEach(() => vi.restoreAllMocks());
 async function nextFrame() {
   await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
@@ -151,13 +160,14 @@ it("announces incoming messages without announcing history and provides keyboard
 });
 it("windows long histories and can focus the actual first and last messages", async () => {
   const pod = createDemoPod({ root: ROOT });
+  const onRendered = vi.fn();
   const messages = Array.from({ length: 240 }, (_, i) =>
     message(`message-${String(i).padStart(3, "0")}`, ME, new Date(Date.now() + i * 1000)),
   );
   const view = await mount(
     h(ChatProvider, {
       session: session(pod),
-      children: h(Timeline, { ...timelineProps, messages }),
+      children: h(Timeline, { ...timelineProps, messages, onRendered }),
     }),
   );
   expect(view.host.querySelectorAll("article")).toHaveLength(200);
@@ -165,9 +175,11 @@ it("windows long histories and can focus the actual first and last messages", as
   await key(log, "Home");
   await nextFrame();
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[0]?.id);
+  expect(onRendered).toHaveBeenLastCalledWith(Date.parse(messages[199]?.published as string));
   await key(document.activeElement as HTMLElement, "End");
   await nextFrame();
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[239]?.id);
+  expect(onRendered).toHaveBeenLastCalledWith(Date.parse(messages[239]?.published as string));
   await key(document.activeElement as HTMLElement, "ArrowUp");
   await nextFrame();
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[238]?.id);
@@ -223,4 +235,164 @@ it("mounts the actual room, safe message text, header and new-room dialog withou
   await view.render(h(ChatProvider, { session: activeSession, children: h(NewRoomPage) }));
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("New conversation");
   await accessible(document.querySelector('[role="dialog"]') as Element);
+});
+
+async function fill(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await act(() => {
+    const prototype =
+      field.tagName === "TEXTAREA"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it("rejects external and sibling-pod room routes before making any request", async () => {
+  const fetch = vi.fn();
+  const activeSession = {
+    ...session(createDemoPod({ root: ROOT })),
+    storageUrl: `${ROOT}alice/`,
+    fetch,
+  };
+  for (const url of ["https://foreign.example/chat/rooms/a/", `${ROOT}bob/chat/rooms/a/`]) {
+    const view = await mount(
+      h(ChatProvider, {
+        session: activeSession,
+        children: h(RoomRoute, { reference: encodeRef(url) }),
+      }),
+    );
+    expect(view.host.textContent).toContain(
+      "Opening conversations in other pods arrives with sign-in.",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    await view.unmount();
+  }
+});
+
+it("keeps the editor and room drafts through transient refresh errors, recovery and remounts", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Drafts", members: [] });
+  let fail: "http" | "network" | undefined;
+  const activeSession = {
+    ...session(pod),
+    fetch: (async (input, init) => {
+      if (
+        fail &&
+        (String(input).endsWith("index.ttl") || String(input).endsWith("chat/rooms.ttl"))
+      ) {
+        if (fail === "network") throw new TypeError("Network unavailable");
+        return new Response(null, { status: 503 });
+      }
+      return pod.fetch(input, init);
+    }) as typeof globalThis.fetch,
+  };
+  let chat!: ReturnType<typeof useChat>;
+  function Probe() {
+    chat = useChat();
+    return h(RoomView, { url: room.url });
+  }
+  const view = await mount(h(ChatProvider, { session: activeSession, children: h(Probe) }));
+  const field = view.host.querySelector("textarea") as HTMLTextAreaElement;
+  await fill(field, "My unsent draft");
+  for (const failure of ["http", "network"] as const) {
+    fail = failure;
+    await act(() => chat.invalidate());
+    expect(view.host.querySelector("textarea")).toBe(field);
+    expect(field.value).toBe("My unsent draft");
+    expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+  }
+  fail = undefined;
+  await act(() => chat.invalidate());
+  expect(view.host.querySelector("textarea")).toBe(field);
+  await view.unmount();
+  const reopened = await mount(h(ChatProvider, { session: activeSession, children: h(Probe) }));
+  expect(reopened.host.querySelector("textarea")?.value).toBe("My unsent draft");
+  await reopened.render(
+    h(ChatProvider, {
+      session: activeSession,
+      children: h(Composer, {
+        url: `${ROOT}chat/rooms/other/`,
+        send: noop,
+        editing: undefined,
+        onEdit: noop,
+        lastOwn: undefined,
+      }),
+    }),
+  );
+  expect(reopened.host.querySelector("textarea")?.value).toBe("");
+});
+
+it("members' message menus explain write access and never offer edit/delete or the edit shortcut", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const owner = new ChatClient(pod.fetch, ROOT, "https://bob.example/#me");
+  const room = await owner.createRoom({ name: "Append only", members: [ME] });
+  const member = new ChatClient(pod.fetch, ROOT, ME);
+  await member.send(room.url, "Member message");
+  const view = await mount(
+    h(ChatProvider, { session: session(pod), children: h(RoomView, { url: room.url }) }),
+  );
+  const field = view.host.querySelector("textarea") as HTMLTextAreaElement;
+  await key(field, "ArrowUp");
+  expect(field.value).toBe("");
+  const log = view.host.querySelector('[role="log"]') as HTMLElement;
+  await key(log, "Home");
+  await nextFrame();
+  await key(log.querySelector("article") as HTMLElement, "Enter");
+  const menu = document.querySelector('[role="menu"]') as HTMLElement;
+  expect(menu.textContent).toContain("Editing needs write access to this room");
+  expect(menu.textContent).toContain("Turn into task");
+  expect(
+    [...menu.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent),
+  ).not.toContain("Edit");
+  expect(menu.textContent).not.toContain("Delete");
+});
+
+it("advances read receipts only to the newest rendered message, never to the current clock", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Receipts", members: [] });
+  const at = new Date(Date.now() - 60_000);
+  await client.send(room.url, "A minute ago", { at });
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  const markRead = vi.spyOn(PreferencesStore.prototype, "markRead").mockResolvedValue([]);
+  await mount(h(ChatProvider, { session: session(pod), children: h(RoomView, { url: room.url }) }));
+  expect(markRead).toHaveBeenCalledWith(room.url, at);
+  expect(markRead).toHaveBeenCalledTimes(1);
+});
+
+it("adds a DM partner with the picker button while preserving input focus until click", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+  const tab = [...document.querySelectorAll('[role="tab"]')].find(
+    (node) => node.textContent === "Direct message",
+  ) as HTMLElement;
+  await act(() => tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })));
+  const input = document.querySelector('[role="combobox"]') as HTMLInputElement;
+  await act(() => input.focus());
+  await fill(input, "https://bob.example.org/profile/card#me");
+  const add = document.querySelector(".su-picker-input button") as HTMLButtonElement;
+  const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+  await act(() => add.dispatchEvent(down));
+  expect(down.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(input);
+  await click(add);
+  expect(document.querySelector('[aria-label="Selected people"]')?.textContent).toContain("Bob");
+  const submit = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+  expect(submit.disabled).toBe(false);
+  expect(submit.textContent).toBe("Start direct message");
+});
+
+it("opens a room with no invitees immediately instead of showing the invite step", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+  const input = document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement;
+  await fill(input, "Just me");
+  await click(document.querySelector('button[type="submit"]') as HTMLButtonElement);
+  expect(routing.replace).toHaveBeenCalledWith(
+    `/chat/r/${encodeRef(`${ROOT}chat/rooms/just-me/`)}`,
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Invite people");
 });

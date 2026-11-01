@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { afterEach, expect, it, vi } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Room } from "../src/apps/chat/lib/client";
 import {
   ChatProvider,
@@ -15,6 +16,7 @@ import { act, deferred, h, mount } from "./drive-ui-dom";
 
 const ROOT = "https://alice.example/";
 const ME = `${ROOT}profile#me`;
+beforeEach(() => localStorage.clear());
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -111,10 +113,37 @@ it("queues offline hook sends and flushes them on online", async () => {
   const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
   await act(() => sender.send("Queued"));
   expect(view.host.textContent).toBe("sending");
+  const pending = sender.data[0];
+  await view.unmount();
+  const reopened = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  expect(sender.data[0]).toEqual(pending);
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
   await act(() => window.dispatchEvent(new Event("online")));
-  expect(view.host.textContent).toBe("sent");
+  expect(reopened.host.textContent).toBe("sent");
   expect((await client.messages(room.url)).messages[0]?.content).toBe("Queued");
+});
+
+it("rehydrates and flushes pending sends when Chat remounts already online", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Reopen", members: [] });
+  const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  let sender!: ReturnType<typeof useSend>;
+  function Probe() {
+    sender = useSend(room.url);
+    return null;
+  }
+  const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  await act(() => sender.send("Survives Drive"));
+  const pending = sender.data[0];
+  await view.unmount();
+  online.mockReturnValue(true);
+  await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  expect((await client.messages(room.url)).messages[0]).toMatchObject({
+    id: pending?.id,
+    published: pending?.published,
+    content: "Survives Drive",
+  });
 });
 it("clears prior-room data on navigation and ignores late abandoned responses", async () => {
   const pod = createDemoPod({ root: ROOT });

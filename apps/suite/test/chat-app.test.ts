@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
@@ -63,7 +64,10 @@ it("wires the actual session, frame, empty sidebar and empty main with valid hea
   const main = view.host.querySelector("main") as HTMLElement;
   const sidebar = view.host.querySelector('[aria-label="Conversations"]') as HTMLElement;
   expect(main.textContent).toContain("No conversations yet");
-  expect(sidebar.textContent).toContain("Start a room");
+  expect(sidebar.textContent).toContain("New room");
+  expect(sidebar.textContent).toContain("Rooms");
+  expect(sidebar.textContent).toContain("Direct messages");
+  expect(sidebar.textContent).not.toContain("No conversations yet");
   await accessible(main);
   await accessible(sidebar);
 });
@@ -77,5 +81,7 @@ it("renders the polling capability fallback once and keeps unread/read hooks in 
     "Updates every 30 s",
   );
   expect(view.host.querySelector("main h1")?.textContent).toBe("Polling room");
+  expect(view.host.querySelector('[data-slot="badge"]')).toBeNull();
+  expect(view.host.textContent).not.toContain("Load earlier messages");
   await accessible(view.host.querySelector("main") as HTMLElement);
 });

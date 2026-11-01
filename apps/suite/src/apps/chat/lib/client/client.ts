@@ -1,4 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { createPodScopedFetch, isWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -40,8 +44,12 @@ export interface Message extends ChatMessage {
 }
 export class ChatClientError extends Error {
   override name = "ChatClientError";
-  constructor(readonly code: "not-own-message" | "missing-message") {
-    super(`Chat: ${code}`);
+  constructor(readonly code: "not-own-message" | "missing-message" | "direct-room-collision") {
+    super(
+      code === "direct-room-collision"
+        ? "The direct message address is occupied by an unavailable or different conversation. Try again later."
+        : `Chat: ${code}`,
+    );
   }
 }
 function displayMessage(message: ChatMessage): Message {
@@ -76,17 +84,25 @@ function slug(name: string): string {
   );
 }
 export class ChatClient {
+  readonly fetch: typeof globalThis.fetch;
   readonly preferences: PreferencesStore;
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
   constructor(
-    readonly fetch: typeof globalThis.fetch,
+    fetch: typeof globalThis.fetch,
     readonly storageUrl: string,
     readonly webId: string,
+    private readonly publicFetch: typeof globalThis.fetch = globalThis.fetch,
   ) {
-    roomContainer(storageUrl);
+    this.fetch = createPodScopedFetch(roomContainer(storageUrl), {
+      fetch: refuseRedirects(fetch),
+      maxRedirects: 0,
+    });
     httpIri(webId);
-    this.preferences = new PreferencesStore(fetch, storageUrl);
+    this.preferences = new PreferencesStore(this.fetch, storageUrl);
+  }
+  canOpen(url: string): boolean {
+    return isWithinPodScope(this.storageUrl, url);
   }
   async joinedRooms(): Promise<JoinedRoom[]> {
     const { rooms } = await loadRooms(this.fetch, this.storageUrl);
@@ -231,10 +247,50 @@ export class ChatClient {
       .slice(0, 8)
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
-    return this.create(`dm-${hash}`, "", people);
+    const candidate = `dm-${hash}`;
+    const url = `${roomContainer(this.storageUrl)}chat/rooms/${candidate}/`;
+    let room: Room;
+    try {
+      const document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
+        name: "",
+        members: people,
+        creator: this.webId,
+        created: new Date(),
+      });
+      room = roomResult(
+        url,
+        readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
+      );
+    } catch (error) {
+      if (!(error instanceof ChatIoError && error.status === 412)) throw error;
+      room = await this.directWinner(url);
+      if (!room.isDirect || !people.every((person) => room.members.includes(person)))
+        throw new ChatClientError("direct-room-collision");
+    }
+    await this.join(url);
+    return room;
+  }
+  private async directWinner(url: string): Promise<Room> {
+    // The container is claimed before its ACL/index are written. Give the winner
+    // a bounded chance to finish; never overwrite or suffix a deterministic DM.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.room(url);
+      } catch (error) {
+        if (!(error instanceof RdfFetchError && error.status === 404) || attempt === 4)
+          throw new ChatClientError("direct-room-collision");
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
   }
   async join(url: string): Promise<void> {
-    await saveJoinedRoom(this.fetch, this.storageUrl, url);
+    try {
+      await saveJoinedRoom(this.fetch, this.storageUrl, url);
+    } catch (error) {
+      if (!(error instanceof ChatIoError && error.status === 412)) throw error;
+      // Joining is set insertion: re-read after a concurrent collection write.
+      await saveJoinedRoom(this.fetch, this.storageUrl, url);
+    }
   }
   async leave(url: string): Promise<void> {
     await removeJoinedRoom(this.fetch, this.storageUrl, url);
@@ -247,7 +303,10 @@ export class ChatClient {
         const messages = page.messages
           .filter(
             (message) =>
-              !message.deleted && message.author !== undefined && message.published !== undefined,
+              !message.deleted &&
+              message.author !== undefined &&
+              message.author !== this.webId &&
+              message.published !== undefined,
           )
           .map((message) => ({
             id: message.id,
@@ -277,7 +336,7 @@ export class ChatClient {
   profile(webId: string): Promise<string> {
     let pending = this.profiles.get(webId);
     if (!pending) {
-      pending = loadProfileName(this.fetch, webId).catch(() => {
+      pending = loadProfileName(this.fetch, this.publicFetch, this.storageUrl, webId).catch(() => {
         const url = new URL(webId);
         return `${url.host}${url.pathname}${url.hash}`;
       });

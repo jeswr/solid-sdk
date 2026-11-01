@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -119,7 +120,10 @@ export function NewRoomPage() {
                 )
                   .then(
                     (room) => {
-                      if (tab === "dm" && rooms.data?.some((joined) => joined.url === room.url))
+                      if (
+                        (tab === "room" && people.length === 0) ||
+                        (tab === "dm" && rooms.data?.some((joined) => joined.url === room.url))
+                      )
                         router.replace(`/chat/r/${encodeRef(room.url)}`);
                       else setCreated(room);
                       invalidate();
@@ -158,14 +162,27 @@ export function NewRoomPage() {
                   <p className="chat-hint">Choose one person by their WebID.</p>
                 </TabsContent>
               </Tabs>
-              <PeoplePicker
-                contacts={{ people: [], state: { kind: "ready" } }}
-                value={people}
-                onChange={setPeople}
-                query={query}
-                onQueryChange={setQuery}
-                useProfile={useProfile}
-              />
+              <div
+                onPointerDownCapture={(event) => {
+                  // Keep focus in the picker until Add person receives its click.
+                  // Blur removes its suggestions and recenters this dialog between
+                  // pointerdown and pointerup, moving the mobile button off target.
+                  if (
+                    event.target instanceof Element &&
+                    event.target.closest(".su-picker-input button")
+                  )
+                    event.preventDefault();
+                }}
+              >
+                <PeoplePicker
+                  contacts={{ people: [], state: { kind: "ready" } }}
+                  value={people}
+                  onChange={setPeople}
+                  query={query}
+                  onQueryChange={setQuery}
+                  useProfile={useProfile}
+                />
+              </div>
               {error && <p role="alert">{error}</p>}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close} disabled={busy}>

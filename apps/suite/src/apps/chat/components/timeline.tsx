@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
   IconButton,
   toast,
@@ -38,6 +40,7 @@ function MessageArticle({
   onTask,
   retry,
   discard,
+  canRewrite,
 }: {
   message: TimelineMessage;
   grouped: boolean;
@@ -48,13 +51,14 @@ function MessageArticle({
   onTask: (message: Message) => void;
   retry: (id: string) => void;
   discard: (id: string) => void;
+  canRewrite: boolean;
 }) {
   const { session } = useChat();
   const profile = useProfile(message.author ?? "");
   const name = profile.displayName || message.author || "Unknown author";
   const time = message.published
     ? new Date(message.published).toLocaleTimeString(undefined, {
-        hour: "2-digit",
+        hour: "numeric",
         minute: "2-digit",
       })
     : "Unknown time";
@@ -106,12 +110,17 @@ function MessageArticle({
               <MoreHorizontal size={18} aria-hidden="true" />
             </IconButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {message.author === session.webId && (
+          <DropdownMenuContent align="end" className="chat-message-actions">
+            {message.author === session.webId && canRewrite && (
               <>
                 <DropdownMenuItem onSelect={() => onEdit(message)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onDelete(message)}>Delete</DropdownMenuItem>
               </>
+            )}
+            {!canRewrite && (
+              <DropdownMenuLabel className="chat-hint">
+                Editing needs write access to this room
+              </DropdownMenuLabel>
             )}
             <DropdownMenuItem onSelect={() => onTask(message)}>Turn into task</DropdownMenuItem>
             {message.author !== session.webId && (
@@ -144,6 +153,8 @@ export function Timeline({
   onTask,
   retry,
   discard,
+  canRewrite,
+  onRendered,
 }: {
   url: string;
   messages: Message[];
@@ -156,6 +167,8 @@ export function Timeline({
   onTask: (message: Message) => void;
   retry: (id: string) => void;
   discard: (id: string) => void;
+  canRewrite: boolean;
+  onRendered?: (at: number) => void;
 }) {
   const { session } = useChat();
   const scroll = useRef<HTMLDivElement>(null);
@@ -209,6 +222,14 @@ export function Timeline({
   const virtual = rows.length > 200;
   const start = virtual ? Math.max(0, Math.min(windowStart, rows.length - 200)) : 0;
   const rendered = rows.slice(start, start + 200);
+  const newestRendered = rendered.reduce(
+    (at, { message }) =>
+      !message.status && message.published ? Math.max(at, Date.parse(message.published)) : at,
+    0,
+  );
+  useEffect(() => {
+    onRendered?.(newestRendered);
+  }, [newestRendered, onRendered]);
   const heightOf = (id: string) => heights.current.get(id) ?? 80;
   const topHeight = rows.slice(0, start).reduce((sum, row) => sum + heightOf(row.message.id), 0);
   const bottomHeight = rows
@@ -381,6 +402,7 @@ export function Timeline({
               onTask={onTask}
               retry={retry}
               discard={discard}
+              canRewrite={canRewrite}
             />
           </div>
         ))}

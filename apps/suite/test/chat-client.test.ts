@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { DataFactory, Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -190,15 +191,18 @@ it("resolves slug collisions, folds to ASCII, caps the slug and propagates nonco
 });
 it("counts the live newest page, excludes tombstones, and advances read markers monotonically", async () => {
   const room = await client.createRoom({ name: "Unread", members: [] });
-  const first = await client.send(room.url, "one");
+  await client.send(room.url, "My own message");
+  expect(await client.unreadCounts([room])).toEqual({ [room.url]: 0 });
+  const other = new ChatClient(pod.fetch, ROOT, BOB);
+  const first = await other.send(room.url, "one");
   vi.setSystemTime(new Date(NOW.getTime() + 1));
-  const second = await client.send(room.url, "two");
+  const second = await other.send(room.url, "two");
   expect(await client.unreadCounts([room])).toEqual({ [room.url]: 2 });
   await client.preferences.markRead(room.url, NOW);
   expect(await client.unreadCounts([room])).toEqual({ [room.url]: 1 });
-  await client.edit(room.url, first.id, "An edit isn't a new unread");
+  await other.edit(room.url, first.id, "An edit isn't a new unread");
   expect(await client.unreadCounts([room])).toEqual({ [room.url]: 1 });
-  await client.remove(room.url, second.id);
+  await other.remove(room.url, second.id);
   expect(await client.unreadCounts([room])).toEqual({ [room.url]: 0 });
   await client.preferences.markRead(room.url, new Date(NOW.getTime() - 100));
   expect((await client.preferences.read()).data[0]?.lastRead).toBe(NOW.getTime());
@@ -242,7 +246,7 @@ it("encodes share links and caches parsed profile names, including vcard and hos
   new ChatNode(ME, profiles, DataFactory).setText(`${NS.FOAF}name`, "Alice");
   await saveChat(pod.fetch, ROOT, `${ROOT}profile/card`, profiles, { ifNoneMatch: "*" });
   const fetch = vi.fn(pod.fetch);
-  const cached = new ChatClient(fetch, ROOT, ME);
+  const cached = new ChatClient(fetch, ROOT, ME, pod.fetch);
   expect(await cached.profile(ME)).toBe("Alice");
   expect(await cached.profile(ME)).toBe("Alice");
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -252,8 +256,8 @@ it("encodes share links and caches parsed profile names, including vcard and hos
   new ChatNode(vcard, dataset, DataFactory).setText(`${NS.FOAF}name`, "   ");
   new ChatNode(vcard, dataset, DataFactory).setText(`${NS.VCARD}fn`, "Other");
   await saveChat(pod.fetch, ROOT, vcard.split("#")[0] as string, dataset, { ifNoneMatch: "*" });
-  expect(await loadProfileName(pod.fetch, vcard)).toBe("Other");
-  expect(await loadProfileName(pod.fetch, `${room.url}index.ttl`)).toBe(
+  expect(await loadProfileName(pod.fetch, pod.fetch, ROOT, vcard)).toBe("Other");
+  expect(await loadProfileName(pod.fetch, pod.fetch, ROOT, `${room.url}index.ttl`)).toBe(
     "alice.demo.pod/chat/rooms/links/index.ttl",
   );
 });
@@ -305,4 +309,136 @@ it("allows the empty DM name while preserving invalid-name and leave validation"
       { title: "Task", due: new Date("bad") },
     ),
   ).rejects.toThrow();
+});
+
+it("never calls the authenticated transport outside the storage origin and path, including redirects", async () => {
+  const storage = `${ROOT}alice/`;
+  const fetch = vi.fn(pod.fetch);
+  const scoped = new ChatClient(fetch, storage, ME);
+  for (const url of [
+    "https://evil.example/chat/",
+    `${ROOT}bob/chat/`,
+    `${ROOT}alice-other/`,
+    `${storage}../bob/`,
+  ]) {
+    expect(scoped.canOpen(url)).toBe(false);
+    await expect(scoped.room(url)).rejects.toThrow();
+    await expect(scoped.messages(url)).rejects.toThrow();
+    await expect(scoped.send(url, "no credentials")).rejects.toThrow();
+    await expect(scoped.files(url)).rejects.toThrow();
+  }
+  expect(fetch).not.toHaveBeenCalled();
+  expect(scoped.canOpen(`${storage}chat/rooms/ok/`)).toBe(true);
+  const redirect = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: `${ROOT}bob/index.ttl` },
+      }),
+  );
+  await expect(
+    new ChatClient(redirect, storage, ME).room(`${storage}chat/rooms/a/`),
+  ).rejects.toThrow();
+  expect(redirect).toHaveBeenCalledTimes(1);
+  expect(redirect.mock.calls[0]?.[1]?.redirect).toBe("manual");
+});
+
+it("uses anonymous credentials for foreign and same-origin sibling profiles and refuses their redirects", async () => {
+  const storage = `${ROOT}alice/`;
+  const authenticated = vi.fn(pod.fetch);
+  const publicFetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+    expect(init?.credentials).toBe("omit");
+    expect(init?.redirect).toBe("manual");
+    const headers = new Headers(init?.headers);
+    for (const header of ["authorization", "dpop", "cookie"])
+      expect(headers.has(header)).toBe(false);
+    return new Response(null, { status: 302, headers: { location: `${storage}private` } });
+  });
+  const guarded = new ChatClient(authenticated, storage, ME, publicFetch);
+  expect(await guarded.profile(BOB)).toBe("bob.example.org/profile/card#me");
+  expect(await guarded.profile(`${ROOT}bob/profile#me`)).toBe("alice.demo.pod/bob/profile#me");
+  expect(authenticated).not.toHaveBeenCalled();
+  expect(publicFetch).toHaveBeenCalledTimes(2);
+  const foreign = new Store();
+  new ChatNode(BOB, foreign, DataFactory).setText(`${NS.FOAF}name`, "Bob");
+  const { serializeChat } = await import("../src/apps/chat/lib/model");
+  publicFetch.mockResolvedValueOnce(
+    new Response(await serializeChat(foreign), { headers: { "content-type": "text/turtle" } }),
+  );
+  expect(await new ChatClient(authenticated, storage, ME, publicFetch).profile(BOB)).toBe("Bob");
+});
+
+it("concurrent clients converge on one deterministic DM, even before the winning index is ready", async () => {
+  vi.useRealTimers();
+  const second = new ChatClient(pod.fetch, ROOT, ME);
+  const [a, b] = await Promise.all([client.createDirect(BOB), second.createDirect(BOB)]);
+  expect(a).toEqual(b);
+  expect(pod.snapshot().containers.filter(([url]) => /\/dm-[a-f\d]+\/$/.test(url))).toHaveLength(1);
+  expect((await client.joinedRooms()).map((room) => room.url)).toEqual([a.url]);
+});
+
+it("reconciles a concurrent joined-room write without dropping either conversation", async () => {
+  const room = `${ROOT}chat/rooms/new/`;
+  const other = `${ROOT}chat/rooms/concurrent/`;
+  let raced = false;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (String(input) === `${ROOT}chat/rooms.ttl` && init?.method === "PUT" && !raced) {
+      raced = true;
+      await client.join(other);
+    }
+    return pod.fetch(input, init);
+  };
+  await new ChatClient(fetch, ROOT, ME).join(room);
+  expect((await client.joinedRooms()).map((room) => room.url)).toEqual([other, room]);
+  await expect(
+    new ChatClient(async () => new Response(null, { status: 503 }), ROOT, ME).join(room),
+  ).rejects.toMatchObject({ status: 503 });
+  const unavailable = new ChatClient(
+    async (input, init) =>
+      init?.method === "PUT" ? new Response(null, { status: 503 }) : pod.fetch(input, init),
+    ROOT,
+    ME,
+  );
+  await expect(unavailable.join(`${ROOT}chat/rooms/failed/`)).rejects.toMatchObject({
+    status: 503,
+  });
+});
+
+it("fails clearly for a DM slug occupied by a different room or an unavailable index, without suffixing", async () => {
+  vi.useRealTimers();
+  const dm = await client.createDirect(BOB);
+  await client.leave(dm.url);
+  const index = `${dm.url}index.ttl`;
+  for (const input of [
+    { name: "A named pair", members: [BOB] },
+    { name: "", members: ["https://carol.example/#me"] },
+  ]) {
+    const current = await loadChat(pod.fetch, ROOT, index);
+    await saveChat(
+      pod.fetch,
+      ROOT,
+      index,
+      buildRoom(dm.url, { ...input, creator: ME, created: NOW }),
+      { ifMatch: current.etag as string },
+    );
+    await expect(client.createDirect(BOB)).rejects.toMatchObject({ code: "direct-room-collision" });
+  }
+  await pod.fetch(index, { method: "DELETE" });
+  const failed = client.createDirect(BOB).catch((error: unknown) => error);
+  expect(await failed).toMatchObject({ code: "direct-room-collision" });
+  await pod.fetch(index, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
+  await expect(client.createDirect(BOB)).rejects.toMatchObject({ code: "direct-room-collision" });
+  const failing = new ChatClient(async () => new Response(null, { status: 503 }), ROOT, ME);
+  await expect(failing.createDirect(BOB)).rejects.toMatchObject({ status: 503 });
+  // A non-collision write failure must also remain visible to the caller.
+  const writeFailure = new ChatClient(
+    async (url, init) =>
+      init?.method === "PUT" ? new Response(null, { status: 503 }) : pod.fetch(url, init),
+    ROOT,
+    ME,
+  );
+  await expect(writeFailure.createDirect("https://dan.example/#me")).rejects.toMatchObject({
+    status: 503,
+  });
+  expect(pod.snapshot().containers.some(([url]) => /dm-[a-f\d]+-2\/$/.test(url))).toBe(false);
 });

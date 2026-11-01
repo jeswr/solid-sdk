@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Send, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Message } from "../lib/client";
-import { useChatActions } from "../state/chat-context";
+import { useChatActions, useDraft } from "../state/chat-context";
 export function Composer({
   url,
   send,
@@ -21,12 +22,15 @@ export function Composer({
   disabledReason?: string | undefined;
 }) {
   const actions = useChatActions();
-  const [draft, setDraft] = useState("");
+  const [storedDraft, setStoredDraft] = useDraft(url);
+  const [editDraft, setEditDraft] = useState("");
+  const draft = editing ? editDraft : storedDraft;
+  const setDraft = editing ? setEditDraft : setStoredDraft;
   const [saving, setSaving] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const id = useId();
   useEffect(() => {
-    setDraft(editing?.content ?? "");
+    setEditDraft(editing?.content ?? "");
     if (editing) field.current?.focus();
   }, [editing]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: resizing follows the draft text
@@ -72,7 +76,9 @@ export function Composer({
           </IconButton>
         </div>
       )}
-      <label htmlFor={id}>{editing ? "Edit message" : "Message"}</label>
+      <label className="sr-only" htmlFor={id}>
+        {editing ? "Edit message" : "Message"}
+      </label>
       <div className="chat-compose-row">
         <textarea
           id={id}

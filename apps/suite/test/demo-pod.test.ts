@@ -535,6 +535,13 @@ describe("demo INSERT DATA PATCH", () => {
       "INSERT DATA {} ; DELETE WHERE {}",
       "INSERT DATA { broken }",
       "INSERT DATA { GRAPH <https://example.org/> {} }",
+      'INSERT DATA { <#s> <https://example/p> "x" . # }',
+      "INSERT DATA { # a brace is not a delimiter }\r",
+      'INSERT DATA { <#s> <https://example/p> "unterminated }',
+      "INSERT DATA { <#s> <https://example/p> 'unterminated }",
+      'INSERT DATA { <#s> <https://example/p> """unterminated }',
+      "INSERT DATA { <#s> <https://example/p> '''unterminated }",
+      "INSERT DATA { <unterminated }",
     ]) {
       expect(
         (
@@ -588,6 +595,27 @@ describe("demo INSERT DATA PATCH", () => {
       headers: { "content-type": "text/turtle" },
     });
     expect((await pod.fetch(url, { method: "PATCH", headers, body })).status).toBe(422);
+  });
+  it("scans IRIs, comments, escapes and all four Turtle string forms before closing the envelope", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    const source = [
+      "INSERT DATA {",
+      '# } this is a comment, with " and <',
+      String.raw`<#one> <https://example.org/text> "braces { } # and \"quoted\"" .`,
+      String.raw`<#two> <https://example.org/text> 'single { } # and \'quoted\'' .`,
+      '<#three> <https://example.org/text> """long " { } #\nline""" .',
+      "<#four> <https://example.org/text> '''long ' { } #\nline''' .",
+      '<https://example.org/#subject> <https://example.org/#predicate> "IRI hash" .',
+      "# a second ignored brace }\r",
+      "}",
+    ].join("\n");
+    const result = await pod.fetch(url, {
+      method: "PATCH",
+      headers: { ...headers, "if-none-match": "*" },
+      body: source,
+    });
+    expect(result.status).toBe(201);
+    expect((await graph(await pod.fetch(url), url)).size).toBe(5);
   });
   it("never overwrites a concurrent mutation made during serialization", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT });

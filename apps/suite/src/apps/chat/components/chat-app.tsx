@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -84,7 +85,7 @@ function SidebarRow({ room, count }: { room: Room; count: number }) {
         <span className="chat-room-label">
           <RoomName room={room} />
         </span>
-        <CountBadge count={count} />
+        {count > 0 && <CountBadge count={count} />}
       </Link>
     </li>
   );
@@ -112,7 +113,7 @@ function Sidebar() {
   const unread = useUnread();
   return (
     <nav className="chat-sidebar" aria-label="Conversations">
-      <Button asChild>
+      <Button asChild className="chat-new-room">
         <Link href="/chat/new">
           <Plus aria-hidden="true" size={18} />
           New room
@@ -123,16 +124,6 @@ function Sidebar() {
           <LoadingSkeleton preset="list" count={3} />
         ),
         error: rooms.status === "error" && <ChatFailure error={rooms.error} retry={rooms.retry} />,
-        empty: rooms.data?.length === 0 && (
-          <div>
-            <h2 className="sr-only">Conversations</h2>
-            <EmptyState
-              title="No conversations yet"
-              body="Start a conversation in your pod."
-              primaryAction={<Link href="/chat/new">Start a room</Link>}
-            />
-          </div>
-        ),
         children: (
           <>
             {[false, true].map((direct) => (
@@ -155,6 +146,11 @@ function Sidebar() {
                         ),
                   )}
                 </ul>
+                {rooms.data?.length === 0 && (
+                  <p className="chat-hint">
+                    {direct ? "Start a direct message with someone." : "Create a room to begin."}
+                  </p>
+                )}
               </section>
             ))}
           </>

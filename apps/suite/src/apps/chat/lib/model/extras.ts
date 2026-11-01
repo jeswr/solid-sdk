@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
-import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
 import { buildTask } from "@jeswr/solid-task-model/task";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
@@ -12,10 +13,23 @@ import { httpIri, isoDate, text } from "./validation";
 
 export async function loadProfileName(
   fetch: typeof globalThis.fetch,
+  publicFetch: typeof globalThis.fetch,
+  storage: string,
   webId: string,
 ): Promise<string> {
   const url = new URL(httpIri(webId));
-  const document = await loadChat(fetch, `${url.origin}/`, webId);
+  const local = isWithinPodScope(storage, webId);
+  const anonymous: typeof globalThis.fetch = (input, init) => {
+    const headers = new Headers(init?.headers);
+    for (const name of ["authorization", "dpop", "cookie"]) headers.delete(name);
+    return publicFetch(input, { ...init, headers, credentials: "omit" });
+  };
+  // loadChat refuses all redirects before either transport can follow them.
+  const document = await loadChat(
+    local ? fetch : anonymous,
+    local ? storage : `${url.origin}/`,
+    webId,
+  );
   return (
     readText(document.dataset, webId, `${NS.FOAF}name`)?.trim() ||
     readText(document.dataset, webId, `${NS.VCARD}fn`)?.trim() ||

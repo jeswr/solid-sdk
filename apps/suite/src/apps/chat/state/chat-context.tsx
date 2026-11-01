@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   createContext,
@@ -12,8 +13,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
-import { ChatClient, type JoinedRoom, type Message } from "../lib/client";
+import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
+import { ChatLocalState } from "./local-state";
 import { ChatOutbox, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
@@ -27,6 +29,7 @@ export interface AsyncResult<T> {
 }
 interface ChatContextValue {
   client: ChatClient;
+  local: ChatLocalState;
   session: ChatSession;
   revision: number;
   invalidate: () => void;
@@ -48,7 +51,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
     [session.fetch, session.storageUrl, session.webId],
   );
   const [revision, setRevision] = useState(0);
-  const queue = useMemo(() => new ChatOutbox(client, () => navigator.onLine !== false), [client]);
+  const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);
+  const queue = useMemo(
+    () => new ChatOutbox(client, () => navigator.onLine !== false, local),
+    [client, local],
+  );
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
   const rooms = useRef<string[]>([]);
   const [details, setDetails] = useState(false);
@@ -84,6 +91,7 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       invalidate();
     };
     addEventListener("online", online);
+    queue.flush();
     return () => removeEventListener("online", online);
   }, [queue, invalidate]);
   const send = queue.send;
@@ -93,6 +101,7 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   const value = useMemo(
     () => ({
       client,
+      local,
       session,
       revision,
       invalidate,
@@ -109,6 +118,7 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
     }),
     [
       client,
+      local,
       session,
       revision,
       invalidate,
@@ -156,7 +166,17 @@ export function useAsync<T>(
     }));
     void load().then(
       (data) => live && setState({ resource, status: "ready", data, error: undefined }),
-      (error: unknown) => live && setState({ resource, status: "error", data: undefined, error }),
+      (error: unknown) =>
+        live &&
+        setState((current) => ({
+          resource,
+          status: "error",
+          data:
+            current.resource === resource && classifyChatError(error) === "unreachable"
+              ? current.data
+              : undefined,
+          error,
+        })),
     );
     return () => {
       live = false;
@@ -179,8 +199,9 @@ export function useRoom(url: string) {
   const { client } = useChat();
   return useAsync(useCallback(() => client.room(url), [client, url]));
 }
-export function useMessages(url: string) {
+export function useMessages(url: string, since?: string) {
   const { client, acknowledge } = useChat();
+  const resource = useMemo(() => ({ client, url }), [client, url]);
   const [paging, setPaging] = useState({ url, pages: 1 });
   const pages = paging.url === url ? paging.pages : 1;
   const result = useAsync(
@@ -189,7 +210,10 @@ export function useMessages(url: string) {
       const all: Message[] = [];
       let next: Date | null = null;
       for (let page = 0; page < pages; page++) {
-        const result = await client.messages(url, { before });
+        const result = await client.messages(url, {
+          before,
+          ...(since ? { since: new Date(since) } : {}),
+        });
         all.push(...result.messages);
         next = result.next;
         if (!next) break;
@@ -199,15 +223,24 @@ export function useMessages(url: string) {
         (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
       );
       return { messages, next };
-    }, [client, url, pages]),
+    }, [client, url, pages, since]),
     true,
-    url,
+    resource,
   );
   useEffect(() => {
     if (result.data) acknowledge(new Set(result.data.messages.map((message) => message.id)));
   }, [result.data, acknowledge]);
   const loadOlder = useCallback(() => setPaging({ url, pages: pages + 1 }), [url, pages]);
   return { ...result, loadOlder };
+}
+export function useDraft(url: string) {
+  const { local } = useChat();
+  const draft = useSyncExternalStore(
+    local.subscribe,
+    () => local.draft(url),
+    () => "",
+  );
+  return [draft, (text: string) => local.setDraft(url, text)] as const;
 }
 export function useSend(url: string) {
   const chat = useChat();

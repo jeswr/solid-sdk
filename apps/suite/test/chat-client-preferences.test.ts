@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { expect, it, vi } from "vitest";
 import { classifyChatError, PreferencesStore } from "../src/apps/chat/lib/client";
 import { ChatIoError } from "../src/apps/chat/lib/model";
@@ -84,6 +86,12 @@ it("classifies transport errors once for the shared async surfaces without expos
   ] as const)
     expect(classifyChatError({ status })).toBe(category);
   expect(classifyChatError(new TypeError("network"))).toBe("unreachable");
+  expect(classifyChatError(new RdfFetchError("network", { cause: new TypeError("offline") }))).toBe(
+    "unreachable",
+  );
+  expect(classifyChatError(new RdfFetchError("invalid RDF", { cause: new SyntaxError() }))).toBe(
+    "unknown",
+  );
   for (const error of [null, undefined, "unknown", {}, new SyntaxError("JSON"), { status: "503" }])
     expect(classifyChatError(error)).toBe("unknown");
 });

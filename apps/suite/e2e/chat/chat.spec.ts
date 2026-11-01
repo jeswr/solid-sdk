@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -39,6 +40,9 @@ test.beforeEach(async ({ page }) => {
 });
 async function accessible(page: Page) {
   await expect(page).toHaveTitle("Chat · Solid Suite");
+  // Radix animates the closing portal; wait for its content to leave the DOM
+  // before scanning the full page (keep every axe rule enabled).
+  await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
@@ -64,8 +68,7 @@ async function createRoom(page: Page, name = "Book club") {
   await page.goto("/chat/new");
   await page.getByRole("textbox", { name: "Room name", exact: true }).fill(name);
   await page.getByRole("button", { name: "Create room", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Invite people", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Open conversation", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "New conversation", exact: true })).toBeHidden();
   await expect(page.getByRole("heading", { name, level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
 }

@@ -38,6 +38,38 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA = "http://www.w3.org/ns/iana/media-types/";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
 
+/** Find the envelope boundary without interpreting Turtle inside it. N3 validates the body. */
+function insertDataBody(source: string): string | null {
+  const header = /^\s*INSERT\s+DATA\s*\{/i.exec(source);
+  if (!header) return null;
+  const start = header[0].length;
+  let index = start;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === "#") {
+      while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index++;
+    } else if (char === "<" || char === '"' || char === "'") {
+      const delimiter =
+        char === "<" ? ">" : source.startsWith(char.repeat(3), index) ? char.repeat(3) : char;
+      index += char === "<" ? 1 : delimiter.length;
+      let closed = false;
+      while (index < source.length) {
+        if (source[index] === "\\") index += 2;
+        else if (source.startsWith(delimiter, index)) {
+          index += delimiter.length;
+          closed = true;
+          break;
+        } else index++;
+      }
+      if (!closed) return null;
+    } else if (char === "}") {
+      return source.slice(index + 1).trim() === "" ? source.slice(start, index) : null;
+    } else if (char === "{") return null;
+    else index++;
+  }
+  return null;
+}
+
 class ListedResource extends TermWrapper {
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -431,8 +463,8 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
           .join(","),
       );
     const source = new TextDecoder().decode(await bodyBytes(init.body));
-    const insert = /^\s*INSERT\s+DATA\s*\{([\s\S]*)\}\s*$/i.exec(source);
-    if (!insert) return respond(422);
+    const insert = insertDataBody(source);
+    if (insert === null) return respond(422);
     if (preconditionFails(url, conditions)) return respond(412);
     const existing = resources.get(url);
     if (!existing && conditions.get("if-none-match") !== "*") return respond(404);
@@ -448,7 +480,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     try {
       const parser = () => new Parser({ baseIRI: url, format: "text/turtle" });
       dataset = new Store(existing ? parser().parse(new TextDecoder().decode(existing.body)) : []);
-      dataset.addQuads(parser().parse(insert[1] as string));
+      dataset.addQuads(parser().parse(insert));
     } catch {
       return respond(422);
     }
