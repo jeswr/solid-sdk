@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
@@ -11,7 +12,8 @@ and the rest of the [@jeswr Solid app suite](https://github.com/jeswr).
 > **Scope:** auth, `window.solid`, popup/side-panel account UI, a gated shared replica,
 > and per-data-class consent through `requestAccess` / `listGrants` / `revokeGrant` /
 > `resolveClass` are implemented. Class resolution merges SAI registrations and Solid Type
-> Indexes; SHACL member sampling and offline write queues remain follow-ups.
+> Indexes, and the built-in `pim:Storage` class gives whole-pod access; SHACL member sampling
+> and offline write queues remain follow-ups.
 
 ## Architecture
 
@@ -264,6 +266,29 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
   targets are internally marked `unchecked`. Provenance stays internal; persisted grants and
   page-visible targets still contain only URLs and kinds. Consent grouping is a later task.
   An unknown/unreachable class resolves to an empty target set.
+
+Storage-wide apps can request the built-in class
+`http://www.w3.org/ns/pim/space#Storage` alongside any other classes. It resolves directly
+to the WebID subject's `pim:storage` roots in the profile, without reading Type Indexes.
+Only HTTP(S) container URLs (ending in `/` after normalization) on allowed pod origins
+are included. Each root is pinned as a container covering itself and all its descendants;
+no storage roots means no access. For example:
+
+```js
+await window.solid.requestAccess({
+  classes: ['http://www.w3.org/ns/pim/space#Storage'],
+  modes: ['read', 'write'],
+  purpose: 'Manage your pod files',
+  duration: 'P30D',
+}); // Call from a click or keypress, as above.
+```
+
+Consent labels this class **Full access to your pod**, displays every resolved storage URL,
+and warns “This site can read and change everything in this pod” (or “This site can read
+everything in this pod” for read-only requests). It starts unchecked, including after an
+account change, and requires the person's selection and Share click. Sites with access
+lists the same label and storage URLs. Modes, expiry, origin/profile binding, revocation,
+and replica purging use the same class-grant enforcement as other classes.
 
 Class-only origins are confined to the targets pinned at consent, the granted modes, and
 expiry, including on cache hits. Instances cover an exact resource path; containers cover

@@ -10,6 +10,7 @@
  * **Solid Type Index** (`solid:publicTypeIndex` / `solid:privateTypeIndex` →
  * `solid:TypeRegistration` `solid:forClass` → `solid:instance` / `solid:instanceContainer`).
  * SAI class matching lives in class-resolve-sai.ts; SHACL member sampling remains a follow-up.
+ * The built-in pim:Storage class instead pins the WebID's advertised pim:storage containers.
  *
  * RDF is parsed with N3.js (the house rule — never regex over Turtle). The pure parse helpers
  * are unit-testable against fixtures; `resolveClassTargets` takes an injected fetch that
@@ -25,6 +26,7 @@
  */
 
 import { DataFactory, Parser, Store } from 'n3';
+import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl } from './class-path';
 import {
@@ -40,6 +42,7 @@ const PRIVATE_TYPE_INDEX = `${SOLID}privateTypeIndex`;
 const FOR_CLASS = `${SOLID}forClass`;
 const INSTANCE = `${SOLID}instance`;
 const INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
+const PIM_STORAGE = 'http://www.w3.org/ns/pim/space#storage';
 
 /** Public documents must never carry credentials; `url` is the final post-redirect RDF base. */
 export type ResolveFetch = (
@@ -156,9 +159,34 @@ export function parseTargetsForClass(
   return out;
 }
 
+/** Storage roots must already be containers; never widen a resource by adding a slash. */
+function parseStorageTargets(
+  webId: string,
+  profileTurtle: string,
+  profileUrl: string,
+  allowedOrigins?: ReadonlySet<string>,
+): PinnedTarget[] {
+  const store = parse(profileUrl, profileTurtle);
+  const roots = new Set<string>();
+  for (const q of store.getQuads(
+    DataFactory.namedNode(webId),
+    DataFactory.namedNode(PIM_STORAGE),
+    null,
+    null,
+  )) {
+    if (q.object.termType !== 'NamedNode') continue;
+    const n = normaliseTargetUrl(q.object.value);
+    if (n === null || !n.url.endsWith('/')) continue;
+    if (allowedOrigins && !allowedOrigins.has(n.origin)) continue;
+    roots.add(n.url);
+  }
+  return [...roots].map((url) => ({ url, kind: 'container' }));
+}
+
 /**
  * Resolve SAI first, then Type Index, sharing one public profile read and document cache.
  * Merge only rung-produced targets, preserving provenance and truncation internally.
+ * pim:Storage skips SAI and resolves directly from the profile's storage roots.
  * An unregistered class resolves to nothing. Per-document fetch/parse failures are skipped.
  */
 export async function resolveClassTargets(
@@ -167,6 +195,11 @@ export async function resolveClassTargets(
 ): Promise<ClassResolution> {
   const fetch = memoiseResolveFetch(opts.fetch);
   const options = { ...opts, fetch };
+  if (classIRI === PIM_STORAGE_CLASS)
+    return mergeClassTargets(
+      { targets: [], truncated: false },
+      await resolveTypeIndexTargets(classIRI, options),
+    );
   const profile = await fetch(opts.webId, false);
   const sai = await resolveSaiTargets(classIRI, options, profile);
   const indexed = await resolveTypeIndexTargets(classIRI, options);
@@ -182,6 +215,8 @@ async function resolveTypeIndexTargets(
 
   let refs: ReturnType<typeof parseTypeIndexRefs>;
   try {
+    if (classIRI === PIM_STORAGE_CLASS)
+      return parseStorageTargets(opts.webId, profile.text, profile.url, opts.allowedOrigins);
     refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url);
   } catch {
     return [];

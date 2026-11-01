@@ -1,8 +1,22 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** Extension-owned ConsentSheet. Untrusted request copy is always rendered as text. */
 import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
 import type { ConsentDecisionMessage, PendingConsentView } from '../shared/messages';
+import { PIM_STORAGE_CLASS } from '../shared/storage-class';
+
+/** Whole-pod warning copy derived from the modes actually requested (write implies append). */
+function storageWarning(modes: readonly string[]): string {
+  const read = modes.includes('read');
+  const write = modes.includes('write');
+  const append = modes.includes('append');
+  if (read && write) return 'This site can read and change everything in this pod';
+  if (read && append) return 'This site can read everything in this pod and add to it';
+  if (write) return 'This site can change everything in this pod';
+  if (append) return 'This site can add to anything in this pod';
+  return 'This site can read everything in this pod';
+}
 
 function fmtExpiry(ms: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(ms);
@@ -38,6 +52,7 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
   const boxes = new Map<string, HTMLInputElement>();
   container.replaceChildren();
   for (const [index, c] of view.classes.entries()) {
+    const isStorage = c.dataClass === PIM_STORAGE_CLASS;
     const copy = dataClassCopy(c.dataClass);
     const item = el('article', { class: 'class-item data-card' });
     const titleId = `class-title-${index}`;
@@ -46,7 +61,8 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
     const head = el('label', { class: 'class-head card-check' });
     const box = el('input');
     box.type = 'checkbox';
-    box.checked = c.targets.length > 0;
+    // Whole-pod access always needs a fresh selection in the trusted consent window.
+    box.checked = !isStorage && c.targets.length > 0;
     box.setAttribute('aria-labelledby', titleId);
     box.setAttribute('aria-describedby', descriptionId);
     boxes.set(c.dataClass, box);
@@ -54,8 +70,8 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
     titleWrap.append(
       el('span', { class: 'class-title card-title', text: copy.label, id: titleId }),
       el('span', {
-        class: 'card-description hint',
-        text: copy.description,
+        class: isStorage ? 'card-description warning' : 'card-description hint',
+        text: isStorage ? storageWarning(c.modes) : copy.description,
         id: descriptionId,
       }),
     );
@@ -73,19 +89,21 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
       }),
     );
     if (c.targets.length > 0) {
-      const scope = el('details', { class: 'scope-details' });
-      scope.append(el('summary', { text: 'See included items' }));
       const list = el('ul', { class: 'targets' });
       for (const target of c.targets) {
         list.append(
           el('li', {
-            text: `${target.url}${target.kind === 'container' ? ' (folder and its contents)' : ''}`,
+            text: `${target.url}${!isStorage && target.kind === 'container' ? ' (folder and its contents)' : ''}`,
             class: target.kind === 'container' ? 'container-target' : undefined,
           }),
         );
       }
-      scope.append(list);
-      item.append(scope);
+      if (isStorage) item.append(list);
+      else {
+        const scope = el('details', { class: 'scope-details' });
+        scope.append(el('summary', { text: 'See included items' }), list);
+        item.append(scope);
+      }
     }
     container.append(item);
   }

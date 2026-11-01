@@ -1,8 +1,24 @@
-import { type BrowserContext, expect, type Page } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test';
 
 /** The seeded CSS test WebID (see e2e/setup/seed.json). */
 export const TEST_WEBID = 'http://localhost:3000/test-pod/profile/card#me';
 export const WORK_WEBID = 'http://localhost:3000/work-pod/profile/card#me';
+
+/**
+ * Click a control whose handler closes its own window (Fill, Cancel, Share) and wait
+ * for that window to close. The window can close while Playwright is still finishing
+ * the click, which rejects with "Target page, context or browser has been closed" even
+ * though the click landed. Only that error is tolerated, and the close event is still
+ * required, so a click on an already-closed window or a no-op control fails the test.
+ */
+export async function clickClosingControl(page: Page, target: Locator): Promise<void> {
+  await Promise.all([
+    page.waitForEvent('close'),
+    target.click().catch((error: Error) => {
+      if (!/Target page, context or browser has been closed/.test(error.message)) throw error;
+    }),
+  ]);
+}
 
 /**
  * Complete the CSS OIDC login + consent flow on the window
@@ -124,6 +140,6 @@ export async function grantOrigin(
   } else {
     await expect(consent.locator('.targets')).toContainText('/private/notes');
   }
-  await consent.getByRole('button', { name: 'Share', exact: true }).click();
+  await clickClosingControl(consent, consent.getByRole('button', { name: 'Share', exact: true }));
   await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');
 }

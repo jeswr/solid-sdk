@@ -24,6 +24,7 @@ import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
 import { MemoryProfileDb, profileCredentials } from './profile-fixtures';
 import { opaqueRedirect, redirectProbe } from './redirect-fixtures';
 
@@ -925,6 +926,180 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
       release();
       lookup.mockRestore();
     }
+  });
+});
+
+describe('pim:Storage through the existing worker gate', () => {
+  const root = 'https://alice.pod.example/alice/';
+  const deep = `${root}photos/2026/november/photo.jpg`;
+  const finance = 'https://w3id.org/jeswr/sectors/finance#Transaction';
+
+  it.each([
+    false,
+    true,
+  ])('pins storage from mixed consent and enforces its modes (write: %s)', async (write) => {
+    await seedSession();
+    await loadWorker();
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${root}> ;
+          <http://www.w3.org/ns/solid/terms#publicTypeIndex> <https://alice.pod.example/index> .`
+          : `<#fin> <http://www.w3.org/ns/solid/terms#forClass> <${finance}> ;
+          <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/> .`,
+      );
+    const request = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'storage',
+        classes: [PIM_STORAGE_CLASS, finance],
+        modes: write ? ['read', 'write'] : ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+        approvedClasses: [PIM_STORAGE_CLASS], // A page cannot include its own approval.
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+    expect(view.classes).toMatchObject([
+      { dataClass: PIM_STORAGE_CLASS, targets: [{ url: root, kind: 'container' }] },
+      {
+        dataClass: finance,
+        targets: [{ url: 'https://alice.pod.example/finance/', kind: 'container' }],
+      },
+    ]);
+    expect(storage.get('solid:origin-grants')).toEqual([]);
+    expect(
+      fetchCalls.filter((call) => call.url === 'https://alice.pod.example/index'),
+    ).toHaveLength(1);
+    const approve = {
+      type: 'SOLID_CONSENT_DECISION',
+      consentId,
+      profileId: '1',
+      approvedClasses: [PIM_STORAGE_CLASS],
+    };
+    await send(approve, APPX);
+    expect(storage.get('solid:origin-grants')).toEqual([]);
+    await send(approve, EXT_SENDER);
+    const result = await request;
+    expect(result.ok).toBe(true);
+    const grants = result.grants as ClassGrant[];
+    expect(grants).toHaveLength(1);
+    expect(grants[0]).toMatchObject({
+      dataClass: PIM_STORAGE_CLASS,
+      targets: [{ url: root, kind: 'container' }],
+    });
+
+    // Later profile discovery cannot widen the targets the person approved.
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <https://alice.pod.example/> .`
+          : 'pod bytes',
+      );
+    expect(
+      (
+        await send(
+          {
+            type: 'SOLID_RESOLVE_CLASS',
+            requestId: 'resolve',
+            classIRI: PIM_STORAGE_CLASS,
+            stampedOrigin: APPX.origin,
+          },
+          APPX,
+        )
+      ).targets,
+    ).toEqual([{ url: 'https://alice.pod.example/', kind: 'container' }]);
+    fetchCalls.length = 0;
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(200);
+    expect(new Headers(fetchCalls[0].init?.headers).get('Authorization')).toBe(
+      'DPoP access-token-xyz',
+    );
+    fetchCalls.length = 0;
+    expect(
+      (
+        await sendFetch(
+          { url: deep, method: 'PUT', body: 'new bytes', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).status,
+    ).toBe(write ? 200 : 403);
+    expect(fetchCalls).toHaveLength(write ? 1 : 0);
+    for (const url of [
+      'https://alice.pod.example/alice-sibling/file',
+      'https://alice.pod.example/alice/../outside',
+      'https://alice.pod.example/finance/file',
+      'https://other.example/alice/photos/file',
+    ]) {
+      fetchCalls.length = 0;
+      expect((await sendFetch({ url, stampedOrigin: APPX.origin }, APPX)).status).toBe(403);
+      expect(fetchCalls).toHaveLength(0);
+    }
+
+    // An existing storage grant is never a remembered approval for a fresh request.
+    const repeated = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'storage-again',
+        classes: [PIM_STORAGE_CLASS],
+        modes: ['read', 'write'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(2));
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId: new URL(createdWindows[1]).searchParams.get('consentId'),
+        approvedClasses: [],
+      },
+      EXT_SENDER,
+    );
+    expect(await repeated).toMatchObject({ ok: false, grants: [] });
+  });
+
+  it.each([
+    'revoke',
+    'expiry',
+  ])('denies the next read and purges the storage replica on %s', async (action) => {
+    await seedSession();
+    storage.set('solid:class-grants', [
+      classGrant({
+        dataClass: PIM_STORAGE_CLASS,
+        targets: [{ url: root, kind: 'container' }],
+      }),
+    ]);
+    await loadWorker();
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(200);
+    expect(cacheStore.size).toBe(1);
+    if (action === 'revoke') {
+      expect(
+        await send(
+          {
+            type: 'SOLID_REVOKE_GRANT',
+            requestId: 'revoke-storage',
+            grantId: 'grant-1',
+            stampedOrigin: APPX.origin,
+          },
+          APPX,
+        ),
+      ).toMatchObject({ ok: true });
+    } else {
+      const parent = (storage.get('solid:origin-grants') as OriginGrant[])[0];
+      storage.set('solid:origin-grants', [{ ...parent, expiresAt: Date.now() - 1 }]);
+    }
+    fetchCalls.length = 0;
+    expect((await sendFetch({ url: deep, stampedOrigin: APPX.origin }, APPX)).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+    if (action === 'expiry') alarmListener({ name: 'solid-origin-expiry' });
+    await vi.waitFor(() => expect(cacheStore.size).toBe(0));
   });
 });
 

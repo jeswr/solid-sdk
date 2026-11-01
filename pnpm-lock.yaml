@@ -3493,6 +3493,9 @@ importers:
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
       n3:
         specifier: ^2.0.3
         version: 2.1.1
