@@ -306,3 +306,40 @@ describe.each(["solid", "lws"] as const)("%s memory listing byte caps", (protoco
     await expect(storage.list(ROOT, { maxBytes: Number.NaN })).rejects.toThrow(TypeError);
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("RDF parse budgets follow the caller's listing cap", () => {
+  // A Turtle listing larger than fetch-rdf's 16 MiB default parse budget.
+  const big = `<> <http://www.w3.org/ns/ldp#contains> <${ROOT}a> .\n${"#".repeat(17 * 1024 * 1024)}\n`;
+  const solid = (body: string) =>
+    createSolidBackend({
+      root: ROOT,
+      fetch: async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+    });
+
+  test("a raised maxBytes lets a listing above the parser's default budget through", async () => {
+    const page = await solid(big).list(ROOT, { maxBytes: 32 * 1024 * 1024 });
+    expect(page.items.map((item) => item.url)).toEqual([`${ROOT}a`]);
+  });
+
+  test("without maxBytes the parser's default budget still applies", async () => {
+    await expect(solid(big).list(ROOT)).rejects.toMatchObject({ code: "invalid-response" });
+  });
+
+  test("an abort during parsing surfaces as an aborted network error", async () => {
+    const controller = new AbortController();
+    const body = `<> <http://www.w3.org/ns/ldp#contains> <${ROOT}a> .\n`;
+    const storage = createSolidBackend({
+      root: ROOT,
+      fetch: async () => {
+        queueMicrotask(() => controller.abort(new Error("stop")));
+        return new Response(body, { headers: { "content-type": "text/turtle" } });
+      },
+    });
+    const error = await storage
+      .list(ROOT, { maxBytes: 1024, signal: controller.signal })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({ code: "network", retryable: false });
+  });
+});

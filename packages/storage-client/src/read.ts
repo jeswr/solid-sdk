@@ -14,7 +14,7 @@ import {
   scoped,
   send,
 } from "./http.js";
-import { listingTooLarge } from "./internal.js";
+import { listingTooLarge, throwIfAborted } from "./internal.js";
 import type { AuthFetch, RdfReadResult, ReadResult, StorageClient } from "./types.js";
 
 /** RFC 6838 type/subtype without parameters. */
@@ -91,8 +91,15 @@ export async function rdfBody(
       ? await result.text()
       : await boundedText(result, maxBytes, listingTooLarge(result.url, maxBytes), signal);
   try {
-    return { type, dataset: await parseRdf(text, result.contentType, { baseIRI: result.url }) };
+    // fetch-rdf caps parsing at its own default budget; a caller's larger byte cap must reach it.
+    const options = {
+      baseIRI: result.url,
+      ...(maxBytes === undefined ? {} : { maxBytes }),
+      ...(signal === undefined ? {} : { signal }),
+    };
+    return { type, dataset: await parseRdf(text, result.contentType, options) };
   } catch (cause) {
+    throwIfAborted("GET", result.url, signal);
     throw new StorageError(code, {
       method: "GET",
       url: result.url,
@@ -182,7 +189,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
           notModified: true,
         };
       }
-      const { type, dataset } = await rdfBody(result, "not-rdf");
+      const { type, dataset } = await rdfBody(result, "not-rdf", undefined, opts.signal);
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
   };
