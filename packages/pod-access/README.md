@@ -1,65 +1,86 @@
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/pod-access
 
-> **Experimental — AI-agent-generated.** Security-critical WAC/ACP policy utilities.
+> **Experimental — AI-agent-generated.** Security-critical WAC/ACP translation extracted from Pod Migrator.
 
-Pure access-control reading, translation and serialization extracted from Pod Migrator.
-Callers supply RDF datasets and independently established server implementations; pod I/O,
-crawling, group discovery and migration execution remain in the application.
+Pure, offline access-control readers, writers, a neutral policy model, conservative translation,
+inheritance composition, and bounded symbolic access proofs. Pod Migrator consumes this package;
+HTTP, group fetching, planning, decisions, conditional writes, and execution remain in the app.
 
-The contract is **never widen access**: translate effective policies, preserve every
-established restriction, and omit, narrow or refuse unsupported rules with report items.
-`assertNotWider(source, target, context)` performs a bounded symbolic subset proof and throws
-on widening or excessive complexity. A supplied `targetOwner` is explicitly exempted; the
-caller must establish that this identity already controls the target.
+Private at version 0.1.0. Requires Node.js >=24 and the root pnpm workspace tooling.
+The broader sharing client in SDK core `ADR-003-storage-client.md` §9 remains unimplemented.
+
+Readers can return resource, member, and combined rules. `translatePolicy` and `assertNotWider`
+require every grant and denial to be normalized to resource scope; they throw otherwise.
+Use `scopePolicy` to select and normalize each scope, then translate and prove the two separately.
+`policiesEqual` likewise requires normalized policies and returns false for invalid scopes.
 
 ```ts
-import { assertNotWider, ownerPolicy, translatePolicy, unionPolicies, writeAcp }
-  from "@jeswr/pod-access";
+import {
+  assertNotWider, readWac, scopePolicy, translatePolicy, unionPolicies, writeAcp,
+} from "@jeswr/pod-access";
 
-const context = { resourceUrl, sourceOwner, targetOwner, groups: new Map(),
-  targetImplementation: "css" as const };
-const { policy: translated, report } = translatePolicy(sourceEffective, "acp", context);
-const policy = unionPolicies(ownerPolicy(targetOwner, resourceUrl.endsWith("/")), translated);
-assertNotWider(sourceEffective, policy, context);
-const turtle = await writeAcp(policy, resourceUrl, acrUrl, "css");
+// Parse RDF with @jeswr/fetch-rdf using the access document URL as baseIRI.
+const source = readWac(dataset, sourceResource, sourceAclUrl, "css");
+const context = {
+  resourceUrl: sourceResource,
+  sourceOwner,
+  targetOwner,
+  targetImplementation: "css",
+  groups: new Map(),
+} as const;
+const sourceResourcePolicy = scopePolicy(source, "resource");
+const sourceMemberPolicy = scopePolicy(source, "members");
+const resource = translatePolicy(sourceResourcePolicy, "acp", context);
+const members = translatePolicy(sourceMemberPolicy, "acp", {
+  ...context,
+  scopeId: "members:",
+});
+// Review resource.report and members.report; prove each translated component in its own scope.
+assertNotWider(sourceResourcePolicy, resource.policy, context);
+assertNotWider(sourceMemberPolicy, members.policy, context);
+// Translation returns resource-normalized rules. Restore member scope before serialization.
+const policy = unionPolicies(resource.policy, {
+  grants: members.policy.grants.map((rule) => ({ ...rule, appliesTo: "members" })),
+  denials: members.policy.denials.map((rule) => ({ ...rule, appliesTo: "members" })),
+});
+const turtle = await writeAcp(policy, targetResource, targetAcrUrl, "css");
+// Before persistence, also prove the complete effective target resource and member policies,
+// including owner access, retained target rules, and ancestor controls, against their source scopes.
 ```
 
-`sourceEffective` must already include source inheritance. Before any PUT, the caller reviews
-reports, preserves owner Control, and proves the complete target state including ancestors.
+The root entry point exports:
 
-Public API:
+- `readWac` / `writeWac`, `readAcp` / `writeAcp`, `AcpDialect`, and `PolicyTooComplex`.
+- `translatePolicy`, `TranslationContext`, `reportItem`, and `optionDescriptions`. Report IDs,
+  explanations, options, and default decisions retain Pod Migrator's behavior. Translation scopes
+  output to the resource and requires normalized input; callers select scopes and restore member
+  scope explicitly.
+- `emptyPolicy`, `scopePolicy`, `unionPolicies`, `ownerPolicy`, `effectivePolicy`,
+  `effectiveMembers`, `assertNotWider`, `policiesEqual`, `ProofContext`, and `subjectKey`.
+- The extracted policy/report types and shared RDF helpers (`ACL`, `ACP`, `RDF`, `FOAF`,
+  `modes`, `modeIri`, `readModes`, `safeIri`, `RdfNode`, `serialize`, `parent`).
 
-- Model: `Mode`, `Subject`, `Grant`, `Denial`, `EffectivePolicy`, `AccessDocument`,
-  `AccessSystem`, `PodImplementation`, reports/resolutions and `AcpDialect`.
-- Composition/proof: `effectivePolicy`, `effectiveMembers`, `scopePolicy`, `unionPolicies`,
-  `emptyPolicy`, `ownerPolicy`, `assertNotWider`, `policiesEqual`, `ProofContext`.
-- Readers/writers: `readWac`, `writeWac`, `readAcp`, `writeAcp`, and
-  `isPolicyTooComplex(error)` to identify bounded-representation refusals.
-- Translation/reports: `translatePolicy`, `TranslationContext`, `reportItem`.
-- `./testing` exports `emptyPolicy` and `ownerPolicy` fixtures.
+`@jeswr/pod-access/testing` remains reserved and exports nothing.
 
-In-process callers are trusted code; JavaScript cannot prevent same-realm code from patching
-prototypes or built-ins such as `Set.prototype.has` or `Array.prototype`.
-The package therefore does not defend against deliberate prototype patching and keeps internal
-mutable state, RDF helpers and helper classes out of its public exports.
-Frozen mode lists guard against accidental mutation; returned policies and reports remain caller-owned.
+Server dialects are trusted caller assertions, never inferred from editable RDF. Source readers
+retain conservative permissions; target readers use the widest established interpretation and refuse
+unsupported restrictions. Non-CSS ACP targets must fit the closed target allowlist. Unsupported
+conditions and denials retain the migrator's narrowing decisions; group expansion needs an explicitly
+supplied, publicly readable membership snapshot. Writer output alone does not prove migration safety:
+callers must retain owner access, validate decisions, prove effective resource and ancestor policies,
+and protect persistence with scope checks and reviewed validators.
 
-Source reads use the **strictest plausible** implementation semantics. For ESS,
-`effectivePolicy` suppresses ancestor grants when the resource attaches an explicit policy;
-ancestor denials remain. CSS sources and all target proofs use additive ACP composition.
-Existing-target reads (`target: true`) use the **widest plausible** permissions or refuse
-unsupported shapes. Pass the implementation to `effectivePolicy` only for source reads.
+Run from the workspace root:
 
-ESS targets require the closed allowlist: one exclusive ACR root, simple controls/policies,
-agent/public/authenticated matchers with `allOf` and optional `noneOf`, known `acp:*` modes,
-and paired Read+Write for ACR access. Client/issuer/VC, owner/creator roles, `anyOf`, foreign
-modes and extra graph constructs are refused. ESS/NSS are offline fixture contracts; CSS 7.2
-has an independent installed-server oracle. Full access semantics and the matrix remain in
-[DESIGN §3–6](../../apps/pod-migrator/docs/DESIGN.md#3-neutral-model).
+```sh
+pnpm --filter @jeswr/pod-access run lint
+pnpm --filter @jeswr/pod-access... run build
+pnpm --filter @jeswr/pod-access run typecheck
+pnpm --filter @jeswr/pod-access run test
+```
 
-Requires Node >=24. Run `pnpm --filter @jeswr/pod-access run {lint,build,typecheck,test}`
-individually from the workspace root. Tests enforce 100% lines/branches/functions/statements.
-The moved regression suites retain test-only imports of the app's migration harness and are
-also included in the app's coverage run. No application code is shipped by this package.
+Package tests require 100% branches, functions, lines, and statements, including adversarial target
+shapes, malformed RDF, dialect-specific denials, symbolic proof limits, and writer failures.
+The migrator retains its end-to-end engine regression and dialect matrix tests.

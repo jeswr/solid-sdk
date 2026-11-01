@@ -32,7 +32,8 @@ import {
   requestCacheDirective,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
-import type { CacheMetadata, UpdatedEvent } from './types.js';
+import { reportRevalidation } from './revalidation-events.js';
+import type { CacheMetadata, OfflineEvent } from './types.js';
 
 /** Minimal Cache-API surface we depend on (Cache stores Response bytes by Request). */
 export interface ByteCache {
@@ -43,7 +44,7 @@ export interface ByteCache {
 
 /** Minimal BroadcastChannel surface. */
 export interface Broadcaster {
-  postMessage(message: UpdatedEvent): void;
+  postMessage(message: OfflineEvent): void;
 }
 
 /** Dependencies injected into the engine (all mockable in tests). */
@@ -267,72 +268,92 @@ async function forcedRevalidate(
   rl: RequestLike,
   deps: SwrDeps,
 ): Promise<HandleResult> {
-  const record = await lookupRecord(rl, deps);
-
-  // KEEP the caller's `Cache-Control: no-cache` on the wire (roborev High): the
-  // SW's `self.fetch` can itself hit the browser HTTP cache / an intermediary, so
-  // dropping the directive would let the conditional request be confirmed against
-  // STALE intermediary state — defeating the very guarantee this path exists for.
-  // When we hold an ETag we add `If-None-Match` so a fresh origin answer is a
-  // cheap 304; the `no-cache` directive (and `cache: 'no-cache'` request mode)
-  // forces the revalidation all the way to the origin either way.
-  const condHeaders = new Headers(request.headers);
-  if (!condHeaders.has('cache-control')) condHeaders.set('cache-control', 'no-cache');
-  if (record?.etag) condHeaders.set('If-None-Match', record.etag);
-  const condRequest = new Request(request, {
-    method: 'GET',
-    headers: condHeaders,
-    cache: 'no-cache',
-  });
-  const fresh = await deps.fetch(condRequest);
-
-  // A `304` only CONFIRMS our cached bytes when WE sent the validator that earned
-  // it — i.e. only when the stored record had an ETag we put in `If-None-Match`
-  // (roborev High). If the record had no ETag we sent no validator, so a `304`
-  // (e.g. earned by an `If-Modified-Since` the caller's request happened to carry,
-  // or a misbehaving server) does NOT validate OUR bytes — never serve them. We
-  // re-fetch unconditionally (purging first) so the caller gets a confirmed body.
-  if (fresh.status === 304 && record?.etag) {
-    // Confirmed: serve the cached bytes (now proven fresh), touch fetchedAt.
-    const keyReq = keyRequest(rl.url, record.varyKey);
-    const cached = await deps.cache.match(keyReq, IGNORE_VARY);
-    await deps.meta.touch(record.key, deps.now());
-    if (cached) {
-      return { response: cached.clone(), source: 'request-no-cache-revalidated' };
+  let terminal: 'updated' | 'revalidated' | 'revalidate-failed' = 'revalidate-failed';
+  async function finish(fresh: Response): Promise<HandleResult> {
+    const result = await finalizeForced(rl, fresh, deps);
+    if (
+      (fresh.status >= 200 && fresh.status < 300) ||
+      fresh.status === 403 ||
+      fresh.status === 404
+    ) {
+      terminal = 'updated';
     }
-    // Bytes evicted under us → fall through to a fresh unconditional read below
-    // (purge first so no stale variant can survive). Re-fetch without the
-    // conditional so we get a body.
+    return result;
   }
+  return reportRevalidation<HandleResult>(
+    rl.url,
+    deps.broadcast,
+    async () => {
+      const record = await lookupRecord(rl, deps);
 
-  // Either a `304` we did NOT validate (no stored ETag), or a `304` whose bytes
-  // were evicted: re-fetch UNCONDITIONALLY (strip any `If-None-Match`) so the
-  // caller is guaranteed a real body, and purge any stale variant first.
-  if (fresh.status === 304) {
-    await purgeAllVariants(rl.url, deps);
-    const unconditional = new Headers(request.headers);
-    // Strip EVERY conditional validator (roborev Medium) — not just If-None-Match
-    // but also If-Modified-Since (and the other precondition headers) — or the
-    // caller's own validators could earn ANOTHER bodyless 304 and we'd hand back a
-    // 304 instead of the promised confirmed body.
-    unconditional.delete('if-none-match');
-    unconditional.delete('if-modified-since');
-    unconditional.delete('if-match');
-    unconditional.delete('if-unmodified-since');
-    unconditional.delete('if-range');
-    if (!unconditional.has('cache-control')) unconditional.set('cache-control', 'no-cache');
-    const refetch = await deps.fetch(
-      new Request(request, { method: 'GET', headers: unconditional, cache: 'no-cache' }),
-    );
-    return finalizeForced(rl, refetch, deps);
-  }
+      // KEEP the caller's `Cache-Control: no-cache` on the wire (roborev High): the
+      // SW's `self.fetch` can itself hit the browser HTTP cache / an intermediary, so
+      // dropping the directive would let the conditional request be confirmed against
+      // STALE intermediary state — defeating the very guarantee this path exists for.
+      // When we hold an ETag we add `If-None-Match` so a fresh origin answer is a
+      // cheap 304; the `no-cache` directive (and `cache: 'no-cache'` request mode)
+      // forces the revalidation all the way to the origin either way.
+      const condHeaders = new Headers(request.headers);
+      if (!condHeaders.has('cache-control')) condHeaders.set('cache-control', 'no-cache');
+      if (record?.etag) condHeaders.set('If-None-Match', record.etag);
+      const condRequest = new Request(request, {
+        method: 'GET',
+        headers: condHeaders,
+        cache: 'no-cache',
+      });
+      const fresh = await deps.fetch(condRequest);
 
-  // Authoritative answer (200/403/404/etc.): purge every stale variant and store
-  // the new one iff cacheable, regardless of whether we previously held an ETag
-  // (roborev High: the no-ETag path must ALSO purge a stale positive entry when
-  // the fresh answer is non-cacheable — no-store/private or 403/404 — so an old
-  // positive ACL can never survive to be served later).
-  return finalizeForced(rl, fresh, deps);
+      // A `304` only CONFIRMS our cached bytes when WE sent the validator that earned
+      // it — i.e. only when the stored record had an ETag we put in `If-None-Match`
+      // (roborev High). If the record had no ETag we sent no validator, so a `304`
+      // (e.g. earned by an `If-Modified-Since` the caller's request happened to carry,
+      // or a misbehaving server) does NOT validate OUR bytes — never serve them. We
+      // re-fetch unconditionally (purging first) so the caller gets a confirmed body.
+      if (fresh.status === 304 && record?.etag) {
+        // Confirmed: serve the cached bytes (now proven fresh), touch fetchedAt.
+        const keyReq = keyRequest(rl.url, record.varyKey);
+        const cached = await deps.cache.match(keyReq, IGNORE_VARY);
+        await deps.meta.touch(record.key, deps.now());
+        if (cached) {
+          terminal = 'revalidated';
+          return { response: cached.clone(), source: 'request-no-cache-revalidated' };
+        }
+        // Bytes evicted under us → fall through to a fresh unconditional read below
+        // (purge first so no stale variant can survive). Re-fetch without the
+        // conditional so we get a body.
+      }
+
+      // Either a `304` we did NOT validate (no stored ETag), or a `304` whose bytes
+      // were evicted: re-fetch UNCONDITIONALLY (strip any `If-None-Match`) so the
+      // caller is guaranteed a real body, and purge any stale variant first.
+      if (fresh.status === 304) {
+        await purgeAllVariants(rl.url, deps);
+        const unconditional = new Headers(request.headers);
+        // Strip EVERY conditional validator (roborev Medium) — not just If-None-Match
+        // but also If-Modified-Since (and the other precondition headers) — or the
+        // caller's own validators could earn ANOTHER bodyless 304 and we'd hand back a
+        // 304 instead of the promised confirmed body.
+        unconditional.delete('if-none-match');
+        unconditional.delete('if-modified-since');
+        unconditional.delete('if-match');
+        unconditional.delete('if-unmodified-since');
+        unconditional.delete('if-range');
+        if (!unconditional.has('cache-control')) unconditional.set('cache-control', 'no-cache');
+        const refetch = await deps.fetch(
+          new Request(request, { method: 'GET', headers: unconditional, cache: 'no-cache' }),
+        );
+        return finish(refetch);
+      }
+
+      // Authoritative answer (200/403/404/etc.): purge every stale variant and store
+      // the new one iff cacheable, regardless of whether we previously held an ETag
+      // (roborev High: the no-ETag path must ALSO purge a stale positive entry when
+      // the fresh answer is non-cacheable — no-store/private or 403/404 — so an old
+      // positive ACL can never survive to be served later).
+      return finish(fresh);
+    },
+    () => terminal,
+  );
 }
 
 /**
@@ -359,11 +380,6 @@ async function finalizeForced(
   // answer.
   await purgeAllVariants(rl.url, deps);
   if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
-  deps.broadcast.postMessage({
-    url: rl.url,
-    event: 'updated',
-    etag: fresh.headers.get('etag') ?? undefined,
-  });
   return { response: fresh.clone(), source: 'request-no-cache-revalidated' };
 }
 
@@ -527,62 +543,72 @@ async function revalidate(
     return { kind: 'skipped' };
   }
   const etag = record.etag;
-  try {
-    // Build the conditional request FROM THE ORIGINAL (the #2 fix): preserve
-    // credentials, mode, referrer, redirect, etc. A bare `new Request(url, {...})`
-    // drops `credentials: 'include'`/`mode`, so a cross-origin authenticated read
-    // would revalidate UNAUTHENTICATED and wrongly 401/403 → delete/replace state.
-    const condHeaders = new Headers(request.headers);
-    condHeaders.set('If-None-Match', etag);
-    const condRequest = new Request(request, { method: 'GET', headers: condHeaders });
-    const fresh = await deps.fetch(condRequest);
+  return reportRevalidation<RevalidateOutcome>(
+    rl.url,
+    deps.broadcast,
+    async () => {
+      try {
+        // Build the conditional request FROM THE ORIGINAL (the #2 fix): preserve
+        // credentials, mode, referrer, redirect, etc. A bare `new Request(url, {...})`
+        // drops `credentials: 'include'`/`mode`, so a cross-origin authenticated read
+        // would revalidate UNAUTHENTICATED and wrongly 401/403 → delete/replace state.
+        const condHeaders = new Headers(request.headers);
+        condHeaders.set('If-None-Match', etag);
+        const condRequest = new Request(request, { method: 'GET', headers: condHeaders });
+        const fresh = await deps.fetch(condRequest);
 
-    if (fresh.status === 304) {
-      // 304 carries no body and no reliable Vary; reuse the record key we
-      // already hold and just touch fetchedAt — the provisional bytes are
-      // hereby confirmed fresh.
-      await deps.meta.touch(record.key, deps.now());
-      return { kind: '304-confirmed' };
-    }
+        if (fresh.status === 304) {
+          // 304 carries no body and no reliable Vary; reuse the record key we
+          // already hold and just touch fetchedAt — the provisional bytes are
+          // hereby confirmed fresh.
+          await deps.meta.touch(record.key, deps.now());
+          return { kind: '304-confirmed' };
+        }
 
-    if (fresh.status >= 200 && fresh.status < 300) {
-      const decision = classifyResponse(rl, resLike(fresh));
-      if (decision.cacheable) {
-        // A change replaces the whole resource: drop EVERY stale variant for this
-        // URL first (other Vary keys / legacy rows), then store the new canonical
-        // one — so `lookupRecord` can't keep matching an old variant.
-        await purgeAllVariants(rl.url, deps);
-        await store(rl, fresh, deps, decision.negative);
-      } else {
-        // 2xx but NOT cacheable now (e.g. the server added Cache-Control:
-        // no-store/private). Leaving ANY variant's bytes + metadata would keep
-        // serving stale content the server has made uncacheable — so purge ALL
-        // variants for this URL (the re-review corrective: a revoke affects every
-        // Vary key, not just the matched one).
-        await purgeAllVariants(rl.url, deps);
+        if (fresh.status >= 200 && fresh.status < 300) {
+          const decision = classifyResponse(rl, resLike(fresh));
+          if (decision.cacheable) {
+            // A change replaces the whole resource: drop EVERY stale variant for this
+            // URL first (other Vary keys / legacy rows), then store the new canonical
+            // one — so `lookupRecord` can't keep matching an old variant.
+            await purgeAllVariants(rl.url, deps);
+            await store(rl, fresh, deps, decision.negative);
+          } else {
+            // 2xx but NOT cacheable now (e.g. the server added Cache-Control:
+            // no-store/private). Leaving ANY variant's bytes + metadata would keep
+            // serving stale content the server has made uncacheable — so purge ALL
+            // variants for this URL (the re-review corrective: a revoke affects every
+            // Vary key, not just the matched one).
+            await purgeAllVariants(rl.url, deps);
+          }
+          const newEtag = fresh.headers.get('etag') ?? undefined;
+          return { kind: '200-replaced', etag: newEtag };
+        }
+
+        // 403/404 now? The resource changed visibility — a permission revoke / delete
+        // affects EVERY variant. Purge ALL variants for this URL first (the re-review
+        // corrective), then go through `classifyResponse`: a cacheable 403/404 leaves a
+        // single negative entry (offline parity, #8); a no-store/private 403/404 caches
+        // nothing. Either way no stale positive variant survives.
+        if (fresh.status === 403 || fresh.status === 404) {
+          const decision = classifyResponse(rl, resLike(fresh));
+          await purgeAllVariants(rl.url, deps);
+          if (decision.cacheable) {
+            await store(rl, fresh, deps, decision.negative);
+          }
+          return { kind: '200-replaced' };
+        }
+
+        return { kind: 'skipped' };
+      } catch (error) {
+        return { kind: 'error', error };
       }
-      const newEtag = fresh.headers.get('etag') ?? undefined;
-      deps.broadcast.postMessage({ url: rl.url, event: 'updated', etag: newEtag });
-      return { kind: '200-replaced', etag: newEtag };
-    }
-
-    // 403/404 now? The resource changed visibility — a permission revoke / delete
-    // affects EVERY variant. Purge ALL variants for this URL first (the re-review
-    // corrective), then go through `classifyResponse`: a cacheable 403/404 leaves a
-    // single negative entry (offline parity, #8); a no-store/private 403/404 caches
-    // nothing. Either way no stale positive variant survives.
-    if (fresh.status === 403 || fresh.status === 404) {
-      const decision = classifyResponse(rl, resLike(fresh));
-      await purgeAllVariants(rl.url, deps);
-      if (decision.cacheable) {
-        await store(rl, fresh, deps, decision.negative);
-      }
-      deps.broadcast.postMessage({ url: rl.url, event: 'updated' });
-      return { kind: '200-replaced' };
-    }
-
-    return { kind: 'skipped' };
-  } catch (error) {
-    return { kind: 'error', error };
-  }
+    },
+    (outcome) =>
+      outcome.kind === '304-confirmed'
+        ? 'revalidated'
+        : outcome.kind === '200-replaced'
+          ? 'updated'
+          : 'revalidate-failed',
+  );
 }

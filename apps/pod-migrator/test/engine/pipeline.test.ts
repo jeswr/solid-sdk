@@ -1,19 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
-  acl,
-  grant,
-  pods,
-  policy,
-  resolve,
-  stranger,
-} from "../../../../packages/pod-access/test/helpers.js";
-import {
   executeMigration,
   finalizePlan,
   MigrationAborted,
   planMigration,
 } from "../../src/engine/index.js";
+import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 
 describe("migration with an independently enforcing LDP server", () => {
   for (const from of ["wac", "acp"] as const)

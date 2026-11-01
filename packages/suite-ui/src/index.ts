@@ -12,6 +12,7 @@ export type { FileGridProps } from "./collections/file-grid.js";
 export { FileGrid } from "./collections/file-grid.js";
 export type { SelectionModel, SelectionOptions } from "./collections/use-selection.js";
 export { useSelection } from "./collections/use-selection.js";
+export * from "./components/async-copy.js";
 export * from "./components/atoms/app-icon.js";
 export * from "./components/atoms/count-badge.js";
 export * from "./components/atoms/file-type-icon.js";
@@ -28,10 +29,13 @@ export { formatBytes, plainText, surfaceErrors } from "./components/content.js";
 export { DropZoneOverlay, type DropZoneOverlayProps } from "./components/drop-zone-overlay.js";
 export type { EditableTextProps } from "./components/editable-text.js";
 export { EditableText } from "./components/editable-text.js";
+export * from "./components/empty-state.js";
+export * from "./components/error-state.js";
 export type { FilterChip, FilterChipsProps } from "./components/filter-chips.js";
 export { FilterChips } from "./components/filter-chips.js";
 export type { AccessSummary, ItemDetailsProps } from "./components/item-details.js";
 export { accessSummaryText, ItemDetails } from "./components/item-details.js";
+export * from "./components/loading-skeleton.js";
 export { PodMeter } from "./components/pod-meter.js";
 export {
   PreviewPane,
@@ -39,6 +43,7 @@ export {
   type PreviewSource,
   previewKind,
 } from "./components/preview-pane.js";
+export * from "./components/render-async.js";
 export {
   type SurfaceError,
   type SurfaceState,
@@ -112,6 +117,37 @@ export {
   RailPreferencesProvider,
   usePreferences,
 } from "./navigation/preferences.js";
+export {
+  type ConsentAccount,
+  type ConsentDataType,
+  ConsentSheet,
+  type ConsentSheetProps,
+} from "./sharing/consent-sheet.js";
+export {
+  DurationChips,
+  type DurationChipsProps,
+  type SharingDuration,
+} from "./sharing/duration-chips.js";
+export {
+  PeoplePicker,
+  type PeoplePickerProps,
+  type SharingPerson,
+  type SharingProfile,
+  type UseSharingProfile,
+  validatePersonEntry,
+} from "./sharing/people-picker.js";
+export {
+  type PermissionItem,
+  PermissionRow,
+  type PermissionRowProps,
+} from "./sharing/permission-row.js";
+export {
+  type DisabledReason,
+  RoleSelect,
+  type RoleSelectProps,
+  type SharingRole,
+} from "./sharing/role-select.js";
+export type { SharingError, SharingState } from "./sharing/state.js";
 export type { SuiteToken, TokenName } from "./tokens.js";
 export { tokens } from "./tokens.js";
 export {

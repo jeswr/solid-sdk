@@ -1,0 +1,15 @@
+# expect: https://jeswr.org/ns/core#about
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#VerifiableAttributeShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/VerifiableAttribute-5> a id:VerifiableAttribute;
+    id:assertedBy <https://example.org/fixtures/identity/support-7>;
+    id:assertedAt "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    id:attributeName "Fixture";
+    id:assuranceLevel "Fixture".
+<https://example.org/fixtures/identity/support-6> a core:Person.
+<https://example.org/fixtures/identity/support-7> a core:Agent.

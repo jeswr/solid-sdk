@@ -1,0 +1,8 @@
+# expect: http://purl.org/dc/terms/title
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/drawing/shapes#SceneShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix drawing: <https://jeswr.org/ns/sectors/drawing#>.
+
+<https://example.org/fixtures/drawing/Scene-1> a drawing:Scene;
+    drawing:sceneDocument <https://example.org/fixtures/drawing/support-2>.

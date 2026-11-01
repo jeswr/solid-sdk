@@ -1,0 +1,686 @@
+{
+  "schemaVersion": 1,
+  "description": "Local disposable servers started by interop/local/stack.js (mandatory in CI).",
+  "targets": [
+    {
+      "id": "css-local",
+      "name": "Community Solid Server 7.2.0 (local container, memory backend, WAC)",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "css",
+      "software": {
+        "name": "Community Solid Server",
+        "version": "7.2.0",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer/releases/tag/v7.2.0"
+      },
+      "env": [],
+      "config": {
+        "label": "local CSS",
+        "storage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherStorage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/",
+        "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me",
+        "issuer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "css-password",
+          "email": "alice@interop.test",
+          "password": "alice-local-only",
+          "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me"
+        },
+        "scratchContainer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherProtected": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/.acl"
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": false,
+        "revocation": true,
+        "storageDiscovery": true
+      },
+      "capabilityNotes": {
+        "refreshRotation": "CSS 7.2.0 (oidc-provider as configured by CSS) does not rotate refresh tokens: the rotation check observed no new refresh token after refresh (2026-09-27)"
+      }
+    },
+    {
+      "id": "css-local-client-id",
+      "name": "Community Solid Server 7.2.0 (local) with a Solid-OIDC Client Identifier Document instead of dynamic registration",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "css",
+      "software": {
+        "name": "Community Solid Server",
+        "version": "7.2.0",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer/releases/tag/v7.2.0"
+      },
+      "env": [],
+      "config": {
+        "label": "local CSS (client identifier document)",
+        "storage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherStorage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/",
+        "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me",
+        "issuer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "css-password",
+          "email": "alice@interop.test",
+          "password": "alice-local-only",
+          "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me"
+        },
+        "scratchContainer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherProtected": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/.acl",
+        "clientId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/ra-interop-clients/client.jsonld"
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": false,
+        "revocation": true,
+        "storageDiscovery": true
+      },
+      "capabilityNotes": {
+        "refreshRotation": "CSS 7.2.0 (oidc-provider as configured by CSS) does not rotate refresh tokens: the rotation check observed no new refresh token after refresh (2026-09-27)"
+      },
+      "scenarios": [
+        "solid.login",
+        "solid.private-read",
+        "solid.refresh-restore",
+        "solid.logout",
+        "solid.cleanup"
+      ]
+    },
+    {
+      "id": "css-local-client-credentials",
+      "name": "Community Solid Server 7.2.0 (local) client credentials: a disposable credential created through the CSS account API, DPoP-bound tokens, no browser",
+      "category": "local",
+      "adapter": "client-credentials",
+      "stack": "css",
+      "software": {
+        "name": "Community Solid Server",
+        "version": "7.2.0",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer/releases/tag/v7.2.0"
+      },
+      "env": [],
+      "config": {
+        "issuer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/",
+        "storage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me",
+        "scratchContainer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherProtected": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/.acl",
+        "insecure": true,
+        "account": {
+          "email": "alice@interop.test",
+          "password": "alice-local-only"
+        }
+      },
+      "capabilities": {}
+    },
+    {
+      "id": "css-local-browser",
+      "name": "Community Solid Server 7.2.0 (local) with the library running in the browser (engine from --browser)",
+      "category": "local",
+      "adapter": "solid-browser",
+      "stack": "css",
+      "software": {
+        "name": "Community Solid Server",
+        "version": "7.2.0",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer/releases/tag/v7.2.0"
+      },
+      "env": [],
+      "config": {
+        "label": "local CSS (browser)",
+        "storage": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me",
+        "issuer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/",
+        "scratchContainer": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/",
+        "otherProtected": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/bob/.acl",
+        "appPort": "39396",
+        "insecure": true,
+        "login": {
+          "recipe": "css-password",
+          "email": "alice@interop.test",
+          "password": "alice-local-only",
+          "webId": "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/alice/profile/card#me"
+        }
+      },
+      "capabilities": {}
+    },
+    {
+      "id": "nss-local",
+      "name": "Node Solid Server 6.0.0 (local container built from the v6.0.0 Dockerfile, multi-user, WAC)",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "nss",
+      "software": {
+        "name": "Node Solid Server",
+        "version": "6.0.0",
+        "source": "open",
+        "url": "https://github.com/nodeSolidServer/node-solid-server/releases/tag/v6.0.0"
+      },
+      "env": [],
+      "config": {
+        "label": "local NSS",
+        "storage": "http://alice.localhost:39343/",
+        "webId": "http://alice.localhost:39343/profile/card#me",
+        "issuer": "http://localhost:39343",
+        "scratchContainer": "http://alice.localhost:39343/private/",
+        "otherProtected": "http://bob.localhost:39343/private/",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "nss-password",
+          "username": "alice",
+          "password": "alice-local-only-Pw1!"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": true
+      },
+      "capabilityNotes": {
+        "refreshTokens": "NSS 6.0.0 advertises refresh_token, but refresh behaviour cannot be observed here: login is blocked by the verified nonce incompatibility",
+        "refreshRotation": "cannot be observed: login is blocked by the verified nonce incompatibility",
+        "revocation": "NSS 6.0.0 (@solid/oidc-op) advertises no revocation_endpoint in its discovery document (observed 2026-09-27)"
+      },
+      "knownIncompatible": {
+        "solid.login": {
+          "reason": "NSS 6.0.0 issues ID tokens without the nonce claim the client sent (OpenID Connect Core §3.1.3.7 requires it); the library validates it strictly for every issuer except the two hosted NSS deployments in its upstream quirk list (datapod.igrant.io, solidweb.org)",
+          "signature": "JWT \"nonce\" \\(nonce\\) claim missing"
+        }
+      }
+    },
+    {
+      "id": "keycloak-public",
+      "name": "Keycloak 26.7.4 public client: PKCE S256, OpenID Connect, rotating refresh tokens, audience",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-public)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-public",
+        "scopes": ["openid", "profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "oidc": {
+          "subject": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      }
+    },
+    {
+      "id": "keycloak-confidential",
+      "name": "Keycloak 26.7.4 confidential server-side client (client_secret_basic + PKCE)",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-confidential)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-confidential",
+        "scopes": ["openid", "profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "oidc": {
+          "subject": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+        },
+        "clientSecret": "ra-confidential-local-only-secret"
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      }
+    },
+    {
+      "id": "keycloak-confidential-post",
+      "name": "Keycloak 26.7.4 confidential server-side client (client_secret_post + PKCE)",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-confidential, client_secret_post)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-confidential",
+        "scopes": ["openid", "profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "oidc": {
+          "subject": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+        },
+        "clientSecret": "ra-confidential-local-only-secret",
+        "tokenEndpointAuthMethod": "client_secret_post"
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      }
+    },
+    {
+      "id": "keycloak-plain-oauth",
+      "name": "Keycloak 26.7.4 public client used as plain OAuth 2.0 (no openid scope: no nonce, no ID token)",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-public)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-public",
+        "scopes": ["profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "discovery": "oidc"
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      }
+    },
+    {
+      "id": "keycloak-short-lived",
+      "name": "Keycloak 26.7.4 client with 5 s access tokens (expiry renewal)",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-short)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-short",
+        "scopes": ["openid", "profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "oidc": {
+          "subject": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+        },
+        "tokenLifetimeSeconds": 5
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": true,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      },
+      "scenarios": [
+        "oauth.login-api",
+        "oauth.expiry-renewal",
+        "oauth.concurrent-refresh",
+        "oauth.refresh-restore"
+      ]
+    },
+    {
+      "id": "keycloak-no-audience",
+      "name": "Keycloak 26.7.4 client whose tokens lack the API audience (negative)",
+      "category": "local",
+      "adapter": "oauth-code",
+      "stack": "keycloak",
+      "software": {
+        "name": "Keycloak",
+        "version": "26.7.4",
+        "source": "open",
+        "url": "https://www.keycloak.org/getting-started/getting-started-docker"
+      },
+      "env": [],
+      "config": {
+        "label": "local Keycloak (ra-no-audience)",
+        "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
+        "clientId": "ra-no-audience",
+        "scopes": ["openid", "profile"],
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "keycloak-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        },
+        "api": {
+          "local": "introspecting",
+          "audience": "interop-api",
+          "introspection": {
+            "clientId": "interop-api",
+            "clientSecret": "interop-api-local-only-secret"
+          },
+          "identity": {
+            "field": "sub",
+            "expected": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+          }
+        },
+        "introspection": {
+          "clientId": "interop-api",
+          "clientSecret": "interop-api-local-only-secret"
+        },
+        "oidc": {
+          "subject": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": true
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
+        "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
+      },
+      "scenarios": ["oauth.audience-mismatch"]
+    },
+    {
+      "id": "nextcloud-local",
+      "name": "Solid Nextcloud (pdsinterop/solid-nextcloud main b074376 on Nextcloud 30, local container, HTTPS with a test CA)",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "nextcloud",
+      "software": {
+        "name": "Solid Nextcloud",
+        "version": "main@b0743766631f88fca276f9405162e16c10688675 (app 0.10.x) on Nextcloud 30",
+        "source": "open",
+        "url": "https://github.com/pdsinterop/solid-nextcloud"
+      },
+      "env": [],
+      "config": {
+        "label": "local Solid Nextcloud",
+        "storage": "https://localhost:39445/apps/solid/~alice/storage/",
+        "webId": "https://localhost:39445/apps/solid/~alice/profile/card#me",
+        "issuer": "https://localhost:39445",
+        "scratchContainer": "https://localhost:39445/apps/solid/~alice/storage/private/",
+        "otherProtected": "https://localhost:39445/apps/solid/~bob/storage/private/",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "login": {
+          "recipe": "nextcloud-password",
+          "username": "alice",
+          "password": "alice123"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "advertised (grant_types_supported), but not observable: authentication cannot start (see knownIncompatible)",
+        "refreshRotation": "not observable: authentication cannot start (see knownIncompatible)",
+        "revocation": "the discovery document has no revocation_endpoint (observed 2026-09-27)",
+        "storageDiscovery": "the storage root is typed pim:Storage, but its storage description Link uses rel http://www.w3.org/ns/solid#storageDescription rather than the Solid Protocol's http://www.w3.org/ns/solid/terms#storageDescription; not observable end to end while authentication cannot start"
+      },
+      "knownIncompatible": {
+        "solid.login": {
+          "reason": "Solid Nextcloud answers unauthenticated GET, HEAD and PUT requests to protected resources with 403 and no WWW-Authenticate challenge (observed 2026-09-27). The Solid Protocol (HTTP Server) requires 401 when a request lacks valid credentials for a resource that needs them (404 is allowed for security reasons); this library authenticates reactively, only after a 401 challenge, so no login can start",
+          "signature": "answered an unauthenticated request to a protected resource with 403 and no 401/WWW-Authenticate challenge"
+        }
+      }
+    },
+    {
+      "id": "php-local",
+      "name": "PHP Solid Server (pdsinterop/php-solid-server main e8d265c, local container, HTTPS with a test CA)",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "php",
+      "software": {
+        "name": "PHP Solid Server",
+        "version": "main@e8d265cd45c59ef0f02146ad44d52dc5a9cf71f0 (after v0.6.2; last commit 2022-06-15)",
+        "source": "open",
+        "url": "https://github.com/pdsinterop/php-solid-server"
+      },
+      "env": [],
+      "config": {
+        "label": "local PHP Solid Server",
+        "storage": "https://localhost:39444/storage/",
+        "webId": "https://localhost:39444/profile/card#me",
+        "issuer": "https://localhost:39444",
+        "privateResource": "https://localhost:39444/storage/private/data.txt",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "login": {
+          "recipe": "php-password",
+          "username": "alice",
+          "password": "alice-local-only"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "advertised (grant_types_supported) but not observable: authentication cannot start (see knownIncompatible)",
+        "refreshRotation": "not observable: authentication cannot start (see knownIncompatible)",
+        "revocation": "the discovery document has no revocation_endpoint (observed 2026-09-27)",
+        "storageDiscovery": "not observable while authentication cannot start"
+      },
+      "knownIncompatible": {
+        "solid.login": {
+          "reason": "PHP Solid Server e8d265c evaluates WAC only for requests carrying an Origin header (src/Controller/ResourceController.php); other requests, including this Node client's, are served without any authorization (an owner-only resource was returned to an unauthenticated GET, 2026-09-27), and denied browser requests get 403 without a challenge, so a 401-driven client never authenticates",
+          "signature": "served a resource configured as protected to an unauthenticated request"
+        }
+      }
+    },
+    {
+      "id": "manas-local",
+      "name": "Manas 0.1.2 single_fs_wac (released binaries; owner signs in at the local CSS)",
+      "category": "local",
+      "adapter": "solid-oidc",
+      "stack": "manas",
+      "software": {
+        "name": "Manas",
+        "version": "0.1.2 (manas_server_single_fs_wac release binaries, sha256-verified)",
+        "source": "open",
+        "url": "https://github.com/manomayam/manas/releases/tag/v0.1.2"
+      },
+      "env": [],
+      "config": {
+        "label": "local Manas (owner at local CSS)",
+        "storage": "http://localhost:39310/",
+        "webId": "http://localhost:39301/alice/profile/card#me",
+        "issuer": "http://localhost:39301/",
+        "scratchContainer": "http://localhost:39310/",
+        "redirectUri": "http://127.0.0.1:39398/callback",
+        "insecure": true,
+        "login": {
+          "recipe": "css-password",
+          "email": "alice@interop.test",
+          "password": "alice-local-only",
+          "webId": "http://localhost:39301/alice/profile/card#me"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "issued by the local CSS identity provider, but their use against Manas is not observable while its resources never challenge (see knownIncompatible)",
+        "refreshRotation": "not observable while Manas resources never challenge (see knownIncompatible)",
+        "storageDiscovery": "the root is typed pim:Storage with a Solid storageDescription Link (observed), but automatic discovery end to end is not observable while authentication cannot start"
+      },
+      "knownIncompatible": {
+        "solid.login": {
+          "reason": "Manas 0.1.2 answers unauthenticated GET and PUT requests to protected resources with 403 (problem+json 'Not authorized', no WWW-Authenticate); only unauthenticated DELETE gets 401 with a DPoP challenge (observed 2026-09-27). The Solid Protocol (HTTP Server) requires 401 when a request lacks valid credentials for a resource that needs them (404 is allowed for security reasons); this library authenticates reactively, only after a 401 challenge, so it never starts a login here. (RFC 9110 §15.5.4 itself also allows 403 for refusals unrelated to credentials; the comparison is with the Solid Protocol.)",
+          "signature": "answered an unauthenticated request to a protected resource with 403 and no 401/WWW-Authenticate challenge"
+        }
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Google and Microsoft specifics for the credential helper: FIXED official endpoints, the scopes
  * requested and why, OIDC ID-token verification, token exchange/refresh and the explicit
@@ -9,9 +10,11 @@
  * Calendar API calendarList.list; Microsoft identity platform auth-code flow with PKCE, ID token
  * claims, Graph "List calendars".
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createLocalJWKSet, decodeJwt, type JWTPayload, jwtVerify } from "jose";
 import { z } from "zod";
+import { PROVIDER_CALL_TIMEOUT_MS } from "./deadlines.js";
 import { type Grant, HelperError, type Profile } from "./store.js";
 
 // ------------------------------------------------------------------ transport
@@ -24,7 +27,6 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   "https://login.microsoftonline.com",
   "https://graph.microsoft.com",
 ]);
-const CALL_TIMEOUT_MS = 15_000;
 const MAX_BODY = 256 * 1024;
 
 /** One bounded call to an allow-listed origin; JSON answer (or a typed error, never the body). */
@@ -47,20 +49,34 @@ export async function call(
     res = await transport(url, {
       ...init,
       redirect: "error",
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(PROVIDER_CALL_TIMEOUT_MS),
     });
   } catch {
     throw new HelperError("unavailable", `${what}: the provider could not be reached`);
   }
   let text: string;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_BODY)
-      throw new HelperError("unavailable", `${what}: answer too large`);
-    text = new TextDecoder().decode(buf);
+    reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY) {
+        // Cancellation failures must not hide the size limit or expose provider data.
+        await reader.cancel().catch(() => undefined);
+        throw new HelperError("unavailable", `${what}: answer too large`);
+      }
+      chunks.push(value);
+    }
+    text = new TextDecoder().decode(Buffer.concat(chunks, size));
   } catch (error) {
     if (error instanceof HelperError) throw error;
     throw new HelperError("unavailable", `${what}: the answer could not be read`);
+  } finally {
+    reader?.releaseLock();
   }
   let body: unknown;
   try {

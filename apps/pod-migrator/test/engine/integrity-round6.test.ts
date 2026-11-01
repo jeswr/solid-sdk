@@ -2,11 +2,11 @@
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
-import { pods, resolve } from "../../../../packages/pod-access/test/helpers.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { serialize } from "../../src/engine/rdf.js";
 import { readBody, readResourceBytes } from "../../src/engine/resource-body.js";
 import type { PodHttp } from "../../src/engine/types.js";
+import { pods, resolve } from "./helpers.js";
 
 const url = "https://source.example/pod/note.ttl";
 const value = "café 漢字 🌱";

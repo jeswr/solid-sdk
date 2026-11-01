@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-authz-verifier
 
@@ -6,6 +7,11 @@ Fail-closed verification of agent authorization chains composed from signed cred
 
 The package performs no network I/O or RDF parsing. Key control and credential-status checks enter
 only through injected seams, so a decision can be reproduced independently.
+
+Authorization credentials must contain one subject record (a single-element array is
+accepted). Canonical and legacy claim aliases must agree, including action sets after
+deduplication. Bare claim names expand to the legacy namespace. Conflicts, malformed
+aliases, and multiple subject records deny with `BINDING_MISMATCH`.
 
 > Experimental and security-critical. Present the raw fetched policy source text and Content-Type
 > for signed content-digest verification; do not reserialize them first.

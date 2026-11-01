@@ -13,6 +13,8 @@
  * and no bespoke RDF/OAuth. See the README for wiring + the security tradeoffs.
  */
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+
 export {
   buildDpopCustomFetch,
   buildSolidDpopFetch as solidDpopFetch,
@@ -27,6 +29,12 @@ export {
   Solid,
   type SolidProvider,
 } from "./provider.js";
+export {
+  type RefreshSolidSessionOptions,
+  refreshSolidSession,
+  SolidSessionRefreshError,
+  type SolidSessionRefreshErrorCode,
+} from "./refresh.js";
 export {
   type AccountLike,
   extractSolidAuthState,

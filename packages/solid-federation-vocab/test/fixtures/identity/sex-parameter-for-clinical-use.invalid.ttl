@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/core#about
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#SexParameterForClinicalUseShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/SexParameterForClinicalUse-14> a id:SexParameterForClinicalUse;
+    id:assertedBy <https://example.org/fixtures/identity/support-16>;
+    id:assertedAt "2026-11-01T09:00:00Z"^^xsd:dateTime.
+<https://example.org/fixtures/identity/support-15> a core:Person.
+<https://example.org/fixtures/identity/support-16> a core:Agent.

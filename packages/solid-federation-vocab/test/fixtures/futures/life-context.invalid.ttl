@@ -1,0 +1,7 @@
+# expect: https://www.w3.org/ns/activitystreams#content
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#LifeContextShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/LifeContext-11> a fut:LifeContext.

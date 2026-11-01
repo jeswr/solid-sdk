@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/futures#clusterCount
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#ConvergenceMetricsShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/ConvergenceMetrics-23> a fut:ConvergenceMetrics;
+    fut:clusterCount "wrong datatype".

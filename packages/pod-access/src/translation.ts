@@ -1,29 +1,29 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { emptyPolicy, subjectKey } from "./policy.js";
+import { assertResourceScope, emptyPolicy, subjectKey } from "./policy.js";
 import type {
   AccessSystem,
   EffectivePolicy,
   Grant,
   OptionId,
-  PodImplementation,
   ReportItem,
   ReportKind,
   Resolutions,
   Subject,
 } from "./types.js";
-/** Caller-established owners, implementation, group evidence and source provenance. */
+/** Trusted translation inputs and optional provenance for migration decision reports. */
 export interface TranslationContext {
   scopeId?: string;
   sourceRules?: ReadonlyMap<string, string>;
   resourceUrl: string;
   targetOwner: string;
   sourceOwner: string;
-  targetImplementation?: PodImplementation;
+  targetImplementation?: "css" | "ess" | "nss";
   groups: ReadonlyMap<string, readonly string[]>;
   sourceRuleTurtle?: string;
 }
-/** Stable explanations for report decisions, shared with migration callers. */
-const optionDescriptions: Readonly<Record<OptionId, string>> = Object.freeze({
+/** Stable descriptions for the migrator decision options. */
+export const optionDescriptions: Record<OptionId, string> = {
   skip: "Leave this resource or unsupported grant out of the migration.",
   expand: "Grant only the listed current members; future membership changes will not follow.",
   "owner-only": "Copy with access reserved to the target owner.",
@@ -36,8 +36,8 @@ const optionDescriptions: Readonly<Record<OptionId, string>> = Object.freeze({
   "drop-overlapping": "Drop every grant clause that might overlap a denial.",
   abort: "Stop the migration without writing anything.",
   acknowledge: "Acknowledge this information; no decision is required.",
-});
-/** Build a stable report item for a limitation and its safe caller choices. */
+};
+/** Create a stable decision or informational item for a resource and rule suffix. */
 export function reportItem(
   kind: ReportKind,
   resourceUrl: string,
@@ -62,13 +62,17 @@ export function reportItem(
     recommended: options[0] as OptionId,
   };
 }
-/** Pure translation; decisions select only narrowing alternatives. */
+/**
+ * Translate a resource-normalized policy; decisions select only narrowing alternatives.
+ * Select resource and member inputs separately with scopePolicy and restore member scope on output.
+ */
 export function translatePolicy(
   source: EffectivePolicy,
   target: AccessSystem,
   context: TranslationContext,
   resolutions?: Resolutions,
 ): { policy: EffectivePolicy; report: ReportItem[] } {
+  assertResourceScope(source);
   const policy = emptyPolicy();
   const report: ReportItem[] = [];
   const unestablished = (subject: Subject) =>

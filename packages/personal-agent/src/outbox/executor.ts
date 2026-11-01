@@ -82,6 +82,8 @@ export interface ExecutorResult {
   readonly prohibited: number;
   /** Number of intents that failed to send. */
   readonly failed: number;
+  /** Number of final receipt writes that failed, independently of the sent/failed counts. */
+  readonly receiptErrors: number;
   /** Number of proposals skipped (already have a receipt, or lost the claim race). */
   readonly skipped: number;
 }
@@ -92,6 +94,7 @@ const EMPTY_RESULT: ExecutorResult = {
   queuedForConfirmation: 0,
   prohibited: 0,
   failed: 0,
+  receiptErrors: 0,
   skipped: 0,
 };
 
@@ -237,6 +240,7 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
   let queuedForConfirmation = 0;
   let prohibited = 0;
   let failed = 0;
+  let receiptErrors = 0;
   let skipped = 0;
   let outboxAclEnsured = false;
   const ensureOutboxAcl = async () => {
@@ -358,6 +362,9 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       outcome = "failed";
       failed += 1;
     }
+
+    // Transmission determines the outcome. A finalization error must never turn a sent
+    // message into a failed one; the existing claim still prevents any later re-send.
     try {
       await putReceipt(
         config,
@@ -377,8 +384,17 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
     } catch {
       // Persistence cannot change the known transmission outcome. Keep the original claim
       // (or final receipt if the write committed) so a later pass never re-sends it.
+      receiptErrors += 1;
     }
   }
 
-  return { mandateLoaded: true, sent, queuedForConfirmation, prohibited, failed, skipped };
+  return {
+    mandateLoaded: true,
+    sent,
+    queuedForConfirmation,
+    prohibited,
+    failed,
+    receiptErrors,
+    skipped,
+  };
 }

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/suite-ui": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "@solid/reactive-authentication": "file:vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@jeswr/solid-task-model": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@rdfjs/types": "^2.0.1",
     "@tailwindcss/postcss": "^4",

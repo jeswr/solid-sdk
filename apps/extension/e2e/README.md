@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Extension E2E tests
 
 Use Node.js 24 and the workspace lockfile, from the solid-sdk root:
@@ -40,6 +41,21 @@ fetch. Finally, it revokes the first site's access through the side panel, check
 its next captured fetch is denied, and verifies the second site's reads still work.
 The test has its own fresh browser context and creates all its own profiles and
 grants; it does not depend on another spec's state or change shared pod data.
+
+`permission-surfaces.spec.ts` covers populated grant rows (collapsed, expanded, and
+revoke confirmation) and form-fill preview cards (unchecked and checked) at 375, 768,
+and 1280 pixels in both light and dark themes. It signs in and grants access through
+the real extension flows against the seeded local server. Each state checks document
+and container horizontal overflow, attaches a full-page screenshot, and runs browser
+axe WCAG A/AA checks with colour contrast explicitly enabled. Contrast must produce
+passing results with no violations or incomplete contrast checks. The preview is
+cancelled after checking, leaving the site's form untouched.
+
+To run just these browser checks (also included in the normal E2E command):
+
+```sh
+pnpm --filter @jeswr/app-extension run test:e2e -- permission-surfaces.spec.ts
+```
 
 On runners with a read-only home directory, Chromium can fail before any test with
 `chrome_crashpad_handler: --database is required`. The launches disable crash

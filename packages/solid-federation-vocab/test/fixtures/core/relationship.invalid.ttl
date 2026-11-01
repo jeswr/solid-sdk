@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#relatesParty
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#RelationshipShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/Relationship-19> a core:Relationship.
+<https://example.org/fixtures/core/support-20> a core:RelationshipParty.
+<https://example.org/fixtures/core/support-21> a core:RelationshipParty.

@@ -1,11 +1,9 @@
 // AUTHORED-BY Codex GPT-6
-
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { RdfNode } from "../../../../packages/pod-access/src/rdf.js";
-import { pods } from "../../../../packages/pod-access/test/helpers.js";
-import { serialize } from "../../src/engine/rdf.js";
+import { RdfNode, serialize } from "../../src/engine/rdf.js";
 import { targetAccessLinks } from "../../src/engine/target-access.js";
+import { pods } from "./helpers.js";
 
 it("refuses non-child target inventory entries and keeps external profiles outside the credential fence", async () => {
   const { target } = await pods();

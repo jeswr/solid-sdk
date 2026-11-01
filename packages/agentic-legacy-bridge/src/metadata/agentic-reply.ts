@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Deterministic extraction of a peer agent's **`AgenticReply` carrier** (metadata-
  * protocol Rule 1c — `NOW-PERSONAL-AGENT.md` §5.1/§5.4): the inline JSON-LD block
@@ -63,6 +64,24 @@ const ACTION_TYPES: ReadonlyMap<string, string> = new Map(
     [`https://schema.org/${name}`, iri],
   ]),
 );
+
+/** A proof binds an unordered RDF type set, never the order of JSON aliases. */
+function verifiedActionType(subject: unknown): string | undefined {
+  const aliases = [prop(subject, "@type"), prop(subject, "type")].filter(
+    (value) => value !== undefined,
+  );
+  if (aliases.length !== 1) return undefined;
+  const raw = aliases[0];
+  const types = typeof raw === "string" ? [raw] : Array.isArray(raw) ? raw : [];
+  // Reject over-limit sets rather than hiding a conflicting action beyond the cap.
+  if (types.length > 8) return undefined;
+  const actions = types.flatMap((type) => {
+    const iri = typeof type === "string" ? ACTION_TYPES.get(type.trim()) : undefined;
+    return iri === undefined ? [] : [iri];
+  });
+  // Multiple spellings of the same action are also ambiguous aliases.
+  return actions.length === 1 ? actions[0] : undefined;
+}
 
 /** The verdict an injected verifier returns. Anything but `verified: true` fails closed. */
 export interface AgenticReplyVerification {
@@ -303,6 +322,7 @@ export async function extractAgenticReply(
         verified = false;
       }
     }
+    if (verified && verifiedActionType(prop(root, "credentialSubject")) === undefined) continue;
     if (verified) {
       anyVerified = true;
       verifiedIssuer ??= issuer;

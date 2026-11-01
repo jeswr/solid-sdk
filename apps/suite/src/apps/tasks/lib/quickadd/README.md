@@ -31,6 +31,12 @@ Calendar dates use the injected zone, never the machine zone. Nonexistent DST wa
 in the title with no due/span; repeated times choose the earlier instant. An explicit numeric or
 named timezone recognised by chrono overrides the injected zone for that phrase's instant.
 
+`this week <weekday>` resolves a single named weekday within the injected calendar's
+Sunday-based week, including dates earlier than today; an optional time and explicit zone
+are supported. Unqualified `this week`, `this month` and `this year` still use their period
+boundaries. Unsupported merged week qualifiers (such as multiple weekdays or a relative
+weekday modifier) throw `RangeError` rather than silently dropping the qualifier.
+
 Anchored offsets (`2 hours before 5pm`, `2 days after Monday`, `5pm +2 hours`) remain literal.
 When an unmasked offset has an anchor, the parser leaves all deadline text in that input unparsed
 and does not parse recurrence or infer a due date; metadata tokens still parse.

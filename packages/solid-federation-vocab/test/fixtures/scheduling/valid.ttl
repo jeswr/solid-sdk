@@ -1,0 +1,33 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the scheduling profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/CalendarEvent-1> a sched:CalendarEvent;
+    sched:summary "Fixture";
+    sched:startTime "2026-11-01"^^xsd:date;
+    sched:endTime "2026-11-01"^^xsd:date;
+    sched:organizer <https://example.org/fixtures/scheduling/support-2>.
+<https://example.org/fixtures/scheduling/support-2> a core:Agent.
+<https://example.org/fixtures/scheduling/Task-3> a sched:Task;
+    sched:summary "Fixture".
+<https://example.org/fixtures/scheduling/Calendar-4> a sched:Calendar;
+    dcterms:title "Fixture".
+<https://example.org/fixtures/scheduling/Attendance-5> a sched:Attendance;
+    sched:attendanceFor <https://example.org/fixtures/scheduling/support-6>;
+    sched:hasAttendee <https://example.org/fixtures/scheduling/support-8>;
+    sched:attendanceStatus <https://example.org/fixtures/scheduling/support-9>.
+<https://example.org/fixtures/scheduling/support-6> a sched:CalendarEvent;
+    sched:summary "Fixture";
+    sched:startTime "2026-11-01"^^xsd:date;
+    sched:endTime "2026-11-01"^^xsd:date;
+    sched:organizer <https://example.org/fixtures/scheduling/support-7>.
+<https://example.org/fixtures/scheduling/support-8> a core:Agent.
+<https://example.org/fixtures/scheduling/support-9> a sched:AttendanceStatus.
+<https://example.org/fixtures/scheduling/support-7> a core:Agent.
+<https://example.org/fixtures/scheduling/RecurrenceRule-10> a sched:RecurrenceRule;
+    sched:frequency "Fixture".
+<https://example.org/fixtures/scheduling/Reminder-11> a sched:Reminder.

@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { parent } from "./rdf.js";
+import { modes, parent } from "./rdf.js";
 import type {
   AccessDocument,
   AccessSystem,
@@ -9,14 +10,11 @@ import type {
   PodImplementation,
   Subject,
 } from "./types.js";
-
-// Proof coverage and owner permissions must never depend on a caller-visible collection.
-const proofModes: readonly Mode[] = Object.freeze(["read", "append", "write", "control"]);
-/** Create a deny-all policy with no grants or denials. */
+/** Return a policy with no grants or denials. */
 export function emptyPolicy(): EffectivePolicy {
   return { grants: [], denials: [] };
 }
-/** Select rules for resource or member scope and normalize them to resource scope. */
+/** Select resource or member rules and normalize them to resource scope. */
 export function scopePolicy(
   policy: EffectivePolicy,
   scope: "resource" | "members",
@@ -27,7 +25,13 @@ export function scopePolicy(
       .map((rule) => ({ ...rule, appliesTo: "resource" as const }));
   return { grants: select(policy.grants), denials: select(policy.denials) };
 }
-/** Combine grants and denials without discarding any restriction. */
+/** Require a selected, resource-normalized scope before translation or proof. @internal */
+export function assertResourceScope(policy: EffectivePolicy): void {
+  for (const rule of [...policy.grants, ...policy.denials])
+    if (rule.appliesTo !== "resource")
+      throw new TypeError("Policy must be normalized with scopePolicy before translation or proof");
+}
+/** Combine rules without discarding denials or evaluating their conditions. */
 export function unionPolicies(...policies: EffectivePolicy[]): EffectivePolicy {
   return { grants: policies.flatMap((p) => p.grants), denials: policies.flatMap((p) => p.denials) };
 }
@@ -60,12 +64,12 @@ export function effectivePolicy(
   }
   return unionPolicies(...found);
 }
-/** Create an explicit all-mode owner grant, optionally covering descendants. */
+/** Grant all modes to one owner, optionally including descendants. */
 export function ownerPolicy(webId: string, members = false): EffectivePolicy {
   return {
     grants: [
       {
-        modes: new Set(proofModes),
+        modes: new Set(modes),
         who: [[{ kind: "agent", webId }]],
         except: [],
         appliesTo: members ? "both" : "resource",
@@ -75,7 +79,7 @@ export function ownerPolicy(webId: string, members = false): EffectivePolicy {
     denials: [],
   };
 }
-/** Compose policies applying to descendants; WAC replaces, ACP adds. */
+/** Compose descendant defaults using WAC replacement or ACP additive inheritance. */
 export function effectiveMembers(
   system: AccessSystem,
   url: string,
@@ -94,7 +98,7 @@ export function effectiveMembers(
   }
   return unionPolicies(...found);
 }
-/** Encode RDF subject identity independently of JavaScript property ordering. */
+/** Produce a stable symbolic key for a principal or condition. */
 export function subjectKey(subject: Subject): string {
   switch (subject.kind) {
     case "agent":
@@ -113,7 +117,7 @@ export function subjectKey(subject: Subject): string {
       return subject.kind;
   }
 }
-/** Trusted owner identities and publicly established group membership evidence. */
+/** Trusted owner identities and public group snapshots used by the symbolic proof. */
 export interface ProofContext {
   sourceOwner?: string;
   targetOwner?: string;
@@ -129,12 +133,17 @@ function or(values: Tri[]): Tri {
 function not(value: Tri): Tri {
   return value === undefined ? undefined : !value;
 }
-/** A bounded exhaustive symbolic implication check. Unknown/group conditions stay symbolic. */
+/**
+ * Prove implication between resource-normalized policies for the same selected scope.
+ * Call scopePolicy separately for resource and member proofs. Unknown/group conditions stay symbolic.
+ */
 export function assertNotWider(
   source: EffectivePolicy,
   target: EffectivePolicy,
   context: ProofContext = {},
 ): void {
+  assertResourceScope(source);
+  assertResourceScope(target);
   const variables = new Map<string, Subject>();
   const assignment = new Map<string, boolean>();
   function subjectValue(subject: Subject, side: "source" | "target"): Tri {
@@ -186,7 +195,7 @@ export function assertNotWider(
       }
     return true;
   }
-  for (const mode of proofModes) {
+  for (const mode of modes) {
     variables.clear();
     assignment.clear();
     budget = 65536;
@@ -211,7 +220,7 @@ export function assertNotWider(
     if (counterexample()) throw new TypeError(`Planned policy widens ${mode} access`);
   }
 }
-/** Prove mutual containment; return false on widening or excessive complexity. */
+/** Check normalized policies in both directions; return false for invalid scopes or failed proofs. */
 export function policiesEqual(
   a: EffectivePolicy,
   b: EffectivePolicy,

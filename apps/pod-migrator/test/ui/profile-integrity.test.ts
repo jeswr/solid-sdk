@@ -2,9 +2,8 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
-import { RdfNode } from "../../../../packages/pod-access/src/rdf.js";
 import { PodConnection } from "../../src/auth/connections.js";
-import { serialize } from "../../src/engine/rdf.js";
+import { RdfNode, serialize } from "../../src/engine/rdf.js";
 import { fakeAuth, profileTurtle, sourceRoot, sourceWebId } from "./fixtures.js";
 
 it.each([

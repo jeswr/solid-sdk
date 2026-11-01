@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type ProviderEnvironment, zonedToUtc } from "./providers/common.js";
+import { type ProviderEnvironment, zonedToUtc, zonedToUtcChecked } from "./providers/common.js";
 import {
   type AccessTokenProvider,
   CredentialError,
@@ -136,8 +137,8 @@ describe("Google freeBusy adapter", () => {
     expect(minimal.get("primary")).toMatchObject({ ok: true });
   });
 
-  it("credential problems are needs-setup (revoked) or blocked (unavailable), never free", async () => {
-    const failing = (code: "revoked" | "unavailable"): AccessTokenProvider => ({
+  it("credential problems are needs-setup (revoked) or blocked (unavailable/timeout), never free", async () => {
+    const failing = (code: "revoked" | "unavailable" | "timeout"): AccessTokenProvider => ({
       getAccessToken: async () => {
         throw new CredentialError(code, `helper says ${code}`);
       },
@@ -146,6 +147,7 @@ describe("Google freeBusy adapter", () => {
     for (const [code, status] of [
       ["revoked", "needs-setup"],
       ["unavailable", "blocked"],
+      ["timeout", "blocked"],
     ] as const) {
       const r = await googleFreeBusy(
         env(f, failing(code)),
@@ -492,7 +494,7 @@ describe("credential supply (separable, no stored tokens)", () => {
     const hang = Date.now();
     await expect(
       runHelper(process.execPath, [script("setInterval(() => {}, 1000)")], {}, 300),
-    ).rejects.toMatchObject({ code: "unavailable", message: expect.stringMatching(/in time/) });
+    ).rejects.toMatchObject({ code: "timeout", message: expect.stringMatching(/in time/) });
     expect(Date.now() - hang).toBeLessThan(5000);
     await expect(
       runHelper(process.execPath, [script('process.stdout.write("x".repeat(100000))')], {}),
@@ -660,6 +662,53 @@ describe("review counterexamples (independently reproduced) and related boundari
       ok: true,
       busy: [{ start: "2026-11-01T05:30:00.000Z", end: "2026-11-01T06:45:00.000Z" }],
     });
+  });
+
+  it("widens busy times across Lord Howe's thirty-minute repeated interval", async () => {
+    expect(
+      new Date(
+        zonedToUtcChecked("2026-04-05", 105, "Australia/Lord_Howe", "earliest") as number,
+      ).toISOString(),
+    ).toBe("2026-04-04T14:45:00.000Z");
+    expect(
+      new Date(
+        zonedToUtcChecked("2026-04-05", 105, "Australia/Lord_Howe", "latest") as number,
+      ).toISOString(),
+    ).toBe("2026-04-04T15:15:00.000Z");
+    const result = await microsoftCalendarView(
+      env(
+        vi.fn(async () =>
+          json({
+            value: [
+              {
+                showAs: "busy",
+                start: { dateTime: "2026-04-05T01:45:00", timeZone: "Australia/Lord_Howe" },
+                end: { dateTime: "2026-04-05T01:50:00", timeZone: "Australia/Lord_Howe" },
+              },
+            ],
+          }),
+        ),
+      ),
+      {
+        connectionId: "m",
+        calendarId: "primary",
+        window: { start: "2026-04-04T00:00:00Z", end: "2026-04-06T00:00:00Z" },
+        ownerTimeZone: "Australia/Lord_Howe",
+      },
+      at,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      busy: [{ start: "2026-04-04T14:45:00.000Z", end: "2026-04-04T15:20:00.000Z" }],
+    });
+  });
+
+  it.each([
+    "earliest",
+    "latest",
+  ] as const)("rejects Lord Howe's skipped half-hour and Samoa's skipped day (%s)", (prefer) => {
+    expect(zonedToUtcChecked("2026-10-04", 135, "Australia/Lord_Howe", prefer)).toBeUndefined();
+    expect(zonedToUtcChecked("2011-12-30", 720, "Pacific/Apia", prefer)).toBeUndefined();
   });
 
   it("the adapter boundary refuses malformed or expired token expiry from any credential provider", async () => {

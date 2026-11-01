@@ -179,24 +179,27 @@ function isTokenEndpointLeg(input: URL | RequestInfo, init: RequestInit | undefi
   return ct?.toLowerCase().includes("application/x-www-form-urlencoded") === true;
 }
 
-/** True iff a 4xx response is the RFC 9449 §8 `use_dpop_nonce` challenge (header or body error). */
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** True iff a 4xx token response explicitly reports the RFC 9449 §8 `use_dpop_nonce` error. */
 async function isUseDpopNonceChallenge(res: Response): Promise<boolean> {
   if (res.status < 400 || res.status >= 500) {
     return false;
   }
-  // The canonical signal is a `DPoP-Nonce` header. RFC 9449 §8 also defines an
-  // `error":"use_dpop_nonce"` body for the token endpoint; treat either as the challenge.
-  if (res.headers.get("dpop-nonce")) {
-    return true;
-  }
+  // A nonce header alone is not an instruction to replay a grant: an AS can send one on any
+  // response. In particular, never replay invalid_grant (a rotated refresh token may be single-use).
   try {
     const cloned = res.clone();
     const text = await cloned.text();
     if (text.length === 0) {
       return false;
     }
-    const parsed = JSON.parse(text) as { error?: unknown };
-    return parsed.error === "use_dpop_nonce";
+    const parsed: unknown = JSON.parse(text);
+    return (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "error" in parsed &&
+      parsed.error === "use_dpop_nonce"
+    );
   } catch {
     return false;
   }
@@ -209,11 +212,14 @@ async function isUseDpopNonceChallenge(res: Response): Promise<boolean> {
  * @param underlying    the base fetch Auth.js passes its requests to (the global `fetch`, or an
  *                      injected SSRF-guarded / test fetch).
  * @param allowInsecure permit http: on loopback (dev OP). Default false (https-only).
+ * @param nonceState    optional caller-owned nonce for a single authorization server; seeds proofs
+ *                      and receives the latest nonempty token-response nonce, including on retry.
  */
 export function buildDpopCustomFetch(
   keyPair: DpopKeyPair,
   underlying: FetchLike,
   allowInsecure: boolean,
+  nonceState?: { nonce: string | undefined },
 ): typeof fetch {
   // SECURITY (redirect refusal): the token-endpoint leg is CREDENTIALED — it carries the DPoP proof
   // plus the authorization code and, for a confidential client, the client secret. Wrap the
@@ -242,7 +248,7 @@ export function buildDpopCustomFetch(
 
     // The token-endpoint proof carries NO `ath` (RFC 9449 §4.2 — there is no access token being
     // presented yet). A fresh `jti` per proof (solid-dpop) makes it single-use.
-    const send = async (nonce?: string): Promise<Response> => {
+    const send = async (nonce = nonceState?.nonce): Promise<Response> => {
       const proof = await createDpopProof(
         nonce === undefined
           ? { keyPair, htm: method, htu: url }
@@ -261,7 +267,12 @@ export function buildDpopCustomFetch(
       // oauth4webapi sends the body in `init.body` (a URLSearchParams string) — a small, replayable
       // value, so the §8 retry can resend it as-is. We forward `init` unchanged but with our headers.
       // `tokenLegFetch` refuses redirects (see above) so this credentialed request never follows a 3xx.
-      return tokenLegFetch(url, { ...(init ?? {}), method, headers });
+      const response = await tokenLegFetch(url, { ...(init ?? {}), method, headers });
+      const nextNonce = response.headers.get("dpop-nonce");
+      if (nonceState && nextNonce) {
+        nonceState.nonce = nextNonce;
+      }
+      return response;
     };
 
     const res = await send();

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 import { z } from "zod";
 
 /** Passed to the later usePreferences('drive', schema) adapter; no persistence here. */
@@ -8,6 +9,11 @@ export const drivePreferencesSchema = z.object({
     .array(
       z.object({
         url: z.url({ protocol: /^https?$/ }),
+        name: z.string().optional(),
+        type: z.enum(["file", "folder"]).optional(),
+        contentType: z.string().optional(),
+        size: z.number().int().nonnegative().optional(),
+        modified: z.iso.datetime({ offset: true }).optional(),
         openedAt: z.iso.datetime({ offset: true }),
       }),
     )

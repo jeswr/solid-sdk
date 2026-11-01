@@ -12,6 +12,7 @@
  * leaves the old or the new file, never a partial one. Nothing here searches for credentials
  * elsewhere (no keychains, browser profiles or password managers).
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -32,6 +33,7 @@ import { isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { parseRfc3339 } from "../actions/providers/common.js";
+import { PROFILE_LOCK_WAIT_MS } from "./deadlines.js";
 
 export class HelperError extends Error {
   constructor(
@@ -339,7 +341,7 @@ export class CredentialStore {
   ): Promise<T> {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     const path = join(this.dir, "locks", `${name}.lock`);
-    const deadline = Date.now() + (opts.waitMs ?? 20_000);
+    const deadline = Date.now() + (opts.waitMs ?? PROFILE_LOCK_WAIT_MS);
     const staleMs = opts.staleMs ?? 60_000;
     for (;;) {
       try {

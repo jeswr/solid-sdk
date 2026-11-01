@@ -1,15 +1,16 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Migration engine safety notes
+
+The offline WAC/ACP readers, writers, translation, policy model, inheritance and access proof
+implementation live in `@jeswr/pod-access`. Local policy/translation/system modules preserve the
+engine imports through compatibility exports. HTTP, review, planning and execution stay here.
 
 The public contract is `index.ts`. `planMigration` performs reads only. `finalizePlan` requires
 an explicit valid choice for every decision item and proves the resulting access policies do
 not widen access. Executable plans carry a private snapshot, are bound to the original two
 sessions, and are single-use. Downloaded JSON is a report, not a resumable executable plan.
-
-The policy model, proof, translation and dialect implementations are provided by
-[`@jeswr/pod-access`](../../../../packages/pod-access/README.md). The engine retains pod I/O
-and migration orchestration.
 
 The offline CSS 7.2 and `@solid/access-control-policy` implementations resolve ambiguities in
 DESIGN.md as follows. These notes are colocated with the engine and reflected in the design document.
@@ -27,7 +28,7 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   modes activate; inactive `acl:*` or other modes are reported with skip/abort. Denials
   retain both vocabularies. ESS denial exemptions requiring unestablished issuer/VC
   enforcement are removed in the source reader, independently of target support.
-  Conflicting ESS member-policy documentation is intersected: explicit own policies
+  Conflicting ESS member-policy documentation is intersected: explicit own grants
   suppress ancestor member grants, while ancestor denials always apply. CSS sources
   and every target proof retain additive ACP semantics. ESS→ACP materializes controls
   per resource with an inheritance-narrowed decision, so target member grants cannot
@@ -48,14 +49,14 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
 - CSS 7.2 uses ACL mode IRIs and resource Control. Its configured `AuthAuxiliaryReader` derives
   ACR access from that Control; ACR-self Read/Write and `acp:access` do not grant resource Control.
   ESS source forms are accepted only with independently established ESS semantics, documented in
-  `packages/pod-access/src/systems/acp.ts`. `PodSide.implementation` is a trusted caller assertion, never inferred from
+  `systems/acp.ts`. `PodSide.implementation` is a trusted caller assertion, never inferred from
   editable RDF or mode IRIs. ACP target writes without established CSS/ESS semantics abort.
   The browser establishes ESS from the selected HTTPS `*.inrupt.com` storage host;
   an identity provider's issuer cannot identify the storage implementation. CSS/NSS require an exposed root
   `X-Powered-By` header. Login/page input and RDF claims cannot set implementation. Unknown
   sources retain conservative readings; unknown ACP targets explain the refusal and abort.
   Live PodSpaces behavior still needs account testing. Its ACP-namespace modes, typed ACR
-  roots and ACR-self/`acp:access` Control handling remain isolated in `packages/pod-access/src/systems/acp.ts`.
+  roots and ACR-self/`acp:access` Control handling remain isolated in `systems/acp.ts`.
   ESS folder locks use `acp:memberAccess` for descendant Control as well as `acp:access`
   for resource Control. Resource Control mode grants are inactive on ESS.
 - **Writing TARGET:** never rely on a condition the target might not enforce. CSS 7.2's configured
@@ -65,7 +66,7 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   emit `acl:default`, and CSS ACP output uses resource Control without ineffective ACR-self or
   `acp:access` grants. Target reads reject ambiguous denials and role matchers rather than relying
   on them to mask actual grants. Only CSS 7.2 source-established enforcement or the explicitly
-  selected ESS behavior in `packages/pod-access/src/systems/acp.ts` may be emitted.
+  selected ESS behavior in `systems/acp.ts` may be emitted.
 - CSS applies Write→Append implication after ACP denial subtraction. Source denials remain
   conservative; output denials of either Write or Append cover both. Existing target denials
   of just one are refused because their derived Append behavior needs a richer neutral model.

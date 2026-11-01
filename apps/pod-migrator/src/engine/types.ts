@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { AccessSystem, PodImplementation, ReportItem, Resolutions } from "@jeswr/pod-access";
+import type { AccessSystem, ReportItem, Resolutions } from "@jeswr/pod-access";
 
 export type {
   AccessDocument,
@@ -9,7 +10,6 @@ export type {
   Grant,
   Mode,
   OptionId,
-  PodImplementation,
   ReportItem,
   ReportKind,
   ReportOption,
@@ -34,7 +34,7 @@ export interface PodSide {
   /** Same pod fence over auth-core.publicFetch; never an authenticated fallback. */
   publicHttp?: PodHttp;
   /** Established by the caller independently of editable access RDF; never inferred from mode IRIs. */
-  implementation?: PodImplementation;
+  implementation?: "css" | "ess" | "nss";
 }
 export interface PlannedResource {
   sourceUrl: string;

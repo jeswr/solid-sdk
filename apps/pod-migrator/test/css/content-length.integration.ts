@@ -2,7 +2,6 @@
 import { once } from "node:events";
 import { createConnection } from "node:net";
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -14,7 +13,9 @@ import {
   type PodSide,
   planMigration,
 } from "../../src/engine/index.js";
+import { ownerPolicy } from "../../src/engine/policy.js";
 import { serialize } from "../../src/engine/rdf.js";
+import { writeWac } from "../../src/engine/systems/wac.js";
 import { type CssAccount, createAccount } from "./account.js";
 import { ownerRule, putFixture, setAccess } from "./fixtures.js";
 import { accessLink, appendProbeBody } from "./probe.js";

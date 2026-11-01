@@ -2,15 +2,14 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: { alias: { "@jeswr/pod-access": new URL("./src/index.ts", import.meta.url).pathname } },
   test: {
     environment: "node",
     globals: false,
-    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     coverage: {
       enabled: true,
       provider: "v8",
-      reporter: ["text", "json-summary"],
+      reporter: ["text", "json-summary", "json"],
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
       thresholds: {

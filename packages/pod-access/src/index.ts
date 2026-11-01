@@ -1,24 +1,50 @@
-// AUTHORED-BY Codex GPT-6
-/** Trusted evidence used by symbolic containment proofs. */
-export type { ProofContext } from "./policy.js";
-/** Effective resource/member policies and bounded, never-widen implication proofs. */
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Dialect-aware WAC/ACP parsing, serialization, translation and narrowing proofs. */
 export {
   assertNotWider,
   effectiveMembers,
   effectivePolicy,
   emptyPolicy,
   ownerPolicy,
+  type ProofContext,
   policiesEqual,
   scopePolicy,
+  subjectKey,
   unionPolicies,
 } from "./policy.js";
-export type { AcpDialect } from "./systems/acp.js";
-/** ACP reader/writer with separate source and existing-target interpretations. */
-export { isPolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
-/** WAC reader/writer with explicit CSS/NSS implementation handling. */
+export {
+  ACL,
+  ACP,
+  FOAF,
+  modeIri,
+  modes,
+  parent,
+  RDF,
+  RdfNode,
+  readModes,
+  safeIri,
+  serialize,
+} from "./rdf.js";
+export { type AcpDialect, PolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
 export { readWac, writeWac } from "./systems/wac.js";
-export type { TranslationContext } from "./translation.js";
-/** Pure policy translation; reports every omitted or conservatively narrowed construct. */
-export { reportItem, translatePolicy } from "./translation.js";
-/** Neutral model, reports and caller-selected narrowing decisions. */
-export type * from "./types.js";
+export {
+  optionDescriptions,
+  reportItem,
+  type TranslationContext,
+  translatePolicy,
+} from "./translation.js";
+export type {
+  AccessDocument,
+  AccessSystem,
+  Denial,
+  EffectivePolicy,
+  Grant,
+  Mode,
+  OptionId,
+  PodImplementation,
+  ReportItem,
+  ReportKind,
+  ReportOption,
+  Resolutions,
+  Subject,
+} from "./types.js";

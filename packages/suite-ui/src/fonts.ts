@@ -1,24 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Onest, Source_Code_Pro, Source_Serif_4 } from "next/font/google";
+import localFont from "next/font/local";
 
-export const onest = Onest({
-  subsets: ["latin", "latin-ext"],
+export const onest = localFont({
+  src: "./font-assets/onest/Onest-Variable.woff2",
   display: "swap",
-  weight: "variable",
+  weight: "100 900",
+  style: "normal",
   variable: "--font-onest",
   fallback: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
 });
-export const sourceSerif = Source_Serif_4({
-  subsets: ["latin", "latin-ext"],
+export const sourceSerif = localFont({
+  src: "./font-assets/source-serif-4/SourceSerif4-Variable.woff2",
   display: "swap",
-  axes: ["opsz"],
+  weight: "200 900",
+  style: "normal",
+  adjustFontFallback: "Times New Roman",
   variable: "--font-source-serif",
   fallback: ["Georgia", "serif"],
 });
-export const sourceCode = Source_Code_Pro({
-  subsets: ["latin", "latin-ext"],
+export const sourceCode = localFont({
+  src: [
+    { path: "./font-assets/source-code-pro/SourceCodePro-Regular.woff2", weight: "400" },
+    { path: "./font-assets/source-code-pro/SourceCodePro-Semibold.woff2", weight: "600" },
+  ],
   display: "swap",
-  weight: ["400", "600"],
+  style: "normal",
   variable: "--font-source-code",
   fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
 });

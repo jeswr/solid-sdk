@@ -1,21 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 import { gzipSync } from "node:zlib";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { writeAcp } from "@jeswr/pod-access";
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
-import {
-  acl,
-  grant,
-  pods,
-  resolve,
-  stranger,
-} from "../../../../packages/pod-access/test/helpers.js";
 import { detectAccessSystem, readAccess } from "../../src/engine/access.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { serialize } from "../../src/engine/rdf.js";
 import { readResourceBytes } from "../../src/engine/resource-body.js";
+import { writeAcp } from "../../src/engine/systems/acp.js";
+import { acl, grant, pods, resolve, stranger } from "./helpers.js";
 
 async function turtle(value: string): Promise<string> {
   const dataset = new Store();

@@ -1,9 +1,9 @@
-// AUTHORED-BY Codex GPT-6
-/** Access-control language, independent of the server implementation. */
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Detected access-control model; unknown requires caller handling. */
 export type AccessSystem = "wac" | "acp" | "unknown";
-/** Trusted server implementation established independently of editable RDF. */
+/** Independently established server dialect; never infer this from editable RDF. */
 export type PodImplementation = "css" | "ess" | "nss";
-/** Stable report categories retained by policy translation and its migration callers. */
+/** Existing migrator report categories, retained for consumer compatibility. */
 export type ReportKind =
   | "group-unsupported"
   | "origin-unsupported"
@@ -20,7 +20,7 @@ export type ReportKind =
   | "protected-target"
   | "metadata-skipped"
   | "too-complex";
-/** Caller decisions; translation offers only safe narrowing alternatives. */
+/** Existing migrator decision identifiers; the caller validates resolutions. */
 export type OptionId =
   | "skip"
   | "expand"
@@ -31,13 +31,13 @@ export type OptionId =
   | "drop-overlapping"
   | "abort"
   | "acknowledge";
-/** A narrowing decision with human-readable label and consequence. */
+/** A labeled migration decision and its explanation. */
 export interface ReportOption {
   id: OptionId;
   label: string;
   description: string;
 }
-/** A policy limitation with provenance and explicit caller choices. */
+/** Stable, resource-scoped translation report with available narrowing decisions. */
 export interface ReportItem {
   id: string;
   kind: ReportKind;
@@ -49,11 +49,11 @@ export interface ReportItem {
   options: ReportOption[];
   recommended: OptionId;
 }
-/** Selections indexed by stable report item ID. */
+/** Caller-selected options indexed by stable report item ID. */
 export type Resolutions = Readonly<Record<string, OptionId>>;
-/** Solid access mode; normalized reads include Append whenever Write is granted. */
+/** Neutral access modes used by translation and symbolic proofs. */
 export type Mode = "read" | "append" | "write" | "control";
-/** One symbolic identity or condition in a grant conjunction. */
+/** A principal or condition atom; clauses conjoin atoms and rules disjoin clauses. */
 export type Subject =
   | { kind: "agent"; webId: string }
   | { kind: "public" }
@@ -65,7 +65,7 @@ export type Subject =
   | { kind: "issuer"; issuer: string }
   | { kind: "vc"; vcType: string }
   | { kind: "origin"; origin: string };
-/** A scoped disjunction of subject conjunctions, with exclusions and provenance. */
+/** A scoped conditional rule with source document provenance. */
 export interface Grant {
   modes: Set<Mode>;
   who: Subject[][];
@@ -73,16 +73,16 @@ export interface Grant {
   appliesTo: "resource" | "members" | "both";
   source: { url: string; node: string };
 }
-/** A scoped rule that subtracts access using the same normal form as a grant. */
+/** A restriction with the same condition and scope structure as a grant. */
 export type Denial = Grant;
-/** Grant/denial normal form after parsing or effective-policy composition. */
+/** Neutral grants and denials, optionally recording explicit own ACP policies. */
 export interface EffectivePolicy {
   grants: Grant[];
   denials: Denial[];
   /** An ACP document attached at least one policy that can apply to the resource itself. */
   explicit?: boolean;
 }
-/** Caller-supplied access representation, parsed policy, validator and provenance. */
+/** A read access-control snapshot and its validator, supplied by the caller. */
 export interface AccessDocument {
   policy: EffectivePolicy;
   url: string;

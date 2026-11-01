@@ -3,6 +3,7 @@ name: solid-elements
 description: Use when building or consuming @jeswr/solid-elements Lit web components, React wrappers, shared theme/account/feedback/status chrome, custom events and reflected attributes, or its optional Solid login adapter.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/solid-elements`
 
@@ -13,6 +14,11 @@ Keep the root package presentation-oriented: custom elements receive attributes/
 - Import `@jeswr/solid-elements` to register the `jeswr-*` custom elements.
 - Import `@jeswr/solid-elements/react` for React wrappers.
 - Import `@jeswr/solid-elements/auth` only when using its optional auth adapter, and install every optional peer it requires. Prefer `@jeswr/solid-auth-core` for new shared auth logic.
+
+For proactive auth, `deriveProactiveAllowedOrigins` excludes the issuer origin by default;
+only `includeIssuerOrigin: true` opts in. A pod hosted on the issuer origin remains allowed
+through `podRoot`. Use `includeWebIdOrigin: false` if the WebID document is not served by
+the pod. The separate `computeAllowedOrigins` default still includes the issuer.
 
 Use the documented tags for theme toggle, account menu, feedback, login, empty/error/loading states, and saving status. Prefer DOM attributes for string configuration; set function/object seams such as `submit` or `controller` as properties.
 

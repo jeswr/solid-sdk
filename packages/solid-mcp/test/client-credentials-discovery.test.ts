@@ -494,6 +494,8 @@ describe("anonymous WebID profile redirects", () => {
         contentType: "text/turtle",
         body: `<#registration> <${solid}instance> <${instance}> .`,
       },
+      // Search reports a hinted instance only after the caller can read it.
+      [instance]: { contentType: "text/turtle", body: "" },
     });
     const profiles: string[] = [];
     const authenticated: string[] = [];
@@ -558,6 +560,8 @@ describe("in-pod WebID profile redirects", () => {
         contentType: "text/turtle",
         body: `<#registration> <${solid}instance> <${instance}> .`,
       },
+      // Search reports a hinted instance only after the caller can read it.
+      [instance]: { contentType: "text/turtle", body: "" },
     });
     const urls: string[] = [];
     const proofs: string[] = [];
@@ -574,7 +578,7 @@ describe("in-pod WebID profile redirects", () => {
     expect(await search({ ...config, fetch, webId }, "favorite")).toEqual([
       { url: instance, name: "favorite.ttl", snippet: "type-index instance" },
     ]);
-    expect(urls).toEqual([webId, card, index, POD]);
+    expect(urls).toEqual([webId, card, index, instance, POD]);
     expect(new Set(proofs).size).toBe(urls.length);
     expect(css.stats.tokens).toBe(1);
   });
@@ -594,6 +598,7 @@ describe("in-pod WebID profile redirects", () => {
       },
       [webId]: { contentType: "text/turtle", body: "", redirectTo: "profile/card" },
       [card]: { contentType: "text/turtle", body: "", redirectTo: location },
+      [`${POD}favorite.txt`]: { contentType: "text/plain", body: "" },
     });
     const fetch = await createCliFetch(config, async (input, init) => {
       const request = new Request(input, init);
@@ -604,7 +609,7 @@ describe("in-pod WebID profile redirects", () => {
     expect(await search({ ...config, fetch, webId }, "favorite")).toEqual([
       { url: `${POD}favorite.txt`, name: "favorite.txt", snippet: "name/url match" },
     ]);
-    expect(urls).toEqual([webId, card, POD]);
+    expect(urls).toEqual([webId, card, POD, `${POD}favorite.txt`]);
   });
 
   it("bounds an in-pod profile redirect chain and falls back to the pod scan", async () => {

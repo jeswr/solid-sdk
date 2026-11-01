@@ -2,9 +2,8 @@
 import { LiteralFrom, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
-import { FOAF, RdfNode } from "../../../../packages/pod-access/src/rdf.js";
 import { PodConnection } from "../../src/auth/connections.js";
-import { serialize } from "../../src/engine/rdf.js";
+import { FOAF, RdfNode, serialize } from "../../src/engine/rdf.js";
 import { fakeAuth, sourceRoot, sourceWebId } from "./fixtures.js";
 
 it.each([

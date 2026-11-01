@@ -1,9 +1,5 @@
-// AUTHORED-BY Codex GPT-6
-
-import type { EffectivePolicy, Grant, Resolutions, Subject } from "@jeswr/pod-access";
-import { ownerPolicy, unionPolicies, writeAcp, writeWac } from "@jeswr/pod-access";
-import type { MigrationPlan } from "../../../apps/pod-migrator/src/engine/types.js";
-import { FakePod } from "./fake-pod.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { EffectivePolicy, Grant, Subject } from "../src/types.js";
 export const stranger = "https://people.example/stranger#me";
 export function grant(
   who: Subject[][] = [[{ kind: "public" }]],
@@ -23,32 +19,4 @@ export function grant(
 }
 export function policy(...grants: Grant[]): EffectivePolicy {
   return { grants, denials: [] };
-}
-export async function acl(
-  pod: FakePod,
-  resource: string,
-  extra = policy(),
-  members = resource.endsWith("/"),
-): Promise<string> {
-  const model = unionPolicies(ownerPolicy(pod.owner, members), extra);
-  return pod.system === "wac"
-    ? writeWac(model, resource, pod.acl(resource))
-    : writeAcp(model, resource, pod.acl(resource), pod.implementation === "ess" ? "ess" : "css");
-}
-export async function pods(
-  from: "wac" | "acp" = "wac",
-  to: "wac" | "acp" = "acp",
-): Promise<{ source: FakePod; target: FakePod }> {
-  const source = new FakePod("https://shared.example/alice/", from);
-  const target = new FakePod("https://shared.example/bob/", to);
-  await source.initialize(await acl(source, source.root));
-  await target.initialize(await acl(target, target.root));
-  return { source, target };
-}
-export function resolve(plan: MigrationPlan, overrides: Record<string, string> = {}): Resolutions {
-  return Object.fromEntries(
-    plan.report
-      .filter((item) => item.severity === "needs-decision")
-      .map((item) => [item.id, overrides[item.kind] ?? item.recommended]),
-  ) as Resolutions;
 }

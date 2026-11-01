@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over a VC graph + the low-level GraphBuilder
@@ -52,19 +53,27 @@ function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType>
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
 }
 
-/** Read-only authorization claims across both namespace spellings. */
+/** Read-only authorization claims; every present namespace must agree. */
 export class AuthorizationSubjectNode extends TermWrapper {
   constructor(subject: string, dataset: DatasetCore) {
     super(subject, dataset, DataFactory as unknown as DataFactoryType);
   }
-  iris(local: "authorizes" | "action" | "target" | "policy"): Set<string> {
-    return new Set(
-      [SVC, LEGACY_SVC_NS].flatMap((ns) =>
-        [...objectTerms(this, ns + local)]
-          .filter((term) => term.termType === "NamedNode")
-          .map((term) => term.value),
-      ),
-    );
+  iris(local: "authorizes" | "action" | "target" | "policy"): Set<string> | undefined {
+    let values: Set<string> | undefined;
+    for (const ns of [SVC, LEGACY_SVC_NS]) {
+      const terms = [...objectTerms(this, ns + local)];
+      if (terms.length === 0) continue;
+      // A malformed alias must not disappear behind another, well-formed alias.
+      if (terms.some((term) => term.termType !== "NamedNode")) return undefined;
+      const alias = new Set(terms.map((term) => term.value));
+      if (
+        values !== undefined &&
+        (values.size !== alias.size || [...values].some((v) => !alias.has(v)))
+      )
+        return undefined;
+      values ??= alias;
+    }
+    return values ?? new Set();
   }
 }
 

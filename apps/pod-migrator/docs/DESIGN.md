@@ -175,10 +175,6 @@ Cancel is available at every step. A cancel during execute stops after the in-fl
 everything already copied stays owner-only or at its final, never-wider state, and the report
 lists what was and wasn't done. The run log is kept in `sessionStorage` so a reload can show it.
 
-The neutral model, policy proofs, translation and WAC/ACP readers/writers live in
-[`@jeswr/pod-access`](../../../packages/pod-access/README.md). The app owns transport,
-crawling, planning, execution and UI. The sections below remain the access design of record.
-
 ## 3. Neutral model
 
 ```ts
@@ -300,10 +296,9 @@ ESS member-policy documentation conflicts: the
 while [Inrupt's ACR guide](https://docs.inrupt.com/guides/access-control-policies#access-control-resource-acr)
 describes ancestor policies as defaults when a child lacks explicit policies. Take the
 strictest reading of both for ESS sources: ancestor member **grants** contribute only when
-the resource's own ACR attaches no explicit resource or ACR-access policy; ancestor member
+the resource's own ACR has no explicit resource or ACR-access grants; ancestor member
 **denials always contribute**. This covers `memberAccessControl` and `memberAccess` alike.
-An absent or empty own ACR does not suppress ancestor grants. Any attached resource or
-ACR-access policy, including a denial-only or inactive policy, suppresses them. CSS sources retain
+An absent, empty or denial-only own ACR does not suppress ancestor grants. CSS sources retain
 the additive algorithm validated against installed/live CSS. Existing targets always use
 the widest, additive reading, including ESS targets. When writing ACP, materialize ESS source
 permissions per existing resource and omit shared member grants, with `inheritance-narrowed`
@@ -360,7 +355,7 @@ fixture is an offline contract, not a captured fresh PodSpaces ACR or live ESS v
 `PodSide.implementation` is an optional, trusted caller assertion (`css`, `ess`, `nss`), established
 independently of editable access RDF. An unknown source uses conservative readings; ACP target
 writes require established CSS or ESS semantics and otherwise offer only abort. Never infer ESS
-from an `acp:*` mode IRI. Source ESS variants are isolated in `packages/pod-access/src/systems/acp.ts`; live PodSpaces
+from an `acp:*` mode IRI. Source ESS variants are isolated in `systems/acp.ts`; live PodSpaces
 validation still requires a real account. Existing target restrictions that cannot be proven
 effective are refused, so an ignored denial cannot mask a broader target grant.
 
@@ -375,7 +370,7 @@ are applied without those conditions or exclusions, with a `deny-unsupported` re
 an otherwise empty positive clause becomes public. Other established conjuncts remain.
 CSS ACP output uses resource `acl:Control`; it does not emit ineffective ACR-self or `acp:access`
 controls. Only established CSS 7.2 enforcement or the explicitly selected ESS behavior documented
-in `packages/pod-access/src/systems/acp.ts` may be written.
+in `systems/acp.ts` may be written.
 
 The target proof replays empty creation, owner-only locking, content copying and bottom-up
 granting in executor order. It recomputes effective permissions from the access documents left
@@ -407,7 +402,7 @@ controls the target pod.
 | ACP `creator` / `owner` | target owner WebID | same | info item `owner-mapped` |
 | Grant to the source owner's WebID | kept verbatim (it is the same person, and they may still use that WebID) | same | info item |
 | WAC child ACL narrower than an inherited default | write the child ACL | ACP inheritance is additive, so the parent's member rules would reach the child | `inheritance-narrowed`: **per-resource** (no member controls on that parent; every existing descendant gets its own explicit controls; new files added later inherit nothing) / **abort** |
-| ACP member controls + own controls | CSS source: union; ESS source: own policies suppress inherited grants, inherited denials remain | CSS source: union; ESS source: materialize strict effective controls per resource | ESS→ACP: `inheritance-narrowed`: **per-resource** / **abort** |
+| ACP member controls + own controls | CSS source: union; ESS source: own grants suppress inherited grants, inherited denials remain | CSS source: union; ESS source: materialize strict effective controls per resource | ESS→ACP: `inheritance-narrowed`: **per-resource** / **abort** |
 | Source ACL/ACR with unproven integrity/completeness | — | — | `acl-unreadable`: **skip the resource and subtree** / **abort** |
 | Unreadable source ACL/ACR | — | — | `acl-unreadable`: **owner-only** / **skip the resource** / **abort** |
 | Unreadable, ambiguous or shared target ACL/ACR | — | — | `acl-unreadable`: **skip the resource** / **abort**. Owner-only cannot remove unproven existing restrictions or additive ancestor grants |
@@ -459,7 +454,7 @@ In particular ESS issuer/VC and NSS origin enforcement are uncertain and never t
 a target. The ESS source reader may narrow variants outside its established matcher subset;
 the target reader must refuse those variants rather than reuse that narrowing.
 
-Every row label is a case in [`dialect-matrix.test.ts`](../../../packages/pod-access/test/dialect-matrix.test.ts).
+Every row label is a case in [`dialect-matrix.test.ts`](../test/engine/dialect-matrix.test.ts).
 Each runs all 16 source × target pairs. CSS checks use the installed server readers/evaluator;
 ESS/NSS use independent fake evaluation. The oracle never uses the engine's reader or prover.
 Matching, nonmatching and anonymous contexts vary WebID, client, issuer, VC and origin. Checks
@@ -572,7 +567,7 @@ parse the returned media type and normalize to Turtle for later scope checks and
 - UI: Playwright screenshots at 375 / 768 / 1280 px, light and dark.
 
 PodSpaces itself can only be tested with a real account; ESS specifics (ACR URL form, any extra
-policies it requires) are isolated in `packages/pod-access/src/systems/acp.ts` so they can be adjusted after
+policies it requires) are isolated in `src/engine/systems/acp.ts` so they can be adjusted after
 a live run.
 
 ## 8. Static hosting

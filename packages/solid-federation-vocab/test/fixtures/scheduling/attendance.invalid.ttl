@@ -1,0 +1,19 @@
+# expect: https://jeswr.org/ns/sectors/scheduling#attendanceFor
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/scheduling/shapes#AttendanceShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/Attendance-5> a sched:Attendance;
+    sched:hasAttendee <https://example.org/fixtures/scheduling/support-8>;
+    sched:attendanceStatus <https://example.org/fixtures/scheduling/support-9>.
+<https://example.org/fixtures/scheduling/support-6> a sched:CalendarEvent;
+    sched:summary "Fixture";
+    sched:startTime "2026-11-01"^^xsd:date;
+    sched:endTime "2026-11-01"^^xsd:date;
+    sched:organizer <https://example.org/fixtures/scheduling/support-7>.
+<https://example.org/fixtures/scheduling/support-8> a core:Agent.
+<https://example.org/fixtures/scheduling/support-9> a sched:AttendanceStatus.
+<https://example.org/fixtures/scheduling/support-7> a core:Agent.

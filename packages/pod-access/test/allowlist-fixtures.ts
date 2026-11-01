@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   LiteralAs,
   LiteralFrom,
@@ -9,10 +11,8 @@ import {
   TermFrom,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
+import { ownerPolicy, writeAcp } from "../src/index.js";
 import { ACL, ACP, RDF, RdfNode } from "../src/rdf.js";
-
-import type { FakePod } from "./fake-pod.js";
-import { acl } from "./helpers.js";
 
 export const acceptedTargets = [
   "owner-lock",
@@ -76,9 +76,12 @@ export const rejectedTargets = [
 ] as const;
 
 /** Start from the emitted owner lock, then independently author one candidate shape. */
-export async function targetFixture(pod: FakePod, shape: string): Promise<Store> {
-  pod.setAcl(pod.root, await acl(pod, pod.root));
-  const dataset = (await pod.dataset(pod.root)) as Store;
+export async function targetFixture(resource: string, url: string, shape: string): Promise<Store> {
+  const dataset = (await parseRdf(
+    await writeAcp(ownerPolicy("urn:owner", true), resource, url, "ess"),
+    "text/turtle",
+    { baseIRI: url },
+  )) as Store;
   const n = (id: string) =>
     new RdfNode(
       shape === "blank-nodes" && id.startsWith("urn:")
@@ -87,7 +90,7 @@ export async function targetFixture(pod: FakePod, shape: string): Promise<Store>
       dataset,
       DataFactory,
     );
-  const root = n(pod.acl(pod.root));
+  const root = n(url);
   const ac = n("urn:allowlist:control");
   const p = n("urn:allowlist:policy");
   const m = n("urn:allowlist:matcher");

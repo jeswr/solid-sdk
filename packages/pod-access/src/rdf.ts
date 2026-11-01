@@ -1,26 +1,27 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Writer } from "n3";
 import type { Mode } from "./types.js";
-/** Web Access Control vocabulary namespace. */
+/** WAC vocabulary namespace used by the extracted migrator core. */
 export const ACL = "http://www.w3.org/ns/auth/acl#";
-/** Access Control Policy vocabulary namespace. */
+/** ACP vocabulary namespace used by the extracted migrator core. */
 export const ACP = "http://www.w3.org/ns/solid/acp#";
-/** RDF syntax vocabulary namespace. */
+/** RDF vocabulary namespace. */
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-/** FOAF vocabulary namespace. */
+/** FOAF vocabulary namespace for public WAC agents. */
 export const FOAF = "http://xmlns.com/foaf/0.1/";
-/** Frozen canonical mode order, internal to the package. */
-export const modes: readonly Mode[] = Object.freeze(["read", "append", "write", "control"]);
-/** Map a neutral mode to the corresponding acl:* IRI. */
+/** Canonical mode order, retained from the migrator. */
+export const modes: Mode[] = ["read", "append", "write", "control"];
+/** Map a neutral mode to its WAC mode IRI. */
 export function modeIri(mode: Mode): string {
   return ACL + mode.charAt(0).toUpperCase() + mode.slice(1);
 }
-/** Read ACL mode IRIs and apply the Write implies Append rule. */
+/** Read recognized WAC modes, including the Write to Append implication. */
 export function readModes(iris: Iterable<string>): Set<Mode> {
+  const values = new Set(iris);
   const result = new Set<Mode>();
-  for (const mode of modes) if ([...iris].includes(modeIri(mode))) result.add(mode);
+  for (const mode of modes) if (values.has(modeIri(mode))) result.add(mode);
   if (result.has("write")) result.add("append");
   return result;
 }
@@ -34,7 +35,7 @@ export function safeIri(value: string): string {
     throw new TypeError("Unsafe RDF IRI");
   return value;
 }
-/** Typed RDF accessor used by the access readers and writers. */
+/** Typed graph accessors shared by the WAC and ACP implementations. */
 export class RdfNode extends TermWrapper {
   iris(predicate: string): string[] {
     return [...SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string)];
@@ -54,7 +55,7 @@ export class RdfNode extends TermWrapper {
     );
   }
 }
-/** Validate named-node IRIs and serialize the dataset using n3.Writer. */
+/** Serialize RDF as Turtle after validating every named-node IRI. */
 export function serialize(dataset: DatasetCore): Promise<string> {
   for (const quad of dataset)
     for (const term of [quad.subject, quad.predicate, quad.object, quad.graph])
@@ -65,7 +66,7 @@ export function serialize(dataset: DatasetCore): Promise<string> {
     writer.end((error, value) => (error ? reject(error) : resolve(value))),
   );
 }
-/** Find the Solid path parent, stopping at the caller-supplied storage root. */
+/** Return the path parent, stopping at the supplied pod root. */
 export function parent(url: string, root: string): string | undefined {
   if (url === root) return undefined;
   return new URL(".", url.endsWith("/") ? url.slice(0, -1) : url).href;

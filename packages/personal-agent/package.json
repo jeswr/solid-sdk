@@ -99,7 +99,7 @@
   "dependencies": {
     "@a2a-js/sdk": "^1.2.1",
     "@jeswr/agentic-legacy-bridge": "workspace:*",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-mcp": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",

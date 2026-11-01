@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/scheduling#summary
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/scheduling/shapes#CalendarEventShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/CalendarEvent-1> a sched:CalendarEvent;
+    sched:startTime "2026-11-01"^^xsd:date;
+    sched:endTime "2026-11-01"^^xsd:date;
+    sched:organizer <https://example.org/fixtures/scheduling/support-2>.
+<https://example.org/fixtures/scheduling/support-2> a core:Agent.

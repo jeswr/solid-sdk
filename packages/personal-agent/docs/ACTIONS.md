@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Deterministic actions (operator guide)
 
 Common personal-agent operations as typed, validated, machine-described **actions** that run
@@ -69,9 +70,12 @@ npm run build
 node dist/dashboard/cli.js actions list
 node dist/dashboard/cli.js actions describe --id calendar.availability
 node dist/dashboard/cli.js actions prepare --id calendar.availability --input request.json   # or --input -
-node dist/dashboard/cli.js actions execute --token <token from a prepare of a local-write action>
+node dist/dashboard/cli.js actions execute --token="<token from a prepare of a local-write action>"
 node dist/dashboard/cli.js actions mcp            # stdio MCP server: list/describe/prepare/execute
 ```
+
+Preparation tokens use base64url and can begin with `-`. Prefer `--token=VALUE` when
+copying a token or calling the CLI from a script; `--token VALUE` is also accepted.
 
 Common options:
 

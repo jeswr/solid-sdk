@@ -116,6 +116,11 @@ import {
 | **Mandate** | `evaluateAutonomy(policy, proposal)` / `createSolidVcMandateVerifier(…)` | ODRL evaluation + the signed-mandate loader. |
 | **Outbox executor** | `runOutboxOnce({ verifier, senders, proposals, outbox, ownerWebId, … })` | Deterministic, no-LLM; the enforcement point + the send. `senders` is the credential seam. |
 
+`runOutboxOnce` counts transmission outcomes in `sent` and `failed`, and final receipt-write
+failures separately in `receiptErrors`. Once a sender succeeds, the message stays counted as
+sent even if its receipt cannot be finalized. The existing claim remains an at-most-once
+marker, so a later pass skips the proposal rather than sending it again.
+
 ## What runs today vs. what needs credentials / deploy
 
 The live Actor's injected authenticated fetch must use credentials that lack `acl:Control`
@@ -303,7 +308,9 @@ Profile, wire semantics, security assumptions, supervisor interface and boundari
 - **Untrusted email** goes only through the bridge's exhaustively-hardened `parseEmail`; this package
   never hand-rolls RFC/MIME parsing or RDF (it uses `@jeswr/fetch-rdf`, `@solid/object`, `n3.Writer`).
 - **Owner-private + ACL-first**: every container is owner-only ACL'd before any content (regression
-  tested).
+  tested). The helper discovers the existing container's own WAC ACL and validates it
+  before replacing it. Missing/ambiguous associations, ACP, out-of-container or shared ACLs,
+  redirects and read/write failures abort before private content is written.
 - **Deny-by-default autonomy** via the signed ODRL mandate, enforced in the no-LLM executor.
 - **At-most-once send** (compare-and-swap claim before send).
 - **SSRF-guarded, redirect-refusing** remote reads; the pod (the owner's own origin) uses the injected

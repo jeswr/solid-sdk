@@ -1,0 +1,11 @@
+# expect: https://jeswr.org/ns/sectors/health/diet#symptomType
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#SymptomShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/Symptom-7> a diet:Symptom;
+    schema:startTime "2026-11-01T09:00:00Z"^^xsd:dateTime.
+<https://example.org/fixtures/health/diet/support-8> a diet:SymptomType.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";

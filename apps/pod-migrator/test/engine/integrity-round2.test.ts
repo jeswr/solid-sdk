@@ -1,19 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { writeAcp } from "@jeswr/pod-access";
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
-import { RdfNode } from "../../../../packages/pod-access/src/rdf.js";
-import {
-  acl,
-  grant,
-  pods,
-  resolve,
-  stranger,
-} from "../../../../packages/pod-access/test/helpers.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { serialize } from "../../src/engine/rdf.js";
+import { RdfNode, serialize } from "../../src/engine/rdf.js";
+import { writeAcp } from "../../src/engine/systems/acp.js";
+import { acl, grant, pods, resolve, stranger } from "./helpers.js";
 
 async function turtle(value = "é"): Promise<string> {
   const store = new Store();

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { AclResource } from "@solid/object";
@@ -5,7 +6,7 @@ import { DataFactory, Store } from "n3";
 import { ACL, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 
-/** Read WAC with conservative source semantics or widest existing-target validation. */
+/** Read WAC rules for one resource; target reads refuse unknown semantic constructs. */
 export function readWac(
   dataset: DatasetCore,
   resource: string,
@@ -74,7 +75,7 @@ export function readWac(
   return { grants, denials: [] };
 }
 
-/** Serialize a representable WAC policy without weakening conditions. */
+/** Serialize representable WAC rules; reject denials, exclusions and unsafe conditions. */
 export async function writeWac(
   policy: EffectivePolicy,
   resource: string,

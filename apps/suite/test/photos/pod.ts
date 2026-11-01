@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { vi } from "vitest";
-export function mockPod() {
+export function mockPod({
+  putEtags = true,
+  existingContainerStatus = 412,
+}: {
+  putEtags?: boolean;
+  existingContainerStatus?: 409 | 412;
+} = {}) {
   const files = new Map<string, { body: string | Blob; type: string; etag: string | null }>();
   let revision = 0;
   const failures = new Map<string, number>();
@@ -23,6 +29,8 @@ export function mockPod() {
         : new Response(null, { status: 404 });
     if (!headers.has("if-match") && !headers.has("if-none-match"))
       throw new Error("Unconditional mutation");
+    if (method === "PUT" && url.endsWith("/") && file)
+      return new Response(null, { status: existingContainerStatus });
     if (headers.get("if-none-match") === "*" && file) return new Response(null, { status: 412 });
     if (headers.has("if-match") && file?.etag !== headers.get("if-match"))
       return new Response(null, { status: 412 });
@@ -32,11 +40,13 @@ export function mockPod() {
     }
     const etag = `"${++revision}"`;
     files.set(url, {
-      body: init?.body as string | Blob,
+      body: headers.has("link")
+        ? "<> a <http://www.w3.org/ns/ldp#BasicContainer>."
+        : (init?.body as string | Blob),
       type: headers.get("content-type") as string,
       etag,
     });
-    return new Response(null, { status: 201, headers: { etag } });
+    return new Response(null, { status: 201, headers: putEtags ? { etag } : {} });
   });
   return { fetch, files, failures };
 }

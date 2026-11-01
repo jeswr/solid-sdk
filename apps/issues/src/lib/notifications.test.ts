@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { subscriptionRequest, changedResource, watchContainer } from "./notifications";
 import { WEBSOCKET_CHANNEL_TYPE } from "./notification-discovery";
@@ -109,6 +110,39 @@ describe("watchContainer (WebSocket live-sync, mocked)", () => {
     expect(onChange).not.toHaveBeenCalled();
     ws.emit("message");
     expect(onChange).toHaveBeenCalledTimes(1);
+    sync.close();
+  });
+
+  it("subscribes to CSS's discovered service outside the pod path on the storage origin", async () => {
+    const service = "https://pod.example/.notifications/WebSocketChannel2023/";
+    const doFetch = ownPodFetch("wss://pod.example/socket", service);
+    const sync = watchContainer(CONTAINER, vi.fn(), {
+      ownStorageUrls: OWN,
+      fetch: doFetch,
+      WebSocketImpl: MockWebSocket as unknown as typeof WebSocket,
+    });
+    try {
+      await flush();
+      expect(doFetch).toHaveBeenCalledWith(service, expect.objectContaining({
+        method: "POST",
+        body: subscriptionRequest(CONTAINER),
+      }));
+      expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      sync.close();
+    }
+  });
+
+  it("keeps sibling-pod topics outside the resource allow-list", async () => {
+    const doFetch = ownPodFetch("wss://pod.example/socket", "https://pod.example/.notifications/WebSocketChannel2023/");
+    const sync = watchContainer("https://pod.example/bob/issues/", vi.fn(), {
+      ownStorageUrls: OWN,
+      fetch: doFetch,
+      WebSocketImpl: MockWebSocket as unknown as typeof WebSocket,
+    });
+    await flush();
+    expect(vi.mocked(doFetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    expect(MockWebSocket.instances).toHaveLength(0);
     sync.close();
   });
 

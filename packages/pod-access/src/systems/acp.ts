@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { AccessControlResource, type Matcher, Policy } from "@solid/object";
@@ -5,16 +6,11 @@ import { DataFactory, Store } from "n3";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 import { assertUnvalidatedTargetAcp } from "./acp-target.js";
-
-/** Safe refusal when ACP expressions exceed the bounded neutral representation. */
-class PolicyTooComplex extends Error {
+/** Reject expressions whose bounded neutral representation cannot preserve safety. */
+export class PolicyTooComplex extends Error {
   override name = "PolicyTooComplex";
 }
-/** Identify bounded-representation refusals without exposing the internal error class. */
-export function isPolicyTooComplex(error: unknown): boolean {
-  return error instanceof PolicyTooComplex;
-}
-/** Independently established CSS or ESS ACP implementation. */
+/** Independently established ACP server semantics supported by the migrator. */
 export type AcpDialect = "css" | "ess";
 function product(left: Subject[][], right: Subject[][]): Subject[][] {
   if (left.length * right.length > 64) throw new PolicyTooComplex("ACP policy exceeds 64 clauses");
@@ -342,7 +338,7 @@ export function readAcp(
   return result;
 }
 
-/** Serialize ACP using only the selected implementation's established vocabulary and scopes. */
+/** Serialize ACP rules using the selected dialect, with separate ESS ACR controls. */
 export async function writeAcp(
   policy: EffectivePolicy,
   resource: string,
