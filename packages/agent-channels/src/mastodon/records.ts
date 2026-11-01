@@ -3,6 +3,7 @@ import { digestBytes, parseBoundedJson } from "@jeswr/agent-model";
 import type { InboundRawMessage } from "../channel.js";
 import { ChannelParseError } from "../errors.js";
 import type { BridgeMessage } from "../message.js";
+import { decodeEntities } from "./entities.js";
 import { handle, id, JSON_LIMITS, MAX_RECORD_BYTES, record } from "./rest.js";
 
 export type Source = "notifications" | "conversations";
@@ -21,21 +22,14 @@ function plainText(value: unknown): string {
 /** A plain-text projection only. No provider markup, attributes or links are followed. */
 function htmlText(value: unknown): string {
   if (typeof value !== "string") throw new ChannelParseError("invalid Mastodon text");
-  const entities: Record<string, string> = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: " ",
-  };
   return clean(
-    value
-      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-      .replace(/<!--[\s\S]*?-->/g, "")
-      .replace(/<br\s*\/?\s*>|<\/p\s*>/gi, "\n")
-      .replace(/<[^>]*>/g, "")
-      .replace(/&(amp|lt|gt|quot|apos|nbsp);/g, (_, name: string) => entities[name] as string),
+    decodeEntities(
+      value
+        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .replace(/<br\s*\/?\s*>|<\/p\s*>/gi, "\n")
+        .replace(/<[^>]*>/g, ""),
+    ).replaceAll("\u00a0", " "),
   ).trim();
 }
 export function parseRecord(origin: string, item: InboundRawMessage): BridgeMessage {

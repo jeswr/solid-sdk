@@ -377,6 +377,51 @@ it.each([
   expect(parsed.rawByteLength).toBe(Buffer.byteLength(item.raw));
 });
 
+it.each([
+  ["Don&#39;t accept", "Don't accept"],
+  ["Don&#x27;t accept", "Don't accept"],
+  ["Don&#X000027;t accept", "Don't accept"],
+  ["&#128512; &#x1F600;", "😀 😀"],
+  ["&amp; &lt; &gt; &quot; &apos; a&nbsp;b", "& < > \" ' a b"],
+  ["&copy; &eacute; &mdash; &rsquo; &hellip;", "© é — ’ …"],
+  ["&Omega; &NotEqualTilde; &Afr;", "Ω ≂̸ 𝔄"],
+  ["&CounterClockwiseContourIntegral;", "∳"],
+  ["&#128; &#x92;", "€ ’"],
+  ["&#0; &#xD800; &#xDFFF; &#1114112;", "� � � �"],
+  [`&#${"9".repeat(400)};`, "�"],
+  ["&#55295; &#57344; &#1114111;", "\ud7ff \ue000 \u{10ffff}"],
+  ["a&#1;&#x7F;&#x81;&#x202E;&#8294;&#8297;b", "ab"],
+  ["a&NewLine;b&Tab;c", "a\nb\tc"],
+  ["&amp;#39; &amp;lt; &amp;amp;", "&#39; &lt; &amp;"],
+  ["&lt;script&gt;literal&lt;/script&gt;", "<script>literal</script>"],
+  [
+    "&unknown; &constructor; &tostring; &#x; &#; &#-1;",
+    "&unknown; &constructor; &tostring; &#x; &#; &#-1;",
+  ],
+  ["a &AMP; &LT; &GT; &QUOT; b", 'a & < > " b'],
+  ["&copy &notit; &notin; &#39 &#x27", "© ¬it; ∉ ' '"],
+])("decodes status HTML references in %s", (content, expected) => {
+  const row = {
+    ...fixtures.conversation,
+    last_status: {
+      ...fixtures.conversation.last_status,
+      spoiler_text: "",
+      content: `<p>${content}</p>`,
+    },
+  };
+  expect(parseRecord(instance, incoming("conversations", row)).textBody).toBe(expected);
+});
+
+it("decodes ordinary numeric HTML references in notifications", () => {
+  const row = {
+    ...fixtures.notification,
+    status: { ...fixtures.notification.status, content: "<p>Don&#39;t accept &#x202e;this</p>" },
+  };
+  expect(parseRecord(instance, incoming("notifications", row)).textBody).toBe(
+    "Mastodon notification: mention\nDon't accept this",
+  );
+});
+
 it("validates the configured instance and provider scalars and snapshots allowed origins", async () => {
   for (const value of [
     "bad",
