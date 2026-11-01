@@ -4,6 +4,7 @@ import type { ReadResult, StorageClient } from '@jeswr/storage-client';
 import type { ResolvedWarmBudget } from './warmer.js';
 
 export const LARGE_RESOURCE_BYTES = 5_000_000;
+export const WARM_REQUEST_HEADER = 'x-solid-offline-warm';
 const lengths = new WeakMap<ReadResult, string>();
 export const warmContentLength = (result: ReadResult): string | undefined => lengths.get(result);
 
@@ -23,9 +24,10 @@ export interface WarmStartMessage {
   type: 'warm-start';
   root: string;
   maxBytes: number;
+  token: string;
 }
 type Command = {
-  type: 'watch' | 'unwatch' | 'list-start' | 'list-end' | 'inspect' | 'close';
+  type: 'inspect' | 'close';
   url?: string;
 };
 
@@ -40,8 +42,6 @@ export class WarmLimitError extends Error {
 
 /** A guard belongs to one page and one crawl; ordinary reads use the normal SWR path. */
 export class WorkerWarmSession {
-  private urls = new Set<string>();
-  private listings = 0;
   private observations = new Map<string, Observation>();
   private cancellations = new Set<() => void>();
   private bytes = 0;
@@ -51,13 +51,10 @@ export class WorkerWarmSession {
   constructor(
     readonly root: string,
     private maxBytes: number,
+    private token: string,
   ) {}
 
   command(command: Command): Snapshot {
-    if (command.type === 'watch' && command.url) this.urls.add(new URL(command.url).href);
-    if (command.type === 'list-start') this.listings += 1;
-    if (command.type === 'list-end') this.listings -= 1;
-    if (command.type === 'unwatch' && command.url) this.urls.delete(new URL(command.url).href);
     if (command.type === 'close') this.close();
     return {
       bytes: this.bytes,
@@ -67,11 +64,7 @@ export class WorkerWarmSession {
   }
 
   matches(request: Request): boolean {
-    // LWS listAll owns its cursor URLs. Its listing requests remain within the
-    // same root and carry this backend-specific Accept, including later pages.
-    const listing =
-      this.listings > 0 && request.headers.get('accept')?.startsWith('application/lws+json');
-    return this.urls.has(request.url) || Boolean(listing);
+    return request.headers.get(WARM_REQUEST_HEADER) === this.token;
   }
 
   close(): void {
@@ -146,6 +139,7 @@ export async function warmStorage(
   if (!controller) return { storage, close: async () => undefined };
   signal?.throwIfAborted();
   const { port1, port2 } = new MessageChannel();
+  const token = crypto.randomUUID();
   let sequence = 0;
   const pending = new Map<number, { resolve(value: Snapshot): void; reject(error: Error): void }>();
   function reply(id: number): Promise<Snapshot> {
@@ -194,6 +188,7 @@ export async function warmStorage(
         type: 'warm-start',
         root: storage.root,
         maxBytes: budget.maxBytes,
+        token,
       } satisfies WarmStartMessage,
       [port2],
     );
@@ -208,25 +203,26 @@ export async function warmStorage(
     url: string,
     opts: Parameters<StorageClient['read']>[1],
   ) {
-    await command({ type: 'watch', url });
+    let result: ReadResult | undefined;
+    let failure: unknown;
     try {
-      let result: ReadResult | undefined;
-      let failure: unknown;
-      try {
-        result = await storage[method](url, opts);
-      } catch (error) {
-        failure = error;
-      }
-      const snapshot = await command({ type: 'inspect', url });
-      if (snapshot.observation?.skipped)
-        throw new WarmLimitError(snapshot.observation, snapshot.budgetHit);
-      if (!result) throw failure;
-      if (snapshot.observation?.length !== undefined)
-        lengths.set(result, snapshot.observation.length);
-      return result;
-    } finally {
-      await command({ type: 'unwatch', url });
+      result = await storage[method](url, tagged(opts));
+    } catch (error) {
+      failure = error;
     }
+    const snapshot = await command({ type: 'inspect', url });
+    if (snapshot.observation?.skipped)
+      throw new WarmLimitError(snapshot.observation, snapshot.budgetHit);
+    if (!result) throw failure;
+    if (snapshot.observation?.length !== undefined)
+      lengths.set(result, snapshot.observation.length);
+    return result;
+  }
+
+  function tagged<T extends { headers?: HeadersInit }>(opts?: T) {
+    const headers = new Headers(opts?.headers);
+    headers.set(WARM_REQUEST_HEADER, token);
+    return { ...opts, headers };
   }
 
   return {
@@ -235,14 +231,7 @@ export async function warmStorage(
       head: (url, opts) => observe('head', url, opts),
       read: (url, opts) => observe('read', url, opts),
       async *listAll(url, opts) {
-        await command({ type: 'list-start', url });
-        await command({ type: 'watch', url });
-        try {
-          yield* storage.listAll(url, opts);
-        } finally {
-          await command({ type: 'unwatch', url });
-          await command({ type: 'list-end', url });
-        }
+        yield* storage.listAll(url, tagged(opts));
       },
     },
     async close() {

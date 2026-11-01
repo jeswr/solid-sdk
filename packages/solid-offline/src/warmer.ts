@@ -50,6 +50,8 @@ const BINARY_TYPE_PREFIXES = [
 export interface WarmDeps {
   /** Authenticated page-side client; all reads stay inside its storage boundary. */
   storage: StorageClient;
+  /** Restore worker configuration before each crawl, including after worker termination. */
+  prepare?(): Promise<void>;
   signal?: AbortSignal;
   /**
    * Record a negative-cache entry for a pruned/forbidden URL. In production this
@@ -152,6 +154,7 @@ export async function warm(
   profileTurtle?: string,
   opts?: { seeds?: string[] },
 ): Promise<WarmResult> {
+  await deps.prepare?.();
   const guarded = await warmStorage(deps.storage, budget, deps.signal);
   let result: WarmResult | undefined;
   try {

@@ -3,8 +3,10 @@
 import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { keyRequest } from '../src/cache-policy.js';
+import { createOfflineClient } from '../src/index.js';
 import { MetadataStore } from '../src/metadata-store.js';
-import { warmStorage } from '../src/warm-transport.js';
+import { WARM_REQUEST_HEADER, warmStorage } from '../src/warm-transport.js';
 import { resolveBudget, warm } from '../src/warmer.js';
 import { MockByteCache } from './mocks.js';
 
@@ -26,6 +28,7 @@ afterEach(async () => {
 async function worker(transport: typeof fetch) {
   const handlers = new Map<string, (event: unknown) => void>();
   const pending: Promise<unknown>[] = [];
+  const broadcasts: unknown[] = [];
   const cache = new MockByteCache();
   const put = vi.spyOn(cache, 'put').mockImplementation(async (request, response) => {
     // Cache.put resolves only after consuming the complete body in browsers.
@@ -43,7 +46,10 @@ async function worker(transport: typeof fetch) {
   vi.stubGlobal(
     'BroadcastChannel',
     class {
-      postMessage() {}
+      postMessage(message: unknown) {
+        broadcasts.push(message);
+      }
+      addEventListener() {}
       close() {}
     },
   );
@@ -59,7 +65,15 @@ async function worker(transport: typeof fetch) {
     type: 'config',
     config: { webId: scopedWebId, storageRoot: root, storageBackend: { protocol: 'solid' } },
   });
-  vi.stubGlobal('navigator', { serviceWorker: { controller: { postMessage: send } } });
+  const controller = { postMessage: send };
+  vi.stubGlobal('navigator', {
+    serviceWorker: {
+      controller,
+      register: async () => ({ active: controller }),
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
   const pageFetch: typeof fetch = async (input, init) => {
     const request = new Request(input, init);
     let response: Promise<Response> | undefined;
@@ -84,6 +98,11 @@ async function worker(transport: typeof fetch) {
     network,
     cache,
     put,
+    broadcasts,
+    async restart() {
+      vi.resetModules();
+      await import('../src/worker.js');
+    },
   };
 }
 
@@ -276,6 +295,133 @@ it('leaves ordinary page reads outside the warming guard', async () => {
     expect(put).toHaveBeenCalledOnce();
   } finally {
     await session.close();
+  }
+});
+
+it.each([
+  'document',
+  'listing',
+])('does not guard a foreground %s overlapping warming', async (kind) => {
+  let finish: ((response: Response) => void) | undefined;
+  const { storage, pageFetch, network } = await worker(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.headers.has(WARM_REQUEST_HEADER)).toBe(false);
+    if (request.headers.get('cache-control') === 'no-cache')
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    return new Response('foreground bytes');
+  });
+  const session = await warmStorage(
+    kind === 'listing' ? createLwsBackend({ root, fetch: pageFetch }) : storage,
+    resolveBudget({ maxBytes: 1 }),
+  );
+  try {
+    const warming =
+      kind === 'document'
+        ? session.storage.read(url)
+        : session.storage.listAll(root)[Symbol.asyncIterator]().next();
+    const rejected = expect(warming).rejects.toThrow();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const response = await pageFetch(kind === 'document' ? url : `${root}cursor?next=1`, {
+      headers: {
+        accept: kind === 'document' ? '*/*' : 'application/lws+json, application/ld+json;q=0.5',
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('foreground bytes');
+    finish?.(new Response('warming bytes'));
+    await rejected;
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(await session.close()).toMatchObject({ bytes: 0, budgetHit: true });
+  } catch (error) {
+    finish?.(new Response(null));
+    await session.close();
+    throw error;
+  }
+});
+
+it.each([200, 304])('waits for cached warming revalidation (%s) before closing', async (status) => {
+  let fresh = false;
+  let finish: ((response: Response) => void) | undefined;
+  const { storage, pageFetch, cache, broadcasts } = await worker(async (input, init) => {
+    const request = new Request(input, init);
+    const headers = { 'content-type': 'text/plain', etag: '"old"' };
+    if (request.method === 'HEAD') return new Response(null, { headers });
+    if (!fresh) return new Response('old bytes', { headers });
+    expect(request.headers.get('if-none-match')).toBe('"old"');
+    return new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+  });
+  await (await pageFetch(url)).text();
+  broadcasts.length = 0;
+  fresh = true;
+  let complete = false;
+  const running = warm(webId, { storage }, resolveBudget(), '', { seeds: [url] }).then((result) => {
+    complete = true;
+    return result;
+  });
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  expect(complete).toBe(false);
+  finish?.(
+    new Response(status === 304 ? null : 'fresh bytes', {
+      status,
+      headers: { 'content-type': 'text/plain', etag: status === 304 ? '"old"' : '"new"' },
+    }),
+  );
+  const result = await running;
+  expect(result.warmed).toBe(1);
+  expect(result.visits[0]?.bytes).toBe(status === 304 ? 9 : 11);
+  const meta = await MetadataStore.open(scopedWebId);
+  const [record] = await meta.getByUrl(url);
+  expect(record?.etag).toBe(status === 304 ? '"old"' : '"new"');
+  expect(await (await cache.match(keyRequest(url, record?.varyKey ?? '')))?.text()).toBe(
+    status === 304 ? 'old bytes' : 'fresh bytes',
+  );
+  expect(broadcasts).toEqual(status === 304 ? [] : [{ url, event: 'updated', etag: '"new"' }]);
+  meta.close();
+});
+
+it.each([
+  'manual',
+  'reconnect',
+])('restores scope for %s warming after worker restart', async (trigger) => {
+  let online: (() => void) | undefined;
+  vi.stubGlobal('addEventListener', (type: string, listener: () => void) => {
+    if (type === 'online') online = listener;
+  });
+  vi.stubGlobal('removeEventListener', vi.fn());
+  const { storage, restart, network } = await worker(
+    async (input, init) =>
+      new Response(new Request(input, init).method === 'HEAD' ? null : '', {
+        headers: { 'content-type': 'text/turtle' },
+      }),
+  );
+  const client = createOfflineClient({
+    storage,
+    webId: scopedWebId,
+    channelName: 'warming-updates',
+    warm: { warmOnLogin: false, seeds: [url] },
+  });
+  try {
+    await client.register();
+    expect((await client.warm())?.warmed).toBeGreaterThan(0);
+    await restart(); // Same controller and durable stores; no controllerchange.
+    network.mockClear();
+    if (trigger === 'manual') expect((await client.warm())?.warmed).toBeGreaterThan(0);
+    else {
+      expect(online).toBeTypeOf('function');
+      online?.();
+      await vi.waitFor(() => expect(network).toHaveBeenCalled());
+      expect((await client.warm())?.warmed).toBeGreaterThan(0);
+    }
+    expect(network).toHaveBeenCalled();
+    const meta = await MetadataStore.open(scopedWebId);
+    expect(await meta.getByUrl(url)).toHaveLength(1);
+    meta.close();
+  } finally {
+    client.close();
   }
 });
 

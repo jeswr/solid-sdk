@@ -258,7 +258,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     const warmCfg = config.warm === true ? {} : config.warm;
     warmer = createWarmController({
       webId: config.webId,
-      deps: { storage: config.storage },
+      deps: {
+        storage: config.storage,
+        prepare: () =>
+          postConfig(
+            typeof navigator !== 'undefined' ? navigator.serviceWorker?.controller : undefined,
+          ),
+      },
       budget: resolveBudget(warmCfg.budget),
       warmOnLogin: warmCfg.warmOnLogin,
       rewarmOnReconnect: warmCfg.rewarmOnReconnect,

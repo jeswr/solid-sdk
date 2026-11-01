@@ -39,7 +39,7 @@ import { cacheNameForWebId, isScopeChange } from './scope.js';
 import { createPolicyStorage } from './storage.js';
 import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
 import type { AppShellConfig, OfflineClientConfig, PageToWorkerMessage } from './types.js';
-import { type WarmStartMessage, WorkerWarmSession } from './warm-transport.js';
+import { WARM_REQUEST_HEADER, type WarmStartMessage, WorkerWarmSession } from './warm-transport.js';
 
 declare const self: ServiceWorkerGlobalScope & {
   /**
@@ -284,13 +284,15 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
       warmSessions.has(client.id) ||
       data.root !== storageRoot ||
       !Number.isSafeInteger(data.maxBytes) ||
-      data.maxBytes < 0
+      data.maxBytes < 0 ||
+      typeof data.token !== 'string' ||
+      !data.token
     ) {
       port.postMessage({ id: 0, error: 'Worker warming scope unavailable or already active' });
       port.close();
       return;
     }
-    const session = new WorkerWarmSession(data.root, data.maxBytes);
+    const session = new WorkerWarmSession(data.root, data.maxBytes, data.token);
     warmSessions.set(client.id, session);
     event.waitUntil(
       new Promise<void>((resolve) => {
@@ -482,7 +484,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // serves a COMPLETE shell, switching to the new bucket the moment it finishes
   // precaching. Both handlers also still degrade gracefully (network-first
   // navigation / network-fallback asset) when nothing complete exists yet.
-  if (shellConfig) {
+  if (shellConfig && !request.headers.has(WARM_REQUEST_HEADER)) {
     if (request.mode === 'navigate' && method === 'GET') {
       event.respondWith(respondShellNavigation(event));
       return;
@@ -582,6 +584,23 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
 }
 
 async function respond(event: FetchEvent): Promise<Response> {
+  const warming = warmSessions.get(event.clientId);
+  const marked = event.request.headers.has(WARM_REQUEST_HEADER);
+  const guarded =
+    warming?.matches(event.request) &&
+    createSolidBackend({ root: warming.root, fetch: self.fetch.bind(self) }).isWithinStorage(
+      event.request.url,
+    )
+      ? warming
+      : undefined;
+  if (marked && !guarded) return new Response(null, { status: 413 });
+  const headers = new Headers(event.request.headers);
+  headers.delete(WARM_REQUEST_HEADER);
+  // Warming must finish fresh reads before closing its guard. Foreground reads
+  // retain SWR; a marked GET uses the existing synchronous revalidation path.
+  if (guarded && !headers.get('cache-control')?.toLowerCase().includes('no-store'))
+    headers.set('cache-control', 'no-cache');
+  const request = marked ? new Request(event.request, { headers }) : event.request;
   // The SWR engine's deps are the shared base + the online flag (the only field
   // the invalidation pipeline doesn't need).
   const deps: SwrDeps = {
@@ -589,18 +608,12 @@ async function respond(event: FetchEvent): Promise<Response> {
     isOnline: () => self.navigator.onLine,
   };
 
-  const warming = warmSessions.get(event.clientId);
-  const guarded =
-    warming?.matches(event.request) &&
-    createSolidBackend({ root: warming.root, fetch: deps.fetch }).isWithinStorage(event.request.url)
-      ? warming
-      : undefined;
   if (guarded) {
     const transport = deps.fetch;
     deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
   }
   try {
-    const result = await handleFetch(event.request, deps);
+    const result = await handleFetch(request, deps);
     // Keep background revalidation alive past the response if the SW supports it.
     if (result.revalidation && typeof event.waitUntil === 'function') {
       event.waitUntil(result.revalidation.then(() => undefined));

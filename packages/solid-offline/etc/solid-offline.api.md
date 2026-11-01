@@ -167,6 +167,8 @@ declare const DEFAULT_WARM_BUDGET: ResolvedWarmBudget;
 interface WarmDeps {
     /** Authenticated page-side client; all reads stay inside its storage boundary. */
     storage: StorageClient;
+    /** Restore worker configuration before each crawl, including after worker termination. */
+    prepare?(): Promise<void>;
     signal?: AbortSignal;
     /**
      * Record a negative-cache entry for a pruned/forbidden URL. In production this
