@@ -38,6 +38,10 @@ export interface RunImportOptions extends ConnectorStateOptions {
   /** Cursor from the previous import (incremental, where supported). */
   cursor?: string;
   onProgress?: (p: ImportProgress) => void;
+  /** Cancels the run, including waits between source requests. */
+  signal?: AbortSignal;
+  /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
+  scopes?: readonly string[];
 }
 
 export interface ImportReport {
@@ -89,6 +93,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       write: session.write,
       writeBinary: session.writeBinary,
       remove: session.remove,
+      signal: opts.signal,
+      scopes: opts.scopes,
     });
     const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();

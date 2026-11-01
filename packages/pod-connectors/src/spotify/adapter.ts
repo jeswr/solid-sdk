@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
@@ -172,10 +173,18 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       await artists("music/followed-artists.ttl", "/me/following?type=artist&limit=50", true);
 
       ctx.progress({ label: "Fetching playlists and items…", done: 2, total: 4 });
-      const user = await spotifyJson<{ id?: string }>(ctx.api, `${API}/me`, budget);
+      const user = await spotifyJson<{ id?: string }>(ctx.api, `${API}/me`, budget, ctx.signal);
       const userId = optionalText(user?.id);
       const slug = "music/playlists.ttl";
       const ds = new Store();
+      // A partial grant omits playlists of the withheld kind before creating subjects or
+      // requesting contents, and carries their earlier import forward into the snapshot.
+      const granted = (value: SpotifyPlaylist) =>
+        ctx.scopes === undefined ||
+        ctx.scopes.includes(
+          value.collaborative === true ? "playlist-read-collaborative" : "playlist-read-private",
+        );
+      const withheld = new Set<string>();
       for await (const page of pages<SpotifyPlaylist>(
         ctx,
         `${API}/me/playlists?limit=50`,
@@ -188,6 +197,10 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
             continue;
           }
           const playlistIri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`;
+          if (!granted(value)) {
+            withheld.add(playlistIri);
+            continue;
+          }
           const playlist = new MusicPlaylist(playlistIri, ds, DataFactory).mark();
           playlist.name = optionalText(value.name);
           playlist.identifier = id;
@@ -239,6 +252,10 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
           }
           ds.addQuads([...contents]);
         }
+      }
+      if (withheld.size > 0) {
+        const previous = await ctx.read(slug);
+        if (previous) carryForward(previous, ds, withheld, `${ctx.resolve(slug)}#`);
       }
       stage(slug, ds, CLASSES.MusicPlaylist);
 
@@ -293,6 +310,31 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
 }
 
 export const spotifyAdapter = createSpotifyAdapter();
+
+/**
+ * Copy the stored descriptions of `roots` and of the document-local nodes they link to (list
+ * items, tracks). A subject this run already describes keeps its new description.
+ */
+function carryForward(previous: DatasetCore, target: Store, roots: Set<string>, local: string) {
+  const pending = [...roots];
+  const seen = new Set(pending);
+  for (let subject = pending.pop(); subject !== undefined; subject = pending.pop()) {
+    const node = DataFactory.namedNode(subject);
+    if (target.countQuads(node, null, null, null) > 0) continue;
+    for (const quad of previous.match(node, null, null, null)) {
+      target.add(quad);
+      const object = quad.object;
+      if (
+        object.termType === "NamedNode" &&
+        object.value.startsWith(local) &&
+        !seen.has(object.value)
+      ) {
+        seen.add(object.value);
+        pending.push(object.value);
+      }
+    }
+  }
+}
 
 function parseCursor(
   cursor: string | undefined,

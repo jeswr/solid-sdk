@@ -65,9 +65,9 @@ const rules: Readonly<Record<string, readonly ScopeRule[]>> = {
   dropbox: [{ scopes: ["files.metadata.read"], document: /files/, request: /\/files\// }],
 };
 
-/** The package runners have no scope selector. Omit deselected collection reads
- * and writes, and don't call source endpoints for permissions the user withheld.
- * Identity lookups needed to resolve selected collections remain available. */
+/** Omit deselected collection reads and writes, and don't call source endpoints for
+ * permissions the user withheld. Identity lookups needed to resolve selected collections
+ * remain available. Adapters split mixed collections themselves from ctx.scopes. */
 export function withSelectedScopes(
   adapter: IntegrationAdapter,
   selection: readonly string[],
@@ -83,31 +83,14 @@ export function withSelectedScopes(
     async import(ctx) {
       const outcome = await adapter.import({
         ...ctx,
+        scopes: selected,
         api: async (input, init) => {
           const url = new URL(
             typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
           );
-          if (allowed(url.pathname, "request")) {
-            const response = await ctx.api(input, init);
-            if (
-              adapter.metadata.id !== "spotify" ||
-              !/\/me\/playlists$/.test(url.pathname) ||
-              !response.ok
-            )
-              return response;
-            // The list endpoint combines both permissions. Filter before the adapter
-            // creates playlist subjects or requests their contents, on every page.
-            const page = await response.json();
-            if (Array.isArray(page.items))
-              page.items = page.items.filter((playlist: { collaborative?: boolean } | null) =>
-                selected.includes(
-                  playlist?.collaborative === true
-                    ? "playlist-read-collaborative"
-                    : "playlist-read-private",
-                ),
-              );
-            return Response.json(page, { status: response.status, headers: response.headers });
-          }
+          // Mixed endpoints (Spotify's playlist list) pass through unchanged: the adapter reads
+          // them through its bounded, budgeted reader and omits withheld kinds via ctx.scopes.
+          if (allowed(url.pathname, "request")) return ctx.api(input, init);
           const empty =
             adapter.metadata.id === "github" ||
             adapter.metadata.id === "discord" ||

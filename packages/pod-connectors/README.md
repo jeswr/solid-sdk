@@ -653,7 +653,8 @@ endpoint without a client secret or API bearer header; redirects are refused. Co
 401s share one refresh. Refresh responses are capped at 64 KiB; oversized or invalid responses
 fail with an authentication error without updating the in-memory token. GET retries are
 limited to one refresh per request. API 429s wait
-for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
+for `Retry-After` (seconds or HTTP date), with at most three retries; aborting the run's
+`signal` (`RunImportOptions.signal`) ends a pending wait with the abort reason. Playlist item 403/404
 responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
 other failures reach the host without advancing its checkpoint. Unusable or oversized delays
 surface as `RateLimitedError` for the host to schedule later.
@@ -672,7 +673,11 @@ host application. Playlist item requests use Spotify's current `/playlists/{id}/
 endpoint with `additional_types=track,episode` and accept both `item` and legacy `track`
 payloads, including podcast episodes
 as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only for playlists
-owned by the current user or marked collaborative. Other playlists retain their metadata
+owned by the current user or marked collaborative. When `scopes` (`RunImportOptions.scopes`)
+withholds `playlist-read-private` or `playlist-read-collaborative`, listed playlists of that
+kind are omitted after the bounded, budgeted list read, their items are not requested, and
+their previously imported descriptions (list items and tracks) carry forward into the replaced
+`music/playlists.ttl`. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
 ## Tier A sync behavior

@@ -6,6 +6,7 @@ import {
   runFileImport,
   runImport,
 } from "@jeswr/pod-connectors";
+import { createSpotifyAdapter } from "@jeswr/pod-connectors/adapters/spotify";
 import { memoryFile } from "@jeswr/pod-connectors/testing";
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Parser, Store } from "n3";
@@ -57,6 +58,70 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     expect(source.fetch.mock.calls.some(([input]) => String(input).includes(excludedId))).toBe(
       false,
     );
+  });
+  it("keeps previously imported private playlists when a re-sync selects shared playlists only", async () => {
+    const { session } = await setup();
+    const source = fixtureTransport("spotify");
+    const sync = (scopes: readonly string[]) =>
+      runImport({
+        adapter: withSelectedScopes(source.adapter, scopes),
+        mode: "live",
+        sourceAuth: { fetch: source.fetch },
+        podWriter: createImportWriter(session, "spotify", new AbortController().signal),
+      });
+    await sync(source.adapter.metadata.scopes);
+    source.fetch.mockClear();
+    const report = await sync(["playlist-read-collaborative"]);
+    const playlists = report.written.find(({ url }) => url.endsWith("playlists.ttl"));
+    if (!playlists) throw new Error("Missing playlist document");
+    const body = await (await session.fetch(playlists.url)).text();
+    expect(body).toContain("Sunday Morning");
+    expect(body).toContain("Focus Flow");
+    // The withheld private playlist's contents are carried forward, never re-requested.
+    expect(
+      source.fetch.mock.calls.some(([input]) => String(input).includes("37i9dQZF1DXcBWIGoYBM5M")),
+    ).toBe(false);
+  });
+  it("charges the original Spotify playlist list to the run's data budget before omitting withheld kinds", async () => {
+    const { session } = await setup();
+    const adapter = createSpotifyAdapter({ maxRequests: 100, maxItems: 10_000, maxBytes: 1024 });
+    const encoder = new TextEncoder();
+    let index = 0;
+    let cancelled = false;
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/me") return Response.json({ id: "fixture-user" });
+      if (url.pathname !== "/v1/me/playlists") throw new Error(`Unexpected request ${url}`);
+      // Private playlists only: filtering them out first would leave a tiny body.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('{"items":['));
+        },
+        pull(controller) {
+          if (index >= 250) {
+            controller.enqueue(encoder.encode('{"id":"last"}]}'));
+            controller.close();
+            return;
+          }
+          controller.enqueue(encoder.encode(`{"id":"private-${index++}","collaborative":false},`));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(body, { headers: { "content-type": "application/json" } });
+    };
+    await expect(
+      runImport({
+        adapter: withSelectedScopes(adapter, ["playlist-read-collaborative"]),
+        mode: "live",
+        sourceAuth: { fetch: transport },
+        podWriter: createImportWriter(session, "spotify", new AbortController().signal),
+      }),
+    ).rejects.toThrow("data budget");
+    // The bounded reader stops the ~10 KB body early instead of buffering it whole.
+    expect(cancelled).toBe(true);
+    expect(index).toBeLessThan(250);
   });
   it("imports only selected Spotify collections and does not advance an omitted history checkpoint", async () => {
     const { session } = await setup();
@@ -509,6 +574,47 @@ describe("saved import transactions", () => {
       ).toBe(false);
     expect(store.read(DEMO_WEBID)[id]).toMatchObject({ mode: "live", lastOutcome: "ok" });
   });
+  it("cancels during a Spotify Retry-After wait, records the run incomplete and releases the reservation", async () => {
+    const { session } = await setup();
+    const [store] = preferencesPair();
+    const update = updater(store, "spotify");
+    const source = fixtureTransport("spotify");
+    const controller = new AbortController();
+    const limited = deferred<void>();
+    const transport: typeof fetch = async (input, init) => {
+      if (new URL(String(input)).pathname === "/v1/me/tracks") {
+        limited.resolve();
+        return new Response(null, { status: 429, headers: { "retry-after": "3600" } });
+      }
+      return source.fetch(input, init);
+    };
+    const pending = runSavedImport(DEMO_ROOT, "spotify", "live", controller.signal, update, () =>
+      runImport({
+        adapter: withSelectedScopes(source.adapter, source.adapter.metadata.scopes),
+        mode: "live",
+        sourceAuth: { fetch: fetchWithSignal(transport, controller.signal) },
+        podWriter: createImportWriter(session, "spotify", controller.signal),
+        signal: controller.signal,
+      }),
+    );
+    await limited.promise;
+    controller.abort();
+    // Settles now rather than after the hour-long Retry-After.
+    await expect(pending).rejects.toThrow();
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({ lastOutcome: "incomplete" });
+    const next = vi.fn(
+      async (): Promise<ImportReport> => ({
+        adapterId: "spotify",
+        mode: "live",
+        written: [],
+        categories: [],
+        indexUrl: `${DEMO_ROOT}index`,
+      }),
+    );
+    await runSavedImport(DEMO_ROOT, "spotify", "live", new AbortController().signal, update, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(store.read(DEMO_WEBID).spotify).toMatchObject({ lastOutcome: "ok" });
+  }, 5_000);
   it.each([
     false,
     true,

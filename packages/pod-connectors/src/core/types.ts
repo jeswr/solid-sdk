@@ -184,6 +184,14 @@ export interface ImportContext {
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */
   readonly cursor?: string;
+  /** Cancels the run; adapters stop waiting (for example on a rate-limit delay) when it aborts. */
+  readonly signal?: AbortSignal;
+  /**
+   * Source permissions the user granted for this run; undefined means every `metadata.scopes`
+   * entry. Adapters omit data that needs a withheld scope and keep what earlier runs imported
+   * under it.
+   */
+  readonly scopes?: readonly string[];
 }
 
 /** What `import()` returns (documents are reported by the runner). */

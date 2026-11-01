@@ -153,6 +153,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 // Demo replays complete fixtures; live resumes the successful checkpoint.
                 ...(cursor ? { cursor } : {}),
                 onProgress,
+                // Cancel also ends waits between source requests (rate-limit backoff).
+                signal: abort.signal,
               });
         },
       );
