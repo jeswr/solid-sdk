@@ -5,15 +5,18 @@ export const TEST_WEBID = 'http://localhost:3000/test-pod/profile/card#me';
 export const WORK_WEBID = 'http://localhost:3000/work-pod/profile/card#me';
 
 /**
- * Click a control whose handler closes its own window (Fill, Cancel, Share). The window
- * can close while Playwright is still finishing the click, which rejects with "Target
- * page, context or browser has been closed" even though the click landed. Only that
- * error is tolerated; callers still assert the outcome (the close event or the page state).
+ * Click a control whose handler closes its own window (Fill, Cancel, Share) and wait
+ * for that window to close. The window can close while Playwright is still finishing
+ * the click, which rejects with "Target page, context or browser has been closed" even
+ * though the click landed. Only that error is tolerated, and the close event is still
+ * required, so a click on an already-closed window or a no-op control fails the test.
  */
-export async function clickClosingControl(target: Locator): Promise<void> {
+export async function clickClosingControl(page: Page, target: Locator): Promise<void> {
+  const closed = page.waitForEvent('close');
   await target.click().catch((error: Error) => {
     if (!/Target page, context or browser has been closed/.test(error.message)) throw error;
   });
+  await closed;
 }
 
 /**
@@ -136,6 +139,6 @@ export async function grantOrigin(
   } else {
     await expect(consent.locator('.targets')).toContainText('/private/notes');
   }
-  await clickClosingControl(consent.getByRole('button', { name: 'Share', exact: true }));
+  await clickClosingControl(consent, consent.getByRole('button', { name: 'Share', exact: true }));
   await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');
 }

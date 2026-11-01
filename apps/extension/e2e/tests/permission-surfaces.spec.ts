@@ -114,6 +114,6 @@ test('populated form-fill preview cards reflow and meet browser axe checks in bo
       await remember.uncheck();
     });
   }
-  await clickClosingControl(preview.getByRole('button', { name: 'Cancel', exact: true }));
+  await clickClosingControl(preview, preview.getByRole('button', { name: 'Cancel', exact: true }));
   for (const input of await site.locator('input').all()) await expect(input).toHaveValue('');
 });
