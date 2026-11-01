@@ -739,13 +739,42 @@ function setTermsConform(doc: TermWrapper, plan: FieldPlan): boolean {
   return validCount >= min;
 }
 
+/** sh:node conformance checks EVERY raw value, even on optional fields. */
+function flatTermsConform(doc: TermWrapper, plan: FieldPlan): boolean {
+  const seen = new Set<string>();
+  const { field } = plan;
+  for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+    for (const term of matchObjects(
+      doc.dataset,
+      doc as unknown as Term,
+      doc.factory.namedNode(predicate),
+    )) {
+      const key =
+        term.termType === "Literal"
+          ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
+          : JSON.stringify([term.termType, term.value]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (field.maxCount !== undefined && seen.size > field.maxCount) return false;
+      if (readTerm(doc, plan, term) === undefined) return false;
+    }
+  }
+  return seen.size >= Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0);
+}
+
 /**
  * Read one flat field from `doc` into `data` (the parse per-field logic). Returns
- * `"reject"` when a `requiredFailClosed` single field is absent/unreadable (so the
- * caller fails the whole parse closed); `"ok"` otherwise. Shared by the flat + composite
- * paths, so a composite sub-node enforces its own MUSTs identically to a flat entity.
+ * `"reject"` on a required failure, or on any violated constraint in strict nested
+ * validation. Root optional fields retain their drop/filter policy. Projection is
+ * shared so a migration backstop observes exactly the same values as public parses.
  */
-function readFlatFieldInto(doc: TermWrapper, plan: FieldPlan, data: EntityData): "ok" | "reject" {
+function readFlatFieldInto(
+  doc: TermWrapper,
+  plan: FieldPlan,
+  data: EntityData,
+  strict = false,
+): "ok" | "reject" {
+  if (strict && !flatTermsConform(doc, plan)) return "reject";
   const { field } = plan;
   if (field.collection === "set") {
     if (!setTermsConform(doc, plan)) return field.guards?.requiredFailClosed ? "reject" : "ok";
@@ -776,18 +805,62 @@ function writeIriLink(doc: TermWrapper, predicate: string, targetIri: string): v
   );
 }
 
-/** Establish shape ownership against the original data, before any aliases change. */
+/** A write-time migration must preserve every previously recognised projection. */
+export class MigrationError extends Error {
+  override readonly name = "MigrationError";
+}
+
+interface MigrationBudget {
+  reads: number;
+}
+function migrationRead(budget: MigrationBudget): void {
+  if (++budget.reads > MAX_CLASS_READS)
+    throw new MigrationError("alias migration exceeds the 10,000-read validation budget");
+}
+
+/** Count raw field reads as well as shape visits and class traversal during re-parsing. */
+function migrationDataset(store: Store, budget: MigrationBudget): DatasetCore {
+  return new Proxy(store, {
+    get(target, key) {
+      if (key === "readQuads")
+        return function* (...args: Parameters<Store["readQuads"]>) {
+          for (const quad of target.readQuads(...args)) {
+            migrationRead(budget);
+            yield quad;
+          }
+        };
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+type ShapeOwner = ManifestEntity | ManifestNode;
+interface MigrationCheck {
+  node: ShapeOwner;
+  iri: string;
+  byName: ReadonlyMap<string, ManifestNode>;
+  strict: boolean;
+  recognised: boolean;
+  before: EntityData | undefined;
+}
+
+/** Establish ALL ownership and projections against the original, unmodified graph. */
 function aliasFocusNodes(
   store: Store,
   manifest: ModelManifest,
   factory: DataFactory,
-): Map<ManifestEntity | ManifestNode, Set<string>> {
-  const scopes = new Map<ManifestEntity | ManifestNode, Set<string>>();
+  budget: MigrationBudget,
+) {
+  const scopes = new Map<ShapeOwner, Set<string>>();
+  const checks = new Map<ShapeOwner, Map<string, MigrationCheck>>();
+  const linkClasses: { iri: string; hasClass: string }[] = [];
+  const readStore = migrationDataset(store, budget);
   const candidates = new Set<string>();
-  for (const quad of store.getQuads(null, RDF_TYPE, null, null)) {
-    if (quad.subject.termType === "NamedNode" && isSafeAbsoluteIri(quad.subject.value)) {
+  for (const quad of store.readQuads(null, RDF_TYPE, null, null)) {
+    migrationRead(budget);
+    if (quad.subject.termType === "NamedNode" && isSafeAbsoluteIri(quad.subject.value))
       candidates.add(quad.subject.value);
-    }
   }
   for (const entity of manifest.entities) {
     const byName = new Map(
@@ -795,7 +868,32 @@ function aliasFocusNodes(
     );
     const root = isCompositeEntity(entity) ? byName.get(entity.root) : entity;
     if (!root) continue;
-    const visit = (node: ManifestEntity | ManifestNode, iri: string): void => {
+    const remember = (node: ShapeOwner, iri: string, recognised: boolean): void => {
+      let subjects = checks.get(node);
+      if (!subjects) {
+        subjects = new Map();
+        checks.set(node, subjects);
+      }
+      const existing = subjects.get(iri);
+      if (existing) {
+        existing.recognised ||= recognised;
+        return;
+      }
+      migrationRead(budget);
+      const strict = node !== root;
+      subjects.set(iri, {
+        node,
+        iri,
+        byName,
+        strict,
+        recognised,
+        before: parseShapeAt(node, iri, readStore, factory, byName, strict, {
+          visits: 0,
+          migration: budget,
+        }),
+      });
+    };
+    const visit = (node: ShapeOwner, iri: string): void => {
       let subjects = scopes.get(node);
       if (!subjects) {
         subjects = new Set();
@@ -803,6 +901,7 @@ function aliasFocusNodes(
       }
       if (subjects.has(iri)) return;
       subjects.add(iri);
+      remember(node, iri, false);
       const doc = new TermWrapper(factory.namedNode(iri), store, factory);
       for (const field of node.fields) {
         if (field.kind !== "nested") continue;
@@ -812,27 +911,83 @@ function aliasFocusNodes(
           child &&
           !link.reject &&
           link.target !== undefined &&
-          (field.hasClass === undefined || hasDatasetClass(doc, link.target, [field.hasClass]))
+          (field.hasClass === undefined ||
+            hasDatasetClass(doc, link.target, [field.hasClass], budget))
         ) {
-          // sh:node applies the child shape to this focus node regardless of its type.
+          if (field.hasClass !== undefined)
+            linkClasses.push({ iri: link.target, hasClass: field.hasClass });
           visit(child, link.target);
         }
       }
     };
-    for (const iri of candidates) {
-      const doc = new TermWrapper(factory.namedNode(iri), store, factory);
-      if (hasDatasetClass(doc, iri, [...root.typeIris, ...(root.aliasTypeIris ?? [])])) {
-        visit(root, iri);
+    // Snapshot every node shape that recognises a typed subject, even when that
+    // node is not reachable from a composite root and will not itself migrate.
+    for (const node of isCompositeEntity(entity) ? entity.nodes : [entity]) {
+      for (const iri of candidates) {
+        migrationRead(budget);
+        const doc = new TermWrapper(factory.namedNode(iri), store, factory);
+        if (hasDatasetClass(doc, iri, [...node.typeIris, ...(node.aliasTypeIris ?? [])], budget)) {
+          remember(node, iri, true);
+          if (node === root) visit(root, iri);
+        }
       }
     }
   }
-  return scopes;
+  return {
+    scopes,
+    checks: [...checks.values()].flatMap((subjects) => [...subjects.values()]),
+    linkClasses,
+  };
+}
+
+function sameProjection(a: EntityData | undefined, b: EntityData | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      if (!Object.hasOwn(b, key)) return false;
+      const left = a[key],
+        right = b[key];
+      return Array.isArray(left) && Array.isArray(right)
+        ? left.length === right.length &&
+            left.every((value, index) => sameValueZero(value, right[index]))
+        : sameValueZero(left, right);
+    })
+  );
 }
 
 /** Canonicalise aliases only at their owning shapes' focus nodes, in a COPY. */
 function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: DataFactory): Store {
-  const scopes = aliasFocusNodes(store, manifest, factory);
+  const owners = manifest.entities.flatMap<ShapeOwner>((entity) =>
+    isCompositeEntity(entity) ? entity.nodes : [entity],
+  );
+  const aliases = owners.flatMap((node) => [
+    ...(node.aliasTypeIris ?? []),
+    ...node.fields.flatMap((field) => field.aliasPredicates ?? []),
+  ]);
+  if (
+    !aliases.some(
+      (alias) =>
+        store.countQuads(null, alias, null, null) || store.countQuads(null, RDF_TYPE, alias, null),
+    )
+  )
+    return new Store([...store]);
+  const budget: MigrationBudget = { reads: 0 };
+  const { scopes, checks, linkClasses } = aliasFocusNodes(store, manifest, factory, budget);
   const output = new Store([...store]);
+  const migratingTypes = new Set<string>();
+  for (const [node, subjects] of scopes)
+    for (const iri of subjects) {
+      if (node.aliasTypeIris?.some((alias) => store.countQuads(iri, RDF_TYPE, alias, null)))
+        migratingTypes.add(iri);
+    }
+  // Preserve actual DATA-graph class proofs before alias rdf:type deletion.
+  for (const { iri, hasClass } of linkClasses) {
+    if (!migratingTypes.has(iri)) continue;
+    const doc = new TermWrapper(factory.namedNode(iri), output, factory);
+    SetFrom.subjectPredicate(doc, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom).add(hasClass);
+  }
   for (const [node, subjects] of scopes) {
     for (const field of node.fields) {
       if (!field.aliasPredicates?.length) continue;
@@ -866,6 +1021,40 @@ function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: Dat
         }
       }
     }
+  }
+  const readOutput = migrationDataset(output, budget);
+  for (const check of checks) {
+    migrationRead(budget);
+    const doc = new TermWrapper(factory.namedNode(check.iri), output, factory);
+    if (
+      check.recognised &&
+      !hasDatasetClass(
+        doc,
+        check.iri,
+        [...check.node.typeIris, ...(check.node.aliasTypeIris ?? [])],
+        budget,
+      )
+    ) {
+      throw new MigrationError(
+        `alias migration changed type recognition for ${check.node.name} at ${check.iri}`,
+      );
+    }
+    const after = parseShapeAt(
+      check.node,
+      check.iri,
+      readOutput,
+      factory,
+      check.byName,
+      check.strict,
+      {
+        visits: 0,
+        migration: budget,
+      },
+    );
+    if (!sameProjection(check.before, after))
+      throw new MigrationError(
+        `alias migration changed the parsed result for ${check.node.name} at ${check.iri}`,
+      );
   }
   return output;
 }
@@ -939,11 +1128,7 @@ function makeEntity(
     if (!isSafeAbsoluteIri(iri)) return undefined;
     const doc = new Wrapper(subject(resourceUrl), dataset, factory);
     if (!doc.isInstance) return undefined;
-    const data: EntityData = {};
-    for (const plan of plans) {
-      if (readFlatFieldInto(doc, plan, data) === "reject") return undefined;
-    }
-    return data;
+    return parseShapeAt(entity, iri, dataset, factory);
   };
 
   return assembleEntity(
@@ -985,7 +1170,12 @@ const MAX_LINK_READS = 32;
 const MAX_CLASS_READS = 10000;
 
 /** SHACL class membership is rdf:type followed by rdfs:subClassOf* in the data. */
-function hasDatasetClass(doc: TermWrapper, subject: string, required: readonly string[]): boolean {
+function hasDatasetClass(
+  doc: TermWrapper,
+  subject: string,
+  required: readonly string[],
+  budget?: MigrationBudget,
+): boolean {
   const accepted = new Set(required);
   const pending: Term[] = [];
   const seen = new Set<string>();
@@ -1005,6 +1195,7 @@ function hasDatasetClass(doc: TermWrapper, subject: string, required: readonly s
     doc.factory.namedNode(subject),
     doc.factory.namedNode(RDF_TYPE),
   )) {
+    if (budget) migrationRead(budget);
     if (++reads > MAX_CLASS_READS) return false;
     if (enqueue(type)) return true;
   }
@@ -1012,6 +1203,7 @@ function hasDatasetClass(doc: TermWrapper, subject: string, required: readonly s
   while (pending.length) {
     const type = pending.pop() as Term;
     for (const parent of matchObjects(doc.dataset, type, subClassOf)) {
+      if (budget) migrationRead(budget);
       if (++reads > MAX_CLASS_READS) return false;
       if (enqueue(parent)) return true;
     }
@@ -1029,6 +1221,7 @@ interface NestedTargetResolution {
   readonly reject: boolean;
   /** The exact lexical http(s) target, when resolved and unambiguous (else undefined). */
   readonly target?: string;
+  readonly present?: boolean;
 }
 
 /**
@@ -1058,7 +1251,52 @@ function resolveNestedTarget(doc: TermWrapper, predicate: string): NestedTargetR
     }
     if (target === undefined) target = object.value;
   }
-  return { reject: false, target };
+  return { reject: false, target, present: raw !== undefined };
+}
+
+/** Parse at an ACTUAL focus IRI; only nested focus nodes use strict conformance. */
+function parseShapeAt(
+  node: ManifestEntity | ManifestNode,
+  iri: string,
+  dataset: DatasetCore,
+  factory: DataFactory,
+  byName: ReadonlyMap<string, ManifestNode> = new Map(),
+  strict = false,
+  budget: { visits: number; migration?: MigrationBudget } = { visits: 0 },
+): EntityData | undefined {
+  if (budget.migration) migrationRead(budget.migration);
+  if (++budget.visits > MAX_NODE_VISITS || !isSafeAbsoluteIri(iri)) return undefined;
+  const doc = new TermWrapper(factory.namedNode(iri), dataset, factory);
+  const data: EntityData = {};
+  for (const field of node.fields) {
+    if (field.kind !== "nested") {
+      if (readFlatFieldInto(doc, planField(field), data, strict) === "reject") return undefined;
+      continue;
+    }
+    const child = byName.get(field.node as string);
+    if (!child) return undefined;
+    const required = field.guards?.requiredFailClosed === true;
+    const link = resolveNestedTarget(doc, field.predicate);
+    if (link.reject) {
+      if (required || strict) return undefined;
+      continue;
+    }
+    const childData =
+      link.target !== undefined &&
+      (field.hasClass === undefined ||
+        hasDatasetClass(doc, link.target, [field.hasClass], budget.migration))
+        ? parseShapeAt(child, link.target, dataset, factory, byName, true, budget)
+        : undefined;
+    if (budget.visits > MAX_NODE_VISITS) return undefined;
+    if (childData === undefined) {
+      // An optional edge may degrade at the root. Inside sh:node a present
+      // violation makes THIS child non-conforming; its incoming edge grades it.
+      if (required || (strict && link.present)) return undefined;
+      continue;
+    }
+    Object.assign(data, childData);
+  }
+  return data;
 }
 
 function makeCompositeEntity(
@@ -1141,57 +1379,13 @@ function makeCompositeEntity(
     // Target classes select root resources; sh:node applies child property constraints
     // without making the child shape's target classes an additional constraint.
     if (!new rootRt.Wrapper(rootIri, dataset, factory).isInstance) return undefined;
-    // Fail-closed budget on total sub-node parse attempts (bounds the graph-walk's
-    // backtracking against a hostile document — see MAX_NODE_VISITS).
-    let visits = 0;
-    const parseNode = (rt: NodeRuntime, iri: string): EntityData | undefined => {
-      if (++visits > MAX_NODE_VISITS) return undefined;
-      if (!isSafeAbsoluteIri(iri)) return undefined;
-      const doc = new rt.Wrapper(iri, dataset, factory);
-      const data: EntityData = {};
-      for (const plan of rt.plans) {
-        if (readFlatFieldInto(doc, plan, data) === "reject") return undefined;
-      }
-      for (const nf of rt.nested) {
-        const child = runtimes.get(nf.node as string);
-        if (!child) continue;
-        const required = nf.guards?.requiredFailClosed === true;
-        // GRAPH-WALK: follow the ACTUAL link triple to the target subject (never assume
-        // the fragment convention — an untrusted document may link anywhere). A nested
-        // link is SINGLE-VALUED (maxCount 1 by construction — set-valued links are a
-        // documented future feature); the bounded resolver streams the objects and FAILS
-        // the LINK on ambiguity (>1 distinct target) OR an over-budget fan-out, without
-        // materialising the full candidate list.
-        //
-        // DISPOSITION of any link-resolution failure is graded by the link's SHACL G1
-        // grade: a Violation-graded (requiredFailClosed) link rejects the WHOLE
-        // composite; a Warning/Info (optional) link DEGRADES — its field is dropped and
-        // the composite admitted (an otherwise-usable document is never rejected over an
-        // unresolvable optional link). The resolver's bounds themselves are unchanged.
-        const link = resolveNestedTarget(doc, nf.predicate);
-        if (link.reject) {
-          if (required) return undefined;
-          continue;
-        }
-        const childData =
-          link.target !== undefined &&
-          (nf.hasClass === undefined || hasDatasetClass(doc, link.target, [nf.hasClass]))
-            ? parseNode(child, link.target)
-            : undefined;
-        if (childData === undefined) {
-          // Same grading: a Violation-graded cross-node MUST whose single target is
-          // absent or non-conforming (fails its own property guards) rejects the
-          // WHOLE composite. A Warning/Info link drops its sub-node's fields and admits.
-          if (required) return undefined;
-          continue;
-        }
-        // Merge the sub-node's flat fields into the composite projection. Field names are
-        // globally unique across the composite (validator-enforced), so no clobber.
-        Object.assign(data, childData);
-      }
-      return data;
-    };
-    return parseNode(rootRt, rootIri);
+    return parseShapeAt(
+      rootRt.node,
+      rootIri,
+      dataset,
+      factory,
+      new Map(entity.nodes.map((node) => [node.name, node])),
+    );
   };
 
   return assembleEntity(

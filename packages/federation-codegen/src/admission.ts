@@ -22,7 +22,12 @@ import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
 import { Graph, RDF, SH } from "./rdf.js";
-import { localName, type NormalizedShapes } from "./shapes.js";
+import {
+  implicitClassTargets,
+  localName,
+  type NormalizedShapes,
+  sharedAliasPredicates,
+} from "./shapes.js";
 
 export type AdmissionSeverity = "error" | "warning";
 
@@ -76,6 +81,36 @@ export function admit(
   // Metadata never constrains accepted instance data. Every other sh:* predicate
   // must have an effective runtime projection; unknown components fail even at
   // advisory severity. This also covers external / orphan / nested shape subjects.
+  for (const subject of implicitClassTargets(shapes.quads)) {
+    add(
+      "implicit-class-target",
+      "error",
+      subject,
+      "implicit class targets are not modeled by the runtime",
+    );
+  }
+  for (const predicate of sharedAliasPredicates(shapes)) {
+    add(
+      "shared-canonical-alias",
+      "error",
+      predicate,
+      "shared canonical predicate with aliases has potentially overlapping owners",
+    );
+  }
+  const childTargets = new Set(
+    (config?.entities ?? []).flatMap((entity) =>
+      isCompositeConfig(entity)
+        ? Object.entries(entity.nodes)
+            .filter(([name]) => name !== entity.root)
+            .map(([, node]) => node.targetClass)
+        : [],
+    ),
+  );
+  const childProperties = new Set(
+    shapes.nodeShapes
+      .filter((shape) => childTargets.has(shape.targetClass))
+      .flatMap((shape) => shape.properties.map((c) => c.shapeIri)),
+  );
   const graph = new Graph(shapes.quads);
   const shapeByIri = new Map(shapes.nodeShapes.map((shape) => [shape.iri, shape]));
   const constraintByIri = new Map(
@@ -225,10 +260,9 @@ export function admit(
           unsupported("sh:node requires a projected composite link");
       }
       if (component === "class" && !isNested && config !== undefined) {
-        // A Warning/Info class hint on a flat IRI does not control admission.
-        // Dropping that advisory check cannot admit a record forbidden by a MUST.
-        // Its IRI term kind is still checked; the warning remains in the report.
-        const advisory = !isFailClosedSeverity(c?.severity);
+        // Root advisory hints retain their documented omission policy. A child
+        // reached through sh:node must enforce even present optional constraints.
+        const advisory = !childProperties.has(subject.value) && !isFailClosedSeverity(c?.severity);
         unsupported(
           "class conformance requires a composite link; advisory flat hints are omitted",
           advisory ? "warning" : "error",

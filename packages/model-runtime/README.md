@@ -39,11 +39,12 @@ the spelling they will store. The guard inventory is:
   filters them without rewriting. Other admitted IRIs retain bookmark normalization.
   Canonicalisation retains the imported bookmark contract; unlike `rdf-serialize`, this helper
   rejects surviving forbidden characters rather than escaping the lexical input.
-- **`tryRead` fail-closed field drops** — a malformed literal in untrusted pod data drops the field
-  rather than aborting the parse. Literal term kind, datatype, and XSD lexical forms are checked;
+- **`tryRead` fail-closed field drops** — at the root, a malformed optional literal in untrusted
+  pod data drops the field. Inside `sh:node`, a present violation makes the child non-conforming. Literal term kind, datatype, and XSD lexical forms are checked;
   malformed values cannot satisfy a required field.
 - **Cardinality and enums** — ambiguous singletons drop; sets enforce `minCount`/`maxCount`.
-  A `requiredFailClosed` failure rejects the record; an optional failure drops the field.
+  At the root, a `requiredFailClosed` failure rejects the record; an optional failure drops
+  the field. Nested children validate all present values before projection.
   Closed `in` enums filter reads and writes, including live-set additions; invalid writes drop.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
@@ -105,7 +106,9 @@ A flat entity or composite **node** may declare `aliasTypeIris: string[]`; a fla
 may declare `aliasPredicates: string[]`. Both keys are optional, contain at most four
 **distinct, Turtle-safe absolute http(s) IRIs**, and exclude their canonical `typeIris` / `predicate`.
 Predicate aliases cannot overlap any field's canonical predicate or another alias anywhere
-in the manifest. `rdf:type` and nested link predicates are reserved from flat canonical
+in the manifest. If a canonical predicate is shared by multiple entities or nodes, none of
+those owners may declare aliases for it: RDF co-typing prevents proving their focus sets disjoint.
+`rdf:type` and nested link predicates are reserved from flat canonical
 fields and all aliases. Type aliases cannot equal any canonical type or another owner's alias.
 `nested` structural links reject `aliasPredicates`, even an empty array.
 Aliases do not bypass the reserved-name or unknown-key checks.
@@ -141,6 +144,15 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   text, or collapsing raw cardinality. Revalidation checks those original terms. Explicit API
   writes still apply JS write guards and sanitization. Prefixes advertising alias namespaces
   are omitted.
+
+Before deleting an alias `rdf:type`, migration materialises each satisfied explicit link
+`sh:class` on that subject, preserving proofs that depended on the deleted alias's data-graph
+ancestry. It then re-parses every previously recognised entity/node projection (including
+recognised but unreached nodes) and every reached child focus. Changed type recognition or
+parsed results throw the exported `MigrationError` before any output is emitted. The check
+shares a 10,000-read/visit budget across candidate scanning, class walks and re-parsing;
+exhaustion also throws `MigrationError`. This includes rejecting cleanup that would repair
+invalid required data or expose a previously masked default. The input store stays unchanged.
 
 The generator derives aliases exclusively from explicit extra `sh:targetClass` values and
 bounded `sh:alternativePath` lists. Vocabulary alignment annotations never grant aliases.
@@ -178,25 +190,30 @@ field names are **globally unique** across the composite (the projection is one 
   without URL canonicalisation. The root must have a data-graph type reaching one of its
   canonical or alias classes. A child validated through `sh:node` must satisfy its shape's
   property constraints; it need not carry the shape's target type. `sh:targetClass` selects
-  focus nodes and does not add a child constraint. Link-resolution
+  focus nodes and does not add a child constraint. Inside a child, every present raw value
+  must satisfy its property constraints, even for optional fields and optional deeper links.
+  Absence is allowed when the property's minimum permits it. Nested conformance counts the
+  raw path union before canonical-first projection; root reads retain their documented alias
+  selection and drop-invalid-optional policy. Link-resolution
   enforces any retained `hasClass` (`sh:class`): the linked subject must have that type,
   or a type reaching it through `rdfs:subClassOf*` in the **data graph**. Build-time ontology
   ancestry never proves data membership. Traversal is cycle-safe and capped at 10,000 raw
   type/subclass reads per link; exceeding the cap fails the link closed. Builds explicitly
   assert the link's class on a materialised child so their data needs no ontology inference.
   Link-resolution failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), an unsafe IRI, or an
-  over-budget fan-out — is graded by the link: a `requiredFailClosed` cross-node link **rejects the
-  WHOLE composite** (a titled `Track` + a valid `Instant` MUST be reachable); a Warning/Info (optional)
-  link simply drops its sub-node's fields and admits (an otherwise-usable document is never rejected
-  over an unresolvable optional link). Field names being globally unique, the sub-nodes' fields merge
-  into one flat object.
+  over-budget fan-out — at a root link is graded by that link: `requiredFailClosed` rejects the
+  whole composite, while an optional link drops its subtree. Inside a child, a present failed
+  link makes that child non-conforming; the failure propagates to its incoming link. Field
+  names are globally unique, so conforming sub-nodes merge into one flat object.
 
-The composite manifest is validated **fail-closed** (the tree invariant — one root, every non-root node
-exactly one incoming link, acyclic + spanning; a `nested` field may retain a safe absolute
-`hasClass` IRI, but cannot require an alias class owned by any entity or node in the manifest,
-because type migration can remove that assertion;
-it carries no scalar data-shape key and only the `requiredFailClosed` guard; composite documents
-are http(s)-scoped, matching the suite IRI discipline).
+The composite manifest enforces a tree: one root, exactly one incoming link per non-root
+node, and no unreachable nodes or cycles. A `nested` field carries no scalar data-shape
+keys and only the `requiredFailClosed` guard. It may retain a safe absolute `hasClass` IRI,
+but cannot require a type alias owned anywhere in the manifest, because migration can delete
+that assertion. `classOnly: true` represents `sh:class` without `sh:node`, requires `hasClass`,
+and must project a node whose sole canonical target class equals `hasClass` exactly. Links
+combining `sh:class` and `sh:node` retain their ontology compatibility check in the generator.
+Composite documents are http(s)-scoped, matching the suite IRI discipline.
 
 ## Install
 

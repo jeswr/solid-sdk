@@ -34,10 +34,12 @@ import {
 } from "./config.js";
 import { SH } from "./rdf.js";
 import {
+  implicitClassTargets,
   localName,
   type NodeShapeModel,
   type NormalizedShapes,
   type ShapeConstraint,
+  sharedAliasPredicates,
 } from "./shapes.js";
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -96,7 +98,11 @@ export function linkTargetConforms(
   c: ShapeConstraint,
   targetClass: string,
 ): boolean {
+  // A bare IRI constraint never requests any child shape's property constraints.
+  if (c.node === undefined && c.hasClass === undefined) return false;
   if (c.hasClass !== undefined) {
+    // Without sh:node, only this exact class selects the projected shape.
+    if (c.node === undefined && targetClass !== c.hasClass) return false;
     // The canonical projection must be compatible with the ontology. This is
     // only a build-time mapping check, never proof that a linked subject (whose
     // type may be an alias) satisfies sh:class. Retain that constraint below.
@@ -305,8 +311,8 @@ function compileEntity(
  * `fields` → flat fields (via {@link compileField}, with the composite rename), `links`
  * → nested link fields (an IRI-link property → a sub-node; the requiredFailClosed
  * cross-node MUST derives from the shape's Violation-graded minCount, G1). A property in
- * neither is omitted — a Violation-graded (MUST) omission is caught by the fidelity
- * assertion, so a security constraint can never be silently dropped.
+ * neither is omitted only at the root. Children must project every constraint;
+ * root omissions still undergo MUST/alias coverage checks in fidelity.
  */
 function compileCompositeEntity(
   compConfig: CompositeEntityConfig,
@@ -426,6 +432,9 @@ function compileCompositeEntity(
           predicate: constraint.pathIri,
           kind: "nested",
           node: targetNode,
+          ...(constraint.node === undefined && constraint.hasClass !== undefined
+            ? { classOnly: true }
+            : {}),
           ...(constraint.hasClass !== undefined ? { hasClass: constraint.hasClass } : {}),
         };
         // G1 — the cross-node MUST: fail-closed only when Violation-graded (or severity
@@ -447,7 +456,17 @@ function compileCompositeEntity(
         continue;
       }
       const fieldConfig = flatCfg[shapeFieldName];
-      if (fieldConfig === undefined) continue; // omitted (fidelity enforces MUST-coverage)
+      if (fieldConfig === undefined) {
+        if (nodeName !== compConfig.root)
+          throw new Error(
+            `composite ${compConfig.name} omits child shape constraint ${constraint.pathIri}`,
+          );
+        continue; // Root omissions still undergo MUST/alias fidelity checks.
+      }
+      if (nodeName !== compConfig.root && constraint.hasClass !== undefined)
+        throw new Error(
+          `child shape sh:class constraint ${constraint.pathIri} requires a projected composite link`,
+        );
       const resolvedName = fieldConfig.rename ?? constraint.name ?? localName(constraint.pathIri);
       assertIdentifier(resolvedName, "composite field name");
       claimName(resolvedName, nodeName);
@@ -475,6 +494,12 @@ function compileCompositeEntity(
 
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
+  if (implicitClassTargets(shapes.quads).length)
+    throw new TypeError("implicit class targets are not modeled by the runtime");
+  if (sharedAliasPredicates(shapes).length)
+    throw new TypeError(
+      "shared canonical predicate with aliases has potentially overlapping owners",
+    );
   // Check every property BEFORE any projection can discard datatype/cardinality,
   // including nested links and optional properties omitted by a composite.
   for (const shape of shapes.nodeShapes) {

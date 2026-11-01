@@ -133,7 +133,7 @@ describe("R9 M1: reject sh:class aliases owned anywhere in the manifest", () => 
 });
 
 describe("R9 M2: migration preserves data under other shapes' guards", () => {
-  it("preserves B's pending value despite A's active-only alias field in both profiles", async () => {
+  it("rejects shared canonical aliases even when the supplied subjects have disjoint types", async () => {
     const ontologyTtl = `${HEADER}
       ex:A a owl:Class; rdfs:label "A"; rdfs:comment "A" .
       ex:B a owl:Class; rdfs:label "B"; rdfs:comment "B" .
@@ -143,33 +143,22 @@ describe("R9 M2: migration preserves data under other shapes' guards", () => {
         sh:property [ sh:path [ sh:alternativePath ( ex:p ex:old ) ]; sh:name "status"; sh:datatype xsd:string; sh:in ( "active" ); sh:minCount 1; sh:maxCount 1 ] .
       ex:BShape a sh:NodeShape; sh:targetClass ex:B;
         sh:property [ sh:path ex:p; sh:name "status"; sh:datatype xsd:string; sh:in ( "pending" ); sh:minCount 1; sh:maxCount 1 ] .`;
-    const result = generateModel({
-      ontologyTtl,
-      shapesTtl: source,
-      config: {
-        shapesBase: `${EX}shapes/`,
-        prefixes: {},
-        entities: ["A", "B"].map((name) => ({
-          name,
-          targetClass: `${EX}${name}`,
-          subject: { convention: "self" as const },
-        })),
-      },
-      admissionNamespace: EX,
-    });
-    const e = defineModel(result.manifest).entities.B;
-    if (!e) throw new Error("missing B");
-    const ds = store(`ex:doc a ex:B; ex:p "pending"; ex:old "active" .
-      ex:a a ex:Special; ex:old "active" . ex:Special rdfs:subClassOf ex:OldA .`);
-    await crossCheck(ds, source, result.artifacts["shapes.ttl"]);
-    expect(e.parse(DOC, ds)).toEqual({ status: "pending" });
-    const emitted = store(await e.storeToTurtle(ds));
-    await crossCheck(emitted, source, result.artifacts["shapes.ttl"]);
-    expect(e.parse(DOC, emitted)).toEqual({ status: "pending" });
-    expect(emitted.getObjects(DOC, `${EX}old`, null).map((term) => term.value)).toEqual(["active"]);
-    expect(emitted.getObjects(`${EX}a`, `${EX}p`, null).map((term) => term.value)).toEqual([
-      "active",
-    ]);
+    expect(() =>
+      generateModel({
+        ontologyTtl,
+        shapesTtl: source,
+        config: {
+          shapesBase: `${EX}shapes/`,
+          prefixes: {},
+          entities: ["A", "B"].map((name) => ({
+            name,
+            targetClass: `${EX}${name}`,
+            subject: { convention: "self" as const },
+          })),
+        },
+        admissionNamespace: EX,
+      }),
+    ).toThrow(/shared canonical predicate.*alias/i);
   });
   it("migrates reached composite predicates and types while preserving unreached nodes in both profiles", async () => {
     const source = treeProfile(true);

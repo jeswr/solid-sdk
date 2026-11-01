@@ -36,10 +36,12 @@ import {
   linkTargetConforms,
 } from "./compile.js";
 import {
+  implicitClassTargets,
   localName,
   type NormalizedShapes,
   type ShapeConstraint,
   type ShapeScalar,
+  sharedAliasPredicates,
 } from "./shapes.js";
 
 /** The shape-derived projection of one field (the constraints model.json must cover). */
@@ -454,6 +456,14 @@ function assertCompositeFidelity(
             `composite ${composite.name} node "${node.name}" nested link ${field.name} maps the multi-valued shape property ${field.predicate} (maxCount ${constraint.maxCount ?? "unbounded"}); a nested link must be single-valued (sh:maxCount 1)`,
           );
         }
+        if (
+          (field.classOnly === true) !==
+          (constraint.node === undefined && constraint.hasClass !== undefined)
+        ) {
+          throw new FidelityError(
+            `composite link ${field.name} changes class-only constraint semantics`,
+          );
+        }
         if (field.hasClass !== constraint.hasClass) {
           throw new FidelityError(
             `composite ${composite.name} link ${field.name} changes or drops sh:class`,
@@ -495,6 +505,11 @@ function assertCompositeFidelity(
         continue;
       }
 
+      if (node.name !== composite.root && constraint.hasClass !== undefined) {
+        throw new FidelityError(
+          `child shape sh:class constraint ${field.predicate} requires a projected composite link`,
+        );
+      }
       // FLAT field — structural check (kind / datatype / cardinality / collection /
       // inValues), aligned by predicate (the name is a codegen rename choice).
       const shapeProj: FieldProjection = {
@@ -535,8 +550,13 @@ function assertCompositeFidelity(
       );
     }
 
-    // MUST-coverage — every presence-MUST property of the node must be projected.
+    // Children require full constraint coverage; roots require MUST/alias coverage.
     for (const constraint of shape.properties) {
+      if (node.name !== composite.root && !coveredPreds.has(constraint.pathIri)) {
+        throw new FidelityError(
+          `composite ${composite.name} omits child shape constraint ${constraint.pathIri}`,
+        );
+      }
       if (constraint.aliasPredicates !== undefined && !coveredPreds.has(constraint.pathIri)) {
         throw new FidelityError(`composite omits aliased property ${constraint.pathIri}`);
       }
@@ -557,6 +577,12 @@ function assertCompositeFidelity(
  * is projected inside that composite, never also as a flat entity).
  */
 export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult): void {
+  if (implicitClassTargets(shapes.quads).length)
+    throw new FidelityError("implicit class targets are not modeled by the runtime");
+  if (sharedAliasPredicates(shapes).length)
+    throw new FidelityError(
+      "shared canonical predicate with aliases has potentially overlapping owners",
+    );
   // Independently mirror the compiler's pre-projection satisfiability checks.
   for (const shape of shapes.nodeShapes) {
     for (const c of shape.properties) {
