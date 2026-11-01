@@ -55,6 +55,8 @@ export function snapshotJson(document: unknown, maxDepth: number): unknown {
   const stack: { source: object; target: Record<string, unknown> | unknown[]; depth: number }[] =
     [];
   const copy = (value: unknown, depth: number): unknown => {
+    // Functions are not JSON data; a copied callback (such as a `then`) could run after the check.
+    if (typeof value === "function") throw new TypeError("Context documents must be JSON data.");
     if (value === null || typeof value !== "object") return value;
     if (depth > maxDepth) throw parseLimit("maxJsonDepth");
     const target: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};

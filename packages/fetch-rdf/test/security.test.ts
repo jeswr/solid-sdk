@@ -482,6 +482,31 @@ describe("context budgets and cancellation", () => {
     });
     expect((await parse(shifting)).size).toBe(1);
     expect(reads).toBe(1);
+
+    // A callback copied into the snapshot (here a thenable) must not run after the check.
+    let armed = false;
+    const thenable: Record<string, unknown> = {};
+    Object.defineProperty(thenable, "@context", {
+      enumerable: true,
+      get() {
+        armed = true;
+        return context["@context"];
+      },
+    });
+    // biome-ignore lint/suspicious/noThenProperty: the test builds a hostile thenable on purpose.
+    Object.defineProperty(thenable, "then", {
+      enumerable: true,
+      get: () =>
+        armed
+          ? function (this: Record<string, unknown>, resolve: (value: unknown) => void) {
+              delete this.then;
+              this["@context"] = deep;
+              resolve(this);
+            }
+          : undefined,
+    });
+    await expect(parse(thenable)).rejects.toMatchObject({ name: "RdfFetchError" });
+    await expect(parse(() => context)).rejects.toMatchObject({ name: "RdfFetchError" });
   });
 
   it("preserves a custom loader's refusal in the direct parse cause", async () => {
