@@ -264,13 +264,38 @@ it("gives storage read decorators complete bodies for fetch and listing authoriz
   expect(inspected).toEqual([body, body]);
 });
 
-it("keeps public same-origin storage discovery anonymous and propagates discovery errors", async () => {
+it.each([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+])("refuses outside-root %s discovery without an anonymous transport", async (method) => {
+  const storage = createMemoryStorage({ root: ROOT });
+  const authenticated = vi.fn<typeof fetch>(async (input, init) => {
+    const request = new Request(input, init);
+    request.headers.set("authorization", "Bearer fixture");
+    request.headers.set("dpop", "fixture");
+    return new Response(null);
+  });
+  vi.mocked(createPodClient).mockImplementationOnce(async (options) => {
+    await options.fetch("https://storage-port.example/.well-known/storage", { method });
+    return { storage } as Awaited<ReturnType<typeof createPodClient>>;
+  });
+  const pod = createStoragePodPort({ fetch: authenticated, podRoot: ROOT });
+  await expect(pod.list(ROOT)).rejects.toThrow("Anonymous discovery transport required");
+  expect(authenticated).not.toHaveBeenCalled();
+});
+
+it.each([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+])("keeps public same-origin %s storage discovery anonymous and propagates discovery errors", async (method) => {
   const { storage } = fixture();
   vi.mocked(createPodClient).mockReset();
   const authenticated = vi.fn<typeof fetch>();
   const publicFetch = vi.fn<typeof fetch>(async () => new Response("description"));
   vi.mocked(createPodClient).mockImplementationOnce(async (options) => {
-    await options.fetch("https://storage-port.example/.well-known/storage");
+    await options.fetch("https://storage-port.example/.well-known/storage", { method });
     for (const target of [
       "https://foreign.example/metadata",
       "https://storage-port.example/metadata",

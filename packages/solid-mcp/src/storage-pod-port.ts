@@ -25,7 +25,7 @@ const solidListings = new AsyncLocalStorage<boolean>();
 /** Discover Solid or LWS through storage-client, retaining the MCP capability boundary. */
 export function createStoragePodPort(
   input: SolidMcpConfig,
-  discoveryFetch: typeof fetch = input.fetch,
+  discoveryFetch?: typeof fetch,
 ): PodPort {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
   const legacy = createFetchPodPort(config);
@@ -47,6 +47,7 @@ export function createStoragePodPort(
         throw new Error("Outside discovery scope");
       for (const name of ["authorization", "dpop", "cookie"])
         if (request.headers.has(name)) throw new Error("Caller credentials are forbidden");
+      if (discoveryFetch === undefined) throw new Error("Anonymous discovery transport required");
       response = await podOperationFetch(discoveryFetch)(request, {
         redirect: "manual",
         credentials: "omit",

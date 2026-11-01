@@ -68,8 +68,9 @@ const server = createSolidMcpServer({ pod });
 
 `createStoragePodPort(config, discoveryFetch?)` uses `@jeswr/storage-client` to discover
 Solid or LWS and paginate listings. A separate trusted, guarded anonymous `discoveryFetch`
-can read same-origin storage descriptions outside the pod root; resource credentials stay
-within the pod. Discovery failures propagate without choosing a fallback backend.
+is required to read same-origin storage descriptions outside the pod root; those requests
+are refused when it is omitted. Resource credentials stay within the pod.
+Discovery failures propagate without choosing a fallback backend.
 The adapter refuses redirects. Solid create-only writes keep their exact URL and
 `If-None-Match: *`; LWS create-only writes fail before mutation because LWS names are
 hints. Updates preserve `ifMatch`; deletion without a supplied validator first reads
