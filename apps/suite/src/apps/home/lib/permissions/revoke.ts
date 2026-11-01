@@ -44,6 +44,8 @@ export class AclConflictError extends Error {
 /** An undo whose rules were changed or re-created by someone else since the revoke. */
 export class RestoreConflictError extends AclConflictError {
   override name = "RestoreConflictError";
+  /** The ACL document whose restore was refused, once known. */
+  source?: string;
   constructor() {
     super();
     this.message = "This access was changed elsewhere, so it can't be restored here";
@@ -320,18 +322,23 @@ function sameBody(a: RuleShape, b: RuleShape): boolean {
 }
 /**
  * What a rule grants, as principal x origin x target cells. An empty principal or
- * origin set is its own cell value: an origin-free rule applies to every origin.
+ * origin set is its own cell value: an origin-free rule applies to every origin. A
+ * rule with neither principals nor origins grants nothing, so it has no cells.
  */
 function cells(grants: Grants): Set<string> {
   const result = new Set<string>();
+  if (!grants.principals.size && !grants.origins.size) return result;
   for (const principal of grants.principals.size ? grants.principals : [""])
     for (const origin of grants.origins.size ? grants.origins : [""])
       for (const target of grants.targets) result.add(JSON.stringify([principal, origin, target]));
   return result;
 }
+/** An origin-free cell covers every origin, but only for a real principal. */
 function covered(granted: Set<string>, cell: string): boolean {
   const [principal, , target] = JSON.parse(cell) as string[];
-  return granted.has(cell) || granted.has(JSON.stringify([principal, "", target]));
+  return (
+    granted.has(cell) || (principal !== "" && granted.has(JSON.stringify([principal, "", target])))
+  );
 }
 function covers(granted: Set<string>, wanted: Iterable<string>): boolean {
   return [...wanted].every((cell) => covered(granted, cell));
@@ -471,12 +478,15 @@ function takeExact(dataset: DatasetCore, remove: DeltaRule[]): boolean {
  * named rule, or for a blank rule another blank rule with the same description; else
  * re-create it. `exact` re-adds the whole rule after takeExact removed its successors;
  * otherwise only the cells still missing are added, so undos apply in any order.
+ * `leftovers` are the blank rules the undone write left behind: only those may be
+ * folded into a widened rule, and each at most once.
  */
 function restoreRule(
   dataset: DatasetCore,
   rule: RuleShape,
   wanted: Set<string>,
   exact: boolean,
+  leftovers: DeltaRule[],
 ): void {
   const current = shapes(dataset);
   const named =
@@ -500,22 +510,25 @@ function restoreRule(
     const next = merged(candidate, missing, granted);
     if (!next) continue;
     addGrants(dataset, candidate.root, next);
-    // A blank piece the merged rule now wholly grants is a leftover split: rejoin it.
+    // A piece the undone write split off, now wholly granted by the merged rule, is
+    // rejoined. Other writers' rules stay as they are, even when they are covered.
     if (!exact)
-      for (const other of blanks)
-        if (other !== candidate && covers(cells(next), cells(other)))
-          deleteRule(dataset, other.root);
+      for (const other of blanks) {
+        if (other === candidate || !covers(cells(next), cells(other))) continue;
+        const quads = authorizationQuads(dataset, other.root);
+        const index = leftovers.findIndex((piece) => isomorphic(piece.quads, quads));
+        if (index < 0) continue;
+        leftovers.splice(index, 1);
+        deleteRule(dataset, other.root);
+      }
     return;
   }
+  const reuse = rule.root.termType === "NamedNode" && !named;
+  // The rule's name now describes something else (say, an untyped rule another writer
+  // left): adding these grants to it would switch that description on, so refuse.
+  if (reuse && dataset.match(rule.root as Quad["subject"]).size) throw new RestoreConflictError();
   for (const [index, grants] of (exact ? [rule] : products(missing)).entries())
-    createRule(
-      dataset,
-      rule,
-      index === 0 && rule.root.termType === "NamedNode" && !named
-        ? rule.root
-        : DataFactory.blankNode(),
-      grants,
-    );
+    createRule(dataset, rule, index === 0 && reuse ? rule.root : DataFactory.blankNode(), grants);
 }
 /**
  * Apply an inverse delta to a fresh read. Only grants this revoke removed are put back:
@@ -536,6 +549,7 @@ async function applyDelta(
     for (const target of rule.targets)
       assertWithinPodScope(storage, target.slice(target.indexOf(" ") + 1));
   const left = remove.map((rule) => shapeOf(rule.quads, rule.root));
+  const leftovers = remove.filter((rule) => rule.root.termType === "BlankNode");
   const exact = takeExact(dataset, remove);
   for (const rule of add) {
     const kept = new Set(
@@ -546,6 +560,7 @@ async function applyDelta(
       rule,
       new Set([...cells(rule)].filter((cell) => exact || !covered(kept, cell))),
       exact,
+      leftovers,
     );
   }
 }
@@ -762,7 +777,11 @@ export async function applyRevoke(
         if (!current.etag || current.etag.startsWith("W/")) throw new AclConflictError();
         const inverse = plan.restore?.find((r) => r.source === url);
         const dataset: DatasetCore = new Store([...current.dataset]);
-        if (inverse) await applyDelta(dataset, inverse, url, options.storage);
+        if (inverse)
+          await applyDelta(dataset, inverse, url, options.storage).catch((error: unknown) => {
+            if (error instanceof RestoreConflictError) error.source = url;
+            throw error;
+          });
         else {
           const detached = new Map<string, string[]>();
           for (const change of await resolveChanges(dataset, changes))

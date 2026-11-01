@@ -731,6 +731,23 @@ describe("permission rows", () => {
     expect(trigger.disabled).toBe(true);
     await waitFor(() => expect(document.activeElement).toBe(header));
   });
+  it("focuses the row header after confirming even before the row disables Revoke all", async () => {
+    // The caller's save state can arrive after the dialog closes; focus must not wait for it.
+    const onRevoke = vi.fn();
+    render(<PermissionRow {...permission} onRevoke={onRevoke} />);
+    const header = screen.getByRole("button", { name: /MaraCoach.*details/ });
+    const trigger = screen.getByRole("button", { name: "Revoke all" }) as HTMLButtonElement;
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Remove access" }));
+    expect(onRevoke).toHaveBeenCalledOnce();
+    expect(trigger.disabled).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(header));
+    // A later dismissal without confirming still returns to Revoke all.
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
   it.each(["Cancel", "Escape"])("returns focus to Revoke after %s", async (dismissal) => {
     const onRevoke = vi.fn();
     render(<PermissionRow {...permission} onRevoke={onRevoke} />);
