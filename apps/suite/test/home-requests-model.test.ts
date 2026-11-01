@@ -40,6 +40,7 @@ import {
   isReadable,
   isShareable,
   listText,
+  NOT_SAVED,
   purposeLine,
   purposeText,
   type ReadableRequest,
@@ -200,6 +201,17 @@ describe("requesters and purposes", () => {
     expect(purposeText("urn:purpose:1")).toBeUndefined();
     expect(purposeLine("build your training plan")).toBe("Build your training plan");
     expect(purposeLine(undefined)).toBeUndefined();
+  });
+
+  it("cleans purpose text like requester names and caps its length", () => {
+    expect(purposeText("build\u202E nalp ruoy\u202C")).toBe("build nalp ruoy");
+    expect(purposeText("plan\u200B your\u200D \u0007 runs\uFEFF")).toBe("plan your runs");
+    expect(purposeText("\u2066\u200F\u2069")).toBeUndefined();
+    const long = purposeText("a".repeat(500)) as string;
+    expect(Array.from(long)).toHaveLength(200);
+    expect(long.endsWith("…")).toBe(true);
+    // Cleaning runs before the IRI check, so a disguised IRI is still never shown.
+    expect(purposeText("urn:\u200Bpurpose:1")).toBeUndefined();
   });
 
   it("applies the headline rule", () => {
@@ -397,16 +409,24 @@ describe("errors and capabilities", () => {
       message: "You're offline. Reconnect and try again.",
       retry: true,
     });
-    expect(reviewError(new Error(" The access records folder is shared "), true)).toEqual({
-      kind: "error",
-      category: "unknown",
-      message: "The access records folder is shared",
-      retry: true,
-    });
     expect(reviewError(new Error(""), true)).toMatchObject({
       message: "Your answer wasn't saved. Try again.",
     });
     expect(reviewError("boom", false)).toMatchObject({ category: "unknown" });
+  });
+
+  it("never shows an unmapped SDK message: fixed copy, the raw error only on the console", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const raw = new Error(" The access records folder https://pod.test/.access/ is shared ");
+    expect(reviewError(raw, true)).toEqual({
+      kind: "error",
+      category: "unknown",
+      message: NOT_SAVED,
+      retry: true,
+    });
+    expect(NOT_SAVED).toBe("Your answer wasn't saved. Try again.");
+    expect(logged).toHaveBeenCalledWith(expect.any(String), raw);
+    logged.mockRestore();
   });
 
   it.each([
@@ -414,7 +434,7 @@ describe("errors and capabilities", () => {
     ["The access records folder ACL kept changing", "Something else changed this request", true],
     ["Every approved data type needs an owner registration", "isn't registered in your pod", false],
     ["Registered container is missing", "isn't registered in your pod", false],
-    ["This request claims an approval that was never recorded", "no record of that", false],
+    ["This request claims an approval that was never recorded", "You can still deny it", false],
     [
       "This request only asks to add data, which no sharing role allows on its own, so it can't be approved",
       "only asks to add data, which can't be shared yet",
@@ -424,17 +444,40 @@ describe("errors and capabilities", () => {
     ["Cannot deny an approval", "can't be denied now. Finish approving it", false],
     ["Cannot approve a denial", "You already denied this request", false],
     [
-      "Request x is still finishing with different choices; finish it first",
-      "still finishing. Close this and choose Finish approving",
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+      "Choose Finish approving to complete it as it was first chosen",
       false,
     ],
-    ["Unreadable access request", "couldn't be read, so it can't be answered here", false],
     ["Request no longer exists", "isn't in your inbox any more", false],
   ])("maps the SDK's %j to plain copy", (raw, copy, retry) => {
     const failure = reviewError(new Error(raw), true);
     expect(failure).toMatchObject({ kind: "error", category: "unknown", retry });
     expect(failure.kind === "error" && failure.message).toContain(copy);
     expect(failure.kind === "error" && failure.message).not.toContain(raw);
+  });
+
+  it("says which refusals mean finish the pinned approval, and which leave only Deny", () => {
+    const flags = (raw: string) => {
+      const failure = reviewError(new Error(raw), true);
+      return failure.kind === "error" ? [failure.finish, failure.deny] : [];
+    };
+    expect(
+      flags(
+        "An earlier approval of this request is still finishing with different choices; finish it first",
+      ),
+    ).toEqual([true, undefined]);
+    expect(flags("Cannot deny an approval")).toEqual([true, undefined]);
+    expect(flags("This request claims an approval that was never recorded")).toEqual([
+      undefined,
+      true,
+    ]);
+    expect(flags("Conditional write failed (412)")).toEqual([undefined, undefined]);
+    // The SDK no longer explains unreadable entries here: they get the fixed copy.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(reviewError(new Error("Unreadable access request"), false)).toMatchObject({
+      message: NOT_SAVED,
+    });
+    logged.mockRestore();
   });
 
   it("never shows a sharing-layer error's own message, which names a document", () => {

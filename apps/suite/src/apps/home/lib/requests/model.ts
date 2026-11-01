@@ -25,6 +25,7 @@ const DAY = 86_400_000;
 export const DECIDED_WINDOW_DAYS = 30;
 const MAX_NAME = 80;
 const MAX_CLASS_NAME = 60;
+const MAX_PURPOSE = 200;
 
 /** Format characters (bidi overrides, zero-width joiners) can disguise requester-written text. */
 function plainText(value: string): string {
@@ -32,6 +33,7 @@ function plainText(value: string): string {
     .replace(/\p{Cf}/gu, "")
     .replace(/\s+/g, " ")
     .replace(/\p{Cc}/gu, "")
+    .replace(/ {2,}/g, " ")
     .trim();
 }
 
@@ -68,14 +70,15 @@ export function initials(name: string): string {
 }
 
 /**
- * A purpose as words: a known DPV purpose's label, or the requester's own text. Unknown IRIs
- * have no words to show, so they are omitted rather than displayed raw.
+ * A purpose as words: a known DPV purpose's label, or the requester's own text, cleaned of
+ * disguising characters and capped. Unknown IRIs have no words to show, so they are omitted
+ * rather than displayed raw.
  */
 export function purposeText(purpose: string | undefined): string | undefined {
-  const value = purpose?.replace(/\s+/g, " ").trim();
+  const value = purpose === undefined ? "" : plainText(purpose);
   if (!value) return undefined;
   if (httpUrl(value)) return dpvPurposeLabel(value);
-  return /^[a-z][\w+.-]*:\S*$/i.test(value) ? undefined : value;
+  return /^[a-z][\w+.-]*:\S*$/i.test(value) ? undefined : capped(value, MAX_PURPOSE);
 }
 
 /** Lower-case a sentence-case label for use mid-sentence, leaving acronyms ("GPS data") alone. */
@@ -260,7 +263,10 @@ export interface RequestLists {
   pending: ReadableRequest[];
   /** Approved and denied within the last 30 days, most recently decided first. */
   decided: ReadableRequest[];
-  /** Notifications that couldn't be read; they can only be denied. */
+  /**
+   * Inbox notifications that aren't access requests or couldn't be read. Nothing can answer
+   * them, so they are never counted as waiting.
+   */
   unreadable: UnreadableRequest[];
 }
 
@@ -308,11 +314,24 @@ export type ReviewError =
       message: string;
       /** Whether running the same decision again can succeed. */
       retry: boolean;
+      /** An approval is pinned with other choices: only finishing it (no choices) can work. */
+      finish?: true;
+      /** Approving can't work, but denying can: offer Deny first. */
+      deny?: true;
     };
+
+/** Shown for any failure without a known plain-language cause; the raw error goes to the console. */
+export const NOT_SAVED = "Your answer wasn't saved. Try again.";
 
 /** Plain copy for the SDK's known refusals, matched on its messages. */
 const CHANGED = "Something else changed this request at the same time. Try again.";
-const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[] = [
+const KNOWN_ERRORS: readonly {
+  match: RegExp;
+  message: string;
+  retry: boolean;
+  finish?: true;
+  deny?: true;
+}[] = [
   { match: /^Conditional write failed \(412\)|kept changing/, message: CHANGED, retry: true },
   {
     match: /needs an owner registration|Registered container is missing/,
@@ -324,6 +343,7 @@ const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[
     message:
       "This request says it was already approved, but your pod has no record of that. You can still deny it.",
     retry: false,
+    deny: true,
   },
   {
     match: /only asks to add data|grants no requested modes/,
@@ -335,6 +355,7 @@ const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[
     message:
       "Approving this request has already started, so it can't be denied now. Finish approving it, then remove access from Permissions if you change your mind.",
     retry: false,
+    finish: true,
   },
   {
     match: /^Cannot approve a denial/,
@@ -342,15 +363,11 @@ const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[
     retry: false,
   },
   {
-    match: /still finishing/,
+    match: /^An earlier approval of this request is still finishing with different choices/,
     message:
-      "An earlier approval of this request is still finishing. Close this and choose Finish approving.",
+      "An earlier approval of this request, with different choices, is still finishing. Choose Finish approving to complete it as it was first chosen, or deny it.",
     retry: false,
-  },
-  {
-    match: /^Unreadable access request/,
-    message: "This request couldn't be read, so it can't be answered here.",
-    retry: false,
+    finish: true,
   },
   {
     match: /^Request no longer exists/,
@@ -360,9 +377,9 @@ const KNOWN_ERRORS: readonly { match: RegExp; message: string; retry: boolean }[
 ];
 
 /**
- * What the sheet shows for a failed decision: plain copy for the SDK's known refusals, the error's
- * own message otherwise. A race with another decision is not an error for the user, and ACP
- * storage gets its own copy.
+ * What the sheet shows for a failed decision: plain copy for the SDK's known refusals and fixed
+ * copy otherwise (SDK messages can name URLs and internals, so they only reach the console). A
+ * race with another decision is not an error for the user, and ACP storage gets its own copy.
  */
 export function reviewError(error: unknown, approve: boolean, online = true): ReviewError {
   if (error instanceof RequestConflictError) return { kind: "conflict" };
@@ -398,21 +415,25 @@ export function reviewError(error: unknown, approve: boolean, online = true): Re
         message: "Sharing this would lock you out of your own data, so nothing was changed.",
         retry: false,
       };
+    if (error.code !== "conflict") console.error("Access request decision failed", error);
     return {
       kind: "error",
       category: "unknown",
-      message: error.code === "conflict" ? CHANGED : "Your answer wasn't saved. Try again.",
+      message: error.code === "conflict" ? CHANGED : NOT_SAVED,
       retry: true,
     };
   }
   const message = error instanceof Error ? error.message.trim() : "";
   const known = KNOWN_ERRORS.find((candidate) => candidate.match.test(message));
   if (known)
-    return { kind: "error", category: "unknown", message: known.message, retry: known.retry };
-  return {
-    kind: "error",
-    category: "unknown",
-    message: message || "Your answer wasn't saved. Try again.",
-    retry: true,
-  };
+    return {
+      kind: "error",
+      category: "unknown",
+      message: known.message,
+      retry: known.retry,
+      ...(known.finish && { finish: true as const }),
+      ...(known.deny && { deny: true as const }),
+    };
+  console.error("Access request decision failed", error);
+  return { kind: "error", category: "unknown", message: NOT_SAVED, retry: true };
 }
