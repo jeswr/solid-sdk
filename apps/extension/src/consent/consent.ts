@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Extension-owned ConsentSheet. Untrusted request copy is always rendered as text. */
 import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
@@ -48,9 +49,30 @@ function scopeSummary(targets: PendingConsentView['classes'][number]['targets'])
   return parts.join(' and ');
 }
 
-function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> {
+type ConsentTargetView = PendingConsentView['classes'][number]['targets'][number];
+
+/** Per class: its select-all box and one box per target id. */
+interface ClassSelection {
+  readonly box: HTMLInputElement;
+  readonly targets: Map<string, HTMLInputElement>;
+}
+
+const SOURCE_HEADINGS: Record<ConsentTargetView['source'], string> = {
+  sai: 'From your data registries',
+  'type-index': 'From your type index',
+};
+
+/** The class box mirrors its targets: checked when all are, mixed when some are. */
+function syncClassBox(selection: ClassSelection): void {
+  const boxes = [...selection.targets.values()];
+  const checked = boxes.filter((box) => box.checked).length;
+  selection.box.checked = boxes.length > 0 && checked === boxes.length;
+  selection.box.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function renderClasses(view: PendingConsentView): Map<string, ClassSelection> {
   const container = document.getElementById('classes')!;
-  const boxes = new Map<string, HTMLInputElement>();
+  const selections = new Map<string, ClassSelection>();
   container.replaceChildren();
   for (const [index, c] of view.classes.entries()) {
     const isStorage = c.dataClass === PIM_STORAGE_CLASS;
@@ -62,11 +84,12 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
     const head = el('label', { class: 'class-head card-check' });
     const box = el('input');
     box.type = 'checkbox';
-    // Whole-pod access always needs a fresh selection in the trusted consent window.
-    box.checked = !isStorage && c.targets.length > 0;
+    // A class with nothing to pin cannot be granted (C5), so it cannot be selected.
+    box.disabled = c.targets.length === 0;
     box.setAttribute('aria-labelledby', titleId);
     box.setAttribute('aria-describedby', descriptionId);
-    boxes.set(c.dataClass, box);
+    const selection: ClassSelection = { box, targets: new Map() };
+    selections.set(c.dataClass, selection);
     const titleWrap = el('span');
     titleWrap.append(
       el('span', { class: 'class-title card-title', text: copy.label, id: titleId }),
@@ -91,26 +114,59 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
     );
     if (c.truncated) item.appendChild(el('p', { text: 'Some data could not be checked' }));
     if (c.targets.length > 0) {
-      const list = el('ul', { class: 'targets' });
-      for (const target of c.targets) {
-        list.append(
-          el('li', {
-            text: `${target.url}${!isStorage && target.kind === 'container' ? ' (folder and its contents)' : ''}`,
+      const lists = el('div', { class: 'target-groups' });
+      const sources = [...new Set(c.targets.map((target) => target.source))];
+      for (const source of sources) {
+        // Whole-pod storage has one source and its own warning; a heading adds nothing.
+        if (!isStorage)
+          lists.append(el('p', { class: 'target-group', text: SOURCE_HEADINGS[source] }));
+        const list = el('ul', { class: 'targets' });
+        for (const target of c.targets.filter((t) => t.source === source)) {
+          const row = el('li', {
             class: target.kind === 'container' ? 'container-target' : undefined,
-          }),
-        );
+          });
+          const label = el('label', { class: 'target-check' });
+          const targetBox = el('input');
+          targetBox.type = 'checkbox';
+          targetBox.checked = target.preselected;
+          targetBox.dataset.targetId = target.id;
+          selection.targets.set(target.id, targetBox);
+          label.append(
+            targetBox,
+            el('span', {
+              text: `${target.url}${!isStorage && target.kind === 'container' ? ' (folder and its contents)' : ''}`,
+            }),
+          );
+          row.append(label);
+          if (!target.preselected && !isStorage) {
+            const hintId = `target-hint-${target.id}`;
+            targetBox.setAttribute('aria-describedby', hintId);
+            row.append(
+              el('span', {
+                class: 'target-hint hint',
+                id: hintId,
+                text: `Couldn't confirm this holds ${copy.label.toLowerCase()}`,
+              }),
+            );
+          }
+          list.append(row);
+        }
+        lists.append(list);
       }
-      if (isStorage) item.append(list);
+      if (isStorage) item.append(lists);
       else {
         const scope = el('details', { class: 'scope-details' });
-        scope.append(el('summary', { text: 'See included items' }), list);
+        // Unconfirmed targets start unselected; open the list so that choice is visible.
+        scope.open = c.targets.some((target) => !target.preselected);
+        scope.append(el('summary', { text: 'See included items' }), lists);
         item.append(scope);
       }
     }
+    syncClassBox(selection);
     container.append(item);
   }
   document.getElementById('empty-note')!.hidden = view.classes.some((c) => c.targets.length > 0);
-  return boxes;
+  return selections;
 }
 
 function renderRequest(view: PendingConsentView): void {
@@ -136,20 +192,23 @@ async function main(): Promise<void> {
   const selectAll = document.getElementById('select-all') as HTMLInputElement;
   const container = document.getElementById('classes')!;
   const error = document.getElementById('error')!;
-  let boxes = new Map<string, HTMLInputElement>();
+  let selections = new Map<string, ClassSelection>();
+  const targetBoxes = () => [...selections.values()].flatMap((c) => [...c.targets.values()]);
   let selectedProfileId: string | undefined;
   let loading = true;
   let decided = false;
   let version = 0;
   const updateSelection = () => {
-    const checked = [...boxes.values()].filter((box) => box.checked).length;
+    const all = targetBoxes();
+    const checked = all.filter((box) => box.checked).length;
+    for (const selection of selections.values()) syncClassBox(selection);
     approve.disabled = loading || decided || checked === 0;
-    selectAll.disabled = loading || decided || boxes.size === 0;
-    selectAll.checked = boxes.size > 0 && checked === boxes.size;
-    selectAll.indeterminate = checked > 0 && checked < boxes.size;
+    selectAll.disabled = loading || decided || all.length === 0;
+    selectAll.checked = all.length > 0 && checked === all.length;
+    selectAll.indeterminate = checked > 0 && checked < all.length;
     document.getElementById('selection-hint')!.textContent = checked
-      ? `${checked} ${checked === 1 ? 'data type' : 'data types'} selected. Only checked data will be shared.`
-      : 'Choose at least one data type to share.';
+      ? `${checked} ${checked === 1 ? 'item' : 'items'} selected. Only checked items will be shared.`
+      : 'Choose at least one item to share.';
   };
   const showError = (message: string) => {
     error.textContent = message;
@@ -157,17 +216,18 @@ async function main(): Promise<void> {
     loading = true;
     updateSelection();
   };
-  const decide = (approvedClasses: string[]) => {
+  const decide = (approvedTargets: Record<string, string[]>) => {
     if (!consentId || decided) return;
     decided = true;
     picker.disabled = true;
     updateSelection();
+    const approving = Object.keys(approvedTargets).length > 0;
     const message: ConsentDecisionMessage = {
       type: 'SOLID_CONSENT_DECISION',
       consentId,
-      approvedClasses,
+      approvedTargets,
       // Retain the existing denial payload; only an approval needs an account binding.
-      ...(approvedClasses.length ? { profileId: selectedProfileId } : {}),
+      ...(approving ? { profileId: selectedProfileId } : {}),
     };
     chrome.runtime.sendMessage(message, (result: ActionResult | undefined) => {
       if (result?.error) showError(result.error);
@@ -176,21 +236,33 @@ async function main(): Promise<void> {
   };
   document.getElementById('deny')!.addEventListener('click', () => {
     if (decided) window.close();
-    else decide([]);
+    else decide({});
   });
   approve.addEventListener('click', () => {
-    if (!approve.disabled)
-      decide([...boxes].filter(([, box]) => box.checked).map(([dataClass]) => dataClass));
+    if (approve.disabled) return;
+    const approved: Record<string, string[]> = {};
+    for (const [dataClass, selection] of selections) {
+      const ids = [...selection.targets].filter(([, box]) => box.checked).map(([id]) => id);
+      if (ids.length) approved[dataClass] = ids;
+    }
+    decide(approved);
   });
-  container.addEventListener('change', updateSelection);
+  container.addEventListener('change', (event) => {
+    // A class box selects or clears every target in its class.
+    for (const selection of selections.values()) {
+      if (event.target !== selection.box) continue;
+      for (const box of selection.targets.values()) box.checked = selection.box.checked;
+    }
+    updateSelection();
+  });
   selectAll.addEventListener('change', () => {
-    for (const box of boxes.values()) box.checked = selectAll.checked;
+    for (const box of targetBoxes()) box.checked = selectAll.checked;
     updateSelection();
   });
   // Closing the trusted window still denies the request, without overwriting an approval.
   window.addEventListener('pagehide', () => {
     try {
-      decide([]);
+      decide({});
     } catch {
       // Best effort when extension chrome is being destroyed.
     }
@@ -220,7 +292,7 @@ async function main(): Promise<void> {
       }
       selectedProfileId = view.profileId;
       renderRequest(view);
-      boxes = renderClasses(view);
+      selections = renderClasses(view);
       picker.replaceChildren(
         ...view.profiles.map((profile) => {
           const option = el('option', { text: profile.label });

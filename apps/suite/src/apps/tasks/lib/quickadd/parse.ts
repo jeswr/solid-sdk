@@ -12,6 +12,31 @@ const reminderPrefix = new RegExp(
   "i",
 );
 
+/** Bound a reminder phrase, including an `on` qualifier, before a separate deadline. */
+export function reminderPhrase(remaining: string, ctx: QuickAddContext): string | undefined {
+  const parser = ctx.locale === "en-US" ? en.casual : en.GB;
+  const today = localCalendar(ctx.now, ctx.tz);
+  const reminder =
+    reminderPrefix.exec(remaining)?.[0] ??
+    parser
+      .parse(remaining, { instant: today, timezone: 0 }, { forwardDate: true })
+      .find((candidate) => candidate.index === 0)?.text;
+  if (!reminder) return undefined;
+  let length = reminder.length;
+  const suffix = remaining.slice(length);
+  const connector = /^\s+on\s+/i.exec(suffix);
+  if (connector) {
+    const calendarParser = parser.clone();
+    calendarParser.refiners = [];
+    const qualifier = calendarParser
+      .parse(suffix.slice(connector[0].length), { instant: today, timezone: 0 })
+      .find((candidate) => candidate.index === 0);
+    // Unknown connected qualifiers stay literal, including their remaining text.
+    length += qualifier ? connector[0].length + qualifier.text.length : suffix.length;
+  }
+  return remaining.slice(0, length);
+}
+
 /** Pure English quick-add parser. See README.md for conflict and DST policies. */
 export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResult {
   if (!Number.isFinite(ctx.now.getTime())) throw new RangeError("Invalid quick-add clock");
@@ -58,26 +83,9 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     const remaining = working.slice(marker.index + marker[0].length);
     // Bound time-first reminders before chrono can merge them with the following deadline.
     // Calendar-first reminders can include their own date and time as one complete phrase.
-    const reminder =
-      reminderPrefix.exec(remaining)?.[0] ??
-      parser
-        .parse(remaining, { instant: today, timezone: 0 }, { forwardDate: true })
-        .find((candidate) => candidate.index === 0)?.text;
+    const reminder = reminderPhrase(remaining, ctx);
     if (reminder) {
-      let length = reminder.length;
-      const suffix = remaining.slice(length);
-      const connector = /^\s+on\s+/i.exec(suffix);
-      if (connector) {
-        // Parse one calendar qualifier without merging an adjacent, separate deadline.
-        const calendarParser = parser.clone();
-        calendarParser.refiners = [];
-        const qualifier = calendarParser
-          .parse(suffix.slice(connector[0].length), { instant: today, timezone: 0 })
-          .find((candidate) => candidate.index === 0);
-        // Unknown connected qualifiers stay literal, including their remaining text.
-        length += qualifier ? connector[0].length + qualifier.text.length : suffix.length;
-      }
-      mask(marker.index, marker[0].length + length);
+      mask(marker.index, marker[0].length + reminder.length);
     }
   }
   // Chrono merges anchored offsets into relative results, discarding their anchor.
