@@ -104,6 +104,9 @@
   font-size: var(--text-sm);
 }
 .su-sign-in-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 3px;

@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -492,5 +493,14 @@ describe("SignInCard", () => {
     expect(
       results.violations.filter(({ impact }) => impact === "serious" || impact === "critical"),
     ).toEqual([]);
+  });
+});
+
+describe("SignInCard stylesheet", () => {
+  it("gives footer links a 44px touch target without relying on host styles", () => {
+    const css = readFileSync("src/styles/sign-in.css", "utf8");
+    const rule = /\.su-sign-in-footer a \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/min-height:\s*44px/);
+    expect(rule).toMatch(/display:\s*inline-flex/);
   });
 });
