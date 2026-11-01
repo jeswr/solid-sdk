@@ -4,6 +4,7 @@
 
 import * as entry0 from "@jeswr/agent-credentials";
 import * as cli from "@jeswr/agent-credentials/cli";
+import * as matrix from "@jeswr/agent-credentials/matrix";
 import * as google from "@jeswr/agent-credentials/providers/google";
 import * as microsoft from "@jeswr/agent-credentials/providers/microsoft";
 import * as setup from "@jeswr/agent-credentials/providers/setup";
@@ -20,6 +21,7 @@ const modules: Record<string, object> = {
   "./providers/google": google,
   "./providers/microsoft": microsoft,
   "./providers/setup": setup,
+  "./matrix": matrix,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
 

@@ -35,6 +35,10 @@
     "./providers/setup": {
       "types": "./dist/providers/setup.d.ts",
       "default": "./dist/providers/setup.js"
+    },
+    "./matrix": {
+      "types": "./dist/matrix.d.ts",
+      "default": "./dist/matrix.js"
     }
   },
   "files": [

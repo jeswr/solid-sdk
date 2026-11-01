@@ -16,7 +16,7 @@
  * leaves the old or the new file, never a partial one. Nothing here searches for credentials
  * elsewhere (no keychains, browser profiles or password managers).
  */
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import {
   closeSync,
   constants,
@@ -35,6 +35,7 @@ import { homedir, hostname } from "os";
 import { isAbsolute, join } from "path";
 import { setTimeout as sleep } from "timers/promises";
 import { z } from "zod";
+import { type MatrixDevice, matrixDeviceSchema } from "./matrix-record.js";
 import { parseRfc3339 } from "./providers/common.js";
 
 export class HelperError extends Error {
@@ -262,11 +263,14 @@ export class CredentialStore {
     if (!isAbsolute(dir)) throw new HelperError("invalid", "--dir must be an absolute path");
     this.dir = dir;
     ensureDir(dir);
-    for (const sub of ["clients", "profiles", "grants", "providers", "locks", "ledger"])
+    for (const sub of ["clients", "profiles", "grants", "providers", "locks", "ledger", "matrix"])
       ensureDir(join(dir, sub));
   }
 
-  private path(sub: "clients" | "profiles" | "grants" | "providers", name: string): string {
+  private path(
+    sub: "clients" | "profiles" | "grants" | "providers" | "matrix",
+    name: string,
+  ): string {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     return join(this.dir, sub, `${name}.json`);
   }
@@ -397,6 +401,26 @@ export class CredentialStore {
     validFor(grantSchema, g);
     this.write(this.path("grants", g.profile), g);
   }
+  /** A privately provisioned token, with a purpose independent of its scopes. */
+  matrixDevice(account: string, purpose: "read" | "send"): MatrixDevice | undefined {
+    const name = createHash("sha256")
+      .update(JSON.stringify([account, purpose]))
+      .digest("hex")
+      .slice(0, 32);
+    const record = this.read(this.path("matrix", name), matrixDeviceSchema);
+    if (record && (record.account !== account || record.purpose !== purpose))
+      throw new HelperError("account", "Matrix device belongs to another account or purpose");
+    return record;
+  }
+  putMatrixDevice(record: MatrixDevice): void {
+    validFor(matrixDeviceSchema, record);
+    const name = createHash("sha256")
+      .update(JSON.stringify([record.account, record.purpose]))
+      .digest("hex")
+      .slice(0, 32);
+    this.write(this.path("matrix", name), record);
+  }
+
   /** A privately provisioned token, with a purpose independent of its scopes. */
   tokenFile(name: string): TokenFile | undefined {
     return this.read(this.path("providers", name), tokenFileSchema);
