@@ -60,8 +60,10 @@ test("unsupported link option explains why and duration is disabled", async ({ p
   await dialog.getByRole("combobox", { name: "General access", exact: true }).click();
   const link = page.getByRole("option", { name: "Anyone with the link", exact: true });
   await expect(link).toBeDisabled();
-  await link.locator("..").hover();
-  await expect(page.getByRole("tooltip", { name: "Not available on this storage" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    dialog.getByText("Link sharing isn't available on this storage.", { exact: true }),
+  ).toBeVisible();
   await audit(page, "unsupported", info.project.name);
 });
 

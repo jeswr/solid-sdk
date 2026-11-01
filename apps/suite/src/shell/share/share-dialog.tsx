@@ -490,26 +490,20 @@ function SharingContent({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {generalAccessOptions(caps).map((option) =>
-                  option.disabled ? (
-                    <Tooltip key={option.value}>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <SelectItem value={option.value} disabled>
-                            {option.label}
-                          </SelectItem>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>Not available on this storage</TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ),
-                )}
+                {/* A disabled option says why in the note under the field: a tooltip
+                    wrapper inside the listbox breaks its required-children structure. */}
+                {generalAccessOptions(caps).map((option) => (
+                  <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {generalAccessOptions(caps).some((option) => option.disabled) && (
+              <p className="text-sm text-muted-foreground" id={`${id}-general-note`}>
+                Link sharing isn't available on this storage.
+              </p>
+            )}
             {state.general.mode !== "restricted" && (
               <RoleSelect
                 label="General access role"
