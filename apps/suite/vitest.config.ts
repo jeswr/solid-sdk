@@ -24,6 +24,8 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/shell/lib/**/*.ts",
+        "src/shell/search/local-source.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/state/*.{ts,tsx}",
