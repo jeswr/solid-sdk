@@ -14,7 +14,7 @@ import {
 } from "./policy.js";
 import { aclLink, links, parent, parse, requireOk } from "./rdf.js";
 import { ResourceReadError } from "./resource-body.js";
-import { type AcpDialect, PolicyTooComplex } from "./systems/acp.js";
+import { type AcpDialect, isPolicyTooComplex } from "./systems/acp.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import { reportItem, type TranslationContext, translatePolicy } from "./translation.js";
 import {
@@ -112,7 +112,7 @@ async function buildPlan(opts: {
     opts.signal?.throwIfAborted();
     const url = queue.shift() as string;
     seen.add(url);
-    if (seen.size > 10000) throw new PolicyTooComplex("Pod has more than 10000 resources");
+    if (seen.size > 10000) throw new RangeError("Pod has more than 10000 resources");
     const head = requireOk(await source.http.head(url, { signal: opts.signal }), url);
     const acl = aclLink(head, url, source.root);
     for (const auxiliary of [...links(head, url, "acl"), ...links(head, url, "describedby")])
@@ -228,7 +228,7 @@ async function buildPlan(opts: {
         if (error instanceof ResourceReadError) sourceIntegrityErrors.add(item.resource.sourceUrl);
         report.push(
           reportItem(
-            error instanceof PolicyTooComplex ? "too-complex" : "acl-unreadable",
+            isPolicyTooComplex(error) ? "too-complex" : "acl-unreadable",
             item.resource.sourceUrl,
             // readAccess normalizes non-Error transport rejections at its boundary.
             (error as Error).message,

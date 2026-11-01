@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -8,6 +9,7 @@
 // NamedNodeFrom/LiteralFrom + the dataset add, all from @rdfjs/wrapper.
 
 import { escapeIri } from "@jeswr/rdf-serialize";
+import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -45,16 +47,6 @@ import {
   ODRLD_DELEGATED_UNDER,
   RDF_TYPE,
 } from "./vocab.js";
-
-/**
- * Read a property as a Set of the OBJECT TERMS themselves (not their lexical
- * `.value`) — so the term type survives the read and the read layer can reject
- * malformed objects (e.g. a literal where an IRI is required). The factory is
- * shared so term identity / Set de-duplication hold.
- */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
-}
 
 /** A live alias view: phase-1 writes use legacy predicates and clear canonical aliases. */
 class AliasedTermSet extends Set<TermWrapperType> {

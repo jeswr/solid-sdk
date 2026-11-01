@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * The channel-upgrade ORCHESTRATION (M2-DESIGN.md §4) — ties the pure state machine
@@ -72,14 +73,12 @@ export class RelationshipConflictError extends Error {
 }
 
 /**
- * The CANONICAL storage key for a counterparty — the SAME canonicalisation the state
- * machine applies to `personIri` ({@link initialRelationship} uses `asUrn ?? safeHttpIri`).
- * A store MUST key `load` AND `save` on this, not the raw argument: otherwise a caller
- * that loads with a non-canonical HTTP IRI (e.g. a default-port / uppercase-host form)
- * misses the state saved under the canonical `state.personIri`, and the ratchet is stuck
- * re-creating the initial state (a roborev M2.4 finding). Idempotent (canonical → itself);
- * falls back to the raw string only for a value neither canonicaliser accepts (which the
- * state machine would reject upstream anyway).
+ * The shared storage key for a counterparty — the SAME escaping the state machine
+ * applies to `personIri` ({@link initialRelationship} uses `asUrn ?? safeHttpIri`).
+ * A store must use this for both load and save so escaped input resolves to its
+ * persisted state. HTTP IRI identity stays lexical: default ports, host case, and
+ * dot segments survive. Falls back to the raw string only for a value neither
+ * guard accepts (which the state machine rejects upstream).
  */
 export function canonicalPersonKey(personIri: string): string {
   return asUrn(personIri) ?? safeHttpIri(personIri) ?? personIri;
@@ -139,7 +138,10 @@ const MAX_STATE_BYTES = 1024 * 1024;
  * typed {@link serializeRelationship}/{@link parseRelationship}. `save` uses `If-Match`
  * (the loaded ETag) — or `If-None-Match: *` for a brand-new resource — for optimistic
  * concurrency, and refuses redirects on every request. Every resource URL is
- * scope-guarded strictly within the container.
+ * scope-guarded strictly within the container. When a lexical-key resource is
+ * missing, loads also check the previous URL-canonicalized key, accepting only
+ * records marked as legacy (including unversioned documents). Legacy state keeps
+ * its canonical personIri, so subsequent saves use that resource and its ETag.
  */
 export function createPodRelationshipStore(
   options: PodRelationshipStoreOptions,
@@ -164,9 +166,21 @@ export function createPodRelationshipStore(
 
   return {
     async load(personIri: string): Promise<LoadedRelationship | undefined> {
-      const url = urlFor(personIri);
-      const res = await readFetch(url, { method: "GET", redirect: "manual" });
+      let url = urlFor(personIri);
+      let legacyKey: string | undefined;
+      let res = await readFetch(url, { method: "GET", redirect: "manual" });
       assertNoRedirect(res, "GET", url);
+      if (res.status === 404 && safeHttpIri(personIri) !== undefined) {
+        // Before the shared lexical guard, keys used URL.href then IRI escaping.
+        // Parse the original input here to reproduce its old URL normalization.
+        const legacyUrl = urlFor(new URL(personIri).href);
+        if (legacyUrl !== url) {
+          legacyKey = canonicalPersonKey(new URL(personIri).href);
+          url = legacyUrl;
+          res = await readFetch(url, { method: "GET", redirect: "manual" });
+          assertNoRedirect(res, "GET", url);
+        }
+      }
       if (res.status === 404) return undefined;
       if (!res.ok) {
         throw new Error(`relationship load failed: GET ${url} -> ${res.status} ${res.statusText}`);
@@ -178,6 +192,11 @@ export function createPodRelationshipStore(
       const turtle = new TextDecoder().decode(bytes);
       const state = parseRelationship(turtle, url);
       if (state === undefined) return undefined; // unparseable → treat as no state (fail-closed)
+      if (
+        legacyKey !== undefined &&
+        (state.personIriVersion !== 1 || state.personIri !== legacyKey)
+      )
+        return undefined;
       const etag = res.headers.get("etag");
       if (etag === null || etag.length === 0) {
         throw new Error("relationship load failed: existing state has no ETag for safe CAS.");
@@ -420,7 +439,10 @@ export async function offerAndNegotiate(
   const loaded = await store.load(personIri);
   if (loaded === undefined) return { ok: false, reason: "no relationship for counterparty." };
 
-  const normalized = normalizeUpgradeOffer(offer);
+  const normalized = normalizeUpgradeOffer(
+    offer,
+    loaded.state.state === "offer-pending" ? (loaded.state.pendingOfferVersion ?? 1) : 2,
+  );
   if (normalized === undefined) return { ok: false, reason: "offer is malformed or unsafe." };
 
   let pending: LoadedRelationship;
@@ -447,7 +469,9 @@ export async function offerAndNegotiate(
   const target = pending.state.agentCardUrl;
   if (target === undefined) return { ok: false, reason: "no verified card endpoint to offer to." };
 
-  const raw = await transport({ target, payload: encodeUpgradeOffer(normalized) });
+  const persistedOffer = pending.state.pendingOffer;
+  if (persistedOffer === undefined) return { ok: false, reason: "no persisted offer to send." };
+  const raw = await transport({ target, payload: encodeUpgradeOffer(persistedOffer) });
   const response = decodeUpgradeResponse(raw);
   const resolved = transition(pending.state, { kind: "offer-response", response }, now);
   if (!resolved.ok) return resolved;
