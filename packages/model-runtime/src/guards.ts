@@ -14,7 +14,7 @@
  * IRI filter: it retains solid-bookmark's `URL.href` canonicalisation for parity,
  * then rejects any remaining IRIREF-forbidden characters before a NamedNode is
  * emitted. rdf-serialize instead escapes the lexical input and preserves identity;
- * the composite graph-walk therefore additionally requires canonical equality.
+ * the composite graph-walk validates lexical safety and follows the exact linked term.
  */
 
 /** True when an IRI contains bytes unsafe in a Turtle IRIREF. */

@@ -41,9 +41,12 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias
-  predicate across the manifest. `nested` links reject aliases, including empty arrays.
+  predicate across the manifest. `rdf:type` and structural link predicates are reserved
+  from flat fields and all aliases. Type aliases cannot overlap any canonical type or
+  another owner's alias. `nested` links reject aliases, including empty arrays.
 - Singleton reads guard the canonical value first, then aliases in order; only `undefined`
-  falls back (`false`, `0`, and `""` win). Defaults require all predicates to be absent.
+  falls back (`false`, `0`, and `""` win). Defaults require all predicates to be absent,
+  cannot satisfy `requiredFailClosed`, and never apply with `maxCount: 0`.
   Each predicate checks distinct raw terms and maxCount before mapping: ambiguity or a
   cardinality violation drops the field without alias fallback; a required field rejects.
   Sets expose the guarded union; parse checks raw-union maxCount and guarded-union minCount.
@@ -51,8 +54,9 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   members. Setters clear aliases even on `undefined`/invalid input; `mark` clears alias
   types. Serialisation migrates known aliases in a copy and writes canonical IRIs only.
 - Composite entities graph-walk exact link terms from the root; never assume fragments.
-  A linked IRI must already equal its safe http(s) canonical form; otherwise the required
-  link rejects the record and an optional link drops its subtree.
+  A linked NamedNode must be an absolute http(s) IRI without IRIREF-forbidden characters.
+  Follow that exact term without URL canonicalisation; an unsafe required link rejects
+  the record and an optional link drops its subtree.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)
   belongs in the consuming package's facade, not in this runtime.
 - Changes here are security-critical: add an adversarial test that fails before the fix.
@@ -61,5 +65,6 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 
 `defineModel`, `validateManifest`, `ManifestError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
-`tryRead` plus the XSD datatype mappers. Packages migrating off hand-written models may reuse
-the guards so their filter behaviour stays byte-identical.
+`tryRead`, `isSafeAbsoluteIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
+mappers. Packages migrating off hand-written models may reuse the guards so their filter
+behaviour stays byte-identical.

@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # 0003 Domain-model code generation in the workspace
@@ -52,7 +53,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 |---|---|---|---|
 | P0 mapping, admission, generator, bookmarks pilot | done in standalone; imported here | `packages/federation-codegen`, `packages/model-runtime` | sst-ild.4.1 |
 | G1 to G4 generator readiness | done; imported | same | (in .4.1) |
-| G5 legacy-IRI read aliases: read old and canonical IRIs, canonical first, write canonical only | open | runtime manifest key + config, fidelity traces it to `legacy-w3id-alignments.ttl` | sst-ild.4.2 |
+| G5 legacy-IRI read aliases: read old and canonical IRIs, canonical first, write canonical only | implemented; landing in PR #213 | derived from SHACL multiple `sh:targetClass` and `sh:alternativePath`; canonical member is the ontology-declared one | sst-ild.4.2 |
 | B bookmarks reference migration | open, needs G5 | `packages/solid-bookmark` flips to generated core plus facade | sst-ild.7.1 |
 | Bookmarks sector ratchet: package profile (`book:`, `schema:keywords`, timestamps) versus `sectors/bookmarks` | needs Jesse (normative vocabulary) | `packages/solid-federation-vocab` | sst-ild.7.2 |
 | P1 workspace codegen task plus a second migration (`solid-health-diary`, the closest sector match) | open | turbo `codegen` check, `packages/solid-health-diary` | sst-ild.4.3 |

@@ -542,12 +542,40 @@ function validatePredicateAliases(entities: AnyManifestEntity[]): void {
   const fields = entities.flatMap((entity) =>
     isCompositeEntity(entity) ? entity.nodes.flatMap((node) => node.fields) : entity.fields,
   );
+  const rdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+  const structural = new Set([
+    rdfType,
+    ...fields.filter((field) => field.kind === "nested").map((field) => field.predicate),
+  ]);
   const canonical = new Set(fields.map((field) => field.predicate));
   const aliases = new Set<string>();
   for (const field of fields) {
+    if (
+      field.predicate === rdfType ||
+      (field.kind !== "nested" && structural.has(field.predicate))
+    ) {
+      fail(`field.predicate is reserved for runtime structure: ${field.predicate}`);
+    }
     for (const alias of field.aliasPredicates ?? []) {
-      if (canonical.has(alias) || aliases.has(alias)) {
+      if (structural.has(alias) || canonical.has(alias) || aliases.has(alias)) {
         fail(`field.aliasPredicates overlaps another field predicate or alias: ${alias}`);
+      }
+      aliases.add(alias);
+    }
+  }
+}
+
+/** An alias has one owner and must never name ANY canonical type in this manifest. */
+function validateTypeAliases(entities: AnyManifestEntity[]): void {
+  const nodes = entities.flatMap<ManifestEntity | ManifestNode>((entity) =>
+    isCompositeEntity(entity) ? entity.nodes : [entity],
+  );
+  const canonical = new Set(nodes.flatMap((node) => node.typeIris));
+  const aliases = new Set<string>();
+  for (const node of nodes) {
+    for (const alias of node.aliasTypeIris ?? []) {
+      if (canonical.has(alias) || aliases.has(alias)) {
+        fail(`aliasTypeIris overlaps a canonical type or another owner: ${alias}`);
       }
       aliases.add(alias);
     }
@@ -769,6 +797,7 @@ export function validateManifest(input: unknown): ModelManifest {
   });
 
   validatePredicateAliases(entities);
+  validateTypeAliases(entities);
 
   return {
     manifestVersion: MANIFEST_VERSION,

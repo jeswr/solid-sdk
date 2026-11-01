@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * `@jeswr/model-runtime` — the ONE audited generic runtime for the
@@ -29,11 +30,13 @@ export {
   isXsdDuration,
   type JsType,
   literalMapper,
+  readLiteral,
   XSD,
 } from "./datatypes.js";
 export {
   httpIriOrUndefined,
   isHttpIri,
+  isSafeAbsoluteIri,
   sanitizeText,
   tryRead,
 } from "./guards.js";

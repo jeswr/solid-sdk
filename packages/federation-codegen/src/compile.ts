@@ -225,6 +225,13 @@ function compileField(
       record("sortOnRead");
     }
     if (fieldConfig.default !== undefined) {
+      if (
+        constraint.minCount !== undefined &&
+        constraint.minCount >= 1 &&
+        isFailClosedSeverity(constraint.severity)
+      ) {
+        throw new Error(`field ${name} config default cannot satisfy a Violation MUST`);
+      }
       field.default = fieldConfig.default;
       record("default");
     }

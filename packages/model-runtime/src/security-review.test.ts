@@ -127,7 +127,7 @@ describe("security review R4: set cardinality", () => {
 
 describe("security review R6: exact composite link identity", () => {
   for (const required of [true, false]) {
-    it(`does not follow a URL-normalized subject (required=${required})`, () => {
+    it(`follows only the exact linked subject, never its URL-normalized decoy (required=${required})`, () => {
       const e = defineModel({
         ...manifest(),
         entities: [
@@ -167,7 +167,7 @@ describe("security review R6: exact composite link identity", () => {
             `<${RES}#it> a <urn:R>; <urn:child> <https://EX.test:443/child> . <https://ex.test/child> a <urn:C>; <urn:p> "decoy" . ${tail}`,
           ),
         );
-        expect(e.parse(RES, store)).toEqual(required ? undefined : {});
+        expect(e.parse(RES, store)).toEqual(tail ? { val: "real" } : required ? undefined : {});
       }
     });
   }

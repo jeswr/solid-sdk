@@ -40,16 +40,22 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   `"http-https"` permits both schemes. Fidelity rejects widening an HTTPS-only shape.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
-  for string-valued nonblank fields. Advisory flat class/node hints may only be omitted with
+  for string-valued nonblank fields. Advisory flat class hints may only be omitted with
   a warning, because they cannot weaken a Violation MUST. Composite link targets must satisfy
   their class (explicit ontology subclass ancestry allowed) and referenced node shape.
+  Inline or unprojected `sh:node` values are admission errors. Every projected parameter
+  retains strict RDF term-kind, datatype and lexical validation; enum literals use the
+  runtime's `readLiteral` reader.
 - Config may add guards (defaults, trims, sort, http(s) scheme) but never contradict the
-  shape; the fidelity assertion fails if a guard value disagrees with SHACL or a MUST is dropped.
+  shape; the fidelity assertion fails if a required guard is missing or disagrees with SHACL.
+  Config defaults on Violation `minCount >= 1` fields are rejected.
 - Aliases come only from SHACL: multiple `sh:targetClass` values select the unique explicit
   ontology `owl:Class` as canonical and emit the sorted extras as `aliasTypeIris`; a flat
   2–4 IRI `sh:alternativePath` list selects the unique ontology property as canonical and
   emits its other members, in list order, as `aliasPredicates`. Ambiguity, malformed/nested
   paths, and aliases overlapping any other canonical/alias field predicate fail admission.
+  Runtime structural predicates are reserved; type aliases cannot overlap any canonical
+  type or an alias owned by another entity/node.
   Both keys are optional, read-only, and capped at four distinct absolute http(s) aliases
   by the runtime. Fidelity covers both keys exactly in both directions, including order.
 - Composite nodes and derived views support aliases on types/flat fields. Structural

@@ -48,8 +48,9 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   datatype/IRI term kinds, cardinality, enums, numeric bounds, string minimum length, and composite
   `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
   the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
-  are admission errors, including on node shapes. Flat Warning/Info class/node hints may be
+  are admission errors, including on node shapes. Flat Warning/Info class hints may be
   omitted with a reported warning: they cannot turn a MUST violation into an accepted record.
+  Inline or unprojected `sh:node` references are admission errors.
   `error` violations block; an unbounded-set `missing-cardinality`
   is an advisory `warning`.
 - **The fidelity assertion** re-derives an order-independent projection of the merged shapes and
@@ -71,12 +72,6 @@ SHACL alias tests. The four oracle files are copied verbatim except imports. SHA
 the same workspace RDF engine as the source package, imported through its built relative path
 in this test harness (no new dependency); they validate the generated `shapes.ttl`. The facade adapts the public
 exports and artifact readers; it contains no alias behavior.
-
-> **Snapshot caveat (Nov 2026).** The 42/42 result is against the July 2026 copy of solid-bookmark
-> (legacy `https://w3id.org/jeswr/bookmark#` namespace), vendored in `examples/bookmark/`. The
-> workspace package has since moved to `https://jeswr.org/ns/bookmark#` and gained dual-namespace
-> reads and more tests, so this result does not yet establish parity with the current package.
-> Re-establishing it is bead sst-ild.4.2 (legacy-IRI read aliases) and sst-ild.7.1 (the flip).
 
 `test/generator/sector-divergence.test.ts` documents (honestly) why the fed-vocab **sector** profile
 cannot yet drive this generation: it uses `https://jeswr.org/ns/sectors/bookmarks#Bookmark` instead of the package's

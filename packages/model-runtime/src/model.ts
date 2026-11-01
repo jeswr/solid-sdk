@@ -27,7 +27,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory as N3DataFactory, Store, Writer } from "n3";
 import { type DatatypeMapper, iriMapper, literalMapper } from "./datatypes.js";
-import { httpIriOrUndefined, sanitizeText, tryRead } from "./guards.js";
+import { httpIriOrUndefined, isSafeAbsoluteIri, sanitizeText, tryRead } from "./guards.js";
 import {
   type CompositeManifestEntity,
   isCompositeEntity,
@@ -384,7 +384,12 @@ function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
     if (value !== undefined) return value;
   }
   // A present but malformed value must never be masked by a configured default.
-  return !present && field.default !== undefined ? normalise(field.default) : undefined;
+  return !present &&
+    !field.guards?.requiredFailClosed &&
+    field.maxCount !== 0 &&
+    field.default !== undefined
+    ? normalise(field.default)
+    : undefined;
 }
 
 /** Live set for a set field (mutations write through @rdfjs/wrapper's SetFrom). */
@@ -866,18 +871,18 @@ interface NestedTargetResolution {
    * link drops its field and admits.
    */
   readonly reject: boolean;
-  /** The single canonical http(s) target, when resolved and unambiguous (else undefined). */
+  /** The exact lexical http(s) target, when resolved and unambiguous (else undefined). */
   readonly target?: string;
 }
 
 /**
  * Resolve the SINGLE target of a `nested` (maxCount-1) link FAIL-CLOSED, streaming the raw
  * object terms with EARLY exit — never materialising the full candidate list. A non-http(s)
- * / non-canonical IRI rejects the link; non-NamedNode objects are skipped. The instant a
- * SECOND distinct canonical target is seen the link is rejected; and if the raw object
+ * / unsafe IRI rejects the link; non-NamedNode objects are skipped. The instant a
+ * SECOND distinct RDF target is seen the link is rejected; and if the raw object
  * reads exceed {@link MAX_LINK_READS} before resolving, the link is rejected (a hostile
- * fan-out on one predicate must not force unbounded work). Only lexical IRIs already equal
- * to their canonical form are followed, preserving the linked RDF subject. How a rejected link
+ * fan-out on one predicate must not force unbounded work). Safe lexical IRIs are followed
+ * exactly, preserving the linked RDF subject without URL canonicalisation. How a rejected link
  * affects the composite is decided by the CALLER per the link's grade (see
  * {@link NestedTargetResolution.reject}) — the resolver only reports the link failure.
  */
@@ -888,10 +893,12 @@ function resolveNestedTarget(doc: TermWrapper, predicate: string): NestedTargetR
   for (const object of matchObjects(doc.dataset, doc as unknown as Term, pred)) {
     if (++reads > MAX_LINK_READS) return { reject: true };
     if (object.termType !== "NamedNode") continue;
-    const canon = httpIriOrUndefined(object.value);
-    if (canon === undefined || canon !== object.value) return { reject: true };
+    // Validate the lexical IRI without URL.href rewriting RDF subject identity.
+    if (!isSafeAbsoluteIri(object.value) || !/^https?:\/\//i.test(object.value)) {
+      return { reject: true };
+    }
     if (target === undefined) target = object.value;
-    else if (canon !== target) return { reject: true };
+    else if (object.value !== target) return { reject: true };
   }
   return { reject: false, target };
 }

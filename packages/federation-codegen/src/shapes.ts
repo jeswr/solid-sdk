@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { literalMapper } from "@jeswr/model-runtime";
+import { isSafeAbsoluteIri, literalMapper, readLiteral } from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { type NormalizedOntology, owlRdfsAdapter } from "./adapter.js";
@@ -91,33 +91,77 @@ export function localName(iri: string): string {
   return cut >= 0 ? iri.slice(cut + 1) : iri;
 }
 
-function numberOr(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+function rejectParameter(subject: string, parameter: string): never {
+  throw new AdmissionError([
+    {
+      code: "invalid-shacl-parameter",
+      severity: "error",
+      subject,
+      message: `malformed ${SH}${parameter}: invalid term kind, datatype or lexical form`,
+    },
+  ]);
 }
 
-/**
- * Coerce an RDF list member term to a manifest scalar (by literal datatype). The
- * numeric datatype set is NOT re-enumerated here — a field is numeric iff the
- * audited runtime's `literalMapper` resolves its datatype to `jsType === "number"`,
- * the SAME resolution `emit.ts` types against. Single-sourcing it through the
- * runtime means an `sh:in` enum can never disagree with the emitted TS / runtime
- * numeric treatment (this previously drifted for the unsigned XSD integer subtypes,
- * which `emit.ts` maps to `number` but a local set here omitted).
- */
-function termToScalar(term: Term): ShapeScalar {
-  if (term.termType === "Literal") {
-    const dt = (term as Term & { datatype?: { value: string } }).datatype?.value;
-    if (dt === `${XSD}boolean`) return term.value === "true" || term.value === "1";
-    if (dt !== undefined && literalMapper(dt).jsType === "number") {
-      const n = Number(term.value);
-      if (Number.isFinite(n)) return n;
+const COUNT_PARAMETERS = new Set(["minCount", "maxCount", "minLength", "maxLength"]);
+const BOUND_PARAMETERS = new Set(["minInclusive", "maxInclusive", "minExclusive", "maxExclusive"]);
+const IRI_PARAMETERS = new Set(["datatype", "class", "nodeKind", "severity"]);
+
+/** Validate raw terms BEFORE any value-only projection can erase their RDF types. */
+function validateParameters(quads: Quad[]): void {
+  for (const q of quads) {
+    if (!q.predicate.value.startsWith(SH)) continue;
+    const parameter = q.predicate.value.slice(SH.length);
+    const term = q.object;
+    const reject = () => rejectParameter(q.subject.value, parameter);
+    if (COUNT_PARAMETERS.has(parameter) || BOUND_PARAMETERS.has(parameter)) {
+      if (term.termType !== "Literal") rejectParameter(q.subject.value, parameter);
+      if (COUNT_PARAMETERS.has(parameter) && term.datatype.value !== `${XSD}integer`) reject();
+      if (literalMapper(term.datatype.value).jsType !== "number") reject();
+      let value: unknown;
+      try {
+        value = readLiteral(term);
+      } catch {
+        reject();
+      }
+      if (typeof value !== "number" || !Number.isFinite(value))
+        rejectParameter(q.subject.value, parameter);
+      if (COUNT_PARAMETERS.has(parameter) && (!Number.isSafeInteger(value) || value < 0)) reject();
+    } else if (parameter === "pattern" || parameter === "flags") {
+      if (term.termType !== "Literal" || term.datatype.value !== `${XSD}string`) reject();
+    } else if (IRI_PARAMETERS.has(parameter)) {
+      if (term.termType !== "NamedNode" || !isSafeAbsoluteIri(term.value)) reject();
+      if (
+        parameter === "severity" &&
+        ![`${SH}Violation`, `${SH}Warning`, `${SH}Info`].includes(term.value)
+      )
+        reject();
     }
+  }
+}
+
+/** Decode enum members with exactly the runtime's strict datatype readers. */
+function termToScalar(term: Term, constraint: ShapeConstraint): ShapeScalar {
+  const reject = () => rejectParameter(constraint.shapeIri, "in");
+  if (constraint.kind === "iri") {
+    if (term.termType !== "NamedNode" || !isSafeAbsoluteIri(term.value)) return reject();
     return term.value;
   }
-  // NamedNode (an IRI value set) — carry the IRI string.
-  return term.value;
+  if (term.termType !== "Literal" || term.datatype.value !== constraint.datatype) return reject();
+  let value: unknown;
+  try {
+    value = readLiteral(term);
+  } catch {
+    return reject();
+  }
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  // Date objects / infinities have no lossless ManifestScalar representation.
+  return reject();
+}
+
+function parameterNumber(graph: Graph, subject: Term, parameter: string): number | undefined {
+  const term = graph.object(subject, `${SH}${parameter}`);
+  return term === undefined ? undefined : (readLiteral(term) as number);
 }
 
 /**
@@ -233,6 +277,7 @@ export function parseShapes(
     : ontologyOrQuads;
   const sourceQuads = Array.isArray(ontologyOrQuads) ? ontologyOrQuads : ontologyQuads;
   const quads = parseTurtle(shapesTtl);
+  validateParameters(quads);
   const graph = new Graph(quads);
 
   // Group targets by SHAPE, never by class: extra targets are read aliases.
@@ -308,17 +353,15 @@ export function parseShapes(
       if (datatype !== undefined) constraint.datatype = datatype;
       const hasClass = graph.value(propObj, `${SH}class`);
       if (hasClass !== undefined) constraint.hasClass = hasClass;
-      // sh:node — a reference to another NodeShape the value must conform to. A NamedNode
-      // reference names a link to a structured sub-node (the composite driver reads it);
-      // an inline blank-node sh:node is skolemized elsewhere, so only a named reference is
-      // carried here (the composite binds nodes by their NodeShape target class / config).
+      // Only named references are projected; admission rejects every unprojected sh:node,
+      // including inline shapes (never silently discard or recursively compile them).
       const nodeRef = graph.object(propObj, `${SH}node`);
       if (nodeRef !== undefined && nodeRef.termType === "NamedNode") {
         constraint.node = nodeRef.value;
       }
-      const minCount = numberOr(graph.value(propObj, `${SH}minCount`));
+      const minCount = parameterNumber(graph, propObj, "minCount");
       if (minCount !== undefined) constraint.minCount = minCount;
-      const maxCount = numberOr(graph.value(propObj, `${SH}maxCount`));
+      const maxCount = parameterNumber(graph, propObj, "maxCount");
       if (maxCount !== undefined) constraint.maxCount = maxCount;
       const pattern = graph.value(propObj, `${SH}pattern`);
       if (pattern !== undefined) constraint.pattern = pattern;
@@ -329,13 +372,14 @@ export function parseShapes(
       const inHead = graph.object(propObj, `${SH}in`);
       if (inHead !== undefined) {
         const members = rdfList(graph, inHead);
-        constraint.in = members === undefined ? [] : members.map(termToScalar);
+        constraint.in =
+          members === undefined ? [] : members.map((term) => termToScalar(term, constraint));
       }
-      const minInclusive = numberOr(graph.value(propObj, `${SH}minInclusive`));
+      const minInclusive = parameterNumber(graph, propObj, "minInclusive");
       if (minInclusive !== undefined) constraint.minInclusive = minInclusive;
-      const maxInclusive = numberOr(graph.value(propObj, `${SH}maxInclusive`));
+      const maxInclusive = parameterNumber(graph, propObj, "maxInclusive");
       if (maxInclusive !== undefined) constraint.maxInclusive = maxInclusive;
-      const minLength = numberOr(graph.value(propObj, `${SH}minLength`));
+      const minLength = parameterNumber(graph, propObj, "minLength");
       if (minLength !== undefined) constraint.minLength = minLength;
       properties.push(constraint);
     }
@@ -348,12 +392,25 @@ export function parseShapes(
     });
   }
 
+  const canonicalTypes = new Set(nodeShapes.map((shape) => shape.targetClass));
+  const typeAliases = new Set<string>();
+  for (const shape of nodeShapes) {
+    for (const alias of shape.aliasTypeIris ?? []) {
+      if (canonicalTypes.has(alias) || typeAliases.has(alias)) {
+        rejectAlias(shape.iri, "type alias overlaps a canonical type or another owner");
+      }
+      typeAliases.add(alias);
+    }
+  }
+
   const fields = nodeShapes.flatMap((shape) => shape.properties);
   const canonicalPredicates = new Set(fields.map((field) => field.pathIri));
   const aliases = new Set<string>();
   for (const field of fields) {
+    if (field.pathIri === `${RDF}type`)
+      rejectAlias(field.shapeIri, "rdf:type is a reserved structural predicate");
     for (const alias of field.aliasPredicates ?? []) {
-      if (canonicalPredicates.has(alias) || aliases.has(alias)) {
+      if (alias === `${RDF}type` || canonicalPredicates.has(alias) || aliases.has(alias)) {
         rejectAlias(field.shapeIri, "alias overlaps another field predicate or alias");
       }
       aliases.add(alias);

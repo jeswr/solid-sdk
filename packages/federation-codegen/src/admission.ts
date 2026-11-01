@@ -22,7 +22,7 @@ import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
 import { Graph, RDF, SH } from "./rdf.js";
-import type { NormalizedShapes } from "./shapes.js";
+import { localName, type NormalizedShapes } from "./shapes.js";
 
 export type AdmissionSeverity = "error" | "warning";
 
@@ -81,6 +81,31 @@ export function admit(
   const constraintByIri = new Map(
     shapes.nodeShapes.flatMap((shape) => shape.properties.map((c) => [c.shapeIri, c] as const)),
   );
+  const nestedShapeIris = new Set<string>();
+  for (const entity of config?.entities ?? []) {
+    if (!isCompositeConfig(entity)) continue;
+    for (const node of Object.values(entity.nodes)) {
+      const shape = shapes.nodeShapes.find((s) => s.targetClass === node.targetClass);
+      for (const c of shape?.properties ?? []) {
+        if (node.links?.[c.name ?? localName(c.pathIri)] !== undefined)
+          nestedShapeIris.add(c.shapeIri);
+      }
+    }
+  }
+  const structuralPredicates = new Set(
+    [...constraintByIri.values()]
+      .filter((c) => nestedShapeIris.has(c.shapeIri))
+      .map((c) => c.pathIri),
+  );
+  structuralPredicates.add(`${RDF}type`);
+  for (const c of constraintByIri.values()) {
+    if (
+      (!nestedShapeIris.has(c.shapeIri) && structuralPredicates.has(c.pathIri)) ||
+      (c.aliasPredicates ?? []).some((alias) => structuralPredicates.has(alias))
+    ) {
+      add("reserved-predicate", "error", c.shapeIri, "field claims a runtime structural predicate");
+    }
+  }
   // Only complex paths already checked by parseShapes have a runtime projection.
   // Orphan paths and unsupported sh:* components still fail the closed allowlist.
   const aliasPathRoots = new Set(
@@ -124,20 +149,8 @@ export function admit(
     const isProperty =
       graph.objects(subject, `${SH}path`).length > 0 ||
       graph.has(subject, `${RDF}type`, `${SH}PropertyShape`);
-    const path = graph.object(subject, `${SH}path`);
-    const parent = graph.subjects(`${SH}property`, subject)[0];
-    const shape = parent === undefined ? undefined : shapeByIri.get(parent.value);
-    const tc = shape?.targetClass;
     const c = constraintByIri.get(subject.value);
-    const name = c?.name ?? path?.value.split(/[/#]/).pop() ?? "";
-    const isNested =
-      config?.entities.some(
-        (entity) =>
-          isCompositeConfig(entity) &&
-          Object.values(entity.nodes).some(
-            (node) => node.targetClass === tc && node.links?.[name] !== undefined,
-          ),
-      ) ?? false;
+    const isNested = nestedShapeIris.has(subject.value);
     for (const q of graph.store.getQuads(subject, null, null, null)) {
       if (!q.predicate.value.startsWith(SH)) continue;
       const component = q.predicate.value.slice(SH.length);
@@ -197,13 +210,24 @@ export function admit(
         ["pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(component)
       )
         unsupported("nested links cannot carry scalar guards");
-      if (["class", "node"].includes(component) && !isNested && config !== undefined) {
+      if (component === "node") {
+        if (
+          q.object.termType !== "NamedNode" ||
+          c?.node !== q.object.value ||
+          !shapeByIri.has(q.object.value)
+        ) {
+          unsupported("inline or unprojected sh:node reference");
+        }
+        if (config !== undefined && !isNested)
+          unsupported("sh:node requires a projected composite link");
+      }
+      if (component === "class" && !isNested && config !== undefined) {
         // A Warning/Info class hint on a flat IRI does not control admission.
         // Dropping that advisory check cannot admit a record forbidden by a MUST.
         // Its IRI term kind is still checked; the warning remains in the report.
         const advisory = !isFailClosedSeverity(c?.severity);
         unsupported(
-          "class/node conformance requires a composite link; advisory flat hints are omitted",
+          "class conformance requires a composite link; advisory flat hints are omitted",
           advisory ? "warning" : "error",
         );
       }

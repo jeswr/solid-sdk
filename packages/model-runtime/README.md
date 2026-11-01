@@ -71,7 +71,8 @@ result before publishing when MUST validation is needed. `serialize` uses the sa
 
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
-consumers migrating off a hand-written package keep the exact filter behaviour.
+consumers migrating off a hand-written package keep the exact filter behaviour. Schema tooling
+can use `readLiteral(term)` for strict RDF/JS datatype, lexical and value-space checks.
 
 ## Read-only IRI aliases
 
@@ -79,7 +80,9 @@ A flat entity or composite **node** may declare `aliasTypeIris: string[]`; a fla
 may declare `aliasPredicates: string[]`. Both keys are optional, contain at most four
 **distinct, Turtle-safe absolute http(s) IRIs**, and exclude their canonical `typeIris` / `predicate`.
 Predicate aliases cannot overlap any field's canonical predicate or another alias anywhere
-in the manifest. `nested` structural links reject `aliasPredicates`, even an empty array.
+in the manifest. `rdf:type` and nested link predicates are reserved from flat canonical
+fields and all aliases. Type aliases cannot equal any canonical type or another owner's alias.
+`nested` structural links reject `aliasPredicates`, even an empty array.
 Aliases do not bypass the reserved-name or unknown-key checks.
 
 - Singleton getters and `parse` apply the normal field guards to the canonical predicate
@@ -87,7 +90,8 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   `0`, and `""` win over aliases. Each predicate checks distinct raw terms and `maxCount`
   before strict mapping; ambiguity or a cardinality violation drops the field without alias
   fallback (and rejects a required record). Defaults apply only when **all** predicates are absent; invalid present
-  values cannot be masked by defaults. Reads do not mutate the dataset.
+  values cannot be masked by defaults. Defaults never satisfy `requiredFailClosed` and never
+  apply with `maxCount: 0`. Reads do not mutate the dataset.
 - Sets read the guarded, deduplicated union (Dates compare by instant). Their mutations
   migrate surviving members to the canonical predicate and remove alias triples. Parse checks
   raw-union `maxCount` (including malformed terms) and guarded-union `minCount`.
@@ -130,9 +134,10 @@ field names are **globally unique** across the composite (the projection is one 
 - **`build`** writes every node at `${resourceUrl}#${fragment}` and links them (an optional sub-node
   is materialised only when its subtree carries data — no bare typed shells).
 - **`parse`** GRAPH-WALKS from the root: it follows the ACTUAL link triple (never assumes the fragment
-  — an untrusted document may link anywhere), requiring each lexical target to already equal its
-  safe http(s) canonical form and bounding the candidate scan. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
-  failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), a noncanonical IRI, or an
+  — an untrusted document may link anywhere), requiring an absolute http(s) NamedNode without
+  IRIREF-forbidden characters and bounding the candidate scan. It follows the exact linked term
+  without URL canonicalisation. A sub-node must carry its `rdf:type` (fail-closed). Link-resolution
+  failure — an absent or non-conforming target, an AMBIGUOUS link (>1 distinct target), an unsafe IRI, or an
   over-budget fan-out — is graded by the link: a `requiredFailClosed` cross-node link **rejects the
   WHOLE composite** (a titled `Track` + a valid `Instant` MUST be reachable); a Warning/Info (optional)
   link simply drops its sub-node's fields and admits (an otherwise-usable document is never rejected

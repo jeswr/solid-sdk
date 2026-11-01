@@ -533,6 +533,25 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
   }
 }
 
+/**
+ * Strict RDF/JS literal reader shared with schema admission. Unlike a raw mapper,
+ * this also checks the datatype's lexical and value-space predicates. Throws on
+ * any malformed term; callers must not substitute a coerced value on failure.
+ */
+export function readLiteral(term: Term): unknown {
+  if (term.termType !== "Literal") throw new Error("expected an RDF literal");
+  const mapper = literalMapper(term.datatype.value);
+  // Literal readers use RDF/JS term properties only; no wrapper/dataset is needed.
+  const value = mapper.as(term as unknown as TermWrapper);
+  if (mapper.lexicalValid && (typeof value !== "string" || !mapper.lexicalValid(value))) {
+    throw new Error("invalid datatype lexical form");
+  }
+  if (mapper.numericValid && (typeof value !== "number" || !mapper.numericValid(value))) {
+    throw new Error("invalid datatype value space");
+  }
+  return value;
+}
+
 /** The mapper pair for an IRI-valued (named node) field. */
 export function iriMapper(): DatatypeMapper {
   return {

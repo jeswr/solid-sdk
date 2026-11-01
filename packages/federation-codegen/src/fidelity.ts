@@ -22,6 +22,7 @@ import {
   type CompositeManifestEntity,
   expandDatatype,
   isCompositeEntity,
+  literalMapper,
   type ManifestField,
   type ManifestFieldGuards,
   type ModelManifest,
@@ -285,6 +286,26 @@ function guardIsShapeDerived(
   return false;
 }
 
+/** Re-derive ALL required scalar guards from SHACL, independently of the compiler. */
+function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
+  const required: ManifestFieldGuards = {};
+  if (isPresenceMust(c)) required.requiredFailClosed = true;
+  if (c.kind === "iri" && isHttpPattern(c.pattern))
+    required.iriScheme = iriSchemeForPattern(c.pattern);
+  if (c.minInclusive !== undefined) required.minInclusive = c.minInclusive;
+  if (c.maxInclusive !== undefined) required.maxInclusive = c.maxInclusive;
+  const stringValue =
+    c.kind === "iri" || (c.datatype !== undefined && literalMapper(c.datatype).jsType === "string");
+  if (c.minLength !== undefined && stringValue) required.minLength = c.minLength;
+  if (
+    stringValue &&
+    (c.pattern === "\\S" || (c.kind === "literal" && c.maxCount === 1 && (c.minLength ?? 0) >= 1))
+  ) {
+    required.nonBlank = true;
+  }
+  return required;
+}
+
 /** Assert every guard + default on `field` is shape-derived or config-declared (no silent guard). */
 function assertFieldGuardsTraceable(
   field: ManifestField,
@@ -308,6 +329,21 @@ function assertFieldGuardsTraceable(
     throw new FidelityError(
       `${where} field ${field.name} widens or drops the shape pattern scheme`,
     );
+  }
+  if (constraint !== undefined) {
+    const required = requiredShapeGuards(constraint);
+    for (const key of Object.keys(required) as (keyof ManifestFieldGuards)[]) {
+      if (guards?.[key] !== required[key]) {
+        throw new FidelityError(
+          `${where} field ${field.name} drops or weakens shape guard "${key}"`,
+        );
+      }
+    }
+    if (isPresenceMust(constraint) && field.default !== undefined) {
+      throw new FidelityError(
+        `${where} field ${field.name} default cannot satisfy a Violation MUST`,
+      );
+    }
   }
   if (guards) {
     for (const key of Object.keys(guards)) {
