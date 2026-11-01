@@ -119,6 +119,24 @@ test("sheet: every state, retries, conflict actions, axe and screenshots", async
   await reflow(page);
 });
 
+test("sheet: a long queue scrolls inside the sheet to its last action", async ({ page }) => {
+  await page.goto("/dev/components/sync-sheet");
+  await page.getByRole("button", { name: "Open Long queue", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Sync status" });
+  await expect(sheet).toBeVisible();
+  const last = sheet.getByRole("button", { name: "Resolve Last conflict" });
+  await last.scrollIntoViewIfNeeded();
+  const box = await last.boundingBox();
+  const viewport = page.viewportSize();
+  if (!box || !viewport) throw new Error("Missing geometry");
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  // The scroll happened inside the sheet; the locked page did not move.
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await last.click();
+  await expect(page.getByRole("alertdialog").or(page.getByRole("dialog"))).not.toHaveCount(0);
+});
+
 test("keyboard: pill opens sheet, Escape restores pill; conflict returns to Resolve", async ({
   page,
 }) => {
