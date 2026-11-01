@@ -458,7 +458,7 @@ describe("discoverRegistrations", () => {
       Response.redirect("https://foreign.example/prefs.ttl", 302),
     );
     await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
-      cause: { code: "scope" },
+      cause: { name: "SsrfError" },
     });
     expect(fetch).toHaveBeenCalledExactlyOnceWith(PREFERENCES, {
       headers: expect.any(Headers),
@@ -481,9 +481,10 @@ describe("discoverRegistrations", () => {
     });
     const fetch = vi.fn<typeof globalThis.fetch>(async () => response);
     await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
-      cause: { code: "scope" },
+      cause: { name: "SsrfError" },
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(response.bodyUsed).toBe(true);
   });
 
   it.each([

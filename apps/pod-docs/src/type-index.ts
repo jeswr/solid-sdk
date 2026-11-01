@@ -17,7 +17,6 @@ import {
   createGuardedFetch,
   isLoopbackAddress,
   isWithinPodScope,
-  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { type StorageClient, StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize, NS as SUITE_NS, termsEqual } from "@jeswr/suite-vocab";
@@ -330,14 +329,9 @@ async function readIdentityRdf(
   });
   const result = await fetchRdf(target, {
     headers: REVALIDATE_HEADERS,
-    fetch: async (input, init) => {
-      try {
-        return await guarded(input, init);
-      } catch (error) {
-        if (error instanceof SsrfError && error.cause instanceof StorageError) throw error.cause;
-        throw error;
-      }
-    },
+    // The guard follows and validates visible hops; its transport above stays manual.
+    // Keep its sanitised errors: raw transport causes are deliberately not exposed.
+    fetch: (input, init) => guarded(input, { ...init, redirect: "follow" }),
   });
   return { ...result, url: identityDocumentUrl(result.url, options) };
 }

@@ -277,7 +277,7 @@ describe("identity document resolution regressions", () => {
       Response.redirect(destination, 302),
     );
     await expect(discoverRegistrations(webId, profile, transport)).rejects.toMatchObject({
-      cause: { code: "scope" },
+      cause: { name: "SsrfError" },
     });
     expect(transport).toHaveBeenCalledTimes(1);
   });
@@ -371,8 +371,9 @@ describe("identity document resolution regressions", () => {
         registrations: [],
         fetchImpl: transport,
       }),
-    ).rejects.toMatchObject({ cause: { code: "scope" } });
+    ).rejects.toMatchObject({ cause: { name: "SsrfError" } });
     expect(transport).toHaveBeenCalledTimes(1);
+    expect(response.bodyUsed).toBe(true);
   });
 
   it.each([
@@ -403,7 +404,9 @@ describe("identity document resolution regressions", () => {
     if (vouched) {
       await expect(registration).resolves.toMatchObject({ indexUrl: canonical, added: 1 });
     } else {
-      await expect(registration).rejects.toMatchObject({ cause: { code: "scope" } });
+      await expect(registration).rejects.toMatchObject({
+        cause: { name: "SsrfError" },
+      });
       expect(calls.some((call) => call.url === canonical)).toBe(false);
     }
     const discovery = discoverRegistrations(
@@ -413,6 +416,9 @@ describe("identity document resolution regressions", () => {
       storage,
     );
     if (vouched) await expect(discovery).resolves.toEqual([]);
-    else await expect(discovery).rejects.toMatchObject({ cause: { code: "scope" } });
+    else
+      await expect(discovery).rejects.toMatchObject({
+        cause: { name: "SsrfError" },
+      });
   });
 });

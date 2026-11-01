@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { mockFetch, turtleToStore } from "./test-helpers.js";
@@ -133,7 +134,7 @@ describe("browser identity redirects", () => {
       init?.redirect === "manual" ? opaqueRedirect() : response,
     );
     await expect(discoverRegistrations(webId, profile, transport)).rejects.toMatchObject({
-      cause: { code: "scope" },
+      cause: { name: "SsrfError" },
     });
     expect(transport).toHaveBeenCalledTimes(2);
     expect(response.bodyUsed).toBe(true);
@@ -186,7 +187,7 @@ describe("browser identity redirects", () => {
         registrations: [],
         fetchImpl: transport,
       }),
-    ).rejects.toMatchObject({ cause: { code: "scope" } });
+    ).rejects.toMatchObject({ cause: { name: "SsrfError" } });
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
@@ -251,7 +252,10 @@ describe("browser identity redirects", () => {
     );
     const result = discoverRegistrations(webId, profile, transport);
     if (vouched) await expect(result).resolves.toEqual([]);
-    else await expect(result).rejects.toMatchObject({ cause: { code: "scope" } });
+    else
+      await expect(result).rejects.toMatchObject({
+        cause: { name: "SsrfError" },
+      });
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
@@ -306,7 +310,7 @@ describe("browser identity redirects", () => {
         registrations: [],
         fetchImpl: transport,
       }),
-    ).rejects.toMatchObject({ cause: { code: "scope" } });
+    ).rejects.toMatchObject({ cause: { name: "SsrfError" } });
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
@@ -322,8 +326,42 @@ describe("browser identity redirects", () => {
         registrations: [],
         fetchImpl: transport,
       }),
-    ).rejects.toMatchObject({ cause: { code: "scope" } });
+    ).rejects.toMatchObject({ cause: { name: "SsrfError" } });
     expect(transport).toHaveBeenCalledTimes(1);
     expect(transport.mock.calls[0]?.[1]?.redirect).toBe("manual");
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps transport-thrown scope errors sanitised (opaque fallback: %s)", async (opaque) => {
+    const failure = Object.assign(
+      new StorageError("scope", {
+        url: "https://user:transport-secret@id.example/card?token=transport-secret",
+        method: "GET",
+        cause: new Error('Transport echoed "transport-secret"'),
+      }),
+      { credential: "transport-secret" },
+    );
+    const transport = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      if (opaque && init?.redirect === "manual") return opaqueRedirect();
+      throw failure;
+    });
+    const result = ensureTypeRegistrations({
+      webId: "https://id.example/id#me",
+      podRoot: "https://pod.example/",
+      storage: createMemoryStorage({ root: "https://pod.example/" }),
+      registrations: [],
+      fetchImpl: transport,
+    });
+    await expect(result).rejects.toMatchObject({
+      name: "RdfFetchError",
+      cause: { name: "SsrfError" },
+    });
+    await expect(result).rejects.not.toHaveProperty("cause.cause");
+    await expect(result).rejects.not.toHaveProperty("cause.code");
+    await expect(result).rejects.not.toHaveProperty("cause.credential");
+    await expect(result).rejects.not.toThrow("transport-secret");
+    expect(transport).toHaveBeenCalledTimes(opaque ? 2 : 1);
   });
 });
