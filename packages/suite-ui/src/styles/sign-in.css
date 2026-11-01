@@ -69,17 +69,6 @@
 .su-sign-in-card .su-sign-in-provider[aria-busy="true"]:disabled {
   opacity: 1;
 }
-.su-sign-in-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
 .su-sign-in-card .su-sign-in-back {
   justify-self: start;
   width: 44px;

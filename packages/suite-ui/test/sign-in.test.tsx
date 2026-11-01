@@ -93,9 +93,18 @@ describe("SignInCard", () => {
     render(
       <SignInCard {...props({ recentAccounts: accounts, defaultCustomProviderOpen: true })} />,
     );
+    const focused: Element[] = [];
+    const record = (event: FocusEvent) => {
+      if (event.target instanceof Element) focused.push(event.target);
+    };
+    document.addEventListener("focusin", record);
     await user.click(screen.getByRole("button", { name: "Use another account" }));
+    document.removeEventListener("focusin", record);
     const heading = screen.getByRole("heading", { name: "Sign in" });
     expect(document.activeElement).toBe(heading);
+    // The already open address field is revealed but never focused (no mobile keyboard).
+    const address = screen.getByRole("combobox", { name: "Provider address" });
+    expect(focused).not.toContain(address);
     expect(heading.tabIndex).toBe(-1);
     expect(screen.getByRole("textbox", { name: "WebID" })).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Back to accounts" }));
@@ -383,7 +392,7 @@ describe("SignInCard", () => {
     expect(active).not.toBeNull();
     expect(active?.querySelector(".su-sign-in-spinner")).not.toBeNull();
     expect(document.querySelectorAll('button[aria-busy="true"]')).toHaveLength(1);
-    expect(active?.textContent?.toLowerCase()).toContain("signing in…");
+    expect(active?.textContent).toMatch(/Signing in( with .+)?…/u);
     if (pending.kind === "account") {
       expect(active?.querySelector('[data-slot="avatar"]')?.textContent).toBe("AW");
       expect(active?.textContent).not.toContain("alice.example");
@@ -393,8 +402,7 @@ describe("SignInCard", () => {
       expect(active?.querySelector(".su-sign-in-logo .su-sign-in-spinner")).not.toBeNull();
       expect(active?.querySelector("path")).not.toBeNull();
       expect(active?.querySelectorAll("svg")).toHaveLength(1);
-      expect(active?.textContent).toBe(`${providers[0].name}, signing in…`);
-      expect(active?.querySelector(".su-sign-in-sr-only")?.textContent).toBe(", signing in…");
+      expect(active?.textContent).toBe(`Signing in with ${providers[0].name}…`);
     }
     for (const button of screen.getAllByRole("button")) {
       expect((button as HTMLButtonElement).disabled).toBe(button.textContent !== "Cancel");

@@ -87,6 +87,7 @@ export function SignInCard({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const anotherRef = useRef<HTMLButtonElement>(null);
   const customRef = useRef<HTMLInputElement>(null);
+  const focusCustom = useRef(defaultCustomProviderOpen);
   const focusTarget = useRef<"heading" | "another" | null>(null);
   const busy = pending !== null;
   const view = !recentAccounts.length
@@ -117,10 +118,12 @@ export function SignInCard({
     }
   }, [pending]);
 
+  // Focus the address field only when it is opened (initially or by its toggle), never when a
+  // step change reveals an already open field: that would raise the mobile keyboard.
   useEffect(() => {
-    if (view === "sign-in" && customOpen && allowCustomProvider && !busy)
-      customRef.current?.focus();
-  }, [view, customOpen, allowCustomProvider, busy]);
+    if (customOpen && focusCustom.current) customRef.current?.focus();
+    focusCustom.current = false;
+  }, [customOpen]);
 
   useEffect(() => {
     if (focusTarget.current === "heading" && view === "sign-in") headingRef.current?.focus();
@@ -302,8 +305,11 @@ export function SignInCard({
                         monogramFor(provider.name)
                       )}
                     </span>
-                    <span>{provider.label ?? provider.name}</span>
-                    {active && <span className="su-sign-in-sr-only">, signing in…</span>}
+                    <span>
+                      {active
+                        ? `Signing in with ${provider.label ?? provider.name}…`
+                        : (provider.label ?? provider.name)}
+                    </span>
                   </Button>
                 </li>
               );
@@ -314,7 +320,10 @@ export function SignInCard({
             <Collapsible
               className="su-sign-in-stack"
               open={expanded}
-              onOpenChange={setCustomOpen}
+              onOpenChange={(open) => {
+                focusCustom.current = open;
+                setCustomOpen(open);
+              }}
               disabled={busy}
             >
               <CollapsibleTrigger asChild>
