@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { readRdf, readResource, search } from "../src/pod.js";
@@ -47,6 +46,26 @@ describe("fetch PodPort", () => {
     const pod = createFetchPodPort({ fetch, podRoot: ROOT });
     await expect(pod.head?.(FILE)).rejects.toThrow("WAC ACL discovery failed");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("follows an in-pod %i read but refuses a redirected write", async (status) => {
+    const next = `${ROOT}next.txt`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) =>
+      String(input) === FILE
+        ? new Response(null, { status, headers: { location: next } })
+        : new Response("followed"),
+    );
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT, readOnly: false });
+    expect(new TextDecoder().decode((await pod.read(FILE)).body)).toBe("followed");
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([FILE, next]);
+    fetch.mockClear();
+    await expect(pod.write(FILE, new Uint8Array([1]), "text/plain", {})).rejects.toThrow(
+      /redirect/i,
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
   });
 
   it("retains raw bytes, normalized media type and ETag", async () => {

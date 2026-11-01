@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { assertSafeUrl, SsrfError } from "@jeswr/guarded-fetch";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { assertSafeUrl, createGuardedFetch, SsrfError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import { iterateObjects } from "../src/granary.js";
 import { fetchGranary, GranaryFetchError } from "../src/remote.js";
@@ -110,6 +111,18 @@ describe("fetchGranary", () => {
 });
 
 describe("SSRF guard wiring (the real @jeswr/guarded-fetch policy)", () => {
+  it("retains redirect refusal when the transport is a real guarded fetch", async () => {
+    const transport = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: "/next" } }),
+    );
+    const fetch = createGuardedFetch({
+      fetch: transport,
+      dnsLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+    });
+    await expect(fetchGranary("https://granary.io/x", { fetch })).rejects.toThrow(/redirect/i);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
   // These prove the guard we route through actually refuses dangerous targets — so
   // the default path (nodeGuardedFetch) cannot reach private/loopback/metadata hosts.
   it("refuses the cloud-metadata address", async () => {
