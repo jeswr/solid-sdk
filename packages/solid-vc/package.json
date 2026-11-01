@@ -61,6 +61,7 @@
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",
+    "fflate": "0.8.3",
     "jose": "^6.0.0",
     "jsonld-streaming-parser": "^5.0.0",
     "multiformats": "^14.0.0",

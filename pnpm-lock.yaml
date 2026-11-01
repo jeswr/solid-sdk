@@ -2261,6 +2261,18 @@ importers:
       '@hookform/resolvers':
         specifier: 5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../../packages/agent-mandate
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../../packages/agent-model
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../../packages/ldp-container
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../../packages/solid-vc
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
@@ -4848,6 +4860,9 @@ importers:
       content-type:
         specifier: ^1.0.5
         version: 1.0.5
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       jose:
         specifier: ^6.0.0
         version: 6.2.3

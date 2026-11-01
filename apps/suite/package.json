@@ -49,7 +49,11 @@
     "rrule": "2.8.1",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-dav-bridge": "workspace:*",
-    "rdf-isomorphic": "2.0.1"
+    "rdf-isomorphic": "2.0.1",
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/agent-mandate": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
