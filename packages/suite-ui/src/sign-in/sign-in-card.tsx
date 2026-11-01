@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import { LoaderCircle, Plus } from "lucide-react";
+import { ArrowLeft, Globe, LoaderCircle, UserPlus } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../components/ui/alert.js";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar.js";
@@ -23,27 +23,30 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../components/ui/sheet.js";
-import { hostOf, monogramFor, safeHref, signUpTarget, toneAt } from "./model.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip.js";
+import { providerBrandFor } from "./brands.js";
+import { foregroundFor, hostOf, monogramFor, safeHref, signUpTarget } from "./model.js";
 import type { SignInCardProps } from "./types.js";
 
-function Progress({
-  active,
-  label = "Signing in…",
-  children,
-}: {
-  active: boolean;
-  label?: string;
-  children: ReactNode;
-}) {
+type View = "accounts" | "sign-in";
+type Action = NonNullable<SignInCardProps["pending"]>["kind"];
+
+function Spinner() {
+  return (
+    <LoaderCircle className="su-sign-in-spinner" size={20} strokeWidth={1.75} aria-hidden="true" />
+  );
+}
+
+function Progress({ active, children }: { active: boolean; children: ReactNode }) {
   return active ? (
     <span className="su-sign-in-progress">
-      <LoaderCircle
-        className="su-sign-in-spinner"
-        size={20}
-        strokeWidth={1.75}
-        aria-hidden="true"
-      />
-      <span>{label}</span>
+      <Spinner />
+      <span>Signing in…</span>
     </span>
   ) : (
     children
@@ -51,8 +54,10 @@ function Progress({
 }
 
 export function SignInCard({
-  title = "Sign in",
-  subtitle = "Use your Solid account to continue.",
+  title,
+  accountsTitle = "Choose an account",
+  subtitle,
+  defaultView,
   recentAccounts = [],
   providers,
   recentProviders = [],
@@ -69,228 +74,311 @@ export function SignInCard({
   webIdHelpHref,
 }: SignInCardProps) {
   const id = useId();
+  const [selectedView, setView] = useState<View>(
+    defaultView ?? (recentAccounts.length ? "accounts" : "sign-in"),
+  );
   const [webId, setWebId] = useState("");
   const [customProvider, setCustomProvider] = useState("");
   const [customOpen, setCustomOpen] = useState(defaultCustomProviderOpen);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [lastInput, setLastInput] = useState<"webid" | "custom" | null>("webid");
+  const [lastAction, setLastAction] = useState<Action>(
+    recentAccounts.length && selectedView === "accounts" ? "account" : "webid",
+  );
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const anotherRef = useRef<HTMLButtonElement>(null);
   const customRef = useRef<HTMLInputElement>(null);
+  const focusCustom = useRef(defaultCustomProviderOpen);
+  const focusTarget = useRef<"heading" | "another" | null>(null);
   const busy = pending !== null;
+  const view = !recentAccounts.length
+    ? "sign-in"
+    : pending
+      ? pending.kind === "account"
+        ? "accounts"
+        : "sign-in"
+      : selectedView;
   const expanded = customOpen || pending?.kind === "custom";
-  const errorInput = pending
-    ? pending.kind === "webid" || pending.kind === "custom"
-      ? pending.kind
-      : null
-    : lastInput;
-  const webIdError = !!error && errorInput === "webid";
-  const customError = !!error && errorInput === "custom";
+  const errorAction = pending?.kind ?? lastAction;
+  const webIdError = !!error && errorAction === "webid";
+  const customError = !!error && errorAction === "custom";
   const signUp = signUpTarget(providers);
   const helpHref = safeHref(webIdHelpHref, true);
+  const errorAlert = error ? (
+    <Alert id={`${id}-error`} variant="destructive" className="su-sign-in-error">
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  ) : null;
+
+  // Remember externally initiated actions as well as local clicks after pending clears.
+  useEffect(() => {
+    if (pending) {
+      setLastAction(pending.kind);
+      setView(pending.kind === "account" ? "accounts" : "sign-in");
+      if (pending.kind === "custom") setCustomOpen(true);
+    }
+  }, [pending]);
+
+  // Focus the address field only when it is opened (initially or by its toggle), never when a
+  // step change reveals an already open field: that would raise the mobile keyboard.
+  useEffect(() => {
+    if (customOpen && focusCustom.current) customRef.current?.focus();
+    focusCustom.current = false;
+  }, [customOpen]);
 
   useEffect(() => {
-    if (customOpen && allowCustomProvider) customRef.current?.focus();
-  }, [customOpen, allowCustomProvider]);
+    if (focusTarget.current === "heading" && view === "sign-in") headingRef.current?.focus();
+    if (focusTarget.current === "another" && view === "accounts") anotherRef.current?.focus();
+    focusTarget.current = null;
+  }, [view]);
 
   return (
     <section className="su-sign-in-card" aria-labelledby={`${id}-title`}>
-      <header className="su-sign-in-stack">
-        <h2 className="su-sign-in-title" id={`${id}-title`}>
-          {title}
+      {view === "sign-in" && recentAccounts.length > 0 && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                className="su-sign-in-back"
+                variant="outline"
+                size="icon"
+                aria-label="Back to accounts"
+                disabled={busy}
+                onClick={() => {
+                  if (busy) return;
+                  focusTarget.current = "another";
+                  setView("accounts");
+                }}
+              >
+                <ArrowLeft size={20} aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Back to accounts</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      <header className="su-sign-in-stack su-sign-in-header">
+        <h2 className="su-sign-in-title" id={`${id}-title`} tabIndex={-1} ref={headingRef}>
+          {view === "accounts" ? accountsTitle : (title ?? "Sign in")}
         </h2>
-        <p className="su-sign-in-muted">{subtitle}</p>
+        {subtitle && <p className="su-sign-in-muted">{subtitle}</p>}
       </header>
 
-      {recentAccounts.length > 0 && (
-        <section className="su-sign-in-stack" aria-label="Recent accounts">
-          {recentAccounts.map((account) => {
-            const name = account.name?.trim() || hostOf(account.webId) || "your account";
-            const initials = name.split(/\s+/).slice(0, 2).map(monogramFor).join("");
-            const active = pending?.kind === "account" && pending.key === account.webId;
-            const photoUrl = safeHref(account.photoUrl);
-            return (
+      {view === "accounts" ? (
+        <>
+          {errorAction === "account" && errorAlert}
+          <ul className="su-sign-in-accounts" aria-label="Recent accounts">
+            {recentAccounts.map((account) => {
+              const name = account.name?.trim() || hostOf(account.webId) || "Your account";
+              const initials = name.split(/\s+/).slice(0, 2).map(monogramFor).join("");
+              const active = pending?.kind === "account" && pending.key === account.webId;
+              const photoUrl = safeHref(account.photoUrl);
+              return (
+                <li key={account.webId}>
+                  <Button
+                    className="su-sign-in-account"
+                    variant="ghost"
+                    disabled={busy}
+                    aria-busy={active || undefined}
+                    onClick={() => {
+                      if (busy) return;
+                      setLastAction("account");
+                      onAccount(account);
+                    }}
+                  >
+                    <Avatar className="su-sign-in-avatar" aria-hidden="true">
+                      {photoUrl && <AvatarImage src={photoUrl} alt="" />}
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+                    <span className="su-sign-in-account-copy">
+                      <span className="su-sign-in-account-name">{name}</span>
+                      <span className="su-sign-in-muted">
+                        {active ? "Signing in…" : hostOf(account.webId)}
+                      </span>
+                    </span>
+                    {active && <Spinner />}
+                  </Button>
+                </li>
+              );
+            })}
+            <li>
               <Button
-                key={account.webId}
-                className="su-sign-in-choice"
-                variant="outline"
+                ref={anotherRef}
+                className="su-sign-in-account"
+                variant="ghost"
                 disabled={busy}
-                aria-busy={active || undefined}
                 onClick={() => {
                   if (busy) return;
-                  setLastInput(null);
-                  onAccount(account);
+                  focusTarget.current = "heading";
+                  setView("sign-in");
                 }}
               >
-                <Avatar className="su-sign-in-avatar" aria-hidden="true">
-                  {photoUrl && <AvatarImage src={photoUrl} alt="" />}
-                  <AvatarFallback>{initials}</AvatarFallback>
-                </Avatar>
-                <span className="su-sign-in-choice-copy">
-                  <Progress active={active} label={`Signing in as ${name}…`}>
-                    <span>Continue as {name}</span>
-                  </Progress>
-                  <span className="su-sign-in-muted">{hostOf(account.webId)}</span>
+                <span className="su-sign-in-avatar su-sign-in-user" aria-hidden="true">
+                  <UserPlus size={20} />
                 </span>
-              </Button>
-            );
-          })}
-        </section>
-      )}
-
-      <form
-        className="su-sign-in-stack"
-        aria-labelledby={`${id}-webid-title`}
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          const value = webId.trim();
-          if (busy || !value) return;
-          setLastInput("webid");
-          onWebId(value);
-        }}
-      >
-        <h3 className="su-sign-in-form-title" id={`${id}-webid-title`}>
-          Sign in with your WebID
-        </h3>
-        <Label htmlFor={`${id}-webid`}>Your WebID</Label>
-        <Input
-          id={`${id}-webid`}
-          type="url"
-          inputMode="url"
-          autoComplete="url"
-          placeholder="https://you.example/profile/card#me"
-          value={webId}
-          onChange={(event) => setWebId(event.target.value)}
-          disabled={busy}
-          aria-invalid={webIdError || undefined}
-          aria-describedby={`${id}-webid-help${webIdError ? ` ${id}-error` : ""}`}
-        />
-        <p className="su-sign-in-muted" id={`${id}-webid-help`}>
-          Don't know it? Choose your provider below.
-        </p>
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={busy || !webId.trim()}
-          aria-busy={pending?.kind === "webid" || undefined}
-        >
-          <Progress active={pending?.kind === "webid"}>Continue</Progress>
-        </Button>
-      </form>
-
-      {error && (
-        <Alert id={`${id}-error`} variant="destructive" className="su-sign-in-error">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="su-sign-in-divider">
-        <Separator />
-        <span className="su-sign-in-muted">or continue with your provider</span>
-        <Separator />
-      </div>
-
-      <ul className="su-sign-in-stack su-sign-in-providers" aria-label="Providers">
-        {providers.map((provider, index) => {
-          const active =
-            pending?.kind === "provider" &&
-            (pending.key === provider.id || pending.key === provider.issuer);
-          const iconUrl = safeHref(provider.iconUrl);
-          return (
-            <li key={provider.id}>
-              <Button
-                className="su-sign-in-choice"
-                variant={index === 0 ? "default" : "outline"}
-                disabled={busy}
-                aria-busy={active || undefined}
-                onClick={() => {
-                  if (busy) return;
-                  setLastInput(null);
-                  onProvider(provider);
-                }}
-              >
-                <span
-                  className="su-sign-in-monogram"
-                  style={{ backgroundColor: toneAt(index) }}
-                  aria-hidden="true"
-                >
-                  {iconUrl ? (
-                    // biome-ignore lint/performance/noImgElement: Optional host-supplied icons need no Next.js image loader.
-                    <img src={iconUrl} alt="" />
-                  ) : (
-                    monogramFor(provider.name)
-                  )}
-                </span>
-                <span className="su-sign-in-choice-copy">
-                  <Progress active={active} label={`Signing in with ${provider.name}…`}>
-                    <span>{provider.label ?? `Continue with ${provider.name}`}</span>
-                  </Progress>
-                  {provider.description && (
-                    <span className="su-sign-in-muted">{provider.description}</span>
-                  )}
-                </span>
+                <span className="su-sign-in-account-name">Use another account</span>
               </Button>
             </li>
-          );
-        })}
-      </ul>
-
-      {allowCustomProvider && (
-        <Collapsible
-          className="su-sign-in-stack"
-          open={expanded}
-          onOpenChange={setCustomOpen}
-          disabled={busy}
-        >
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" disabled={busy}>
-              <Plus size={20} strokeWidth={1.75} aria-hidden="true" />
-              Another provider
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <form
-              className="su-sign-in-stack"
-              aria-label="Sign in with another provider"
-              noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                const value = customProvider.trim();
-                if (busy || !value) return;
-                setLastInput("custom");
-                onCustomProvider(value);
-              }}
+          </ul>
+        </>
+      ) : (
+        <>
+          <form
+            className="su-sign-in-stack"
+            aria-label="Sign in with your WebID"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              const value = webId.trim();
+              if (busy || !value) return;
+              setLastAction("webid");
+              onWebId(value);
+            }}
+          >
+            <Label htmlFor={`${id}-webid`}>WebID</Label>
+            <Input
+              id={`${id}-webid`}
+              type="url"
+              inputMode="url"
+              autoComplete="url"
+              placeholder="https://you.example/profile/card#me"
+              value={webId}
+              onChange={(event) => setWebId(event.target.value)}
+              disabled={busy}
+              aria-invalid={webIdError || undefined}
+              aria-describedby={webIdError ? `${id}-error` : undefined}
+            />
+            {webIdError && errorAlert}
+            <Button
+              className="su-sign-in-submit"
+              type="submit"
+              disabled={busy || !webId.trim()}
+              aria-busy={pending?.kind === "webid" || undefined}
             >
-              <Label htmlFor={`${id}-provider`}>Provider address</Label>
-              <Input
-                ref={customRef}
-                id={`${id}-provider`}
-                type="url"
-                inputMode="url"
-                autoComplete="url"
-                placeholder="https://your-provider.example/"
-                list={`${id}-recent-providers`}
-                value={customProvider}
-                onChange={(event) => setCustomProvider(event.target.value)}
-                disabled={busy}
-                aria-invalid={customError || undefined}
-                aria-describedby={customError ? `${id}-error` : undefined}
-              />
-              <datalist id={`${id}-recent-providers`}>
-                {Array.from(new Set(recentProviders)).map((issuer) => (
-                  <option key={issuer} value={issuer} />
-                ))}
-              </datalist>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={busy || !customProvider.trim()}
-                aria-busy={pending?.kind === "custom" || undefined}
-              >
-                <Progress active={pending?.kind === "custom"}>Continue</Progress>
-              </Button>
-            </form>
-          </CollapsibleContent>
-        </Collapsible>
+              <Progress active={pending?.kind === "webid"}>Continue</Progress>
+            </Button>
+          </form>
+
+          <div className="su-sign-in-divider">
+            <Separator />
+            <span className="su-sign-in-muted">or</span>
+            <Separator />
+          </div>
+
+          {errorAction === "provider" && errorAlert}
+          <ul className="su-sign-in-stack su-sign-in-providers" aria-label="Providers">
+            {providers.map((provider) => {
+              const active =
+                pending?.kind === "provider" &&
+                (pending.key === provider.id || pending.key === provider.issuer);
+              const iconUrl = safeHref(provider.iconUrl);
+              const { color, Logo } = providerBrandFor(provider);
+              return (
+                <li key={provider.id}>
+                  <Button
+                    className="su-sign-in-provider"
+                    style={{ backgroundColor: color, color: foregroundFor(color) }}
+                    disabled={busy}
+                    aria-busy={active || undefined}
+                    onClick={() => {
+                      if (busy) return;
+                      setLastAction("provider");
+                      onProvider(provider);
+                    }}
+                  >
+                    <span
+                      className="su-sign-in-logo"
+                      style={
+                        !active && !iconUrl && !Logo
+                          ? { color: foregroundFor(color) === "#ffffff" ? color : "#111111" }
+                          : undefined
+                      }
+                      aria-hidden="true"
+                    >
+                      {active ? (
+                        <Spinner />
+                      ) : iconUrl ? (
+                        // biome-ignore lint/performance/noImgElement: Optional host-supplied logos need no Next.js image loader.
+                        <img src={iconUrl} alt="" />
+                      ) : Logo ? (
+                        <Logo />
+                      ) : (
+                        monogramFor(provider.name)
+                      )}
+                    </span>
+                    <span>
+                      {active
+                        ? `Signing in with ${provider.label ?? provider.name}…`
+                        : (provider.label ?? provider.name)}
+                    </span>
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {allowCustomProvider && (
+            <Collapsible
+              className="su-sign-in-stack"
+              open={expanded}
+              onOpenChange={(open) => {
+                focusCustom.current = open;
+                setCustomOpen(open);
+              }}
+              disabled={busy}
+            >
+              <CollapsibleTrigger asChild>
+                <Button className="su-sign-in-other" variant="outline" disabled={busy}>
+                  <Globe size={20} aria-hidden="true" />
+                  Other provider
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <form
+                  className="su-sign-in-stack"
+                  aria-label="Sign in with another provider"
+                  noValidate
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = customProvider.trim();
+                    if (busy || !value) return;
+                    setLastAction("custom");
+                    onCustomProvider(value);
+                  }}
+                >
+                  <Label htmlFor={`${id}-provider`}>Provider address</Label>
+                  <Input
+                    ref={customRef}
+                    id={`${id}-provider`}
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    placeholder="https://your-provider.example/"
+                    list={`${id}-recent-providers`}
+                    value={customProvider}
+                    onChange={(event) => setCustomProvider(event.target.value)}
+                    disabled={busy}
+                    aria-invalid={customError || undefined}
+                    aria-describedby={customError ? `${id}-error` : undefined}
+                  />
+                  {customError && errorAlert}
+                  <datalist id={`${id}-recent-providers`}>
+                    {Array.from(new Set(recentProviders)).map((issuer) => (
+                      <option key={issuer} value={issuer} />
+                    ))}
+                  </datalist>
+                  <Button
+                    className="su-sign-in-submit"
+                    type="submit"
+                    disabled={busy || !customProvider.trim()}
+                    aria-busy={pending?.kind === "custom" || undefined}
+                  >
+                    <Progress active={pending?.kind === "custom"}>Continue</Progress>
+                  </Button>
+                </form>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+        </>
       )}
 
       {busy && onCancel && (

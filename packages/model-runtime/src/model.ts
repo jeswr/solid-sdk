@@ -984,7 +984,15 @@ function aliasFocusNodes(
     const subjects = scopes.get(request.owner) ?? new Set<string>();
     subjects.add(request.iri);
     scopes.set(request.owner, subjects);
-    if (!checks.get(request.owner)?.has(request.iri)) {
+    // Synthesize the focus check only in the manifest that OWNS the writing wrapper's
+    // shape: every scan shares one budget, so a second (override) scan re-checking the
+    // same projection would only double-count reads and reject legitimate large writes.
+    const owns = manifest.entities.some((entity) =>
+      isCompositeEntity(entity)
+        ? entity.nodes.includes(request.owner as ManifestNode)
+        : entity === request.owner,
+    );
+    if (owns && !checks.get(request.owner)?.has(request.iri)) {
       const composite = manifest.entities.find(
         (entity) =>
           isCompositeEntity(entity) && entity.nodes.includes(request.owner as ManifestNode),

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Solid-OIDC **authorization-code + PKCE + DPoP** flow — the *user-delegated* login that the
  * client-credentials grant in `session.ts` cannot provide. This is the flow five W6.5 prototypes
@@ -14,20 +15,17 @@
  * token), so `authedFetch` / `rdfFetchFor` from `session.ts` work unchanged. Only token ACQUISITION
  * differs (interactive code exchange + refresh rotation vs. a `client_credentials` POST).
  *
- * ─────────────────────────────────────────────────────────────────────────────────────────────
- * THE http/loopback ISSUER GUARD — contrast with the @solid/reactive-authentication 0.1.3 bug
- * ─────────────────────────────────────────────────────────────────────────────────────────────
- * reactive-auth 0.1.3 rejects ANY `http:` issuer outright, which breaks local development against
- * an in-memory CSS at `http://localhost:3000/` (the `dx` S2 blocker). The correct rule — per
- * RFC 8252 §8.3 (loopback) and the OAuth security BCP — is: `https:` is required for real issuers,
- * but `http:` is permitted *only* for loopback hosts (`127.0.0.1`, `[::1]`, and `localhost`). We
- * implement exactly that rule in {@link assertIssuerTransport}; the unit suite regression-tests
- * this bug class.
+ * Issuers and discovered endpoints require HTTPS. HTTP loopback is allowed only with the
+ * explicit allowInsecureLoopback development option; loopback callback URIs remain HTTP.
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createDpopProof, type DpopKeyPair, generateDpopKeyPair } from "./dpop.js";
+import { assertTransport, discover, type HttpOptions, requestToken } from "./http.js";
+
+export { isLoopbackHost } from "./http.js";
+
 import type { FetchLike, SolidSessionState } from "./session.js";
 import { discoveryUrl } from "./session.js";
 
@@ -37,68 +35,18 @@ const defaultFetch: FetchLike = (input, init) =>
 
 // ─────────────────────────────────────────── issuer transport guard ───────────────────────────
 
-/** Loopback hosts for which `http:` is allowed (RFC 8252 §8.3). `localhost` included per the BCP. */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
-
-/** True iff `host` (a URL hostname, no port) is a loopback address. */
-export function isLoopbackHost(host: string): boolean {
-  return LOOPBACK_HOSTS.has(host.toLowerCase());
+/** HTTPS required; HTTP loopback is available only through explicit development opt-in. */
+export function assertIssuerTransport(issuer: string, allowInsecureLoopback = false): void {
+  assertTransport(issuer, "issuer", allowInsecureLoopback);
 }
 
-/**
- * Centralized transport policy: `https:` always allowed; `http:` allowed ONLY for loopback hosts;
- * any other scheme rejected. This is the single source of truth for "is this URL safe to send
- * credentials to" — the reactive-auth D11 loopback rule. It backs BOTH the input-issuer guard
- * ({@link assertIssuerTransport}) AND the per-endpoint guard applied to discovered metadata
- * ({@link assertEndpointTransport}), so a discovered `token_endpoint` is held to the same bar as
- * the issuer the caller typed.
- *
- * @param url   the URL to validate.
- * @param label a human label (e.g. `"issuer"`, `"token_endpoint"`) used in the thrown error.
- * @throws if the URL uses `http:` against a non-loopback host, or an unsupported scheme.
- */
-function assertSecureTransport(url: string, label: string): void {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    throw new Error(`Invalid ${label} URL: ${url}`);
-  }
-  if (u.protocol === "https:") return;
-  if (u.protocol === "http:") {
-    if (isLoopbackHost(u.hostname)) return;
-    throw new Error(
-      `Insecure ${label} ${url}: http is only permitted for loopback hosts ` +
-        `(127.0.0.1, [::1], localhost). Use https for ${u.hostname}.`,
-    );
-  }
-  throw new Error(
-    `Unsupported ${label} scheme ${u.protocol} in ${url} (expected https or http-loopback).`,
-  );
-}
-
-/**
- * Enforce the issuer transport policy: `https:` always allowed; `http:` allowed ONLY for loopback
- * hosts. This is the deliberate fix for the reactive-auth 0.1.3 "rejects all http issuers" bug —
- * it must NOT reject `http://localhost:3000/` while it MUST reject `http://idp.example.com/`.
- *
- * @throws if the issuer uses `http:` against a non-loopback host, or an unsupported scheme.
- */
-export function assertIssuerTransport(issuer: string): void {
-  assertSecureTransport(issuer, "issuer");
-}
-
-/**
- * Enforce the SAME https-or-loopback transport policy on a single DISCOVERED endpoint URL
- * (`authorization_endpoint`, `token_endpoint`, `registration_endpoint`, …). A malicious or
- * misconfigured discovery document could point an endpoint at an insecure non-loopback `http:` URL
- * (or a different origin) and siphon authorization codes, refresh tokens, or client secrets — so
- * every endpoint we will actually contact is validated, not just the input issuer.
- *
- * @throws if the endpoint uses `http:` against a non-loopback host, or an unsupported scheme.
- */
-export function assertEndpointTransport(endpoint: string, name: string): void {
-  assertSecureTransport(endpoint, name);
+/** Apply the same transport policy to a discovered endpoint. */
+export function assertEndpointTransport(
+  endpoint: string,
+  name: string,
+  allowInsecureLoopback = false,
+): void {
+  assertTransport(endpoint, name, allowInsecureLoopback);
 }
 
 // ─────────────────────────────────────────────────── PKCE (RFC 7636) ──────────────────────────
@@ -138,54 +86,23 @@ export interface OidcProviderMetadata {
   readonly authorization_endpoint: string;
   readonly token_endpoint: string;
   readonly registration_endpoint?: string;
+  readonly jwks_uri?: string;
   /** Advertised DPoP-binding algs, if any (RFC 9449 §5.1). Informational here. */
   readonly dpop_signing_alg_values_supported?: string[];
 }
 
-/**
- * Discover the provider metadata from `.well-known/openid-configuration`.
- *
- * Hardening (defence against a malicious / misconfigured discovery document):
- *  1. The INPUT issuer is transport-checked BEFORE the fetch (https-or-loopback).
- *  2. The RETURNED `issuer` MUST equal the requested issuer exactly — OIDC Discovery 1.0 §4.3
- *     requires issuer equality, and this stops a document that claims to speak for a different
- *     origin.
- *  3. EVERY endpoint we will actually contact (`authorization_endpoint`, `token_endpoint`, and
- *     `registration_endpoint` when present) is held to the SAME https-or-loopback bar as the
- *     issuer, so authorization codes / refresh tokens / client secrets cannot be redirected to an
- *     insecure non-loopback `http:` URL.
- *
- * All checks run BEFORE the metadata is returned (and before any downstream request is made).
- */
+/** Discover metadata, checking exact issuer equality and every endpoint before returning it. */
 export async function discoverProvider(
   issuer: string,
   fetchImpl: FetchLike = defaultFetch,
+  options: HttpOptions = {},
 ): Promise<OidcProviderMetadata> {
-  assertIssuerTransport(issuer);
   const url = discoveryUrl(issuer);
-  const res = await fetchImpl(url);
-  if (!res.ok) {
-    throw new Error(`OIDC discovery failed (${res.status}) at ${url}`);
-  }
-  const meta = (await res.json()) as Partial<OidcProviderMetadata>;
+  const meta = await discover(issuer, url, fetchImpl, options);
   if (!meta.authorization_endpoint || !meta.token_endpoint) {
     throw new Error(`OIDC config at ${url} is missing authorization_endpoint or token_endpoint.`);
   }
-  // OIDC Discovery 1.0 §4.3: the metadata `issuer` MUST be identical to the requested issuer.
-  if (meta.issuer !== issuer) {
-    throw new Error(
-      `OIDC issuer mismatch: discovery document at ${url} declares issuer ` +
-        `${meta.issuer ?? "<missing>"} but ${issuer} was requested.`,
-    );
-  }
-  // Apply the issuer's https-or-loopback policy to every discovered endpoint we will contact, so a
-  // malicious document cannot point a sensitive endpoint at an insecure / off-origin URL.
-  assertEndpointTransport(meta.authorization_endpoint, "authorization_endpoint");
-  assertEndpointTransport(meta.token_endpoint, "token_endpoint");
-  if (meta.registration_endpoint) {
-    assertEndpointTransport(meta.registration_endpoint, "registration_endpoint");
-  }
-  return meta as OidcProviderMetadata;
+  return meta as unknown as OidcProviderMetadata;
 }
 
 /** A registered (or statically configured) OAuth client. */
@@ -328,6 +245,8 @@ export function buildAuthorizationUrl(params: AuthUrlParams): string {
 // ─────────────────────────────────────────── loopback redirect listener ───────────────────────
 
 export interface LoopbackListener {
+  /** Expected OAuth state. Use this in the authorization request when none was supplied at startup. */
+  readonly state?: string;
   /** The `http://127.0.0.1:<port>/<path>` redirect URI the AS must redirect to. */
   readonly redirectUri: string;
   /** Resolves with the `{code, state}` (or `{error}`) once the browser hits the redirect. */
@@ -344,7 +263,10 @@ export interface LoopbackListener {
  *
  * Binds to `127.0.0.1` (never `0.0.0.0`) so the listener is never reachable off-host.
  */
-export async function startLoopbackListener(path = "/callback"): Promise<LoopbackListener> {
+export async function startLoopbackListener(
+  path = "/callback",
+  expectedState = randomBytes(16).toString("base64url"),
+): Promise<LoopbackListener> {
   // The handler RESOLVES this with a success-or-error union (never rejects), so the promise is
   // safe to leave un-awaited until waitForCode reads it — no unhandled-rejection window. waitForCode
   // converts the error variant into a thrown Error.
@@ -365,19 +287,30 @@ export async function startLoopbackListener(path = "/callback"): Promise<Loopbac
       return;
     }
     if (settled) {
-      res.writeHead(409, { "content-type": "text/html" }).end("<p>Already completed.</p>");
+      res
+        .writeHead(409, { "content-type": "text/plain; charset=utf-8" })
+        .end("Login failed. You can close this tab.");
       return;
     }
     const error = reqUrl.searchParams.get("error");
     const code = reqUrl.searchParams.get("code");
     const state = reqUrl.searchParams.get("state");
+    const fail = () =>
+      res
+        .writeHead(400, { "content-type": "text/plain; charset=utf-8" })
+        .end("Login failed. You can close this tab.");
+    // Uncorrelated requests must not complete the pending login, including OAuth errors.
+    if (!state || state !== expectedState || reqUrl.searchParams.getAll("state").length !== 1) {
+      fail();
+      return;
+    }
     if (error) {
-      res.writeHead(400, { "content-type": "text/html" }).end(`<p>Login failed: ${error}</p>`);
-      resolveOutcome?.({ error });
+      fail();
+      resolveOutcome?.({ error: "oauth_error" });
       return;
     }
     if (!code || !state) {
-      res.writeHead(400, { "content-type": "text/html" }).end("<p>Missing code/state.</p>");
+      fail();
       resolveOutcome?.({ error: "missing_code_or_state" });
       return;
     }
@@ -414,7 +347,7 @@ export async function startLoopbackListener(path = "/callback"): Promise<Loopbac
     return outcome;
   };
 
-  return { redirectUri, waitForCode, close };
+  return { redirectUri, state: expectedState, waitForCode, close };
 }
 
 // ─────────────────────────────────────────── token exchange (code + DPoP) ─────────────────────
@@ -440,7 +373,7 @@ interface TokenResponse {
 export type OnTokensRefreshed = (session: AuthCodeSession) => void | Promise<void>;
 
 /** The result of a successful code-exchange or refresh: an `authedFetch`-ready session + tokens. */
-export interface AuthCodeSession extends SolidSessionState {
+export interface AuthCodeSession extends SolidSessionState, HttpOptions {
   /** The refresh token (RFC 6749 §6), if the AS issued one (requires `offline_access`). */
   refreshToken?: string;
   /** The provider metadata, retained so refresh can re-hit the token endpoint. */
@@ -465,6 +398,7 @@ async function postTokenWithDpop(
   body: URLSearchParams,
   client: ClientRegistration,
   fetchImpl: FetchLike,
+  options: HttpOptions,
 ): Promise<{ token: TokenResponse; nonce?: string }> {
   const headers = (dpop: string): Record<string, string> => {
     const h: Record<string, string> = {
@@ -484,47 +418,38 @@ async function postTokenWithDpop(
     return h;
   };
 
-  const attempt = async (nonce?: string): Promise<Response> => {
+  const initFor = async (nonce?: string): Promise<NonNullable<Parameters<FetchLike>[1]>> => {
     const dpop = await createDpopProof({
       keyPair,
       htm: "POST",
       htu: meta.token_endpoint,
       ...(nonce !== undefined ? { nonce } : {}),
     });
-    return fetchImpl(meta.token_endpoint, {
+    return {
       method: "POST",
       headers: headers(dpop),
       body: body.toString(),
-    });
+    };
   };
 
-  let res = await attempt();
-  let nonce = res.headers.get("DPoP-Nonce") ?? undefined;
-  if (res.status === 400 && nonce) {
-    res = await attempt(nonce);
-    nonce = res.headers.get("DPoP-Nonce") ?? nonce;
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Token request failed (${res.status}): ${text.slice(0, 300)}`);
-  }
-  const token = (await res.json()) as TokenResponse;
-  return { token, ...(nonce ? { nonce } : {}) };
+  return requestToken<TokenResponse>(meta.token_endpoint, fetchImpl, options, initFor);
 }
 
 /**
  * Exchange an authorization `code` (+ PKCE `verifier`) for a DPoP-bound access token (and a refresh
  * token when `offline_access` was granted). RFC 6749 §4.1.3 + RFC 7636 §4.5 + RFC 9449.
  */
-export async function exchangeCode(args: {
-  readonly meta: OidcProviderMetadata;
-  readonly client: ClientRegistration;
-  readonly redirectUri: string;
-  readonly code: string;
-  readonly codeVerifier: string;
-  readonly keyPair?: DpopKeyPair;
-  readonly fetchImpl?: FetchLike;
-}): Promise<AuthCodeSession> {
+export async function exchangeCode(
+  args: HttpOptions & {
+    readonly meta: OidcProviderMetadata;
+    readonly client: ClientRegistration;
+    readonly redirectUri: string;
+    readonly code: string;
+    readonly codeVerifier: string;
+    readonly keyPair?: DpopKeyPair;
+    readonly fetchImpl?: FetchLike;
+  },
+): Promise<AuthCodeSession> {
   const fetchImpl = args.fetchImpl ?? defaultFetch;
   const keyPair = args.keyPair ?? (await generateDpopKeyPair());
   const body = new URLSearchParams({
@@ -540,6 +465,7 @@ export async function exchangeCode(args: {
     body,
     args.client,
     fetchImpl,
+    args,
   );
   const expiresAt = Date.now() + (token.expires_in ?? 300) * 1000;
   return {
@@ -548,6 +474,11 @@ export async function exchangeCode(args: {
     expiresAt,
     providerMetadata: args.meta,
     client: args.client,
+    ...(args.allowInsecureLoopback !== undefined
+      ? { allowInsecureLoopback: args.allowInsecureLoopback }
+      : {}),
+    ...(args.requestTimeoutMs !== undefined ? { requestTimeoutMs: args.requestTimeoutMs } : {}),
+    ...(args.maxResponseBytes !== undefined ? { maxResponseBytes: args.maxResponseBytes } : {}),
     ...(token.refresh_token ? { refreshToken: token.refresh_token } : {}),
     ...(nonce ? { nonce } : {}),
   };
@@ -563,6 +494,7 @@ export async function exchangeCode(args: {
 export async function refreshSession(
   session: AuthCodeSession,
   fetchImpl: FetchLike = defaultFetch,
+  options: HttpOptions = {},
 ): Promise<AuthCodeSession> {
   if (!session.refreshToken) {
     throw new Error(
@@ -580,6 +512,7 @@ export async function refreshSession(
     body,
     session.client,
     fetchImpl,
+    { ...session, ...options },
   );
   session.accessToken = token.access_token;
   session.expiresAt = Date.now() + (token.expires_in ?? 300) * 1000;
@@ -593,7 +526,7 @@ export async function refreshSession(
 
 // ─────────────────────────────────────────── orchestrated CLI login ───────────────────────────
 
-export interface CliLoginOptions {
+export interface CliLoginOptions extends HttpOptions {
   readonly issuer: string;
   /** Open the authorization URL in a browser. Defaults to printing it. CLIs pass a real opener. */
   readonly openBrowser?: (url: string) => void | Promise<void>;
@@ -620,8 +553,9 @@ export interface CliLoginOptions {
  */
 export async function cliLogin(opts: CliLoginOptions): Promise<AuthCodeSession> {
   const fetchImpl = opts.fetchImpl ?? defaultFetch;
-  const meta = await discoverProvider(opts.issuer, fetchImpl);
-  const listener = await startLoopbackListener(opts.callbackPath ?? "/callback");
+  const meta = await discoverProvider(opts.issuer, fetchImpl, opts);
+  const state = randomBytes(16).toString("base64url");
+  const listener = await startLoopbackListener(opts.callbackPath ?? "/callback", state);
   try {
     const client = opts.clientId
       ? staticClient(opts.clientId, listener.redirectUri, opts.clientSecret)
@@ -633,7 +567,6 @@ export async function cliLogin(opts: CliLoginOptions): Promise<AuthCodeSession> 
         );
 
     const pkce = generatePkce();
-    const state = randomBytes(16).toString("base64url");
     const nonce = randomUUID();
     const authUrl = buildAuthorizationUrl({
       meta,
@@ -657,6 +590,7 @@ export async function cliLogin(opts: CliLoginOptions): Promise<AuthCodeSession> 
       throw new Error("State mismatch on authorization redirect (possible CSRF); aborting.");
     }
     return await exchangeCode({
+      ...opts,
       meta,
       client,
       redirectUri: listener.redirectUri,

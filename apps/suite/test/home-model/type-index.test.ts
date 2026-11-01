@@ -368,6 +368,24 @@ describe("Type Index read model", () => {
     }
   });
 
+  it("discards a response that completes after a concurrent read exhausted the budget", async () => {
+    const budget = new DiscoveryBudget({ maxRequests: 1 });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch = vi.fn(async () => {
+      await gate;
+      return new Response("<#a> <#b> <#c> .", { headers: { "content-type": "text/turtle" } });
+    });
+    const first = budget.read(fetch, `${STORAGE}a.ttl`);
+    await expect(budget.read(fetch, `${STORAGE}b.ttl`)).resolves.toBeUndefined();
+    release();
+    await expect(first).resolves.toBeUndefined();
+    expect(budget.truncated).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("validates index request and deadline limits", async () => {
     const profile = await rdf("");
     for (const maxRequests of [0, -1, 0.1, Number.NaN])

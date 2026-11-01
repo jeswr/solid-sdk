@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 /**
@@ -20,11 +21,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { boundedRead } from "../../../lib/session/bounded-read";
+import type { PodSession } from "../../../lib/session/pod-session";
 import {
   discoverProfileRegistrations,
   ensureTypeRegistrations,
-} from "@/apps/docs/lib/model/type-index";
-import type { PodSession } from "@/lib/session/pod-session";
+} from "../../docs/lib/model/type-index";
 import { driveBootstrapFetch } from "../lib/client/bootstrap";
 import {
   createSolidDriveClient,
@@ -65,13 +67,22 @@ export class DriveRootDiscoveryError extends Error {
   }
 }
 
-async function resolveDriveRoot(client: DriveClient, session: PodSession): Promise<string> {
+async function resolveDriveRoot(
+  client: DriveClient,
+  session: PodSession,
+  signal: AbortSignal,
+): Promise<string> {
   try {
-    const locations = await discoverProfileRegistrations(
-      session.webId,
-      session.fetch,
-      session.storageUrl,
-    );
+    const discover = () =>
+      discoverProfileRegistrations(
+        session.webId,
+        session.fetch,
+        session.storageUrl,
+        session.mode === "extension" ? session.publicFetch : undefined,
+      );
+    // One budget covers the profile and every linked index/preferences read.
+    const locations =
+      session.mode === "extension" ? await boundedRead(discover, 5000, signal) : await discover();
     // Reuse the first DriveRoot container in discovery order (public, then private).
     // A DriveRoot can also be registered as an instance of the root container.
     // Resource instances without a trailing slash cannot serve as a folder.
@@ -83,8 +94,12 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
     const root = existing?.container ?? existing?.instance;
     if (root) return root;
   } catch (cause) {
+    if (session.mode === "extension") return session.storageUrl;
     throw new DriveRootDiscoveryError(cause);
   }
+  // Extension storage grants don't confer access to the profile/preferences or Control
+  // needed to bootstrap a private Type Index. Browse the granted root without provisioning.
+  if (session.mode === "extension") return session.storageUrl;
   const root = `${session.storageUrl}drive/`;
   try {
     await client.createFolder(root, { kind: "inherit-verified" });
@@ -196,12 +211,14 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
 
   useEffect(() => {
     let live = true;
-    resolveDriveRoot(client, session).then(
+    const controller = new AbortController();
+    resolveDriveRoot(client, session, controller.signal).then(
       (root) => live && setDriveRoot(root),
       (error: unknown) => live && setRootError(error),
     );
     return () => {
       live = false;
+      controller.abort();
     };
   }, [client, session]);
 
