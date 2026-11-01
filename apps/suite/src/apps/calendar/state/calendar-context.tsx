@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { podScopedUrl } from "@jeswr/guarded-fetch";
 import { ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -58,7 +59,7 @@ interface CalendarContextValue {
   create: (title: string, colour: string) => Promise<void>;
   selected: Occurrence | undefined;
   focusRequest: { current: { view: CalendarView; date: string; slot: number } | undefined };
-  openEvent: (event: Occurrence, trigger: HTMLElement) => void;
+  openEvent: (event: Occurrence, trigger: HTMLElement, day?: HTMLElement) => void;
   closeEvent: () => void;
   eventTrigger: RefObject<HTMLElement | null>;
   reconcile: (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => void;
@@ -78,6 +79,7 @@ function SessionCalendarProvider({
   const [writes, setWrites] = useState<EventWrite[]>([]);
   const [selected, setSelected] = useState<Occurrence>();
   const trigger = useRef<HTMLElement>(null);
+  const returnDay = useRef<HTMLElement | null>(null);
   const focusRequest = useRef<{ view: CalendarView; date: string; slot: number } | undefined>(
     undefined,
   );
@@ -151,14 +153,9 @@ function SessionCalendarProvider({
     },
     [session, reload],
   );
-  const reconcile = useCallback(
-    (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => {
-      setSelected((current) => reconcileOccurrence(current, events, from, to, failedCalendars));
-    },
-    [],
-  );
-  const openEvent = useCallback((event: Occurrence, element: HTMLElement) => {
+  const openEvent = useCallback((event: Occurrence, element: HTMLElement, day?: HTMLElement) => {
     trigger.current = element;
+    returnDay.current = day ?? element.closest<HTMLElement>("[data-day]");
     setSelected(event);
   }, []);
   useEffect(() => {
@@ -166,8 +163,24 @@ function SessionCalendarProvider({
   }, [selected, prefs.hidden]);
   const closeEvent = useCallback(() => {
     setSelected(undefined);
-    requestAnimationFrame(() => trigger.current?.focus());
+    requestAnimationFrame(() => {
+      const day = returnDay.current;
+      const fallback = day?.isConnected
+        ? (day.querySelector<HTMLElement>(".cal-more") ?? day)
+        : document.getElementById("main-content");
+      const target = trigger.current?.isConnected ? trigger.current : fallback;
+      trigger.current = target;
+      target?.focus();
+    });
   }, []);
+  const reconcile = useCallback(
+    (events: Occurrence[], from: string, to: string, failedCalendars: string[]) => {
+      const next = reconcileOccurrence(selected, events, from, to, failedCalendars);
+      if (selected && !next) closeEvent();
+      else setSelected(next);
+    },
+    [selected, closeEvent],
+  );
   return (
     <Context
       value={{
@@ -273,9 +286,13 @@ export function useEventsInRange(from: string, to: string): EventsState & { relo
     let events = state.events;
     for (const write of writes) {
       if (state.acknowledged.includes(write)) continue;
+      const knownCalendar = events.find((e) => e.url === write.url)?.calendar;
       events = events.filter((e) => e.url !== write.url);
       if (write.kind === "delete") continue;
-      const calendar = visible.find((c) => `${c.url}#it` === write.data.inCalendar);
+      const calendar = write.data.inCalendar
+        ? visible.find((c) => `${c.url}#it` === write.data.inCalendar)
+        : (visible.find((c) => c.url === knownCalendar?.url) ??
+          visible.find((c) => podScopedUrl(c.container, write.url, { allowRoot: false })));
       if (calendar)
         for (const data of expandEvent(write.data, localDate(from), localDate(to), zone))
           events.push({
