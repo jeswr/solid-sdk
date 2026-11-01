@@ -367,10 +367,11 @@ test("storage lists the largest photos and moving one to trash moves its space",
   const name = (await first.locator(".pho-storage-name > span").first().textContent()) ?? "";
   const secondName =
     (await rows.nth(1).locator(".pho-storage-name > span").first().textContent()) ?? "";
-  await first.getByRole("button", { name: `Move ${name} to trash`, exact: true }).click();
+  await first.getByRole("button", { name: `Move ${name} to trash`, exact: true }).focus();
+  await page.keyboard.press("Enter");
   await saved(page);
   await expect(rows).toHaveCount(11);
-  // Focus stays in the list on the row that took the trashed row's place.
+  // Keyboard focus stays in the list on the row that took the trashed row's place.
   await expect(
     page.getByRole("button", { name: `Move ${secondName} to trash`, exact: true }),
   ).toBeFocused();

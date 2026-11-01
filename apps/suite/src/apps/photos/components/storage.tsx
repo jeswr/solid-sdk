@@ -124,8 +124,10 @@ export function StorageScreen() {
         <div className="pho-header-actions">
           <Button
             variant="outline"
-            disabled={refreshing}
+            // aria-disabled keeps focus on the button while it recalculates.
+            aria-disabled={refreshing || undefined}
             onClick={() => {
+              if (refreshing) return;
               sizer.clear();
               setAttempt((n) => n + 1);
             }}
@@ -214,9 +216,11 @@ export function StorageScreen() {
                         variant="ghost"
                         label={`Move ${photo.name} to trash`}
                         data-trash-for={item.key}
-                        onClick={() => {
-                          // Keep keyboard users in the list once this row disappears.
-                          setFocusAfter((stored[index + 1] ?? stored[index - 1])?.key ?? null);
+                        onClick={(event) => {
+                          // Keep keyboard users in the list once this row disappears. A mouse
+                          // click skips this, so the next row's tooltip doesn't pop open.
+                          if (event.currentTarget.matches(":focus-visible"))
+                            setFocusAfter((stored[index + 1] ?? stored[index - 1])?.key ?? null);
                           void state.moveToTrash([photo]);
                         }}
                       >
