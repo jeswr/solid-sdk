@@ -58,9 +58,10 @@ export function ImageUpload({
   const upload = async () => {
     if (!decorative && !alt.trim()) return;
     if (!file) {
+      // Mutations retain the selection; EditorPopoverContent alone restores
+      // focus on close, respecting outside interactions during an upload.
       editor
         .chain()
-        .focus()
         .updateAttributes("image", { alt: decorative ? "" : alt })
         .run();
       close();
@@ -113,7 +114,6 @@ export function ImageUpload({
       editor.view.dispatch(editor.state.tr.setSelection(anchor.selection));
       editor
         .chain()
-        .focus()
         .insertContent({
           type: "image",
           attrs: { src, alt: decorative ? "" : alt.trim() },

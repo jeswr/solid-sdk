@@ -22,6 +22,7 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
+import { wordListFormat } from "./docx-list-format";
 import { type QuoteAncestor, quoteStyleName } from "./docx-quotes";
 
 export interface ExportImage {
@@ -71,18 +72,23 @@ function inline(node: JSONContent): ParagraphChild[] {
 export async function toDocx(json: JSONContent, readImage: ReadExportImage): Promise<Document> {
   let listInstance = 0;
   let quoteInstance = 0;
-  const numberingConfig = (reference: string, start: number, listLevel: number) => ({
+  const numberingConfig = (
+    reference: string,
+    start: number,
+    listLevel: number,
+    format: (typeof LevelFormat)[keyof typeof LevelFormat],
+  ) => ({
     reference,
     levels: Array.from({ length: 9 }, (_, level) => ({
       level,
       start: level === listLevel ? start : 1,
-      format: reference === "bullets" ? LevelFormat.BULLET : LevelFormat.DECIMAL,
-      text: reference === "bullets" ? "•" : `%${level + 1}.`,
+      format,
+      text: format === LevelFormat.BULLET ? "•" : `%${level + 1}.`,
       alignment: AlignmentType.LEFT,
       style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
     })),
   });
-  const config = [numberingConfig("bullets", 1, 0)];
+  const config = [numberingConfig("bullets", 1, 0, LevelFormat.BULLET)];
   const continuationStyles = new Map<string, { id: string; name: string; basedOn: string }>();
   const quoteStyles = new Map<string, IParagraphStyleOptions>();
   const tableStyles = new Map<string, ImportedXmlComponent>();
@@ -192,7 +198,12 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           const reference = node.type === "orderedList" ? `numbers-${instance}` : "bullets";
           if (node.type === "orderedList")
             config.push(
-              numberingConfig(reference, Number(node.attrs?.start ?? 1), Math.min(depth + 1, 8)),
+              numberingConfig(
+                reference,
+                Number(node.attrs?.start ?? 1),
+                Math.min(depth + 1, 8),
+                wordListFormat(node.attrs?.type),
+              ),
             );
           for (const item of content) {
             result.push(

@@ -42,7 +42,7 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     img: ["src", "alt", "width", "height"],
     th: ["colspan", "rowspan"],
     td: ["colspan", "rowspan"],
-    ol: ["start"],
+    ol: ["start", "type"],
     ul: ["data-type"],
     li: ["data-type", "data-checked"],
   };
