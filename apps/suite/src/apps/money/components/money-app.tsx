@@ -4,18 +4,18 @@
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import { ArrowDownToLine, LayoutDashboard, ListTree, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { MoneyProvider, useMoney } from "../state/money-context";
 import { AccountDialog } from "./money-forms";
 
 function Chrome({ children }: { children: ReactNode }) {
   const money = useMoney();
-  const path = usePathname();
+  const path = useRoutePathname();
   const [add, setAdd] = useState(false);
   const links = [
     { href: "/money", label: "Overview", Icon: LayoutDashboard },

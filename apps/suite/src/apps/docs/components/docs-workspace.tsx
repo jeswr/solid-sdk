@@ -3,8 +3,8 @@
 "use client";
 import { Toaster, TooltipProvider } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { decodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { DocsError, DocumentSkeleton } from "./common";
 import { DocumentEditor } from "./document-editor";
@@ -12,7 +12,7 @@ import { DocumentList } from "./document-list";
 export function DocsWorkspace() {
   const state = usePodSessionState();
   // The native export uses trailing-slash URLs.
-  const pathname = usePathname().replace(/(.)\/$/, "$1");
+  const pathname = useRoutePathname();
   if (state.status === "loading")
     return (
       <main id="main-content">
