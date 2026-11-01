@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
@@ -124,27 +125,39 @@ it.each([
 });
 
 describe("Tasks row deletion and focus", () => {
-  it("requires the exact confirmation, supports Cancel, and deletes only after Delete", async () => {
+  it("hides immediately with Undo and only deletes on expiry or dismissal", async () => {
     const { host, store } = await populated(["Pay rent"]);
+    const { toast } = await import("@jeswr/suite-ui");
+    const { pendingDeletes } = await import("../../src/apps/tasks/state/actions");
     const deletes = vi.spyOn(store, "deleteTask");
     const row = host.querySelector<HTMLElement>("[data-tsk-row]");
     if (!row) throw new Error("Missing row");
     await act(() => row.focus());
     await key(row, "F10", true);
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(button("Delete", document.querySelector('[role="menu"]') ?? document)).toBeTruthy(),
+      );
+    });
     await click(button("Delete", document.querySelector('[role="menu"]') ?? document));
-    await vi.waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBeNull());
-    const dialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
-    expect(dialog.textContent).toContain("Delete 'Pay rent'?");
-    expect(dialog.textContent).toContain("This can't be undone.");
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(0);
     expect(deletes).not.toHaveBeenCalled();
-    await click(button("Cancel", dialog));
+    const call = vi.mocked(toast.success).mock.calls.at(-1);
+    expect(call?.[0]).toBe("Deleted 'Pay rent'");
+    const action = call?.[1]?.action;
+    if (!action || typeof action !== "object" || !("onClick" in action))
+      throw new Error("Missing Undo");
+    await act(() => action.onClick(new MouseEvent("click") as never));
     expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(1);
-    expect(deletes).not.toHaveBeenCalled();
-    await act(() => row.focus());
-    await key(row, "F10", true);
-    await click(button("Delete", document.querySelector('[role="menu"]') ?? document));
-    await click(button("Delete", document.querySelector('[role="alertdialog"]') ?? document));
-    await vi.waitFor(() => expect(deletes).toHaveBeenCalledOnce());
+    await act(async () => {
+      const view = cache.getSnapshot().views[0];
+      if (!view) throw new Error("Missing task");
+      const { deleteTask } = await import("../../src/apps/tasks/state/actions");
+      await deleteTask(view, { ...cache.getSnapshot(), cache } as never);
+      pendingDeletes(cache).flush();
+      await vi.waitFor(() => expect(deletes).toHaveBeenCalledOnce());
+    });
     expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(0);
     expect(document.activeElement?.textContent).toContain("Add task");
   });
@@ -156,10 +169,23 @@ describe("Tasks row deletion and focus", () => {
     if (!middle) throw new Error("Missing middle");
     await act(() => middle.focus());
     await key(middle, " ");
+    expect(middle.getAttribute("aria-selected")).toBe("true");
+    await key(middle, "e");
+    await act(async () => {
+      await vi.waitFor(() => expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(2));
+    });
     expect(document.activeElement?.textContent).toContain("Last");
     await key(document.activeElement as Element, " ");
+    await key(document.activeElement as Element, "e");
+    await act(async () => {
+      await vi.waitFor(() => expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(1));
+    });
     expect(document.activeElement?.textContent).toContain("First");
     await key(document.activeElement as Element, " ");
+    await key(document.activeElement as Element, "e");
+    await act(async () => {
+      await vi.waitFor(() => expect(rows()).toHaveLength(0));
+    });
     expect(rows()).toHaveLength(0);
     expect(document.activeElement?.textContent).toContain("Add task");
   });

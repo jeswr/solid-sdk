@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   AlertDialog,
@@ -14,19 +13,29 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  EditableText,
   IconButton,
 } from "@jeswr/suite-ui";
 import { Bell, CalendarDays, Ellipsis, Pencil, Repeat2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { encodeRef } from "@/lib/refs";
 import { formatDue, isOverdue } from "../lib/format/due";
+import { runBulk } from "../lib/views/bulk";
+import { addDays, localDayKey } from "../lib/views/days";
+import { moveDown, moveUp } from "../lib/views/positions";
 import type { Row } from "../lib/views/project-groups";
+import { compareTasks } from "../lib/views/project-groups";
+import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
 import { useNow } from "../state/clock";
+import { completionVisuals } from "../state/completion-visuals";
+import { useTaskListFocus } from "../state/list-focus";
+import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
+import { RowProperties } from "./row-properties";
 import { ReschedulePopover } from "./views/reschedule-popover";
 import "./views/views.css";
 export interface TaskRowProps {
@@ -44,11 +53,26 @@ export function TaskRow({
   onMove,
 }: TaskRowProps) {
   const tasks = useTasks();
+  const visuals = completionVisuals(tasks.cache);
+  const completing = useSyncExternalStore(
+    visuals.subscribe,
+    visuals.getSnapshot,
+    visuals.getSnapshot,
+  ).has(task.url);
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmForever, setConfirmForever] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<"labels" | "repeat">();
+  const rowElement = useRef<HTMLTableRowElement>(null);
+  const titleWasFocused = useRef(false);
+  const focus = useTaskListFocus();
+  const focusRow = () => requestAnimationFrame(() => rowElement.current?.focus());
+  useLayoutEffect(() => {
+    if (editing) rowElement.current?.querySelector<HTMLButtonElement>(".suite-editable")?.click();
+  }, [editing]);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [slow, setSlow] = useState(false);
   const saving = tasks.saving.includes(task.url);
@@ -80,64 +104,177 @@ export function TaskRow({
       task.completedAt ||
       task.derivedFrom,
   );
+  const onKeyDown = useTasksShortcuts(!!focus?.selection.size, (command) => {
+    if (command.type === "focus") return onMove(command.direction);
+    if (command.type === "open") return router.push(href);
+    if (command.type === "clear") return focus?.clearSelection();
+    if (command.type === "select") {
+      focus?.toggleSelection(task.url);
+      focus?.announce(
+        focus.selection.has(task.url) ? `Deselected '${task.title}'` : `Selected '${task.title}'`,
+      );
+      return;
+    }
+    if (command.type === "menu") return setMenuOpen(true);
+    if (pending) return;
+    if (command.type === "complete") {
+      const selected = tasks.views.filter((view) => focus?.selection.has(view.url));
+      focus?.clearSelection();
+      void runBulk(selected, async (view) => {
+        if (view.state === "open") await completeTask(view, tasks, { animate: true });
+      });
+    }
+    if (command.type === "edit") setEditing(true);
+    if (command.type === "delete") void deleteTask(task, tasks);
+    if (command.type === "due") setRescheduleOpen(true);
+    if (command.type === "labels") setPanel("labels");
+    if (command.type === "repeat") setPanel("repeat");
+    if (command.type === "reschedule")
+      void rescheduleTasks([task], localDayKey(addDays(now, command.days)), tasks);
+    if (command.type === "priority") {
+      const stored = tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url);
+      if (stored)
+        void tasks.updateTask(stored, (task) => {
+          task.priority = priorityValue(command.level);
+        });
+      focus?.announce(`Priority P${command.level}`);
+    }
+    if (command.type === "reorder") {
+      const siblings = tasks.views
+        .filter(
+          (view) =>
+            view.state === task.state &&
+            view.projectUrl === task.projectUrl &&
+            view.sectionId === task.sectionId &&
+            view.parentId === task.parentId,
+        )
+        .sort(compareTasks("manual"));
+      const plan = (command.direction === -1 ? moveUp : moveDown)(siblings, task.url);
+      if (!plan) return;
+      void (async () => {
+        for (const patch of [
+          ...(plan.renumber ?? []),
+          { url: task.url, position: plan.position },
+        ]) {
+          const stored = tasks.cache
+            .getSnapshot()
+            .tasks[task.projectUrl]?.items.find((item) => item.url === patch.url);
+          if (
+            !stored ||
+            !(await tasks.updateTask(stored, (task) => {
+              task.rank = patch.position;
+            }))
+          )
+            return;
+        }
+        focus?.announce(`Moved '${task.title}' ${command.direction === -1 ? "up" : "down"}`);
+      })();
+    }
+  });
   return (
-    <li
+    <tr
       className="tsk-row"
       data-tsk-row={task.url}
       data-task-url={task.url}
       data-depth={depth}
-      data-closed={task.state === "closed" || undefined}
+      data-closed={task.state === "closed" || completing || undefined}
+      data-completing={completing || undefined}
       tabIndex={tabIndex}
-      onFocus={onFocus}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (
-          event.key === "ArrowDown" ||
-          event.key === "j" ||
-          event.key === "ArrowUp" ||
-          event.key === "k"
-        ) {
-          event.preventDefault();
-          onMove(event.key === "ArrowDown" || event.key === "j" ? 1 : -1);
-        }
-        if (event.key === "Enter") {
-          event.preventDefault();
-          router.push(href);
-        }
-        if (event.key === " " && !pending) {
-          event.preventDefault();
-          void (task.state === "closed" ? reopenTask(task, tasks) : completeTask(task, tasks));
-        }
-        if (event.key === "F10" && event.shiftKey) {
-          event.preventDefault();
-          setMenuOpen(true);
-        }
+      onFocus={(event) => {
+        if ((event.target as HTMLElement).tagName === "TD") event.currentTarget.focus();
+        onFocus();
       }}
+      aria-selected={focus?.selection.has(task.url) ?? false}
+      ref={rowElement}
+      onKeyDown={onKeyDown}
     >
-      <label className="tsk-check-target">
-        <input
-          className="tsk-check"
-          data-priority={task.priority}
-          type="checkbox"
-          tabIndex={-1}
-          checked={task.state === "closed"}
-          disabled={pending}
-          aria-label={`${task.state === "closed" ? "Reopen" : "Complete"} '${task.title}'`}
-          onChange={() => {
-            void (task.state === "closed" ? reopenTask(task, tasks) : completeTask(task, tasks));
-          }}
-        />
-      </label>
-      <div className="tsk-row-body">
-        <Link className="tsk-task-title" tabIndex={-1} href={href}>
-          {task.title}
-        </Link>
+      <td className="tsk-completion-cell">
+        <label className="tsk-check-target">
+          <input
+            className="tsk-check"
+            data-priority={task.priority}
+            type="checkbox"
+            tabIndex={-1}
+            checked={task.state === "closed" || completing}
+            disabled={pending || completing}
+            aria-label={`${task.state === "closed" ? "Reopen" : "Complete"} '${task.title}'`}
+            onChange={() => {
+              void (task.state === "closed"
+                ? reopenTask(task, tasks)
+                : completeTask(task, tasks, { animate: true }));
+            }}
+          />
+        </label>
+      </td>
+      <td className="tsk-row-body">
+        {editing ? (
+          <div
+            className="tsk-inline-title"
+            onKeyDownCapture={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setEditing(false);
+                focusRow();
+              }
+            }}
+          >
+            <EditableText
+              label="Task title"
+              value={task.title}
+              validate={(value) => (value.trim() ? undefined : "A title is required")}
+              onCommit={(value) => {
+                const stored = tasks.tasks[task.projectUrl]?.items.find(
+                  (item) => item.url === task.url,
+                );
+                if (stored)
+                  void tasks.updateTask(stored, (task) => {
+                    task.title = value.trim();
+                  });
+                setEditing(false);
+                focusRow();
+              }}
+            />
+          </div>
+        ) : (
+          <Link
+            className="tsk-task-title"
+            tabIndex={-1}
+            href={href}
+            onPointerDown={() => {
+              titleWasFocused.current = document.activeElement === rowElement.current;
+            }}
+            onClick={(event) => {
+              if (
+                !pending &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.shiftKey &&
+                !event.altKey &&
+                titleWasFocused.current
+              ) {
+                event.preventDefault();
+                setEditing(true);
+              }
+              titleWasFocused.current = false;
+            }}
+          >
+            {task.title}
+          </Link>
+        )}
         {hasMeta && (
           <div className="tsk-meta">
             {(task.due || task.allDay) && (
-              <span className="tsk-due" data-overdue={isOverdue(task, now) || undefined}>
+              <button
+                type="button"
+                className="tsk-due"
+                disabled={pending || completing}
+                aria-label={`Reschedule '${task.title}'`}
+                onClick={() => setRescheduleOpen(true)}
+                data-overdue={isOverdue(task, now) || undefined}
+              >
                 {formatDue(task, now)}
-              </span>
+              </button>
             )}
             {task.recurring && (
               <span title="Recurring task">
@@ -189,110 +326,143 @@ export function TaskRow({
             {showProject && task.projectTitle && <span>{task.projectTitle}</span>}
           </div>
         )}
-      </div>
-      <ReschedulePopover
-        open={rescheduleOpen}
-        onOpenChange={setRescheduleOpen}
-        onSelect={(dayKey) => {
-          void rescheduleTasks([task], dayKey, tasks);
-        }}
-        onCloseFocus={() => {
-          document.querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)?.focus();
-        }}
-      >
-        <div className="tsk-row-actions">
-          <IconButton
-            className="tsk-wide-action"
-            label="Reschedule"
-            variant="ghost"
-            tabIndex={-1}
-            disabled={pending}
-            onClick={() => setRescheduleOpen(true)}
-          >
-            <CalendarDays size={16} aria-hidden="true" />
-          </IconButton>
-          <Link
-            className="tsk-wide-action tsk-icon-link"
-            href={href}
-            tabIndex={-1}
-            aria-label={`Edit '${task.title}'`}
-          >
-            <Pencil size={16} aria-hidden="true" />
-          </Link>
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <IconButton label={`Actions for '${task.title}'`} variant="ghost" tabIndex={-1}>
-                <Ellipsis size={18} aria-hidden="true" />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                if (confirmDelete || rescheduleOpen) return;
-                document
-                  .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
-                  ?.focus();
-              }}
+      </td>
+      <td className="tsk-actions-cell">
+        <ReschedulePopover
+          open={rescheduleOpen}
+          onOpenChange={setRescheduleOpen}
+          onSelect={(dayKey) => {
+            void rescheduleTasks([task], dayKey, tasks);
+          }}
+          onCloseFocus={() => {
+            document
+              .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+              ?.focus();
+          }}
+        >
+          <div className="tsk-row-actions">
+            <IconButton
+              className="tsk-wide-action"
+              label="Reschedule"
+              variant="ghost"
+              tabIndex={-1}
+              disabled={pending || completing}
+              onClick={() => setRescheduleOpen(true)}
             >
-              <DropdownMenuItem asChild>
-                <Link href={href}>Edit</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={pending}
-                onSelect={() => {
-                  setRescheduleOpen(true);
+              <CalendarDays size={16} aria-hidden="true" />
+            </IconButton>
+            <Link
+              className="tsk-wide-action tsk-icon-link"
+              href={href}
+              tabIndex={-1}
+              aria-label={`Edit '${task.title}'`}
+            >
+              <Pencil size={16} aria-hidden="true" />
+            </Link>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <IconButton label={`Actions for '${task.title}'`} variant="ghost" tabIndex={-1}>
+                  <Ellipsis size={18} aria-hidden="true" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  if (confirmForever || rescheduleOpen || panel) return;
+                  document
+                    .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+                    ?.focus();
                 }}
               >
-                Reschedule…
-              </DropdownMenuItem>
-              {task.state === "closed" && (
+                <DropdownMenuItem asChild>
+                  <Link href={href}>Edit</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={pending}
+                  disabled={pending || completing}
                   onSelect={() => {
-                    void reopenTask(task, tasks);
+                    setRescheduleOpen(true);
                   }}
                 >
-                  Reopen
+                  Reschedule…
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                disabled={pending}
-                onSelect={() => {
-                  setConfirmDelete(true);
-                }}
-              >
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-            <AlertDialogContent
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                document
-                  .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
-                  ?.focus();
-              }}
-            >
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete '{task.title}'?</AlertDialogTitle>
-                <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
+                {task.state === "closed" && (
+                  <DropdownMenuItem
+                    disabled={pending || completing}
+                    onSelect={() => {
+                      void reopenTask(task, tasks);
+                    }}
+                  >
+                    Reopen
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  disabled={pending || completing}
+                  onSelect={() => setEditing(true)}
+                >
+                  Edit title
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={pending || completing}
+                  onSelect={() => setPanel("labels")}
+                >
+                  Labels…
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={pending || completing}
+                  onSelect={() => setPanel("repeat")}
+                >
+                  Repeat…
+                </DropdownMenuItem>
+                {task.recurring && task.state === "open" && (
+                  <DropdownMenuItem
+                    disabled={pending || completing}
+                    onSelect={() => setConfirmForever(true)}
+                  >
+                    Complete forever
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  disabled={pending || completing}
+                  onSelect={() => {
                     void deleteTask(task, tasks);
                   }}
                 >
                   Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </ReschedulePopover>
-      {saving && slow && <span className="tsk-saving" role="status" aria-label="Saving task" />}
-    </li>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialog open={confirmForever} onOpenChange={setConfirmForever}>
+              <AlertDialogContent
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  document
+                    .querySelector<HTMLElement>(`[data-tsk-row="${CSS.escape(task.url)}"]`)
+                    ?.focus();
+                }}
+              >
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Stop repeating and complete?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Complete '{task.title}' without creating another occurrence.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      void completeTask(task, tasks, { forever: true, animate: true });
+                    }}
+                  >
+                    Complete forever
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </ReschedulePopover>
+        <RowProperties task={task} panel={panel} onClose={() => setPanel(undefined)} />
+        {saving && slow && <span className="tsk-saving" role="status" aria-label="Saving task" />}
+      </td>
+    </tr>
   );
 }

@@ -519,3 +519,82 @@
 .tsk-composer-controls > [data-slot="select-trigger"] {
   max-width: 100%;
 }
+
+.tsk-row[aria-selected="true"] {
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 var(--primary);
+}
+.tsk-row[aria-selected="true"]::before {
+  content: "✓";
+  position: absolute;
+  inset-inline-start: -14px;
+  color: var(--primary);
+}
+.tsk-inline-title {
+  width: 100%;
+}
+.tsk-inline-title .suite-label {
+  display: none;
+}
+button.tsk-due {
+  border: 0;
+  padding: 0;
+  min-height: 24px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button.tsk-due:hover {
+  text-decoration: underline;
+}
+.tsk-property-anchor {
+  position: absolute;
+  inset: 0 0 auto auto;
+}
+.tsk-check {
+  transition:
+    background-color 240ms var(--ease-spring),
+    border-color 240ms var(--ease-spring);
+}
+.tsk-row[data-completing] {
+  animation: tsk-complete-fade 400ms ease-out both;
+}
+@keyframes tsk-complete-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tsk-row[data-completing],
+  .tsk-check {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+.tsk-completion-cell {
+  flex-shrink: 0;
+}
+.tsk-actions-cell {
+  flex-shrink: 0;
+}
+.tsk-list {
+  display: block;
+  width: 100%;
+  border-spacing: 0;
+}
+.tsk-list > tbody {
+  display: block;
+}
+.tsk-completion-cell,
+.tsk-actions-cell {
+  padding: 0;
+}
+.tsk-row-body {
+  padding-inline: 0;
+}

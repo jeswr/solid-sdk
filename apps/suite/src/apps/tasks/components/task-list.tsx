@@ -143,19 +143,21 @@ function TaskListBody({
   // A group can collapse without rerendering the persistent focus owner.
   useLayoutEffect(() => focus?.refresh());
   const renderRows = (rows: Row[], label: string) => (
-    // biome-ignore lint/a11y/noRedundantRoles: explicit list role preserves Safari semantics when list markers are removed
-    <ul role="list" aria-label={label} className="tsk-list">
-      {rows.map((row) => (
-        <TaskRow
-          key={row.task.url}
-          row={row}
-          showProject={showProject}
-          tabIndex={row.task.url === focus?.activeUrl ? 0 : -1}
-          onFocus={() => focus?.onFocus(row.task.url)}
-          onMove={(direction) => focus?.onMove(row.task.url, direction)}
-        />
-      ))}
-    </ul>
+    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the native table implements a grid with row selection and independent cell controls.
+    <table role="grid" aria-multiselectable="true" aria-label={label} className="tsk-list">
+      <tbody>
+        {rows.map((row) => (
+          <TaskRow
+            key={row.task.url}
+            row={row}
+            showProject={showProject}
+            tabIndex={row.task.url === focus?.activeUrl ? 0 : -1}
+            onFocus={() => focus?.onFocus(row.task.url)}
+            onMove={(direction) => focus?.onMove(row.task.url, direction)}
+          />
+        ))}
+      </tbody>
+    </table>
   );
   return (
     <div className="tsk-task-list">

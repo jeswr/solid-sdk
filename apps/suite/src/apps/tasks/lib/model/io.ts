@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
@@ -73,7 +72,11 @@ export class RdfIO {
     return current;
   }
   async remove(url: string, etag: string | null): Promise<void> {
-    await this.request(url, { method: "DELETE", headers: { "If-Match": requireEtag(etag) } });
+    await this.request(url, {
+      method: "DELETE",
+      headers: { "If-Match": requireEtag(etag) },
+      keepalive: true,
+    });
   }
   private async request(url: string, init: RequestInit): Promise<Response> {
     requireHttp(url);

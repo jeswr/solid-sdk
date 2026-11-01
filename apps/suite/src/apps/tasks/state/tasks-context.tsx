@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -15,6 +14,8 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { TaskStore } from "../lib/model/store";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "./access";
+import { pendingDeletes } from "./actions";
+import { completionVisuals } from "./completion-visuals";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
@@ -45,6 +46,14 @@ function useTasksValue(session: PodSession) {
       ),
   );
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
+  useEffect(() => {
+    const flush = () => {
+      completionVisuals(cache).flush();
+      pendingDeletes(cache).flush();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, [cache]);
   useEffect(() => {
     void cache.start();
   }, [cache]);

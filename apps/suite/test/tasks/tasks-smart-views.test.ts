@@ -154,10 +154,12 @@ describe("Today", () => {
     await key(next, "ArrowUp");
     expect(document.activeElement).toBe(row);
     await key(row, " ");
+    await key(row, "e");
     await act(async () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(next));
     });
     await key(next, " ");
+    await key(next, "e");
     await act(async () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(button("Add task", host)));
     });
@@ -353,11 +355,11 @@ describe("Completed", () => {
     const row = rows[which === "first" ? 0 : 1] as HTMLElement;
     const remaining = rows[which === "first" ? 1 : 0] as HTMLElement;
     await act(() => row.focus());
-    await key(row, " ");
+    await click(row.querySelector("input") as Element);
     await act(async () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(remaining));
     });
-    await key(remaining, " ");
+    await click(remaining.querySelector("input") as Element);
     await act(async () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector("h1")));
     });
@@ -448,6 +450,7 @@ describe("Label view", () => {
     await key(inbox, "ArrowDown");
     expect(document.activeElement).toBe(inbox);
     await key(inbox, " ");
+    await key(inbox, "e");
     await act(async () => {
       await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector("h1")));
     });

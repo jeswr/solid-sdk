@@ -5,15 +5,21 @@ import {
   type ReactNode,
   useContext,
   useLayoutEffect,
+  useReducer,
   useRef,
   useState,
 } from "react";
+import { selectionReducer } from "./selection";
 
 interface ListFocus {
   activeUrl: string | undefined;
   onFocus: (url: string) => void;
   onMove: (url: string, direction: -1 | 1) => void;
   refresh: () => void;
+  selection: ReadonlySet<string>;
+  toggleSelection: (url: string) => void;
+  clearSelection: () => void;
+  announce: (message: string) => void;
 }
 const ListFocusContext = createContext<ListFocus | undefined>(undefined);
 export const useTaskListFocus = () => useContext(ListFocusContext);
@@ -28,6 +34,8 @@ export function TaskListFocus({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [activeUrl, setActive] = useState<string>();
+  const [selection, dispatch] = useReducer(selectionReducer, new Set<string>());
+  const [announcement, announce] = useState("");
   const focused = useRef<{ element: HTMLElement; url: string; order: string[] } | undefined>(
     undefined,
   );
@@ -78,6 +86,10 @@ export function TaskListFocus({
       value={{
         activeUrl,
         refresh,
+        selection,
+        toggleSelection: (url) => dispatch({ type: "toggle", url }),
+        clearSelection: () => dispatch({ type: "clear" }),
+        announce,
         onFocus: setActive,
         onMove: (url, direction) => {
           const rows = visibleRows();
@@ -112,6 +124,9 @@ export function TaskListFocus({
         }}
       >
         {children}
+        <span className="suite-sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </span>
       </div>
     </ListFocusContext.Provider>
   );
