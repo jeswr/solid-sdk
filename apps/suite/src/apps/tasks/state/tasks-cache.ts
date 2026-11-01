@@ -1,11 +1,17 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
+
 import { isomorphic } from "rdf-isomorphic";
+import { missingLabels } from "../lib/compose/planning";
+import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError } from "../lib/model/errors";
+import type { TaskMove } from "../lib/model/move";
 import { DataFactory } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { type CompletionPlan, planComplete } from "../lib/views/completion";
+import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -26,12 +32,16 @@ export interface TasksSnapshot {
   saving: string[];
   views: TaskView[];
 }
-export interface NewTask {
-  title: string;
+export interface NewTask extends Omit<TaskDetails, "state"> {
+  state?: TaskDetails["state"];
   sectionId?: string | undefined;
   due?: Date | undefined;
   allDay?: string | undefined;
   position?: number | undefined;
+  priority?: TaskDetails["priority"];
+  recurrence?: TaskDetails["recurrence"];
+  reminders?: TaskDetails["reminders"];
+  labelIds?: string[] | undefined;
 }
 type Patch = (state: TasksSnapshot) => TasksSnapshot;
 function projectTasks(project: StoredProject, items: StoredTask[]) {
@@ -53,6 +63,10 @@ interface Pending {
   urls: string[];
 }
 export type MutationFailure = (error: unknown, retry: () => void) => void;
+export interface TaskMoveMapping {
+  from: string;
+  to: string;
+}
 const replaceProject = (state: TasksSnapshot, project: StoredProject): TasksSnapshot => ({
   ...state,
   projects: [...state.projects.filter((item) => item.url !== project.url), project],
@@ -92,6 +106,7 @@ export class TasksCache {
   private snapshot = this.baseline;
   private pending: Pending[] = [];
   private listeners = new Set<() => void>();
+  private moveListeners = new Set<(mapping: TaskMoveMapping) => void>();
   private tail: Promise<unknown> = Promise.resolve();
   private started: Promise<void> | undefined;
   private epoch = 0;
@@ -115,6 +130,13 @@ export class TasksCache {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  };
+  /** Successful moves, including toast retries, share one route-independent notification. */
+  readonly subscribeTaskMoves = (listener: (mapping: TaskMoveMapping) => void) => {
+    this.moveListeners.add(listener);
+    return () => {
+      this.moveListeners.delete(listener);
     };
   };
   private emit() {
@@ -377,22 +399,37 @@ export class TasksCache {
     return run;
   }
   createTask(project: StoredProject, data: NewTask): Promise<StoredTask | undefined> {
+    return this.prepareTaskCreate(project, data)();
+  }
+  /** One reservation and captured draft shared by every retry, including batch-owned toasts. */
+  prepareTaskCreate(
+    project: StoredProject,
+    data: NewTask,
+    onRetry?: () => void,
+  ): () => Promise<StoredTask | undefined> {
     const id = crypto.randomUUID();
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const details: TaskDetails = {
+      ...data,
       title: data.title.trim(),
       project: project.tracker.id,
-      creator: this.webId,
-      state: "open",
-      created: new Date(),
+      creator: data.creator ?? this.webId,
+      state: data.state ?? "open",
+      created: data.created ?? new Date(),
       ...(data.allDay
         ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
         : data.due
           ? { dueDate: data.due }
           : {}),
       allDay: data.allDay,
-      rank: data.position,
-      categoryTypes: data.sectionId ? [data.sectionId] : [],
+      rank: this.appendPosition(project, data).position,
+      categoryTypes: [
+        ...new Set([
+          ...(data.categoryTypes ?? []),
+          ...(data.sectionId ? [data.sectionId] : []),
+          ...(data.labelIds ?? []),
+        ]),
+      ],
     };
     const dataset = createTask(url, details);
     const optimistic = {
@@ -403,24 +440,83 @@ export class TasksCache {
     };
     const attempt = (reconcile = false): Promise<StoredTask | undefined> =>
       this.mutate(
-        (state) => replaceTask(state, project.url, url, optimistic),
+        (state) => {
+          // Reconciliation may already have loaded a create whose response was lost.
+          if (state.tasks[project.url]?.items.some((item) => item.url === url)) return state;
+          const placement = this.appendPosition(project, data, state);
+          let next = state;
+          for (const patch of placement.renumber ?? []) {
+            const sibling = next.tasks[project.url]?.items.find((item) => item.url === patch.url);
+            if (sibling)
+              next = replaceTask(
+                next,
+                project.url,
+                sibling.url,
+                changeTask(sibling, (task) => {
+                  task.rank = patch.position;
+                }),
+              );
+          }
+          return replaceTask(
+            next,
+            project.url,
+            url,
+            changeTask(optimistic, (task) => {
+              task.rank = placement.position;
+            }),
+          );
+        },
         async () => {
           const current = this.project(project.url);
           if (`${current.tracker.stateStore}${id}.ttl` !== url) throw new ModelError(409, url);
-          const task =
-            (reconcile ? await this.optionalTask(url) : undefined) ??
-            (await this.store.createTask(current, details, id));
+          const existing = reconcile ? await this.optionalTask(url) : undefined;
+          if (existing)
+            return {
+              result: existing,
+              commit: (state) => replaceTask(state, project.url, url, existing),
+            };
+          const placement = this.appendPosition(current, data, this.baseline);
+          details.rank = placement.position;
+          const updated: StoredTask[] = [];
+          for (const patch of placement.renumber ?? [])
+            updated.push(
+              await this.store.updateTask(this.task(project.url, patch.url), (task) => {
+                task.rank = patch.position;
+              }),
+            );
+          const task = await this.store.createTask(current, details, id);
           return {
             result: task,
-            commit: (state) => replaceTask(state, project.url, task.url, task),
+            commit: (state) => {
+              let next = state;
+              for (const sibling of updated)
+                next = replaceTask(next, project.url, sibling.url, sibling);
+              return replaceTask(next, project.url, task.url, task);
+            },
           };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ?? (() => void run()),
         [url],
       );
-    return attempt();
+    let attempted = false;
+    let saved: StoredTask | undefined;
+    let running: Promise<StoredTask | undefined> | undefined;
+    const run = (): Promise<StoredTask | undefined> => {
+      if (saved) return Promise.resolve(saved);
+      if (running) return running;
+      const reconcile = attempted;
+      attempted = true;
+      running = attempt(reconcile)
+        .then((task) => {
+          saved = task;
+          return task;
+        })
+        .finally(() => {
+          running = undefined;
+        });
+      return running;
+    };
+    return run;
   }
   private async optionalTask(url: string): Promise<StoredTask | undefined> {
     try {
@@ -430,7 +526,47 @@ export class TasksCache {
       throw error;
     }
   }
-  updateTask(item: StoredTask, change: (task: TaskItem) => void): Promise<StoredTask | undefined> {
+  private appendPosition(
+    project: StoredProject,
+    data: NewTask,
+    snapshot = this.snapshot,
+  ): DropPosition {
+    const position = data.position ?? data.rank;
+    if (position !== undefined) return { position };
+    const sectionId =
+      data.sectionId ??
+      project.tracker.sections.find((section) => data.categoryTypes?.includes(section.id))?.id;
+    const siblings = (snapshot.tasks[project.url]?.items ?? [])
+      .map((item) => toTaskView(item, project))
+      .filter((task) => task.sectionId === sectionId && task.parentId === data.parent)
+      .sort(compareTasks("manual"));
+    return siblings.length ? positionForDrop(siblings, siblings.length) : { position: 1 };
+  }
+  /** Serialize tracker writes with other mutations, rechecking names against the latest baseline. */
+  ensureLabels(
+    project: StoredProject,
+    names: readonly string[],
+    onRetry?: () => void,
+  ): Promise<StoredProject | undefined> {
+    const current = this.baseline.projects.find((item) => item.url === project.url);
+    if (!this.pending.length && current && !missingLabels(current, names).length)
+      return Promise.resolve(current);
+    const define = (tracker: TaskTracker) => {
+      for (const name of missingLabels({ ...project, tracker }, names)) {
+        const source = this.snapshot.projects
+          .flatMap((item) => item.tracker.labels)
+          .find((label) => label.name.toLowerCase() === name.toLowerCase());
+        tracker.defineCategory("Label", name, undefined, source?.color);
+      }
+    };
+    return this.updateProject(project, define, onRetry);
+  }
+  updateTask(
+    item: StoredTask,
+    change: (task: TaskItem) => void,
+    /** Composite operations retry their complete intent rather than this write alone. */
+    onRetry?: () => void,
+  ): Promise<StoredTask | undefined> {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -449,11 +585,83 @@ export class TasksCache {
         const task = await this.store.updateTask(this.task(project.url, item.url), change);
         return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
       },
-      () => {
-        void this.updateTask(item, change);
-      },
+      onRetry ??
+        (() => {
+          void this.updateTask(item, change);
+        }),
       [item.url],
     );
+  }
+  moveTaskToProject(item: StoredTask, target: StoredProject): Promise<StoredTask | undefined> {
+    const source = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!source) return Promise.resolve(undefined);
+    if (source.url === target.url) return Promise.resolve(item);
+    const id = crypto.randomUUID();
+    const url = `${target.tracker.stateStore}${id}.ttl`;
+    let operation: TaskMove | undefined;
+    let settled: StoredTask | undefined;
+    let notified = false;
+    const relocate = (state: TasksSnapshot, moved: StoredTask, confirmed = false) => {
+      let next = replaceTask(replaceTask(state, source.url, item.url), target.url, url, moved);
+      for (const project of state.projects)
+        for (const child of state.tasks[project.url]?.items ?? []) {
+          const saved = confirmed ? operation?.references.get(child.url) : undefined;
+          if (saved || child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
+            next = replaceTask(
+              next,
+              project.url,
+              child.url,
+              saved ??
+                changeTask(child, (task) => {
+                  if (task.parent === item.task.id) task.parent = moved.task.id;
+                  if (task.clonedFrom === item.task.id) task.clonedFrom = moved.task.id;
+                }),
+            );
+        }
+      return next;
+    };
+    const attempt = (): Promise<StoredTask | undefined> =>
+      this.mutate(
+        (state) => {
+          const current = state.tasks[source.url]?.items.find((task) => task.url === item.url);
+          const from = state.projects.find((project) => project.url === source.url);
+          const to = state.projects.find((project) => project.url === target.url);
+          if (!current || !from || !to) return state;
+          const dataset = createTask(url, projectMoveData(current, from, to));
+          return relocate(state, {
+            url,
+            dataset,
+            etag: null,
+            task: new TaskItem(`${url}#it`, dataset, DataFactory),
+          });
+        },
+        async () => {
+          if (settled) return { result: settled, commit: (state) => state };
+          if (operation?.canReplan) operation = undefined;
+          operation ??= this.store.prepareTaskMove(
+            this.task(source.url, item.url),
+            this.project(source.url),
+            this.project(target.url),
+            id,
+          );
+          const moved = await operation.run();
+          settled = moved;
+          return { result: moved, commit: (state) => relocate(state, moved, true) };
+        },
+        () => {
+          void attempt();
+        },
+        [item.url, url],
+      ).then((moved) => {
+        if (moved && !notified) {
+          notified = true;
+          for (const listener of this.moveListeners) listener({ from: item.url, to: moved.url });
+        }
+        return moved;
+      });
+    return attempt();
   }
   deleteTask(item: StoredTask): Promise<boolean | undefined> {
     const project = this.snapshot.projects.find((project) =>
@@ -744,6 +952,13 @@ export class TasksCache {
     return run(false);
   }
   createProject(title: string): Promise<StoredProject | undefined> {
+    return this.prepareProjectCreate(title)();
+  }
+  /** Retain project ownership and its reservation when a composite submission retries. */
+  prepareProjectCreate(
+    title: string,
+    onRetry?: () => void,
+  ): () => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
     const optimistic = { url, tracker, dataset, etag: null };
@@ -764,16 +979,34 @@ export class TasksCache {
                 });
           return { result: project, commit: (state) => replaceProject(state, project) };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ?? (() => void run()),
         [url],
       );
-    return attempt();
+    let attempted = false;
+    let saved: StoredProject | undefined;
+    let running: Promise<StoredProject | undefined> | undefined;
+    const run = (): Promise<StoredProject | undefined> => {
+      if (saved) return Promise.resolve(saved);
+      if (running) return running;
+      const retry = attempted;
+      attempted = true;
+      running = attempt(retry)
+        .then((project) => {
+          saved = project;
+          return project;
+        })
+        .finally(() => {
+          running = undefined;
+        });
+      return running;
+    };
+    return run;
   }
   updateProject(
     project: StoredProject,
     change: (tracker: TaskTracker) => void,
+    /** Composite operations retry their complete intent rather than this write alone. */
+    onRetry?: () => void,
   ): Promise<StoredProject | undefined> {
     const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
@@ -791,9 +1024,10 @@ export class TasksCache {
             : await this.store.updateProject(current, change);
           return { result, commit: (state) => replaceProject(state, result) };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ??
+          (() => {
+            void attempt(true);
+          }),
         [project.url],
       );
     return attempt();

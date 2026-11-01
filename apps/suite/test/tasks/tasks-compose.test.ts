@@ -107,7 +107,7 @@ describe("compose recurrence", () => {
     assert.isDefined(result.recurrence);
     validateRule(result.recurrence);
     expect(result.due?.allDay).toBe(date);
-    expect(result.chips.find((c) => c.kind === "repeat")?.label).toMatch(/^Repeats Every /);
+    expect(result.chips.find((c) => c.kind === "repeat")?.label).toMatch(/^Repeats every /);
   });
   it("matches the spec's rent example with an explicit date before recurrence", () => {
     const result = parse("Pay rent tomorrow 5pm #Home @bills p2 every month");
@@ -125,7 +125,7 @@ describe("compose recurrence", () => {
       "#Home",
       "@bills",
       "P2",
-      "Repeats Every month on the 31st",
+      "Repeats every month on the 31st",
     ]);
   });
   it("takes the next weekday after a weekend", () => {
@@ -145,14 +145,16 @@ describe("compose recurrence", () => {
     expect(new Date("2026-10-30T00:00Z").getDate()).toBe(29);
     const result = parse(`Task ${phrase}`, { tz: "America/New_York", now: new Date(now) });
     expect(result.due?.allDay).toBe(date);
-    expect(result.chips.find((chip) => chip.kind === "repeat")?.label).toBe(`Repeats ${copy}`);
+    expect(result.chips.find((chip) => chip.kind === "repeat")?.label).toBe(
+      `Repeats ${copy[0]?.toLowerCase()}${copy.slice(1)}`,
+    );
   });
   it("formats a recurrence in a different zone from the host", () => {
     vi.stubEnv("TZ", "America/New_York");
     const result = parse("Task every year", { now: new Date("2026-11-01T00:30Z") });
     expect(result.due?.allDay).toBe("2026-11-01");
     expect(result.chips.find((chip) => chip.kind === "repeat")?.label).toBe(
-      "Repeats Every year on 1 Nov",
+      "Repeats every year on 1 Nov",
     );
   });
 });
