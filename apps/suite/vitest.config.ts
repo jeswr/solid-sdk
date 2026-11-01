@@ -24,6 +24,8 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/shell/lib/**/*.ts",
+        "src/shell/search/local-source.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/state/*.{ts,tsx}",
@@ -127,6 +129,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/music/lib/data/**/*.ts",
+        "src/apps/health/lib/data/**/*.ts",
         "src/apps/money/lib/data/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
