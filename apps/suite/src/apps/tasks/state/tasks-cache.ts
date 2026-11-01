@@ -396,6 +396,14 @@ export class TasksCache {
     return run;
   }
   createTask(project: StoredProject, data: NewTask): Promise<StoredTask | undefined> {
+    return this.prepareTaskCreate(project, data)();
+  }
+  /** One reservation and captured draft shared by every retry, including batch-owned toasts. */
+  prepareTaskCreate(
+    project: StoredProject,
+    data: NewTask,
+    onRetry?: () => void,
+  ): () => Promise<StoredTask | undefined> {
     const id = crypto.randomUUID();
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const details: TaskDetails = {
@@ -484,12 +492,28 @@ export class TasksCache {
             },
           };
         },
-        () => {
-          void attempt(true);
-        },
+        onRetry ?? (() => void run()),
         [url],
       );
-    return attempt();
+    let attempted = false;
+    let saved: StoredTask | undefined;
+    let running: Promise<StoredTask | undefined> | undefined;
+    const run = (): Promise<StoredTask | undefined> => {
+      if (saved) return Promise.resolve(saved);
+      if (running) return running;
+      const reconcile = attempted;
+      attempted = true;
+      running = attempt(reconcile)
+        .then((task) => {
+          saved = task;
+          return task;
+        })
+        .finally(() => {
+          running = undefined;
+        });
+      return running;
+    };
+    return run;
   }
   private async optionalTask(url: string): Promise<StoredTask | undefined> {
     try {

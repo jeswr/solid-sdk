@@ -14,6 +14,8 @@ let inbox: StoredProject;
 let host: HTMLElement;
 let root: Root;
 let mobile = false;
+let pod: Pod;
+let failures: ReturnType<typeof vi.fn<(error: unknown, retry: () => void) => void>>;
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
   useTasks: () => ({ cache, projects: cache.getSnapshot().projects }),
 }));
@@ -73,7 +75,10 @@ beforeEach(async () => {
   );
   vi.stubGlobal("cancelAnimationFrame", clearTimeout);
   vi.stubGlobal("matchMedia", () => Object.assign(new EventTarget(), { matches: mobile }));
-  const pod = new Pod();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-01T10:00:00Z"));
+  pod = new Pod();
+  failures = vi.fn();
   cache = new TasksCache(
     new TaskStore({
       storage,
@@ -83,7 +88,7 @@ beforeEach(async () => {
       ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
       ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
     }),
-    vi.fn(),
+    failures,
     webId,
   );
   await cache.start();
@@ -99,6 +104,8 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   mobile = false;
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -148,10 +155,124 @@ describe("composer component with the real cache and model", () => {
     expect(query('[role="alertdialog"]').textContent).toContain("Discard task?");
     await clickText("Cancel");
     expect(input().value).toBe("Unsaved");
+    await vi.waitFor(() => expect(document.activeElement).toBe(input()));
     expect(close).not.toHaveBeenCalled();
     await key("Escape");
     await clickText("Discard");
     expect(close).toHaveBeenCalledOnce();
+  });
+  it("retains rejected parser input, reports validation and recovers after editing", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call tomorrow p1");
+    await act(async () => query<HTMLButtonElement>('button[aria-label="Remove P1"]').click());
+    await type("Call this week next Monday p1");
+    expect(input().value).toBe("Call this week next Monday p1");
+    expect(input().getAttribute("aria-invalid")).toBe("true");
+    expect(query('[role="alert"]').textContent).toContain("Edit the text and try again");
+    expect(query<HTMLButtonElement>('button[type="submit"]').disabled).toBe(true);
+    await type("Call today");
+    expect(input().getAttribute("aria-invalid")).not.toBe("true");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    await submit();
+    expect(cache.getSnapshot().views[0]).toMatchObject({ title: "Call", allDay: "2026-11-01" });
+  });
+  it("keeps a rejected paste editable without creating a partial batch", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await paste("First\nCall this week next Monday\nLast");
+    expect(input().value).toContain("Call this week next Monday");
+    expect(query('[role="alert"]').textContent).toContain("Edit the text and try again");
+    expect(cache.getSnapshot().views).toHaveLength(0);
+    await type("Call today");
+    await submit();
+    expect(cache.getSnapshot().views).toHaveLength(1);
+  });
+  it("releases removed due tokens when their text changes", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call tomorrow");
+    await act(async () =>
+      query<HTMLButtonElement>('button[aria-label="Remove Due Tomorrow"]').click(),
+    );
+    await type("Call tomorrow again");
+    expect(document.querySelector('button[aria-label="Remove Due Tomorrow"]')).toBeNull();
+    await type("Call today");
+    expect(query(".tsk-composer-chips").textContent).toContain("Due Today");
+    await submit();
+    expect(cache.getSnapshot().views[0]).toMatchObject({ title: "Call", allDay: "2026-11-01" });
+  });
+  it("retains property edits made while an older draft is saving", async () => {
+    const create = cache.store.createTask.bind(cache.store);
+    let release: () => void = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const creates = vi.spyOn(cache.store, "createTask").mockImplementationOnce(async (...args) => {
+      await waiting;
+      return create(...args);
+    });
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call");
+    await act(async () => {
+      query<HTMLFormElement>("form.tsk-composer").dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      await vi.waitFor(() => expect(creates).toHaveBeenCalledOnce());
+    });
+    await act(async () => {
+      const trigger = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Priority P4",
+      );
+      trigger?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await act(async () => {
+      const option = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent === "P2",
+      );
+      if (!option) throw new Error("Missing priority option");
+      option.click();
+    });
+    await act(async () => {
+      release();
+      await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    });
+    expect(cache.getSnapshot().views[0]?.priority).toBe(4);
+    expect(input().value).toBe("Call");
+    expect(query(".tsk-composer-controls").textContent).toContain("Priority P2");
+    await submit(inbox.url, 2);
+    expect(cache.getSnapshot().views.map((task) => task.priority)).toEqual([4, 2]);
+    expect(input().value).toBe("");
+  });
+  it("interprets new input and later drafts using the current clock", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    vi.setSystemTime(new Date("2026-11-01T10:30:00Z"));
+    await type("Call in 1 hour");
+    await submit();
+    expect(cache.getSnapshot().views[0]?.due).toEqual(new Date("2026-11-01T11:30:00Z"));
+    vi.setSystemTime(new Date("2026-11-02T00:30:00Z"));
+    await type("Walk tomorrow");
+    expect(query(".tsk-composer-chips").textContent).toContain("Due Tomorrow");
+    await submit(inbox.url, 2);
+    expect(cache.getSnapshot().views[1]?.allDay).toBe("2026-11-03");
+  });
+  it("uses the current day for date presets after an idle midnight", async () => {
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await type("Call");
+    vi.setSystemTime(new Date("2026-11-02T00:30:00Z"));
+    await clickText("Due");
+    await clickText("Today");
+    await submit();
+    expect(cache.getSnapshot().views[0]?.allDay).toBe("2026-11-02");
   });
   it("confirms the total paste count and persists children after their parent", async () => {
     await act(async () =>
@@ -208,6 +329,63 @@ describe("composer component with the real cache and model", () => {
     expect(tasks.filter((task) => task.title === "Parent")).toHaveLength(1);
     const parent = tasks.find((task) => task.title === "Parent");
     expect(tasks.filter((task) => task.parent === parent?.id)).toHaveLength(2);
+  });
+  it.each([
+    ["committed", "toast"],
+    ["uncommitted", "toast"],
+    ["committed", "inline"],
+    ["uncommitted", "inline"],
+  ])("shares %s paste recovery between %s and the other retry control", async (outcome, first) => {
+    const failedUrls: string[] = [];
+    const creates = vi.spyOn(cache.store, "createTask");
+    pod.intercept = (request) => {
+      if (request.method !== "PUT" || request.headers.get("If-None-Match") !== "*")
+        return undefined;
+      const title = creates.mock.calls.at(-1)?.[1].title;
+      if ((title === "Child one" || title === "Child two") && !failedUrls.includes(request.url)) {
+        failedUrls.push(request.url);
+        if (outcome === "committed") pod.seed(request.url, request.body);
+        throw new TypeError("Response lost");
+      }
+      return undefined;
+    };
+    await act(async () =>
+      root.render(createElement(Composer, { project: inbox, onClose: vi.fn() })),
+    );
+    await paste("Parent\n  Child one tomorrow\n  Child two");
+    expect(document.body.textContent).toContain("Added 1 of 3 tasks.");
+    const toastRetry = failures.mock.calls[0]?.[1];
+    if (!toastRetry) throw new Error("Missing toast retry");
+    if (first === "toast") await act(async () => toastRetry());
+    else await clickText("Retry remaining tasks");
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Added 2 of 3 tasks."));
+    vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+    if (first === "toast") await clickText("Retry remaining tasks");
+    else await act(async () => toastRetry());
+    await act(async () => {
+      await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    });
+    // Old toast actions must remain harmless even after the whole batch has completed.
+    await act(async () => {
+      toastRetry();
+      failures.mock.calls[1]?.[1]();
+    });
+    const tasks = await cache.store.listTasks(inbox.tracker.stateStore as string);
+    expect(tasks.map((task) => task.task.title).sort()).toEqual([
+      "Child one",
+      "Child two",
+      "Parent",
+    ]);
+    const parent = tasks.find((task) => task.task.title === "Parent");
+    expect(tasks.filter((task) => task.task.parent === parent?.task.id)).toHaveLength(2);
+    expect(tasks.find((task) => task.task.title === "Child one")?.task.allDay).toBe("2026-11-02");
+    expect(document.body.textContent).not.toContain("Retry remaining tasks");
+    for (const url of failedUrls) {
+      const requests = pod.requests.filter((request) => request.url === url);
+      expect(requests[0]?.method).toBe("PUT");
+      expect(requests[1]?.method).toBe("GET");
+    }
+    expect(pod.requests.some((request) => request.method === "DELETE")).toBe(false);
   });
   it("opens a section ghost row as a mobile sheet and keeps the section after submit", async () => {
     mobile = true;

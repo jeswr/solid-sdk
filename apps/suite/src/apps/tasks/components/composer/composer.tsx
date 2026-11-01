@@ -68,7 +68,9 @@ interface PasteBatch {
   entries: PasteEntry[];
   index: number;
   created: Map<number, { task: StoredTask; project: StoredProject }>;
+  save?: (() => Promise<{ task: StoredTask; project: StoredProject } | undefined>) | undefined;
 }
+const parseFailure = "Couldn't interpret this task. Edit the text and try again.";
 
 export function Composer({
   project,
@@ -89,7 +91,7 @@ export function Composer({
     () => matchMedia(mediaQuery).matches,
     () => false,
   );
-  const [now] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date());
   const [defaults, setDefaults] = useState<ComposeContext["defaults"]>(() => ({
     projectUrl: project.url,
     ...(sectionId
@@ -111,8 +113,7 @@ export function Composer({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const input = useRef<HTMLInputElement>(null);
-  const textRef = useRef(text);
-  textRef.current = text;
+  const revision = useRef(0);
   const requestCloseRef = useRef<() => void>(() => {});
   const id = useId();
   const [labelName, setLabelName] = useState("");
@@ -124,8 +125,37 @@ export function Composer({
     Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase() === "en-us" ? "en-US" : "en-GB",
   );
   ctx.keepText = keepText;
-  const parsed = parseQuickAdd(text, ctx);
-  const result = applyControls(parsed, controls, ctx, text);
+  let parsed: ComposeResult = {
+    title: text,
+    priority: 4,
+    labels: [],
+    reminders: [],
+    chips: [],
+    canSubmit: false,
+  };
+  let result = parsed;
+  let parseError = false;
+  try {
+    parsed = parseQuickAdd(text, ctx);
+    result = applyControls(parsed, controls, ctx, text);
+  } catch {
+    parseError = true;
+  }
+  const editControls = (change: (previous: ComposeOverrides) => ComposeOverrides) => {
+    revision.current++;
+    setControls(change);
+  };
+  const editText = (next: string) => {
+    revision.current++;
+    try {
+      setKeepText(rebaseKeepText(text, next, keepText, ctx));
+    } catch {
+      // An invalid previous phrase must not prevent the next edit from recovering.
+      setKeepText(new Set());
+    }
+    setNow(new Date());
+    setText(next);
+  };
   const projectValue =
     result.project?.kind === "existing"
       ? result.project.url
@@ -143,11 +173,12 @@ export function Composer({
   requestCloseRef.current = requestClose;
   // The owning Dialog sees Escape before the input. Both paths use the same discard guard.
   const remove = (chip: Chip) => {
+    revision.current++;
     const removed = removeChip(text, chip, keepText);
     setKeepText(removed.keepText);
     setControls((previous) => {
       const next = { ...previous };
-      if (chip.kind === "due") next.due = null;
+      if (chip.kind === "due") delete next.due;
       if (chip.kind === "priority") delete next.priority;
       if (chip.kind === "project") delete next.projectUrl;
       if (chip.kind === "label" && next.labels)
@@ -163,7 +194,11 @@ export function Composer({
     });
     focus();
   };
-  async function save(draft: ComposeResult, parent?: { task: StoredTask; project: StoredProject }) {
+  async function prepareSave(
+    draft: ComposeResult,
+    parent?: { task: StoredTask; project: StoredProject },
+    onRetry?: () => void,
+  ) {
     if (!draft.canSubmit) throw new Error("Every task needs a title");
     const snapshot = cache.getSnapshot();
     let target = parent?.project;
@@ -187,22 +222,28 @@ export function Composer({
     await cache.loadTasks(target, cache.getSnapshot().tasks[target.url]?.status === "error");
     if (cache.getSnapshot().tasks[target.url]?.status !== "ready")
       throw new Error("Couldn't load the project's tasks. Try again.");
-    const task = await cache.createTask(
+    const create = cache.prepareTaskCreate(
       target,
       taskSubmission(draft, target, parent?.task.task.id),
+      onRetry,
     );
-    if (!task) return undefined;
-    if (target.url !== project.url) toast.success(`Added to ${target.tracker.title}`);
-    return { task, project: target };
+    const destination = target;
+    return async () => {
+      const task = await create();
+      if (!task) return undefined;
+      if (destination.url !== project.url) toast.success(`Added to ${destination.tracker.title}`);
+      return { task, project: destination };
+    };
   }
   async function submit() {
-    if (!result.canSubmit || busyRef.current) return;
+    if (parseError || !result.canSubmit || busyRef.current || batch) return;
     busyRef.current = true;
     setBusy(true);
-    const submittedText = text;
+    const submittedRevision = revision.current;
     try {
-      const saved = await save(result);
-      if (saved) {
+      const save = await prepareSave(result);
+      const saved = await save?.();
+      if (saved && revision.current === submittedRevision) {
         setDefaults({
           projectUrl: saved.project.url,
           ...(result.sectionId
@@ -215,11 +256,11 @@ export function Composer({
             : {}),
           ...(due ? { due } : {}),
         });
-        if (textRef.current === submittedText) {
-          setText("");
-          setKeepText(new Set());
-          setControls({});
-        }
+        setText("");
+        setKeepText(new Set());
+        setControls({});
+        setLabelName("");
+        setNow(new Date());
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't add task");
@@ -230,7 +271,7 @@ export function Composer({
     }
   }
   async function addPaste(pending: PasteBatch) {
-    if (busyRef.current) return;
+    if (busyRef.current || pending.index === pending.entries.length) return;
     busyRef.current = true;
     setBusy(true);
     setConfirmPaste(false);
@@ -240,15 +281,18 @@ export function Composer({
         const entry = pending.entries[pending.index] as PasteEntry;
         const parent =
           entry.parentIndex === undefined ? undefined : pending.created.get(entry.parentIndex);
-        const saved = await save(entry.result, parent);
+        pending.save ??= await prepareSave(entry.result, parent, () => void addPaste(pending));
+        const saved = await pending.save?.();
         if (!saved) {
           setPasteFailed(true);
           return;
         }
         pending.created.set(pending.index, saved);
         pending.index++;
+        pending.save = undefined;
       }
       setBatch(undefined);
+      setNow(new Date());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't add tasks");
       setPasteFailed(true);
@@ -284,11 +328,9 @@ export function Composer({
           ref={input}
           placeholder={TASK_PLACEHOLDER}
           value={text}
-          onChange={(event) => {
-            const next = event.target.value;
-            setKeepText(rebaseKeepText(text, next, keepText, ctx));
-            setText(next);
-          }}
+          aria-invalid={parseError || undefined}
+          aria-describedby={parseError ? `${id}-error` : undefined}
+          onChange={(event) => editText(event.target.value)}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) {
               if (event.key === "Enter") event.preventDefault();
@@ -305,7 +347,13 @@ export function Composer({
             if (!/[\r\n]/.test(pasted)) return;
             event.preventDefault();
             if (busyRef.current || batch) return;
-            const entries = planPaste(pasted, { ...ctx, keepText: new Set() });
+            let entries: PasteEntry[];
+            try {
+              entries = planPaste(pasted, { ...ctx, now: new Date(), keepText: new Set() });
+            } catch {
+              editText(pasted.replace(/[\r\n]+/g, " "));
+              return;
+            }
             if (!entries.length) return;
             if (entries.some((entry) => !entry.result.canSubmit)) {
               toast.error("Every task needs a title");
@@ -329,7 +377,7 @@ export function Composer({
                   label={chip.label}
                   value={result.due}
                   context={ctx}
-                  onChange={(value) => setControls((previous) => ({ ...previous, due: value }))}
+                  onChange={(value) => editControls((previous) => ({ ...previous, due: value }))}
                 />
               ) : (
                 <span>{chip.label}</span>
@@ -354,7 +402,7 @@ export function Composer({
             label="Due"
             value={result.due}
             context={ctx}
-            onChange={(value) => setControls((previous) => ({ ...previous, due: value }))}
+            onChange={(value) => editControls((previous) => ({ ...previous, due: value }))}
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -366,7 +414,7 @@ export function Composer({
               <DropdownMenuRadioGroup
                 value={String(result.priority)}
                 onValueChange={(value) =>
-                  setControls((previous) => ({
+                  editControls((previous) => ({
                     ...previous,
                     priority: Number(value) as 1 | 2 | 3 | 4,
                   }))
@@ -400,7 +448,7 @@ export function Composer({
                   ))
                     kept = removeChip(text, chip, kept).keepText;
                   setKeepText(kept);
-                  setControls((previous) => ({ ...previous, labels: names }));
+                  editControls((previous) => ({ ...previous, labels: names }));
                 }}
               />
               <label className="tsk-composer-label" htmlFor={`${id}-label`}>
@@ -409,7 +457,10 @@ export function Composer({
               <Input
                 id={`${id}-label`}
                 value={labelName}
-                onChange={(event) => setLabelName(event.target.value)}
+                onChange={(event) => {
+                  revision.current++;
+                  setLabelName(event.target.value);
+                }}
               />
               <Button
                 type="button"
@@ -418,7 +469,7 @@ export function Composer({
                   const names = [
                     ...new Set([...result.labels.map((label) => label.name), labelName.trim()]),
                   ];
-                  setControls((previous) => ({ ...previous, labels: names }));
+                  editControls((previous) => ({ ...previous, labels: names }));
                   setLabelName("");
                 }}
               >
@@ -432,7 +483,7 @@ export function Composer({
               // Radix's native form bridge can emit an empty change while its
               // options update after parsing. It is not a project selection.
               if (!url) return;
-              setControls((previous) => {
+              editControls((previous) => {
                 const next = { ...previous };
                 if (url === "__create__") delete next.projectUrl;
                 else next.projectUrl = url;
@@ -464,7 +515,7 @@ export function Composer({
               <DropdownMenuRadioGroup
                 value={result.reminders[0]?.offset ?? "none"}
                 onValueChange={(offset) =>
-                  setControls((previous) => ({
+                  editControls((previous) => ({
                     ...previous,
                     reminders: offset === "none" ? [] : [{ offset }],
                   }))
@@ -483,6 +534,11 @@ export function Composer({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {parseError && (
+          <p id={`${id}-error`} role="alert" className="tsk-composer-note">
+            {parseFailure}
+          </p>
+        )}
         {result.chips.some((chip) => chip.invalid) && (
           <p className="tsk-composer-note">Reminders require a due date.</p>
         )}
@@ -501,13 +557,21 @@ export function Composer({
           <Button type="button" variant="ghost" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={!result.canSubmit || busy || Boolean(batch)}>
+          <Button
+            type="submit"
+            disabled={parseError || !result.canSubmit || busy || Boolean(batch)}
+          >
             Add task
           </Button>
         </div>
       </form>
       <AlertDialog open={discard} onOpenChange={setDiscard}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            input.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Discard task?</AlertDialogTitle>
             <AlertDialogDescription>Your task draft will be discarded.</AlertDialogDescription>
