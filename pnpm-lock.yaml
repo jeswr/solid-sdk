@@ -1354,6 +1354,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../../packages/pod-connectors
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2246,6 +2249,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../../packages/pod-connectors
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize

@@ -2,7 +2,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import { NamedGraphDataset, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DriveMetadata } from "../google-drive/vocab.js";
 import { TypeIndexDataset } from "../pod/type-index.js";
 import { canonicalizeJeswrDataset, canonicalJeswrIri } from "./canonical-vocab.js";
@@ -91,21 +91,60 @@ describe("jeswr read aliases", () => {
     ]);
   });
 
-  it("canonicalizes 50,000 legacy type triples within two seconds", () => {
-    const source = new Store();
+  it("canonicalizes 50,000 legacy type triples with linear reads and linear scaling", () => {
+    const count = 50_000;
     const legacyClass = "https://w3id.org/jeswr/core#Agent";
-    for (let i = 0; i < 50_000; i++) {
+    const source = new Store();
+    for (let i = 0; i < count; i++) {
       new PodThing(`https://pod.test/items#item-${i}`, source, DataFactory).types.add(legacyClass);
     }
-    const started = performance.now();
-    const result = canonicalizeJeswrDataset(source);
-    const elapsed = performance.now() - started;
-    expect(elapsed).toBeLessThan(2_000);
-    expect(result.size).toBe(50_000);
-    expect(result.getQuads(null, `${NS.RDF}type`, `${NS.CORE}Agent`, null)).toHaveLength(50_000);
+    // Every Store read (iteration, match, getQuads, has) goes through readQuads, so counting the quads it
+    // yields bounds the work by operations rather than wall-clock time: a per-quad scan would be ~count².
+    const readQuads = Store.prototype.readQuads;
+    const budget = count * 4;
+    let visited = 0;
+    const reads = vi.spyOn(Store.prototype, "readQuads").mockImplementation(function* (
+      this: Store,
+      ...args: Parameters<Store["readQuads"]>
+    ) {
+      for (const quad of readQuads.apply(this, args)) {
+        visited += 1;
+        if (visited > budget) throw new Error("canonicalization read budget exceeded");
+        yield quad;
+      }
+    });
+    let result: Store;
+    try {
+      result = canonicalizeJeswrDataset(source);
+    } finally {
+      reads.mockRestore();
+    }
+    expect(visited).toBeGreaterThanOrEqual(count);
+    expect(visited).toBeLessThanOrEqual(budget);
+
+    // Work on cached arrays or N3 indexes bypasses readQuads, so also check scaling: 4x the input costs
+    // about 4x when linear and 16x when quadratic. Best-of-N timings at both sizes on the same runner keep
+    // this independent of runner speed, unlike an absolute wall-clock bound.
+    const fastest = (store: Store, runs: number) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < runs; run++) {
+        const started = performance.now();
+        canonicalizeJeswrDataset(store);
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    const small = new Store();
+    for (let i = 0; i < count / 4; i++) {
+      new PodThing(`https://pod.test/items#item-${i}`, small, DataFactory).types.add(legacyClass);
+    }
+    fastest(small, 1);
+    expect(fastest(source, 2) / Math.max(fastest(small, 3), 1)).toBeLessThan(10);
+    expect(result.size).toBe(count);
+    expect(result.getQuads(null, `${NS.RDF}type`, `${NS.CORE}Agent`, null)).toHaveLength(count);
     expect(result.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(0);
-    expect(source.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(50_000);
-  });
+    expect(source.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(count);
+  }, 60_000);
 
   it("preserves blank nodes, literal metadata and named graph identities in transformed and unchanged quads", () => {
     const source = new Store();
