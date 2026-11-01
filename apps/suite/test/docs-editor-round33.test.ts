@@ -1,0 +1,883 @@
+// @vitest-environment jsdom
+// AUTHORED-BY Codex
+
+import { File as NodeFile } from "node:buffer";
+import { TooltipProvider } from "@jeswr/suite-ui";
+import { getSchema, type JSONContent } from "@tiptap/react";
+import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import { act, createElement, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { Doc } from "yjs";
+import { baseExtensions } from "../src/apps/docs/editor/extensions";
+import type { DocumentPersistence } from "../src/apps/docs/editor/persistence";
+import { TitleConflictError } from "../src/apps/docs/lib/model";
+import type { PodSession } from "../src/lib/session/pod-session";
+
+const mocks = vi.hoisted(() => ({
+  runtime: null as DocumentPersistence | null,
+  router: { push: vi.fn(), replace: vi.fn() },
+  remove: vi.fn(),
+  restore: vi.fn(),
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+}));
+vi.mock("@jeswr/suite-ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jeswr/suite-ui")>()),
+  toast: mocks.toast,
+}));
+vi.mock("../src/apps/docs/editor/operations", () => ({
+  deleteDocument: mocks.remove,
+  restoreDocument: mocks.restore,
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => mocks.router,
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/docs/new",
+}));
+vi.mock("../src/apps/docs/hooks/use-document", () => ({
+  useDocument: () => ({ runtime: mocks.runtime, error: null, recover: vi.fn() }),
+}));
+vi.mock("@/components/interim-shell/suite-frame", () => ({
+  SuiteFrame: ({
+    children,
+    context,
+    actions,
+    sidebar,
+  }: {
+    children: ReactNode;
+    context: ReactNode;
+    actions: ReactNode;
+    sidebar: ReactNode;
+  }) => createElement("div", null, context, actions, sidebar, children),
+}));
+
+import { DocumentEditor } from "../src/apps/docs/components/document-editor";
+
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("ClipboardEvent", Event);
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  Object.defineProperty(window.Range.prototype, "getClientRects", {
+    configurable: true,
+    value: () => [new DOMRect()],
+  });
+  Object.defineProperty(window.Range.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value: () => new DOMRect(),
+  });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.body.replaceChildren();
+});
+
+async function mountEditor(
+  initial?: JSONContent,
+  storedUrl?: string,
+  fetchImpl: typeof fetch = vi.fn(async () => new Response(null, { status: 404 })),
+  readOnly = false,
+) {
+  const session = {
+    storageUrl: "https://pod.test/",
+    fetch: fetchImpl,
+  } as unknown as PodSession;
+  const doc = initial
+    ? prosemirrorJSONToYDoc(getSchema(baseExtensions(session.fetch)), initial)
+    : new Doc();
+  mocks.runtime = {
+    doc,
+    session,
+    title: "Plan",
+    state: "saved",
+    localState: "saved",
+    online: true,
+    lastSaved: Date.now(),
+    readOnly,
+    capture: vi.fn(),
+    flush: vi.fn(),
+    change: vi.fn(),
+    forceSave: vi.fn(),
+    ...(storedUrl ? { stored: { url: storedUrl } } : {}),
+  } as unknown as DocumentPersistence;
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const render = () =>
+    root.render(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(DocumentEditor, { session, resource: undefined }),
+      ),
+    );
+  await act(async () => render());
+  const body = await vi.waitFor(() => {
+    const body = host.querySelector<HTMLElement>('[aria-label="Document body"]');
+    expect(body).not.toBeNull();
+    return body as HTMLElement;
+  });
+  if (!storedUrl) await vi.waitFor(() => expect(document.activeElement).toBe(body));
+  return {
+    host,
+    body,
+    async refresh() {
+      await act(async () => render());
+    },
+    async close() {
+      await act(async () => root.unmount());
+      doc.destroy();
+    },
+  };
+}
+
+it.each(
+  ["paste", "drop"].flatMap((path) => ["html", "plain"].map((format) => ({ path, format }))),
+)("round50 $path $format takes precedence over its PNG fallback", async ({ path, format }) => {
+  const view = await mountEditor();
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    const html = '<p>First paragraph</p><p><a href="https://example.org/guide">Guide</a></p>';
+    const plain = "First paragraph\nGuide";
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [new File(["png fallback"], "fallback.png", { type: "image/png" })],
+        types: ["Files", "text/plain", ...(format === "html" ? ["text/html"] : [])],
+        getData: (type: string) =>
+          type === "text/html"
+            ? format === "html"
+              ? html
+              : ""
+            : type === "text/plain"
+              ? plain
+              : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(view.body.textContent).toBe("First paragraphGuide");
+    expect(
+      [...view.body.querySelectorAll("p")]
+        .map((paragraph) => paragraph.textContent)
+        .filter(Boolean),
+    ).toEqual(["First paragraph", "Guide"]);
+    if (format === "html")
+      expect(view.body.querySelector("a")?.getAttribute("href")).toBe("https://example.org/guide");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(mocks.runtime?.change).toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(
+  ["paste", "drop"].flatMap((path) => ["data", "file", "blob"].map((scheme) => ({ path, scheme }))),
+)("round51 $path uploads embedded $scheme images while retaining the rich fragment", async ({
+  path,
+  scheme,
+}) => {
+  const fetchImpl = vi.fn<typeof fetch>(async () => new Response(null, { status: 201 }));
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl", fetchImpl);
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const source =
+      scheme === "data"
+        ? "data:image/png;base64,cGl4ZWxz"
+        : scheme === "file"
+          ? "file:///tmp/chart.png"
+          : "blob:https://source.test/chart";
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [new File(["pixels"], "chart.png", { type: "image/png" })],
+        types: ["Files", "text/html", "text/plain"],
+        getData: (type: string) =>
+          type === "text/html"
+            ? `<p><strong>Before</strong></p><img src="${source}" alt="Chart"><p><a href="https://example.org/guide">After</a></p>`
+            : type === "text/plain"
+              ? "Before\nAfter"
+              : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    const dialog = document.querySelector('[aria-label="Image alt text"]');
+    expect(dialog?.textContent).toContain("Insert image");
+    expect(dialog?.querySelector<HTMLInputElement>('input:not([type="checkbox"])')?.value).toBe(
+      "Chart",
+    );
+    await act(async () =>
+      dialog
+        ?.querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull(),
+    );
+    expect(view.body.textContent).toBe("BeforeAfter");
+    expect(view.body.querySelector("strong")?.textContent).toBe("Before");
+    expect(view.body.querySelector("a")?.getAttribute("href")).toBe("https://example.org/guide");
+    const json = vi.mocked(mocks.runtime?.change)?.mock.lastCall?.[1] as JSONContent;
+    expect(json.content?.slice(0, 3).map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    expect(json.content?.[1]?.attrs).toMatchObject({
+      src: expect.stringMatching(/^https:\/\/pod.test\/docs\/plan\/assets\/.*\.png$/),
+      alt: "Chart",
+    });
+    const puts = fetchImpl.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.[1]).toMatchObject({
+      redirect: "error",
+      headers: { "content-type": "image/png", "if-none-match": "*" },
+    });
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "offline",
+  "unsupported",
+  "unreadable",
+  "missing",
+])("round51 rejected %s embedded images preserve the accompanying text and report why", async (reason) => {
+  const view = await mountEditor();
+  mocks.toast.error.mockClear();
+  try {
+    if (reason === "offline") {
+      Object.assign(mocks.runtime as DocumentPersistence, { online: false });
+      await view.refresh();
+    }
+    const source =
+      reason === "unsupported"
+        ? "data:image/avif;base64,cGl4ZWxz"
+        : reason === "unreadable"
+          ? "data:image/png;base64,!!!"
+          : reason === "missing"
+            ? "file:///missing.png"
+            : "data:image/png;base64,cGl4ZWxz";
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        types: ["text/html"],
+        getData: (type: string) =>
+          type === "text/html"
+            ? `<p><strong>Keep</strong></p><img src="${source}"><p>this text</p>`
+            : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(view.body.textContent).toBe("Keepthis text");
+    expect(view.body.querySelector("strong")?.textContent).toBe("Keep");
+    expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull();
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      reason === "offline"
+        ? "Reconnect to add images"
+        : reason === "unsupported"
+          ? "Choose a PNG, JPEG, GIF, WebP or SVG image"
+          : "Couldn't read an embedded image. Copy it again or add it as a file.",
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  { state: "saving", localState: "saved", online: true, trashed: false, icon: "loader-circle" },
+  { state: "retrying", localState: "saved", online: true, trashed: false, icon: "triangle-alert" },
+  { state: "failed", localState: "saved", online: true, trashed: false, icon: "triangle-alert" },
+  { state: "saved", localState: "saving", online: true, trashed: false, icon: "loader-circle" },
+  { state: "saved", localState: "retrying", online: false, trashed: false, icon: "triangle-alert" },
+  { state: "saved", localState: "failed", online: true, trashed: true, icon: "triangle-alert" },
+  { state: "saved", localState: "saved", online: true, trashed: false, icon: "check" },
+])("round51 mobile save icon reflects $state/$localState (online: $online, trashed: $trashed)", async ({
+  state,
+  localState,
+  online,
+  trashed,
+  icon,
+}) => {
+  const view = await mountEditor();
+  try {
+    Object.assign(mocks.runtime as DocumentPersistence, { state, localState, online, trashed });
+    await view.refresh();
+    const indicator = view.host.querySelector(".docs-save");
+    expect(indicator?.querySelector(`svg.lucide-${icon}`)).not.toBeNull();
+    expect(indicator?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    if (icon !== "check") expect(indicator?.querySelector("svg.lucide-check")).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "paste",
+  "drop",
+])("round50 %s still offers image insertion for image-only transfers", async (path) => {
+  const view = await mountEditor();
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [
+          new File(["ignored"], "notes.txt", { type: "text/plain" }),
+          new File(["png"], "image.png", { type: "image/png" }),
+        ],
+        types: ["Files"],
+        getData: () => "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('[aria-label="Image alt text"]')?.textContent).toContain(
+      "Insert image",
+    );
+    expect(view.body.textContent).toBe("");
+  } finally {
+    await view.close();
+  }
+});
+
+it("round45 view-only document bodies are keyboard focusable for outline navigation and Find", async () => {
+  const view = await mountEditor(
+    {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Plan" }] },
+        { type: "paragraph", content: [{ type: "text", text: "Plain legacy text" }] },
+      ],
+    },
+    "https://pod.test/pod-docs/plan.ttl",
+    undefined,
+    true,
+  );
+  try {
+    expect(view.body.getAttribute("contenteditable")).toBe("false");
+    expect(view.body.tabIndex).toBe(0);
+    await act(async () => view.body.focus());
+    expect(document.activeElement).toBe(view.body);
+    const heading = view.host.querySelector<HTMLButtonElement>(
+      '[aria-label="Document outline"] button',
+    );
+    expect(heading?.textContent).toBe("Plan");
+    await act(async () => {
+      heading?.focus();
+      heading?.click();
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    for (const modifier of ["ctrlKey", "metaKey"]) {
+      const event = new KeyboardEvent("keydown", {
+        key: "f",
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => view.body.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(true);
+      expect(view.host.querySelector('[aria-label="Find and replace"]')).not.toBeNull();
+      await act(async () => {
+        if (modifier === "ctrlKey")
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+          );
+        else view.host.querySelector<HTMLButtonElement>('[aria-label="Close find"]')?.click();
+      });
+      await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    }
+    const title = view.host.querySelector<HTMLInputElement>('[aria-label="Document title"]');
+    await act(async () => {
+      title?.focus();
+      title?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    for (const [key, shiftKey, label] of [
+      ["c", true, "Word count"],
+      ["/", false, "Keyboard shortcuts"],
+    ] as const) {
+      await act(async () =>
+        view.body.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            shiftKey,
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      );
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain(label);
+      await act(async () => {
+        if (label === "Keyboard shortcuts")
+          document
+            .querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="Close"]')
+            ?.click();
+        else
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+          );
+      });
+      await vi.waitFor(() => expect(document.querySelector('[role="dialog"]'), label).toBeNull());
+      await vi.waitFor(() => expect(document.activeElement, label).toBe(view.body));
+    }
+    expect(view.body.textContent).toBe("PlanPlain legacy text");
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+    await act(async () =>
+      view.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+      ),
+    );
+    expect(document.querySelector('[aria-label="Link"]')).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it("round39 leaving a document cancels all pending File menu prints before another document is visible", async () => {
+  const view = await mountEditor(
+    {
+      type: "doc",
+      content: [
+        { type: "paragraph" },
+        { type: "image", attrs: { src: "https://pod.test/logo.png", alt: "Loading logo" } },
+      ],
+    },
+    "https://pod.test/docs/plan.ttl",
+    vi.fn(() => new Promise<Response>(() => {})),
+  );
+  const print = vi.spyOn(window, "print").mockImplementation(() => {});
+  vi.useFakeTimers();
+  try {
+    const image = view.body.querySelector("img") as HTMLImageElement;
+    expect(image.hasAttribute("src")).toBe(false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await act(async () => {
+        view.host
+          .querySelector<HTMLButtonElement>('[aria-label="File menu"]')
+          ?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+      });
+      const download = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (item) => item.textContent === "Download",
+      );
+      expect(download).toBeDefined();
+      await act(async () => {
+        download?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      });
+      const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (item) => item.textContent === "Print / Save as PDF",
+      );
+      expect(item).toBeDefined();
+      await act(async () => item?.click());
+      await act(() => vi.advanceTimersByTimeAsync(100));
+    }
+    expect(print).not.toHaveBeenCalled();
+    await view.close();
+    document.body.textContent = "Another document";
+    await vi.advanceTimersByTimeAsync(10_000);
+    image.dispatchEvent(new Event("load"));
+    await Promise.resolve();
+    expect(print).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    print.mockRestore();
+    vi.useRealTimers();
+    if (view.host.isConnected && view.host.hasChildNodes()) await view.close();
+  }
+});
+
+it("round38 save-error dialog restores focus to its invoking Why button", async () => {
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl");
+  try {
+    const runtime = mocks.runtime as DocumentPersistence;
+    runtime.state = "failed";
+    await view.refresh();
+    const why = Array.from(view.host.querySelectorAll("button")).find(
+      (button) => button.textContent === "Why?",
+    ) as HTMLButtonElement;
+    await act(async () => {
+      why.focus();
+      why.click();
+    });
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain("Couldn't save");
+    await act(async () =>
+      dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(why));
+  } finally {
+    await view.close();
+  }
+});
+
+it("round38 resolving a title-conflict dialog restores the previously focused editor", async () => {
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl");
+  try {
+    const runtime = mocks.runtime as DocumentPersistence;
+    view.body.focus();
+    runtime.conflict = new TitleConflictError("https://pod.test/docs/plan.ttl", "Mine", "Theirs");
+    runtime.resolveTitle = vi.fn(async () => {
+      runtime.conflict = undefined;
+    });
+    await view.refresh();
+    const keep = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (button) => button.textContent === "Keep mine",
+    ) as HTMLButtonElement;
+    expect(keep).toBeDefined();
+    await act(async () => keep.click());
+    await view.refresh();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "Bold",
+  "Italic",
+  "Underline",
+])("round33 empty-caret %s stored marks immediately update toolbar feedback", async (label) => {
+  const view = await mountEditor();
+  try {
+    const button = view.host.querySelector<HTMLButtonElement>(
+      `[role="toolbar"] [aria-label="${label}"]`,
+    ) as HTMLButtonElement;
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    await act(async () => button.click());
+    expect(view.body.textContent).toBe("");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => button.click());
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it("round33 shortcut-opened help restores editor focus after Close", async () => {
+  const view = await mountEditor();
+  try {
+    await act(async () => {
+      view.body.focus();
+      view.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "/", ctrlKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Keyboard shortcuts");
+    await vi.waitFor(() =>
+      expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull(),
+    );
+    await act(async () => {
+      (document.querySelector('[role="dialog"] button') as HTMLButtonElement).click();
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "ctrlKey",
+  "metaKey",
+])("round34 %s+F refocuses the open Find field without clearing its query", async (modifier) => {
+  const view = await mountEditor();
+  const shortcut = () =>
+    view.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "f",
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  try {
+    await act(async () => {
+      shortcut();
+    });
+    const input = view.host.querySelector<HTMLInputElement>(
+      ".docs-find-bar input",
+    ) as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "kept query",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      view.body.focus();
+    });
+    expect(document.activeElement).toBe(view.body);
+    await act(async () => {
+      shortcut();
+    });
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("kept query");
+    expect(view.body.textContent).toBe("");
+  } finally {
+    await view.close();
+  }
+});
+
+async function menuItem(trigger: HTMLElement, label: string) {
+  await act(async () =>
+    trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })),
+  );
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+    (node) => node.textContent?.startsWith(label),
+  );
+  expect(item).toBeDefined();
+  await act(async () => {
+    item?.focus();
+    item?.click();
+  });
+}
+
+it("round36 toolbar Find keeps typing focus and never edits the document", async () => {
+  const view = await mountEditor();
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="More formatting"]') as HTMLElement,
+      "Find and replace",
+    );
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
+    const input = view.host.querySelector<HTMLInputElement>(
+      ".docs-find-bar input",
+    ) as HTMLInputElement;
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    await act(async () => {
+      const focused = document.activeElement as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        focused,
+        "settings",
+      );
+      focused.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(input.value).toBe("settings");
+    expect(view.body.textContent).toBe("");
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "Link",
+  "Insert image",
+  "Word count",
+])("round36 toolbar %s opens its control after the menu closes", async (label) => {
+  const view = await mountEditor();
+  try {
+    await menuItem(view.host.querySelector('[aria-label="More formatting"]') as HTMLElement, label);
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
+    if (label === "Insert image") {
+      const input = view.host.querySelector('input[type="file"]') as HTMLInputElement;
+      await act(async () => {
+        Object.defineProperty(input, "files", {
+          value: [new File(["image"], "image.png", { type: "image/png" })],
+        });
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+    await vi.waitFor(() =>
+      expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull(),
+    );
+    expect(view.body.textContent).toBe("");
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it("round36 the dynamic Alt text menu action preserves its control's focus", async () => {
+  const view = await mountEditor({
+    type: "doc",
+    content: [
+      { type: "image", attrs: { src: "https://pod.test/image.png", alt: "Existing image" } },
+    ],
+  });
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="More formatting"]') as HTMLElement,
+      "Alt text",
+    );
+    await vi.waitFor(() =>
+      expect(document.activeElement?.closest('[aria-label="Image alt text"]')).not.toBeNull(),
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+it("round36 cancelling menu-opened Import restores the File menu trigger", async () => {
+  const view = await mountEditor();
+  try {
+    const trigger = view.host.querySelector('[aria-label="File menu"]') as HTMLElement;
+    await menuItem(trigger, "Import to replace…");
+    await vi.waitFor(() =>
+      expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull(),
+    );
+    const cancel = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ).find((button) => button.textContent === "Cancel");
+    await act(async () => cancel?.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "no warnings",
+  "Open document",
+  "Escape",
+])("round37 completed replacement keeps editor focus after %s teardown", async (completion) => {
+  const view = await mountEditor();
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      "Import to replace…",
+    );
+    const input = document.querySelector('[role="dialog"] input[type="file"]') as HTMLInputElement;
+    const source =
+      completion === "no warnings"
+        ? "Replacement"
+        : "Replacement\n\n![Unsafe](data:image/png;base64,x)";
+    await act(async () => {
+      Object.defineProperty(input, "files", { value: [new NodeFile([source], "plan.md")] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const replace = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ).find((button) => button.textContent === "Replace contents");
+    await act(async () => replace?.click());
+    if (completion !== "no warnings") {
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+        "Some items weren't imported",
+      );
+      await act(async () => {
+        if (completion === "Escape")
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+          );
+        else
+          Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'))
+            .find((button) => button.textContent === "Open document")
+            ?.click();
+      });
+    }
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    expect(view.body.textContent).toContain("Replacement");
+  } finally {
+    await view.close();
+  }
+});
+
+it("round37 editor Undo opens the restored document instead of a reused original URL", async () => {
+  const url = "https://pod.test/docs/plan.ttl";
+  const view = await mountEditor(undefined, url);
+  const restoredUrl = "https://pod.test/docs/plan%20(restored).ttl";
+  const entry = {
+    url: "https://pod.test/drive/.trash/slot/plan.ttl",
+    original: url,
+    name: "plan.ttl",
+    trashedAt: new Date(),
+  };
+  mocks.remove.mockResolvedValue({ done: [entry], failed: [] });
+  mocks.restore.mockResolvedValue({
+    done: [{ entry, url: restoredUrl, renamed: true }],
+    failed: [],
+  });
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      "Move to trash",
+    );
+    const confirm = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+    ).find((button) => button.textContent === "Move to trash");
+    expect(confirm).toBeDefined();
+    await act(async () => confirm?.click());
+    await vi.waitFor(() => expect(mocks.toast).toHaveBeenCalled());
+    await act(async () => mocks.toast.mock.calls.at(-1)?.[1].action.onClick());
+    const { encodeRef } = await import("../src/lib/refs");
+    expect(mocks.router.push).toHaveBeenLastCalledWith(`/docs/d/${encodeRef(restoredUrl)}`);
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "Escape",
+  "ctrlKey",
+  "metaKey",
+])("round46 focused checkboxes retain document shortcut %s", async (shortcut) => {
+  const view = await mountEditor({
+    type: "doc",
+    content: [
+      {
+        type: "taskList",
+        content: [
+          {
+            type: "taskItem",
+            attrs: { checked: false },
+            content: [{ type: "paragraph", content: [{ type: "text", text: "Task" }] }],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    vi.mocked((mocks.runtime as DocumentPersistence).change).mockClear();
+    const checkbox = view.body.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    ) as HTMLInputElement;
+    const event = new KeyboardEvent("keydown", {
+      key: shortcut === "Escape" ? "Escape" : "s",
+      ...(shortcut === "Escape" ? {} : { [shortcut]: true }),
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      checkbox.focus();
+      checkbox.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    if (shortcut === "Escape")
+      expect(document.activeElement).toBe(view.host.querySelector('[aria-label="Document title"]'));
+    else {
+      expect(mocks.runtime?.forceSave).toHaveBeenCalledOnce();
+      expect(document.activeElement).toBe(checkbox);
+    }
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});

@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * App-managed trash index (04-drive §5.3): one `prov:Entity` subject per
  * trashed item in `<drive>/.trash/index.ttl`, read and written through
@@ -49,6 +50,20 @@ export interface TrashEntry {
 }
 
 export class TrashRecord extends TermWrapper {
+  /** Exact trash resource paired with this Docs snapshot/companion. */
+  get pairedWith(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}relation`, NamedNodeAs.string);
+  }
+  set pairedWith(value: string | undefined) {
+    OptionalAs.object(this, `${DCT}relation`, value, NamedNodeFrom.string);
+  }
+  /** Chosen restore destination survives completion/removal of the companion record. */
+  get restoredLocation(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}isReplacedBy`, NamedNodeAs.string);
+  }
+  set restoredLocation(value: string | undefined) {
+    OptionalAs.object(this, `${DCT}isReplacedBy`, value, NamedNodeFrom.string);
+  }
   /** JSON archive of each original container's own ACL, before Trash privatizes it. */
   get containerAcls(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${DCT}accessRights`, LiteralAs.string);
