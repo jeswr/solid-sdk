@@ -303,10 +303,24 @@ it("exports native Word run properties and recovers them in paragraphs and lists
       { type: "listItem", content: [json.content[0] as NonNullable<typeof json.content>[number]] },
     ],
   });
+  json.content?.push({
+    type: "paragraph",
+    attrs: { indent: 2 },
+    content: [
+      {
+        type: "text",
+        text: "Suite font",
+        marks: [{ type: "textStyle", attrs: { fontFamily: "var(--font-ui)" } }],
+      },
+    ],
+  });
   const bytes = await Packer.toBuffer(await toDocx(json, vi.fn()));
   const zip = await openArrayBuffer(Uint8Array.from(bytes).buffer);
   const xml = await zip.read("word/document.xml", "utf-8");
   for (const property of [
+    // The suite UI font exports as its named family; two indent steps are one inch.
+    'w:ascii="Onest"',
+    'w:left="1440"',
     'w:ascii="Georgia"',
     'w:val="28"',
     'w:val="C00000"',
@@ -345,10 +359,10 @@ it("exports native Word run properties and recovers them in paragraphs and lists
 it("reads inherited Word properties safely, including absent, cyclic and unknown styles", () => {
   const parse = (source: string) => new DOMParser().parseFromString(source, "application/xml");
   const definitions = parse(
-    `<w:styles xmlns:w="${WORD}"><w:style w:styleId="Base"><w:name w:val="Base"/><w:rPr><w:rFonts w:ascii="Georgia"/><w:color w:val="C00000"/></w:rPr><w:pPr><w:spacing w:line="360" w:before="240"/></w:pPr></w:style><w:style w:styleId="Child"><w:basedOn w:val="Base"/><w:rPr><w:sz w:val="28"/></w:rPr></w:style><w:style w:styleId="Cycle"><w:basedOn w:val="Cycle"/></w:style><w:style w:styleId="Base"/></w:styles>`,
+    `<w:styles xmlns:w="${WORD}"><w:style w:styleId="Base"><w:name w:val="Base"/><w:rPr><w:rFonts w:ascii="Georgia"/><w:color w:val="C00000"/></w:rPr><w:pPr><w:spacing w:line="360" w:before="240"/></w:pPr></w:style><w:style w:styleId="Child"><w:basedOn w:val="Base"/><w:rPr><w:sz w:val="28"/></w:rPr></w:style><w:style w:styleId="Cycle"><w:basedOn w:val="Cycle"/></w:style><w:style w:styleId="Base"/><w:style w:styleId="MyCode"><w:name w:val="Inline Code"/></w:style></w:styles>`,
   );
   const document = parse(
-    `<w:document xmlns:w="${WORD}"><w:body><w:p><w:pPr><w:pStyle w:val="Base"/></w:pPr><w:r><w:rPr><w:rStyle w:val="Child"/><w:shd w:fill="FFE678"/></w:rPr><w:t>A</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Cycle"/><w:spacing w:line="400" w:lineRule="exact" w:after="99999"/></w:pPr><w:r><w:t>B</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Unknown"/><w:spacing w:line="400" w:lineRule="atLeast"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="evil"/><w:sz w:val="9999"/><w:color w:val="evil"/></w:rPr><w:t>C</w:t></w:r></w:p><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/></w:rPr><w:t>D</w:t></w:r></w:p></w:body></w:document>`,
+    `<w:document xmlns:w="${WORD}"><w:body><w:p><w:pPr><w:pStyle w:val="Base"/></w:pPr><w:r><w:rPr><w:rStyle w:val="Child"/><w:shd w:fill="FFE678"/></w:rPr><w:t>A</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Cycle"/><w:spacing w:line="400" w:lineRule="exact" w:after="99999"/></w:pPr><w:r><w:t>B</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="Unknown"/><w:spacing w:line="400" w:lineRule="atLeast"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="evil"/><w:sz w:val="9999"/><w:color w:val="evil"/></w:rPr><w:t>C</w:t></w:r></w:p><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/></w:rPr><w:t>D</w:t></w:r></w:p><w:p><w:r><w:rPr><w:rStyle w:val="Base"/></w:rPr><w:t>E</w:t></w:r><w:r><w:rPr><w:rStyle w:val="MyCode"/><w:color w:val="C00000"/></w:rPr><w:t>F</w:t></w:r></w:p></w:body></w:document>`,
   );
   const styles = docxStyles(document, definitions);
   expect(styles.paragraph(document.getElementsByTagNameNS(WORD, "p")[0] as Element)).toBe(
@@ -359,4 +373,16 @@ it("reads inherited Word properties safely, including absent, cyclic and unknown
   expect([...styles.runs.values()][0]?.css).toContain("font-family: Georgia, serif");
   expect([...styles.runs.values()][0]?.css).toContain("font-size: 14pt");
   expect([...styles.runs.values()][1]?.css).toContain("font-family: Arial, sans-serif");
+  expect(styles.paragraph(document.getElementsByTagNameNS(WORD, "p")[3] as Element)).toBe("");
+  // A named character style keeps its name on the alias; inline code (matched by style
+  // name, as the import style map does) is carried by the code mark instead.
+  expect([...styles.runs.values()].map((run) => run.styleId)).toEqual(["Child", null, "Base"]);
+  const aliases = [...definitions.getElementsByTagNameNS(WORD, "style")].filter((style) =>
+    style.getAttributeNS(WORD, "styleId")?.startsWith("SuiteRun"),
+  );
+  expect(
+    aliases.map((alias) =>
+      alias.getElementsByTagNameNS(WORD, "name")[0]?.getAttributeNS(WORD, "val"),
+    ),
+  ).toEqual([undefined, undefined, "Base"]);
 });

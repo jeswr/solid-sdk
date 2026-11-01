@@ -211,9 +211,7 @@ function mapLists(
       const formatting = runs.get(element.styleId ?? "");
       if (formatting && element.styleName !== "Task Marker") {
         const id = `SuiteText${styleMap.length}`;
-        styleMap.unshift(
-          `r.${id} => span[style='${formatting.css}']${element.styleName === "Inline Code" ? " > code" : ""}`,
-        );
+        styleMap.unshift(`r.${id} => span[style='${formatting.css}']`);
         element.styleId = id;
       }
     }

@@ -2,7 +2,7 @@
 import { colour, fontFamily, fontSize, lineHeight, paragraphSpace } from "../editor/styles";
 import { WORD } from "./docx-xml";
 
-const direct = (element: Element | undefined, name: string) =>
+const direct = (element: Element | null | undefined, name: string) =>
   Array.from(element?.children ?? []).find(
     (child) => child.namespaceURI === WORD && child.localName === name,
   );
@@ -78,10 +78,13 @@ export function docxStyles(document: Document, definitions: Document) {
     }
     let reference = direct(props, "rStyle");
     const styleId = value(reference) ?? null;
-    const paragraphProps = direct(run.closest("p") ?? run.parentElement ?? undefined, "pPr");
+    const name = direct(styles.get(styleId ?? ""), "name");
+    const paragraphProps = direct(run.closest("p"), "pPr");
     // Code runs and code blocks carry their own font and shading through the code mark/node;
-    // reading those as text styles would add a spurious highlight to every code span.
-    if (styleId === "InlineCode" || value(direct(paragraphProps, "pStyle")) === "Code") continue;
+    // reading those as text styles would add a spurious highlight to every code span. The
+    // import style map recognises inline code by its style name, so match the name here.
+    if (value(name) === "Inline Code" || value(direct(paragraphProps, "pStyle")) === "Code")
+      continue;
     // Paragraph styles (headings, titles) and the Hyperlink character style are carried by the
     // block type and link mark; only the run's own formatting and other character styles become text styles.
     const safe = css([...(styleId === "Hyperlink" ? [] : inherited(styleId, "rPr")), props], false);
@@ -96,7 +99,7 @@ export function docxStyles(document: Document, definitions: Document) {
     const alias = definitions.createElementNS(WORD, "w:style");
     alias.setAttributeNS(WORD, "w:type", "character");
     alias.setAttributeNS(WORD, "w:styleId", id);
-    const name = direct(styles.get(styleId ?? ""), "name");
+    // Keep the style name: name-based import rules (hyperlinks, task markers) still apply.
     if (name) alias.append(name.cloneNode(true));
     definitions.documentElement.append(alias);
   }
