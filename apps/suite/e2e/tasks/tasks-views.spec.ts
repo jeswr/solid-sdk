@@ -221,18 +221,52 @@ test("scenario 2: overdue count, Reschedule all, and all-day-first Today orderin
   await expect(overdue.locator(".tsk-count")).toHaveCSS("color", destructive);
   await expect(page.locator(".tsk-date-subtitle")).toHaveText("Monday, 2 November");
   await accessible(page);
-  await page.getByRole("button", { name: "Reschedule all", exact: true }).click();
+  const rescheduleAll = page.getByRole("button", { name: "Reschedule all", exact: true });
+  await rescheduleAll.focus();
+  await rescheduleAll.press("Enter");
+  await page.getByRole("dialog", { name: "Reschedule", exact: true }).press("Escape");
+  await expect(rescheduleAll).toBeFocused();
+  await rescheduleAll.press("Enter");
   await page
     .getByRole("dialog", { name: "Reschedule", exact: true })
     .getByRole("button", { name: "Today", exact: true })
     .click();
   await expect(overdue).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Today", level: 1, exact: true })).toBeFocused();
   const today = page.getByRole("region", { name: "Today", exact: true });
   await expect(today.locator(".tsk-task-title")).toHaveText(["Yesterday all day", "Today at five"]);
   await expect(
     page.locator("[data-sonner-toast]").filter({ hasText: "Rescheduled 1 tasks" }),
   ).toBeVisible();
   await expect.poll(async () => (await readTask(page, overdueUrl)).allDay).toBe("2026-11-02");
+  await accessible(page);
+});
+
+test("keyboard focus moves between completion-day groups and returns to the heading", async ({
+  page,
+}) => {
+  await seed(page, async (store, inbox) => {
+    await store.createTask(inbox, { title: "Today done", state: "closed", endedAt: now });
+    await store.createTask(inbox, {
+      title: "Yesterday done",
+      state: "closed",
+      endedAt: new Date("2026-11-01T12:00:00Z"),
+    });
+  });
+  await page.goto("/tasks/completed");
+  const today = page.locator("[data-tsk-row]").filter({ hasText: "Today done" });
+  const yesterday = page.locator("[data-tsk-row]").filter({ hasText: "Yesterday done" });
+  await expect(today).toBeVisible();
+  await today.focus();
+  await today.press("ArrowDown");
+  await expect(yesterday).toBeFocused();
+  await yesterday.press("ArrowUp");
+  await today.press("Space");
+  await expect(yesterday).toBeFocused();
+  await yesterday.press("Space");
+  await expect(
+    page.getByRole("heading", { name: "Completed", level: 1, exact: true }),
+  ).toBeFocused();
   await accessible(page);
 });
 

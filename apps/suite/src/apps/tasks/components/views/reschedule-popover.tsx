@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, Popover, PopoverAnchor, PopoverContent } from "@jeswr/suite-ui";
+import { Button, Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@jeswr/suite-ui";
 import { DatePickerPopover, type DateTimeValue } from "@jeswr/suite-ui/date-time";
 import { type ReactNode, useState } from "react";
 import { addDays, localDayKey } from "../../lib/views/days";
@@ -12,12 +12,14 @@ export function ReschedulePopover({
   onOpenChange,
   onSelect,
   children,
+  trigger,
   onCloseFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (dayKey: string) => void;
-  children: ReactNode;
+  children?: ReactNode;
+  trigger?: ReactNode;
   onCloseFocus?: () => void;
 }) {
   const now = useNow();
@@ -28,7 +30,11 @@ export function ReschedulePopover({
   };
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      {trigger ? (
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      ) : (
+        <PopoverAnchor asChild>{children}</PopoverAnchor>
+      )}
       <PopoverContent
         aria-label="Reschedule"
         align="end"

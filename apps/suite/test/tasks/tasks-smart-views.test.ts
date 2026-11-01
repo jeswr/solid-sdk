@@ -1,14 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import type { TasksContextValue } from "../../src/apps/tasks/state/tasks-context";
 import { act, click, h, key, mount } from "../drive-ui-dom";
+import type { Pod } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 const now = new Date("2026-11-02T10:00:00Z");
 let cache: TasksCache;
+let pod: Pod;
 const replace = vi.fn();
 vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
 vi.mock("next/navigation", () => ({
@@ -110,13 +113,56 @@ beforeEach(async () => {
   vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
   vi.stubGlobal("DocumentFragment", window.DocumentFragment);
   vi.clearAllMocks();
-  cache = (await frameCache()).cache;
+  ({ cache, pod } = await frameCache());
 });
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("Today", () => {
+  it("returns focus to Reschedule all on Escape and to the heading when Overdue disappears", async () => {
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    await cache.createTask(inbox, { title: "Late", allDay: "2026-11-01" });
+    const { host } = await mount(h("main", null, h(TodayView)));
+    const opener = button("Reschedule all", host);
+    await act(() => opener.focus());
+    await click(opener);
+    await key(document.activeElement as Element, "Escape");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(opener));
+    });
+    expect(cache.getSnapshot().views[0]?.allDay).toBe("2026-11-01");
+    await click(opener);
+    await click(button("Today", document.querySelector('[role="dialog"]') ?? document));
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector("h1")));
+    });
+    expect(host.textContent).not.toContain("Overdue");
+  });
+
+  it("moves focus across groups after completion, then to the empty-state action", async () => {
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    await cache.createTask(inbox, { title: "Late", allDay: "2026-11-01" });
+    await cache.createTask(inbox, { title: "Today task", allDay: "2026-11-02" });
+    const { host } = await mount(h("main", null, h(TodayView)));
+    const row = host.querySelector<HTMLElement>("[data-tsk-row]") as HTMLElement;
+    const next = region(host, "Today").querySelector<HTMLElement>("[data-tsk-row]") as HTMLElement;
+    expect(host.querySelectorAll('[data-tsk-row][tabindex="0"]')).toHaveLength(1);
+    await act(() => row.focus());
+    await key(row, "ArrowDown");
+    expect(document.activeElement).toBe(next);
+    await key(next, "ArrowUp");
+    expect(document.activeElement).toBe(row);
+    await key(row, " ");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(next));
+    });
+    await key(next, " ");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(button("Add task", host)));
+    });
+  });
+
   it("groups and counts overdue separately, orders all-day before time, and reschedules all through updates", async () => {
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
     await cache.createTask(inbox, { title: "Timed today", due: new Date("2026-11-02T17:00:00Z") });
@@ -198,6 +244,28 @@ describe("Today", () => {
 });
 
 describe("Upcoming", () => {
+  it("renders default locale preferences when both week-info APIs are missing", async () => {
+    const method = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "getWeekInfo");
+    const property = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "weekInfo");
+    Object.defineProperties(Intl.Locale.prototype, {
+      getWeekInfo: { configurable: true, value: undefined },
+      weekInfo: { configurable: true, value: undefined },
+    });
+    try {
+      const { host } = await mount(h("main", null, h(UpcomingView)));
+      expect(host.querySelectorAll(".tsk-day-cell")).toHaveLength(7);
+      expect(host.querySelector(".tsk-day-cell")?.getAttribute("data-day-key")).toBe("2026-11-02");
+    } finally {
+      for (const [key, descriptor] of [
+        ["getWeekInfo", method],
+        ["weekInfo", property],
+      ] as const) {
+        if (descriptor) Object.defineProperty(Intl.Locale.prototype, key, descriptor);
+        else Reflect.deleteProperty(Intl.Locale.prototype, key);
+      }
+    }
+  });
+
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
     localStorage.setItem("suite.tasks.prefs", JSON.stringify({ weekStart: "sunday" }));
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
@@ -269,6 +337,32 @@ describe("Upcoming", () => {
 });
 
 describe("Completed", () => {
+  it.each([
+    "first",
+    "last",
+  ])("focuses the next or previous group when reopening its %s task, then the heading", async (which) => {
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    await cache.createTask(inbox, { title: "Today done", state: "closed", endedAt: now });
+    await cache.createTask(inbox, {
+      title: "Yesterday done",
+      state: "closed",
+      endedAt: new Date("2026-11-01T12:00:00Z"),
+    });
+    const { host } = await mount(h("main", null, h(CompletedView)));
+    const rows = [...host.querySelectorAll<HTMLElement>("[data-tsk-row]")];
+    const row = rows[which === "first" ? 0 : 1] as HTMLElement;
+    const remaining = rows[which === "first" ? 1 : 0] as HTMLElement;
+    await act(() => row.focus());
+    await key(row, " ");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(remaining));
+    });
+    await key(remaining, " ");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector("h1")));
+    });
+  });
+
   it("groups by completion day, renders occurrence metadata, and reopens with endedAt removed", async () => {
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
     const first = await cache.createTask(inbox, {
@@ -339,6 +433,100 @@ describe("Completed", () => {
 });
 
 describe("Label view", () => {
+  it("shares focus across project groups and skips rows in collapsed groups", async () => {
+    await labels();
+    const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
+    const inbox = region(host, "Inbox").querySelector<HTMLElement>("[data-tsk-row]") as HTMLElement;
+    const home = region(host, "Home").querySelector<HTMLElement>("[data-tsk-row]") as HTMLElement;
+    await act(() => inbox.focus());
+    await key(inbox, "ArrowDown");
+    expect(document.activeElement).toBe(home);
+    await act(() => button("Home", host).focus());
+    await click(button("Home", host));
+    expect(inbox.tabIndex).toBe(0);
+    await act(() => inbox.focus());
+    await key(inbox, "ArrowDown");
+    expect(document.activeElement).toBe(inbox);
+    await key(inbox, " ");
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector("h1")));
+    });
+    await click(button("Home", host));
+    expect(home.tabIndex).toBe(0);
+  });
+
+  it("renames only tracker metadata even when task projections are incomplete", async () => {
+    const { home } = await labels();
+    const tasks = api();
+    const load = tasks.tasks[home.url];
+    if (!load) throw new Error("Missing Home load");
+    tasks.tasks = { ...tasks.tasks, [home.url]: { ...load, warningCount: 1 } };
+    const updateTask = vi.spyOn(tasks, "updateTask");
+    const result = await renameLabel("bills", "utilities", tasks);
+    expect(result.done).toHaveLength(2);
+    expect(result.failed).toHaveLength(0);
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(
+      cache
+        .getSnapshot()
+        .projects.flatMap((project) => project.tracker.labels.map((label) => label.name)),
+    ).toEqual(["utilities", "utilities"]);
+  });
+
+  it("refuses the whole deletion with an error toast when a ready project skipped a labelled task", async () => {
+    await labels();
+    const tasks = api();
+    const target = labelTargets("bills", tasks.projects)[1];
+    if (!target) throw new Error("Missing Home label");
+    const bad = await cache.store.createTask(target.project, { title: "Skipped", state: "open" });
+    const dataset = await pod.dataset(bad.url);
+    for (const id of target.labelIds) node(bad.task.id, dataset).types.add(id);
+    const rule = `${bad.url}#recurrence`;
+    node(bad.task.id, dataset).iris(`${NS.SCHEDULING}recurrence`).add(rule);
+    node(rule, dataset).setText(`${NS.SCHEDULING}frequency`, "FORTNIGHTISH");
+    pod.seed(bad.url, await serialize(dataset));
+    await cache.loadTasks(target.project, true);
+    expect(cache.getSnapshot().tasks[target.project.url]).toMatchObject({
+      status: "ready",
+      warningCount: 1,
+    });
+    expect(
+      cache.getSnapshot().tasks[target.project.url]?.items.some((item) => item.url === bad.url),
+    ).toBe(false);
+    const writes = pod.mutations().length;
+    const { host } = await mount(h("main", null, h(LabelView, { label: "bills" })));
+    await click(button("Delete", host));
+    await click(button("Delete", document.querySelector('[role="alertdialog"]') as HTMLElement));
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(
+      cache.getSnapshot().projects.every((project) => project.tracker.labels.length === 1),
+    ).toBe(true);
+    expect(
+      node(bad.task.id, await pod.dataset(bad.url)).types.has(target.labelIds[0] as string),
+    ).toBe(true);
+  });
+
+  it.each([
+    "missing",
+    "loading",
+    "error",
+  ] as const)("writes nothing when one affected project's task load is %s", async (status) => {
+    const { home } = await labels();
+    const tasks = api();
+    tasks.tasks = { ...tasks.tasks };
+    if (status === "missing") delete tasks.tasks[home.url];
+    else tasks.tasks[home.url] = { status, items: [] };
+    const writes = pod.mutations().length;
+    const result = await deleteLabel("bills", tasks);
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Home"));
+  });
+
   it("unions sidebar counts and groups projects, then confirms rename in both trackers", async () => {
     await labels();
     const updates = vi.spyOn(cache, "updateProject");
@@ -358,7 +546,9 @@ describe("Label view", () => {
     expect(updates).not.toHaveBeenCalled();
     await click(button("Cancel", dialog));
     expect(updates).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(button("Rename", host));
+    await act(async () => {
+      await vi.waitFor(() => expect(document.activeElement).toBe(button("Rename", host)));
+    });
     await click(button("Rename", host));
     await type(
       document.querySelector('[role="alertdialog"] input') as HTMLInputElement,

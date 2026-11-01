@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState, LoadingSkeleton, renderAsync } from "@jeswr/suite-ui";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, type Ref, useEffect } from "react";
 import { flatRows } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
 import { openAddTask } from "../../state/add-focus";
+import { TaskListFocus } from "../../state/list-focus";
 import { useTasks } from "../../state/tasks-context";
 import { TaskList } from "../task-list";
 import { ProjectError } from "./project-error";
@@ -21,6 +21,7 @@ export function CrossProjectView({
   toolbar,
   children,
   emptyAction,
+  headingRef,
   count = rows.length,
 }: {
   title: string;
@@ -34,6 +35,7 @@ export function CrossProjectView({
   children?: ReactNode;
   emptyAction?: ReactNode;
   count?: number;
+  headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const tasks = useTasks();
   useEffect(() => {
@@ -46,10 +48,12 @@ export function CrossProjectView({
       (project) => !tasks.tasks[project.url] || tasks.tasks[project.url]?.status === "loading",
     );
   return (
-    <div className="tsk-content">
+    <TaskListFocus className="tsk-content">
       <header className="tsk-view-header">
         <div className="tsk-heading-line">
-          <h1>{title}</h1>
+          <h1 ref={headingRef} tabIndex={-1}>
+            {title}
+          </h1>
           <span className="tsk-count">
             {count}
             <span className="tsk-sr-only"> tasks</span>
@@ -96,6 +100,6 @@ export function CrossProjectView({
           </>
         ),
       })}
-    </div>
+    </TaskListFocus>
   );
 }

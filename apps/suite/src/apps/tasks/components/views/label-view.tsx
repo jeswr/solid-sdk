@@ -43,7 +43,6 @@ export function LabelView({ label }: { label: string }) {
   const opener = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [failures, setFailures] = useState<string[]>([]);
-  const loaded = targets.every(({ project }) => tasks.tasks[project.url]?.status === "ready");
   const confirm = async () => {
     const selected = action;
     if (!selected || (selected === "rename" && !nextName.trim())) return;
@@ -102,7 +101,7 @@ export function LabelView({ label }: { label: string }) {
             type="button"
             size="sm"
             variant="ghost"
-            disabled={!targets.length || busy || !loaded}
+            disabled={!targets.length || busy}
             onClick={(event) => {
               opener.current = event.currentTarget;
               setAction("delete");

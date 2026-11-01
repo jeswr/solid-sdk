@@ -2,7 +2,7 @@
 "use client";
 import { Button } from "@jeswr/suite-ui";
 import { Sun } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { todayGroups } from "../../lib/views/today";
 import type { TaskView } from "../../lib/views/types";
 import { openAddTask } from "../../state/add-focus";
@@ -17,6 +17,8 @@ export function TodayView() {
   const tasks = useTasks();
   const now = useNow();
   const groups = todayGroups(tasks.views, now);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const rescheduleButton = useRef<HTMLButtonElement>(null);
   const [reschedule, setReschedule] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failures, setFailures] = useState<TaskView[]>([]);
@@ -24,6 +26,7 @@ export function TodayView() {
   return (
     <CrossProjectView
       title="Today"
+      headingRef={heading}
       rows={rows}
       subtitle={`${now.toLocaleDateString("en-GB", { weekday: "long" })}, ${now.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}`}
       emptyTitle="Nothing due today"
@@ -45,6 +48,12 @@ export function TodayView() {
             <ReschedulePopover
               open={reschedule}
               onOpenChange={setReschedule}
+              onCloseFocus={() => {
+                (rescheduleButton.current?.isConnected && !rescheduleButton.current.disabled
+                  ? rescheduleButton.current
+                  : heading.current
+                )?.focus();
+              }}
               onSelect={(dayKey) => {
                 setBusy(true);
                 void rescheduleTasks(groups.overdue, dayKey, tasks)
@@ -53,19 +62,18 @@ export function TodayView() {
                   })
                   .finally(() => setBusy(false));
               }}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                aria-haspopup="dialog"
-                aria-expanded={reschedule}
-                onClick={() => setReschedule(true)}
-              >
-                Reschedule all
-              </Button>
-            </ReschedulePopover>
+              trigger={
+                <Button
+                  ref={rescheduleButton}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                >
+                  Reschedule all
+                </Button>
+              }
+            />
           }
         />
       )}
