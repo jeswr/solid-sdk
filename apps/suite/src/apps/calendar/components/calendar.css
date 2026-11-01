@@ -386,6 +386,13 @@
   margin-top: 12px;
   font-size: 14px;
 }
+.cal-details-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
 .cal-calendar-name {
   display: flex;
   align-items: center;

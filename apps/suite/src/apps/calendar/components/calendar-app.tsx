@@ -49,10 +49,11 @@ export function useCalendarNavigation() {
   const router = useRouter();
   const { prefs, setPrefs } = useCalendarState();
   const segment = pathname.split("/")[2] ?? "week";
-  const view = isView(segment) ? segment : prefs.view;
-  const date = parseDate(
-    params.get("d") ?? params.get("return")?.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)?.[1],
-  );
+  const returnTo = params.get("return");
+  // The editor route keeps the view it was opened from (in `return`) behind the sheet.
+  const returnView = returnTo?.match(/^\/calendar\/([a-z]+)/)?.[1] ?? "";
+  const view = isView(segment) ? segment : isView(returnView) ? returnView : prefs.view;
+  const date = parseDate(params.get("d") ?? returnTo?.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)?.[1]);
   const navigate = useCallback(
     (nextDate: string, nextView: CalendarView = view) => {
       const href = calendarHref(nextView, nextDate);
@@ -234,14 +235,6 @@ function Details() {
           <p className="cal-description">{event.description}</p>
         </>
       )}
-      <Button
-        onClick={() => {
-          closeEvent();
-          router.push(editorHref(selected.url, selected.data.start, calendarHref(view, date)));
-        }}
-      >
-        Edit
-      </Button>
       <h3>Reminders</h3>
       {event.reminders?.length ? (
         <ul>
@@ -252,6 +245,16 @@ function Details() {
       ) : (
         <p>No reminders</p>
       )}
+      <div className="cal-details-actions">
+        <Button
+          onClick={() => {
+            closeEvent();
+            router.push(editorHref(selected.url, selected.data.start, calendarHref(view, date)));
+          }}
+        >
+          Edit
+        </Button>
+      </div>
     </div>
   );
 }

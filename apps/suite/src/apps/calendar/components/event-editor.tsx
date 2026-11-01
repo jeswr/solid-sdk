@@ -53,6 +53,7 @@ import {
   type SeriesMode,
 } from "../state/editing";
 import { type CalendarInfo, calendarHref, dateKey, eventDateRange, localDate } from "../state/view";
+import { useCalendarNavigation } from "./calendar-app";
 import { CalendarScreen } from "./calendar-views";
 
 interface Quick {
@@ -329,6 +330,7 @@ function modelRule(value: UiRule | null, data: CalendarEvent) {
 export function CalendarEditorRoute({ eventRef }: { eventRef: string }) {
   const { session, calendars, writes, prefs } = useCalendarState();
   const editing = useCalendarEditing();
+  const { view: backgroundView } = useCalendarNavigation();
   const params = useSearchParams();
   const [loaded, setLoaded] = useState<StoredItem<CalendarEvent>>();
   const [error, setError] = useState("");
@@ -407,7 +409,7 @@ export function CalendarEditorRoute({ eventRef }: { eventRef: string }) {
   return (
     <>
       <div className="cal-editor-background">
-        <CalendarScreen view={prefs.view} />
+        <CalendarScreen view={backgroundView} />
       </div>
       {error ? (
         <div role="alert">{error}</div>
