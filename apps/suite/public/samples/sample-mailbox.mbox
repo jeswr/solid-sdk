@@ -1,0 +1,304 @@
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-0@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 10:00:00 GMT
+Subject: Garden plans 1
+X-Gmail-Labels: Inbox,Unread,Starred,Important,Garden club,Travel
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 1.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-1@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 11:00:00 GMT
+Subject: Re: Garden plans 1
+X-Gmail-Labels: Inbox
+MIME-Version: 1.0
+References: <sample-0@example.org>
+In-Reply-To: <sample-0@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 2.
+See you at the community garden.
+
+On Sun, 1 Mar 2026 Mira wrote:
+> Bring some seeds.
+> Thanks!
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-2@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 12:00:00 GMT
+Subject: Re: Garden plans 1
+X-Gmail-Labels: Inbox,Unread
+MIME-Version: 1.0
+References: <sample-0@example.org>
+In-Reply-To: <sample-1@example.org>
+Content-Type: text/html; charset=utf-8
+
+<p>Our <strong>garden</strong> is growing.</p><img src="https://tracker.example.org/pixel"><script>alert(1)</script>
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-3@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 13:00:00 GMT
+Subject: Re: Garden plans 1
+X-Gmail-Labels: Inbox,Garden club
+MIME-Version: 1.0
+References: <sample-0@example.org>
+In-Reply-To: <sample-2@example.org>
+Content-Type: multipart/mixed; boundary="sample-part-3"
+
+--sample-part-3
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 4.
+See you at the community garden.
+
+--sample-part-3
+Content-Type: text/plain; name="garden-3.txt"
+Content-Disposition: attachment; filename="garden-3.txt"
+Content-Transfer-Encoding: base64
+
+U2VlZHMgYW5kIHdhdGVyCg==
+--sample-part-3--
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-4@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 14:00:00 GMT
+Subject: Re: Garden plans 1
+X-Gmail-Labels: Inbox,Unread,Travel
+MIME-Version: 1.0
+References: <sample-0@example.org>
+In-Reply-To: <sample-3@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 5.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-5@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 15:00:00 GMT
+Subject: Garden plans 2
+X-Gmail-Labels: Inbox
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 6.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-6@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 16:00:00 GMT
+Subject: Re: Garden plans 2
+X-Gmail-Labels: Inbox,Unread,Garden club
+MIME-Version: 1.0
+References: <sample-5@example.org>
+In-Reply-To: <sample-5@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 7.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-7@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 17:00:00 GMT
+Subject: Re: Garden plans 2
+X-Gmail-Labels: Inbox,Important
+MIME-Version: 1.0
+References: <sample-5@example.org>
+In-Reply-To: <sample-6@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 8.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-8@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 18:00:00 GMT
+Subject: Re: Garden plans 2
+X-Gmail-Labels: Inbox,Unread,Travel
+MIME-Version: 1.0
+References: <sample-5@example.org>
+In-Reply-To: <sample-7@example.org>
+Content-Type: multipart/mixed; boundary="sample-part-8"
+
+--sample-part-8
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 9.
+See you at the community garden.
+
+--sample-part-8
+Content-Type: text/plain; name="garden-8.txt"
+Content-Disposition: attachment; filename="garden-8.txt"
+Content-Transfer-Encoding: base64
+
+U2VlZHMgYW5kIHdhdGVyCg==
+--sample-part-8--
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-9@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 19:00:00 GMT
+Subject: Re: Garden plans 2
+X-Gmail-Labels: Inbox,Garden club
+MIME-Version: 1.0
+References: <sample-5@example.org>
+In-Reply-To: <sample-8@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 10.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-10@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 20:00:00 GMT
+Subject: Garden plans 3
+X-Gmail-Labels: Inbox,Unread
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 11.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-11@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 21:00:00 GMT
+Subject: Re: Garden plans 3
+X-Gmail-Labels: Inbox,Starred
+MIME-Version: 1.0
+References: <sample-10@example.org>
+In-Reply-To: <sample-10@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 12.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-12@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 22:00:00 GMT
+Subject: Re: Garden plans 3
+X-Gmail-Labels: Inbox,Unread,Garden club,Travel
+MIME-Version: 1.0
+References: <sample-10@example.org>
+In-Reply-To: <sample-11@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 13.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-13@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Sun, 01 Mar 2026 23:00:00 GMT
+Subject: Re: Garden plans 3
+X-Gmail-Labels: Inbox
+MIME-Version: 1.0
+References: <sample-10@example.org>
+In-Reply-To: <sample-12@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 14.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-14@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Mon, 02 Mar 2026 00:00:00 GMT
+Subject: Re: Garden plans 3
+X-Gmail-Labels: Inbox,Unread,Important
+MIME-Version: 1.0
+References: <sample-10@example.org>
+In-Reply-To: <sample-13@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 15.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-15@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Mon, 02 Mar 2026 01:00:00 GMT
+Subject: Garden plans 4
+X-Gmail-Labels: Inbox,Garden club
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 16.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-16@example.org>
+From: Mira Vale <mira@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Mon, 02 Mar 2026 02:00:00 GMT
+Subject: Re: Garden plans 4
+X-Gmail-Labels: Inbox,Unread,Travel
+MIME-Version: 1.0
+References: <sample-15@example.org>
+In-Reply-To: <sample-15@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 17.
+See you at the community garden.
+From sender@example.org Thu Jan 01 00:00:00 2026
+Message-ID: <sample-17@example.org>
+From: Noel Reed <noel@example.org>
+To: Garden friends <friends@example.org>
+Cc: Alex Moss <alex@example.org>
+Date: Mon, 02 Mar 2026 03:00:00 GMT
+Subject: Re: Garden plans 4
+X-Gmail-Labels: Inbox
+MIME-Version: 1.0
+References: <sample-15@example.org>
+In-Reply-To: <sample-16@example.org>
+Content-Type: text/plain; charset=utf-8
+
+Hello friends,
+Here are our fictional garden notes 18.
+See you at the community garden.
