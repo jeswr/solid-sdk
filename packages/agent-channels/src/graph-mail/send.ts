@@ -21,6 +21,20 @@ export interface GraphMailSendOptions extends EmailRenderOptions {
   /** Executor verifies a current owner approval bound to these bytes and account. */
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
 }
+/** Parse one bare addr-spec or name-addr; lists and ambiguous routing syntax fail closed. */
+function mailboxMatches(values: readonly string[], expected: string): boolean {
+  if (values.length !== 1) return false;
+  const value = values[0] as string;
+  if (value === expected) return true;
+  const mailbox = /^(.*?)<([^<>\s]+)>$/.exec(value);
+  return (
+    mailbox !== null &&
+    mailbox[2] === expected &&
+    /^(?:[^()<>[\]:;@\\,"\p{Cc}]*|"(?:[^"\\\p{Cc}]|\\[ -~])*")$/u.test(
+      (mailbox[1] as string).trim().replaceAll("\t", " "),
+    )
+  );
+}
 /** Graph constructs MIME from JSON, so boundaries and dates cannot match the local wire. */
 function verifiedCopy(
   raw: Uint8Array,
@@ -36,9 +50,12 @@ function verifiedCopy(
     )
   )
     return false;
+  if (
+    !mailboxMatches(headerValues(tree.root, "from"), config.from) ||
+    !mailboxMatches(headerValues(tree.root, "to"), config.recipient)
+  )
+    return false;
   const headers = {
-    from: config.from,
-    to: config.recipient,
     subject: `[Agent] ${proposal.message.kind}`,
     "message-id": emailMessageIdFor(proposal.message.id),
     "x-agentic-reply": "1",

@@ -194,8 +194,10 @@ transport failures remain uncertain. The binding never retries sending.
 
 Lookup uses a read grant and an `internetMessageId eq '…'` filter on `/me/messages`,
 then verifies at most ten candidate MIME copies. Exchange-generated dates,
-boundaries and transfer encodings may differ. Sender, recipient, subject,
-Message-ID and carriage header must still match exactly; extra routing/reply
+boundaries and transfer encodings may differ. Sender and recipient headers must
+each contain exactly one pinned mailbox; bare addresses and quoted or unquoted
+display names with angle brackets are accepted. Subject, Message-ID and carriage
+header must still match exactly; duplicate headers and extra routing/reply
 destinations are refused. STRICT parity checks every human and structured MIME
 copy and requires the original signed carrier. Lookup works after expiry and
 returns `found` only with positive evidence. Misses, rewritten human content or

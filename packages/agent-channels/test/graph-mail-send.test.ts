@@ -271,6 +271,64 @@ it("reconciles transport-generated MIME boundaries and dates without relaxing hu
   expect(await s.send.lookup?.(wire)).toEqual({ outcome: "found", providerRef: "provider-copy" });
 });
 
+it.each([
+  ["Software Agent", "Graph Recipient"],
+  ['"Agent, Software"', '"Recipient, Graph"'],
+  ['"Agent \\"Software\\""', '"Graph <display@example.test>"'],
+  ["=?utf-8?B?QWdlbnQ=?=", "=?utf-8?B?UmVjaXBpZW50?="],
+  ["", ""],
+  ["Software\r\n Agent", "Graph\r\n Recipient"],
+])("reconciles single pinned mailboxes with display names (%s, %s)", async (from, to) => {
+  const s = sender([]);
+  const wire = await s.send.render(signed(), EMAIL_MIME);
+  const provider = wire.bytes
+    .replace("From: sender@example.test", `From: ${from} <sender@example.test>`)
+    .replace(`To: ${recipient}`, `To: ${to} <${recipient}>`);
+  s.queue.push(search(["provider-copy"]), mime(provider));
+  expect(await s.send.lookup?.(wire)).toEqual({ outcome: "found", providerRef: "provider-copy" });
+  s.queue.push(
+    search(["changed-copy"]),
+    mime(provider.replace("Subject: [Agent] describe", "Subject: changed")),
+  );
+  expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+  const changedBody = provider.replace(
+    /(Content-Type: text\/plain; charset=utf-8\r\n)Content-Transfer-Encoding: base64\r\n\r\n[A-Za-z0-9+/=\r\n]+/,
+    "$1Content-Transfer-Encoding: 7bit\r\n\r\nChanged human text\r\n",
+  );
+  expect(changedBody).not.toBe(provider);
+  s.queue.push(search(["changed-human-copy"]), mime(changedBody));
+  expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+});
+
+it("refuses missing, duplicate, multiple and spoofed mailboxes despite matching signed and human bodies", async () => {
+  const s = sender([]);
+  const wire = await s.send.render(signed(), EMAIL_MIME);
+  for (const [name, address] of [
+    ["From", "sender@example.test"],
+    ["To", recipient],
+  ]) {
+    const original = `${name}: ${address}\r\n`;
+    for (const value of [
+      "",
+      `${name}: Software Agent <${address}>\r\n${original}`,
+      `${name}: Software Agent <${address}>, Other <stranger@example.test>\r\n`,
+      `${name}: ${address}, ${address}\r\n`,
+      `${name}: "Software Agent <${address}>" <stranger@example.test>\r\n`,
+      `${name}: "Software Agent <${address}>"\r\n`,
+      `${name}: ${address} <stranger@example.test>\r\n`,
+      `${name}: Software Agent <stranger@example.test> <${address}>\r\n`,
+      `${name}: Software Agent <${address}> <stranger@example.test>\r\n`,
+      `${name}: Software Agent <${address}>, stranger@example.test\r\n`,
+      `${name}: Software Agent <${address}>; stranger@example.test\r\n`,
+      `${name}: Group: ${address};\r\n`,
+      `${name}: "Unclosed display <${address}>\r\n`,
+    ]) {
+      s.queue.push(search(["candidate"]), mime(wire.bytes.replace(original, value)));
+      expect(await s.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    }
+  }
+});
+
 it("refuses extra destinations, duplicate or changed headers, broken MIME and changed signed or human copies", async () => {
   const s = sender([]);
   const wire = await s.send.render(signed(), EMAIL_MIME);
