@@ -12,8 +12,17 @@
 //  - a bare-string `revoked` became a set of characters;
 //  - a chain without content permitted on presenter-chosen objects by default.
 
-import { type OdrlPolicy, policyToTurtle, type RequestContext } from "@jeswr/solid-odrl";
-import { issueAgentAuthorization, type VerifiableCredential } from "@jeswr/solid-vc";
+import {
+  type OdrlPolicy,
+  policyToRdf,
+  policyToTurtle,
+  type RequestContext,
+} from "@jeswr/solid-odrl";
+import {
+  digestRdfContent,
+  issueAgentAuthorization,
+  type VerifiableCredential,
+} from "@jeswr/solid-vc";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   type PresentedChain,
@@ -360,6 +369,69 @@ describe("signed-content reading is order- and accessor-independent", () => {
     expect(r.authorized).toBe(true);
   });
 
+  it("JSON-LD content cannot add relative-IRI rules the base-free signed graph dropped", async () => {
+    const doc = CAST.instituteInternalId.replace(/#.*$/, "");
+    const forgedId = `${doc}#forged`;
+    const forged: OdrlPolicy = {
+      ...base.instituteInternal,
+      permissions: [
+        ...(base.instituteInternal.permissions ?? []),
+        {
+          id: forgedId,
+          type: "permission",
+          action: "modify",
+          target: SECRET,
+          assignee: CAST.agentR,
+        },
+      ],
+    };
+    // Hand-written JSON-LD of the forged graph, with only the forged rule relative.
+    type Term = {
+      termType: string;
+      value: string;
+      language?: string;
+      datatype?: { value: string };
+    };
+    const term = (t: Term) =>
+      t.termType === "NamedNode"
+        ? { "@id": t.value === forgedId ? "#forged" : t.value }
+        : t.termType === "BlankNode"
+          ? { "@id": `_:${t.value}` }
+          : t.language
+            ? { "@value": t.value, "@language": t.language }
+            : { "@value": t.value, "@type": t.datatype?.value };
+    const nodes = new Map<string, Record<string, unknown[] | string>>();
+    for (const q of policyToRdf(forged)) {
+      const id = term(q.subject as Term)["@id"] as string;
+      const node = nodes.get(id) ?? { "@id": id };
+      ((node[q.predicate.value] as unknown[] | undefined) ?? (node[q.predicate.value] = [])).push(
+        term(q.object as Term),
+      );
+      nodes.set(id, node);
+    }
+    const content = JSON.stringify({ "@graph": [...nodes.values()] });
+    // The base-free digest is the genuine one: the relative rule is dropped.
+    expect(await digestRdfContent(content, "application/ld+json")).toBe(
+      await digestRdfContent(base.policyDocuments.instituteInternal),
+    );
+    const r = await verifyInternal(
+      internalChain({
+        policyContents: {
+          [CAST.instituteInternalId]: { content, contentType: "application/ld+json" },
+        },
+      }),
+      {
+        request: {
+          action: "modify",
+          target: SECRET,
+          attributes: { dateTime: base.now.toISOString() },
+        },
+      },
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_INTEGRITY");
+  });
+
   it("a prohibition whose operand the request leaves out still denies", async () => {
     const guarded: OdrlPolicy = {
       ...base.instituteInternal,
@@ -432,6 +504,49 @@ describe("signed-content reading is order- and accessor-independent", () => {
       expect(r.authorized).toBe(false);
       expect(r.phase).toBe("A");
     }
+  });
+
+  it("an out-of-range validity bound denies instead of rolling forward", async () => {
+    for (const validUntil of ["2027-02-30T00:00:00Z", "2027-01-01T00:00:00+15:00"]) {
+      const vc = await issueAgentAuthorization(
+        {
+          principal: CAST.inst,
+          agent: CAST.agentR,
+          action: "read",
+          target: CAST.records,
+          policy: CAST.instituteInternalId,
+          policyContent: base.policyDocuments.instituteInternal,
+          validFrom: VALID_FROM,
+          validUntil,
+        },
+        base.keys.inst,
+      );
+      const r = await verifyInternal(internalChain({ credentials: [vc] }));
+      expect(r.authorized).toBe(false);
+      expect(r.code).toBe("MALFORMED");
+    }
+  });
+
+  it("a leaf grantUse prohibition on depth does not block a read, whatever depth the caller claims", async () => {
+    const leafDepth: OdrlPolicy = {
+      ...base.instituteInternal,
+      prohibitions: [
+        {
+          type: "prohibition",
+          action: "grantUse",
+          constraints: [{ leftOperand: "delegationDepth", operator: "gt", rightOperand: 5 }],
+        },
+      ],
+    };
+    const content = await policyToTurtle(leafDepth);
+    const presented = { [CAST.instituteInternalId]: { content } };
+    expect((await verifySigned(content, presented)).authorized).toBe(true);
+    const claimed = readRequest();
+    const r = await verifySigned(content, presented, {
+      ...claimed,
+      attributes: { ...claimed.attributes, delegationDepth: 0 },
+    });
+    expect(r.authorized).toBe(true);
   });
 
   it("a scalar operator with several right operands is refused (the triple order would pick one)", async () => {

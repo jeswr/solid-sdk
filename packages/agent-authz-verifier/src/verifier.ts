@@ -81,7 +81,14 @@ import type {
   VerifiableCredential,
   VerifyCredentialOptions,
 } from "@jeswr/solid-vc";
-import { digestQuads, SVC, verifyCredential, verifyRelatedResources } from "@jeswr/solid-vc";
+import {
+  digestQuads,
+  digestRdfContent,
+  SVC,
+  verifyCredential,
+  verifyRelatedResources,
+} from "@jeswr/solid-vc";
+import { DataFactory, type Quad } from "n3";
 import {
   PHASE_A_CODES,
   STATUS_GATE_CODES,
@@ -565,47 +572,110 @@ function policyDocumentUrl(policyId: string): string | undefined {
   }
 }
 
-/** An XSD dateTime that names its timezone; a bare local time depends on the host TZ. */
-const ZONED_DATE_TIME = /^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+/** An IRI with a scheme. */
+const ABSOLUTE_IRI = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
-/** A validity bound that is absent, or a zoned dateTime that parses. */
-function validBound(value: unknown): boolean {
+/** `quad` with each relative IRI resolved against `base` (left as is without one). */
+function resolveQuad(quad: Quad, base: string | undefined): Quad {
+  const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
+    t: T,
+  ): T =>
+    t.termType === "NamedNode" && base !== undefined && !ABSOLUTE_IRI.test(t.value)
+      ? (DataFactory.namedNode(new URL(t.value, base).href) as T)
+      : t;
+  return DataFactory.quad(
+    term(quad.subject),
+    term(quad.predicate),
+    term(quad.object),
+    term(quad.graph),
+  ) as Quad;
+}
+
+/** An XSD dateTime that names its timezone; a bare local time depends on the host TZ. */
+const ZONED_DATE_TIME =
+  /^(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+/**
+ * A zoned XSD dateTime whose fields are in range (`Date.parse` would roll
+ * `02-30` forward) and that `Date.parse` reads.
+ */
+function zonedDateTime(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const m = ZONED_DATE_TIME.exec(value);
+  if (m === null) return false;
+  const [year, month, day, hour, minute, second, tzHour, tzMinute] = m
+    .slice(1)
+    .map((x) => (x === undefined ? 0 : Number(x))) as number[] as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const monthDays = new Date(Date.UTC(2000, month, 0)).getUTCDate();
+  const leapFeb = month === 2 && day === 29 && new Date(Date.UTC(year, 1, 29)).getUTCDate() !== 29;
   return (
-    value === undefined ||
-    (typeof value === "string" && ZONED_DATE_TIME.test(value) && Number.isFinite(Date.parse(value)))
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= monthDays &&
+    !leapFeb &&
+    (hour < 24 || (hour === 24 && minute === 0 && second === 0)) &&
+    minute <= 59 &&
+    second <= 59 &&
+    tzMinute <= 59 &&
+    (tzHour < 14 || (tzHour === 14 && tzMinute === 0)) &&
+    Number.isFinite(Date.parse(value))
   );
+}
+
+/** A validity bound that is absent, or a well-formed zoned dateTime. */
+function validBound(value: unknown): boolean {
+  return value === undefined || zonedDateTime(value);
 }
 
 /**
  * A chain prohibition the request might trigger whose constraints name an operand
  * the request does not supply. solid-odrl treats a missing operand as unsatisfied,
  * so the prohibition would not fire: a request could escape it by leaving the
- * operand out. Probes each such prohibition with its unresolved constraints (and
- * its assignee) removed, against the requested action and against `grantUse`
- * (the delegation edge check). Returns the policy holding one that would match.
+ * operand out. Mirrors the evaluator's two reads of each policy: the requested
+ * action (where the caller's `delegationDepth` is stripped, so it is never
+ * supplied) and, for every policy above the leaf, `grantUse` (where the evaluator
+ * injects `delegationDepth`). Each suspect prohibition is probed with its
+ * unresolved constraints, its depth constraints and its assignee removed.
+ * Returns the policy holding one that would match.
  */
 function unresolvedProhibition(
   chain: readonly OdrlPolicy[],
   request: RequestContext,
   now: Date,
 ): OdrlPolicy | undefined {
-  const attributes = request.attributes ?? {};
-  const resolved = (c: OdrlConstraint) =>
+  const { delegationDepth: _ignored, ...attributes } = request.attributes ?? {};
+  const supplied = (c: OdrlConstraint, depthInjected: boolean) =>
     c.leftOperand === "dateTime" ||
-    (Object.hasOwn(attributes, c.leftOperand) && typeof attributes[c.leftOperand] !== "boolean");
-  // The delegation-depth operand is injected per edge by the evaluator.
-  const kept = (c: OdrlConstraint) => resolved(c) && c.leftOperand !== "delegationDepth";
-  for (const policy of chain) {
-    const suspects = (policy.prohibitions ?? [])
-      .filter((r) => (r.constraints ?? []).some((c) => !resolved(c)))
-      .map(({ assignee: _assignee, ...r }) => ({
-        ...r,
-        constraints: (r.constraints ?? []).filter(kept),
-      }));
-    if (suspects.length === 0) continue;
-    const probe: OdrlPolicy = { id: policy.id, prohibitions: suspects };
-    for (const action of [request.action, "grantUse"] as const) {
-      if (evaluate(probe, { ...request, action }, { now }).matchedProhibitions.length > 0) {
+    (c.leftOperand === "delegationDepth"
+      ? depthInjected
+      : Object.hasOwn(attributes, c.leftOperand) && typeof attributes[c.leftOperand] !== "boolean");
+  for (const [index, policy] of chain.entries()) {
+    const reads: Array<[RequestContext["action"], boolean]> = [[request.action, false]];
+    if (index < chain.length - 1) reads.push(["grantUse", true]);
+    for (const [action, depthInjected] of reads) {
+      const suspects = (policy.prohibitions ?? [])
+        .filter((r) => (r.constraints ?? []).some((c) => !supplied(c, depthInjected)))
+        .map(({ assignee: _assignee, ...r }) => ({
+          ...r,
+          constraints: (r.constraints ?? []).filter(
+            (c) => supplied(c, depthInjected) && c.leftOperand !== "delegationDepth",
+          ),
+        }));
+      if (suspects.length === 0) continue;
+      const probe: OdrlPolicy = { id: policy.id, prohibitions: suspects };
+      if (
+        evaluate(probe, { ...request, action, attributes }, { now }).matchedProhibitions.length > 0
+      ) {
         return policy;
       }
     }
@@ -644,11 +714,25 @@ async function contentBoundPolicy(
   try {
     const contentType = presented.contentType ?? "text/turtle";
     // Resolve relative IRIs (`<#policy>`) against the policy document, as a
-    // consumer fetching it would; the digest gate above binds the bytes. Parse once
-    // so the policy and the round-trip compare read the same graph.
+    // consumer fetching it would. The digest binds the BASE-FREE graph, so the
+    // evaluated graph must be exactly that graph with its relative IRIs resolved:
+    // a JSON-LD parser drops relative-IRI triples when it has no base, and they
+    // would otherwise reappear (unsigned) in a based parse.
+    const baseIRI = policyDocumentUrl(hop.id);
     const dataset = await parseRdf(presented.content, contentType, {
-      ...(policyDocumentUrl(hop.id) !== undefined && { baseIRI: policyDocumentUrl(hop.id) }),
+      ...(baseIRI !== undefined && { baseIRI }),
     });
+    const unbased = await parseRdf(presented.content, contentType);
+    const unbasedQuads = [...unbased.match()] as Quad[];
+    const [signedDigest, unbasedDigest, resolvedDigest, basedDigest] = await Promise.all([
+      digestRdfContent(presented.content, contentType),
+      digestQuads(unbasedQuads),
+      digestQuads(unbasedQuads.map((q) => resolveQuad(q, baseIRI))),
+      digestQuads([...dataset.match()] as Quad[]),
+    ]);
+    if (signedDigest !== unbasedDigest || resolvedDigest !== basedDigest) {
+      return "the policy graph read against its document differs from the signed graph";
+    }
     const parsed = await parsePolicy(dataset);
     if (parsed === undefined) return "the signed content holds no well-formed ODRL policy";
     if (parsed.id !== hop.id) {
@@ -670,11 +754,7 @@ async function contentBoundPolicy(
     ) {
       return "a scalar constraint operator carries several right operands, whose order the signed graph does not fix";
     }
-    const [signed, projected] = await Promise.all([
-      digestQuads([...dataset.match()]),
-      digestQuads(policyToRdf(parsed)),
-    ]);
-    if (signed !== projected) {
+    if (basedDigest !== (await digestQuads(policyToRdf(parsed)))) {
       return "the signed content carries statements the evaluator cannot represent — refusing to evaluate a weaker policy than was signed";
     }
     return parsed;
@@ -1095,8 +1175,7 @@ export async function verifyAgentAuthority(
       !(
         typeof v === "boolean" ||
         (typeof v === "number" && Number.isFinite(v)) ||
-        (typeof v === "string" &&
-          (key !== "dateTime" || (ZONED_DATE_TIME.test(v) && Number.isFinite(Date.parse(v)))))
+        (typeof v === "string" && (key !== "dateTime" || zonedDateTime(v)))
       ),
   );
   if (malformed !== undefined) {
