@@ -392,6 +392,32 @@ describe("DpopApiVerifier — authentication failures (401)", () => {
     expect(err.message).toMatch(/iat/i);
   });
 
+  it("401: a future-dated proof beyond clock tolerance (it would outlive the jti replay window)", async () => {
+    const token = await mintAccessToken();
+    const proof = await mintProof({ accessToken: token, iat: nowSec() + 300 });
+    const err = await expectStatus(
+      makeVerifier().authorizeOwner(mkRequest({ authorization: `DPoP ${token}`, dpop: proof })),
+      401,
+    );
+    expect(err.message).toMatch(/iat/i);
+  });
+
+  it("remembers a jti for as long as its proof stays acceptable", async () => {
+    let clock = Date.now();
+    const verifier = makeVerifier({
+      now: () => clock,
+      replayStore: new InProcessReplayStore({ now: () => clock }),
+    });
+    const token = await mintAccessToken({ exp: nowSec() + 3600 });
+    const proof = await mintProof({ accessToken: token, iat: Math.floor(clock / 1000) + 5 });
+    const request = () => mkRequest({ authorization: `DPoP ${token}`, dpop: proof });
+    await verifier.authorizeOwner(request());
+    // Last second at which the proof's iat is still inside the accepted window.
+    clock += (300 + 5 + 5 - 1) * 1000;
+    const err = await expectStatus(verifier.authorizeOwner(request()), 401);
+    expect(err.message).toMatch(/replay/i);
+  });
+
   it("401: proof missing iat (presence enforced, not only range)", async () => {
     const token = await mintAccessToken();
     const proof = await mintProof({ accessToken: token, noIat: true });

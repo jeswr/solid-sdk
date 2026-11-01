@@ -659,8 +659,13 @@ export class DpopApiVerifier {
     if (typeof payload.iat !== "number") {
       throw this.challenge("invalid_token", "DPoP proof is missing iat.", true);
     }
+    // A proof may be up to MAX_AGE old, but only clock-tolerance in the future: a proof
+    // dated further ahead would outlive the replay window its jti is remembered for.
     const nowSec = Math.floor(this.now() / 1000);
-    if (Math.abs(nowSec - payload.iat) > DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec) {
+    if (
+      nowSec - payload.iat > DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec ||
+      payload.iat - nowSec > this.clockToleranceSec
+    ) {
       throw this.challenge("invalid_token", "DPoP proof iat is not recent enough.", true);
     }
     // `jti` — must be present (the replay cache consumes it).
@@ -690,7 +695,9 @@ export class DpopApiVerifier {
 
   /** Consume the proof's `jti` against the replay store (a repeat within the window = replay). */
   private async checkReplay(jti: string): Promise<void> {
-    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + this.clockToleranceSec;
+    // Accepted iat spans [now - MAX_AGE - tolerance, now + tolerance], so a proof stays
+    // acceptable for at most MAX_AGE + 2 * tolerance after first use.
+    const ttlSeconds = DPOP_PROOF_MAX_AGE_SEC + 2 * this.clockToleranceSec;
     const result = await this.replayStore.mark(jti, ttlSeconds);
     if (result === "replay") {
       this.log.warn({ event: "api-auth.replay.detected" }, "DPoP jti replay detected — rejecting.");
