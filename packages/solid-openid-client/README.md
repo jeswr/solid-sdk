@@ -2,6 +2,11 @@
 
 # @jeswr/solid-openid-client
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** See the [pod-auth migration guide](../pod-auth/SKILL.md).
+> This package remains available for existing consumers and pinned mirrors; the API below is legacy.
+
 A server-side Solid-OIDC client built on `openid-client` v6 with PKCE, DPoP, refresh, and
 authenticated pod fetches.
 

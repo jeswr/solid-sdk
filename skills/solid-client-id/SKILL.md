@@ -5,6 +5,15 @@ description: Use when publishing or debugging a Solid-OIDC Client Identifier Doc
 
 ## Quick reference
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+For new suite deployments, use the ADR-004 D7 generator:
+`node scripts/client-id.mjs <config.json> <public-directory>`. It writes
+`/.well-known/solid-client-id.jsonld` with canonical federation self-description. Read
+[pod-auth's config recipe](../../packages/pod-auth/README.md#generate-the-suite-client-identifier-document)
+and [package skill](../../packages/pod-auth/SKILL.md) for current wiring. The solid-auth-core
+example below is legacy maintenance guidance; that package is deprecated in favor of pod-auth.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 **Publish a Solid Client Identifier Document**
 A Client Identifier Document is a dereferenceable JSON-LD document whose URL is the OAuth `client_id`. Prefer it for deployed public clients so the identity provider sees one stable app identity.
@@ -157,7 +166,7 @@ A static-export site can instead ship a real file at the exact path, served with
 
 ## Wiring into the shared auth core
 
-Use [`@jeswr/solid-auth-core`](../../packages/solid-auth-core/SKILL.md) for new integrations.
+Existing [`@jeswr/solid-auth-core`](../../packages/solid-auth-core/SKILL.md) integrations use this legacy API.
 Its `createSolidAuth()` supports a static `clientId` and enforces the resource-origin boundary
 in both provider `matches()` and `upgrade()`. The legacy bundled provider reference does not
 enforce that boundary and must not be copied into a new integration.

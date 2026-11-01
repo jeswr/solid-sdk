@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { generateKeyPair, SignJWT } from "jose";
@@ -28,48 +29,50 @@ async function fixture(revoke) {
   const { privateKey } = await generateKeyPair("ES256");
   let nonce,
     issued = 0;
-  const session = new OidcSession(
-    callback,
-    {
-      getCode: async (url) => {
-        nonce = url.searchParams.get("nonce");
-        const redirect = new URL(callback);
-        redirect.searchParams.set("code", "code");
-        redirect.searchParams.set("state", url.searchParams.get("state"));
-        redirect.searchParams.set("iss", op.issuer);
-        return { value: redirect.href, [Symbol.dispose]() {} };
-      },
-    },
-    { getClient: async () => ({ client_id: "client", id_token_signed_response_alg: "ES256" }) },
-    {
-      namespace,
-      cache,
-      sessionStore,
-      fence,
-      http: {
-        fetch: async (url, init) => {
-          if (new URL(url).pathname === "/revoke") return await revoke(init);
-          assert.equal(new URL(url).href, metadata.token_endpoint);
-          assert.equal(new URLSearchParams(init.body).get("grant_type"), "authorization_code");
-          issued++;
-          return Response.json({
-            access_token: `access-${issued}`,
-            refresh_token: `refresh-${issued}`,
-            token_type: "DPoP",
-            expires_in: 300,
-            id_token: await new SignJWT({ nonce })
-              .setProtectedHeader({ alg: "ES256" })
-              .setIssuer(op.issuer)
-              .setAudience("client")
-              .setSubject("alice")
-              .setIssuedAt()
-              .setExpirationTime("5m")
-              .sign(privateKey),
-          });
+  const load = () =>
+    new OidcSession(
+      callback,
+      {
+        getCode: async (url) => {
+          nonce = url.searchParams.get("nonce");
+          const redirect = new URL(callback);
+          redirect.searchParams.set("code", "code");
+          redirect.searchParams.set("state", url.searchParams.get("state"));
+          redirect.searchParams.set("iss", op.issuer);
+          return { value: redirect.href, [Symbol.dispose]() {} };
         },
       },
-    },
-  );
+      { getClient: async () => ({ client_id: "client", id_token_signed_response_alg: "ES256" }) },
+      {
+        namespace,
+        cache,
+        sessionStore,
+        fence,
+        http: {
+          fetch: async (url, init) => {
+            if (new URL(url).pathname === "/revoke") return await revoke(init);
+            assert.equal(new URL(url).href, metadata.token_endpoint);
+            assert.equal(new URLSearchParams(init.body).get("grant_type"), "authorization_code");
+            issued++;
+            return Response.json({
+              access_token: `access-${issued}`,
+              refresh_token: `refresh-${issued}`,
+              token_type: "DPoP",
+              expires_in: 300,
+              id_token: await new SignJWT({ nonce })
+                .setProtectedHeader({ alg: "ES256" })
+                .setIssuer(op.issuer)
+                .setAudience("client")
+                .setSubject("alice")
+                .setIssuedAt()
+                .setExpirationTime("5m")
+                .sign(privateKey),
+            });
+          },
+        },
+      },
+    );
+  const session = load();
   const get = (context = "first") =>
     session.get(metadata, context, new AbortController().signal, accessTokenUsable);
   const entry = await get();
@@ -82,7 +85,55 @@ async function fixture(revoke) {
     "openid webid",
     "first",
   ]);
-  return { session, fence, peer, cache, sessionStore, get, entry, key };
+  return { session, fence, peer, cache, sessionStore, get, entry, key, load };
+}
+
+for (const catalog of [false, true]) {
+  test(`logout after reload clears stored keys before bounded revocation; catalog=${catalog}`, async () => {
+    const started = deferred();
+    let signal, token;
+    const f = await fixture((init) => {
+      signal = init.signal;
+      token = new URLSearchParams(init.body).get("token");
+      started.resolve();
+      return new Promise(() => {}); // Deliberately ignores abort.
+    });
+    // Model stores that require explicit keys, and a fresh instance with no in-memory key catalog.
+    delete f.cache.clear;
+    delete f.sessionStore.clear;
+    const reloaded = f.load();
+    const generation = await f.fence.generation();
+    const oldSignal = f.fence.signal;
+    const keys = catalog
+      ? async () => {
+          assert.equal(oldSignal.aborted, true, "read the catalog after superseding the session");
+          return [f.key];
+        }
+      : [f.key];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const rejected = assert.rejects(reloaded.forget(keys), (error) => {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.errors.length, 1);
+        assert.equal(error.errors[0].name, "TimeoutError");
+        return true;
+      });
+      await started.promise;
+      assert.equal(token, f.entry.tokenResult.refresh_token);
+      assert.equal(oldSignal.aborted, true);
+      assert.equal(await f.cache.getItem(f.key), null);
+      assert.equal(await f.sessionStore.getItem(f.key), null);
+      assert.equal(await f.peer.commit(generation + 1, async () => "unlocked"), "unlocked");
+      await vi.advanceTimersByTimeAsync(5_000);
+      await rejected;
+      assert.equal(signal.aborted, true);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      vi.useRealTimers();
+      f.fence.close();
+      f.peer.close();
+    }
+  });
 }
 
 for (const mode of ["ignores abort", "honours abort", "stalls in the response body"]) {

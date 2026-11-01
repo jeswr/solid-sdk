@@ -1,12 +1,124 @@
 ---
 name: storage-client
-description: Use when working on @jeswr/storage-client, the protocol-neutral storage clients for solid and lws package in the Solid SDK workspace.
+description: Use when reading, creating, conditionally editing, listing or moving pod resources with @jeswr/storage-client, or maintaining its Solid/LWS backends and offline fixtures.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-client
+
+## Quick reference
+
+Apps import `createPodClient` from `@jeswr/storage-client`. Inject the authenticated, guarded
+fetch supplied by the auth layer; discovery and storage operations use that same transport.
+Pass a storage root or a resource inside it. The factory resolves a `StorageDescription`,
+derives features through `capabilities()` (including cached Solid probes), and picks the
+backend from `description.protocol`. It returns `{ storage, description, features }`;
+`storage.features` is the same features object. Discovery errors propagate without guessing
+a backend. Apps should use this root API; direct `./solid` and `./lws` imports are for backend
+work and tests (the SDK layer guard disallows app manifest edges to those subpaths).
+
+```ts
+import { createPodClient } from '@jeswr/storage-client';
+
+declare const authenticatedFetch: typeof fetch; // Inject pod-auth auth.fetch.
+declare const storageRoot: string;
+declare const signal: AbortSignal;
+
+const { storage, features } = await createPodClient({
+  fetch: authenticatedFetch,
+  storage: storageRoot,
+  signal,
+});
+const created = await storage.create(storage.root, 'first draft', {
+  name: 'note.txt', contentType: 'text/plain',
+});
+const current = await storage.head(created.url);
+if (current.etag === null) throw new Error('A validator is required to edit this resource');
+await storage.write(created.url, 'second draft', {
+  contentType: 'text/plain', ifMatch: current.etag,
+});
+```
+
+Read [LWS app differences](../../skills/lws-vs-solid/SKILL.md) before assuming path containment,
+permission headers or recursive notifications. Use [pod-notifications](../pod-notifications/SKILL.md)
+for changes; [pod-access](../pod-access/SKILL.md) currently has no sharing implementation.
+
+`capabilities` in the factory options is an optional `DescriptionCache`, shared with other
+capability consumers; the default is the capabilities package's shared in-memory cache.
+`clock` supplies discovery/cache time. `signal` covers client creation; pass operation signals
+separately for subsequent reads/writes. `backend` explicitly forces an implementation for
+diagnostics/tests; description and features still report discovery evidence, so it is not a
+way to advertise capabilities the server lacks. All storage operation URLs remain absolute
+and scoped to `description.root`; an LWS storage id never authorises a foreign fetch.
+
+### Conditional mutations and returned URLs
+
+- `write`, `writeRdf`, `patch`, `move`, `delete`, and `setMetadata` require a nonempty `ifMatch`.
+  Keep ETags verbatim. Re-read after a 412 (`StorageError.code === 'precondition-failed'`);
+  `./helpers` provides `retryOnConflict` for callers that can safely reapply their change.
+- Only `write` and `writeRdf` accept `'*'`: Solid sends no precondition; LWS sends
+  `If-Match: *` and still returns 404 when the resource is absent. Prefer the observed ETag
+  for edits. `create` needs no `ifMatch` because it creates a new resource.
+- `setMetadata` takes the metadata document's ETag from `storage.metadata(url)`, rather than
+  the content ETag. A write result may have `etag: null` if a committed mutation omitted it
+  and its follow-up HEAD failed; read again before the next conditional mutation.
+- With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
+  a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
+  identifier. Without a name, both use POST. Always use the returned `url`, including after
+  moves; never construct a resource URL from a hint. LWS move ignores `name`.
+
+**LWS RDF patch is read-modify-write by default:** read the RDF and check the caller's initial
+ETag, apply inserts/deletes locally, then PUT with that read's ETag. On 412 the backend re-reads
+and reapplies once against the newer state; a second 412 propagates. This can merge a patch
+into newer content, so callers needing strict rejection of all intervening edits should use
+an explicit conditional `writeRdf` instead. Advertised SPARQL Update is used only for the actual
+resource media type and default-graph patches; named-graph patches retain RMW. Variables and
+nonempty `where` are unsupported. LWS stores RDF bodies as opaque content.
+
+### Offline fixtures (`./testing`, Node only)
+
+`createRecordingFetch({ fetch, directory })` returns the original transport unless `RECORD=1`
+at construction. When enabled it buffers bodies, forwards the effective Request, and writes
+one version-1 JSON pair per request as `000001.json`, `000002.json`, etc., in invocation order.
+Use a fresh scenario directory for each recorder; files are created exclusively, never
+silently overwritten. Conformance runners can target
+`packages/storage-client/testing/fixtures/<target>/<scenario>/`. Package tests use temporary
+directories and synthetic CSS/sparq exchanges; no live server is needed.
+
+Headers are normalised; Authorization, DPoP, Set-Cookie, Cookie and Proxy-Authorization are
+omitted case-insensitively from both persisted sides. Live requests/responses retain those
+headers. Bodies use base64 to preserve arbitrary bytes; null means no body, distinct from
+empty bytes. This is header redaction only: use public/synthetic body and URL data for fixtures,
+and inspect captures before committing them.
+
+```ts
+import {
+  createRecordingFetch, createReplayFetch, loadFixtures,
+} from '@jeswr/storage-client/testing';
+import { createPodClient } from '@jeswr/storage-client';
+import { createMemoryCache } from '@jeswr/storage-capabilities/cache';
+
+declare const authenticatedFetch: typeof fetch;
+declare const directory: string; // Fresh directory containing synthetic/public fixture data.
+declare const storageRoot: string;
+const freshCache = createMemoryCache();
+
+const recordedFetch = createRecordingFetch({ fetch: authenticatedFetch, directory });
+// In RECORD=1 mode, inject recordedFetch into the conformance client's factory.
+// In offline tests, inject the replay instead:
+const replay = createReplayFetch(await loadFixtures(directory));
+const client = await createPodClient({ fetch: replay, storage: storageRoot, capabilities: freshCache });
+// Run the recorded scenario using client.storage, then prove all pairs were consumed:
+replay.assertDone();
+```
+
+Replay checks method, URL, public headers and exact request bytes in order, ignoring credential
+headers. Extra requests, mismatches, corrupt fixtures and unused entries fail; no network
+fallback exists. Mismatches do not consume entries and never echo request/header/body data.
+Responses preserve recorded URLs, redirect flags, status and bytes. Match discovery/cache state
+and generated names to the recording; use deterministic name hints in reproducible tests.
 
 T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types from the root), the
 §2 error model (`StorageError`, pure `toStorageError(method, url, response, bodyText?, now?)`,
@@ -16,8 +128,8 @@ and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, s
 T-021 adds the Solid backend's read side; T-022 adds its mutations. `./solid` exports
 `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and the pure async
 `buildN3Patch({ inserts, deletes, where? })`. T-023 adds `./lws` →
-`createLwsBackend({ fetch, root, storage?, features? })`. `./testing` is still reserved (T-025);
-LWS mutations reject with `unsupported` until T-024.
+`createLwsBackend({ fetch, root, storage?, features? })`. T-024 adds conditional LWS mutations
+in `src/lws-write.ts`. T-025 adds `createPodClient` and the Node-only recorder/replayer in `./testing`.
 
 Solid read side (ADR-003 §6):
 - Every URL must be absolute: its standalone parse (`new URL(url)`, without a base) must pass
@@ -80,9 +192,11 @@ Solid read side (ADR-003 §6):
   On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
   context that differs from `storage` gives `scope` and discards the body. Matching/absent links
   are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
-- `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
-  `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
-  first, then fetched as canonical URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
+- `list` and `listAll` accept scoped opaque container identifiers, including those without a trailing
+  slash, preserving their URLs. Query/fragment (even empty `?`/`#`) gives `bad-request`; the response
+  must be a valid Container or ContainerPage. GET Accept:
+  `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped first, then fetched as canonical
+  URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
 - Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
   for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
@@ -131,9 +245,68 @@ Solid read side (ADR-003 §6):
   hreflang/title* are skipped (preserved in raw). raw is parsed JSON, url is the fetched linkset URL,
   etag is its ETag. Maps and own-property params preserve hostile property names as data.
 - `parentOf` scopes first; root → null without a request, otherwise one HEAD returning parent.
-  write/writeRdf/create/patch/move/delete/setMetadata reject `unsupported` without fetching (T-024).
   Fixtures in src/fixtures/lws.ts are synthetic, shaped exactly after the cited sparq lines; the
   1,500-member listing overrides sparq's default page_size=100 to 500 for three pages.
+
+## LWS write side
+
+- Every mutation target, destination, Location, Content-Location and follow-up HEAD stays scoped
+  to the root, with the same canonicalisation, credential redaction, manual redirects, bounded
+  Link parsing and response storage-id validation as reads. Mutation URLs reject queries and
+  fragments, including empty delimiters. PUT/PATCH/DELETE accept only 200/204/205; POST requires
+  201. In particular, PUT never creates: 404 remains not-found, 201 is invalid-response.
+- `write`/`writeRdf` require a nonempty `ifMatch`; `'*'` sends `If-Match: *`. All other mutations
+  require a non-wildcard ETag. Headers reject whitespace padding, CR/LF/NUL and non-ByteString
+  values; media types must be syntactically valid. Root content cannot be PUT; other resource
+  kinds are validated by the server, never inferred from an identifier's trailing slash.
+  RDF serialisation uses the shared serializer; JSON-LD writing remains unsupported.
+- `create` always POSTs: optional `name` is the Slug hint, never an exact child name. Emit Container
+  or DataResource Link type plus each validated `opts.links` entry. Initial up/linkset metadata is
+  refused. Create parents and move destinations may be slashless opaque identifiers; the server
+  validates their kind. Null bodies become empty bodies; containers default to application/lws+json, resources
+  require contentType. Location is mandatory, scoped and query/fragment-free, but need not follow
+  the parent's URL path (LWS logical containment). It cannot name the parent or root. Untrusted
+  Location and Content-Location values are never retained in errors or causes.
+- Ordinary mutation results use their response ETag or a follow-up HEAD, else null if HEAD fails:
+  the mutation already committed. Streaming bodies are forwarded with duplex half and never
+  replayed automatically; failures, including HTTP errors, are nonretryable for streams.
+- JSON patch sends application/json-patch+json plus If-Match. Raw patches validate mediaType and
+  string body. RDF patch rebuilds caller quads before asynchronous reads, refuses invalid term
+  positions, variables and any nonempty where clause. When any SPARQL format is advertised, HEAD
+  discovers the actual resource media type: only that format's advertisement enables SPARQL
+  DELETE DATA/INSERT DATA for default-graph patches, using the shared safe formula serializer.
+  Patches containing named graphs always use RMW to preserve graph identity in TriG/N-Quads.
+- **Otherwise RDF patch is RMW:** readRdf, check the initial ETag against the caller's ifMatch,
+  applyQuadPatch in n3 Store, serialize in the original writable RDF format, then PUT with the
+  read ETag. On 412 reread and reapply exactly once; the initial caller ETag check is not repeated
+  against the newer state. A second 412 propagates. Missing retry ETags fail closed; absent
+  deletions conflict, blank-node deletions and named graphs in triple-only formats are refused.
+- `setMetadata` uses the linkset ETag (not the content ETag), checked before PATCH. Generate
+  sequential JSON Patch against a cloned raw document, retaining other anchors, relations and
+  attributes. Add new anchors/rel arrays when needed, append absent targets, remove all matching
+  target occurrences descending within each repeated anchor context, and escape JSON Pointer
+  keys. Empty/no-op changes avoid PATCH. Explicit anchors must be scoped; hrefs and extension
+  rels must be absolute IRIs; registered rel tokens lower-case. type/up/linkset are always
+  unsupported here, including when MoveResource is available; anchor is reserved structure.
+- `move` requires features.move available, a matching source ETag, and a usable linkset ETag.
+  Container moves also require detail.containers. Refuse root/self moves. Ignore name. Require
+  one resource context with one up target, then send test of the raw anchor and replace of
+  `/linkset/i/up/0/href`, with the linkset's If-Match. When Content-Location is present (or
+  preservesIdentifier is false), require scoped Content-Location and parse the bounded returned
+  linkset; require one scoped anchor with exactly one up target naming the destination and one
+  linkset target naming Content-Location, independently of context order. Reject missing or
+  ambiguous identity relations before the follow-up HEAD. A move with
+  preservesIdentifier false requires Content-Location. HEAD the resulting resource for its ETag;
+  the PATCH ETag belongs to the linkset. created is true only when the identifier changes.
+- Nonrecursive delete sends If-Match and refuses the root. Recursive delete always uses client
+  traversal: features.recursiveDelete advertises the POST-based RecursiveDeleteService, which
+  does not establish Depth support for DELETE. HEAD-check the top ETag,
+  preflight paginated listings + HEAD through logical containment (not URI prefixes), accepting
+  slashless opaque container identifiers only after HEAD confirms their container kind. Require
+  each child's up to match its listed parent and every child to have an ETag. Cycles, duplicates, root members,
+  and trees above 10,000 nodes fail before deletion. Delete in reverse traversal order, refreshing
+  container ETags after child deletion; every DELETE is conditional. Concurrent additions can
+  still produce 409 and partial deletion. Errors propagate without a destructive retry.
 
 Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-write.ts`):
 - Every target, container, destination, Location and describedby URL passes `scoped(root, method,
@@ -307,7 +480,7 @@ Rules the memory backend enforces, and the real backends must match:
   literal lexical values preserved. Prefixes are ignored; no caller context is accepted and no
   remote context is emitted or fetched. Malformed terms and directional literals (including
   `rdf:dirLangString`) reject with `TypeError`. JSON-LD RDF patch support is unchanged (415).
-  The Solid HTTP backend remains read-only pending T-022; LWS HTTP is still reserved.
+  The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain unsupported.
 
 RDF/JS types (`DatasetCore`, `Quad`, `Term`) come from `@jeswr/fetch-rdf`'s type re-exports, so the
 emitted declarations need no `@rdfjs/types` dependency (which the layer guard does not allow).

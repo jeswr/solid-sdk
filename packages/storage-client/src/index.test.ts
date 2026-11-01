@@ -10,8 +10,8 @@ import * as memory from "./memory.js";
 import * as solid from "./solid.js";
 import * as testing from "./testing.js";
 
-test("entry points expose the T-020–T-023 surface; testing stays reserved", () => {
-  expect(Object.keys(api).sort()).toEqual(["StorageError", "toStorageError"]);
+test("entry points expose the storage client and testing surface", () => {
+  expect(Object.keys(api).sort()).toEqual(["StorageError", "createPodClient", "toStorageError"]);
   expect(Object.keys(errors).sort()).toEqual([
     "MAX_PROBLEM_BYTES",
     "StorageError",
@@ -29,5 +29,9 @@ test("entry points expose the T-020–T-023 surface; testing stays reserved", ()
   expect(Object.keys(memory)).toEqual(["createMemoryStorage"]);
   expect(Object.keys(solid).sort()).toEqual(["buildN3Patch", "createSolidBackend"]);
   expect(Object.keys(lws)).toEqual(["createLwsBackend"]);
-  expect(Object.keys(testing)).toEqual([]);
+  expect(Object.keys(testing).sort()).toEqual([
+    "createRecordingFetch",
+    "createReplayFetch",
+    "loadFixtures",
+  ]);
 });
