@@ -19,6 +19,10 @@
     "./requests-solid": {
       "types": "./dist/requests-solid/index.d.ts",
       "default": "./dist/requests-solid/index.js"
+    },
+    "./roles": {
+      "types": "./dist/roles/index.d.ts",
+      "default": "./dist/roles/index.js"
     }
   },
   "files": [
