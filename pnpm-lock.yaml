@@ -4745,6 +4745,9 @@ importers:
       '@jeswr/solid-api-auth':
         specifier: workspace:*
         version: link:../solid-api-auth
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
