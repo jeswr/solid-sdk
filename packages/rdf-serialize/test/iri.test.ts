@@ -275,19 +275,22 @@ describe("safeIri — scheme-agnostic", () => {
 // isHttpIri
 // ---------------------------------------------------------------------------
 
-describe("isHttpIri — lexical safety predicate (not canonical equality)", () => {
+describe("isHttpIri — lexical safety predicate", () => {
   it("returns true for a clean absolute http/https IRI", () => {
     expect(isHttpIri("http://example.com/x")).toBe(true);
     expect(isHttpIri("https://example.com/x")).toBe(true);
   });
 
-  it("accepts non-canonical-but-safe values (does NOT require === safeHttpIri)", () => {
+  it("accepts safe lexical spellings also preserved by safeHttpIri", () => {
     // Missing trailing slash — raw-safe, accepted.
     expect(isHttpIri("http://example.com")).toBe(true);
     // Uppercase host — raw-safe, accepted.
     expect(isHttpIri("http://EXAMPLE.com/")).toBe(true);
     // Default :443 + host case — raw-safe, accepted.
     expect(isHttpIri("https://Example.COM:443/x")).toBe(true);
+    for (const iri of ["http://example.com", "http://EXAMPLE.com/", "https://Example.COM:443/x"]) {
+      expect(safeHttpIri(iri)).toBe(iri);
+    }
   });
 
   it("rejects authority-less and empty-authority forms (same lexical rule as safeHttpIri)", () => {

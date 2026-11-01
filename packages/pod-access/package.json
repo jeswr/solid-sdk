@@ -19,6 +19,10 @@
     "./notify": {
       "types": "./dist/notify.d.ts",
       "default": "./dist/notify.js"
+    },
+    "./roles": {
+      "types": "./dist/roles/index.d.ts",
+      "default": "./dist/roles/index.js"
     }
   },
   "files": [
@@ -41,7 +45,6 @@
     "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@jeswr/fetch-rdf": "workspace:*",
     "@types/n3": "1.26.1",
     "@vitest/coverage-v8": "^4.1.9"
   },
@@ -52,6 +55,7 @@
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
     "n3": "2.0.3",
+    "@jeswr/fetch-rdf": "workspace:*",
     "solid-agent-notify": "workspace:*"
   }
 }

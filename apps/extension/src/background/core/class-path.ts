@@ -17,3 +17,11 @@ export function safePathUrl(value: string): URL | null {
     return null;
   }
 }
+
+/** A confined resource must not gain query/fragment semantics, even empty components.
+ * URL.search/hash erase empty delimiters, so inspect the original IRI first. */
+export function safeTargetUrl(value: string): URL | null {
+  if (/[?#]/.test(value)) return null;
+  const url = safePathUrl(value);
+  return url && !url.username && !url.password ? url : null;
+}

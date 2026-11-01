@@ -53,7 +53,10 @@ percent signs (`%25`) remain supported.
 - Errors: `SolidHttpError`, `SolidPreconditionFailedError`, and the deprecated
   `SolidRedirectError` alias of `@jeswr/guarded-fetch`’s `RedirectRefusedError`.
 
-Container listings use `storage.listAll`, with local per-entry scope filtering. The local
+Container listings use `storage.listAll`, with local per-entry scope filtering. Members must be
+direct children of the container being listed, even when the driver's base is broader, so
+recursive prefix clear skips sibling resources and containers and never deletes outside the
+cleared prefix. Listings are parsed within fetch-rdf's default byte and quad budgets. The local
 `listContainer(containerUrl, base, fetchImpl)` compatibility wrapper keeps accepting fetch
 and returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually.
 Headers, recursion, key mapping and scope/redirect checks stay local. The fetch option creates

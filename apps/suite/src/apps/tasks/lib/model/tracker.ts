@@ -82,6 +82,26 @@ export class TaskTracker extends Tracker {
   get labels() {
     return this.readCategories("Label");
   }
+  /** Edit a class in place so existing task type IRIs remain stable. */
+  updateSection(id: string, change: { name?: string; position?: number }): void {
+    if (!this.sections.some((section) => section.id === id))
+      throw new TypeError("Unknown section.");
+    const section = node(id, this.dataset);
+    if (change.name !== undefined) {
+      requireTitle(change.name);
+      section.setText(`${NS.RDFS}label`, change.name);
+    }
+    if (change.position !== undefined) {
+      if (!Number.isFinite(change.position)) throw new TypeError("Invalid position.");
+      section.setNumber(`${SCHEMA}position`, change.position);
+    }
+  }
+  /** Remove only this tracker's section class; callers clear task references first. */
+  removeSection(id: string): void {
+    if (!this.sections.some((section) => section.id === id))
+      throw new TypeError("Unknown section.");
+    for (const quad of this.dataset.match(DataFactory.namedNode(id))) this.dataset.delete(quad);
+  }
   defineCategory(
     kind: "Section" | "Label",
     name: string,

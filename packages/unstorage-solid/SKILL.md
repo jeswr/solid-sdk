@@ -23,6 +23,11 @@ do not restore local protocol discovery or socket parsing. Deletes use observed 
 Do not invent an identity index: the existing fixed-name key layout refuses server-renamed
 LWS creates, and never deletes the unfamiliar returned URL.
 This package is security-critical: no guard may be loosened.
+The shared helper accepts only NamedNode descendants of the currently listed container,
+in addition to the driver-base guard. Prefix clear must never follow sibling resources or
+containers, including sibling cycles, or DELETE outside the cleared prefix.
+The helper streams listing bodies with a default 16 MiB byte limit and the parser's default
+quad limit. Preserve PARSE_LIMIT failures instead of treating them as empty listings.
 
 Merge driver defaults, then transaction headers, then SDK operation headers. Never let
 transaction headers replace generated `If-Match` / `If-None-Match` validators or explicit

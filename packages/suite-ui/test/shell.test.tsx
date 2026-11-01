@@ -39,16 +39,19 @@ function Frame({
   hasDetails = true,
   sidebarContent,
   detailsContent,
+  characterShortcuts,
 }: {
   initial?: ShellPreferences;
   hasDetails?: boolean;
   sidebarContent?: ReactNode;
   detailsContent?: ReactNode;
+  characterShortcuts?: boolean;
 }) {
   const [preferences, setPreferences] = useState(initial);
   return (
     <ShellFrame
       pageTitle="My Drive"
+      {...(characterShortcuts === undefined ? {} : { characterShortcuts })}
       topBar={{
         appName: "Drive",
         search: <input aria-label="Search" />,
@@ -196,6 +199,17 @@ describe("shell layout", () => {
     ).toBe("false");
     expect(screen.queryByRole("complementary")).toBeNull();
     await accessible();
+  });
+  it("ignores brackets and stops advertising them when character shortcuts are off", () => {
+    render(<Frame characterShortcuts={false} />);
+    fireEvent.keyDown(document.body, { key: "[" });
+    fireEvent.keyDown(document.body, { key: "]" });
+    expect(screen.getByRole("navigation", { name: "Drive sections" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Budget" })).toBeTruthy();
+    for (const name of ["Toggle sidebar", "Toggle details pane"])
+      expect(screen.getByRole("button", { name }).hasAttribute("aria-keyshortcuts")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(screen.queryByRole("navigation", { name: "Drive sections" })).toBeNull();
   });
   it("keeps brackets in input, textarea, contenteditable, modified keys and consumed events", () => {
     render(<Frame />);
