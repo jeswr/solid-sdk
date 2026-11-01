@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
@@ -144,9 +143,8 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       const fetcher = offPodProfile ? transport : scopedFetch({ ...config, fetch: transport });
       const response = await fetcher(target, {
         method: "GET",
-        // The CLI transport validates and anonymizes every off-pod profile hop.
-        // Other injected fetches retain manual redirects; in-pod reads use the scoped loop.
-        redirect: offPodProfile && handlesProfileRedirects(config.fetch) ? "follow" : "manual",
+        // Follow through the scoped loop, or the CLI's validated anonymous profile loop.
+        redirect: !offPodProfile || handlesProfileRedirects(config.fetch) ? "follow" : "manual",
         // Generic reads preserve the server's default representation.
         headers: options.accept === undefined ? undefined : { accept: options.accept },
       });

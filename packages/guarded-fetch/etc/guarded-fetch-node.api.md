@@ -18,6 +18,9 @@ export type ConnectLookup = (hostname: string, options: {
 export function createNodeGuardedFetch(options?: NodePinningOptions): typeof globalThis.fetch;
 
 // @public
+export function createPinningDispatcher(options?: PinningDispatcherOptions): Agent;
+
+// @public
 export function createPinningDispatcher(options?: NodePinningOptions): Agent;
 
 // @public
@@ -48,6 +51,13 @@ export const nodeGuardedFetch: typeof globalThis.fetch;
 
 // @public
 export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinningFetch" | "dnsLookup"> {
+    readonly allowLoopback?: boolean;
+    readonly ca?: string | Buffer | Array<string | Buffer>;
+    readonly resolveAll?: ResolveAll;
+}
+
+// @public
+export interface PinningDispatcherOptions {
     readonly allowLoopback?: boolean;
     readonly ca?: string | Buffer | Array<string | Buffer>;
     readonly resolveAll?: ResolveAll;

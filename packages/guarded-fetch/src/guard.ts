@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The SSRF / DNS-rebinding guard POLICY CORE — the small, reviewed custom code over the
  * mechanical IP primitive in `./addresses.ts`. Browser-safe by default: this module has NO
@@ -45,11 +46,14 @@
  */
 import { classifyIpLiteral, isLoopbackAddress, isPublicAddress } from "./addresses.js";
 import {
+  cancelBody,
   isRedirect,
   normalizeRequest,
   rewriteInitForRedirect,
   safeProtocol,
   sameOrigin,
+  sanitizeUrl,
+  validateLimit,
 } from "./redirect.js";
 
 /** Raised when the guard refuses a URL / redirect / oversize body on SSRF grounds. */
@@ -218,9 +222,7 @@ async function loadNodeDnsLookup(): Promise<DnsLookup> {
   try {
     mod = (await import(/* @vite-ignore */ NODE_DNS_SPECIFIER)) as typeof mod;
   } catch (cause) {
-    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`, {
-      cause,
-    });
+    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`);
   }
   return (host: string) => mod.lookup(host, { all: true });
 }
@@ -229,7 +231,9 @@ async function loadNodeDnsLookup(): Promise<DnsLookup> {
  * Build a `fetch`-shaped guarded fetcher bound to the given options. The returned function
  * has the `typeof globalThis.fetch` signature so it threads straight into any consumer that
  * takes an injectable fetch (a `@jeswr/fetch-rdf` parse, an LDN POST, …). The guard validates
- * the URL + every redirect hop, caps the body, and bounds the time.
+ * the URL + every redirect hop, caps the body, and bounds the time. The captured Request/init
+ * redirect mode is honoured: `follow` (default) re-validates each hop, `manual` finalises
+ * and returns the first redirect, and `error` cancels it and throws {@link SsrfError}.
  */
 export function createGuardedFetch(options: GuardOptions = {}): typeof globalThis.fetch {
   const guard = new SsrfGuard(options);
@@ -327,9 +331,17 @@ class SsrfGuard {
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
     this.injectedLookup = options.dnsLookup === null ? undefined : (options.dnsLookup ?? undefined);
     this.usingDefaultNodeLookup = options.dnsLookup === undefined && hasNodeDns();
-    this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+    const {
+      maxBytes = DEFAULT_MAX_BYTES,
+      timeoutMs = DEFAULT_TIMEOUT_MS,
+      maxRedirects = DEFAULT_MAX_REDIRECTS,
+    } = options;
+    this.maxBytes = maxBytes;
+    this.timeoutMs = timeoutMs;
+    this.maxRedirects = maxRedirects;
+    validateLimit("maxBytes", this.maxBytes, true);
+    validateLimit("maxRedirects", this.maxRedirects, true);
+    validateLimit("timeoutMs", this.timeoutMs, false);
     this.allowLoopback = options.allowLoopback ?? false;
     this.allowUnresolvedHosts = options.allowUnresolvedHosts ?? false;
     this.requireDnsPinning = options.requireDnsPinning ?? false;
@@ -355,6 +367,13 @@ class SsrfGuard {
     }
     try {
       return await this.fetchGuarded(startUrl, effectiveInit, controller);
+    } catch (error) {
+      controller.abort();
+      // Early abort/DNS refusal can bypass the transport that normally cancels the upload.
+      if (effectiveInit?.body instanceof ReadableStream) {
+        void effectiveInit.body.cancel().catch(() => {});
+      }
+      throw error;
     } finally {
       clearTimeout(timer);
       callerSignal?.removeEventListener("abort", onCallerAbort);
@@ -368,14 +387,18 @@ class SsrfGuard {
   ): Promise<Response> {
     let currentUrl = startUrl;
     let currentInit: RequestInit = { ...(init ?? {}) };
+    const redirectMode = init?.redirect ?? "follow";
     let prevWasHttps = false;
     const seen = new Set<string>();
     for (let hop = 0; hop <= this.maxRedirects; hop += 1) {
       if (seen.has(currentUrl)) {
-        throw new SsrfError(`Redirect loop detected at ${currentUrl}.`);
+        throw new SsrfError(`Redirect loop detected at ${sanitizeUrl(currentUrl)}.`);
       }
       seen.add(currentUrl);
-      await this.assertAllowed(currentUrl, prevWasHttps);
+      this.throwIfAborted(currentUrl, controller);
+      await this.waitFor(this.assertAllowed(currentUrl, prevWasHttps), currentUrl, controller);
+      // A late DNS result must never start a transport after the deadline/caller abort.
+      this.throwIfAborted(currentUrl, controller);
 
       const dispatchInit = {
         ...currentInit,
@@ -388,43 +411,69 @@ class SsrfGuard {
       try {
         res = await this.fetcher(currentUrl, dispatchInit);
       } catch (cause) {
+        // Raw errors can retain secret-bearing URLs in their stack, cause or custom fields.
+        // Keep only the sanitised diagnostic in our message, including on timeout.
         if (controller.signal.aborted) {
-          throw new SsrfError(`Fetch timed out for ${currentUrl} (${this.timeoutMs}ms).`, {
-            cause,
-          });
+          throw new SsrfError(
+            `Fetch timed out for ${sanitizeUrl(currentUrl)} (${this.timeoutMs}ms).`,
+          );
         }
-        throw new SsrfError(`Fetch failed for ${currentUrl}: ${message(cause)}`, { cause });
+        throw new SsrfError(`Fetch failed for ${sanitizeUrl(currentUrl)}: ${message(cause)}`);
       }
 
-      if (!isRedirect(res.status)) {
+      if (!isRedirect(res.status) || redirectMode === "manual") {
         return await this.finalize(res, currentUrl, controller);
       }
 
-      const location = res.headers.get("location");
-      if (!location) {
-        // A 3xx with no Location is not followable — return it as-is (finalised).
-        return await this.finalize(res, currentUrl, controller);
-      }
-      let nextUrl: string;
       try {
-        nextUrl = new URL(location, currentUrl).toString();
-      } catch {
-        throw new SsrfError(`Redirect to a malformed Location (${location}) from ${currentUrl}.`);
+        if (redirectMode === "error") {
+          throw new SsrfError(
+            `Redirect refused for ${sanitizeUrl(currentUrl)} (redirect mode "error").`,
+          );
+        }
+        const location = res.headers.get("location");
+        if (!location) {
+          // A 3xx with no Location is not followable — return it as-is (finalised).
+          return await this.finalize(res, currentUrl, controller);
+        }
+        let nextUrl: string;
+        try {
+          nextUrl = new URL(location, currentUrl).toString();
+        } catch {
+          throw new SsrfError(`Redirect to a malformed Location from ${sanitizeUrl(currentUrl)}.`);
+        }
+        currentInit = rewriteInitForRedirect(
+          currentInit,
+          res.status,
+          !sameOrigin(currentUrl, nextUrl),
+        );
+        prevWasHttps = safeProtocol(currentUrl) === "https:";
+        currentUrl = nextUrl;
+      } finally {
+        cancelBody(res);
       }
-      currentInit = rewriteInitForRedirect(
-        currentInit,
-        res.status,
-        !sameOrigin(currentUrl, nextUrl),
-      );
-      try {
-        await res.body?.cancel();
-      } catch {
-        // Body already consumed/closed — fine.
-      }
-      prevWasHttps = safeProtocol(currentUrl) === "https:";
-      currentUrl = nextUrl;
     }
-    throw new SsrfError(`Too many redirects (> ${this.maxRedirects}) starting from ${startUrl}.`);
+    throw new SsrfError(
+      `Too many redirects (> ${this.maxRedirects}) starting from ${sanitizeUrl(startUrl)}.`,
+    );
+  }
+
+  private throwIfAborted(url: string, controller: AbortController): void {
+    if (controller.signal.aborted) {
+      throw new SsrfError(`Fetch timed out for ${sanitizeUrl(url)} (${this.timeoutMs}ms).`);
+    }
+  }
+
+  /** Bound DNS and body reads even if the injected resolver/stream ignores abort. */
+  private waitFor<T>(work: Promise<T>, url: string, controller: AbortController): Promise<T> {
+    const signal = controller.signal;
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () =>
+        reject(new SsrfError(`Fetch timed out for ${sanitizeUrl(url)} (${this.timeoutMs}ms).`));
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+      work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    });
   }
 
   /** Enforce the content-type allowlist (when configured) then cap the body. */
@@ -433,23 +482,23 @@ class SsrfGuard {
     url: string,
     controller: AbortController,
   ): Promise<Response> {
-    if (this.allowedContentTypes && isBodyBearingStatus(res.status)) {
-      const contentType = (res.headers.get("content-type") ?? "")
-        .split(";")[0]
-        ?.trim()
-        .toLowerCase();
-      if (!contentType || !this.allowedContentTypes.includes(contentType)) {
-        try {
-          await res.body?.cancel();
-        } catch {
-          // already consumed — fine
+    try {
+      if (this.allowedContentTypes && isBodyBearingStatus(res.status)) {
+        const contentType = (res.headers.get("content-type") ?? "")
+          .split(";")[0]
+          ?.trim()
+          .toLowerCase();
+        if (!contentType || !this.allowedContentTypes.includes(contentType)) {
+          throw new GuardError(
+            `Disallowed content-type "${contentType || "(none)"}" for ${sanitizeUrl(url)}; expected one of ${this.allowedContentTypes.join(", ")}.`,
+          );
         }
-        throw new GuardError(
-          `Disallowed content-type "${contentType || "(none)"}" for ${url}; expected one of ${this.allowedContentTypes.join(", ")}.`,
-        );
       }
+      return await this.capBody(res, url, controller);
+    } catch (error) {
+      cancelBody(res);
+      throw error;
     }
-    return await this.capBody(res, url, controller);
   }
 
   private async capBody(
@@ -461,7 +510,7 @@ class SsrfGuard {
     if (!Number.isNaN(declared) && declared > this.maxBytes) {
       controller.abort();
       throw new SsrfError(
-        `Response body for ${url} exceeds cap (Content-Length ${declared} > ${this.maxBytes}).`,
+        `Response body for ${sanitizeUrl(url)} exceeds cap (Content-Length ${declared} > ${this.maxBytes}).`,
       );
     }
     const bytes = await this.readCapped(res, url, controller);
@@ -494,7 +543,7 @@ class SsrfGuard {
     let total = 0;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await this.waitFor(reader.read(), url, controller);
         if (done) {
           break;
         }
@@ -503,12 +552,15 @@ class SsrfGuard {
           if (total > this.maxBytes) {
             controller.abort();
             throw new SsrfError(
-              `Response body for ${url} exceeds cap (${total} bytes > ${this.maxBytes}).`,
+              `Response body for ${sanitizeUrl(url)} exceeds cap (${total} bytes > ${this.maxBytes}).`,
             );
           }
           chunks.push(value);
         }
       }
+    } catch (error) {
+      void reader.cancel().catch(() => {});
+      throw error;
     } finally {
       try {
         reader.releaseLock();
@@ -535,12 +587,10 @@ class SsrfGuard {
     try {
       url = new URL(rawUrl);
     } catch {
-      throw new SsrfError(`URL is malformed: ${rawUrl}.`);
+      throw new SsrfError("URL is malformed (expected an absolute http(s) URL).");
     }
     if (url.protocol !== "https:" && url.protocol !== "http:") {
-      throw new SsrfError(
-        `URL must be https: (got ${url.protocol} for ${rawUrl}). Only http(s) is fetched.`,
-      );
+      throw new SsrfError(`URL must be https: (got a non-http(s) URL). Only http(s) is fetched.`);
     }
     if (url.protocol === "http:" && !this.allowLoopback) {
       throw new SsrfError(
@@ -592,7 +642,7 @@ class SsrfGuard {
           this.assertDnslessHostnameAllowed(url.protocol, hostname);
           return;
         }
-        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`, { cause });
+        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`);
       }
     } else {
       this.assertDnslessHostnameAllowed(url.protocol, hostname);
@@ -612,7 +662,7 @@ class SsrfGuard {
     try {
       resolved = await lookup(hostname);
     } catch (cause) {
-      throw new SsrfError(`Host did not resolve: ${hostname}: ${message(cause)}`, { cause });
+      throw new SsrfError(`Host did not resolve: ${hostname}: ${message(cause)}`);
     }
     if (resolved.length === 0) {
       throw new SsrfError(`Host resolved to no addresses: ${hostname}.`);
@@ -769,6 +819,37 @@ function isBrowserContext(): boolean {
   );
 }
 
+/**
+ * Redact every URL-like token. Transport errors embed URLs in many malformed spellings
+ * (no slashes, spaces inside the authority, relative paths), so rather than parse them,
+ * any whitespace-separated token containing ':', '/', '\\', '?', '#' or '@' is replaced,
+ * except a plain word ending in one colon ("RequestInit:", "loopback-only:"); a message
+ * containing any quote is replaced entirely.
+ */
+function safeText(text: string): string {
+  // A message that quotes anything (e.g. Headers.append echoing an invalid header value,
+  // which may itself contain quotes and a wrapped credential) is replaced entirely.
+  if (/["'`]/.test(text)) return "(diagnostic redacted)";
+  return text.replace(/\S+/g, (token) =>
+    /[:/\\?#@]/.test(token) && !/^[\w.-]+:$/.test(token) ? "(redacted)" : token,
+  );
+}
+
 function message(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  const diagnostics: string[] = [];
+  const seen = new Set<unknown>();
+  // Undici nests connection refusals under a generic "fetch failed". Retain only safe
+  // prose and error codes, with bounded traversal for cyclic/deep transport causes.
+  for (let current = cause; !seen.has(current) && diagnostics.length < 8; ) {
+    seen.add(current);
+    const text = safeText(current instanceof Error ? current.message : String(current));
+    const code = (current as { code?: unknown } | null)?.code;
+    const part = [text, typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code) ? code : ""]
+      .filter(Boolean)
+      .join(" ");
+    if (part) diagnostics.push(part);
+    if (!(current instanceof Error) || current.cause === undefined) break;
+    current = current.cause;
+  }
+  return diagnostics.length > 0 ? diagnostics.join(": ") : "transport error";
 }
