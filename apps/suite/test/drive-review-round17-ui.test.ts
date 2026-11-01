@@ -90,6 +90,24 @@ function button(label: string, scope: ParentNode = document) {
 function rows(host: Element) {
   return [...host.querySelectorAll<HTMLElement>("[data-url]")];
 }
+async function openTrash(newerB: boolean) {
+  const view = await setup();
+  await act(async () => {
+    const items = (await drive.client.list(ROOT)).toSorted((a, b) => a.name.localeCompare(b.name));
+    const now = new Date();
+    if (newerB) {
+      for (const [index, item] of items.entries())
+        await operations.trashItems(drive.client, ROOT, [item], {
+          now: new Date(now.getTime() - (items.length - index) * 1000),
+        });
+    } else await operations.trashItems(drive.client, ROOT, items, { now });
+  });
+  await view.render(tree(h(TrashView)));
+  // Trash intentionally sorts newest first. Exercise A's action while B is
+  // first, without depending on whether two real clock reads cross a millisecond.
+  if (newerB) expect(rows(view.host)[0]?.querySelector(".drv-name")?.textContent).toBe("B.txt");
+  return view;
+}
 async function focus(element: HTMLElement) {
   await act(async () => element.focus());
   expect(document.activeElement).toBe(element);
@@ -98,6 +116,16 @@ async function activate(element: HTMLElement) {
   await focus(element);
   await click(element);
 }
+async function waitForRemoval(element: HTMLElement, expectedFocus: Element) {
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(element.isConnected).toBe(false);
+      expect(document.activeElement).toBe(expectedFocus);
+    },
+    { timeout: 10_000 },
+  );
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -105,20 +133,18 @@ afterEach(() => {
 });
 
 it.each([
-  ["delete", "row", "operation"],
-  ["delete", "toolbar", "operation"],
-  ["delete", "empty-trash", "operation"],
-  ["restore", "row", "operation"],
-  ["restore", "toolbar", "operation"],
-  ["delete", "row", "listing"],
-  ["restore", "row", "listing"],
-] as const)("Trash %s from %s preserves Search focus while awaiting %s", async (action, source, delay) => {
-  const view = await setup();
-  await act(async () => {
-    await operations.trashItems(drive.client, ROOT, await drive.client.list(ROOT));
-  });
-  await view.render(tree(h(TrashView)));
-  const removed = rows(view.host)[0] as HTMLElement;
+  ["delete", "row", "operation", false],
+  ["delete", "toolbar", "operation", false],
+  ["delete", "empty-trash", "operation", false],
+  ["restore", "row", "operation", false],
+  ["restore", "toolbar", "operation", false],
+  ["delete", "row", "listing", false],
+  ["restore", "row", "listing", false],
+  ["delete", "row", "operation", true],
+  ["restore", "row", "operation", true],
+] as const)("Trash %s from %s preserves Search focus while awaiting %s (newer B: %s)", async (action, source, delay, newerB) => {
+  const view = await openTrash(newerB);
+  const removed = button("Restore: A.txt", view.host).closest("tr") as HTMLElement;
   if (source === "toolbar") await click(removed.querySelector("input") as Element);
   const label = action === "delete" ? "Delete for ever" : "Restore";
   const trigger = button(
@@ -128,11 +154,17 @@ it.each([
   const pending = deferred<void>();
   const listing = deferred<void>();
   const list = operations.listTrash;
-  if (delay === "listing")
-    vi.spyOn(operations, "listTrash").mockImplementation(async (...args) => {
-      await listing.promise;
+  const listings = new Set<ReturnType<typeof list>>();
+  vi.spyOn(operations, "listTrash").mockImplementation((...args) => {
+    const flight = (async () => {
+      if (delay === "listing") await listing.promise;
       return list(...args);
-    });
+    })();
+    listings.add(flight);
+    const settled = () => listings.delete(flight);
+    void flight.then(settled, settled);
+    return flight;
+  });
   const remove = operations.deleteForever;
   const restore = operations.restoreItems;
   const mutation =
@@ -147,38 +179,43 @@ it.each([
         });
   await activate(trigger);
   if (action === "delete") {
+    const returnedFocus = deferred<void>();
+    trigger.addEventListener("focus", () => returnedFocus.resolve(), { once: true });
     await activate(
       button(
         source === "empty-trash" ? "Empty trash" : label,
         document.querySelector('[role="alertdialog"]') as Element,
       ),
     );
+    // Radix restores focus from a scheduled close callback. Observe that
+    // lifecycle event, independent of the runner's polling/time budget.
+    await returnedFocus.promise;
+    expect(document.activeElement).toBe(trigger);
     await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 10_000 });
   }
-  if (delay === "listing")
-    await act(async () => {
-      pending.resolve();
-      await mutation.mock.results[0]?.value;
-    });
   const search = view.host.querySelector<HTMLInputElement>(
     'input[type="search"]',
   ) as HTMLInputElement;
-  await focus(search);
   await act(async () => {
-    pending.resolve();
-    const result = await mutation.mock.results[0]?.value;
-    listing.resolve();
-    expect(result?.failed).toEqual([]);
+    try {
+      if (delay === "listing") {
+        pending.resolve();
+        const result = await mutation.mock.results[0]?.value;
+        expect(result?.failed).toEqual([]);
+      }
+      search.focus();
+      expect(document.activeElement).toBe(search);
+      pending.resolve();
+      const result = await mutation.mock.results[0]?.value;
+      expect(result?.failed).toEqual([]);
+    } finally {
+      // Release the deliberate listing gate before asking React to drain work.
+      // Otherwise act can wait for the very listing this test is still holding.
+      listing.resolve();
+    }
+    while (listings.size) await Promise.all([...listings]);
   });
-  // The real in-memory operation runs every access and delete check; allow CI load.
-  await vi.waitFor(
-    async () => {
-      await act(async () => {});
-      expect(removed.isConnected).toBe(false);
-    },
-    { timeout: 10_000 },
-  );
-  expect(document.activeElement).toBe(search);
+  await waitForRemoval(removed, search);
 });
 
 it.each([
@@ -278,15 +315,14 @@ it("Details pane close preserves focus moved elsewhere before removal commits", 
 });
 
 it.each([
-  "row",
-  "toolbar",
-])("Trash restore from %s replaces focus displaced by removal", async (source) => {
-  const view = await setup();
-  await act(async () => {
-    await operations.trashItems(drive.client, ROOT, await drive.client.list(ROOT));
-  });
-  await view.render(tree(h(TrashView)));
-  const [removed, next] = rows(view.host) as [HTMLElement, HTMLElement];
+  ["row", false],
+  ["toolbar", false],
+  ["row", true],
+  ["toolbar", true],
+] as const)("Trash restore from %s replaces focus displaced by removal (newer B: %s)", async (source, newerB) => {
+  const view = await openTrash(newerB);
+  const removed = button("Restore: A.txt", view.host).closest("tr") as HTMLElement;
+  const next = rows(view.host).find((row) => row !== removed) as HTMLElement;
   if (source === "toolbar") await click(removed.querySelector("input") as Element);
   const pending = deferred<void>();
   const restore = operations.restoreItems;
@@ -299,11 +335,5 @@ it.each([
     pending.resolve();
     await mutation.mock.results[0]?.value;
   });
-  await vi.waitFor(
-    () => {
-      expect(removed.isConnected).toBe(false);
-      expect(document.activeElement).toBe(next);
-    },
-    { timeout: 10_000 },
-  );
+  await waitForRemoval(removed, next);
 });

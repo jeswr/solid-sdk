@@ -453,3 +453,15 @@ it.each([
   });
   expect(document.querySelector('.meta')?.textContent).toContain(summary);
 });
+
+it('shows truncation from the resolver while retaining the discovered scope', async () => {
+  const initial = view();
+  const { document } = await mount({
+    ...initial,
+    classes: [{ ...initial.classes[0], truncated: true }],
+  });
+  expect(document.querySelector('.class-item')?.textContent).toContain(
+    'Some data could not be checked',
+  );
+  expect(document.querySelector('.targets')?.textContent).toBe('https://pod.example/1/private');
+});

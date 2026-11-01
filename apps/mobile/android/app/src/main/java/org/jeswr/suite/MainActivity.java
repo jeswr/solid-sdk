@@ -1,10 +1,13 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import android.os.Bundle;
 import android.view.Gravity;
 import android.webkit.WebView;
 import android.widget.TextView;
+import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 import com.getcapacitor.BridgeActivity;
 import java.io.ByteArrayInputStream;
@@ -22,8 +25,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(SuiteAuthSessionPlugin.class);
+        registerPlugin(SuitePushPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
+        registerPlugin(SuiteSecureStorePlugin.class);
         super.onCreate(savedInstanceState);
     }
 
@@ -43,6 +48,20 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         bridge.setWebViewClient(new SuiteWebViewClient(bridge));
+        webView.stopLoading();
+        // Reinstall Capacitor's listener with synchronous secure-store admission. Its inherited
+        // listener checks the main frame and WebView enforces these exact-origin rules before
+        // SuiteMessageHandler.postMessage can take a ticket or dispatch any plugin invocation.
+        try {
+            if (NavigationPolicy.origin(bridge.getServerUrl()) == null) throw new IllegalStateException("Missing suite origin");
+            WebViewCompat.removeWebMessageListener(webView, "androidBridge");
+            bridge.getAllowedOriginRules().clear();
+            bridge.getAllowedOriginRules().add(bridge.getServerUrl());
+            new SuiteMessageHandler(bridge, webView);
+        } catch (RuntimeException e) {
+            refuse();
+            return;
+        }
         // Capacitor's cookie and HTTP plugins install JavascriptInterfaces for every frame whatever
         // their config, and its bridge falls back to an "androidBridge" interface if registering the
         // origin-scoped web message listener throws. Remove all three and restart the first load so

@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
-import { describe, expect, it } from 'vitest';
+// AUTHORED-BY Codex GPT-6
+import { describe, expect, it, vi } from 'vitest';
 import { createDpopProof } from '../src/background/core/dpop';
 import { ProfileStore } from '../src/background/core/profile-store';
 import { ProfileDb } from '../src/background/profile-db';
@@ -12,6 +13,9 @@ function fixtureIdb() {
   let abortNext = false;
   let failRead = false;
   let closed = 0;
+  let beforeCommit: (() => void) | undefined;
+  let afterCommit: (() => void) | undefined;
+  const abortTransaction = vi.fn();
   const db = {
     createObjectStore: (name: string) => stores.set(name, new Map()),
     close: () => closed++,
@@ -24,6 +28,12 @@ function fixtureIdb() {
         onerror: null as (() => void) | null,
         onabort: null as (() => void) | null,
         error: new Error('fixture transaction aborted'),
+        abort: () => {
+          abortTransaction();
+          if (settled) throw new DOMException('Already committed', 'InvalidStateError');
+          settled = true;
+          queueMicrotask(() => tx.onabort?.());
+        },
         objectStore: (name: string) => {
           const backing = snapshot.get(name)!;
           const req = <T>(op: () => T) => {
@@ -43,6 +53,8 @@ function fixtureIdb() {
               pending--;
               queueMicrotask(() => {
                 if (pending !== 0 || settled) return;
+                if (mode === 'readwrite') beforeCommit?.();
+                if (settled) return;
                 settled = true;
                 if (abortNext) {
                   abortNext = false;
@@ -50,6 +62,7 @@ function fixtureIdb() {
                 } else {
                   if (mode === 'readwrite')
                     for (const [key, value] of snapshot) stores.set(key, value);
+                  if (mode === 'readwrite') afterCommit?.();
                   tx.oncomplete?.();
                 }
               });
@@ -92,6 +105,13 @@ function fixtureIdb() {
   return {
     factory,
     stores,
+    abortTransaction,
+    onBeforeCommit: (hook: () => void) => {
+      beforeCommit = hook;
+    },
+    onAfterCommit: (hook: () => void) => {
+      afterCommit = hook;
+    },
     abort: () => {
       abortNext = true;
     },
@@ -137,6 +157,23 @@ describe('ProfileDb IndexedDB adapter', () => {
     expect(await db.read()).toEqual(before);
     fixture.readError();
     await expect(db.read()).rejects.toThrow('read failed');
+  });
+
+  it.each([
+    'before',
+    'during',
+    'after',
+  ] as const)('rejects cancellation %s the transaction; aborts pending writes and preserves committed chains', async (phase) => {
+    const fixture = fixtureIdb();
+    const db = await ProfileDb.open(fixture.factory);
+    const before = await db.read();
+    const controller = new AbortController();
+    if (phase === 'before') controller.abort();
+    if (phase === 'during') fixture.onBeforeCommit(() => controller.abort());
+    if (phase === 'after') fixture.onAfterCommit(() => controller.abort());
+    await expect(db.write({ ...before, migrated: true }, controller.signal)).rejects.toThrow();
+    expect(fixture.abortTransaction).toHaveBeenCalledTimes(phase === 'before' ? 0 : 1);
+    expect((await db.read()).migrated).toBe(phase === 'after');
   });
 
   it('fails closed when IndexedDB is unavailable or opening fails', async () => {

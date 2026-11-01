@@ -1,0 +1,338 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.con-app {
+  padding: 24px;
+  min-width: 0;
+}
+.con-hidden {
+  display: none;
+}
+.con-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 12px;
+}
+.con-sidebar nav {
+  display: grid;
+  gap: 4px;
+}
+.con-sidebar h2 {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin: 12px 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.con-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.con-nav-link[aria-current="page"] {
+  background: var(--app-contacts-soft);
+  color: var(--app-contacts);
+}
+.con-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.con-label-row {
+  display: flex;
+  position: relative;
+  align-items: center;
+}
+.con-label-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: var(--shadow-md);
+  display: grid;
+}
+.con-label-form {
+  display: grid;
+  gap: 8px;
+}
+.con-label-form input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 8px;
+  border-radius: 6px;
+  width: 100%;
+}
+.con-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.con-icon:hover {
+  background: var(--app-contacts-soft);
+}
+.con-icon[aria-pressed="true"] {
+  color: var(--app-contacts);
+}
+.con-app :focus-visible,
+.con-detail :focus-visible,
+.con-sidebar :focus-visible {
+  outline: 2px solid var(--app-contacts);
+  outline-offset: 2px;
+}
+.con-migration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--app-contacts-soft);
+  font-size: 13px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.con-migration p {
+  margin: 0;
+  flex: 1 1 180px;
+}
+.con-list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.con-list-heading h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+.con-list-heading [role="status"] {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.con-save {
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.con-table {
+  position: relative;
+  --row-h: 64px;
+}
+.con-table .suite-collection-toolbar,
+.con-table tr > :first-child {
+  display: none;
+}
+.con-table tr {
+  /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+  grid-template-columns: minmax(200px, 1.5fr) minmax(150px, 1fr) 140px 120px 56px !important;
+}
+.con-table table {
+  /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+  min-width: 720px !important;
+  width: 100%;
+}
+.con-table .suite-column-resize {
+  display: none;
+}
+.con-table .suite-table-viewport {
+  max-height: calc(100dvh - 250px);
+}
+.con-person {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+.con-person-text {
+  min-width: 0;
+  display: grid;
+}
+.con-name {
+  padding: 4px 0;
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.con-section-letter {
+  width: 16px;
+  flex: 0 0 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+.con-avatar {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.con-avatar [data-slot="avatar-fallback"] {
+  font-size: 12px;
+  font-weight: 600;
+}
+.con-avatar-large {
+  width: 80px;
+  height: 80px;
+  margin: auto;
+}
+.con-avatar-large [data-slot="avatar-fallback"] {
+  font-size: 28px;
+}
+.con-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.con-mobile-point,
+.con-sticky-letter {
+  display: none;
+}
+.con-app mark {
+  background: var(--app-contacts-soft);
+  color: var(--foreground);
+  border-radius: 2px;
+  font-weight: 700;
+}
+.con-detail {
+  padding: 20px;
+  overflow-wrap: anywhere;
+}
+.con-detail-header {
+  text-align: center;
+  margin: 24px 0 16px;
+}
+.con-detail-header h2 {
+  font-size: 24px;
+  margin: 16px 0 4px;
+}
+.con-detail-header p {
+  color: var(--muted-foreground);
+  margin: 0;
+}
+.con-detail-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.con-contact-points {
+  display: grid;
+  gap: 4px;
+}
+.con-contact-points a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  color: var(--foreground);
+  font-size: 14px;
+  text-decoration: none;
+}
+.con-contact-points a:hover {
+  text-decoration: underline;
+}
+.con-contact-points svg {
+  flex-shrink: 0;
+  color: var(--app-contacts);
+}
+.con-note {
+  padding: 16px 0;
+  font-size: 14px;
+}
+.con-note h3 {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.con-note p {
+  white-space: pre-wrap;
+}
+@media (min-width: 1024px) {
+  :where(.ish-frame[data-app="contacts"][data-has-details]) .con-table tr {
+    /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+    grid-template-columns: minmax(180px, 1fr) 48px !important;
+  }
+  :where(.ish-frame[data-app="contacts"][data-has-details]) .con-table tr > :nth-child(3),
+  :where(.ish-frame[data-app="contacts"][data-has-details]) .con-table tr > :nth-child(4),
+  :where(.ish-frame[data-app="contacts"][data-has-details]) .con-table tr > :nth-child(5) {
+    display: none;
+  }
+  :where(.ish-frame[data-app="contacts"][data-has-details]) .con-table table {
+    /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+    min-width: 0 !important;
+  }
+}
+@media (max-width: 639px) {
+  .con-app {
+    padding: 12px;
+  }
+  .con-table table {
+    /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+    min-width: 0 !important;
+  }
+  .con-table tr {
+    /* biome-ignore lint/complexity/noImportantStyles: Overrides DataTable inline widths for the responsive Contacts layout. */
+    grid-template-columns: minmax(0, 1fr) 44px !important;
+  }
+  .con-table tr > :last-child {
+    padding: 0;
+    justify-content: center;
+  }
+  .con-section-letter {
+    display: none;
+  }
+  .con-table tr > :nth-child(3),
+  .con-table tr > :nth-child(4),
+  .con-table tr > :nth-child(5) {
+    display: none;
+  }
+  .con-mobile-point {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .con-table .suite-table-viewport {
+    max-height: calc(100dvh - 280px);
+  }
+  .con-table th {
+    visibility: hidden;
+  }
+  .con-sticky-letter {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 12px;
+    z-index: 3;
+    height: 36px;
+    padding: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    pointer-events: none;
+    color: var(--app-contacts);
+  }
+  .con-detail {
+    padding: 8px;
+  }
+}

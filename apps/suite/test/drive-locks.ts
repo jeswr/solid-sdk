@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { clearTimeout, setTimeout } from "node:timers";
 
 /** Browser-style exclusive, non-re-entrant FIFO locks; queued deadlocks fail promptly. */

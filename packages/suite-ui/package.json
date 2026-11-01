@@ -13,6 +13,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./tokens": {
+      "types": "./dist/tokens.d.ts",
+      "import": "./dist/tokens.js"
+    },
     "./fonts": {
       "types": "./dist/fonts.d.ts",
       "import": "./dist/fonts.js"
@@ -38,6 +42,11 @@
       "import": "./dist/shell/index.js"
     },
     "./styles/shell.css": "./dist/styles/shell.css",
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js"
+    },
+    "./styles/sync.css": "./dist/styles/sync.css",
     "./sign-in": {
       "types": "./dist/sign-in/index.d.ts",
       "import": "./dist/sign-in/index.js"

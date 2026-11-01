@@ -87,8 +87,19 @@ class InboxAgent extends TermWrapper {
  */
 export function noFollowFetch(fetchImpl?: typeof fetch): typeof fetch {
   const base = fetchImpl ?? fetch;
-  return ((input: RequestInfo | URL, init?: RequestInit) =>
-    base(input, { ...init, redirect: "manual" })) as typeof fetch;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await base(input, { ...init, redirect: "manual" });
+    // RDF readers may implement their own GET redirect loop. Refuse here so
+    // a returned 3xx cannot bypass this policy. The notification POST handles
+    // its own 3xx response and retains its typed NotificationSendError.
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if ((method === "GET" || method === "HEAD") &&
+      (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error("Discovery redirect refused.");
+    }
+    return response;
+  }) as typeof fetch;
 }
 
 /**

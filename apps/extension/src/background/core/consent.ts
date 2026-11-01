@@ -27,6 +27,7 @@ export interface ConsentClass {
   readonly targets: readonly PinnedTarget[];
   /** The shape IRI the class resolved through (design anchor), or `null` (type-index rung). */
   readonly shape: string | null;
+  readonly truncated?: boolean;
 }
 
 /** A pending consent request awaiting the user's decision in the consent window. */
@@ -55,7 +56,10 @@ export function buildPendingConsent(
     readonly purpose: string | null;
     readonly expiresAt: number;
   },
-  resolved: ReadonlyMap<string, { targets: readonly PinnedTarget[]; shape?: string | null }>,
+  resolved: ReadonlyMap<
+    string,
+    { targets: readonly PinnedTarget[]; shape?: string | null; truncated?: boolean }
+  >,
   createdAt: number,
 ): PendingConsent {
   const classes: ConsentClass[] = spec.classes.map((dataClass) => {
@@ -67,6 +71,7 @@ export function buildPendingConsent(
       expiresAt: spec.expiresAt,
       targets: r?.targets ?? [],
       shape: r?.shape ?? null,
+      ...(r?.truncated ? { truncated: true } : {}),
     };
   });
   return { consentId, origin, webId, createdAt, classes };

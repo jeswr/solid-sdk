@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 package org.jeswr.suite;
 
 import android.content.ActivityNotFoundException;
@@ -9,6 +10,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
+import com.getcapacitor.PluginHandle;
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
 
@@ -22,6 +24,15 @@ public class SuiteWebViewClient extends BridgeWebViewClient {
         super(bridge);
         this.bridge = bridge;
         this.policy = new NavigationPolicy(bridge.getServerUrl(), bridge.getErrorUrl());
+    }
+
+    @Override
+    public void onPageCommitVisible(WebView view, String url) {
+        PluginHandle handle = bridge.getPlugin("SuiteSecureStore");
+        if (handle != null && handle.getInstance() instanceof SuiteSecureStorePlugin) {
+            ((SuiteSecureStorePlugin) handle.getInstance()).mainFrameNavigation();
+        }
+        super.onPageCommitVisible(view, url);
     }
 
     /**
