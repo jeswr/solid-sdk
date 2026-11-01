@@ -336,6 +336,7 @@ it("rejects malformed inbound records, UTF-8, IDs, dates and non-direct conversa
     { ...fixtures.notification, created_at: 1 },
     { ...fixtures.notification, status: { ...fixtures.notification.status, visibility: 1 } },
     { ...fixtures.notification, status: { ...fixtures.notification.status, content: 1 } },
+    { ...fixtures.notification, status: { ...fixtures.notification.status, spoiler_text: 1 } },
     { ...fixtures.notification, status: { ...fixtures.notification.status, id: "bad" } },
   ];
   for (const row of variants)
@@ -352,6 +353,28 @@ it("rejects malformed inbound records, UTF-8, IDs, dates and non-direct conversa
   expect(() =>
     rawId(instance, "conversations", { ...fixtures.conversation, last_status: null }),
   ).toThrow();
+});
+
+it.each([
+  "notifications",
+  "conversations",
+] as const)("preserves literal plain-text warnings and display names in %s while stripping controls", (source) => {
+  const row = structuredClone(
+    source === "notifications" ? fixtures.notification : fixtures.conversation,
+  );
+  const status = source === "notifications" ? row.status : row.last_status;
+  const sender = source === "notifications" ? row.account : status.account;
+  sender.display_name = "  Alice <team> &amp; &#39;\u0000\u202e  ";
+  status.spoiler_text = "  Budget < 10 > 5 <b>literal</b> &amp; &#39;\u0000\u202e  ";
+  status.content = "<p>Body &amp; <b>markup</b></p>";
+  const item = incoming(source, row);
+  const parsed = parseRecord(instance, item);
+  expect(parsed.sender?.displayName).toBe("Alice <team> &amp; &#39;");
+  expect(parsed.textBody).toBe(
+    `${source === "notifications" ? "Mastodon notification: mention\n" : ""}Budget < 10 > 5 <b>literal</b> &amp; &#39;\nBody & markup`,
+  );
+  expect(parsed.rawSha256).toBe(digestBytes(item.raw).slice(8));
+  expect(parsed.rawByteLength).toBe(Buffer.byteLength(item.raw));
 });
 
 it("validates the configured instance and provider scalars and snapshots allowed origins", async () => {

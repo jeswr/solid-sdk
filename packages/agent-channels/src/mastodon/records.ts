@@ -14,8 +14,12 @@ function clean(text: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: strip hostile control and bidi characters
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, "");
 }
+function plainText(value: unknown): string {
+  if (typeof value !== "string") throw new ChannelParseError("invalid Mastodon text");
+  return clean(value).trim();
+}
 /** A plain-text projection only. No provider markup, attributes or links are followed. */
-function plain(value: unknown): string {
+function htmlText(value: unknown): string {
   if (typeof value !== "string") throw new ChannelParseError("invalid Mastodon text");
   const entities: Record<string, string> = {
     amp: "&",
@@ -70,7 +74,7 @@ export function parseRecord(origin: string, item: InboundRawMessage): BridgeMess
       if (typeof status.visibility !== "string")
         throw new ChannelParseError("invalid Mastodon visibility");
       signals["mastodon-visibility"] = status.visibility;
-      textBody += `${textBody ? "\n" : ""}${plain(status.spoiler_text ?? "")}${status.spoiler_text ? "\n" : ""}${plain(status.content)}`;
+      textBody += `${textBody ? "\n" : ""}${plainText(status.spoiler_text ?? "")}${status.spoiler_text ? "\n" : ""}${htmlText(status.content)}`;
     }
     const date = source === "conversations" ? status?.created_at : row.created_at;
     if (typeof date !== "string" || !Number.isFinite(Date.parse(date)))
@@ -86,7 +90,7 @@ export function parseRecord(origin: string, item: InboundRawMessage): BridgeMess
       sender: {
         handle: senderHandle,
         ...(typeof sender.display_name === "string"
-          ? { displayName: plain(sender.display_name) }
+          ? { displayName: plainText(sender.display_name) }
           : {}),
       },
       textBody: textBody.slice(0, 16384),
