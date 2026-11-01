@@ -184,28 +184,33 @@ describe("Home presentation", () => {
     expect(actions.map((action) => action.label)).toEqual([
       "Open",
       "Who can see this",
+      "Edit",
+      "Delete",
       "Open in Spotify",
       "Copy link",
     ]);
     expect(actions[1]?.href).toBe(`${actions[0]?.href}#access`);
-    expect(actions[2]).toMatchObject({
+    expect(actions.find((action) => action.id === "source")).toMatchObject({
       href: "https://open.spotify.com/track/caroline",
       external: true,
     });
     expect(itemActions(fixture(), ROOT).map((action) => action.id)).toEqual([
       "open",
       "access",
+      "edit",
+      "delete",
       "copy",
     ]);
     expect(
       itemActions(fixture("notes", "Same host", undefined, `${ROOT}source`), ROOT),
-    ).toHaveLength(3);
+    ).toHaveLength(5);
     expect(
       itemActions(fixture("notes", "Unsafe", undefined, "javascript:alert(1)"), ROOT),
-    ).toHaveLength(3);
+    ).toHaveLength(5);
     expect(
-      itemActions(fixture("notes", "Other service", undefined, "https://example.org"), ROOT)[2]
-        ?.label,
+      itemActions(fixture("notes", "Other service", undefined, "https://example.org"), ROOT).find(
+        (action) => action.id === "source",
+      )?.label,
     ).toBe("Open in source");
     // A named source may contain several URL values; unsafe siblings cannot suppress a safe one.
     item.dataset.add(

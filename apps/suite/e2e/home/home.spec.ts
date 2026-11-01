@@ -69,14 +69,11 @@ test("empty domains offer the appropriate actions", async ({ page }) => {
     "href",
     "/connect?domain=mobility",
   );
-  await expect(page.getByRole("link", { name: "Add manually", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add manually", exact: true })).toHaveCount(0);
   await accessible(page);
   await page.keyboard.press("4");
   await expect(page).toHaveURL("/home/body-health");
-  await expect(page.getByRole("link", { name: "Add manually", exact: true })).toHaveAttribute(
-    "href",
-    "/home/body-health?add=1",
-  );
+  await expect(page.getByRole("button", { name: "Add manually", exact: true })).toHaveCount(2);
   await expect(page.getByRole("link", { name: "Connect a service", exact: true })).toBeVisible();
   await accessible(page);
 });
@@ -148,7 +145,7 @@ test("URL filters, card menus, source links and keyboard opening", async ({ page
     new URL(route, page.url()).href,
   );
   await page.getByRole("link", { name: "Caroline", exact: true }).click({ button: "right" });
-  await expect(page.getByRole("menuitem")).toHaveCount(4);
+  await expect(page.getByRole("menuitem")).toHaveCount(6);
   await page.keyboard.press("Escape");
   await accessible(page);
   await page.getByRole("link", { name: "Caroline", exact: true }).focus();

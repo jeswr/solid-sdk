@@ -4,7 +4,7 @@ import { encodeRef } from "../../../lib/refs";
 import { type DomainItem, nameFromUrl, sortItems } from "../lib/model/discovery";
 import type { DataCategory } from "../lib/model/domains";
 import { CONNECTORS, connectorForUrl, provenanceOf } from "../lib/model/provenance";
-import { httpUrl, subjectOf } from "../lib/model/rdf";
+import { httpUrl, inStorage, primarySubject, subjectOf } from "../lib/model/rdf";
 
 export function greeting(date: Date, displayName: string): string {
   const hour = date.getHours();
@@ -158,13 +158,41 @@ export interface ItemAction {
   href?: string;
   external?: boolean;
 }
-/** Shared by dropdown and context menus; Edit/Delete can be appended here later. */
-export function itemActions(item: DomainItem, storage: string): ItemAction[] {
-  const href = `/home/${item.domain.id}/i/${encodeRef(item.url)}`;
+export function itemHref(item: DomainItem): string {
+  const primary = primarySubject(item.dataset, item.url);
+  const subject =
+    item.subject.termType === "NamedNode" && primary && primary.value !== item.subject.value
+      ? `?s=${encodeRef(item.subject.value)}`
+      : "";
+  const view =
+    item.dataType?.id === "contact-details" ? `${subject ? "&" : "?"}view=contact-details` : "";
+  return `/home/${item.domain.id}/i/${encodeRef(item.url)}${subject}${view}`;
+}
+/** Shared by the card and detail page. The response header takes precedence when available. */
+export function itemActions(
+  item: DomainItem,
+  storage: string,
+  writable = inStorage(item.url, storage),
+): ItemAction[] {
+  const href = itemHref(item);
   const actions: ItemAction[] = [
     { id: "open", label: "Open", href },
     { id: "access", label: "Who can see this", href: `${href}#access` },
   ];
+  if (writable && item.dataType?.id !== "files")
+    actions.push({
+      id: "edit",
+      label: "Edit",
+      href: `${href}${href.includes("?") ? "&" : "?"}edit=1`,
+    });
+  const node = subjectOf(item.dataset, item.subject);
+  if (
+    writable &&
+    !item.url.endsWith("/") &&
+    !node.types.some((type) => /(?:#Container|#BasicContainer|#DriveRoot)$/.test(type)) &&
+    !node.contains.length
+  )
+    actions.push({ id: "delete", label: "Delete" });
   const source = subjectOf(item.dataset, item.subject).sourceUrls.find((value) => {
     const url = httpUrl(value);
     return url && url.host !== new URL(storage).host;

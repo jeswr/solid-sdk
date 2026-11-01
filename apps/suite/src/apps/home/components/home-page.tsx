@@ -15,7 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -31,10 +31,25 @@ import { DomainNavigation } from "./domain-navigation";
 import { useHomeSession } from "./home-app";
 import { HomeCard } from "./home-card";
 import { HomeHeader } from "./home-header";
+import { AddManuallySheet } from "./item/add-manually-sheet";
+import { itemShortcut } from "./item/shortcuts";
+import { useItemActions } from "./item/use-item-actions";
 
 export function HomePage({ domain }: { domain: string }) {
   const session = useHomeSession();
-  const data = useDomainItems(session);
+  const loaded = useDomainItems(session);
+  const { hidden } = useItemActions(session);
+  const visibleItems = loaded.items.filter((item) => !hidden.has(item.url));
+  const data = {
+    ...loaded,
+    items: visibleItems,
+    counts: new Map(
+      [...loaded.counts.keys()].map((id) => [
+        id,
+        visibleItems.filter((item) => item.domain.id === id).length,
+      ]),
+    ),
+  };
   const entry = DOMAINS.find((candidate) => candidate.id === domain) ?? UNCATEGORISED;
   const search = useSearchParams();
   const pathname = usePathname();
@@ -67,6 +82,25 @@ export function HomePage({ domain }: { domain: string }) {
     // which (unlike router.replace) also works on a prerendered page opened with a query.
     window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
   };
+  const [adding, setAdding] = useState(search.get("add") === "1");
+  const returnTarget = useRef<HTMLElement | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const canAdd = entry.dataTypes.some((type) => type.manualForm);
+  const openAdd = () => {
+    returnTarget.current = document.activeElement as HTMLElement;
+    setAdding(true);
+  };
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "a" && canAdd && !adding && itemShortcut(event)) {
+        event.preventDefault();
+        returnTarget.current = document.activeElement as HTMLElement;
+        setAdding(true);
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [canAdd, adding]);
   const connect = `/connect?domain=${entry.id}`;
   const retry = () => void data.refresh();
   return (
@@ -91,10 +125,17 @@ export function HomePage({ domain }: { domain: string }) {
         counts={data.counts}
       />
       <section className="hm-domain-content" aria-labelledby="hm-domain-heading">
-        <h2 id="hm-domain-heading">
-          <DomainIcon name={entry.icon} size={24} />
-          {entry.label}
-        </h2>
+        <div className="hm-domain-heading">
+          <h2 id="hm-domain-heading">
+            <DomainIcon name={entry.icon} size={24} />
+            {entry.label}
+          </h2>
+          {canAdd ? (
+            <Button ref={addButton} variant="outline" onClick={openAdd} disabled={!online}>
+              Add manually
+            </Button>
+          ) : null}
+        </div>
         {!online && data.items.length ? (
           <p className="hm-notice" role="status">
             Showing saved copies
@@ -174,8 +215,8 @@ export function HomePage({ domain }: { domain: string }) {
                 }
                 secondaryAction={
                   entry.dataTypes.some((type) => type.manualForm) ? (
-                    <Button variant="outline" asChild>
-                      <Link href={`${pathname}?add=1`}>Add manually</Link>
+                    <Button variant="outline" onClick={openAdd} disabled={!online}>
+                      Add manually
                     </Button>
                   ) : undefined
                 }
@@ -229,6 +270,19 @@ export function HomePage({ domain }: { domain: string }) {
           </>
         )}
       </section>
+      {canAdd ? (
+        <AddManuallySheet
+          key={domain}
+          domain={entry}
+          open={adding}
+          onOpenChange={setAdding}
+          returnFocus={() => {
+            const target = returnTarget.current;
+            if (target?.isConnected && target !== document.body) target.focus();
+            else addButton.current?.focus();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
