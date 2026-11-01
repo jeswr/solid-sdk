@@ -41,10 +41,12 @@ async function menu(page: Page, title = "Work") {
 }
 async function closeNavigation(page: Page) {
   const navigation = page.getByRole("dialog", { name: "Navigation", exact: true });
-  if (await navigation.isVisible()) {
+  if (!(await navigation.isVisible())) return;
+  // A just-closed calendar menu can still be the top dismissable layer and swallow the first Escape.
+  await expect(async () => {
     await page.keyboard.press("Escape");
-    await expect(navigation).toBeHidden();
-  }
+    await expect(navigation).toBeHidden({ timeout: 1000 });
+  }).toPass();
 }
 // The demo seed has a Mon/Wed/Fri stand-up, so match the planning series by title.
 function planning(page: Page, day: string) {
