@@ -1,4 +1,5 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
 name: agent-daemon-container
 on:
   pull_request:
@@ -9,6 +10,7 @@ on:
       - 'pnpm-workspace.yaml'
       - 'package.json'
       - '.npmrc'
+      - '.gitignore'
       - 'turbo.json'
       - 'tsconfig.base.json'
       - '.github/workflows/agent-daemon-container.yml'
@@ -23,6 +25,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build production image
         run: docker build -f apps/agent-daemon/Containerfile -t agent-daemon:check .
+      - name: Validate the shipped production tree on distroless Node 24
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:check \
+            --input-type=module --eval '
+              import assert from "node:assert/strict";
+              import { readdirSync } from "node:fs";
+              const daemon = await import("./dist/index.js");
+              assert.equal(typeof daemon.runConfiguredCloud, "function");
+              const installed = readdirSync("node_modules/.pnpm");
+              for (const name of ["vitest", "typescript", "@solid+community-server"]) {
+                assert.ok(!installed.some((entry) => entry.startsWith(`${name}@`)), name);
+              }
+            '
       - name: Refuse unconfigured production startup
         run: |
           if docker run --rm --network none agent-daemon:check; then

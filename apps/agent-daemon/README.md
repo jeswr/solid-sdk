@@ -120,12 +120,18 @@ runs `plutil -lint`; elsewhere Python plistlib validates the XML plist.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 The A-042 cloud variant is **undeployed**. Build its nonroot distroless Node 24
 image from the workspace root with
 `docker build -f apps/agent-daemon/Containerfile -t agent-daemon:local .`.
 The build uses the frozen workspace lock, disables dependency lifecycle scripts,
-builds dependencies first and copies a production-only pnpm deployment into the
-runtime. No credentials or host-specific composition are baked into the base image.
+builds dependencies first, prunes the workspace and installs its production tree
+with `--prod --frozen-lockfile --offline --ignore-scripts`. This preserves locked
+resolutions without pnpm's legacy deployment, which overrides frozen-lockfile.
+The runtime retains the pruned workspace layout, with `/app/bin` and `/app/dist`
+symlinks preserving the derived-image contract. No credentials or host-specific
+composition are baked into the base image.
 
 The cloud executable is `bin/awp-cloud.mjs`. A reviewed derived image must copy a
 trusted composition to `/app/host/compose.mjs` and run Node with
@@ -180,7 +186,8 @@ OAuth listener, provider request or real credentials are needed to build or test
 its integration requirements. Nothing is connected to a deploy workflow. Jesse's
 explicit go is required before enabling or deploying it.
 
-CI's `agent-daemon-container` workflow builds the production image and the
+CI's `agent-daemon-container` workflow builds and imports the production tree on
+distroless Node 24, checks that build/test dependencies are absent, and builds the
 `css-test` target. The latter runs the existing A-012 memory-CSS golden path
 (private inbound data, proposal, signed approval, transmission, audit, signed halt)
 and the cloud regressions inside distroless Node 24 with container networking
