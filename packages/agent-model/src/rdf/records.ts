@@ -62,6 +62,7 @@ export const RECORD_MAPPINGS: Readonly<
       channel: f("channel"),
       binding: f("binding"),
       carriage: f("carriage"),
+      description: f("description", "string", `${DCT}description`),
       structuredPayload: f("structuredPayload", "boolean"),
       endToEndEncrypted: f("endToEndEncrypted", "boolean"),
       deliveryReceipts: f("deliveryReceipts", "boolean"),

@@ -26,6 +26,9 @@ original lexical form. Ordered arrays use RDF sequences; extracted structured co
 audit payloads and opaque proofs use `rdf:JSON` literals. Typed fields remain queryable. Nested structures may use blank nodes on input;
 record IDs and authority references remain absolute IRIs.
 
+Channel capabilities may include a `description` for provider limitations. It maps
+to `dcterms:description` and grants no permission to send.
+
 Accounts expose `channelHandleHash`; intents expose `recipientHash`. Callers compute
 salted hashes before constructing records. No handle-resolution or send operation exists.
 Approval and mandate proofs are preserved without verification. A parsed approval is

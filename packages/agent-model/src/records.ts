@@ -76,6 +76,7 @@ const channelCapability = z.strictObject({
   channel: nonempty,
   binding: nonempty,
   carriage: nonempty,
+  description: text.optional(),
   structuredPayload: z.boolean(),
   endToEndEncrypted: z.boolean(),
   deliveryReceipts: z.boolean(),
