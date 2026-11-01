@@ -135,6 +135,7 @@ function SharingContent({
   const [duration, setDuration] = useState<SharingDuration>("until-revoked");
   const [custom, setCustom] = useState("");
   const [saving, setSaving] = useState("");
+  const [expiryRevision, setExpiryRevision] = useState(0);
   const [copied, setCopied] = useState(false);
   const busy = useRef(false);
   const alive = useRef(true);
@@ -419,7 +420,8 @@ function SharingContent({
                             // Uncontrolled and committed on blur: typing a date must not
                             // save each keystroke (a second save while busy is dropped), and
                             // clearing the field never silently makes the grant permanent.
-                            key={person.expires?.getTime() ?? "none"}
+                            // Remount after every attempt so a failed save shows the stored date.
+                            key={`${person.expires?.getTime() ?? "none"}:${expiryRevision}`}
                             defaultValue={
                               person.expires
                                 ? `${person.expires.getFullYear()}-${String(person.expires.getMonth() + 1).padStart(2, "0")}-${String(person.expires.getDate()).padStart(2, "0")}`
@@ -429,21 +431,43 @@ function SharingContent({
                             onBlur={(event) => {
                               const value = event.target.value;
                               if (!value || value === event.target.defaultValue) return;
+                              const remount = () => setExpiryRevision((value) => value + 1);
                               try {
                                 const expires = grantExpires("custom", value, new Date());
-                                if (!expires) return;
+                                if (!expires) return remount();
                                 void act(person.webId, () =>
                                   adapter.setPerson(url, person.webId, person.role as ShareRole, {
                                     expires,
                                   }),
-                                );
+                                ).finally(remount);
                               } catch {
                                 setError("Choose a future end date");
+                                remount();
                               }
                             }}
                           />
                         </label>
                       )}
+                      {person.role !== "owner" &&
+                        !person.inherited &&
+                        caps.grantExpiry &&
+                        person.expires && (
+                          <Button
+                            variant="link"
+                            disabled={disabled}
+                            onClick={() =>
+                              void act(person.webId, () =>
+                                adapter.setPerson(url, person.webId, person.role as ShareRole, {}),
+                              )
+                            }
+                          >
+                            Remove end date
+                            <span className="suite-sr-only">
+                              {" "}
+                              for {person.name ?? person.webId}
+                            </span>
+                          </Button>
+                        )}
                     </div>
                     {person.role === "owner" ? (
                       <span>Owner</span>
