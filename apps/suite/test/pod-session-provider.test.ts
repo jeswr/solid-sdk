@@ -159,10 +159,25 @@ describe("PodSessionProvider", () => {
       for (let i = 0; i < 100; i++) reply(`unrelated-${i}`);
     });
     expect(api.listGrants).toHaveBeenCalledOnce();
-    const timers = vi.spyOn(window, "setTimeout");
+    // Capture the deferred zero-delay notifications instead of letting real timers also fire
+    // them: a real timer landing after the queued check would add a legitimate extra recheck.
+    const realSetTimeout = window.setTimeout.bind(window);
+    const deferredNotifications: Array<() => void> = [];
+    const timers = vi.spyOn(window, "setTimeout").mockImplementation(((
+      callback: () => void,
+      ms?: number,
+      ...args: unknown[]
+    ) => {
+      if (ms === 0) {
+        deferredNotifications.push(callback);
+        return 0;
+      }
+      return realSetTimeout(callback, ms, ...args);
+    }) as typeof window.setTimeout);
     for (let i = 0; i < 12; i++) await stateMessage();
+    timers.mockRestore();
     await act(() => {
-      for (const [callback, ms] of timers.mock.calls) if (ms === 0) (callback as () => void)();
+      for (const callback of deferredNotifications) callback();
     });
     expect(api.listGrants).toHaveBeenCalledOnce();
     await act(() => first.resolve(grants));
