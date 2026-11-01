@@ -2086,7 +2086,9 @@ class SolidAuthEngine implements SolidAuth {
   // ── Issuer resolution: WebID profile → solid:oidcIssuer (never regex) ──────
   /** The `solid:oidcIssuer` values the WebID's (public) profile advertises. */
   async #advertisedIssuers(webId: string): Promise<string[]> {
-    const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
+    const { dataset } = await fetchRdf(webId, {
+      fetch: secureRedirectFetch(this.#profileFetch, this.#opts.allowInsecureLoopback ?? false),
+    });
     const agent = new Agent(webId, dataset, DataFactory);
     return [...agent.oidcIssuer];
   }
@@ -3341,6 +3343,53 @@ function needsInteraction(e: unknown): boolean {
   }
 }
 
+/** True when a URL string carries a query or fragment delimiter, even an empty one. */
+function hasQueryOrFragment(value: string): boolean {
+  return value.includes("?") || value.includes("#");
+}
+
+/** Redirect hops a profile read may follow before giving up. */
+const MAX_PROFILE_REDIRECTS = 5;
+
+/**
+ * Wrap a fetch so the profile read that proves the WebID↔issuer binding never crosses
+ * plaintext: redirects are followed by hand and every hop must be https (http only for a
+ * loopback host under `allowInsecureLoopback`), so a network attacker cannot answer an
+ * https → http hop with a profile naming their OP. Where the platform hides redirects
+ * (a browser's opaque redirect), the request is re-issued with `redirect: "follow"`; the
+ * browser's mixed-content blocking then refuses https → http, and the final URL is
+ * still checked.
+ */
+export function secureRedirectFetch(
+  base: typeof fetch,
+  allowInsecureLoopback: boolean,
+): typeof fetch {
+  const assertSecure = (url: string): void => {
+    validateWebId(url, allowInsecureLoopback);
+  };
+  return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    let url = input instanceof Request ? input.url : String(input);
+    for (let hop = 0; hop <= MAX_PROFILE_REDIRECTS; hop += 1) {
+      assertSecure(url);
+      const response = await base(url, { ...init, redirect: "manual" });
+      if (response.type === "opaqueredirect") {
+        const followed = await base(url, { ...init, redirect: "follow" });
+        if (followed.url) assertSecure(followed.url);
+        return followed;
+      }
+      const location =
+        response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+      if (location === null) {
+        if (response.url) assertSecure(response.url);
+        return response;
+      }
+      void response.body?.cancel().catch(() => {});
+      url = new URL(location, url).href;
+    }
+    throw new Error("Too many redirects while reading the WebID profile.");
+  }) as typeof fetch;
+}
+
 /**
  * Whether an advertised `solid:oidcIssuer` value names `issuer` (tolerant of a trailing
  * slash, as discovery normalises it). Unparseable values never match (fail-closed).
@@ -3354,7 +3403,7 @@ function sameIssuer(advertised: string, issuer: URL): boolean {
   }
   // An OIDC issuer identifier has no query or fragment (OIDC Discovery §3); refuse
   // either rather than compare them, and only forgive a trailing slash on the PATH.
-  if (candidate.search || candidate.hash || issuer.search || issuer.hash) return false;
+  if (hasQueryOrFragment(advertised) || hasQueryOrFragment(issuer.href)) return false;
   const trim = (path: string) => path.replace(/\/$/, "");
   return candidate.origin === issuer.origin && trim(candidate.pathname) === trim(issuer.pathname);
 }

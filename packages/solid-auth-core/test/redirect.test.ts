@@ -555,6 +555,13 @@ describe("completeRedirectLogin", () => {
 
   it("issuer-only login: REJECTS a WebID whose profile does not list this issuer (fail-closed)", async () => {
     const store = new RecordingStore();
+    // Observable localStorage: the remembered pointer and recent accounts live there.
+    const written = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => written.get(k) ?? null,
+      setItem: (k: string, v: string) => void written.set(k, v),
+      removeItem: (k: string) => void written.delete(k),
+    });
     const { auth, storage } = makeAuth({ store });
     await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/" });
     // A hostile OP asserts a WebID whose profile names a DIFFERENT issuer.
@@ -563,6 +570,8 @@ describe("completeRedirectLogin", () => {
     expect(auth.webId).toBeNull(); // no session, no credential, no pointer
     expect(store.puts).toHaveLength(0);
     expect(auth.recentAccounts()).toHaveLength(0);
+    expect([...written.keys()]).toEqual([]); // no pointer, no recent-account entry
+    vi.unstubAllGlobals();
     expect(readPersistedRedirectFlow(storage, "solid-auth-core.redirect-flow")).toBeNull();
   });
 
@@ -570,6 +579,14 @@ describe("completeRedirectLogin", () => {
     const { auth } = makeAuth();
     await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/?tenant=alice" });
     agentIssuer = "https://idp.example/?tenant=alice/";
+    await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
+    expect(auth.webId).toBeNull();
+  });
+
+  it("issuer-only login: an empty fragment or query on the advertised issuer never matches", async () => {
+    const { auth } = makeAuth();
+    await auth.beginRedirectLogin({ oidcIssuer: "https://idp.example/" });
+    agentIssuer = "https://idp.example/#";
     await expect(auth.completeRedirectLogin(callback())).rejects.toThrow(/does not list/i);
     expect(auth.webId).toBeNull();
   });
