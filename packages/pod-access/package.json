@@ -1,5 +1,5 @@
 {
-  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Codex GPT-6",
   "name": "@jeswr/pod-access",
   "version": "0.1.0",
   "private": true,
@@ -15,6 +15,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./notify": {
+      "types": "./dist/notify.d.ts",
+      "default": "./dist/notify.js"
     }
   },
   "files": [
@@ -34,6 +38,7 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "@jeswr/fetch-rdf": "workspace:*",
@@ -44,6 +49,7 @@
     "@rdfjs/types": "2.0.1",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
-    "n3": "2.0.3"
+    "n3": "2.0.3",
+    "solid-agent-notify": "workspace:*"
   }
 }

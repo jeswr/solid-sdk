@@ -1,8 +1,9 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-access
 
-> **Experimental — AI-agent-generated.** Security-critical WAC/ACP translation extracted from Pod Migrator.
+> **Experimental — AI-agent-generated.** Security-critical WAC/ACP translation extracted from Pod Migrator and notification delivery. Sharing/grant APIs remain unimplemented.
 
 Pure, offline access-control readers, writers, a neutral policy model, conservative translation,
 inheritance composition, and bounded symbolic access proofs. Pod Migrator consumes this package;
@@ -15,6 +16,53 @@ Readers can return resource, member, and combined rules. `translatePolicy` and `
 require every grant and denial to be normalized to resource scope; they throw otherwise.
 Use `scopePolicy` to select and normalize each scope, then translate and prove the two separately.
 `policiesEqual` likewise requires normalized policies and returns false for invalid scopes.
+
+## Notification delivery
+
+Notification delivery lives at `@jeswr/pod-access/notify`:
+
+```ts
+import { assignmentAnnounce, createNotify } from '@jeswr/pod-access/notify';
+
+const notify = createNotify({ fetch: auth.fetch });
+const result = await notify(assigneeWebId, {
+  ...assignmentAnnounce(task, tracker, assignerName, title),
+  actor: senderWebId,
+});
+// { delivered: boolean, inbox: string | null,
+//   reason?: 'no-inbox' | 'forbidden' | 'lws-no-ldn' | 'network' }
+```
+
+Activities support `Announce`, `Offer`, `Accept`, `Reject`, and `Create`; `object` and `actor`
+are required, with optional `target` and `summary`. The POST body is ActivityStreams JSON-LD
+(`application/ld+json`). Delivery failures resolve as values. An inbox's 401/403 is `forbidden`;
+other transport, parsing, policy or HTTP failures are `network`. No unambiguous inbox is `no-inbox`.
+
+Builders return templates without actor: `shareNotification(resource, role)` announces a share
+with summary `Shared with you as {role}`; `assignmentAnnounce(task, tracker, assignerName, title)`
+announces the task with tracker target and summary `{name} assigned you '{title}'`;
+`mentionNotification(annotation, document)` creates an annotation with the document target;
+`roomInvitation(room)` offers a room. These helpers do not modify grants or resource data.
+
+Each notifier caches positive and missing-inbox discovery for ten minutes, sharing concurrent
+profile reads. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
+to one caller/session: recreate the notifier on account changes. `clock` is injectable for tests.
+
+Known LWS recipients should be identified by `recipientProtocol: webId => 'lws'`; this returns
+`lws-no-ldn` without network requests. An `application/lws+json` profile response also returns
+`lws-no-ldn`. Unknown recipients are treated as WebIDs; the sender's protocol is irrelevant.
+
+Profile and inbox destinations must be public HTTPS without URL credentials; inbox fragments
+and ambiguous inbox assertions are refused. The caller transport must honor `redirect: 'manual'`.
+All redirects are refused, bodies are capped at 256 KiB, and requests have an eight-second deadline.
+Node hostname targets require an authenticated `pinningFetch` explicitly asserted to pin DNS,
+in addition to `fetch`; ordinary pod-auth fetch is not silently treated as pinned. Browsers cannot
+pin DNS and use guarded-fetch's browser policy. Activity IRIs currently require HTTPS.
+
+React applications can use `useNotify()` from `@jeswr/suite-sdk` under `PodAuthProvider`; it
+supplies the current actor/fetch and resets the cache on identity changes.
+
+## Offline policy translation
 
 ```ts
 import {
@@ -84,3 +132,5 @@ pnpm --filter @jeswr/pod-access run test
 Package tests require 100% branches, functions, lines, and statements, including adversarial target
 shapes, malformed RDF, dialect-specific denials, symbolic proof limits, and writer failures.
 The migrator retains its end-to-end engine regression and dialect matrix tests.
+Tests also cover the reserved testing entry point, notification builders and a byte-snapshotted
+assignment delivered through the real notifier and a fixture fetch.
