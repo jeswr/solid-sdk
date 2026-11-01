@@ -3,6 +3,32 @@ import type { SignInProvider } from "./types.js";
 
 const tones = ["home", "drive", "docs", "tasks", "calendar", "contacts"] as const;
 
+/** Accept a literal opaque RGB colour, never arbitrary CSS. */
+export function validColor(value: string | undefined): string | undefined {
+  return value && /^#[\da-f]{6}$/iu.test(value) ? value : undefined;
+}
+
+/** WCAG sRGB relative luminance for six-digit hex colours. */
+export function relativeLuminance(color: string): number {
+  if (!validColor(color)) throw new TypeError("Expected a six-digit hex colour");
+  const linearChannel = (offset: number) => {
+    const channel = Number.parseInt(color.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  };
+  return linearChannel(1) * 0.2126 + linearChannel(3) * 0.7152 + linearChannel(5) * 0.0722;
+}
+
+export function contrastRatio(first: string, second: string): number {
+  const a = relativeLuminance(first);
+  const b = relativeLuminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/** White where it meets AA normal-text contrast, otherwise near-black. */
+export function foregroundFor(background: string): string {
+  return contrastRatio(background, "#ffffff") >= 4.5 ? "#ffffff" : "#111111";
+}
+
 /** The first Unicode character, with a fallback for an empty display name. */
 export function monogramFor(name: string): string {
   return Array.from(name.trim())[0]?.toUpperCase() || "?";
