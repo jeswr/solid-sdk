@@ -65,8 +65,8 @@ export const DEFAULT_SHARE_LIMITS: Readonly<ShareLimits> = Object.freeze({
 
 const BATCH_ID = /^[A-Za-z0-9-]{1,64}$/;
 const MIME = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
 const UNSAFE_NAME =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
   /[\u0000-\u001f\u007f-\u009f/\\%?#:*"<>|\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 /**
  * Types a browser runs when it renders them (HTML, SVG, XML with stylesheets,
