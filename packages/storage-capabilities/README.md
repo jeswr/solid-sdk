@@ -14,7 +14,7 @@ Requires Node.js >=24 and the root pnpm workspace tooling.
 
 The package root exports the ADR-002 type contracts, including `StorageDescription`, `Features`,
 `ResolveOptions`, `DescriptionCache`, `ProbeResult`, `ProbeEvidence`, and `WacMode`.
-It also exports the header parsers `parseLinkHeaders(values, responseUrl)` (RFC 8288) and
+It also exports the header parsers `parseLinkHeaders(values, responseUrl, options?)` (RFC 8288) and
 `parseWacAllow(value)` so that `@jeswr/storage-client` reuses them instead of copying them.
 `@jeswr/storage-capabilities/vocab` exports `LWS`, `DID`, `SEC`, `DCT`, `NOTIFY`, `SOLID`,
 `PIM`, `ACQ`, `ACL`, `ACP`, and `SSD` objects with full IRI values (for example, `LWS.Storage`).
@@ -98,14 +98,17 @@ descriptions are authoritative. See "Feature flags" below for `deriveFeatures` a
 
 Internal helpers:
 
-- `parseLinkHeaders(values, responseUrl)` in `src/link.ts` accepts one combined Link field,
+- `parseLinkHeaders(values, responseUrl, options?)` in `src/link.ts` accepts one combined Link field,
   an array of separate field values, or `null`. It resolves targets and anchor contexts independently,
   retains relation lists and unquoted parameters, and ignores later singleton parameters.
   Extended attributes such as `title*` retain their wire encoding. A deterministic tokenizer skips
   malformed members at unquoted commas outside targets; an unterminated quote or target consumes the
-  rest of that field. Fields over 8 KiB (UTF-8) are ignored, and parsing stops after 64 nonempty members
+  rest of that field. By default, fields over 8 KiB (UTF-8) are ignored, and parsing stops after 64 nonempty members
   across all fields, including malformed members. Invalid target/anchor URLs and members without
-  relations are ignored.
+  relations are ignored. Options `maxBytes` (per field) and `maxMembers` (across fields) accept
+  non-negative safe integers. Set `onOverflow: 'throw'` to reject incomplete inspection with the
+  exported `LinkHeaderOverflowError`, whose `limit` is `maxBytes` or `maxMembers`; exact limits
+  are accepted. The default `onOverflow: 'truncate'` preserves the original behaviour.
 - `parseProbeHeaders(url, headers, observedAt)` in `src/probe-headers.ts` parses ordered raw header
   pairs (or a `Headers` instance) into the architect's `ProbeResult`. Raw pairs preserve response order;
   `Headers` iteration may sort and combine fields. Recognised fields remain as evidence, including

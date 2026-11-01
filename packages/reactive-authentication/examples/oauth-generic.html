@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Any OAuth 2.0 / OpenID Connect provider (Auth0, Keycloak, Okta…)</title>
+<!-- Register a public (SPA) client with redirect URI https://app.example/callback.html (which posts its URL to
+     the opener, see ../callback.html) and allow this origin for CORS on the token endpoint. -->
+<authorization-code-flow></authorization-code-flow>
+<script type="module">
+import "@jeswr/reactive-authentication/registerElements"
+import { CredentialBoundary, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "@jeswr/reactive-authentication"
+
+const source = new OAuthCodeSource({
+    issuer: "https://tenant.example.auth0.com/",       // discovered; or authorizationServer: {...} for servers without discovery
+    clientId: "spa-client-id",                         // no client secret in browsers
+    redirectUri: "https://app.example/callback.html",
+    scopes: ["openid", "read:reports", "offline_access"], // openid → validated identity; offline_access → refresh token (provider-specific)
+    audience: "https://api.example/",                  // Auth0; use `resource` for RFC 8707 servers such as Keycloak
+    codeProvider: document.querySelector("authorization-code-flow"),
+})
+const resources = new CredentialBoundary(["https://api.example/"])
+const manager = new ReactiveFetchManager({providers: [new OAuthBearerTokenProvider(source, {resources})], boundary: resources})
+
+const response = await manager.fetch("https://api.example/reports") // 401 → PKCE login popup → Bearer retry
+console.log(response.status, (await source.identity())?.subject)
+</script>
+</html>

@@ -3,7 +3,12 @@
 export { capabilities } from "./capabilities.js";
 export { CapabilitiesError } from "./errors.js";
 export { deriveFeatures } from "./features.js";
-export { type ParsedLink, parseLinkHeaders } from "./link.js";
+export {
+  LinkHeaderOverflowError,
+  type ParsedLink,
+  type ParseLinkHeadersOptions,
+  parseLinkHeaders,
+} from "./link.js";
 export { parseLwsDescription } from "./lws-description.js";
 export { probe } from "./probe.js";
 export { parseWacAllow } from "./probe-headers.js";
