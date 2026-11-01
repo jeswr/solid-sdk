@@ -82,9 +82,15 @@ export class TaskStore {
     if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
-        else
-          for (const url of await this.io.list(reg.location))
-            if (url.endsWith(".ttl")) urls.add(url);
+        else {
+          try {
+            for (const url of await this.io.list(reg.location))
+              if (url.endsWith(".ttl")) urls.add(url);
+          } catch (error) {
+            if (!onError) throw error;
+            onError(reg.location, error);
+          }
+        }
       }
     const projects: StoredProject[] = [];
     for (const url of urls) {
