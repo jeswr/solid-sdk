@@ -296,6 +296,35 @@ it.each([
 });
 
 describe("relative references", () => {
+  it("omits relative prefix namespaces so abbreviations keep their identity", async () => {
+    const input = [quad(s, namedNode("a"), namedNode(".foo")), quad(s, p, namedNode("true"))];
+    const output = await serialize(input, { prefixes: { ex: ".", empty: "" } });
+    expect(output).not.toMatch(/@prefix/);
+    const base = "https://pod.example/base/doc";
+    const parsed = await parseRdf(output, "text/turtle", { baseIRI: base });
+    expect(
+      parsed.has(
+        quad(s, namedNode(`${base.slice(0, -3)}a`), namedNode(`${base.slice(0, -3)}.foo`)),
+      ),
+    ).toBe(true);
+    expect(parsed.size).toBe(2);
+  });
+
+  it.each([
+    ["a variable-shaped subject", rawQuad({ subject: namedNode("?x") })],
+    ["a blank-node-shaped predicate", rawQuad({ predicate: namedNode("_:b") })],
+    [
+      "an empty datatype",
+      rawQuad({
+        object: { termType: "Literal", value: "v", language: "", datatype: namedNode("") },
+      }),
+    ],
+    ["a relative datatype", rawQuad({ object: literal("v", namedNode("#type")) })],
+    ["an empty named graph", rawQuad({ graph: namedNode("") })],
+  ])("rejects %s that would collide with another term or change meaning", async (_, q) => {
+    await expect(serialize([q], { format: "application/trig" })).rejects.toThrow(TypeError);
+  });
+
   it("keeps <> and <#me> legal for POSTed Turtle bodies, resolving against the target", async () => {
     const input = [
       quad(namedNode(""), p, namedNode("#me")),

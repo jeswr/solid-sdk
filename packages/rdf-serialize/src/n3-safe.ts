@@ -6,6 +6,7 @@ import { escapeIri } from "./iri.js";
 const LANGUAGE = /^[a-zA-Z]+(-[a-zA-Z0-9]+)*$/;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject IRIREF-forbidden characters and lone surrogates.
 const FORBIDDEN_IRI = /[\u0000-\u0020<>"{}|^`\\\uD800-\uDFFF]/u;
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 const PN_CHARS_BASE =
   "A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C\\u200D\\u2070-\\u218F" +
@@ -27,10 +28,19 @@ function stringField(value: unknown): string {
 function iri(value: unknown): string {
   const result = stringField(value);
   // Relative references (`<>` for a POSTed resource, `<#me>`) stay legal Turtle; only
-  // IRIREF-forbidden characters can break out of the angle brackets.
-  if (FORBIDDEN_IRI.test(result)) {
+  // IRIREF-forbidden characters can break out of the angle brackets. N3 identifies
+  // variables as `?x` and blank nodes as `_:x`, so relative references spelled that way
+  // would compare equal to those terms when the writer groups subjects and predicates.
+  if (FORBIDDEN_IRI.test(result) || result.startsWith("?") || result.startsWith("_:")) {
     throw new TypeError("RDF terms require IRIs without IRIREF-forbidden characters");
   }
+  return result;
+}
+
+/** Datatypes, prefix namespaces and named graphs must be absolute: relative ones change meaning. */
+function absoluteIri(value: unknown): string {
+  const result = iri(value);
+  if (!SCHEME.test(result)) throw new TypeError("Expected an absolute IRI");
   return result;
 }
 
@@ -65,7 +75,7 @@ export function injectionSafe(quads: readonly Quad[]): Quad[] {
     const value = stringField(term.value);
     const language = stringField(term.language);
     if (term.datatype?.termType !== "NamedNode") throw new TypeError("Expected a datatype IRI");
-    const datatype = iri(term.datatype.value);
+    const datatype = absoluteIri(term.datatype.value);
     if (language !== "") {
       const direction = (term as { direction?: unknown }).direction ?? "";
       if (direction !== "" && direction !== "ltr" && direction !== "rtl") {
@@ -99,6 +109,8 @@ export function injectionSafe(quads: readonly Quad[]): Quad[] {
       if (q.graph.value !== "") throw new TypeError("DefaultGraph must have an empty value");
       graph = defaultGraph();
     } else {
+      // An empty named graph IRI would share N3's id with the default graph.
+      if (q.graph.termType === "NamedNode") absoluteIri(q.graph.value);
       graph = node(q.graph) as Quad["graph"];
     }
     const predicate =
@@ -151,6 +163,8 @@ export function safePrefixes(
     const value = escapeIri(stringField(namespace));
     // N3 does not escape these namespace regex metacharacters (notably IPv6's '[').
     if (/[[{}|^]/.test(value)) continue;
+    // A relative namespace would abbreviate IRIs into names that resolve elsewhere.
+    if (!SCHEME.test(value)) continue;
     result[name] = iri(value);
   }
   return result;
