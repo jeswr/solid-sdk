@@ -29,6 +29,17 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
 - **Owner-only ACL**, as for everything below `agent/`. The MCP server already authenticates as
   the owner, so reading it needs no mandate. A hosted server that serves an agent that is not
   the owner must go through the mandate path described below.
+- **No category data in shared context.** Addresses, health details, contacts and card data
+  belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
+  refuses a document that contains a Luhn-valid 12–19 digit number (spaces and dashes
+  allowed), and returns a `refused` result that does not echo the digits.
+- The text is owner-authored data. Slice 2's setup helper and discovery must also check that
+  nobody except the owner can write or append to it (`WAC-Allow`, or the ACL itself), so the
+  document cannot carry someone else's injected instructions.
+- Slice 1 reads below the MCP server's configured root. A server scoped to a sub-container
+  therefore looks under that sub-container until Type Index discovery (slice 2) lands.
+- A redirect or alias from the fixed path is refused, so the returned text and ETag always
+  describe that one document (slice 3's `If-Match` depends on it).
 - **Tools** in `@jeswr/solid-mcp` (registered from a separate `context-tools.ts`, so the
   conversation-archive work in the same package stays free of conflicts):
   - `context_read` (read-only, slice 1): returns the document text, its ETag and its URL. A
@@ -41,15 +52,18 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
 
 ### Use case 4: the personal knowledge graph
 
-Build on what already exists. Do not start a new store.
+Build on what already exists. Do not start a new store. `pkg-memory`, `agent-mandate`,
+`agent-authz-verifier`, `solid-health-diary` and the Contacts model are on `main`. The
+`agent-memory`, `agent-audit` and `agent-executor` implementations arrive with the group B
+integration (PR #209); on `main` they are still scaffolds. Slices 3 and 6 depend on #209.
 
 | Need | Existing package | Gap |
 | --- | --- | --- |
 | Facts as nanopublications with provenance and DPV categories | `pkg-memory` (templates: email, phone, address, preference, condition, allergy, medication, relationship) | Payment-card template; health observations (measurements, labs, vaccinations, encounters) |
-| Approval-gated write, purpose-scoped recall | `agent-memory` (mandate `memoryScope`, `RecallQuery.purpose`) | MCP tools on top |
+| Approval-gated write, purpose-scoped recall | `agent-memory` (#209: `MemoryMandate.memoryScope`, a projection of a verified `agent-mandate`; `RecallQuery.purpose`) | MCP tools on top |
 | Contacts | `solid-task-model` `ContactBook`/`Contact` (vCard), used by the Contacts app | A read-only projection into recall results; no second contact model |
 | Diet and intolerance health data | `solid-health-diary`, `apps/pod-health` | Link diary conclusions into the KG as facts with `prov:wasDerivedFrom`, without copying them |
-| Authorisation and audit | `agent-mandate`, `agent-authz-verifier`, `agent-audit` | Wire MCP recall through them |
+| Authorisation and audit | `agent-mandate`, `agent-authz-verifier`, `agent-audit` (#209) | Wire MCP recall through them; the host projects `memoryScope` from the verified mandate |
 | Imports of data an assistant has already collected | none | One-time import into pending (unapproved) nanopublications |
 
 **Storage layout** (all owner-only by default, with no inherited public or authenticated access):
@@ -64,8 +78,9 @@ Build on what already exists. Do not start a new store.
 
 1. The MCP host builds a `RecallQuery` with an explicit purpose (`ServiceProvision` for form
    filling and email replies, `Personalisation` for tailoring).
-2. The query is checked by `agent-authz-verifier` against a signed, unrevoked `agent-mandate`
-   whose `memoryScope` lists the DPV categories it may read. Special-category data (health,
+2. The host verifies a signed, unrevoked `agent-mandate` with `agent-authz-verifier` and
+   projects it to `agent-memory`'s `MemoryMandate`, whose `memoryScope` lists the DPV
+   categories the query may read. Special-category data (health,
    under DPV-PD) needs its own explicit category in scope. The default excludes it.
 3. Every recall, allowed or refused, writes a PROV record to `agent-audit`. The record holds
    the category list and the resources returned, never their values.
@@ -81,9 +96,9 @@ owner to approve in one batch.
 
 - A card fact stores only the **brand, the last four digits, the expiry month and year, and a
   billing-address reference**. The schema has no field for a full card number (PAN) or a CVV.
-- The template validator rejects any input that carries more than four digits in the
-  last-four field. A Luhn-valid 12–19 digit sequence anywhere in the claim is refused before
-  anything is written, and the refusal never echoes the digits.
+- The template validator requires the last-four field to match `^\d{4}$`. A Luhn-valid
+  12–19 digit sequence anywhere in the claim, with or without spaces or dashes, is refused
+  before anything is written, and the refusal never echoes the digits.
 - Form filling that needs a full card asks the owner every time. A vault design is a separate
   decision for Jesse (bead sst-b8c.20.7, `needs:jesse`).
 

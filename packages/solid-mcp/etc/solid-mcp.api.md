@@ -176,6 +176,10 @@ export type SharedContextResult = {
     status: "not_found";
     url: string;
     setup: string;
+} | {
+    status: "refused";
+    url: string;
+    reason: string;
 };
 
 // @public

@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  containsCardNumber,
   createContextToolRegistry,
   readSharedContext,
   SHARED_CONTEXT_PATH,
@@ -120,6 +121,66 @@ describe("shared context", () => {
         portablePod(async () => ({ body: new Uint8Array([0, 1]), contentType: "" })),
       ),
     ).rejects.toThrow("unreadable");
+  });
+
+  it("treats only structured or exact fetch-adapter 404/410 failures as absent", async () => {
+    const gone = portablePod(async () => {
+      throw Object.assign(new Error("gone"), { status: 410 });
+    });
+    expect(await readSharedContext(gone)).toMatchObject({ status: "not_found" });
+    const unrelated = portablePod(async () => {
+      throw new Error("ACL lookup for https://alice.example/pod/.acl failed: HTTP 404");
+    });
+    await expect(readSharedContext(unrelated)).rejects.toThrow("ACL lookup");
+  });
+
+  it("refuses a context that redirects or aliases to another resource", async () => {
+    const aliased = portablePod(async (url) => ({
+      body: new TextEncoder().encode("secret"),
+      contentType: "text/markdown",
+      url: url === CONTEXT ? `${ROOT}secret/health.md` : url,
+    }));
+    await expect(readSharedContext(aliased)).rejects.toThrow("redirect refused");
+    const offPod = portablePod(async () => ({
+      body: new TextEncoder().encode("secret"),
+      contentType: "text/markdown",
+      url: "https://evil.example/context.md",
+    }));
+    await expect(readSharedContext(offPod)).rejects.toThrow("pod-scope");
+    const same = portablePod(async () => ({
+      body: new TextEncoder().encode(MARKDOWN),
+      contentType: "text/markdown",
+      url: CONTEXT,
+    }));
+    expect(await readSharedContext(same)).toMatchObject({ status: "ok", text: MARKDOWN });
+  });
+
+  it("refuses invalid UTF-8", async () => {
+    const pod = portablePod(async () => ({
+      body: new Uint8Array([0xff, 0xfe]),
+      contentType: "text/markdown",
+    }));
+    await expect(readSharedContext(pod)).rejects.toThrow();
+  });
+
+  it("refuses a context containing a payment card number, without echoing it", async () => {
+    for (const card of ["4111111111111111", "4111 1111 1111 1111", "5500-0000-0000-0004"]) {
+      const pod = portablePod(async () => ({
+        body: new TextEncoder().encode(`My card is ${card}.`),
+        contentType: "text/markdown",
+      }));
+      const result = await readSharedContext(pod);
+      expect(result).toMatchObject({ status: "refused", url: CONTEXT });
+      expect(JSON.stringify(result)).not.toContain(card.slice(-4));
+    }
+  });
+
+  it("detects only Luhn-valid 12-19 digit runs", () => {
+    expect(containsCardNumber("4111111111111111")).toBe(true);
+    expect(containsCardNumber("4111111111111112")).toBe(false);
+    expect(containsCardNumber("phone 07700 900123, born 1990")).toBe(false);
+    expect(containsCardNumber("12345678901")).toBe(false);
+    expect(containsCardNumber("")).toBe(false);
   });
 
   it("registers one read-only tool that takes no arguments", async () => {

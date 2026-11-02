@@ -17,7 +17,9 @@ solid_* aliases for v0.2, with the same schema, result and write enforcement as 
 pod_list/pod_read/pod_write/search names. No new tools belong to MCP-01.
 Shared-context tools (decisions/0004) live in context-tools.ts and register beside the pod
 tools. context_read takes no arguments and reads only the fixed SHARED_CONTEXT_PATH; keep
-model input away from the URL, and keep writes to owner-approved proposals.
+model input away from the URL, and keep writes to owner-approved proposals. It reads below
+the server's configured root (a sub-container server looks under that sub-container), refuses
+redirects/aliases, and refuses documents containing Luhn-valid card numbers.
 
 The server and fetch adapter default to read-only independently. Scope-check tool
 and resource URLs even with injected PodPorts. The fetch adapter permits only the
