@@ -6,6 +6,10 @@ import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { sanitizeMessageHtml } from "../mime";
 import {
   archive,
+  createDraft,
+  type Draft,
+  type DraftInput,
+  discardDraft,
   documentOf,
   importMbox,
   loadFolders,
@@ -17,9 +21,11 @@ import {
   mailDocument,
   mailRoot,
   persistImportedMail,
+  readDraft,
   setLabel,
   setRead,
   setStarred,
+  updateDraft,
 } from "../model";
 import { mailAddressName, mailAttachments, privateMailIndex } from "../model/client-support";
 import { type QuotedText, QuoteError, splitQuotedText } from "../quotes";
@@ -228,6 +234,7 @@ export class MailClient {
         ...(message.encoding === undefined ? {} : { originalUrl: message.encoding }),
         read: message.isRead,
         starred: [...message.folderIris].some((f) => folderKey(f) === "starred"),
+        draft: [...message.folderIris].some((f) => folderKey(f) === "drafts"),
         labels: [...message.folderIris],
         attachments: await mailAttachments(this.store, message.value),
       });
@@ -274,6 +281,29 @@ export class MailClient {
     if (this.rootOf(iri) !== this.rootOf(folderIri))
       throw new TypeError("Labels must belong to the same account");
     await setLabel(this.store, iri, folderIri, on);
+  }
+  /** Saves a new draft (no iri) or rewrites an existing one; returns the draft message IRI. */
+  async saveDraft(account: string, input: DraftInput, iri?: string): Promise<string> {
+    const root = this.root(account);
+    if (iri === undefined)
+      return createDraft(this.store, root, this.webId, input, crypto.randomUUID(), new Date());
+    if (this.rootOf(iri) !== root) throw new TypeError("Drafts must belong to the same account");
+    await updateDraft(this.store, root, iri, input, new Date());
+    return iri;
+  }
+  draft(iri: string): Promise<Draft> {
+    return readDraft(this.store, this.rootOf(iri), iri);
+  }
+  async discardDraft(iri: string): Promise<void> {
+    await discardDraft(this.store, this.rootOf(iri), iri, async (url) => {
+      const response = await this.binaryFetch(url, { method: "DELETE" });
+      // Already gone is the goal state.
+      if (!response.ok && response.status !== 404)
+        throw new MailError(
+          response.status === 401 || response.status === 403 ? "forbidden" : "http",
+          response.status,
+        );
+    });
   }
   async createLabel(account: string, title: string): Promise<string> {
     const name = title.trim();

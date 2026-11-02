@@ -203,3 +203,33 @@ test("shows import ZIP guidance and query errors without losing navigation", asy
   await page.goto("/mail/not-a-folder");
   await expect(page.getByRole("heading", { name: "This folder doesn't exist" })).toBeVisible();
 });
+test("composes, saves, edits and discards a draft in the pod", async ({ page }, info) => {
+  await page.goto("/mail/compose");
+  await expect(page.getByRole("heading", { name: "New message", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await page.getByLabel("To", { exact: true }).fill("Bob Example <bob@example.org>");
+  await page.getByLabel("Subject", { exact: true }).fill("Allotment rota");
+  await page.getByLabel("Message", { exact: true }).fill("Can you water on Thursday?");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Edit draft", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/mail\/compose\?draft=/);
+  await accessible(page);
+  await capture(page, info, "compose");
+  await page.goto("/mail/drafts");
+  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await page
+    .getByRole("link", { name: /Allotment rota/ })
+    .first()
+    .click();
+  await expect(page.getByText("Draft, not sent.")).toBeVisible();
+  await page.getByRole("link", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue("bob@example.org");
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Can you water on Thursday?",
+  );
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);
+  await page.goto("/mail/compose?draft=not-a-ref");
+  await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();
+});
