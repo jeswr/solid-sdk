@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
-# 0004 — Conversation archive and cross-account sync on the pod
+# 0005 — Conversation archive and cross-account sync on the pod
 
 Status: proposed (2026-11-02). Scope: use cases 1 and 2 of the MCP personal-data brief, in which Jesse
 wants all his AI conversation history in his pod (1), synced across his accounts (2). Use cases 3 and 4
