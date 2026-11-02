@@ -162,6 +162,65 @@ describe("task creation retry identity", () => {
   });
 });
 
+describe("label deletion retry recovery", () => {
+  it.each([
+    "task",
+    "tracker",
+  ] as const)("reads back a lost %s update response and does not repeat a committed write", async (lostResponse) => {
+    const result = await frameCache();
+    const { cache, store, inbox, pod, failures } = result;
+    const project = await cache.ensureLabels(inbox, ["bills"]);
+    const labelId = project?.tracker.labels[0]?.id;
+    if (!project || !labelId) throw new Error("Missing label");
+    const external = await store.createTask(project, {
+      title: "Server only",
+      state: "open",
+      categoryTypes: [labelId],
+    });
+    if (lostResponse === "task") {
+      const update = store.updateTask.bind(store);
+      vi.spyOn(store, "updateTask").mockImplementationOnce(async (...args) => {
+        await update(...args);
+        throw new Error("Task response lost");
+      });
+    } else {
+      const update = store.updateProject.bind(store);
+      vi.spyOn(store, "updateProject").mockImplementationOnce(async (...args) => {
+        await update(...args);
+        throw new Error("Tracker response lost");
+      });
+    }
+    const start = pod.requests.length;
+    const listed = await store.listTasks(project.tracker.stateStore as string, { strict: true });
+    expect(await cache.deleteLabel(project, [labelId], listed)).toBeUndefined();
+    expect(failures).toHaveBeenCalledTimes(1);
+    if (lostResponse === "task")
+      expect((await store.readProject(project.url)).tracker.labels).toHaveLength(1);
+    const beforeRetry = pod.requests.length;
+    await retry(result);
+    expect(failures).toHaveBeenCalledTimes(1);
+    expect((await store.readTask(external.url)).task.types.has(labelId)).toBe(false);
+    expect((await store.readProject(project.url)).tracker.labels).toHaveLength(0);
+    const writes = pod.requests.slice(start).filter((request) => request.method === "PUT");
+    expect(writes.map((request) => request.url)).toEqual([external.url, project.url]);
+    expect(writes.every((request) => request.headers.has("If-Match"))).toBe(true);
+    const retried = pod.requests.slice(beforeRetry);
+    const firstWrite = retried.findIndex((request) => request.method !== "GET");
+    const taskRead = retried.findIndex(
+      (request) => request.method === "GET" && request.url === external.url,
+    );
+    const trackerRead = retried.findIndex(
+      (request) => request.method === "GET" && request.url === project.url,
+    );
+    expect(taskRead).toBeGreaterThan(-1);
+    expect(trackerRead).toBeGreaterThan(-1);
+    if (lostResponse === "task") {
+      expect(firstWrite).toBeGreaterThan(taskRead);
+      expect(firstWrite).toBeGreaterThan(trackerRead);
+    } else expect(firstWrite).toBe(-1);
+  });
+});
+
 describe("recurring completion retry recovery", () => {
   it("retains earlier completion evidence through a second tab's real advance", async () => {
     const result = await recurring(3);

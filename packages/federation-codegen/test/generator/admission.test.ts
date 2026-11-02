@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,9 +15,9 @@ import {
 } from "../../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const exampleDir = join(here, "..", "..", "examples", "bookmark");
+const packageDir = join(here, "..", "..", "..", "solid-bookmark");
 const config = JSON.parse(
-  readFileSync(join(exampleDir, "codegen.config.json"), "utf8"),
+  readFileSync(join(packageDir, "codegen.config.json"), "utf8"),
 ) as CodegenConfig;
 
 const NS = "https://example.org/broken#";
@@ -100,14 +101,8 @@ describe("tier-a admission — fail-closed on a broken ontology / profile", () =
 
   it("the bookmark package admits cleanly (a warning for the unbounded tags set is non-blocking)", () => {
     const result = generateModel({
-      ontologyTtl: readFileSync(
-        join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"),
-        "utf8",
-      ),
-      shapesTtl: readFileSync(
-        join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"),
-        "utf8",
-      ),
+      ontologyTtl: readFileSync(join(packageDir, "bookmark.ttl"), "utf8"),
+      shapesTtl: readFileSync(join(packageDir, "bookmark.shacl.ttl"), "utf8"),
       config,
     });
     expect(result.admission.ok).toBe(true);

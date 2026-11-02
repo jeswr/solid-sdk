@@ -1,0 +1,25 @@
+// AUTHORED-BY Claude Opus 5.5
+// The fidelity and generate tests read solid-bookmark's ontology, shapes, config and
+// generated model directly; the sector and security tests read solid-federation-vocab
+// sector files, and a review test reads ADR 0003. solid-bookmark depends on this package
+// (it runs the generator), so it cannot be a dependency here; these inputs stop Turbo replaying a
+// stale cached pass when those files change (bead sst-ild.4.10). `--affected` still maps
+// a solid-bookmark change to solid-bookmark only (its own drift test runs there);
+// `gate:full` re-runs these cross-package tests.
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/solid-bookmark/bookmark.ttl",
+        "$TURBO_ROOT$/packages/solid-bookmark/bookmark.shacl.ttl",
+        "$TURBO_ROOT$/packages/solid-bookmark/codegen.config.json",
+        "$TURBO_ROOT$/packages/solid-bookmark/src/**",
+        "$TURBO_ROOT$/packages/solid-federation-vocab/sectors/**",
+        "$TURBO_ROOT$/decisions/0003-domain-model-codegen.md"
+      ]
+    }
+  }
+}

@@ -62,6 +62,16 @@ describe("shared TaskView projection from real model objects", () => {
     expect(toTaskView(storedTask("Priority", { priority }), project()).priority).toBe(level);
   });
 
+  it.each([
+    `${NS.WF}dateDue`,
+    `${NS.DCT}created`,
+    `${NS.PROV}endedAtTime`,
+  ])("rejects a non-finite date read from external RDF at %s", (predicate) => {
+    const stored = storedTask("Malformed timestamp");
+    node(stored.task.id, stored.dataset).setTyped(predicate, "invalid", `${NS.XSD}dateTime`);
+    expect(() => toTaskView(stored, project())).toThrow("Invalid date.");
+  });
+
   it("supports absent metadata in cross-app RDF and defaults unrecognised priority to P4", () => {
     const home = project();
     const stored = storedTask("Minimal");
