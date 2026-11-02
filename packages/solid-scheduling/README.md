@@ -180,9 +180,12 @@ hand-written model imported in #279, they differ as follows, pinned in
   alike.
 - A resource URL that is not a canonical absolute http(s) URL without a fragment (a
   space, `>`, `#frag`, a relative path or another scheme) makes the subject helpers,
-  build and serialize throw a `TypeError`, and parse returns `undefined`. The
-  hand-written model wrote such IRIs into Turtle unchecked. `isResourceUrl` and
-  `assertResourceUrl` expose the check.
+  build throw a `TypeError` (serialize rejects with one), and parse returns
+  `undefined`. The hand-written model wrote such IRIs into Turtle unchecked.
+  `isResourceUrl` and `assertResourceUrl` expose the check; pass `new URL(u).href` to
+  canonicalise an IDN, uppercase-host or raw-Unicode URL first.
+- One malformed federation (`wf:`) value now drops only that field, and accepted
+  federation IRIs come back exactly as stored (task-model's `parseTask` filters them).
 
 ## Develop
 

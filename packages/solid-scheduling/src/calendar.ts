@@ -117,7 +117,7 @@ export function calendarStoreToTurtle(store: Store): Promise<string> {
 }
 
 /** Build + serialise a calendar to a Turtle document in one call. */
-export function serializeCalendar(resourceUrl: string, data: CalendarData): Promise<string> {
+export async function serializeCalendar(resourceUrl: string, data: CalendarData): Promise<string> {
   return calendarStoreToTurtle(buildCalendar(resourceUrl, data));
 }
 

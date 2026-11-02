@@ -247,3 +247,34 @@ describe("parseTask hardens untrusted reads (sst-ild.7.9)", () => {
     expect(back?.dueDate).toBeUndefined();
   });
 });
+
+describe("parseTask returns accepted IRIs as stored (sst-ild.7.9 review)", () => {
+  const Pre = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+    @prefix dct: <http://purl.org/dc/terms/> .`;
+
+  it("keeps a valid non-canonical IRI unchanged on scalars and sets", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee <https://Alice.Example/profile/card#me> ;
+          wf:tracker <http://x.org> ;
+          dct:requires <https://B.example/x#it> .`),
+    );
+    expect(back?.assignee).toBe("https://Alice.Example/profile/card#me");
+    expect(back?.project).toBe("http://x.org");
+    expect(back?.blockedBy).toEqual(["https://B.example/x#it"]);
+  });
+
+  it("drops a bad set member alone and keeps the valid ones", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          dct:requires "lit", [], <javascript:x>, <https://ok.example/t#it> ;
+          dct:relation <https://ok.example/r#it>, "x" .`),
+    );
+    expect(back?.blockedBy).toEqual(["https://ok.example/t#it"]);
+    expect(back?.relatesTo).toEqual(["https://ok.example/r#it"]);
+  });
+});

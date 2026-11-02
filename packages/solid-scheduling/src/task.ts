@@ -149,6 +149,9 @@ export function schedulingNodeIris(resourceUrl: string): {
 
 /** The conventional subject IRI of the i-th reminder in a task document. */
 export function reminderIri(resourceUrl: string, index: number): string {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new TypeError("reminder index must be a non-negative integer");
+  }
   return `${assertResourceUrl(resourceUrl)}#reminder${index}`;
 }
 
@@ -312,7 +315,7 @@ export function storeToTurtle(store: Store): Promise<string> {
 }
 
 /** Build + serialise a task to a Turtle document in one call. */
-export function serializeSchedulingTask(
+export async function serializeSchedulingTask(
   resourceUrl: string,
   data: SchedulingTaskData,
 ): Promise<string> {
@@ -373,19 +376,17 @@ export function parseSchedulingTask(
     .filter((r): r is ReminderData => r !== undefined);
   if (reminders.length > 0) data.reminders = reminders;
 
-  // parseTask filters IRIs only on build and throws on a wrong term kind, so the read
-  // is tryRead-guarded and every IRI it returns is http(s)-filtered here.
-  const wf = tryRead(() => parseTask(resourceUrl, dataset));
+  // Federation fields come from the shared wf:Task model. parseTask guards each read and
+  // drops non-http(s) IRIs, returning accepted IRIs exactly as stored.
+  const wf = parseTask(resourceUrl, dataset);
   if (wf !== undefined) {
-    setIfDefined(data, "assignee", httpIriOrUndefined(wf.assignee));
+    setIfDefined(data, "assignee", wf.assignee);
     setIfDefined(data, "priority", wf.priority);
-    setIfDefined(data, "position", finiteOrUndefined(wf.rank));
-    setIfDefined(data, "parent", httpIriOrUndefined(wf.parent));
-    const blockedBy = httpIris(wf.blockedBy);
-    if (blockedBy.length > 0) data.blockedBy = blockedBy;
-    const relatesTo = httpIris(wf.relatesTo);
-    if (relatesTo.length > 0) data.relatesTo = relatesTo;
-    setIfDefined(data, "duplicateOf", httpIriOrUndefined(wf.duplicateOf));
+    setIfDefined(data, "position", wf.rank);
+    setIfDefined(data, "parent", wf.parent);
+    if (wf.blockedBy !== undefined) data.blockedBy = wf.blockedBy;
+    if (wf.relatesTo !== undefined) data.relatesTo = wf.relatesTo;
+    setIfDefined(data, "duplicateOf", wf.duplicateOf);
   }
   return data;
 }

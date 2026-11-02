@@ -331,9 +331,10 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
   if (!tryRead(() => doc.isTask)) return undefined;
 
   // Pod data is untrusted. Every read is guarded so a malformed value (a literal where
-  // an IRI belongs, a wrong datatype) drops that field instead of aborting the parse,
-  // and every object-property IRI is http(s)-filtered, mirroring buildTask's write-side
-  // filter, so a `javascript:` or `data:` IRI never reaches a consumer.
+  // an IRI belongs, a wrong datatype) drops that value instead of aborting the parse,
+  // and every object-property IRI must use the http(s) scheme, so a `javascript:` or
+  // `data:` IRI never reaches a consumer. Accepted IRIs are returned exactly as stored
+  // (not canonicalised), so foreign data round-trips and IRI comparisons still match.
   const data: TaskData = {
     title: tryRead(() => doc.title) ?? "",
     state: tryRead(() => doc.state) ?? "open",
@@ -346,9 +347,9 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
   setIfDefined(data, "created", validDate(tryRead(() => doc.created)));
   setIfDefined(data, "modified", validDate(tryRead(() => doc.modified)));
   setIfDefined(data, "endedAt", validDate(tryRead(() => doc.endedAt)));
-  setIfDefined(data, "creator", httpIriOrUndefined(tryRead(() => doc.creator)));
-  setIfDefined(data, "assignee", httpIriOrUndefined(tryRead(() => doc.assignee)));
-  setIfDefined(data, "project", httpIriOrUndefined(tryRead(() => doc.project)));
+  setIfDefined(data, "creator", httpScheme(tryRead(() => doc.creator)));
+  setIfDefined(data, "assignee", httpScheme(tryRead(() => doc.assignee)));
+  setIfDefined(data, "project", httpScheme(tryRead(() => doc.project)));
   setIfDefined(data, "dueDate", validDate(tryRead(() => doc.dueDate)));
   setIfDefined(
     data,
@@ -356,14 +357,15 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
     tryRead(() => doc.priority),
   );
   setIfDefined(data, "rank", finite(tryRead(() => doc.rank)));
-  setIfDefined(data, "parent", httpIriOrUndefined(tryRead(() => doc.parent)));
-  setIfDefined(data, "duplicateOf", httpIriOrUndefined(tryRead(() => doc.duplicateOf)));
-  setIfDefined(data, "clonedFrom", httpIriOrUndefined(tryRead(() => doc.clonedFrom)));
+  setIfDefined(data, "parent", httpScheme(tryRead(() => doc.parent)));
+  setIfDefined(data, "duplicateOf", httpScheme(tryRead(() => doc.duplicateOf)));
+  setIfDefined(data, "clonedFrom", httpScheme(tryRead(() => doc.clonedFrom)));
 
-  // The two set-valued relations are omitted when empty (their absence vs an
-  // empty array is observable to consumers, so this is kept explicit).
-  const blockedBy = httpIris(tryRead(() => [...doc.blockedBy]));
-  const relatesTo = httpIris(tryRead(() => [...doc.relatesTo]));
+  // The two set-valued relations are read member by member (a literal or blank-node
+  // member drops alone) and omitted when empty (absence vs an empty array is
+  // observable to consumers, so this is kept explicit).
+  const blockedBy = httpObjects(doc, dct("requires"));
+  const relatesTo = httpObjects(doc, dct("relation"));
   if (blockedBy.length > 0) data.blockedBy = blockedBy;
   if (relatesTo.length > 0) data.relatesTo = relatesTo;
   return data;
@@ -388,9 +390,29 @@ function finite(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/** The absolute http(s) members of an untrusted IRI list. */
-function httpIris(values: readonly string[] | undefined): string[] {
-  return (values ?? []).filter((v) => isHttpIri(v));
+/** `value` unchanged when it parses as an absolute http(s) URL, else `undefined`. */
+function httpScheme(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The distinct http(s) NamedNode objects of `predicate` on `doc`, as stored. */
+function httpObjects(doc: Task, predicate: string): string[] {
+  const out = new Set<string>();
+  const matches = tryRead(() => [
+    ...doc.dataset.match(doc.factory.namedNode(doc.value), doc.factory.namedNode(predicate), null),
+  ]);
+  for (const quad of matches ?? []) {
+    if (quad.object.termType !== "NamedNode") continue;
+    const iri = httpScheme(quad.object.value);
+    if (iri !== undefined) out.add(iri);
+  }
+  return [...out];
 }
 
 /**

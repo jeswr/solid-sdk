@@ -41,3 +41,18 @@ it("parse returns undefined for an unsafe resource URL instead of throwing", () 
     expect(parseCalendar(url, ds)).toBeUndefined();
   }
 });
+
+it("reminderIri rejects a non-integer or negative index", () => {
+  const url = "https://alice.pod.example/tasks/a";
+  expect(reminderIri(url, 2)).toBe(`${url}#reminder2`);
+  for (const bad of [-1, 1.5, Number.NaN]) expect(() => reminderIri(url, bad)).toThrow(TypeError);
+});
+
+it("accepts a canonical URL with a query string or a container path", () => {
+  expect(schedulingTaskSubject("http://localhost:3000/alice/")).toBe(
+    "http://localhost:3000/alice/#it",
+  );
+  expect(schedulingTaskSubject("https://pod.example/t?q=a%20b")).toBe(
+    "https://pod.example/t?q=a%20b#it",
+  );
+});
