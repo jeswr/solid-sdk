@@ -435,7 +435,7 @@ and address reads remain available on a read-only server when permitted.
 
 ## Chat tools
 
-All three tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and require
+All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and require
 `webId` to identify the owner. `chat_save` also requires `readOnly:false`.
 
 - `chat_save({provider, conversationId, title, messages})` returns `{url, saved, skipped}`.
@@ -448,6 +448,9 @@ All three tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and requ
   Limit defaults to 20, maximum 100. Reuse filters when following a cursor.
 - `chat_get({provider, conversationId})` returns the conversation plus its URL and
   messages ordered by time, then ID.
+- `chat_export({provider, conversationId})` returns `{url, markdown}`: the same
+  conversation as a Markdown transcript to paste into another account. Titles and
+  text are redacted again on export, and each message sits in its own code fence.
 
 Storage is `<podRoot>private/chats/<provider>/<conversationId>/`, with owner-only
 WAC ACLs written before chat content and create-only message PUTs using
