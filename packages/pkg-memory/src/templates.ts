@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
+import { containsCardNumber } from "./cards.js";
 import { dateTime, iri, NS, RdfNode, validCalendarDate } from "./rdf.js";
 
 /** Temporal bound whose datatype records its precision (KG §2.3). */
@@ -45,6 +46,22 @@ export type Fact =
       };
     }
   | {
+      /**
+       * A payment card on file, without its number: brand, last four digits, expiry month and
+       * an optional billing-address entity. There is deliberately no field for a full card
+       * number (PAN) or security code, and values that carry one are refused.
+       */
+      template: "paymentCard";
+      value: {
+        id: string;
+        brand: PaymentCardBrand;
+        last4: string;
+        /** Expiry month, as `gYearMonth` (for example `2027-09`). */
+        expires: TemporalValue;
+        billingAddress?: string;
+      };
+    }
+  | {
       template: "relationship";
       value: {
         id: string;
@@ -54,6 +71,45 @@ export type Fact =
         endDate?: TemporalValue;
       };
     };
+
+/** Card networks a payment-card fact may name. */
+export const PAYMENT_CARD_BRANDS = [
+  "visa",
+  "mastercard",
+  "amex",
+  "discover",
+  "diners",
+  "jcb",
+  "unionpay",
+  "maestro",
+  "other",
+] as const;
+/** A card network name from {@link PAYMENT_CARD_BRANDS}. */
+export type PaymentCardBrand = (typeof PAYMENT_CARD_BRANDS)[number];
+const CARD_KEYS = new Set(["id", "brand", "last4", "expires", "billingAddress"]);
+
+/** Refuse anything beyond brand, last four, expiry and billing address; never echo values. */
+function validPaymentCard(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const card = value as Record<string, unknown>;
+  if (Object.keys(card).some((key) => !CARD_KEYS.has(key))) return false;
+  if (!(PAYMENT_CARD_BRANDS as readonly unknown[]).includes(card.brand)) return false;
+  if (typeof card.last4 !== "string" || !/^[0-9]{4}$/.test(card.last4)) return false;
+  const expires = card.expires as TemporalValue | undefined;
+  if (
+    typeof expires !== "object" ||
+    expires === null ||
+    expires.datatype !== "gYearMonth" ||
+    typeof expires.value !== "string" ||
+    Object.keys(expires).some((key) => key !== "value" && key !== "datatype")
+  )
+    return false;
+  for (const text of [card.id, card.billingAddress, expires.value])
+    if (typeof text === "string" && containsCardNumber(text)) return false;
+  if (typeof card.id !== "string") return false;
+  if (card.billingAddress !== undefined && typeof card.billingAddress !== "string") return false;
+  return true;
+}
 
 function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void {
   const patterns = {
@@ -175,6 +231,23 @@ export function createFactAssertion(about: string, fact: Fact): Store {
           schedule.text(`${NS.schema}frequency`, v.dose.frequency);
       }
       period(statement, v);
+      break;
+    }
+    case "paymentCard": {
+      if (!validPaymentCard(fact.value)) throw new Error("Invalid payment card");
+      const v = fact.value;
+      person.link(`${NS.schema}owns`, v.id);
+      const card = new RdfNode(v.id, store)
+        .link(type, `${NS.schema}PaymentCard`)
+        .text(`${NS.schema}brand`, v.brand);
+      const last4 = df.blankNode();
+      card.add(`${NS.schema}identifier`, last4);
+      new RdfNode(last4, store)
+        .link(type, `${NS.schema}PropertyValue`)
+        .text(`${NS.schema}propertyID`, "last4")
+        .text(`${NS.schema}value`, v.last4);
+      temporal(card, `${NS.schema}validThrough`, v.expires);
+      if (v.billingAddress !== undefined) card.link(`${NS.schema}address`, v.billingAddress);
       break;
     }
     case "relationship": {

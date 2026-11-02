@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pkg-memory
 
@@ -31,11 +32,20 @@ const parsed = await parseNanopublications(trig);
 ```
 
 `createFactAssertion` supports `address`, `email`, `phone`, `preference`,
-`condition`, `allergy`, `medication`, and `relationship`. Use its discriminated
+`condition`, `allergy`, `medication`, `relationship`, and `paymentCard`. Use its discriminated
 `Fact` type for the value fields. Residence, clinical, product and role identifiers
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
+
+`paymentCard` records `schema:PaymentCard` with `schema:brand`, the last four
+digits as a `schema:PropertyValue` (`propertyID` "last4"), `schema:validThrough`
+as an `xsd:gYearMonth` and an optional `schema:address`. It has no field for a full
+card number or security code, refuses any extra key, and refuses an id, address
+or expiry containing a Luhn-valid card number. `findCardNumbers` and
+`containsCardNumber` expose the detector: every 12 to 19 digit window with a card
+prefix and a valid Luhn check, over Unicode decimal digits with space, dash, dot,
+comma, underscore or slash separators, in linear time.
 
 The batch contract follows `np_builder.py` (snake-case source fields). Claims can
 supply a default-graph RDF/JS dataset or a Turtle assertion body using the reference
