@@ -1,0 +1,263 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.sht-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  min-height: 60dvh;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--foreground-muted);
+}
+.sht-state h1,
+.sht-state h2 {
+  color: var(--foreground);
+}
+.sht-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.sht-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--app-sheets-soft);
+  color: var(--app-sheets);
+  text-decoration: none;
+}
+.sht-list {
+  padding: var(--space-6);
+}
+.sht-list h1 {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.sht-icon {
+  color: var(--app-sheets);
+  flex-shrink: 0;
+}
+.sht-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.sht-table th {
+  font-weight: 500;
+  color: var(--foreground-muted);
+}
+.sht-table th,
+.sht-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.sht-table th:last-child,
+.sht-table td:last-child {
+  width: 48px;
+  text-align: right;
+}
+.sht-table tr:hover td {
+  background: var(--surface-2);
+}
+.sht-name {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 40px;
+  color: var(--foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.sht-name:hover {
+  text-decoration: underline;
+}
+.sht-mobile-time {
+  display: none;
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+}
+.sht-skeleton {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-6);
+}
+.sht-skeleton span {
+  display: block;
+  min-height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+}
+.sht-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.sht-back {
+  flex-shrink: 0;
+  display: grid;
+  place-content: center;
+  width: 36px;
+  height: 40px;
+  color: var(--foreground);
+  border-radius: var(--radius-md);
+}
+.sht-back:hover {
+  background: var(--surface-2);
+}
+.sht-title {
+  min-width: 0;
+}
+.sht-title .suite-label,
+.sht-title .suite-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.sht-title .suite-field {
+  gap: 0;
+  min-width: 0;
+}
+.sht-title .suite-editable {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.sht-title .suite-input {
+  max-width: 100%;
+  height: 28px;
+}
+.sht-save {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+}
+.sht-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sht-editor {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.sht-grid-region {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.sht-univer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.sht-grid-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  background: var(--surface);
+}
+.sht-import-options {
+  display: grid;
+  gap: var(--space-3);
+}
+.sht-import-options label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sht-import-options legend {
+  padding-bottom: var(--space-3);
+}
+.ish-frame[data-app="sheets"] .ish-main:has(.sht-editor) {
+  overflow: hidden;
+}
+@media (max-width: 639px) {
+  .sht-list {
+    padding: var(--space-4);
+  }
+  .sht-table th,
+  .sht-table td {
+    padding-inline: var(--space-1);
+  }
+  .sht-owner,
+  .sht-modified {
+    display: none;
+  }
+  .sht-mobile-time {
+    display: block;
+    margin-top: var(--space-1);
+  }
+  .sht-title-icon {
+    display: none;
+  }
+  .sht-context {
+    gap: var(--space-1);
+  }
+  .sht-back {
+    width: 24px;
+  }
+  .sht-actions {
+    gap: 0;
+  }
+  .sht-actions button {
+    padding-inline: var(--space-2);
+  }
+  .sht-save {
+    line-height: 1.2;
+  }
+  .ish-frame[data-app="sheets"] .ish-topbar {
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+  .ish-frame[data-app="sheets"] .ish-spacer {
+    display: none;
+  }
+  .ish-frame[data-app="sheets"] .ish-context {
+    flex: 1;
+  }
+}
+
+/* Below the sidebar breakpoint the "New spreadsheet" button lives in the drawer, so offer a FAB. */
+.sht-fab-slot {
+  display: none;
+}
+.sht-fab {
+  display: grid;
+  place-content: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-3);
+  cursor: pointer;
+}
+@media (max-width: 767px) {
+  .sht-fab-slot {
+    display: block;
+    position: fixed;
+    right: var(--space-4);
+    bottom: calc(64px + var(--space-4));
+    z-index: 30;
+  }
+}

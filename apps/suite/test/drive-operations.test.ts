@@ -89,7 +89,8 @@ describe("Drive usage", () => {
     await trashOne(client);
     const expected = pod
       .snapshot()
-      .resources.filter(([url]) => url.startsWith(DRIVE))
+      // Auxiliary ACL documents are not container members, so they are not counted.
+      .resources.filter(([url]) => url.startsWith(DRIVE) && !url.endsWith(".acl"))
       .reduce((sum, [, resource]) => sum + resource.body.byteLength, 0);
     expect(expected).toBeGreaterThan(0);
     expect(await measureUsage(client, DRIVE)).toBe(expected);

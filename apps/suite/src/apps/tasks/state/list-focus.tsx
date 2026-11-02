@@ -5,15 +5,28 @@ import {
   type ReactNode,
   useContext,
   useLayoutEffect,
+  useReducer,
   useRef,
   useState,
 } from "react";
+import { selectionReducer } from "./selection";
 
 interface ListFocus {
   activeUrl: string | undefined;
   onFocus: (url: string) => void;
   onMove: (url: string, direction: -1 | 1) => void;
   refresh: () => void;
+  selection: ReadonlySet<string>;
+  selectedUrls: () => ReadonlySet<string>;
+  toggleSelection: (url: string) => void;
+  clearSelection: () => void;
+  /** Cmd/Ctrl+A: select every visible row. */
+  selectAll: () => void;
+  /** Shift+↑/↓ and Shift+click: select from the range anchor through `to`, then focus it. */
+  selectRange: (from: string, to: string) => void;
+  /** Shift+↑/↓ from a focused row. */
+  extendSelection: (url: string, direction: -1 | 1) => void;
+  announce: (message: string) => void;
 }
 const ListFocusContext = createContext<ListFocus | undefined>(undefined);
 export const useTaskListFocus = () => useContext(ListFocusContext);
@@ -28,6 +41,9 @@ export function TaskListFocus({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [activeUrl, setActive] = useState<string>();
+  const [selection, dispatch] = useReducer(selectionReducer, new Set<string>());
+  const [announcement, announce] = useState("");
+  const anchor = useRef<{ url: string; base: string[] } | undefined>(undefined);
   const focused = useRef<{ element: HTMLElement; url: string; order: string[] } | undefined>(
     undefined,
   );
@@ -39,6 +55,7 @@ export function TaskListFocus({
   const refresh = () => {
     const rows = visibleRows();
     const urls = rows.map((row) => row.dataset.tskRow as string);
+    dispatch({ type: "prune", visible: urls });
     setActive((active) => (active && urls.includes(active) ? active : urls[0]));
     const previous = focused.current;
     if (!previous) return;
@@ -73,11 +90,61 @@ export function TaskListFocus({
     }
   };
   useLayoutEffect(refresh);
+  const selectRange = (from: string, to: string) => {
+    const rows = visibleRows();
+    const urls = rows.map((row) => row.dataset.tskRow as string);
+    if (!anchor.current || !urls.includes(anchor.current.url))
+      anchor.current = { url: from, base: [...selection].filter((url) => url !== from) };
+    const next = selectionReducer(selection, {
+      type: "range",
+      base: anchor.current.base,
+      visible: urls,
+      anchor: anchor.current.url,
+      to,
+    });
+    dispatch({
+      type: "range",
+      base: anchor.current.base,
+      visible: urls,
+      anchor: anchor.current.url,
+      to,
+    });
+    rows.find((row) => row.dataset.tskRow === to)?.focus();
+    announce(`${next.size} selected`);
+  };
   return (
     <ListFocusContext.Provider
       value={{
         activeUrl,
         refresh,
+        selection,
+        selectedUrls: () =>
+          new Set(
+            visibleRows()
+              .map((row) => row.dataset.tskRow as string)
+              .filter((url) => selection.has(url)),
+          ),
+        toggleSelection: (url) => {
+          // The toggled row anchors a later Shift+↑/↓ or Shift+click range.
+          anchor.current = { url, base: [...selection].filter((item) => item !== url) };
+          dispatch({ type: "toggle", url });
+        },
+        clearSelection: () => {
+          anchor.current = undefined;
+          dispatch({ type: "clear" });
+        },
+        selectAll: () => {
+          const urls = visibleRows().map((row) => row.dataset.tskRow as string);
+          dispatch({ type: "add", urls });
+          announce(`Selected ${urls.length} ${urls.length === 1 ? "task" : "tasks"}`);
+        },
+        selectRange,
+        extendSelection: (url, direction) => {
+          const urls = visibleRows().map((row) => row.dataset.tskRow as string);
+          const to = urls[urls.indexOf(url) + direction];
+          if (to) selectRange(url, to);
+        },
+        announce,
         onFocus: setActive,
         onMove: (url, direction) => {
           const rows = visibleRows();
@@ -112,6 +179,9 @@ export function TaskListFocus({
         }}
       >
         {children}
+        <span className="suite-sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </span>
       </div>
     </ListFocusContext.Provider>
   );

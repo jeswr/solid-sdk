@@ -32,6 +32,7 @@ import {
   visibleRange,
 } from "../state/view";
 import { CreateCalendar, useCalendarNavigation } from "./calendar-app";
+import { useCalendarEditing } from "./event-editor";
 
 export function EventButton({
   event,
@@ -74,6 +75,7 @@ export function EventButton({
 }
 function MonthView({ events }: { events: Occurrence[] }) {
   const { date, navigate, weekStart } = useCalendarNavigation();
+  const editing = useCalendarEditing();
   const value = localDate(date);
   const grid = monthGrid(value.getFullYear(), value.getMonth() + 1, weekStart);
   const [focused, setFocused] = useState(date);
@@ -117,7 +119,7 @@ function MonthView({ events }: { events: Occurrence[] }) {
       next = stepDate("month", key, event.key === "PageUp" ? -1 : 1);
     else if (event.key === "Enter") {
       event.preventDefault();
-      navigate(key, "day");
+      editing?.openQuick(key, addDays(key, 1), event.currentTarget as HTMLElement);
       return;
     } else return;
     event.preventDefault();
@@ -165,6 +167,10 @@ function MonthView({ events }: { events: Occurrence[] }) {
                   aria-label={label}
                   onFocus={() => setFocused(cell.date)}
                   onKeyDown={(event) => onKey(event, cell.date)}
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget)
+                      editing?.openQuick(cell.date, addDays(cell.date, 1), event.currentTarget);
+                  }}
                 >
                   <Link
                     tabIndex={-1}
@@ -232,6 +238,12 @@ function MonthView({ events }: { events: Occurrence[] }) {
 }
 function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day" }) {
   const { date, navigate, weekStart } = useCalendarNavigation();
+  const editing = useCalendarEditing();
+  const openSlot = (day: string, slot: number, anchor: HTMLElement) => {
+    const start = localDate(day);
+    start.setMinutes(slot * 30);
+    editing?.openQuick(start, new Date(+start + 3600000), anchor);
+  };
   const range = visibleRange(view, date, weekStart);
   const count = view === "week" ? 7 : 1;
   const days = Array.from({ length: count }, (_, i) => addDays(range.from, i));
@@ -298,7 +310,7 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
     else if (event.key === "ArrowRight") nextDay = addDays(day, 1);
     else if (event.key === "Enter") {
       event.preventDefault();
-      navigate(day, "day");
+      openSlot(day, slot, event.currentTarget as HTMLElement);
       return;
     } else if (event.key === "Tab" && !event.shiftKey) {
       const allDayEvent = bars.bars
@@ -358,6 +370,19 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
         <div className="cal-all-day">
           <span className="cal-gutter-label">All day</span>
           <div className="cal-all-day-events" style={{ height: Math.max(32, bars.laneCount * 30) }}>
+            <div
+              className="cal-all-day-slots"
+              style={{ gridTemplateColumns: `repeat(${count}, 1fr)` }}
+            >
+              {days.map((day) => (
+                <button
+                  type="button"
+                  key={day}
+                  aria-label={`Create all-day event on ${day}`}
+                  onClick={(event) => editing?.openQuick(day, addDays(day, 1), event.currentTarget)}
+                />
+              ))}
+            </div>
             {bars.bars.map((bar) => {
               const event = allDay.find((e) => e.id === bar.id) as Occurrence;
               return (
@@ -408,6 +433,7 @@ function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day"
                         setEventMode(false);
                       }}
                       onKeyDown={(event) => move(event, day, slot)}
+                      onClick={(event) => openSlot(day, slot, event.currentTarget)}
                     />
                   ))}
                 </tr>

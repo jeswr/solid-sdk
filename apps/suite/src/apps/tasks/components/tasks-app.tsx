@@ -23,9 +23,11 @@ import { isEditing, openAddTask } from "../state/add-focus";
 import { TasksProvider, useTasks } from "../state/tasks-context";
 import { Composer } from "./composer/composer";
 import { TaskDetail } from "./detail/task-detail";
+import { TasksDnd } from "./dnd/tasks-dnd";
 import "./detail/detail.css";
 import { TasksSidebar } from "./sidebar";
 import { SortMenu } from "./sort-menu";
+import { ViewToggle } from "./view-toggle";
 
 const VIEW_NAMES: Readonly<Record<string, string>> = {
   "/tasks/inbox": "Inbox",
@@ -41,7 +43,9 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
   const params = useSearchParams();
   const label = useRouteParams<{ label: string }>("/tasks/l/[label]")?.label;
-  const ref = useRouteParams<{ ref: string }>("/tasks/p/[ref]")?.ref;
+  const listRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]")?.ref;
+  const boardRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]/board")?.ref;
+  const ref = listRef ?? boardRef;
   const router = useRouter();
   const [quickAdd, setQuickAdd] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
@@ -53,6 +57,12 @@ function TasksChrome({ children }: { children: ReactNode }) {
         ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
           "Project")
         : "Tasks");
+  let projectUrl: string | undefined;
+  try {
+    if (typeof ref === "string") projectUrl = decodeRef(ref);
+  } catch {
+    /* The project route renders its own not-found state. */
+  }
   const taskRef = params.get("task");
   let taskUrl: string | undefined;
   try {
@@ -183,45 +193,59 @@ function TasksChrome({ children }: { children: ReactNode }) {
   }, []);
   const inbox = tasks.projects.find((project) => project.url === tasks.inboxUrl);
   return (
-    <SuiteFrame
-      app="tasks"
-      sidebar={<TasksSidebar />}
-      context={<span className="tsk-context-title">{title}</span>}
-      actions={supportsSort ? <SortMenu viewId={pathname} /> : undefined}
-      details={details}
-      onDetailsClose={closeDetails}
-    >
-      {quickAdd && inbox && (
-        <Composer
-          modal
-          project={inbox}
-          due={
-            pathname === "/tasks/today"
-              ? parseQuickAdd("today", {
-                  now: new Date(),
-                  tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  projects: [],
-                  labels: [],
-                }).due
-              : undefined
-          }
-          onClose={() => {
-            setQuickAdd(false);
-            requestAnimationFrame(() => restoreFocus.current?.focus());
-          }}
-        />
-      )}
-      <div data-tsk-task-ref={taskRef ?? undefined}>
-        {tasks.status === "error" ? (
-          <div className="tsk-content">
-            <h1>Tasks</h1>
-            <ErrorState error={classifyError(tasks.error)} actions={{ retry: tasks.retry }} />
-          </div>
-        ) : (
-          children
+    <TasksDnd>
+      <SuiteFrame
+        app="tasks"
+        sidebar={<TasksSidebar />}
+        context={<span className="tsk-context-title">{title}</span>}
+        actions={
+          supportsSort || projectUrl ? (
+            <>
+              {supportsSort && <SortMenu viewId={pathname} />}
+              {projectUrl && (
+                <ViewToggle
+                  projectUrl={projectUrl}
+                  mode={pathname.endsWith("/board") ? "board" : "list"}
+                />
+              )}
+            </>
+          ) : undefined
+        }
+        details={details}
+        onDetailsClose={closeDetails}
+      >
+        {quickAdd && inbox && (
+          <Composer
+            modal
+            project={inbox}
+            due={
+              pathname === "/tasks/today"
+                ? parseQuickAdd("today", {
+                    now: new Date(),
+                    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    projects: [],
+                    labels: [],
+                  }).due
+                : undefined
+            }
+            onClose={() => {
+              setQuickAdd(false);
+              requestAnimationFrame(() => restoreFocus.current?.focus());
+            }}
+          />
         )}
-      </div>
-    </SuiteFrame>
+        <div data-tsk-task-ref={taskRef ?? undefined}>
+          {tasks.status === "error" ? (
+            <div className="tsk-content">
+              <h1>Tasks</h1>
+              <ErrorState error={classifyError(tasks.error)} actions={{ retry: tasks.retry }} />
+            </div>
+          ) : (
+            children
+          )}
+        </div>
+      </SuiteFrame>
+    </TasksDnd>
   );
 }
 function SessionGate({ children }: { children: ReactNode }) {

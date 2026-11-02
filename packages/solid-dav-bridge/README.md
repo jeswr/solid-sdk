@@ -57,3 +57,15 @@ package's bounded SSRF guard.
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Browser use
+
+Import `fetchDav`, `parseComponents`, `findComponents` and `vcardToContact` from
+`@jeswr/solid-dav-bridge/browser` to keep Node networking out of browser bundles.
+This entry requires an explicit `fetch`. Validate the HTTPS endpoint (HTTP may be allowed
+for localhost development), reject URL credentials and redirects, omit browser cookies,
+and apply a timeout. Use the browser fetch, never the pod's authenticated fetch.
+DAV credentials are separate, request-local values; never persist or log them. Servers
+must allow browser access through CORS; exporting a `.vcf` file is the fallback.

@@ -9,6 +9,7 @@ import {
 } from "@jeswr/guarded-fetch";
 import type { BlankNode, Term } from "@rdfjs/types";
 import { Container } from "@solid/object";
+import { Artist, Track } from "./entities";
 import { historyShard, type Playback, PlaybackEvent, readHistory } from "./history";
 import { type MusicLibrary, readLibrary } from "./library";
 import { DataFactory, Store, serializeMusic } from "./rdf";
@@ -120,6 +121,38 @@ export async function loadHistory(
   return readHistory(dataset);
 }
 
+async function openShard(
+  fetch: typeof globalThis.fetch,
+  musicBase: string,
+  url: string,
+): Promise<{ document: MusicDocument; condition: WriteCondition }> {
+  try {
+    const document = await loadMusic(createPodScopedFetch(musicBase, { fetch }), url);
+    if (!document.etag)
+      throw new InvalidMusicError("An ETag is required to append to existing history");
+    return { document, condition: { ifMatch: document.etag } };
+  } catch (error) {
+    if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
+    return { document: { dataset: new Store(), etag: null, url }, condition: { ifNoneMatch: "*" } };
+  }
+}
+
+function playbackId(musicBase: string, url: string, iri: string): string {
+  const id = assertWithinPodScope(musicBase, httpIri(iri), { allowRoot: false });
+  if (id.split("#")[0] !== url || !new URL(id).hash) {
+    throw new InvalidMusicError("A playback IRI must be a fragment in its month shard");
+  }
+  return id;
+}
+
+function writePlayback(dataset: Store, id: string, play: Playback): void {
+  const event = new PlaybackEvent(id, dataset).stampType();
+  event.trackIri = play.trackIri;
+  event.startTime = play.startTime;
+  event.endTime = play.endTime;
+  event.agent = play.agent;
+}
+
 /** Read-modify-write one monthly shard; a 412 is propagated without overwriting it. */
 export async function appendPlayback(
   fetch: typeof globalThis.fetch,
@@ -127,27 +160,120 @@ export async function appendPlayback(
   play: Playback,
 ): Promise<MusicDocument> {
   const url = historyShard(musicBase, play.startTime);
-  let document: MusicDocument;
-  let condition: WriteCondition;
-  try {
-    document = await loadMusic(createPodScopedFetch(musicBase, { fetch }), url);
-    if (!document.etag)
-      throw new InvalidMusicError("An ETag is required to append to existing history");
-    condition = { ifMatch: document.etag };
-  } catch (error) {
-    if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
-    document = { dataset: new Store(), etag: null, url };
-    condition = { ifNoneMatch: "*" };
-  }
-  const id = assertWithinPodScope(musicBase, httpIri(play.iri), { allowRoot: false });
-  if (id.split("#")[0] !== url || !new URL(id).hash) {
-    throw new InvalidMusicError("A playback IRI must be a fragment in its month shard");
-  }
-  const event = new PlaybackEvent(id, document.dataset).stampType();
-  event.trackIri = play.trackIri;
-  event.startTime = play.startTime;
-  event.endTime = play.endTime;
-  event.agent = play.agent;
+  const { document, condition } = await openShard(fetch, musicBase, url);
+  writePlayback(document.dataset, playbackId(musicBase, url, play.iri), play);
   document.etag = await saveMusic(fetch, musicBase, url, document.dataset, condition);
   return document;
+}
+
+/** A listen whose song is not in the library: its recording is described in the shard. */
+export interface ImportedRecording {
+  iri: string;
+  title: string;
+  artistIri: string;
+  artist: string;
+}
+export interface ImportedPlayback extends Playback {
+  recording?: ImportedRecording | undefined;
+}
+
+/** Plays of one song this close together are one listen reported twice (as the parser treats them). */
+export const NEAR_DUPLICATE_MS = 30_000;
+const CONFLICT_RETRIES = 3;
+
+/** Normalised identities for one imported play, all fragments of its month shard. */
+function importedIds(musicBase: string, url: string, play: ImportedPlayback) {
+  const iri = playbackId(musicBase, url, play.iri);
+  const recording = play.recording && {
+    ...play.recording,
+    iri: playbackId(musicBase, url, play.recording.iri),
+    artistIri: playbackId(musicBase, url, play.recording.artistIri),
+  };
+  if (recording) {
+    if (new Set([iri, recording.iri, recording.artistIri]).size !== 3)
+      throw new InvalidMusicError("A play, its recording and its artist need their own fragments");
+    if (httpIri(play.trackIri) !== recording.iri)
+      throw new InvalidMusicError("An imported play must point at its recording");
+  }
+  return { play: { ...play, iri, trackIri: recording?.iri ?? play.trackIri }, recording };
+}
+
+/** Writes one shard's plays into `dataset`, skipping plays already there (exactly or nearly). */
+function mergeShard(dataset: Store, group: readonly ReturnType<typeof importedIds>[]) {
+  const has = (iri: string) => dataset.countQuads(DataFactory.namedNode(iri), null, null, null) > 0;
+  const times = new Map<string, number[]>();
+  const remember = (trackIri: string, time: number) => {
+    const list = times.get(trackIri);
+    if (list) list.push(time);
+    else times.set(trackIri, [time]);
+  };
+  for (const play of readHistory(dataset)) remember(play.trackIri, play.startTime.getTime());
+  const near = (trackIri: string, time: number) =>
+    (times.get(trackIri) ?? []).some((other) => Math.abs(other - time) <= NEAR_DUPLICATE_MS);
+  let added = 0;
+  let existing = 0;
+  for (const { play, recording } of group) {
+    const time = play.startTime.getTime();
+    if (has(play.iri) || near(play.trackIri, time)) {
+      existing += 1;
+      continue;
+    }
+    if (recording && !has(recording.iri)) {
+      if (!has(recording.artistIri)) {
+        const artist = new Artist(recording.artistIri, dataset).stampType();
+        artist.title = recording.artist;
+      }
+      const track = new Track(recording.iri, dataset).stampType();
+      track.title = recording.title;
+      track.setArtist(recording.artistIri);
+    }
+    writePlayback(dataset, play.iri, play);
+    remember(play.trackIri, time);
+    added += 1;
+  }
+  return { added, existing };
+}
+
+/**
+ * Appends many plays with one read-modify-write per monthly shard. A play already in
+ * the shard (the same IRI, or the same song within 30 seconds) is counted as existing,
+ * so importing an export twice, or the same listens from another service, adds
+ * nothing. A shard changed during the import (412) is re-read and merged again a few
+ * times; shards written before a failure stay written. Known limits: near-duplicates
+ * are only found within one month shard, and only for the same track IRI.
+ */
+export async function appendPlaybacks(
+  fetch: typeof globalThis.fetch,
+  musicBase: string,
+  plays: readonly ImportedPlayback[],
+  onShard: (done: number, total: number) => void = () => {},
+): Promise<{ added: number; existing: number }> {
+  const shards = new Map<string, ReturnType<typeof importedIds>[]>();
+  for (const play of plays) {
+    const url = historyShard(musicBase, play.startTime);
+    const group = shards.get(url) ?? [];
+    group.push(importedIds(musicBase, url, play));
+    shards.set(url, group);
+  }
+  let added = 0;
+  let existing = 0;
+  let done = 0;
+  for (const [url, group] of [...shards].sort(([a], [b]) => a.localeCompare(b))) {
+    for (let attempt = 1; ; attempt++) {
+      const { document, condition } = await openShard(fetch, musicBase, url);
+      const result = mergeShard(document.dataset, group);
+      try {
+        if (result.added) await saveMusic(fetch, musicBase, url, document.dataset, condition);
+      } catch (error) {
+        if (error instanceof MusicWriteError && error.status === 412 && attempt < CONFLICT_RETRIES)
+          continue;
+        throw error;
+      }
+      added += result.added;
+      existing += result.existing;
+      break;
+    }
+    onShard(++done, shards.size);
+  }
+  return { added, existing };
 }
