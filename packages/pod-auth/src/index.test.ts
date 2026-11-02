@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   AmbiguousIssuerError,
@@ -127,6 +128,12 @@ test.each([
     },
   );
   expect((await auth.login({ issuer: op.issuer })).webId).toBe(webId);
+  if (boundaryKind === "automatic" && webId === null) {
+    expect((await auth.fetch(root + "private")).status).toBe(401);
+    expect(op.stats.tokens).toBe(1);
+    expect(op.stats.accepted).toBe(0);
+    return;
+  }
   for (const path of ["private", "nested/private", "private", "nested/private"]) {
     expect(await (await auth.fetch(root + path)).text()).toBe("protected Solid");
     expect((await auth.identity())?.issuer).toBe(op.issuer);
@@ -327,8 +334,11 @@ test.each([
   ).toBe(false);
 });
 
-test("automatic boundary verifies a storage before prompting and eligible restricts even static roots", async () => {
+test("automatic boundary loads profile storages after login and eligible restricts even static roots", async () => {
   const f = fixture({}, { boundary: {} });
+  expect((await f.auth.fetch(f.op.root + "private")).status).toBe(401);
+  expect(f.options.ui.getWebId).not.toHaveBeenCalled();
+  await f.auth.login();
   expect((await f.auth.fetch(f.op.root + "private")).status).toBe(200);
   expect((await f.auth.identity())?.storages).toContain(f.op.root);
   const g = fixture(

@@ -46,6 +46,17 @@ See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
 Omitting the option preserves the transport's default cache behavior.
 
+`list` and `listAll` also accept `{ maxBytes }`: a non-negative safe integer limiting
+the actual response bytes **per page**, before RDF/JSON parsing. Exact limits are accepted;
+invalid limits throw `TypeError`. An oversized or endless body is cancelled as soon as it
+crosses the cap and rejects with a non-retryable `StorageError` whose `code` is
+`payload-too-large` and whose message names the byte cap. No entries from the rejected page
+are returned. `listAll` can already have yielded earlier, complete pages; consumers must
+propagate failures instead of treating an incomplete listing as authoritative. LWS retains
+its independent 16 MiB JSON hard limit (`invalid-response`), even if `maxBytes` is higher.
+Omitting `maxBytes` preserves existing backend limits. Memory checks the UTF-8 bytes of its
+container representation (the same body as `read`), including empty-container overhead.
+
 `read`, `head`, `list`, and `listAll` accept additional `headers` for request-local
 transport markers. Listings forward them on every page. Accept, Range and
 If-None-Match remain controlled by the operation's dedicated options.

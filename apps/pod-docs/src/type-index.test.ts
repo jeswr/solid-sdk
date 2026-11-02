@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mockFetch, turtleToStore } from "./test-helpers.js";
 import {
   type DesiredRegistration,
@@ -18,6 +19,8 @@ const WEBID = "https://alice.pod/profile/card#me";
 const PROFILE_DOC = "https://alice.pod/profile/card";
 const POD = "https://alice.pod/";
 const PRIVATE_INDEX = "https://alice.pod/settings/privateTypeIndex.ttl";
+const PREFERENCES = "https://alice.pod/settings/prefs.ttl";
+const PUBLIC_INDEX = "https://alice.pod/settings/publicTypeIndex.ttl";
 const CONTAINER = "https://alice.pod/pod-docs/";
 
 const REG: DesiredRegistration = { forClass: DOCUMENT_CLASS, container: CONTAINER };
@@ -26,10 +29,16 @@ function profileWith(links: { privateIndex?: string; publicIndex?: string }): st
   const lines = [
     "@prefix solid: <http://www.w3.org/ns/solid/terms#> .",
     `<${WEBID}> a <http://xmlns.com/foaf/0.1/Person> .`,
+    `<${WEBID}> <http://www.w3.org/ns/pim/space#storage> <${POD}> .`,
   ];
   if (links.privateIndex) lines.push(`<${WEBID}> solid:privateTypeIndex <${links.privateIndex}> .`);
   if (links.publicIndex) lines.push(`<${WEBID}> solid:publicTypeIndex <${links.publicIndex}> .`);
   return lines.join("\n");
+}
+
+function profileWithPreferences(privateIndex?: string): string {
+  return `${profileWith({ privateIndex, publicIndex: PUBLIC_INDEX })}
+    <${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> <${PREFERENCES}> .`;
 }
 
 describe("typed wrappers", () => {
@@ -93,6 +102,194 @@ describe("typed wrappers", () => {
 });
 
 describe("ensureTypeRegistrations", () => {
+  it.each([
+    "http://alice.pod/settings/prefs.ttl",
+    "https://user@alice.pod/settings/prefs.ttl",
+    "https://:secret@alice.pod/settings/prefs.ttl",
+    "https://alice.pod/settings/../prefs.ttl",
+    "https://alice.pod/settings/%2fprefs.ttl",
+    "https://alice.pod/settings/%5cprefs.ttl",
+  ])("refuses unsafe preferences at %s without public registration", async (preferences) => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: {
+        body: profileWithPreferences().replace(PREFERENCES, preferences),
+      },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ code: "scope" });
+    expect(calls.map((call) => call.url)).toEqual([PROFILE_DOC]);
+  });
+
+  it("registers privately through preferences before considering a profile's public index", async () => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: { body: profileWithPreferences() },
+      [`GET ${PREFERENCES}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`GET ${PRIVATE_INDEX}`]: { body: "", etag: '"private"' },
+      [`PUT ${PRIVATE_INDEX}`]: { status: 205 },
+      [`GET ${PUBLIC_INDEX}`]: { body: "", etag: '"public"' },
+      [`PUT ${PUBLIC_INDEX}`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).resolves.toEqual({ indexUrl: PRIVATE_INDEX, added: 1, bootstrapped: false });
+    const writes = calls.filter((call) => call.method === "PUT");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ url: PRIVATE_INDEX, headers: { "if-match": '"private"' } });
+    expect(
+      new TypeIndexDataset(turtleToStore(writes[0]?.body ?? "", PRIVATE_INDEX), DataFactory).locate(
+        DOCUMENT_CLASS,
+      ),
+    ).toEqual([{ forClass: DOCUMENT_CLASS, container: CONTAINER, instance: undefined }]);
+    expect(calls.some((call) => call.url === PUBLIC_INDEX)).toBe(false);
+  });
+
+  it.each([
+    401, 403, 404, 500,
+  ])("refuses registration when linked preferences return %i", async (status) => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: { body: profileWithPreferences() },
+      [`GET ${PREFERENCES}`]: { status },
+      [`GET ${PUBLIC_INDEX}`]: { body: "", etag: '"public"' },
+      [`PUT ${PUBLIC_INDEX}`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ status });
+    expect(calls.some((call) => call.method === "PUT" || call.url === PUBLIC_INDEX)).toBe(false);
+  });
+
+  it.each([
+    undefined,
+    PRIVATE_INDEX,
+  ])("resolves preferences with a legacy private pointer of %s", async (privateIndex) => {
+    const { fetch } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: { body: profileWithPreferences(privateIndex) },
+      [`GET ${PREFERENCES}`]: { body: profileWith({ privateIndex }) },
+      [`GET ${privateIndex ?? PUBLIC_INDEX}`]: { body: "", etag: '"index"' },
+      [`PUT ${privateIndex ?? PUBLIC_INDEX}`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).resolves.toMatchObject({
+      indexUrl: privateIndex ?? PUBLIC_INDEX,
+      added: 1,
+      bootstrapped: false,
+    });
+  });
+
+  it("refuses conflicting legacy and preferences private indexes without writing", async () => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: { body: profileWithPreferences(`${POD}other-private.ttl`) },
+      [`GET ${PREFERENCES}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`GET ${POD}other-private.ttl`]: { body: "", etag: '"other"' },
+      [`PUT ${POD}other-private.ttl`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it.each([
+    "preferences",
+    "index",
+  ])("refuses an out-of-storage %s URL from preferences discovery", async (target) => {
+    const foreign = "https://foreign.example/private.ttl";
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: {
+        body:
+          target === "preferences"
+            ? profileWithPreferences().replace(PREFERENCES, foreign)
+            : profileWithPreferences(),
+      },
+      [`GET ${PREFERENCES}`]: { body: profileWith({ privateIndex: foreign }) },
+      [`GET ${PUBLIC_INDEX}`]: { body: "", etag: '"public"' },
+      [`PUT ${PUBLIC_INDEX}`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ code: "scope" });
+    expect(calls.some((call) => call.url === foreign || call.method === "PUT")).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "multiple preferences documents",
+      profile: `${profileWithPreferences()}
+      <${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> <${POD}other-prefs.ttl>.`,
+      preferences: "",
+    },
+    {
+      name: "multiple private indexes",
+      profile: profileWithPreferences(),
+      preferences: `${profileWith({ privateIndex: PRIVATE_INDEX })}
+      <${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${POD}other-private.ttl>.`,
+    },
+    {
+      name: "literal preferences",
+      profile: `${profileWith({ publicIndex: PUBLIC_INDEX })}
+      <${WEBID}> <http://www.w3.org/ns/pim/space#preferencesFile> "not a URL".`,
+      preferences: "",
+    },
+    {
+      name: "literal private index",
+      profile: profileWithPreferences(),
+      preferences: `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> "not a URL".`,
+    },
+    {
+      name: "malformed preferences RDF",
+      profile: profileWithPreferences(),
+      preferences: "not valid Turtle",
+    },
+  ])("refuses $name without public registration", async ({ profile, preferences }) => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${PROFILE_DOC}`]: { body: profile },
+      [`GET ${PREFERENCES}`]: { body: preferences },
+      [`GET ${PUBLIC_INDEX}`]: { body: "", etag: '"public"' },
+      [`PUT ${PUBLIC_INDEX}`]: { status: 205 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toThrow();
+    expect(calls.some((call) => call.method === "PUT" || call.url === PUBLIC_INDEX)).toBe(false);
+  });
+
   it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
       [`HEAD ${POD}settings/`]: { status: 200 },
@@ -239,6 +436,116 @@ describe("ensureTypeRegistrations", () => {
 });
 
 describe("discoverRegistrations", () => {
+  it("does not trust another identity's advertised storage for preferences", async () => {
+    const webId = "https://identity.example/alice#me";
+    const profile = turtleToStore(
+      `${profileWithPreferences()
+        .replaceAll(WEBID, webId)
+        .replace(`<${webId}> <http://www.w3.org/ns/pim/space#storage> <${POD}> .`, "")}
+        <https://identity.example/bob#me> <http://www.w3.org/ns/pim/space#storage> <${POD}>.`,
+      "https://identity.example/alice",
+    );
+    const { fetch, calls } = mockFetch({});
+    await expect(discoverRegistrations(webId, profile, fetch)).rejects.toMatchObject({
+      code: "scope",
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses preferences redirected to a foreign origin before reading any index", async () => {
+    const profile = turtleToStore(profileWithPreferences(), PROFILE_DOC);
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.redirect("https://foreign.example/prefs.ttl", 302),
+    );
+    await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
+      cause: { name: "SsrfError" },
+    });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(PREFERENCES, {
+      headers: expect.any(Headers),
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it.each([
+    true,
+    false,
+  ])("refuses foreign metadata when a transport ignores redirect mode (redirected: %s)", async (redirected) => {
+    const profile = turtleToStore(profileWithPreferences(), PROFILE_DOC);
+    const response = new Response(profileWith({ privateIndex: PRIVATE_INDEX }), {
+      headers: { "content-type": "text/turtle" },
+    });
+    Object.defineProperties(response, {
+      redirected: { value: redirected },
+      url: { value: "https://foreign.example/prefs.ttl" },
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => response);
+    await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
+      cause: { name: "SsrfError" },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(response.bodyUsed).toBe(true);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("reads an external WebID's preferences without storage discovery (private index: %s)", async (privateIndex) => {
+    const webId = "https://identity.example/alice#me";
+    const profile = turtleToStore(
+      `${profileWithPreferences().replaceAll(WEBID, webId)}
+        <${webId}> <http://www.w3.org/ns/pim/space#storage> <${POD}>.`,
+      "https://identity.example/alice",
+    );
+    const registration = `@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+        <#r> a solid:TypeRegistration; solid:forClass <${DOCUMENT_CLASS}>;
+        solid:instanceContainer <${CONTAINER}>.`;
+    const { fetch, calls } = mockFetch({
+      [`GET ${PREFERENCES}`]: {
+        body: profileWith({ privateIndex: privateIndex ? PRIVATE_INDEX : undefined }).replaceAll(
+          WEBID,
+          webId,
+        ),
+      },
+      [`GET ${PUBLIC_INDEX}`]: { body: privateIndex ? "" : registration },
+      [`GET ${PRIVATE_INDEX}`]: { body: registration },
+    });
+    const transport = vi.fn(fetch);
+    await expect(discoverRegistrations(webId, profile, transport)).resolves.toEqual([
+      { forClass: DOCUMENT_CLASS, container: CONTAINER, instance: undefined },
+    ]);
+    expect(calls.map((call) => call.url)).toEqual(
+      privateIndex ? [PREFERENCES, PUBLIC_INDEX, PRIVATE_INDEX] : [PREFERENCES, PUBLIC_INDEX],
+    );
+    expect(transport.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+  });
+
+  it("discovers a preferences-linked private index alongside a profile's public index", async () => {
+    const profile = turtleToStore(profileWithPreferences(), PROFILE_DOC);
+    const { fetch, calls } = mockFetch({
+      [`GET ${PREFERENCES}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`GET ${PUBLIC_INDEX}`]: { body: "" },
+      [`GET ${PRIVATE_INDEX}`]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+          <#r> a solid:TypeRegistration; solid:forClass <${DOCUMENT_CLASS}>;
+          solid:instanceContainer <${CONTAINER}>.`,
+      },
+    });
+    await expect(discoverRegistrations(WEBID, profile, fetch)).resolves.toEqual([
+      { forClass: DOCUMENT_CLASS, container: CONTAINER, instance: undefined },
+    ]);
+    expect(calls.map((call) => call.url)).toEqual([PREFERENCES, PUBLIC_INDEX, PRIVATE_INDEX]);
+  });
+
+  it("propagates a linked preferences failure rather than returning incomplete discovery", async () => {
+    const profile = turtleToStore(profileWithPreferences(), PROFILE_DOC);
+    const { fetch, calls } = mockFetch({ [`GET ${PREFERENCES}`]: { status: 403 } });
+    await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(calls.map((call) => call.url)).toEqual([PREFERENCES]);
+  });
+
   it("collects locations across both indexes", async () => {
     const Public = "https://alice.pod/pub.ttl";
     const profile = turtleToStore(

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -14,6 +15,9 @@ import type { AppRunnerInput } from "@solid/community-server";
 import { recordingSession } from "../recording.js";
 import type { ConformanceTarget } from "../types.js";
 
+// The pinned dependency graph is process-wide; accounts, credentials and data are per start.
+let moduleStatePromise: ReturnType<typeof moduleState> | undefined;
+
 /** Components.js otherwise scans ancestor node_modules and mixes CSS 7/8 in this workspace. */
 async function moduleState(): Promise<
   NonNullable<NonNullable<AppRunnerInput["loaderProperties"]>["moduleState"]>
@@ -25,17 +29,27 @@ async function moduleState(): Promise<
   const { ModuleStateBuilder } = createRequire(cssPackage)("componentsjs");
   const builder = new ModuleStateBuilder();
   const roots = new Set<string>([cssPath]);
-  let nodeModulePaths: string[] = [];
-  for (;;) {
-    const count = roots.size;
-    for (const path of [...roots]) {
-      const virtual = /^(.*\/node_modules\/\.pnpm\/[^/]+)\/node_modules\//.exec(path);
-      if (virtual?.[1]) roots.add(virtual[1]);
+  const paths = new Set<string>();
+  let pending = [cssPath];
+  const enqueueVirtualRoot = (path: string) => {
+    const virtual = /^(.*\/node_modules\/\.pnpm\/[^/]+)\/node_modules\//.exec(path);
+    if (virtual?.[1] && !roots.has(virtual[1])) {
+      roots.add(virtual[1]);
+      pending.push(virtual[1]);
     }
-    nodeModulePaths = await builder.buildNodeModulePaths([...roots]);
-    for (const path of nodeModulePaths) roots.add(path);
-    if (roots.size === count) break;
+  };
+  enqueueVirtualRoot(cssPath);
+  while (pending.length > 0) {
+    // Scan only newly discovered roots, retaining the complete pinned dependency closure.
+    const found: string[] = await builder.buildNodeModulePaths(pending);
+    pending = [];
+    for (const path of found) {
+      paths.add(path);
+      roots.add(path);
+      enqueueVirtualRoot(path);
+    }
   }
+  const nodeModulePaths = [...paths];
   const nodeModuleImportPaths = [...roots];
   const packageJsons = await builder.buildPackageJsons(nodeModulePaths);
   await builder.preprocessPackageJsons(packageJsons);
@@ -118,28 +132,37 @@ export const cssTarget: ConformanceTarget = {
     const directory = await mkdtemp(join(tmpdir(), "storage-conformance-css-"));
     let app: Awaited<ReturnType<InstanceType<typeof AppRunner>["create"]>> | undefined;
     let auth: PodAuth | undefined;
-    const stop = async () => {
-      try {
-        await auth?.logout();
-      } finally {
+    let stopping: Promise<void> | undefined;
+    const stop = () => {
+      stopping ??= (async () => {
         try {
-          await app?.stop();
+          await auth?.logout();
         } finally {
-          await rm(directory, { recursive: true, force: true });
+          try {
+            await app?.stop();
+          } finally {
+            await rm(directory, { recursive: true, force: true });
+          }
         }
-      }
+      })();
+      return stopping;
     };
     try {
       const port = await freePort();
       const base = `http://localhost:${port}/`;
+      moduleStatePromise ??= moduleState();
       app = await new AppRunner().create({
         config: "@css:config/file.json",
-        loaderProperties: { logLevel: "error", moduleState: await moduleState() },
+        loaderProperties: {
+          logLevel: "error",
+          moduleState: await moduleStatePromise,
+        },
         shorthand: { port, baseUrl: base, rootFilePath: directory, loggingLevel: "error" },
       });
       await app.start();
       const { root, webId, clientId, clientSecret } = await seedCssAccount(base);
       auth = await forClientCredentials({
+        // Match CSS's configured issuer exactly; HTTP is confined to this local fixture.
         issuer: base,
         clientId,
         clientSecret,

@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * Drive's app frame: the account session, Drive state, the interim suite
@@ -180,12 +181,19 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="drv-boot" role="alert">
         <h1>Can't open your Drive</h1>
-        <p>This browser couldn't open the demo pod's storage.</p>
+        <p>
+          {state.mode === "extension"
+            ? "This browser couldn't open your pod through the Solid extension."
+            : "This browser couldn't open the demo pod's storage."}
+        </p>
       </div>
     );
   }
   return (
-    <DriveProvider session={state.session}>
+    <DriveProvider
+      key={JSON.stringify([state.session.mode, state.session.webId, state.session.storageUrl])}
+      session={state.session}
+    >
       <DriveUiProvider>
         <DriveChrome>{children}</DriveChrome>
       </DriveUiProvider>

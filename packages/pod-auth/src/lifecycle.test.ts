@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { RefreshSessionRecord } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
@@ -43,12 +44,44 @@ function fixture(config: Parameters<typeof createMockOp>[0] = {}) {
   return { op, options, load, sessions, values, reads, record };
 }
 
+async function refreshProof(keys: CryptoKeyPair, tokenEndpoint: string) {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const data =
+    encode({
+      typ: "dpop+jwt",
+      alg: "ES256",
+      jwk: await crypto.subtle.exportKey("jwk", keys.publicKey),
+    }) +
+    "." +
+    encode({
+      htm: "POST",
+      htu: tokenEndpoint,
+      iat: Math.floor(Date.now() / 1000),
+      jti: crypto.randomUUID(),
+    });
+  return (
+    data +
+    "." +
+    Buffer.from(
+      await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        keys.privateKey,
+        new TextEncoder().encode(data),
+      ),
+    ).toString("base64url")
+  );
+}
+
 test("restore rotates the same non-extractable ES256 key, persists before emitting, and supplies working fetch", async () => {
   const f = fixture();
   const first = f.load();
   await first.login();
   const [key, before] = f.record();
-  expect(JSON.parse(JSON.parse(key)[1])).toEqual([f.op.issuer, f.op.webId, f.op.clientId]);
+  expect(JSON.parse(JSON.parse(key)[1]).slice(0, 3)).toEqual([
+    f.op.issuer,
+    f.op.webId,
+    f.op.clientId,
+  ]);
   expect(before.dpopKey.privateKey.extractable).toBe(false);
   expect(before.dpopKey.privateKey.algorithm).toMatchObject({ name: "ECDSA", namedCurve: "P-256" });
   await expect(crypto.subtle.exportKey("jwk", before.dpopKey.privateKey)).rejects.toThrow();
@@ -134,7 +167,7 @@ test("a normalized client URL supports login, persistence and refresh after relo
   });
   await f.load().login();
   const [key, before] = f.record();
-  expect(JSON.parse(JSON.parse(key)[1])).toEqual([f.op.issuer, f.op.webId, normalized]);
+  expect(JSON.parse(JSON.parse(key)[1]).slice(0, 3)).toEqual([f.op.issuer, f.op.webId, normalized]);
   expect(before.client.client_id).toBe(normalized);
   const reloaded = f.load();
   await expect(reloaded.restore()).resolves.toMatchObject({
@@ -327,6 +360,53 @@ test("logout purges and emits even when RFC7009 revocation fails", async () => {
   expect(await auth.identity()).toBeNull();
   expect(f.record()).toBeUndefined();
   expect(logout).toHaveBeenCalledOnce();
+});
+
+test.each([
+  false,
+  true,
+])("logout revokes every storage context's distinct grant; reload=%s", async (reload) => {
+  const f = fixture();
+  const nested = f.op.root + "other/";
+  f.options.boundary!.roots!.push(nested);
+  const first = f.load();
+  await first.login();
+  const before = f.record()[1];
+  expect((await first.fetch(nested + "private")).status).toBe(200);
+  expect(f.op.stats.authorizations).toBe(2);
+  // Observe the writes independently of the stored slot, so a collision cannot hide a grant.
+  const grants = f.sessions.setItem.mock.calls
+    .map(([, value]) => value)
+    .filter((value): value is RefreshSessionRecord => "refreshToken" in value);
+  expect(grants).toHaveLength(2);
+  expect(grants[0]!.refreshToken).toBe(before.refreshToken);
+  expect(grants[0]!.refreshToken).not.toBe(grants[1]!.refreshToken);
+  const auth = reload ? f.load() : first;
+  await auth.logout();
+  const revoked = await Promise.all(
+    f.op.requests
+      .filter((request) => request.url.endsWith("/revoke"))
+      .map(async (request) => new URLSearchParams(await request.text()).get("token")),
+  );
+  expect(new Set(revoked)).toEqual(new Set(grants.map((grant) => grant.refreshToken)));
+  expect(f.op.stats.refreshes).toBe(0);
+  for (const grant of grants) {
+    const response = await f.op.fetch(f.op.issuer + "token", {
+      method: "POST",
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: grant.refreshToken,
+        client_id: grant.client.client_id,
+      }),
+      headers: { dpop: await refreshProof(grant.dpopKey, f.op.issuer + "token") },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_grant" });
+  }
+  expect(f.op.stats.reuse).toBe(2);
+  expect([...f.values.keys()].map((key) => JSON.parse(key)[1])).toEqual(["generation"]);
+  expect(await auth.remembered()).toEqual([]);
+  expect(await auth.identity()).toBeNull();
 });
 
 test.each([
@@ -593,31 +673,33 @@ test.each(["solid", "lws"])("issuers without ES256 are refused through %s", asyn
   expect(f.op.stats.tokens).toBe(0);
 });
 
-test("an implicit session restores its verified storage context after automatic boundary mappings are lost", async () => {
+test("restore reloads profile storages after automatic boundary mappings are lost", async () => {
   const f = fixture();
   f.options.boundary = {};
   const first = f.load();
+  await first.login();
   expect((await first.fetch(f.op.root + "private")).status).toBe(200);
   const restored = f.load();
   expect((await restored.restore())?.webId).toBe(f.op.webId);
   expect((await restored.fetch(f.op.root + "different")).status).toBe(200);
-  expect(f.op.stats.authorizations).toBe(1);
+  expect(f.op.stats.authorizations).toBe(2);
   expect(f.op.stats.refreshes).toBe(1);
 });
 
 test.each([
   false,
   true,
-])("restore pins a chosen issuer after metadata loss and preserves credential context; implicit=%s", async (implicit) => {
+])("restore pins a chosen issuer after metadata loss and preserves credential context; automatic=%s", async (automatic) => {
   const f = fixture({ issuers: ["https://other.example/", "https://op.example/"] });
   const chooseIssuer = vi.fn(async () => f.op.issuer);
   f.options.ui.chooseIssuer = chooseIssuer;
-  if (implicit) f.options.boundary = {};
+  if (automatic) f.options.boundary = {};
   const first = f.load();
-  if (implicit) {
+  if (automatic) {
+    await first.login();
     expect((await first.fetch(`${f.op.root}private`)).status).toBe(200);
   } else await first.login({ webId: f.op.webId });
-  expect(chooseIssuer).toHaveBeenCalledOnce();
+  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
   const [credentialKey] = f.record();
   const pointer = () =>
     [...f.values.entries()].find(([key]) => JSON.parse(key)[1] === "active")?.[1];
@@ -626,7 +708,7 @@ test.each([
   expect(before).not.toHaveProperty("selected.issuer");
   f.options.storage!.caches = createMemoryStore();
   // Restoration must work without a chooser and must never invoke an available chooser.
-  if (implicit) delete f.options.ui.chooseIssuer;
+  if (automatic) delete f.options.ui.chooseIssuer;
   else chooseIssuer.mockRejectedValueOnce(new Error("Issuer chooser must not open during restore"));
   const restored = f.load();
   await expect(restored.restore()).resolves.toMatchObject({
@@ -639,9 +721,9 @@ test.each([
     selected: { issuer: f.op.issuer },
   });
   expect(f.op.stats.refreshes).toBe(1);
-  expect(f.op.stats.authorizations).toBe(1);
-  expect(chooseIssuer).toHaveBeenCalledOnce();
-  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(implicit ? 1 : 0);
+  expect(f.op.stats.authorizations).toBe(automatic ? 2 : 1);
+  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
+  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(automatic ? 2 : 0);
   expect((await restored.fetch(`${f.op.root}private`)).status).toBe(200);
   await expect(f.load().restore()).resolves.toMatchObject({ webId: f.op.webId });
   expect(f.op.stats.refreshes).toBe(2);
@@ -816,33 +898,6 @@ test("the mock OP rejects refresh token reuse, wrong key/client binding, and mis
     "sign",
     "verify",
   ]);
-  const proof = async (keys: CryptoKeyPair) => {
-    const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
-    const data =
-      encode({
-        typ: "dpop+jwt",
-        alg: "ES256",
-        jwk: await crypto.subtle.exportKey("jwk", keys.publicKey),
-      }) +
-      "." +
-      encode({
-        htm: "POST",
-        htu: f.op.issuer + "token",
-        iat: Math.floor(Date.now() / 1000),
-        jti: crypto.randomUUID(),
-      });
-    return (
-      data +
-      "." +
-      Buffer.from(
-        await crypto.subtle.sign(
-          { name: "ECDSA", hash: "SHA-256" },
-          keys.privateKey,
-          new TextEncoder().encode(data),
-        ),
-      ).toString("base64url")
-    );
-  };
   for (const [refresh, keys, client] of [
     [before.refreshToken, before.dpopKey, f.op.clientId],
     [current.refreshToken, otherKey, f.op.clientId],
@@ -855,7 +910,7 @@ test("the mock OP rejects refresh token reuse, wrong key/client binding, and mis
         refresh_token: refresh,
         client_id: client,
       }),
-      headers: { dpop: await proof(keys) },
+      headers: { dpop: await refreshProof(keys, f.op.issuer + "token") },
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_grant" });

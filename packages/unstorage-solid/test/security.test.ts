@@ -70,6 +70,44 @@ describe("redirect-based SSRF / credential leak", () => {
 });
 
 describe("hostile container listing — clear() never deletes a foreign IRI", () => {
+  it("recursive clear never DELETEs outside the cleared prefix or follows sibling cycles", async () => {
+    const calls: { url: string; method: string }[] = [];
+    const driver = solidDriver({
+      base: BASE,
+      fetch: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        calls.push({ url, method });
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        // Bound the old cycle so this regression fails promptly rather than hanging.
+        if (calls.filter((call) => call.method === "GET").length > 4) {
+          throw new Error("sibling-container cycle followed");
+        }
+        const members =
+          url === `${BASE}scratch/`
+            ? "<real>, <sub/>, <../valuable>, <../sibling/>"
+            : url === `${BASE}scratch/sub/`
+              ? "<nested>, <../../valuable>, <../../sibling/>"
+              : "<../scratch/>";
+        // Deletes are conditional, so every resource carries an ETag.
+        return new Response(`@prefix ldp: <${LDP}> . <> ldp:contains ${members} .`, {
+          headers: { "content-type": "text/turtle", etag: '"v1"' },
+        });
+      },
+    });
+    await driver.clear?.("scratch:", {});
+    expect(calls.filter((call) => call.method === "GET").map((call) => call.url)).toEqual([
+      `${BASE}scratch/`,
+      `${BASE}scratch/sub/`,
+    ]);
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.url)).toEqual([
+      `${BASE}scratch/real`,
+      `${BASE}scratch/sub/nested`,
+      `${BASE}scratch/sub/`,
+      `${BASE}scratch/`,
+    ]);
+  });
+
   it("deletes only in-base members; skips foreign + out-of-base IRIs from the listing", async () => {
     const deletes: string[] = [];
     const listing = await turtle([

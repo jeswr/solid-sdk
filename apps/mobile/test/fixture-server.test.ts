@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { fixturePorts, startFixtureServer } from "../e2e/fixture-server.mjs";
 
@@ -111,6 +112,7 @@ describe("loopback-only static fixture server", () => {
       "/foreign.html",
       "/index.js",
       "/hostile.js",
+      "/ios-probes.js",
       "/navigation.js?cache=none",
     ]) {
       const response = request(path);
@@ -120,6 +122,16 @@ describe("loopback-only static fixture server", () => {
       );
       expect(String(response.body)).toContain("AUTHORED-BY GPT-5.6 Codex");
     }
+  });
+  test("serves secure-store probes only through the fixture server", () => {
+    const response = request("/secure-store.js");
+    expect(response.status).toBe(200);
+    expect(response.headers["Content-Type"]).toContain("javascript");
+    expect(String(response.body)).toContain("AUTHORED-BY Codex GPT-6.1-Sol");
+    for (const page of ["/index.html", "/hostile.html"])
+      expect(String(request(page).body)).not.toContain('<script src="/secure-store.js"');
+    for (const script of ["/index.js", "/hostile.js"])
+      expect(String(request(script).body)).toContain('script.src = "/secure-store.js"');
   });
   test("serves HEAD without a body", () => {
     const response = request("/index.js", "HEAD");

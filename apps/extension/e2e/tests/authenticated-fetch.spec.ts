@@ -30,7 +30,7 @@ test('an ungranted origin stays stub-only and revocation stops a captured fetch'
     .poll(() =>
       page.evaluate(() => Object.keys((window as unknown as { solid: object }).solid).sort()),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
   await grantOrigin(context, page);
   await expect(page.locator('#fetch-result')).toContainText('Private Note');
   await page.evaluate(() => {
@@ -44,7 +44,7 @@ test('an ungranted origin stays stub-only and revocation stops a captured fetch'
     .poll(() =>
       other.evaluate(() => Object.keys((window as unknown as { solid: object }).solid).sort()),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
   const owner = await context.newPage();
   await owner.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   expect(
@@ -61,7 +61,7 @@ test('an ungranted origin stays stub-only and revocation stops a captured fetch'
     .poll(() =>
       page.evaluate(() => Object.keys((window as unknown as { solid: object }).solid).sort()),
     )
-    .toEqual(['login', 'requestAccess']);
+    .toEqual(['disconnect', 'login', 'requestAccess']);
   expect(
     await page.evaluate(async () => {
       try {

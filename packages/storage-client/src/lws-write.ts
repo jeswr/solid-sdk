@@ -438,7 +438,7 @@ export function lwsWrites(
       for (let attempt = 0; ; attempt++) {
         // Accept the stored representation, including native N-Triples, TriG and N-Quads.
         const read = await client().read(dest, { accept: "*/*", signal: opts.signal });
-        const { type, dataset } = await rdfBody(read, "not-rdf");
+        const { type, dataset } = await rdfBody(read, "not-rdf", undefined, opts.signal);
         if (attempt === 0) checkEtag("PATCH", dest, read.etag, opts.ifMatch);
         const tag = requiredEtag("GET", dest, read.etag);
         if (!WRITABLE_RDF.has(type)) throw unsupported("PATCH", dest, "rdfConneg");

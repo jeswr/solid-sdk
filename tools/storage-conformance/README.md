@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-conformance
 
@@ -88,8 +89,11 @@ sets it from its configured `pageSize` (100 by default).
 Baseline read/write/RDF/delete tests have no optional prerequisite. Local RDF parsing of an
 opaque LWS body does not require server content negotiation, and recursive client traversal does
 not require the separate recursive-delete service. The RDF cases cover Turtle and inline-context
-JSON-LD input, Turtle `writeRdf`, and semantic prefix/blank-node preservation. The stacked SDK
-explicitly refuses JSON-LD serialization; the suite asserts its structured `unsupported` error.
+JSON-LD input, Turtle `writeRdf`, and semantic prefix/blank-node preservation. Memory targets
+set `jsonLdWrites: true` and must round-trip JSON-LD writes with the correct media type and
+reject stale validators. This target setting describes SDK serialization support, independently
+of server content negotiation. HTTP backends still refuse JSON-LD serialization; the suite
+asserts their structured `unsupported` error and verifies that refusal leaves the resource intact.
 Non-RDF reads must return `not-rdf`. Malformed Turtle may instead be rejected during creation
 with HTTP 400 or 422 (`bad-request`); if stored, reading it as RDF must return `not-rdf`.
 

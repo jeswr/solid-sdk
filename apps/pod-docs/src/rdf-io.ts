@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Compatibility RDF helpers over the public storage client. */
 import {
@@ -16,6 +17,7 @@ export async function storageFor(
   url: string,
   fetchImpl = globalThis.fetch,
   storage?: StorageClient,
+  onStorageId?: (id: string) => void,
 ): Promise<StorageClient> {
   if (storage) return storage;
   let accessFailure: { status: 401 | 403; url: string; method: string } | undefined;
@@ -36,7 +38,9 @@ export async function storageFor(
   const target = new URL(url);
   target.hash = "";
   try {
-    return (await createPodClient({ storage: target.href, fetch: revalidatingFetch })).storage;
+    const client = await createPodClient({ storage: target.href, fetch: revalidatingFetch });
+    onStorageId?.(client.description.id);
+    return client.storage;
   } catch (error) {
     if (accessFailure) {
       throw new StorageError(accessFailure.status === 401 ? "unauthenticated" : "forbidden", {

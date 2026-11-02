@@ -9,7 +9,8 @@ description: Use when maintaining @jeswr/pod-access Solid WAC/ACP or LWS ODRL sh
 
 This package implements Solid WAC/ACP and LWS ODRL sharing via `createAccessClient` (T-050/T-051),
 the offline ACL translation core extracted from Pod Migrator, and notification delivery.
-`./testing` remains reserved. Sharing uses `AccessGrant`; the existing neutral policy `Grant`
+`./testing` remains reserved. The `./roles` subpath owns the injected-fetch Solid role client
+from SDK-APP-04 (role/mode mapping, `readGrants`, `setGrants`, `addGrant`, `removeGrant`). Sharing uses `AccessGrant`; the existing neutral policy `Grant`
 keeps its Set-based modes, conditions, scope and provenance for translation consumers.
 Design of record:
 SDK core ADR-001 D4 and `ADR-003-storage-client.md` §9 in `solid-suite-planning/specs/sdk-core/`.
@@ -36,12 +37,24 @@ represent conditional grants as unconditional. Named graphs and malformed typed 
 
 Every share creates a separate rule; caller-supplied ids never overwrite rules. Inheritance
 requires a container and writes both direct and default/member control. WAC revoke preserves
-co-agents, co-selectors and other targets. ACP revoke unlinks local controls, preserving shared
+co-agents, co-selectors and other targets. Before filtering WAC rules, reject matching
+`acl:defaultForNew` with `unsupported` for listing/revocation, even without modern targets:
+the NSS translation reader recognizes these legacy inherited grants, but sharing has no trusted
+WAC dialect. Preserve unrelated legacy defaults. ACP revoke unlinks local controls, preserving shared
 definitions; multi-policy control revocation is unsupported. RevocationKey accepts grant ids,
 agent/group IRIs, `{ public: true }` and `{ authenticated: true }`. Explicit selectors also
 revoke blank-node rules, which have no stable grant id. Validate and snapshot selector keys
 before storage operations; shared WAC targets still fail closed.
 On Solid, purpose/expiry and ACP groups/reserved agent IRIs passed as WebIDs are unsupported.
+ACP operations require `acpDialect: 'css' | 'ess'` from trusted deployment knowledge;
+never infer it from editable RDF. Sharing reuses the translation core's mode activation and
+serialization: CSS `acl:*`, ESS `acp:*`. Unknown dialects refuse before I/O. ESS resource
+Control sharing is unsupported. Refuse `acp:access`/`acp:memberAccess`, ACR-self resource
+bindings and resource-less fragment/blank roots before listing or any edit; these must never
+be silently skipped during revocation. Resource-less canonical roots require the ESS dialect
+and `acp:AccessControlResource` type. Before omitting foreign roots, run the translation reader's
+placement validation: potentially active foreign `accessControl` and `memberAccessControl` grants
+must fail with `unsupported`, including shared controls. Keep the shared translation semantics in sync.
 
 On Solid, `effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns
 null when absent; `public: []` means unknown because StorageClient exposes no anonymous modes.
@@ -87,6 +100,11 @@ report IDs/options and dialect behavior. Server implementation is a trusted call
 never derived from editable access RDF. Normalize resource/member scopes before translation
 and proof, then restore member scope before serialization.
 
+In-process callers are trusted code. Keep internal mode lists private and frozen and helper
+classes out of public exports; no export may let one caller alter another caller's proof.
+The public mode list is a frozen copy; returned policies and reports are caller-owned.
+Patching shared JavaScript built-ins or dependencies directly is outside this trust boundary.
+
 The migrator owns HTTP, public group snapshots, review decisions, effective target phase proofs,
 scope checks, conditional persistence and execution. Serializing a translated policy alone does
 not establish safe migration. Run its regression suite when changing the translation core.
@@ -106,3 +124,87 @@ Only one unambiguous NamedNode inbox on the exact WebID subject is accepted. Pro
 inboxes use public HTTPS and refuse redirects. Node hostname targets require an authenticated
 `pinningFetch`; never silently label an ordinary auth fetch as DNS-pinned. Browsers retain the
 guard's documented DNS limitation. All parsing goes through fetch-rdf, with remote contexts refused.
+Validate changes with this package's `lint`, dependency-first `build`, `typecheck`, and `test` scripts,
+plus the migrator's regression suite and the repository gate.
+
+<!-- AUTHORED-BY Codex -->
+
+The public `./roles` API is documented in README.md: role/mode mapping, neutral AgentRef and
+RoleGrant types, `grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`, and branded `RoleError` classification via
+`isRoleError`. Export helpers through `src/roles/index.ts` only; no mutable reader/error
+classes may escape. New public API changes must update this skill and README together.
+
+Preserve the Drive sharing prior art credited in source: nearest WAC replacement versus
+additive ACP inheritance, separate ACR management, comments-container permissions, shared
+scope/principal splitting, copied inherited ACLs, owner lockout and conditional writes.
+Do not flatten denial/exclusion/conditional policies to unconditional role grants. Partial
+or odd grants never round up; edits refuse lossy projections. Groups remain symbolic WAC
+agents; ACP groups and WAC apps are unsupported. Never derive a server dialect from RDF.
+
+Before every batch, reject expiry/purpose and preflight every URL for caller lockout before
+any PUT. A batch is not atomic: report all per-URL failures, stop that URL's remaining writes,
+and retain successful results accurately. Re-read discovery and governing validators before
+conditional persistence; never retry a 412 silently. Copy WAC defaults through typed setters
+and preserve materializedFrom provenance across reapplication, including descendant defaults.
+Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
+redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+`readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
+`grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token
+verbatim: it binds own-document presence/absence, own and inherited ETags, discovery, comments,
+resource kind and trusted implementation. `setGrants` accepts `expected: snapshot` or a complete
+per-resource map of snapshot version tokens. Compare the re-read validators with the token before
+diffing raw RDF against that baseline; never silently switch a stale caller to a newer baseline.
+Keep the matching snapshot's If-Match / absent If-None-Match: * preconditions through persistence.
+Stale tokens fail even for no-op selections. A changed write consumes its old token; unchanged
+reapplication with a current snapshot sends no PUT. Without expected, retain fresh-read behavior.
+
+Single-agent operations must never route through full-set replacement. Add/raise only the selected
+agent, keeping every other agent's modes, shared scopes, policy semantics and metadata intact;
+an equal/higher effective role sends no write. Removal is idempotent for absent direct grants and
+refuses inherited resource removal; retain inherited comments and refuse lossy comments Write
+revocation. WAC splits shared principals; ACP splits only that principal's policy/matcher/control
+paths while preserving member and foreign references. Both operations use the existing batch
+preflight/results and conditional conflict contract, with no automatic 412 retry. Reject addGrant
+expiry/purpose before any I/O. Test snapshots after JSON round trips, stale own/source validators,
+absence races, preservation of unrelated RDF, creation/replacement preconditions and replay no-ops.
+
+`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` and
+`movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
+its security and proof semantics must remain unchanged. `@jeswr/fetch-rdf` is an existing
+workspace runtime dependency for role HTTP parsing. Keep exactOptionalPropertyTypes enabled.
+
+`RoleContext.implementation` applies to both mapping helpers as well as HTTP options.
+CSS ACP managers use resource acl:Control; ESS uses acp:Read+Write on the own ACR.
+Validate the active mode vocabulary before normalization (CSS acl:*, ESS acp:*).
+Refuse inactive management forms, foreign CSS member controls and ancestor bindings back
+to the selected resource. Preserve CSS ACR-self controls as unrelated RDF using the same
+dialect-aware target invariant for reads, full-set detachment and single-agent splitting.
+ESS app matchers require PublicAgent alongside client; remove this activation marker when
+removing the last client so revocation cannot create public access. Client-only ESS input
+and special clients such as PublicClient are unsupported. Conjunctions of distinct non-public
+selectors must be refused, never treated as empty principal intersections. These refusals
+apply to reads and all three mutation operations.
+
+ESS client matching carries a policy-level login requirement. The shared policy projection
+must refuse any public result from a policy containing client matchers, including mixed
+anyOf alternatives; splitting the policy or removing its last client must never produce
+anonymous access. Apply the invariant to resource/member/management policies across own,
+ancestor and comments documents and generated-document validation. Independent public
+and client policies remain supported.
+
+Allocate ACP roots through one shared writer invariant for full-set and single-agent edits,
+including comments: reuse the canonical ACR IRI only when it is unreferenced and either
+unused or an existing root bound to the selected resource (or the implicit canonical ESS
+root). Otherwise allocate a fresh root. Preserve ACR-self/foreign bindings and identities
+used as controls, policies or matchers, including references with no outgoing statements.
+
+Combine each ACP principal's resource modes across documents before role projection, and
+emit its effective role for every contributing source. Keep partial source provenance visible.
+Inherited rows validate sources only; an explicit selection for the same principal always
+takes precedence regardless of input order. Preserve existing modes for unchanged role
+selections (including chatroom Write and partial ACP contributions completed by inheritance),
+even when another principal changes. Never reconstruct an unchanged selection solely by
+inverting the many-to-one role mapping.

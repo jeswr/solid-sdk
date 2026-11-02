@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/rxdb-solid
 
@@ -39,6 +40,11 @@ await items.insert({ id: "a", title: "Hello, Solid!" });
 `SolidDocStore` and `replicateSolid` accept an existing `StorageClient`. The legacy `fetch`
 option discovers a client lazily through `createPodClient`; discovery errors propagate.
 Reads, paginated listings and conditional mutations use the public storage interface.
+The `SolidDocStore` option `maxResponseBytes` (64 MiB by default) also caps every raw listing page before
+parsing, through StorageClient's `maxBytes`, including when a client is injected. Overflow
+cancels the body; injected clients reject with `StorageError.code === 'payload-too-large'`,
+while the legacy fetch path retains its existing transport errors. Incomplete listings never
+return a partial document URL set. Existing backend hard limits still apply.
 Key encoding, metadata counters, checkpoints, tombstones and RxDB conflict handling are unchanged.
 GC reads an ETag before deleting and refuses deletion when no validator is available.
 

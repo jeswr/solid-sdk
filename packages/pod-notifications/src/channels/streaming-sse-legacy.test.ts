@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import * as storageModule from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, expect, test, vi } from "vitest";
@@ -662,4 +663,44 @@ test("a rejected stream read queued before close cannot schedule reconnection", 
   await flush();
   expect(f.timers.pending).toBe(0);
   expect(sub.state).toBe("closed");
+});
+
+test.each([
+  "throw",
+  "reject",
+])("StreamingHTTP cancellation %s still releases sibling streams and listeners", async (failure) => {
+  const listeners = new Map<string, Set<() => void>>();
+  vi.stubGlobal("addEventListener", (type: string, handler: () => void) => {
+    const handlers = listeners.get(type) ?? new Set();
+    handlers.add(handler);
+    listeners.set(type, handlers);
+  });
+  vi.stubGlobal("removeEventListener", (type: string, handler: () => void) => {
+    listeners.get(type)?.delete(handler);
+  });
+  const f = fixture();
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await f.client.subscribe([f.root, `${f.root}hot`], { signal: abort.signal });
+  await f.timers.advanceBy(0);
+  const error = new Error("reader cancellation failed");
+  const cancel = ReadableStreamDefaultReader.prototype.cancel;
+  const cancellation = Promise.withResolvers<void>();
+  vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel").mockImplementationOnce(function (
+    this: ReadableStreamDefaultReader<Uint8Array>,
+  ) {
+    void cancel.call(this);
+    if (failure === "throw") throw error;
+    return cancellation.promise;
+  });
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const close = sub.close();
+  if (failure === "reject") cancellation.reject(error);
+  await close;
+  expect(sub.close()).toBe(close);
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  expect(f.cancels).toHaveBeenCalledTimes(2);
+  expect([...listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  expect(f.timers.pending).toBe(0);
 });

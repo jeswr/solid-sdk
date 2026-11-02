@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, test } from "vitest";
 import { createChangeNormalizer } from "./normalise.js";
@@ -43,7 +44,7 @@ describe("untrusted notification normalisation", () => {
         actor: "https://person.example/#me",
         published: new Date(raw.published),
         state: '"etag"',
-        id: `${root}note#2026-10-01T00:00:00.000Z`,
+        id: expect.any(String),
         via: "sse",
         raw,
       },
@@ -177,15 +178,79 @@ describe("untrusted notification normalisation", () => {
     expect(n.parse({ ...frame, id: "b" })).toHaveLength(1);
   });
 
-  test("uses the wall clock by default and synthesises an id for invalid/absent ids", () => {
+  test.each([
+    "2026-11-01T00:00:00Z",
+    undefined,
+  ])("preserves ID-less updates with distinct ETags at the same timestamp (%s)", (published) => {
+    const n = normalizer();
+    const activity = { type: "Update", object: frame.object, published };
+    const first = n.parse({ ...activity, state: '"first"' });
+    const second = n.parse({ ...activity, state: '"second"' });
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0]?.state).toBe('"first"');
+    expect(second[0]?.state).toBe('"second"');
+    expect(second[0]?.published).toEqual(first[0]?.published);
+    expect(second[0]?.id).not.toBe(first[0]?.id);
+  });
+
+  test.each([
+    "2026-11-01T00:00:00Z",
+    undefined,
+  ])("preserves an ID-less Remove/Add pair in an LWS batch at the same timestamp (%s)", (published) => {
+    const n = normalizer();
+    const raw = {
+      type: "Notification",
+      storage: storageId,
+      activity: [
+        { type: "Remove", object: frame.object, origin: root, published },
+        { type: "Add", object: frame.object, target: root, published },
+      ],
+    };
+    const events = n.parse(raw);
+    expect(events.map((event) => event.type)).toEqual(["Remove", "Add"]);
+    expect(events[0]).toMatchObject({ object: frame.object, origin: root, raw });
+    expect(events[1]).toMatchObject({ object: frame.object, target: root, raw });
+    expect(events[1]?.id).not.toBe(events[0]?.id);
+  });
+
+  test("repeated ID-less activities receive fresh IDs even with identical semantics", () => {
+    const n = normalizer();
+    const activity = { type: "Update", object: root };
+    const first = n.parse(activity);
+    const second = n.parse(activity);
+    n.advance(5_000);
+    const third = n.parse(activity);
+    expect([first.length, second.length, third.length]).toEqual([1, 1, 1]);
+    expect(new Set([...first, ...second, ...third].map((event) => event.id)).size).toBe(3);
+  });
+
+  test("synthesised IDs do not suppress publisher IDs", () => {
+    const n = normalizer();
+    const activity = { type: "Update", object: root };
+    const [generated] = n.parse(activity);
+    expect(generated).toBeDefined();
+    const supplied = { ...activity, id: generated?.id };
+    expect(n.parse(supplied)).toHaveLength(1);
+    expect(n.parse(supplied)).toEqual([]);
+    expect(n.parse(activity)).toHaveLength(1);
+  });
+
+  test.each([
+    undefined,
+    null,
+    "",
+    7,
+    {},
+  ])("uses the wall clock and a fresh id for invalid/absent id %s", (id) => {
     const parse = createChangeNormalizer({
       storageId,
       isWithinStorage: () => true,
       via: "websocket",
     });
-    const [event] = parse({ type: "Update", object: root, id: 7 });
+    const [event] = parse({ type: "Update", object: root, id });
     expect(event?.published.getTime()).toBeLessThanOrEqual(Date.now());
-    expect(event?.id).toBe(`${root}#${event?.published.toISOString()}`);
+    expect(event?.id).toEqual(expect.any(String));
   });
 
   test("distinct ids for the same object and timestamp survive regardless of id spelling", () => {

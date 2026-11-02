@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { onest, sourceCode, sourceSerif } from "@jeswr/suite-ui/fonts";
 import type { Metadata, Viewport } from "next";
+import { suiteEnv } from "@/shell/lib/env";
 import { Providers } from "./providers";
 import "./globals.css";
 export const viewport: Viewport = { colorScheme: "light dark" };
-export const metadata: Metadata = { title: "Solid Suite · Component fixtures" };
+export const metadata: Metadata = { title: "Solid Suite", icons: { icon: "/icon.svg" } };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-theme="system"
     >
       <body>
-        <Providers>
+        <Providers environment={suiteEnv()}>
           <a className="skip-link" href="#main-content">
             Skip to main content
           </a>

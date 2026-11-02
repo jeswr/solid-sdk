@@ -20,6 +20,13 @@ import {
   Policy,
 } from "@solid/object";
 import { DataFactory } from "n3";
+import {
+  type AcpDialect,
+  acpModeIri,
+  activeAcpGrantModes,
+  canonicalAcpModeIris,
+  readAcp,
+} from "./systems/acp.js";
 import type { AccessGrant, AccessMode, RevocationKey } from "./types.js";
 
 export const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -93,6 +100,9 @@ export function wacRules(dataset: Dataset, target: string, url: string) {
   const result: WacRule[] = [];
   for (const auth of new AclResource(dataset, DataFactory).authorizations) {
     const rule = new WacRule(TermAs.term(auth), dataset, DataFactory);
+    // NSS can activate legacy defaults without accessTo or default. Refuse
+    // matching legacy rules before filtering; this editor has no WAC dialect.
+    if ([...iris(rule, `${ACL}defaultForNew`)].includes(target)) fail("unsupported", url);
     if (!rule.targets.has(target) && !rule.defaults.has(target)) continue;
     // Force typed validation of every target, including multi-target documents.
     [...rule.targets, ...rule.defaults];
@@ -192,18 +202,55 @@ class Acrs extends DatasetWrapper {
       ...this.subjectsOf(`${ACP}resource`, AccessControlResource),
       ...this.subjectsOf(`${ACP}accessControl`, AccessControlResource),
       ...this.subjectsOf(`${ACP}memberAccessControl`, AccessControlResource),
+      ...this.subjectsOf(`${ACP}access`, AccessControlResource),
+      ...this.subjectsOf(`${ACP}memberAccess`, AccessControlResource),
     ];
   }
 }
 
-export function acr(dataset: Dataset, target: string, url: string): AccessControlResource {
+export function acr(
+  dataset: Dataset,
+  target: string,
+  url: string,
+  dialect: AcpDialect,
+): AccessControlResource {
   const candidates = new Map<string, AccessControlResource>();
+  let hasForeignRoots = false;
   for (const root of new Acrs(dataset, DataFactory).resources) {
     // Materialize every typed association before selecting or mutating a root.
     const resources = [...iris(root, `${ACP}resource`)];
+    // A fragment or blank root without an explicit resource binding has no safely
+    // established placement. Never silently create a second root beside it.
+    if (
+      resources.length === 0 &&
+      (dialect !== "ess" ||
+        root.termType !== "NamedNode" ||
+        root.value !== url ||
+        !root.type.has(`${ACP}AccessControlResource`))
+    )
+      fail("unsupported", url);
+    // ACR-self bindings and direct access policies can grant Control. Refuse
+    // these even on another root, rather than silently overlooking a live grant.
+    if (
+      resources.includes(url) ||
+      iris(root, `${ACP}access`).size ||
+      iris(root, `${ACP}memberAccess`).size
+    )
+      fail("unsupported", url);
     if (resources.includes(target) || (resources.length === 0 && root.value === url)) {
       if (resources.length > 1) fail("unsupported", url);
       candidates.set(`${root.termType}:${root.value}`, root);
+    } else hasForeignRoots = true;
+  }
+  if (hasForeignRoots) {
+    // CSS can select foreign member controls too. Reuse the translation core's
+    // complete placement validation, including foreign accessControl grants,
+    // before allowing the local editor to omit any root. Local entries are
+    // validated below; their detached definitions are intentionally preserved.
+    try {
+      readAcp(dataset, target, url, dialect);
+    } catch {
+      fail("unsupported", url);
     }
   }
   if (candidates.size > 1) fail("invalid-response", url);
@@ -220,7 +267,7 @@ function acpAgent(value: string, url: string): AccessGrant["agent"] {
   return value;
 }
 
-export function acpEntries(root: AccessControlResource, url: string) {
+export function acpEntries(root: AccessControlResource, url: string, dialect: AcpDialect) {
   const entries: { control: AccessControl; grant: AccessGrant }[] = [];
   const seen = new Set<string>();
   for (const control of [...root.accessControl, ...root.memberAccessControl]) {
@@ -245,11 +292,19 @@ export function acpEntries(root: AccessControlResource, url: string) {
       predicates(matcher, [TYPE, `${ACP}agent`], url);
       if (matcher.agent.size !== 1) fail("unsupported", url);
       const agent = [...matcher.agent][0] as string;
+      const rawModes = [...policy.allow];
+      const activeModes = activeAcpGrantModes(rawModes, dialect);
+      if (activeModes.length !== rawModes.length) fail("unsupported", url);
+      const accessModes = modes(
+        dialect === "ess" ? canonicalAcpModeIris(activeModes) : activeModes,
+        url,
+      );
+      if (dialect === "ess" && accessModes.includes("control")) fail("unsupported", url);
       entries.push({
         control,
         grant: {
           agent: acpAgent(agent, url),
-          modes: modes(policy.allow, url),
+          modes: accessModes,
           ...identifier(policy),
         },
       });
@@ -264,6 +319,7 @@ export function addAcp(
   grant: AccessGrant,
   inherit: boolean,
   id: string,
+  dialect: AcpDialect,
 ) {
   const control = new AccessControl(`${id}-control`, root.dataset, DataFactory);
   const policy = new Policy(id, root.dataset, DataFactory);
@@ -277,7 +333,7 @@ export function addAcp(
   if (inherit) root.memberAccessControl.add(control);
   control.apply.add(policy);
   policy.allOf.add(matcher);
-  for (const mode of grant.modes) policy.allow.add(MODES[mode as keyof typeof MODES]);
+  for (const mode of grant.modes) policy.allow.add(acpModeIri(mode as keyof typeof MODES, dialect));
   matcher.agent.add(
     typeof grant.agent === "string"
       ? grant.agent
@@ -287,9 +343,14 @@ export function addAcp(
   );
 }
 
-export function revokeAcp(root: AccessControlResource, key: RevocationKey, url: string): boolean {
+export function revokeAcp(
+  root: AccessControlResource,
+  key: RevocationKey,
+  url: string,
+  dialect: AcpDialect,
+): boolean {
   let changed = false;
-  const entries = acpEntries(root, url);
+  const entries = acpEntries(root, url, dialect);
   const byId = entries.some(({ grant }) => grant.id === key);
   for (const { control, grant } of entries) {
     const matchesAgent =

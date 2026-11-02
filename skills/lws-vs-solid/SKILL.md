@@ -102,9 +102,39 @@ records remain separate from the offline translation core's neutral policy rules
 
 Use `createNotifications` with the same fetch and storage client. Re-fetch on changes and
 reconcile on `resync`; events are hints, not a resource snapshot or guaranteed replay log.
-`plan()` may advertise webhook relay while the implemented subscription polls. Observe its
-actual `channel` and `state`, and close it on teardown/logout. See the package skill for a
-complete subscription example and the limits of `hot`, depth and disabled polling.
+For webhook-only LWS storage, configure the relay origin and supply `relay.getIdToken`.
+Implement `getSessionIdToken(signal)` in the application session adapter to obtain a current
+session ID token and honor cancellation:
+
+```ts
+import { createNotifications } from '@jeswr/pod-notifications';
+import type { StorageClient } from '@jeswr/storage-client';
+
+export function notificationsWithRelay(
+  authenticatedPodFetch: typeof globalThis.fetch,
+  storage: StorageClient,
+  getSessionIdToken: (signal: AbortSignal) => Promise<string>,
+) {
+  return createNotifications({
+    fetch: authenticatedPodFetch,
+    storage,
+    relay: {
+      url: 'https://relay.example',
+      getIdToken: signal => getSessionIdToken(signal),
+      // fetch: relayFetch, // Optional separate transport; defaults to globalThis.fetch.
+    },
+  });
+}
+```
+
+The implemented relay registers an inbox and receives changes over SSE. Registration uses
+the session ID token and a separate `relay.fetch`, never the pod access token or authenticated
+pod fetch. A configured relay without `getIdToken` still selects `webhook-relay`, stays
+degraded and retries; it does not fall back to polling. Polling is used when no push channel
+is selected; `pollIntervalMs: 0` disables that fallback. `plan()` reports the advertised
+preference. Observe the subscription's actual `channel` and `state`, and close it on
+teardown/logout. See the package skill for a complete subscription example and the limits
+of `hot`, depth and disabled polling.
 
 `features.recursiveDelete` describes a separate POST service, not permission to add Depth to
 DELETE. Current `storage.delete(..., { recursive: true, ifMatch })` performs client traversal;

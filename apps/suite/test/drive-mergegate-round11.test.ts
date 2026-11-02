@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
@@ -135,7 +136,12 @@ it.each([
   f.audit([PRIVATE, nested]);
   // A new client proves metadata is durable, rather than cached in the deleting tab.
   const onPrivateFolder = vi.fn();
-  const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, onPrivateFolder });
+  const fresh = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: f.fetch,
+    webId: OWNER,
+    onPrivateFolder,
+  });
   expect((await restoreItems(fresh, DRIVE, [file])).failed).toEqual([]);
   await fresh.write(
     `${nested}another`,

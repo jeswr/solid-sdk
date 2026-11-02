@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import WebKit
 
 /// Wraps Capacitor's `bridge` script-message handler: Capacitor does not check which frame sent a
@@ -11,10 +12,13 @@ final class BridgeOriginGuard: NSObject, WKScriptMessageHandler {
     private weak var inner: WKScriptMessageHandler?
     private let allowed: SuiteOrigin
     private let isRegistered: (String) -> Bool
+    private let admitted: (Any) -> Void
 
-    init(inner: WKScriptMessageHandler, allowed: SuiteOrigin, isRegistered: @escaping (String) -> Bool) {
+    init(inner: WKScriptMessageHandler, allowed: SuiteOrigin,
+         admitted: @escaping (Any) -> Void = { _ in }, isRegistered: @escaping (String) -> Bool) {
         self.inner = inner
         self.allowed = allowed
+        self.admitted = admitted
         self.isRegistered = isRegistered
     }
 
@@ -47,6 +51,9 @@ final class BridgeOriginGuard: NSObject, WKScriptMessageHandler {
             NSLog("Solid Suite: dropped a bridge call to an unregistered plugin name")
             return
         }
+        // WebKit delivers on the main thread. Capture document identity before Capacitor enqueues
+        // the plugin invocation, since a main-frame commit can happen before that queue runs.
+        admitted(message.body)
         inner?.userContentController(userContentController, didReceive: message)
     }
 }

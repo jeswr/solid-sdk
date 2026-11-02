@@ -3,6 +3,12 @@
 .consent-sheet .classes { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 .consent-sheet .class-head { align-items: flex-start; }
 .consent-sheet .class-head > span { min-width: 0; }
+.consent-sheet .warning {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--warning);
+  color: var(--warning-foreground);
+}
 .consent-sheet .chips { display: flex; flex-wrap: wrap; gap: var(--space-1\.5); margin-top: var(--space-3); }
 .consent-sheet .chip {
   border-radius: var(--radius-sm);

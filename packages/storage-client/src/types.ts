@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
@@ -150,16 +151,23 @@ export interface ObservationOptions {
   revalidate?: boolean;
 }
 
+/** Options shared by single-page and paginated listings. */
+export interface ListingOptions extends ObservationOptions {
+  /**
+   * Maximum response bytes per page, enforced while streaming before parsing. A non-negative
+   * safe integer; exact limits are accepted. Overflow throws StorageError('payload-too-large')
+   * without returning entries from that page. Existing backend hard limits still apply.
+   */
+  maxBytes?: number;
+}
+
 export interface StorageClient {
   readonly protocol: "solid" | "lws";
   readonly root: string;
   readonly features: Features;
 
-  list(
-    container: string,
-    opts?: ObservationOptions & { cursor?: PageCursor },
-  ): Promise<Page<Entry>>;
-  listAll(container: string, opts?: ObservationOptions): AsyncIterable<Entry>;
+  list(container: string, opts?: ListingOptions & { cursor?: PageCursor }): Promise<Page<Entry>>;
+  listAll(container: string, opts?: ListingOptions): AsyncIterable<Entry>;
   head(url: string, opts?: ObservationOptions): Promise<ReadResult>;
   read(
     url: string,

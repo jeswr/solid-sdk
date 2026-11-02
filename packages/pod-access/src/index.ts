@@ -22,12 +22,11 @@ export {
   modes,
   parent,
   RDF,
-  RdfNode,
   readModes,
   safeIri,
   serialize,
 } from "./rdf.js";
-export { type AcpDialect, PolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
+export { type AcpDialect, isPolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
 export { readWac, writeWac } from "./systems/wac.js";
 export {
   optionDescriptions,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
@@ -76,6 +77,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     const generation = await providers.fence.generation();
     const context = await providers.contextFor(request, expected);
+    await providers.boundary.learn(claims.webId, request.signal, providers.fence.signal);
     request.signal.throwIfAborted();
     const webId = claims.webId;
     if (webId !== undefined)
@@ -173,6 +175,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       if (loggingOut) return loggingOut;
       ++epoch;
       current = null;
+      providers.boundary.clear();
       const promise = providers.logout().finally(() => {
         observedFence = providers.fence.signal;
         current = null;

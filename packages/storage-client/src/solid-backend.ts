@@ -8,7 +8,7 @@ import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
 import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
-import { paginate, pathParent } from "./internal.js";
+import { paginate, pathParent, validateListingMaxBytes } from "./internal.js";
 import {
   acceptReadStatus,
   createReadOperations,
@@ -161,6 +161,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     inspect?: InspectContainer,
   ) {
     const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
+    validateListingMaxBytes(opts.maxBytes);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",
@@ -184,7 +185,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: `${container} is not a container`,
       });
     }
-    const { dataset } = await rdfBody(result, "invalid-response");
+    const { dataset } = await rdfBody(result, "invalid-response", opts.maxBytes, opts.signal);
     const listed = new Container(container, dataset, DataFactory);
     const items: Entry[] = [];
     // `contains` is a set of distinct members, so URLs are unique.

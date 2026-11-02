@@ -1,266 +1,405 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
-import { compareRecords, decodeRecord, encodeRecord } from "./record.js";
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+/**
+ * `SolidUpdateStore` — the persistence layer for {@link ../provider.js | SolidPersistence}.
+ *
+ * It implements the **append-only binary update-LOG** model: each Yjs binary
+ * update (`Uint8Array` from `Y.encodeStateAsUpdate` or a `doc.on("update")`
+ * event) is written to its OWN `application/octet-stream` LDP resource under one
+ * configured container; loading the doc lists the container and reads every
+ * member back, so the caller can apply/merge them into a `Y.Doc`.
+ *
+ * **Why an append-only log, not a single snapshot resource** (the documented
+ * design decision):
+ *   - **No read-modify-write race.** A single snapshot resource needs
+ *     read→merge→write, which races between clients/tabs and risks last-write-
+ *     wins data loss. Appending a fresh resource is a pure create — concurrent
+ *     writers never clobber each other.
+ *   - **Offline-friendly + crash-safe.** A queued update is one independent PUT;
+ *     a partial flush leaves a valid (smaller) log, never a corrupt snapshot.
+ *   - **Yjs CRDT semantics make merge order-independent + idempotent.** Applying
+ *     updates in any order, or twice, converges to the same state — so the log
+ *     is robust to out-of-order / duplicate delivery. We still mint
+ *     lexicographically-sortable IDs (timestamp prefix + random suffix) so the
+ *     load order is DETERMINISTIC (easier to reason about + test) and so
+ *     {@link compact} can fold deterministically; correctness does not depend on
+ *     it.
+ *   - **Compaction is the GC for the log.** {@link compact} merges the whole log
+ *     into one update (`Y.mergeUpdates`, supplied by the provider) written as a
+ *     single fresh resource, then deletes the folded members — bounding the log
+ *     size without ever leaving the doc unrepresented.
+ *
+ * **Injectable authenticated fetch.** The store does NO crypto / DPoP itself —
+ * the caller injects an already-authenticated `fetch` (e.g. from
+ * `@solid/reactive-authentication` or a client-credentials DPoP fetch). This
+ * keeps it a pure LDP client, like `@jeswr/solid-memory`.
+ *
+ * **Scope guard on every op.** Every target URL is asserted to lie under
+ * `container` (via `@jeswr/guarded-fetch`'s `assertWithinPodScope`, the suite's
+ * consolidated pod-scope guard) before any request — defence in depth, so a
+ * caller-supplied or server-listed URL can never make the store touch a
+ * foreign origin or escape the container sub-tree. Write-target ops pass
+ * `{ allowRoot: false }`; the listing op passes `{ allowRoot: true }`.
+ *
+ * **RDF discipline (house rule).** The ONLY RDF the store touches is the
+ * container LISTING, parsed (read-only) via `@jeswr/fetch-rdf` `parseRdf` +
+ * `@jeswr/ldp-container` membership filtering. The CRDT payload itself is BINARY and is
+ * stored as `application/octet-stream` — we do NOT invent an RDF encoding for it.
+ * No triples are ever hand-built.
+ */
 
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { parseContainerMembers } from "@jeswr/ldp-container";
+
+/** The media type every update resource is stored with. */
 export const UPDATE_CONTENT_TYPE = "application/octet-stream";
+
+/**
+ * Default fail-closed cap on the bytes read for a SINGLE update resource. A
+ * hostile or buggy server could serve an unbounded (or chunked, content-length-
+ * less) body on a member URL; reading it into memory unbounded is a DoS. 64 MiB
+ * comfortably exceeds any realistic single Yjs update while bounding the read.
+ * Override per store via `maxUpdateBytes`.
+ */
 export const DEFAULT_MAX_UPDATE_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Default fail-closed cap on the bytes read for the container LISTING. A hostile
+ * server could return an enormous Turtle/JSON-LD listing (millions of
+ * `ldp:contains` triples) to exhaust memory before we even iterate members;
+ * capping the read bounds both the parse cost and the member count. 16 MiB.
+ * Override per store via `maxListingBytes`.
+ */
 export const DEFAULT_MAX_LISTING_BYTES = 16 * 1024 * 1024;
 
+/** A single binary update read from (or to be written to) the log. */
 export interface StoredUpdate {
+  /** Absolute URL of the update resource. */
   readonly url: string;
-  /** Yjs payload, without the wire header. */
+  /** The raw binary Yjs update bytes. */
   readonly update: Uint8Array;
-  readonly etag: string | null;
-  readonly kind: "update" | "snapshot";
-  readonly timestamp: bigint;
-  readonly random: number;
 }
 
-type ObservedUpdate = Pick<StoredUpdate, "url" | "etag">;
-
+/** Options for {@link SolidUpdateStore} construction. */
 export interface SolidUpdateStoreOptions {
+  /** Absolute container URL the store owns (normalised to one trailing slash). */
   container: string;
-  storage: StorageClient;
-  /** Includes the 16-byte wire header. */
+  /** The (authenticated) fetch the store issues every request with. */
+  fetch: typeof globalThis.fetch;
+  /**
+   * Fail-closed cap (bytes) on a single update resource read. Defaults to
+   * {@link DEFAULT_MAX_UPDATE_BYTES}. A resource whose body exceeds this is
+   * refused rather than buffered unbounded.
+   */
   maxUpdateBytes?: number;
-  /** Budget for listed entry metadata; raw listing transport limits belong to StorageClient. */
+  /**
+   * Fail-closed cap (bytes) on the container listing read. Defaults to
+   * {@link DEFAULT_MAX_LISTING_BYTES}.
+   */
   maxListingBytes?: number;
-  /** Maximum passes when concurrent compaction removes listed members. Default 5. */
-  maxLoadRounds?: number;
 }
 
-function positive(value: number | undefined, fallback: number): number {
-  return value !== undefined && Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
-}
-
-function missing(cause: unknown): boolean {
-  return cause instanceof StorageError && (cause.code === "not-found" || cause.status === 410);
-}
-
-function validator(etag: string | null): etag is string {
-  return etag !== null && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
-}
-
-/** Immutable Yjs log over the public, protocol-neutral storage API. */
-export class SolidUpdateStore {
-  readonly container: string;
-  readonly storage: StorageClient;
-  private readonly maxUpdateBytes: number;
-  private readonly maxListingBytes: number;
-  private readonly maxLoadRounds: number;
-  private readonly observed = new Map<string, ObservedUpdate>();
-
-  constructor(options: SolidUpdateStoreOptions) {
-    this.storage = options.storage;
-    this.container =
-      this.storage.protocol === "solid"
-        ? normalizePodBase(options.container)
-        : assertWithinPodScope(this.storage.root, options.container);
-    if (!this.storage.isWithinStorage(this.container)) {
-      throw new Error("[y-solid] container escapes storage scope");
-    }
-    this.maxUpdateBytes = positive(options.maxUpdateBytes, DEFAULT_MAX_UPDATE_BYTES);
-    this.maxListingBytes = positive(options.maxListingBytes, DEFAULT_MAX_LISTING_BYTES);
-    this.maxLoadRounds = positive(options.maxLoadRounds, 5);
-  }
-
-  private target(url: string): string {
-    return assertWithinPodScope(
-      this.storage.protocol === "solid" ? this.container : this.storage.root,
-      url,
-      { allowRoot: false },
+/**
+ * Fail-closed refusal to FOLLOW a redirect on a credentialed request. The store
+ * issues every request with the caller's AUTHENTICATED fetch, so a 3xx to a
+ * foreign origin would replay the caller's credentials (bearer / DPoP-bound
+ * token) off-container. We set `redirect: "manual"` on every request and treat
+ * ANY redirect as a hard error:
+ *   - browsers surface a filtered `opaqueredirect` response (`type` set,
+ *     `status === 0`);
+ *   - Node/undici surfaces the raw 3xx response (unfollowed).
+ * Either way we refuse. (Suite recurring finding class: redirect-refusal SSRF.)
+ */
+function assertNotRedirected(res: Response, url: string): void {
+  if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+    throw new Error(
+      `[y-solid] request to ${url} was redirected (status ${res.status}); refused for credential safety`,
     );
   }
+}
 
-  private async member(url: string): Promise<string> {
-    const target = this.target(url);
-    if (
-      target === this.container ||
-      (this.storage.protocol === "lws" && (await this.storage.parentOf(target)) !== this.container)
-    ) {
-      throw new Error("[y-solid] resource is not a member of the document container");
-    }
-    return target;
+/**
+ * Read a response body into bytes with a fail-closed size cap, streaming so an
+ * unbounded (content-length-less) body cannot be buffered whole before the cap
+ * is hit. Honours a declared `content-length` for a fast-fail, then enforces the
+ * cap on the actual bytes streamed (a lying/absent content-length can't bypass
+ * it). Throws if the body exceeds `cap`.
+ */
+async function readBodyCapped(res: Response, cap: number, url: string): Promise<Uint8Array> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > cap) {
+    throw new Error(
+      `[y-solid] resource ${url} exceeds max size (content-length ${declared} > ${cap} bytes); refused`,
+    );
   }
-
-  private async create(update: Uint8Array, kind: StoredUpdate["kind"]): Promise<{ url: string }> {
-    const { bytes, name } = encodeRecord(update, kind);
-    if (bytes.byteLength > this.maxUpdateBytes) {
+  const body = res.body;
+  if (!body) {
+    // No stream available (e.g. an empty body): fall back to a buffered read,
+    // then enforce the cap on the materialised bytes.
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > cap) {
       throw new Error(
-        kind === "snapshot"
-          ? "[y-solid] snapshot exceeds max size; originals retained"
-          : "[y-solid] update exceeds max size",
+        `[y-solid] resource ${url} exceeds max size (${buf.byteLength} > ${cap} bytes); refused`,
       );
     }
-    const result = await this.storage.create(this.container, bytes, {
-      contentType: UPDATE_CONTENT_TYPE,
-      name,
-    });
-    if (result.created !== true) throw new Error("[y-solid] create was not confirmed");
-    const url = await this.member(result.url);
-    return { url };
+    return buf;
   }
-
-  async appendUpdate(update: Uint8Array): Promise<{ url: string }> {
-    return this.create(update, "update");
-  }
-
-  /** Names are opaque hints. This method lists URLs; loadUpdates orders their headers. */
-  async listUpdateUrls(): Promise<string[]> {
-    const urls = new Set<string>();
-    const observations = [...this.observed];
-    let size = 0;
-    try {
-      for await (const entry of this.storage.listAll(this.container, { revalidate: true })) {
-        size += new TextEncoder().encode(JSON.stringify(entry)).byteLength;
-        if (size > this.maxListingBytes) throw new Error("[y-solid] listing exceeds max size");
-        if (entry.kind === "container") continue;
-        try {
-          const url = this.target(entry.url);
-          if (url !== this.container) urls.add(url);
-        } catch {
-          // Untrusted membership never expands the credential scope.
-        }
-      }
-    } catch (cause) {
-      if (!missing(cause) || size > 0) throw cause;
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > cap) {
+      // Stop pulling and refuse — never accumulate past the cap.
+      await reader.cancel().catch(() => {});
+      throw new Error(`[y-solid] resource ${url} exceeds max size (> ${cap} bytes); refused`);
     }
-    // Only a complete listing can retire observations. Preserve reads made while
-    // this listing was in flight, which may include newly appended resources.
-    for (const [url, observation] of observations) {
-      if (!urls.has(url) && this.observed.get(url) === observation) this.observed.delete(url);
-    }
-    return [...urls].sort();
+    chunks.push(value);
   }
-
-  /** Read a scoped member with its immutable header and deletion validator. */
-  async readStoredUpdate(url: string): Promise<StoredUpdate | null> {
-    try {
-      const target = await this.member(url);
-      const result = await this.storage.read(target, { accept: UPDATE_CONTENT_TYPE });
-      // Consume the public stream, never bytes() before enforcing the cap.
-      const reader = result.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      if (reader) {
-        try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            size += value.byteLength;
-            if (size > this.maxUpdateBytes) {
-              await reader.cancel().catch(() => {});
-              throw new Error("[y-solid] update exceeds max size");
-            }
-            chunks.push(value);
-          }
-        } finally {
-          reader.releaseLock();
-        }
-      }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      const record = { url: target, etag: result.etag, ...decodeRecord(bytes, target) };
-      // The legacy compact(merged, urls) form must never acquire a newer ETag
-      // than its first read. New callers pass StoredUpdate records explicitly.
-      if (!this.observed.has(target)) {
-        this.observed.set(target, { url: target, etag: result.etag });
-      }
-      return record;
-    } catch (cause) {
-      if (missing(cause)) {
-        this.observed.delete(this.target(url));
-        return null;
-      }
-      throw cause;
-    }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
   }
+  return out;
+}
 
-  async readUpdate(url: string): Promise<Uint8Array | null> {
-    return (await this.readStoredUpdate(url))?.update ?? null;
-  }
+/**
+ * Mint a lexicographically-sortable update resource name: a zero-padded
+ * millisecond timestamp (sorts chronologically as a string) + a random suffix
+ * (so two updates minted in the same millisecond never collide). The suffix uses
+ * the WHATWG Web Crypto global `crypto.randomUUID()` (Node >=20 + every browser),
+ * keeping the store browser-usable.
+ *
+ * 15 digits zero-pads a millisecond timestamp out to year ~33658, so string sort
+ * stays chronological for any realistic time.
+ */
+function mintUpdateName(now: number = Date.now()): string {
+  const ts = String(now).padStart(15, "0");
+  return `${ts}-${crypto.randomUUID()}`;
+}
 
-  /** Replay all snapshots, then all updates, including offline writes with older timestamps. */
-  async loadUpdates(knownUrls: ReadonlySet<string> = new Set()): Promise<StoredUpdate[]> {
-    const read = new Map<string, StoredUpdate>();
-    for (let round = 0; round < this.maxLoadRounds; round++) {
-      let vanished = false;
-      for (const url of await this.listUpdateUrls()) {
-        if (knownUrls.has(url) || read.has(url)) continue;
-        const record = await this.readStoredUpdate(url);
-        if (record) read.set(url, record);
-        else vanished = true;
-      }
-      if (!vanished) return [...read.values()].sort(compareRecords);
-    }
-    throw new Error("[y-solid] log did not stabilise during concurrent compaction");
-  }
+/**
+ * The persistence store for a single Yjs doc's update log under one container.
+ *
+ * Construct with an absolute container URL + an authenticated fetch. The
+ * constructor rejects a non-http(s) container and normalises it to a single
+ * trailing slash.
+ */
+export class SolidUpdateStore {
+  /** The normalised container URL (one trailing slash). */
+  readonly container: string;
+  private readonly fetch: typeof globalThis.fetch;
+  private readonly maxUpdateBytes: number;
+  private readonly maxListingBytes: number;
 
-  async deleteUpdate(url: string): Promise<void> {
-    try {
-      const target = await this.member(url);
-      const record = this.observed.get(target) ?? (await this.readStoredUpdate(target));
-      if (!record) return;
-      if (!validator(record.etag))
-        throw new Error("[y-solid] deletion requires a strong read ETag");
-      await this.deleteObserved(record);
-    } catch (cause) {
-      if (!missing(cause)) throw cause;
-      this.observed.delete(this.target(url));
-    }
-  }
-
-  private async deleteObserved(record: ObservedUpdate): Promise<void> {
-    try {
-      await this.storage.delete(record.url, { ifMatch: record.etag as string });
-    } catch (cause) {
-      if (!missing(cause)) throw cause;
-    }
-    this.observed.delete(record.url);
+  constructor(options: SolidUpdateStoreOptions) {
+    // normalizePodBase throws on a non-http(s) / non-absolute container.
+    this.container = normalizePodBase(options.container);
+    this.fetch = options.fetch;
+    this.maxUpdateBytes = clampPositive(options.maxUpdateBytes, DEFAULT_MAX_UPDATE_BYTES);
+    this.maxListingBytes = clampPositive(options.maxListingBytes, DEFAULT_MAX_LISTING_BYTES);
   }
 
   /**
-   * Only retire the exact versions folded by the caller, after a confirmed snapshot create.
-   * Return folded URLs confirmed deleted or already absent alongside the snapshot URL.
+   * Append a binary update to the log: PUT it to a freshly-minted
+   * `application/octet-stream` resource under the container with
+   * `If-None-Match: *` (a CONDITIONAL create — a minted-name collision fails
+   * fast rather than overwriting). Returns the minted URL.
+   *
+   * @throws if the write is rejected (incl. a 412 collision).
    */
-  async compact(
-    merged: Uint8Array,
-    obsolete: readonly (string | StoredUpdate)[],
-  ): Promise<{ url: string; deletedUrls: string[] }> {
-    // Validate every target before creating anything. Capture validators before the create.
-    const records: ObservedUpdate[] = [];
-    const deletedUrls: string[] = [];
-    for (const item of obsolete) {
-      let url: string;
-      try {
-        url = await this.member(typeof item === "string" ? item : item.url);
-      } catch (cause) {
-        // Another compactor may already have retired the version we folded.
-        if (missing(cause)) {
-          const missingUrl = this.target(typeof item === "string" ? item : item.url);
-          this.observed.delete(missingUrl);
-          deletedUrls.push(missingUrl);
-          continue;
-        }
-        throw cause;
-      }
-      const record = typeof item === "string" ? this.observed.get(url) : item;
-      if (!record) throw new Error("[y-solid] compaction requires the records that were read");
-      records.push({ url, etag: record.etag });
+  async appendUpdate(update: Uint8Array): Promise<{ url: string }> {
+    const minted = `${this.container}${mintUpdateName()}`;
+    // Defence in depth: a minted URL is always under the container, but assert
+    // it. Write-target semantics: the container root is never a managed
+    // resource (allowRoot: false). Use the CANONICAL URL the guard returns
+    // (check-then-use-the-checked-value) so the URL written + returned is the
+    // URL that was validated.
+    const url = assertWithinPodScope(this.container, minted, { allowRoot: false });
+    const res = await this.fetch(url, {
+      method: "PUT",
+      redirect: "manual",
+      headers: {
+        "content-type": UPDATE_CONTENT_TYPE,
+        "if-none-match": "*",
+      },
+      // Copy into a fresh ArrayBuffer-backed view so the body is a standalone
+      // BodyInit (never a SharedArrayBuffer-backed view), independent of any
+      // buffer Yjs may reuse for the next event.
+      body: toBody(update),
+    });
+    assertNotRedirected(res, url);
+    if (!res.ok) {
+      throw new Error(`[y-solid] appendUpdate ${url} failed: ${res.status} ${res.statusText}`);
     }
-    const created = await this.create(merged, "snapshot");
-    for (const record of records) {
-      // No validator means retain the original. Never guess '*' or a later HEAD's ETag.
-      if (record.url !== created.url && validator(record.etag)) {
-        await this.deleteObserved(record);
-        deletedUrls.push(record.url);
-      }
-    }
-    return { ...created, deletedUrls };
+    return { url };
   }
+
+  /**
+   * List the direct `ldp:contains` members of the container that are update
+   * resources. Returns an empty array for a missing container (404/410). Each
+   * member is scope-guarded against the container — a foreign-origin / escaping
+   * member listed by a hostile or buggy server is skipped, never surfaced. Sub-
+   * containers (trailing slash) are skipped (an update resource is never a
+   * container). The result is sorted by URL (lexicographic) — deterministic load
+   * order (see the class doc on why correctness does not depend on it).
+   *
+   * @throws on any non-ok, non-404/410 response.
+   */
+  async listUpdateUrls(): Promise<string[]> {
+    const res = await this.fetch(this.container, {
+      method: "GET",
+      redirect: "manual",
+      headers: { accept: "text/turtle, application/ld+json;q=0.9" },
+    });
+    assertNotRedirected(res, this.container);
+    if (res.status === 404 || res.status === 410) {
+      return [];
+    }
+    if (!res.ok) {
+      throw new Error(`[y-solid] list ${this.container} failed: ${res.status} ${res.statusText}`);
+    }
+    // Size-cap the listing read: a hostile server could return an unbounded
+    // listing to exhaust memory before we iterate members.
+    const bytes = await readBodyCapped(res, this.maxListingBytes, this.container);
+    const body = new TextDecoder().decode(bytes);
+    // parseRdf resolves relative IRIs against the container URL (baseIRI), so
+    // ldp:contains object IRIs come back absolute.
+    const dataset = await parseRdf(body, res.headers.get("content-type"), {
+      baseIRI: this.container,
+    });
+    return parseContainerMembers(dataset, this.container, { scope: this.container })
+      .filter((member) => !member.container)
+      .map((member) => member.url)
+      .sort();
+  }
+
+  /**
+   * Read a single binary update resource. Returns `null` for a missing resource
+   * (404/410).
+   *
+   * @throws if the target is outside the container, or on any non-ok,
+   *   non-404/410 response.
+   */
+  async readUpdate(url: string): Promise<Uint8Array | null> {
+    // Check-then-USE-the-checked-value: assertWithinPodScope returns the
+    // CANONICAL (WHATWG-normalised) in-scope URL; fetch THAT, never the raw
+    // input, so the URL that was validated is the URL that is dereferenced.
+    const scoped = assertWithinPodScope(this.container, url, { allowRoot: false });
+    const res = await this.fetch(scoped, {
+      method: "GET",
+      redirect: "manual",
+      headers: { accept: UPDATE_CONTENT_TYPE },
+    });
+    assertNotRedirected(res, scoped);
+    if (res.status === 404 || res.status === 410) {
+      return null;
+    }
+    if (!res.ok) {
+      throw new Error(`[y-solid] readUpdate ${scoped} failed: ${res.status} ${res.statusText}`);
+    }
+    // Size-cap the read: never buffer an unbounded body from a hostile/buggy
+    // server into memory.
+    return readBodyCapped(res, this.maxUpdateBytes, scoped);
+  }
+
+  /**
+   * Load the whole update log: list the container, read every member, and return
+   * them in deterministic (URL-sorted) order. Members that 404/410 between the
+   * listing and the read (e.g. a concurrent {@link compact}) are skipped, not
+   * fatal.
+   */
+  async loadUpdates(): Promise<StoredUpdate[]> {
+    const urls = await this.listUpdateUrls();
+    const out: StoredUpdate[] = [];
+    for (const url of urls) {
+      const update = await this.readUpdate(url);
+      if (update) out.push({ url, update });
+    }
+    return out;
+  }
+
+  /**
+   * Delete a single update resource (used by {@link compact}). A missing
+   * resource (404/410) is treated as already-deleted (no throw).
+   *
+   * @throws if the target is outside the container, or on any other non-ok
+   *   response.
+   */
+  async deleteUpdate(url: string): Promise<void> {
+    // Check-then-USE-the-checked-value: DELETE the CANONICAL in-scope URL the
+    // guard returned, never the raw input.
+    const scoped = assertWithinPodScope(this.container, url, { allowRoot: false });
+    const res = await this.fetch(scoped, { method: "DELETE", redirect: "manual" });
+    assertNotRedirected(res, scoped);
+    if (res.status === 404 || res.status === 410) {
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`[y-solid] deleteUpdate ${scoped} failed: ${res.status} ${res.statusText}`);
+    }
+  }
+
+  /**
+   * **Compact** the log: write `merged` (the caller folds the current log via
+   * `Y.mergeUpdates` — the store stays Yjs-free) as a single fresh update
+   * resource, THEN delete the members named in `obsoleteUrls`.
+   *
+   * **Write-before-delete ordering is load-bearing for safety:** the merged
+   * snapshot is created FIRST, so even if the process dies mid-compaction the
+   * doc is never unrepresented — at worst the log temporarily holds both the
+   * merged update and the (still-valid, idempotent) originals. We only delete
+   * the originals AFTER the merged write has succeeded.
+   *
+   * `obsoleteUrls` is each scope-guarded; the new merged resource's URL is
+   * returned. Pass exactly the URLs you merged (typically every URL from the
+   * {@link loadUpdates} that produced `merged`); any URL appended AFTER that
+   * snapshot must NOT be in `obsoleteUrls` or its update would be lost.
+   *
+   * @throws if the merged write fails (before any delete) or a delete fails.
+   */
+  async compact(merged: Uint8Array, obsoleteUrls: readonly string[]): Promise<{ url: string }> {
+    // Guard the to-be-deleted URLs up front (fail before writing anything if any
+    // is out of scope), capturing the CANONICAL in-scope form the guard returns
+    // so the subsequent DELETE + self-write comparison operate on the checked
+    // value, not the raw input (check-then-use-the-checked-value).
+    const scopedObsolete = obsoleteUrls.map((url) =>
+      assertWithinPodScope(this.container, url, { allowRoot: false }),
+    );
+    const created = await this.appendUpdate(merged);
+    for (const scoped of scopedObsolete) {
+      // Never delete the resource we just wrote (a minted name cannot collide
+      // with an existing one, but guard against a caller passing it back). Both
+      // sides are canonical here, so the comparison is exact.
+      if (scoped === created.url) continue;
+      await this.deleteUpdate(scoped);
+    }
+    return created;
+  }
+}
+
+/**
+ * Copy `update` into a standalone `Uint8Array` over a fresh `ArrayBuffer`, so the
+ * request body never aliases a buffer Yjs may mutate/reuse, and is never backed
+ * by a `SharedArrayBuffer` (not a valid `BodyInit`). Returns a `BodyInit`.
+ */
+function toBody(update: Uint8Array): Uint8Array {
+  const copy = new Uint8Array(update.byteLength);
+  copy.set(update);
+  return copy;
+}
+
+/**
+ * Resolve a caller-supplied byte cap: a finite positive number, else the
+ * default. Guards against `0`/negative/`NaN`/`Infinity` silently disabling the
+ * fail-closed cap.
+ */
+function clampPositive(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }

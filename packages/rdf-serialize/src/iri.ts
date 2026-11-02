@@ -225,13 +225,11 @@ export function safeIri(value: unknown): string | undefined {
  * Turtle `IRIREF`-forbidden character (so it can be serialised inside `<…>`
  * without injecting).
  *
- * Unlike `value === safeHttpIri(value)`, this deliberately ACCEPTS benign
- * canonicalisation differences — a missing trailing slash, an upper-case host,
- * a present-or-absent default port — because such a value is already
- * injection-safe even though `safeHttpIri` would return a lexically-different
- * (equally-safe) string. Use it as a cheap guard/type-narrowing predicate; use
- * the `safeHttpIri(v) !== v` rule (below) only for EXACT-MATCH evaluation
- * fields where lexical identity matters.
+ * Like `value === safeHttpIri(value)`, this accepts safe lexical spellings:
+ * a missing trailing slash, an upper-case host, or an explicit default port.
+ * `safeHttpIri` preserves those spellings too. This predicate rejects raw
+ * forbidden characters that `safeHttpIri` would percent-encode; use it as a
+ * guard/type-narrowing predicate when the input must already be injection-safe.
  *
  * Like {@link safeHttpIri} (clause 6), it requires a NON-EMPTY LEXICAL
  * authority: an authority-less `https:example.com` is REJECTED even though the

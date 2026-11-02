@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   createPodClient,
   type StorageClient,
@@ -25,13 +26,14 @@ export async function storageFromFetch(
       discovering && initialRequest && init?.method === "HEAD" && String(input) === base;
     initialRequest = false;
     const merged = new Headers(headers);
+    new Headers(txHeaders).forEach((value, key) => {
+      merged.set(key, value);
+    });
+    // Operation headers (in particular conditional writes) must survive caller defaults.
     new Headers(init?.headers).forEach((value, key) => {
       // SDK resource reads default to */*; keep the driver's configured representation.
       // Discovery and listings still need the SDK's specific protocol media types.
       if (!discovering && key === "accept" && value === "*/*" && merged.has(key)) return;
-      merged.set(key, value);
-    });
-    new Headers(txHeaders).forEach((value, key) => {
       merged.set(key, value);
     });
     const response = await (discovering ? discovery : data)(input, { ...init, headers: merged });

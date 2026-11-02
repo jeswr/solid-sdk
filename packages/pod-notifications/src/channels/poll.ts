@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type Entry,
   type ReadResult,
   type StorageClient,
   StorageError,
 } from "@jeswr/storage-client";
-import { isOnline, platform } from "../runtime.js";
+import { isOnline, platform, runCleanups } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { ChangeEvent, Timers } from "../types.js";
 
@@ -20,6 +21,7 @@ export interface PollChannelOptions {
 }
 
 interface Snapshot {
+  kind: ReadResult["kind"];
   etag: string | null;
   members: Map<string, Entry>;
 }
@@ -91,7 +93,9 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           } catch (error) {
             request.signal.throwIfAborted();
             if (error instanceof StorageError && error.code === "not-found") {
+              const previous = snapshots.get(topic);
               snapshots.set(topic, null);
+              if (previous) emit("Delete", topic, previous.kind, error, {});
               continue;
             }
             throw error;
@@ -109,7 +113,8 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           }
           request.signal.throwIfAborted();
           const previous = snapshots.get(topic);
-          snapshots.set(topic, { etag: head.etag, members });
+          snapshots.set(topic, { kind: head.kind, etag: head.etag, members });
+          if (previous === null) emit("Create", topic, head.kind, head, {});
           if (!previous) continue;
           if (head.etag !== null && previous.etag !== null && head.etag !== previous.etag) {
             emit("Update", topic, head.kind, head, { state: head.etag });
@@ -164,12 +169,14 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
   };
   subscription.cleanup = () => {
     stopped = true;
-    clear();
-    active?.abort();
-    snapshots.clear();
-    platform.removeEventListener?.("offline", offline);
-    platform.removeEventListener?.("online", online);
-    options.signal?.removeEventListener("abort", abort);
+    runCleanups([
+      clear,
+      () => active?.abort(),
+      () => snapshots.clear(),
+      () => platform.removeEventListener?.("offline", offline),
+      () => platform.removeEventListener?.("online", online),
+      () => options.signal?.removeEventListener("abort", abort),
+    ]);
   };
   platform.addEventListener?.("offline", offline);
   platform.addEventListener?.("online", online);

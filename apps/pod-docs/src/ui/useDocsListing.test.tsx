@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // @vitest-environment jsdom
 //
@@ -235,6 +236,22 @@ describe("useDocsListing — opening a document", () => {
 });
 
 describe("useDocsListing — auth seam + staleness", () => {
+  it("threads changes to the explicit loopback opt-in into a fresh store", async () => {
+    const spy = vi.fn(stableFactory({ list: async () => [] }));
+    const createStore = spy as unknown as typeof createDocsStore;
+    const { result, rerender } = renderHook(
+      ({ allowInsecureLoopback }) =>
+        useDocsListing(POD, WEBID, { createStore, allowInsecureLoopback }),
+      { initialProps: { allowInsecureLoopback: false } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ allowInsecureLoopback: false }));
+    rerender({ allowInsecureLoopback: true });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ allowInsecureLoopback: true }));
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
   it("threads the injected fetch into the store factory", async () => {
     const fetchStub = vi.fn() as unknown as typeof fetch;
     const spy = vi.fn(stableFactory({ list: async () => [] }));

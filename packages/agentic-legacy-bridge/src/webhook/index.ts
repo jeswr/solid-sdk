@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 /**
  * `@jeswr/agentic-legacy-bridge/webhook` — the M2.4 stateless, pod-as-state inbound
  * webhook service (M2-DESIGN.md §3). Receives a raw Slack Events API / WhatsApp
@@ -48,6 +49,7 @@ export {
   verifySlackSignature,
 } from "./verify-slack.js";
 export {
+  RawResourceMismatchError,
   type WriteMessageOptions,
   type WriteMessageResult,
   writeMessageCreateOnly,

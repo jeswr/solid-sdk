@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { StorageError } from "@jeswr/storage-client";
+import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { createRxDatabase } from "rxdb";
 import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
 import { describe, expect, it, vi } from "vitest";
@@ -75,6 +78,28 @@ describe.each(["solid", "lws"] as const)("StorageClient adapter (%s)", (protocol
     const read = vi.spyOn(storage, "read");
     await expect(store.getDoc("../escape")).rejects.toThrow();
     expect(read).not.toHaveBeenCalled();
+  });
+
+  it("bounds memberless listings on injected HTTP and memory clients before parsing", async () => {
+    const create = protocol === "solid" ? createSolidBackend : createLwsBackend;
+    const prefix = protocol === "solid" ? "" : JSON.stringify({ type: "Container", items: [] });
+    const http = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(prefix + " ".repeat(1024 * 1024), {
+          headers: {
+            "content-type": protocol === "solid" ? "text/turtle" : "application/lws+json",
+          },
+        }),
+    });
+    for (const storage of [http, fixture().storage]) {
+      const store = new SolidDocStore({ container: ROOT, storage, maxResponseBytes: 8 });
+      await expect(store.listDocUrls()).rejects.toMatchObject({
+        name: "StorageError",
+        code: "payload-too-large",
+        url: ROOT,
+      });
+    }
   });
 
   it("fails closed without a delete validator and on a concurrent edit", async () => {

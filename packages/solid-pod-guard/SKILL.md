@@ -34,7 +34,8 @@ export async function GET(request: Request) {
 ```
 
 1. **authenticate** — anonymous is ALWAYS 401 (+ `WWW-Authenticate`), even with
-   malformed params; an empty `trustedOidcIssuers` is 503, never open.
+   malformed params; an empty `trustedOidcIssuers` is 503, never open, and so is
+   `allowInsecureLoopback` alongside any non-loopback trusted issuer.
 2. **reject overrides** — any `pod`/`webid` in the query, or ANYWHERE in the
    body (nested objects/arrays included), is 400 (`param_rejected`): identity
    and pod are never request inputs. The scan is iterative with a fixed
@@ -46,8 +47,9 @@ export async function GET(request: Request) {
    while the stream is consumed (⇒ 413 `body_too_large`; a `Content-Length`
    precheck is an optimization only, chunked bodies are capped mid-stream)
    plus a 10 s read deadline (⇒ 408 `body_timeout`).
-4. **bind pod** — `resolveAuthorizedPod`; any violation ⇒ 403 (`pod_binding`),
-   allowlist unset ⇒ 503, unreachable profile ⇒ 502.
+4. **bind pod** — `resolveAuthorizedPod`; allowlist unset ⇒ 503 (checked before
+   any outbound fetch), any binding violation ⇒ 403 (`pod_binding`), unreachable
+   or oversized profile/card ⇒ 502.
 5. only then your handler. A thrown `PodAccessError` lowers to its status;
    anything else is a generic 500 (details never leak).
 
@@ -56,7 +58,9 @@ kept the reviewed response shape verbatim).
 
 Construct the guard ONCE at module scope: the verifier owns the jti replay
 store and JWKS cache — a per-request guard would let captured DPoP proofs
-replay.
+replay. The default replay store is in-process, so on serverless or
+multi-instance hosting each instance remembers only its own proofs; pass a
+shared `replayStore` in `PodGuardOptions` there.
 
 ## The pod binding (L2) — why bidirectional
 
@@ -67,7 +71,12 @@ replay.
    `<base>profile/card` composed on a fragment-carrying base dereferences —
    fragment stripped on the wire — to a DIFFERENT resource than the
    owner-only-writable profile card (a card-confusion attack on step 3).
-3. BACKWARD acknowledgment: `<pod>profile/card` (owner-only-writable) must
+3. STORAGE ROOT: the surviving pod base must answer a HEAD with
+   `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"` (Solid Protocol
+   §4.1; CSS and sparq send it). Otherwise a shared sub-container where others
+   can write could be claimed, and "acknowledged" by a card the claimant wrote.
+   This also applies to pod-rooted WebIDs.
+4. BACKWARD acknowledgment: `<pod>profile/card` (owner-only-writable) must
    assert the SAME triple. The forward claim is attacker-authored (anyone can
    put any IRI in their own profile) and an origin allowlist cannot separate
    users on a shared pod host — only the victim pod's refusal to name the
@@ -79,7 +88,8 @@ The backward acknowledgment is meaningful **only because `<pod>profile/card`
 is OWNER-ONLY-WRITABLE**. That is a requirement on every pod host you put in
 `allowedPodOrigins`, and this code cannot verify it from outside. If an
 allowlisted host lets non-owners (or anonymous callers) write the profile
-card, the binding's load-bearing control is void. Operators MUST confirm this
+card of a storage root, the binding's load-bearing control is void.
+Storage-claim objects that are not IRIs (literals, blank nodes) are skipped. Operators MUST confirm this
 property before allowlisting a pod origin.
 
 ## L3 subject binding — a CONSUMER obligation
@@ -97,13 +107,15 @@ of your credential shapes).
 
 - `MYAPP_TRUSTED_OIDC_ISSUERS` — unset ⇒ every guarded route is 503.
 - `MYAPP_POD_ALLOWED_ORIGINS` — SSRF allowlist; unset ⇒ 503.
-- `MYAPP_DEV_ALLOW_LOOPBACK=1` — dev/e2e ONLY: permits loopback http and swaps
-  the DNS-pinned profile fetch for a plain redirect-refusing one. It never
-  relaxes any verification gate.
+- `MYAPP_DEV_ALLOW_LOOPBACK=1` — dev/e2e ONLY: permits loopback http and admits
+  loopback addresses to the DNS-pinned profile fetch. With only loopback issuers
+  trusted, the verifier downgrades its WebID-to-issuer check to a warning. The
+  guard answers 503 if the flag is set with any non-loopback trusted issuer.
 - `MYAPP_TRUST_FORWARDED_HEADERS=1` (auto-on under `VERCEL=1`) — REQUIRED
   behind a TLS-terminating proxy so the DPoP `htu` binding reconstructs the
   public URL; anywhere else forwarded headers are attacker-controlled, leave
-  it off.
+  it off. `vercel env pull` writes `VERCEL=1` into local `.env` files, so set
+  `MYAPP_TRUST_FORWARDED_HEADERS=0` to force it off outside Vercel.
 
 Next.js `basePath` note: the framework strips the basePath from
 `request.url`, but callers mint DPoP proofs against the full public URL — pass
@@ -115,7 +127,9 @@ Next.js `basePath` note: the framework strips the basePath from
 that authenticates as the app's OWN WebID via `client_credentials`: DPoP-bound
 RFC 9068 token (cached until near expiry), fresh single-use RFC 9449 proof per
 request, https-only, every hop refuses redirects, the secret is never echoed
-into errors. Server-only — the secret lives in server env. Authorization stays
+into errors. Discovery must name the configured issuer (RFC 8414 §3.3) before
+the secret is sent, and a non-DPoP `token_type` is refused. The DPoP private
+key is non-extractable. Server-only — the secret lives in server env. Authorization stays
 at the POD (WAC grants naming the service WebID), never in app code.
 
 ## Testing

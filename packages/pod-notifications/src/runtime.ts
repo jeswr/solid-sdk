@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Timers } from "./types.js";
 
 /** Platform adapter shared by polling and future push channels. */
@@ -17,4 +18,17 @@ export const platform = globalThis as unknown as {
 /** Missing navigator/onLine means online. */
 export function isOnline(): boolean {
   return platform.navigator?.onLine !== false;
+}
+
+/** Run every synchronous teardown step, then surface the first failure. */
+export function runCleanups(cleanups: readonly (() => void)[]): void {
+  const errors: unknown[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
 }

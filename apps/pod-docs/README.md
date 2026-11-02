@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Pod Docs
 
 > ⚠️ Experimental — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.
@@ -22,7 +23,7 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 
 ## Storage client API
 
-`createDocsStore({ podRoot, webId, fetchImpl?, storage?, container?, onContainerChange? })` uses the
+`createDocsStore({ podRoot, webId, fetchImpl?, storage?, storageId?, acpDialect?, container?, onContainerChange?, allowInsecureLoopback? })` uses the
 public PodClient storage surface. Inject either memory protocol with `storage`.
 Supply `container` to reopen a server-assigned LWS collection; otherwise the first
 create prepares the default collection and retains its returned identifier in
@@ -32,7 +33,30 @@ including when the subsequent document write fails.
 Document creation uses relative RDF fragments so server-assigned URLs retain valid
 revision subjects. `save` requires the ETag from the prior read; `remove` accepts
 that ETag or obtains a fresh one. `share` delegates to `@jeswr/pod-access`.
-Solid Type Index registration is preserved; LWS has no Solid Type Index bootstrap,
+Discovery retains `description.id` for LWS sharing. When injecting a storage client,
+pass that canonical identifier as `storageId`; it may differ from `storage.root`.
+ACP sharing requires an independently established `acpDialect: 'css' | 'ess'`;
+unknown dialects and unsupported policy shapes fail closed.
+Only a missing or forbidden initial collection request produces an empty listing;
+continuation-page failures propagate, including after an empty first page.
+Solid Type Index registration resolves `pim:preferencesFile` and its private index before
+falling back to a profile-linked public index, while retaining legacy private profile links.
+Linked preferences and their private index must be inside a storage the WebID vouches for
+(not necessarily the one selected for documents). Unreadable,
+missing, malformed, or ambiguous preferences fail closed; conflicting legacy and preferences
+private destinations also fail. Discovery follows the same preferences links. The local
+compatibility API retains separately hosted WebIDs and legacy external index documents;
+the shared `@jeswr/pod-type-index` client currently requires a storage-scoped WebID.
+In Node, identity reads follow at most five redirects, each validated, retaining the
+canonical document URL and its ETag for conditional writes. Browsers expose manual redirects
+only as opaque responses, so there the read is repeated with credentials omitted and native
+redirect following; the browser's own hop limit applies and only the final URL is validated
+(against the same rules), then used as the canonical URL. Either way, preferences must end
+within storage vouched for by the WebID or the injected client, and HTTPS cannot downgrade
+to HTTP. For local CSS, explicitly pass `allowInsecureLoopback: true` to the store or
+`DocumentBrowser` (or the options of the Type Index functions). This permits only loopback
+HTTP. The web host enables it only in development builds (`import.meta.env.DEV`).
+LWS has no Solid Type Index bootstrap,
 and sharing reports unsupported where pod-access does not implement the access model.
 
 ## What it does
@@ -111,6 +135,9 @@ WebID and storage root, then supply it on remount. The host owns persistence;
 the browser does not save collection selections itself. Updating `container`
 to the just-assigned URL keeps the open document; selecting another collection
 reloads its listing.
+The shipped `web/` host saves this selection in browser local storage, isolated by
+WebID and storage root. It restores the exact identifier on remount and reports a
+persistence error if browser storage is unavailable, avoiding replacement collections.
 
 It lists the documents in the pod's `pod-docs/` container (title + modified), opens any document
 (title, format, author, modified, body), and surfaces loading / empty / error / access-denied

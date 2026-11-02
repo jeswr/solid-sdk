@@ -120,7 +120,10 @@ export class ContactsTransport {
     return { url: target, etag: result.etag, dataset: result.dataset, data: parse(result.dataset) };
   }
 
-  async commit(changes: readonly Change[]): Promise<(string | null)[]> {
+  async commit(
+    changes: readonly Change[],
+    confirmed?: (url: string) => void,
+  ): Promise<(string | null)[]> {
     // Preflight ALL scope, concurrency and size guards before the first request.
     const prepared = await Promise.all(
       changes.map(async (change) => {
@@ -164,6 +167,7 @@ export class ContactsTransport {
         }
         completed.push(url);
         etags.push(response.headers.get("etag"));
+        confirmed?.(url);
       }
     } catch (error) {
       if (completed.length) throw new PartialWriteError(completed, error);

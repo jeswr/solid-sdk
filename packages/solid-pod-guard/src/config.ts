@@ -10,11 +10,11 @@
  * the reference app).
  *
  * SECURITY: `allowInsecureLoopback` exists ONLY for the local dev/e2e loop
- * (loopback-HTTP dev issuer + in-memory pods). It relaxes transport rules
- * (http on loopback, plain fetch for WebID dereferencing instead of the
- * DNS-pinned SSRF-guarded default). It NEVER relaxes any verification gate:
- * token verification, the pim:storage binding, and every fail-closed check
- * run identically.
+ * (loopback-HTTP dev issuer + in-memory pods). It relaxes transport rules:
+ * http on loopback, and loopback addresses admitted to the SSRF-guarded WebID
+ * fetch. With only loopback issuers trusted, the verifier also downgrades its
+ * WebID-to-issuer check to a warning. The guard refuses to run (503) when the
+ * flag is set alongside any non-loopback trusted issuer.
  */
 
 export interface PodGuardConfig {
@@ -34,6 +34,15 @@ function splitList(value: string | undefined): readonly string[] {
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function forwardedHeadersTrusted(
+  explicit: string | undefined,
+  vercel: string | undefined,
+): boolean {
+  if (explicit === "1") return true;
+  if (explicit === "0") return false;
+  return vercel === "1";
 }
 
 /**
@@ -57,8 +66,12 @@ export function configFromEnv(
     allowInsecureLoopback: env[`${envPrefix}_DEV_ALLOW_LOOPBACK`] === "1",
     // Vercel terminates TLS ahead of the function, so the forwarded headers are
     // authoritative there; anywhere else they are attacker-controlled (default off).
-    trustForwardedHeaders:
-      env.VERCEL === "1" || env[`${envPrefix}_TRUST_FORWARDED_HEADERS`] === "1",
+    // `vercel env pull` also writes VERCEL=1 into local .env files, so an explicit
+    // `${envPrefix}_TRUST_FORWARDED_HEADERS=0` overrides the Vercel default.
+    trustForwardedHeaders: forwardedHeadersTrusted(
+      env[`${envPrefix}_TRUST_FORWARDED_HEADERS`],
+      env.VERCEL,
+    ),
   };
 }
 

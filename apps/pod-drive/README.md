@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Pod Drive
 
 > ⚠️ Experimental — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active
@@ -23,12 +24,16 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 
 ## Storage client API
 
-`createDriveStore({ root, fetch?, storage? })` discovers a PodClient by default;
+`createDriveStore({ root, fetch?, storage?, storageId?, acpDialect? })` discovers a PodClient by default;
 `storage` accepts an existing StorageClient, including either memory protocol.
 Use `list`, `read`, `create`, `write`, `remove`, `move`, and `share` for pod I/O.
 Pass observed ETags to edits, moves, and deletions, and retain the URLs returned by
 creation and moves. Listings follow every SDK page and preserve LWS container identifiers.
 Sharing delegates to `@jeswr/pod-access`; unsupported access models remain unsupported.
+Discovery retains `description.id` for LWS sharing. When injecting `storage`, pass its
+canonical `description.id` as `storageId`, which may differ from the root. ACP sharing
+requires `acpDialect: 'css' | 'ess'` from independent, trusted deployment knowledge;
+unknown dialects and unsupported ACP policy shapes fail closed.
 The existing RDF model exports remain available for working with datasets in memory.
 
 ## What the data layer does
