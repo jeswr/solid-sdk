@@ -14,9 +14,12 @@ import { useEffect } from "react";
 import { classifyError } from "../../lib/model/errors";
 import { projectGroups } from "../../lib/views/project-groups";
 import { focusAddTask } from "../../state/add-focus";
+import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
+import { BulkToolbar } from "../bulk-toolbar";
 import { TaskList } from "../task-list";
+import { projectHref, useViewMode } from "../view-toggle";
 import { ProjectError } from "./project-error";
 
 export function ProjectView({
@@ -41,6 +44,11 @@ export function ProjectView({
   useEffect(() => {
     document.title = `${title} · Tasks · Solid Suite`;
   }, [title]);
+  // A project opens in its persisted layout (06-tasks §2.5); the Inbox is always a list.
+  const viewMode = useViewMode(inbox ? undefined : url);
+  useEffect(() => {
+    if (url && viewMode.mode === "board") router.replace(projectHref(url, "board"));
+  }, [url, viewMode.mode, router]);
   const add = params.get("add");
   useEffect(() => {
     if (add !== "1" || load?.status !== "ready") return;
@@ -93,7 +101,7 @@ export function ProjectView({
     </>
   );
   return (
-    <div className="tsk-content">
+    <TaskListFocus className="tsk-content">
       <header className="tsk-view-header">
         <h1>
           {!inbox && project ? (
@@ -110,6 +118,7 @@ export function ProjectView({
           )}
         </h1>
       </header>
+      <BulkToolbar />
       {renderAsync({
         loading:
           tasks.status === "loading" ||
@@ -134,6 +143,6 @@ export function ProjectView({
         empty: project && empty ? content : undefined,
         children: content,
       })}
-    </div>
+    </TaskListFocus>
   );
 }

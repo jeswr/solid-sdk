@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { selectionReducer } from "../../src/apps/tasks/state/selection";
-import { tasksCommand } from "../../src/apps/tasks/state/shortcuts";
+import { tasksCommand, viewModeShortcut } from "../../src/apps/tasks/state/shortcuts";
 
 describe("Tasks shortcuts", () => {
   it.each([
@@ -64,5 +64,56 @@ describe("Tasks shortcuts", () => {
     expect([...two]).toEqual(["a", "b"]);
     expect(selectionReducer(pruned, { type: "prune", visible: ["b"] })).toBe(pruned);
     expect(selectionReducer(empty, { type: "clear" })).toBe(empty);
+  });
+  it("extends with Shift+↑/↓ and selects every visible row with Cmd/Ctrl+A", () => {
+    expect(tasksCommand({ key: "ArrowDown", shiftKey: true })).toEqual({
+      type: "extend",
+      direction: 1,
+    });
+    expect(tasksCommand({ key: "ArrowUp", shiftKey: true })).toEqual({
+      type: "extend",
+      direction: -1,
+    });
+    expect(tasksCommand({ key: "a", metaKey: true })).toEqual({ type: "selectAll" });
+    expect(tasksCommand({ key: "A", ctrlKey: true })).toEqual({ type: "selectAll" });
+    expect(tasksCommand({ key: "a", ctrlKey: true, shiftKey: true })).toBeUndefined();
+    expect(tasksCommand({ key: "a", metaKey: true, altKey: true })).toBeUndefined();
+    expect(tasksCommand({ key: "a", metaKey: true, editable: true })).toBeUndefined();
+  });
+  it("maps b to the board and Shift+L to the list outside editable fields", () => {
+    expect(viewModeShortcut({ key: "b" })).toBe("board");
+    expect(viewModeShortcut({ key: "L", shiftKey: true })).toBe("list");
+    expect(viewModeShortcut({ key: "l", shiftKey: true })).toBe("list");
+    for (const input of [
+      { key: "b", shiftKey: true },
+      { key: "l" },
+      { key: "b", editable: true },
+      { key: "b", isComposing: true },
+      { key: "b", ctrlKey: true },
+      { key: "b", metaKey: true },
+      { key: "b", altKey: true },
+    ])
+      expect(viewModeShortcut(input)).toBeUndefined();
+  });
+  it("adds visible rows and selects anchor ranges over a base selection", () => {
+    const base = new Set(["x"]);
+    const visible = ["a", "b", "c", "d"];
+    expect([...selectionReducer(base, { type: "add", urls: ["a", "b"] })]).toEqual(["x", "a", "b"]);
+    expect(selectionReducer(base, { type: "add", urls: ["x"] })).toBe(base);
+    const range = { type: "range" as const, base: ["x"], visible };
+    expect([...selectionReducer(base, { ...range, anchor: "b", to: "d" })]).toEqual([
+      "x",
+      "b",
+      "c",
+      "d",
+    ]);
+    expect([...selectionReducer(base, { ...range, anchor: "c", to: "a" })]).toEqual([
+      "x",
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(selectionReducer(base, { ...range, anchor: "missing", to: "a" })).toBe(base);
+    expect(selectionReducer(base, { ...range, anchor: "a", to: "missing" })).toBe(base);
   });
 });

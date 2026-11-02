@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "../src/lib/demo-pod/binaries";
@@ -39,7 +40,7 @@ describe("demo seed and binary fixtures", () => {
   it("seeds a profile, owner-only ACL, registered calendars, Contacts type index, agent type registration and the Drive acceptance tree", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
-    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(74);
+    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(79);
     expect(DRIVE_ROOT_CLASS).toBe("https://jeswr.org/ns/pod-drive#DriveRoot");
     for (const file of seed) {
       const url = new URL(file.path, DEMO_ROOT).href;
@@ -106,6 +107,14 @@ describe("demo seed and binary fixtures", () => {
     expect((await graph(await pod.fetch(`${DEMO_ROOT}drive/Archive/`), DEMO_ROOT)).size).toBe(5);
   });
 
+  it("leaves Calendar data out when calendar seeding is disabled", async () => {
+    const seed = await buildDemoSeed(NOW, { calendar: false });
+    const full = await buildDemoSeed(NOW);
+    expect(seed.some((file) => file.path.startsWith("calendar/"))).toBe(false);
+    expect(full.some((file) => file.path.startsWith("calendar/"))).toBe(true);
+    expect(seed.some((file) => file.path.startsWith("drive/"))).toBe(true);
+  });
+
   it("provides distinct PNGs with image dimensions and a PDF with readable report content", () => {
     for (const png of [SUNSET_PNG, HILLS_PNG]) {
       expect([...png.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -144,12 +153,12 @@ describe("demo pod HTTP contract", () => {
       "http://www.w3.org/ns/pim/space#Storage",
     ]);
     expect(objects(rootGraph, DEMO_ROOT, `${LDP}contains`)).toEqual([
-      `${DEMO_ROOT}.acl`,
       `${DEMO_ROOT}agent/`,
       `${DEMO_ROOT}calendar/`,
       `${DEMO_ROOT}contacts-pm/`,
       `${DEMO_ROOT}contacts/`,
       `${DEMO_ROOT}drive/`,
+      `${DEMO_ROOT}health/`,
       `${DEMO_ROOT}profile/`,
       `${DEMO_ROOT}settings/`,
     ]);
@@ -310,6 +319,41 @@ describe("demo pod HTTP contract", () => {
     await pod.fetch(file, { method: "PUT" });
     await pod.fetch(file, { method: "DELETE" });
     expect(changed).toHaveBeenCalledTimes(5);
+  });
+
+  it("treats ACL documents as auxiliary: unlisted, readable, and deleted with their subject", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT, now: () => NOW });
+    const folder = `${DEMO_ROOT}shared/`;
+    const file = `${folder}file`;
+    await pod.fetch(file, { method: "PUT", body: "content" });
+    await pod.fetch(`${file}.acl`, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    await pod.fetch(`${folder}.acl`, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    const listing = await graph(await pod.fetch(folder), folder);
+    expect(objects(listing, folder, `${LDP}contains`)).toEqual([file]);
+    expect((await pod.fetch(`${file}.acl`)).status).toBe(200);
+    expect((await pod.fetch(`${file}.acl`, { method: "HEAD" })).headers.get("link")).not.toContain(
+      'rel="acl"',
+    );
+    expect((await pod.fetch(file, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(`${file}.acl`)).toBe(false);
+    expect((await pod.fetch(folder, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(`${folder}.acl`)).toBe(false);
+    await pod.fetch(file, { method: "PUT", body: "again" });
+    await pod.fetch(`${file}.acl`, { method: "PUT", body: "" });
+    expect((await pod.fetch(`${file}.acl`, { method: "DELETE" })).status).toBe(205);
+    expect(pod.has(file)).toBe(true);
+    // An orphan ACL-named file has no subject, so it stays an ordinary member.
+    await pod.fetch(`${folder}orphan.acl`, { method: "PUT", body: "" });
+    const again = await graph(await pod.fetch(folder), folder);
+    expect(objects(again, folder, `${LDP}contains`)).toEqual([file, `${folder}orphan.acl`]);
   });
 
   it("handles missing/outside URLs, OPTIONS, unknown methods, queries and fragments", async () => {
