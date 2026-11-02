@@ -2,7 +2,12 @@
 // AUTHORED-BY Codex GPT-6
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { createPodScopedFetch, isWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import {
+  assertWithinPodScope,
+  createPodScopedFetch,
+  isWithinPodScope,
+  refuseRedirects,
+} from "@jeswr/guarded-fetch";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -12,11 +17,16 @@ import {
   createRoom as createModelRoom,
   deleteOwnMessage,
   httpIri,
+  loadChat,
   loadMessages,
   loadRoom,
   loadRooms,
+  messageResource,
   messageSubject,
+  type Reaction,
+  react,
   readMessages,
+  readReactions,
   readRoom,
   removeJoinedRoom,
   roomContainer,
@@ -24,8 +34,10 @@ import {
   saveMessageEdit,
   saveMessageTask,
   sendMessage,
+  unreact,
 } from "../model";
 import { copyMessageTask, loadProfileName, loadRoomFiles } from "../model/extras";
+import { aggregateReactions, type ReactionSummary } from "../timeline";
 import { PreferencesStore } from "./preferences-store";
 
 export interface Room {
@@ -41,6 +53,7 @@ export type JoinedRoom = Room | { url: string; error: unknown };
 export interface Message extends ChatMessage {
   deleted: boolean;
   edited: boolean;
+  reactions: ReactionSummary[];
 }
 export class ChatClientError extends Error {
   override name = "ChatClientError";
@@ -59,6 +72,7 @@ function displayMessage(message: ChatMessage): Message {
     content: deleted ? "Message deleted" : message.content,
     deleted,
     edited: !deleted && message.updated !== undefined,
+    reactions: [],
   };
 }
 function roomResult(url: string, room: NonNullable<ReturnType<typeof readRoom>>): Room {
@@ -121,9 +135,10 @@ export class ChatClient {
     if (!room) throw new ChatModelError("invalid-input");
     return roomResult(url, room);
   }
-  private remember(messages: ChatMessage[]): Message[] {
+  private remember(messages: ChatMessage[], reactions = new Map<string, Reaction[]>()): Message[] {
     return messages.map((message) => {
       const result = displayMessage(message);
+      result.reactions = aggregateReactions(reactions.get(message.id) ?? [], this.webId);
       this.known.set(result.id, result);
       return result;
     });
@@ -137,7 +152,10 @@ export class ChatClient {
     }: { before?: Date; days?: number; since?: Date } = {},
   ) {
     const page = await loadMessages(this.fetch, url, before, since, days);
-    return { messages: this.remember(page.messages), next: page.next };
+    const reactions = new Map(
+      page.documents.flatMap((document) => [...readReactions(document.dataset)]),
+    );
+    return { messages: this.remember(page.messages, reactions), next: page.next };
   }
   async send(
     room: string,
@@ -154,8 +172,39 @@ export class ChatClient {
       // sendMessage re-reads the day, merging the append against the winner.
       document = await send();
     }
-    const messages = this.remember(readMessages(document.dataset));
+    const messages = this.remember(readMessages(document.dataset), readReactions(document.dataset));
     return messages.find((message) => message.id === messageSubject(room, at, id)) as Message;
+  }
+  async react(room: string, subject: string, emoji: string): Promise<void> {
+    assertWithinPodScope(this.storageUrl, roomContainer(room));
+    const url = messageResource(room, subject);
+    let document: Awaited<ReturnType<typeof loadChat>>;
+    try {
+      document = await loadChat(this.fetch, room, url);
+    } catch (error) {
+      if (error instanceof RdfFetchError && error.status === 404)
+        throw new ChatClientError("missing-message");
+      throw error;
+    }
+    const message = readMessages(document.dataset).find((message) => message.id === subject);
+    if (!message || message.tombstone || message.deletedAt !== undefined)
+      throw new ChatClientError("missing-message");
+    const mine = (readReactions(document.dataset).get(subject) ?? []).filter(
+      (reaction) => reaction.actorId === this.webId && reaction.emoji === emoji,
+    );
+    const input = { message: subject, actor: this.webId, at: new Date() };
+    if (mine.length) {
+      for (const reaction of mine) {
+        document = await unreact(this.fetch, room, {
+          ...input,
+          id: crypto.randomUUID(),
+          reaction: reaction.id,
+        });
+      }
+    } else {
+      document = await react(this.fetch, room, { ...input, id: crypto.randomUUID(), emoji });
+    }
+    this.remember(readMessages(document.dataset), readReactions(document.dataset));
   }
   private own(subject: string): void {
     if (this.known.get(subject)?.author !== this.webId)

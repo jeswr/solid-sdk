@@ -45,6 +45,7 @@ export function readMessages(dataset: DatasetCore): ChatMessage[] {
   const graph = new Store([...dataset.match(null, null, null, DataFactory.defaultGraph())]);
   for (const id of subjects) {
     const types = readRefs(graph, id, RDF_TYPE);
+    if (types.includes(`${NS.AS}Like`) || types.includes(`${NS.AS}Undo`)) continue;
     const tombstone = types.includes(`${NS.AS}Tombstone`);
     let message: CanonicalMessage | undefined;
     if (tombstone) {

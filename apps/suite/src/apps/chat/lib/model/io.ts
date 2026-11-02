@@ -18,6 +18,7 @@ import {
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, serializeChat } from "./rdf";
+import { appendReaction, appendUndo, type ReactionInput, type UndoInput } from "./reactions";
 import {
   buildRoom,
   buildRoomAcl,
@@ -226,6 +227,44 @@ export async function loadMessages(
     (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
   );
   return { documents, messages, next: page.next };
+}
+async function appendEvent(
+  fetch: typeof globalThis.fetch,
+  room: string,
+  message: string,
+  change: (dataset: Store) => Store,
+): Promise<ChatDocument> {
+  const url = messageResource(room, message);
+  const base = roomContainer(room);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const document = await optionalChat(fetch, base, url);
+      const delta = change(document.dataset);
+      const response = checked(
+        await scoped(fetch, base)(url, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/sparql-update",
+            ...conditions({ ifMatch: strongEtag(document.etag) }),
+          },
+          body: `INSERT DATA {\n${await serializeChat(delta, "application/n-triples")}\n}`,
+        }),
+      );
+      return {
+        url,
+        dataset: new Store([...document.dataset, ...delta]),
+        etag: response.headers.get("etag"),
+      };
+    } catch (error) {
+      if (!(error instanceof ChatIoError && error.status === 412) || attempt === 1) throw error;
+    }
+  }
+}
+export function react(fetch: typeof globalThis.fetch, room: string, input: ReactionInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendReaction(dataset, room, input));
+}
+export function unreact(fetch: typeof globalThis.fetch, room: string, input: UndoInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendUndo(dataset, room, input));
 }
 async function mutate(
   fetch: typeof globalThis.fetch,

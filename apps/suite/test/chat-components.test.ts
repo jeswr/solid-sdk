@@ -61,6 +61,7 @@ function message(id: string, author = ME, at = new Date()): Message {
     tombstone: false,
     deleted: false,
     edited: false,
+    reactions: [],
   };
 }
 const noop = () => {};
@@ -191,6 +192,132 @@ it("windows long histories and can focus the actual first and last messages", as
       );
   });
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[236]?.id);
+});
+it("renders named pressed/unpressed reaction chips and toggles through the invalidating action", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const react = vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();
+  const item = {
+    ...message("reactions"),
+    reactions: [
+      { emoji: "👍", count: 2, reactedByMe: true },
+      { emoji: "🎉", count: 1, reactedByMe: false },
+    ],
+  };
+  let revision = 0;
+  function View() {
+    revision = useChat().revision;
+    return h(Timeline, { ...timelineProps, messages: [item] });
+  }
+  const view = await mount(h(ChatProvider, { session: session(pod), children: h(View) }));
+  const chips = view.host.querySelectorAll<HTMLButtonElement>(".chat-reaction");
+  expect(chips).toHaveLength(2);
+  expect(chips[0]?.getAttribute("aria-pressed")).toBe("true");
+  expect(chips[0]?.getAttribute("aria-label")).toBe("👍 2 reactions, including you");
+  expect(chips[1]?.getAttribute("aria-pressed")).toBe("false");
+  expect(chips[1]?.getAttribute("aria-label")).toBe("🎉 1 reaction");
+  await click(chips[0] as Element);
+  expect(react).toHaveBeenCalledWith(ROOM, item.id, "👍");
+  expect(revision).toBe(1);
+  await click(chips[1] as Element);
+  expect(react).toHaveBeenLastCalledWith(ROOM, item.id, "🎉");
+  expect(revision).toBe(2);
+  await accessible(view.host);
+});
+it("adds reactions from the compact picker and restores focus on Escape", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const react = vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();
+  const item = message("picker");
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(Timeline, { ...timelineProps, messages: [item] }),
+    }),
+  );
+  const trigger = view.host.querySelector('[aria-label="Add reaction"]') as HTMLButtonElement;
+  await act(() => trigger.focus());
+  await key(trigger, "ArrowDown");
+  let menu = document.querySelector('[role="menu"][aria-label="Add reaction"]') as HTMLElement;
+  const choices = [...menu.querySelectorAll('[role="menuitem"]')];
+  expect(choices.map((item) => item.textContent)).toEqual([
+    "👍",
+    "❤️",
+    "😂",
+    "🎉",
+    "😮",
+    "😢",
+    "🙏",
+    "👀",
+  ]);
+  await key(choices[0] as Element, "Escape");
+  await nextFrame();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  await key(trigger, "ArrowDown");
+  menu = document.querySelector('[role="menu"][aria-label="Add reaction"]') as HTMLElement;
+  const thumbsUp = [...menu.querySelectorAll('[role="menuitem"]')].find(
+    (choice) => choice.getAttribute("aria-label") === "React with 👍",
+  );
+  expect(thumbsUp).toBeDefined();
+  await click(thumbsUp as Element);
+  expect(react).toHaveBeenCalledWith(ROOM, item.id, "👍");
+  await nextFrame();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  const actions = view.host.querySelector('[aria-label="Message actions"]') as HTMLButtonElement;
+  await act(() => actions.focus());
+  await key(actions, "ArrowDown");
+  const add = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    item.textContent?.startsWith("Add reaction"),
+  ) as HTMLElement;
+  await act(() => add.focus());
+  await key(add, "ArrowRight");
+  const heart = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (choice) => choice.getAttribute("aria-label") === "React with ❤️",
+  ) as HTMLElement;
+  expect(heart).toBeDefined();
+  await key(heart, "Escape");
+  await nextFrame();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(actions);
+  await act(() => (view.host.querySelector('[role="log"]') as HTMLElement).focus());
+  await accessible(view.host);
+});
+it("hides reaction controls on deleted and pending messages", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const item = {
+    ...message("deleted"),
+    deleted: true,
+    reactions: [{ emoji: "👍", count: 1, reactedByMe: true }],
+  };
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(Timeline, { ...timelineProps, messages: [item] }),
+    }),
+  );
+  expect(view.host.querySelector(".chat-reactions")).toBeNull();
+  expect(view.host.querySelector('[aria-label="Add reaction"]')).toBeNull();
+  await view.render(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(Timeline, {
+        ...timelineProps,
+        messages: [],
+        outgoing: [
+          {
+            ...item,
+            deleted: false,
+            localId: "pending",
+            at: new Date(),
+            room: ROOM,
+            draft: "Pending",
+            status: "sending",
+          },
+        ],
+      }),
+    }),
+  );
+  expect(view.host.querySelector(".chat-reactions")).toBeNull();
+  expect(view.host.querySelector('[aria-label="Add reaction"]')).toBeNull();
 });
 it("composer sends on Enter, preserves Shift+Enter, cancels edits and exposes the last-message shortcut", async () => {
   const pod = createDemoPod({ root: ROOT });

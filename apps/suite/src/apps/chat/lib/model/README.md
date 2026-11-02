@@ -24,6 +24,12 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   aliases; tombstones erase bodies and task overlay, preserving author/time/id.
   Task overlays use the SAME message subject and existing wf:Task vocabulary.
   The corresponding I/O functions re-read the original day and conditionally PUT.
+- `appendReaction` / `appendUndo`: return only a new `as:Like` / `as:Undo`
+  subject in the target message's day, retaining the emoji in `as:content`.
+  `readReactions` ignores malformed and cross-document events and subtracts only
+  Undos from the Like's author. Reaction events never appear in `readMessages`.
+  `react` / `unreact` use only PATCH INSERT DATA with the day's strong If-Match,
+  re-reading and retrying one 412. Missing or deleted messages cannot be reacted to.
 - `createRoom`: creates parents, then a new room, its advertised WAC ACL and
   index, in that order. Owner gets Read/Write/Control, members Read/Append with
   default inheritance. No public grants. It does not auto-join the owner or send
