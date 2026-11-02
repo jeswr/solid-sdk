@@ -72,6 +72,9 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
   admission, compilation and fidelity fail closed.
 - A nested link's `sh:minCount` is emitted on the link and fidelity-checked independently of
   severity-graded requiredness.
+- A composite's flat `*Data` type marks a child node's required fields required only when
+  every link on the path from the root is required. Build omits an optional link's child
+  when none of its fields is supplied, so the type must accept that object.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
   for string-valued nonblank fields. At the root, advisory flat class hints may only be

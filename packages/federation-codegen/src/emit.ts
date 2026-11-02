@@ -138,14 +138,13 @@ function propKey(name: string): string {
   return JSON.stringify(name);
 }
 
-function dataFieldLine(field: ManifestField): string {
+function dataFieldLine(field: ManifestField, canRequire = true): string {
   const base = baseTsType(field);
+  const opt = canRequire && isRequired(field) ? "" : "?";
   if (field.collection === "set") {
     const member = field.in !== undefined ? `(${base})` : base;
-    const opt = isRequired(field) ? "" : "?";
     return `  ${propKey(field.name)}${opt}: ${member}[];`;
   }
-  const opt = isRequired(field) ? "" : "?";
   return `  ${propKey(field.name)}${opt}: ${base};`;
 }
 
@@ -169,16 +168,33 @@ function compositeFieldLines(entity: AnyManifestEntity): {
 } {
   if (!isCompositeEntity(entity)) {
     return {
-      dataLines: entity.fields.map(dataFieldLine).join("\n"),
+      dataLines: entity.fields.map((f) => dataFieldLine(f)).join("\n"),
       wrapperLines: entity.fields.map(wrapperFieldLine).join("\n"),
     };
   }
   const flat = (fields: ManifestField[]) => fields.filter((f) => f.kind !== "nested");
-  const dataFields = entity.nodes.flatMap((n) => flat(n.fields));
+  // A node's required fields are required in `*Data` only when every link on its path
+  // from the root is itself required: build omits an optional link's child when the
+  // caller supplies none of its fields, so typing them required would reject objects
+  // the runtime accepts (sst-ild.4.12). Walk required links breadth-first from the root.
+  const byName = new Map(entity.nodes.map((n) => [n.name, n]));
+  const alwaysPresent = new Set<string>([entity.root]);
+  const queue = [entity.root];
+  for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
+    for (const link of byName.get(name)?.fields ?? []) {
+      if (link.kind !== "nested" || !isRequired(link) || link.node === undefined) continue;
+      if (alwaysPresent.has(link.node)) continue;
+      alwaysPresent.add(link.node);
+      queue.push(link.node);
+    }
+  }
+  const dataLines = entity.nodes.flatMap((n) =>
+    flat(n.fields).map((f) => dataFieldLine(f, alwaysPresent.has(n.name))),
+  );
   const rootNode = entity.nodes.find((n) => n.name === entity.root);
   const rootFields = flat(rootNode?.fields ?? []);
   return {
-    dataLines: dataFields.map(dataFieldLine).join("\n"),
+    dataLines: dataLines.join("\n"),
     wrapperLines: rootFields.map(wrapperFieldLine).join("\n"),
   };
 }

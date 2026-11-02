@@ -47,7 +47,7 @@ export interface TaskData {
   "startTime"?: Date;
   "summary": string;
   "count"?: number;
-  "frequency": "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  "frequency"?: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   "interval"?: number;
   "until"?: Date;
 }
