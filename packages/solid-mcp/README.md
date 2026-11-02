@@ -157,7 +157,12 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
 - Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
-- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`.
+- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, `context_read`, and opt-in `pod_write`.
+- Shared context: `context_read` returns the owner's Markdown context document at
+  `agent/context/shared-context.md` under the pod root (`SHARED_CONTEXT_PATH`), or a
+  `not_found` result with setup guidance. It takes no arguments, so a model cannot steer it to
+  another URL. See `decisions/0004-mcp-personal-context-and-knowledge-graph.md`.
+  Helpers: `readSharedContext`, `sharedContextUrl`, `createContextToolRegistry`.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
   List/read/write aliases retain the same schemas, output and read-only enforcement.
   `solid_search` retains its optional scope and ranked array response.
