@@ -5546,6 +5546,9 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../packages/suite-ui
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab

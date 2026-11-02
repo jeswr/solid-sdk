@@ -19,6 +19,7 @@ const packages = [
   "fetch-rdf",
   "rdf-serialize",
   "suite-vocab",
+  "suite-ui",
 ];
 const defaultSkills = [
   // Keep the selected standalone skill fences separate from the guide's import allowlist.

@@ -26,6 +26,7 @@
     "@jeswr/solid-bookmark": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-ui": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@types/node": "^25.9.2",
     "typescript": "^6.0.3",

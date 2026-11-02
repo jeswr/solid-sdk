@@ -75,31 +75,80 @@ screen has two steps.
    including people running their own.
 4. A footer with **Get a pod** and **What is a WebID?** for people new to Solid.
 
+### Use the shared sign-in card
+
+`SignInCard` from `@jeswr/suite-ui/sign-in` draws this screen. It has no sign-in logic of its own:
+you give it the providers and accounts to show, and it calls you back with what the user picked.
+Load `@jeswr/suite-ui/styles/sign-in.css` after the suite-ui token, theme, density and component
+styles.
+
+Map the card's callbacks to `auth.login`, and pass `pending` and `error` back while a sign-in runs:
+
 ```ts
 import type { PodAuth } from '@jeswr/pod-auth';
+import type { SignInCardProps, SignInProvider } from '@jeswr/suite-ui/sign-in';
 
 declare const auth: PodAuth;
+declare function render(props: SignInCardProps): void; // Draw <SignInCard {...props} />.
+declare function enterApp(): void;
 
-// Step 1: an account in the list.
-export async function continueAs(account: { webId: string; issuer: string }) {
-  return auth.login({ webId: account.webId, issuer: account.issuer });
+// Home provider first. Only list providers you have tested against.
+const providers: SignInProvider[] = [
+  { id: 'home', name: 'Example Pods', issuer: 'https://login.pods.example/' },
+  { id: 'community', name: 'Solid Community', issuer: 'https://solidcommunity.net/' },
+];
+const remembered = await auth.remembered();
+
+function show(pending: SignInCardProps['pending'], error: string | null = null) {
+  render({
+    providers,
+    // remembered() holds at most one account today (the last one used).
+    recentAccounts: remembered.map((account) => ({
+      webId: account.webId,
+      name: account.displayName,
+      photoUrl: account.avatar,
+    })),
+    pending,
+    error,
+    onAccount: (account) => {
+      const issuer = remembered.find((entry) => entry.webId === account.webId)?.issuer;
+      run({ kind: 'account', key: account.webId }, { webId: account.webId, issuer });
+    },
+    onWebId: (input) => run({ kind: 'webid', key: input }, { webId: input }),
+    onProvider: (provider) =>
+      run({ kind: 'provider', key: provider.id }, { issuer: provider.issuer }),
+    onCustomProvider: (input) => run({ kind: 'custom', key: input }, { issuer: input }),
+  });
 }
-export const recentAccounts = await auth.remembered();
 
-// Step 2: the WebID field, when the text is a WebID.
-export const signInWithWebId = (webId: string) => auth.login({ webId });
+type Pending = NonNullable<SignInCardProps['pending']>;
 
-// Step 2: a provider button, or the "Other provider" field.
-export const signInWithProvider = (issuer: string) => auth.login({ issuer });
+function run(pending: Pending, hint: { webId?: string; issuer?: string }) {
+  show(pending);
+  auth.login(hint).then(
+    () => enterApp(), // Signed in.
+    () => show(null, 'Sign-in did not finish. Please try again.'),
+  );
+}
+
+show(null);
 ```
 
-Keep the provider list short, and only list providers your app has been tested against.
+`render` stands for however your app re-renders; in React, keep the props in state and return
+`<SignInCard {...props} />`.
 
-**Coming soon.** A ready-made `SignInCard` (in `@jeswr/suite-ui/sign-in`) draws this screen, and
-`@jeswr/pod-auth/directory` adds a list of known providers and a helper that decides whether the
-text in the first field is a WebID or a provider address. With it, a provider-first sign-in
-whose WebID profile does not name that provider is refused (`IssuerNotAuthorizedError`). Both are
-in review; use them once they land instead of building the screen yourself.
+The card shows the account list only when `recentAccounts` is not empty. Provider pills use the
+provider's brand colour and logo when the suite knows it, and a monogram otherwise; set `color`
+(a six-digit `#rrggbb`) or `iconUrl` to override. The
+[suite-ui README](../../packages/suite-ui/README.md#shared-sign-in-card) lists every prop.
+
+**Not ready yet.** The WebID field passes whatever the user typed to `onWebId`, which may be a
+provider's address rather than a WebID. `@jeswr/pod-auth/directory` (in review) adds a helper that
+tells the two apart and a list of known providers. Until it lands, treat the input as a WebID.
+
+Signing in through a provider already fails when the WebID profile does not name that provider.
+The same pull request (in review) gives that failure a named error, `IssuerNotAuthorizedError`, so
+you can explain it to the user.
 
 ## Restore the session on start-up
 
