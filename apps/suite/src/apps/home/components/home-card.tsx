@@ -2,7 +2,6 @@
 "use client";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import {
-  Button,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -11,6 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  IconButton,
   ProvenanceBadge,
   TypedView,
   type TypedViewData,
@@ -112,15 +112,14 @@ export function HomeCard({
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
+                  <IconButton
                     variant="ghost"
-                    size="icon"
                     className="hm-more"
-                    aria-label={`More actions for ${title}`}
+                    label={`More actions for ${title}`}
                     onKeyDown={keydown}
                   >
                     <MoreHorizontal aria-hidden="true" size={20} />
-                  </Button>
+                  </IconButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="hm-menu">
                   {actions.map((action) =>
