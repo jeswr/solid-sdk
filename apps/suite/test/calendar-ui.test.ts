@@ -1123,6 +1123,29 @@ it("loads the series master for editing an occurrence and detaches just that occ
   expect(events.filter((e) => e.data.name === "Changed once")).toHaveLength(1);
   expect(events.filter((e) => e.data.name === "Team stand-up")).toHaveLength(2);
 });
+it("keeps the loaded calendar on screen when a refresh finds the pod unreachable", async () => {
+  const account = mocks.session as PodSession;
+  let offline = false;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (offline) throw new TypeError("Failed to fetch");
+      return account.fetch(input, init);
+    },
+  };
+  mocks.date = "2026-10-28";
+  const mounted = await mount(screen());
+  await settle();
+  const before = buttons(mounted.host, "Team stand-up").length;
+  expect(before).toBeGreaterThan(0);
+  offline = true;
+  // A pod notification (e.g. a late write from another tab) asks every range to reload.
+  await act(() => notify?.(`${DEMO_ROOT}calendar/work/stand-up.ttl`));
+  await settle();
+  await settle();
+  expect(buttons(mounted.host, "Team stand-up")).toHaveLength(before);
+  expect(mounted.host.textContent).not.toContain("Can't reach your storage");
+});
 it("hides a detached occurrence at once while its replacement write is still confirming", async () => {
   const account = mocks.session as PodSession;
   const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;

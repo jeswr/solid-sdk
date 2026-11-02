@@ -143,7 +143,11 @@ function SessionCalendarProvider({
     let live = true;
     discoverCalendars(session).then(
       (result) => live && setCalendars({ status: "ready", ...result }),
-      (error: unknown) => live && setCalendars({ status: "error", error }),
+      (error: unknown) =>
+        live &&
+        setCalendars((current) =>
+          current.status === "ready" && unreachable(error) ? current : { status: "error", error },
+        ),
     );
     return () => {
       live = false;
@@ -286,6 +290,43 @@ function SessionCalendarProvider({
     </Context>
   );
 }
+/**
+ * A refresh that fails because the pod is unreachable (offline) keeps what is already on
+ * screen; queued writes still show through the overlay and sync once the network returns.
+ */
+function unreachable(error: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  // fetch() rejects with a TypeError on network failure; RDF loaders wrap it as the cause.
+  for (let cause = error, depth = 0; cause && depth < 4; depth++) {
+    if (cause instanceof TypeError) return true;
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return false;
+}
+/** On a refresh, a calendar the pod couldn't serve keeps its loaded events instead of emptying. */
+function keepUnreachable(previous: RangeResult, next: RangeResult): RangeResult {
+  const failed = new Set(
+    next.warnings
+      .filter(
+        (warning) =>
+          unreachable(warning.error) &&
+          !previous.warnings.some((old) => old.calendarUrl === warning.calendarUrl),
+      )
+      .map((warning) => warning.calendarUrl),
+  );
+  if (!failed.size) return next;
+  return {
+    ...next,
+    events: [
+      ...next.events,
+      ...previous.events.filter((event) => failed.has(event.calendar.url)),
+    ].sort(
+      (a, b) => +new Date(a.data.start) - +new Date(b.data.start) || a.url.localeCompare(b.url),
+    ),
+    warnings: next.warnings.filter((warning) => !failed.has(warning.calendarUrl)),
+  };
+}
+
 export function CalendarProvider({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
   if (state.status === "loading") return <LoadingSkeleton preset="grid" label="Opening Calendar" />;
@@ -351,10 +392,25 @@ export function useEventsInRange(
       cache.set(key, request);
     }
     request.then(
-      (result) => live && setSnapshot({ key, state: { status: "ready", ...result } }),
+      (result) =>
+        live &&
+        setSnapshot((current) => ({
+          key,
+          state: {
+            status: "ready",
+            ...(current.key === key && current.state.status === "ready"
+              ? keepUnreachable(current.state, result)
+              : result),
+          },
+        })),
       (error: unknown) => {
         cache.delete(key);
-        if (live) setSnapshot({ key, state: { status: "error", error } });
+        if (live)
+          setSnapshot((current) =>
+            current.key === key && current.state.status === "ready" && unreachable(error)
+              ? current
+              : { key, state: { status: "error", error } },
+          );
       },
     );
     return () => {
