@@ -54,8 +54,14 @@
   margin: 0;
   font-size: var(--text-sm);
 }
-.status:empty {
-  display: none;
+/* Live regions stay rendered while empty (a region that appears already holding text
+   is often not announced); an empty paragraph with no margin takes no space. */
+.lock {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
 }
 .status[data-state="taken"],
 .status[data-state="invalid"] {

@@ -149,9 +149,6 @@
   font-size: var(--text-sm);
   color: var(--foreground-muted);
 }
-.hint:empty {
-  display: none;
-}
 .fieldset {
   min-width: 0;
   margin: 0;

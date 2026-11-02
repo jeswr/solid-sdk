@@ -53,17 +53,19 @@ const request = (username = "sam-river"): RegistrationRequest => ({
 
 describe("username rules", () => {
   it("reports each rule as met or not", () => {
-    expect(usernameRules("").map((rule) => rule.met)).toEqual([false, false]);
-    expect(usernameRules("ab").map((rule) => rule.met)).toEqual([false, true]);
-    expect(usernameRules("sam-river-2").map((rule) => rule.met)).toEqual([true, true]);
-    expect(usernameRules("Sam").map((rule) => rule.met)).toEqual([true, false]);
+    expect(usernameRules("").map((rule) => rule.met)).toEqual([false, false, false]);
+    expect(usernameRules("ab").map((rule) => rule.met)).toEqual([false, true, true]);
+    expect(usernameRules("sam-river-2").map((rule) => rule.met)).toEqual([true, true, true]);
+    expect(usernameRules("Sam").map((rule) => rule.met)).toEqual([true, false, false]);
     expect(usernameRules("a".repeat(USERNAME_MAX + 1)).map((rule) => rule.met)).toEqual([
       false,
+      true,
       true,
     ]);
     expect(usernameRules("x").map((rule) => rule.label)).toEqual([
       "3–30 characters",
       "Lowercase letters, numbers and hyphens only",
+      "Starts and ends with a letter or number",
     ]);
   });
   it("validates and explains the first broken rule", () => {
@@ -73,6 +75,9 @@ describe("username rules", () => {
     expect(usernameProblem("ab")).toBe("Use at least 3 characters.");
     expect(usernameProblem("a".repeat(31))).toBe("Use 30 characters or fewer.");
     expect(usernameProblem("Sam!")).toBe("Use only lowercase letters, numbers and hyphens.");
+    for (const name of ["-sam", "sam-", "---"])
+      expect(usernameProblem(name)).toBe("Start and end with a letter or number.");
+    expect(usernameProblem("sam-river")).toBeNull();
     expect(usernameProblem("sam")).toBeNull();
   });
   it("prefills a display name from the username", () => {

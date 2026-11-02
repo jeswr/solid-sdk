@@ -11,12 +11,14 @@ export const USERNAME_MAX = 30;
 export const PASSWORD_MIN = 12;
 
 export interface UsernameRule {
-  id: "length" | "characters";
+  id: "length" | "characters" | "edges";
   label: string;
   met: boolean;
 }
 
 const ALLOWED = /^[a-z0-9-]+$/u;
+/** A hostname label: a hyphen may not start or end it (`-sam`, `sam-`, `---`). */
+const EDGES = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
 
 export function usernameRules(username: string): UsernameRule[] {
   return [
@@ -29,6 +31,11 @@ export function usernameRules(username: string): UsernameRule[] {
       id: "characters",
       label: "Lowercase letters, numbers and hyphens only",
       met: ALLOWED.test(username),
+    },
+    {
+      id: "edges",
+      label: "Starts and ends with a letter or number",
+      met: EDGES.test(username),
     },
   ];
 }
@@ -43,6 +50,7 @@ export function usernameProblem(username: string): string | null {
   if (username.length < USERNAME_MIN) return `Use at least ${USERNAME_MIN} characters.`;
   if (username.length > USERNAME_MAX) return `Use ${USERNAME_MAX} characters or fewer.`;
   if (!ALLOWED.test(username)) return "Use only lowercase letters, numbers and hyphens.";
+  if (!EDGES.test(username)) return "Start and end with a letter or number.";
   return null;
 }
 

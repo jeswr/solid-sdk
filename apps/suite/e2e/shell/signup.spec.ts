@@ -74,14 +74,18 @@ test("signup creates an account, retries a failed step and reaches onboarding", 
   await expect(rules.getByRole("listitem")).toHaveText([
     "3–30 characters (not met yet)",
     "Lowercase letters, numbers and hyphens only (not met yet)",
+    "Starts and ends with a letter or number (not met yet)",
   ]);
   await username.fill("Sam");
   await expect(status).toHaveText("Use only lowercase letters, numbers and hyphens.");
   await expect(rules.getByRole("listitem")).toHaveText([
     "3–30 characters (met)",
     "Lowercase letters, numbers and hyphens only (not met yet)",
+    "Starts and ends with a letter or number (not met yet)",
   ]);
   await accessible(page);
+  await username.fill("sam-");
+  await expect(status).toHaveText("Start and end with a letter or number.");
   await username.fill("alice");
   await expect(status).toHaveText("alice is taken. Try another username.");
   await accessible(page);
