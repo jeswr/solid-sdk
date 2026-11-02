@@ -181,17 +181,20 @@ test("offline keeps the last loaded cards", async ({ page, context }) => {
   await accessible(page);
 });
 
-test("an offline cold open reads the browser's saved demo pod", async ({ page }) => {
+test("an offline cold open explains that storage needs a connection", async ({ page }) => {
   await ready(page, "/home/media");
   // Reload the app with an offline signal while leaving navigation/assets available to the harness.
+  // The demo pod, like any pod, is unreachable offline and this tab has read nothing yet.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
   });
   await ready(page, "/home/media");
-  await expect(page.getByText("Showing saved copies", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("list", { name: "Music items", exact: true }).getByRole("listitem"),
-  ).toHaveCount(3);
+  const pod = page.getByRole("region", { name: "Your pod", exact: true });
+  await expect(pod.getByText("Storage is unavailable offline", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reconnect to load your data.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Can't reach your storage", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Music items", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add manually", exact: true })).toBeDisabled();
   await accessible(page);
 });
 

@@ -494,14 +494,15 @@ describe("Home session discovery cache", () => {
     expect(store.getSnapshot().counts.get("media")).toBe(3);
   });
 
-  it("loads saved demo pod data on an offline cold open", async () => {
+  it("settles an offline demo pod cold open on the offline state without reading it", async () => {
+    // The browser demo pod behaves like a remote server: unreachable while offline.
     const { session, fetch } = await setup();
     vi.stubGlobal("navigator", { onLine: false });
     const cold = domainStore({ ...session });
     cold.ensureLoaded();
-    await vi.waitFor(() => expect(cold.getSnapshot().status).toBe("ready"));
-    expect(cold.getSnapshot().counts.get("media")).toBe(3);
-    expect(fetch).toHaveBeenCalled();
+    await vi.waitFor(() => expect(cold.getSnapshot().status).toBe("offline"));
+    expect(cold.getSnapshot().items).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("settles an offline network cold open without reading the network or another account's cards", async () => {

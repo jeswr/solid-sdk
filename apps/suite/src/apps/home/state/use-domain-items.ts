@@ -137,7 +137,9 @@ function createDomainStore(session: HomeSession) {
       dirty = true;
       return pending;
     }
-    if (typeof navigator !== "undefined" && !navigator.onLine && session.mode !== "demo") {
+    // Every session, the in-browser demo pod included, is unreachable offline: keep
+    // what this tab already read, otherwise settle on the offline state.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
       publish({
         ...snapshot,
         status: snapshot.items.length ? "ready" : "offline",
