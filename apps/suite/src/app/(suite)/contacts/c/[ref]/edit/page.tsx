@@ -1,22 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
-import { EmptyState } from "@jeswr/suite-ui";
-import Link from "next/link";
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
+import { ContactEditRoute } from "@/apps/contacts/components/native-routes";
 
+// Staging sets this literal to false; the web target retains on-demand routes.
 export const dynamicParams = true;
 export function generateStaticParams() {
   return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ ref: "__" }] : [];
 }
-
-export default function ComingNext() {
+export default function EditContactPage() {
   return (
-    <>
-      <h1>Edit contact</h1>
-      <EmptyState
-        title="Coming next"
-        body="The contact form and import wizard arrive in the next lane."
-        primaryAction={<Link href="/contacts">Back to contacts</Link>}
-      />
-    </>
+    <Suspense>
+      <ContactEditRoute />
+    </Suspense>
   );
 }

@@ -410,6 +410,33 @@
 .notes-label-row > svg {
   flex-shrink: 0;
 }
+.notes-keep-import {
+  width: min(560px, calc(100vw - 24px));
+  max-width: 560px;
+}
+.notes-keep-choose,
+.notes-keep-progress,
+.notes-keep-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.notes-keep-review ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted-foreground);
+}
+.notes-keep-skipped {
+  max-height: 30vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.notes-keep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .notes-confirm-actions {
   display: flex;
   justify-content: flex-end;

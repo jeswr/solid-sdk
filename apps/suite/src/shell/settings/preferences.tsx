@@ -124,6 +124,22 @@ export function AutosaveStatus() {
 }
 
 /** Apply per-account appearance before paint once the account's preferences are loaded. */
+const OWN_TOASTER = [
+  "/drive",
+  "/dev",
+  "/docs",
+  "/tasks",
+  "/contacts",
+  "/money",
+  "/music",
+  "/health",
+];
+
+/** True where the page mounts its own toast region, so the shell must not add a second. */
+export function ownsToaster(pathname: string): boolean {
+  return OWN_TOASTER.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 export function AppearanceEffect() {
   const pathname = usePathname();
   const { preferences, ready } = useAllPreferences();
@@ -138,6 +154,7 @@ export function AppearanceEffect() {
   useLayoutEffect(() => {
     if (ready) setTheme(preferences.theme);
   }, [preferences.theme, ready, setTheme]);
-  // Drive and the dev fixtures already mount their own toast region.
-  return pathname.startsWith("/drive") || pathname.startsWith("/dev/") ? null : <Toaster />;
+  // These apps and the dev fixtures mount their own toast region; a second one would
+  // render every toast twice.
+  return ownsToaster(pathname) ? null : <Toaster />;
 }
