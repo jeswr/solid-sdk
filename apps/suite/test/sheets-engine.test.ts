@@ -188,7 +188,7 @@ describe("Univer engine adapter", () => {
     mock.emit({
       type: 1,
       id: "sheet.mutation.data-validation-formula-mark-dirty",
-      params: { book: { data: { formula: true } } },
+      params: { book: { data: { formula: true } } } as { unitId?: string },
     });
     await Promise.resolve();
     expect(change).not.toHaveBeenCalled();
