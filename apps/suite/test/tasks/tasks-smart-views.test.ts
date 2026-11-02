@@ -313,6 +313,10 @@ describe("Upcoming", () => {
     expect(
       host.querySelector('.tsk-day-cell[data-day-key="2026-11-02"]')?.getAttribute("aria-label"),
     ).toContain("1 task");
+    // WCAG 2.5.3: the button's own text is the date, which its expanded name contains.
+    const monday = host.querySelector('.tsk-day-cell[data-day-key="2026-11-02"]');
+    expect(monday?.textContent).toBe("2");
+    expect(monday?.parentElement?.textContent).toBe("2M1");
     expect(host.querySelector(".tsk-day-cell[data-today]")).not.toBeNull();
     expect([...host.querySelectorAll("h2")].map((heading) => heading.textContent)).not.toContain(
       "Overdue",
