@@ -426,14 +426,30 @@ test.describe("touch targets and selection", () => {
     page,
   }, testInfo) => {
     await seed(page, async (store, inbox) => {
-      await store.createTask(inbox, { title: "Touch task", state: "open", allDay: "2026-11-02" });
+      await store.createTask(inbox, {
+        title: "Touch task",
+        state: "open",
+        allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
+      });
     });
     await page.goto("/tasks/inbox");
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
     const row = rowFor(page, "Touch task");
-    const bounds = await row.locator("button.tsk-due").boundingBox();
-    expect(bounds?.width).toBeGreaterThanOrEqual(44);
-    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    // The chip keeps its line height; on coarse pointers an invisible ::before hit area makes
+    // the touch target 44 by 44 (tasks.css). Measure what a tap actually hits.
+    const target = await row.locator("button.tsk-due").evaluate((button) => {
+      const bounds = button.getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      const hits = (dx: number, dy: number) =>
+        button.contains(document.elementFromPoint(x + dx, y + dy));
+      return {
+        width: [-21.5, 21.5].every((dx) => hits(dx, 0)),
+        height: [-21.5, 21.5].every((dy) => hits(0, dy)),
+      };
+    });
+    expect(target).toEqual({ width: true, height: true });
     await row.focus();
     await row.press("Space");
     await expect(row).toHaveAttribute("aria-selected", "true");
