@@ -29,7 +29,11 @@ export interface CommunityMessage {
   authorId: string;
   /** Plain-text body. HTML is stripped to text for the unified view. */
   body: string;
-  /** Original HTML body when the source provides one (Discourse `cooked`, Matrix `formatted_body`). */
+  /**
+   * Original HTML body when the source provides one (Discourse `cooked`, Matrix
+   * `formatted_body`). UNTRUSTED and UNSANITISED: any room member or forum
+   * author controls it. Sanitise before rendering it as HTML.
+   */
   bodyHtml?: string;
   /** ISO-8601 timestamp (from origin_server_ts / created_at). */
   createdAt: string;
