@@ -225,15 +225,19 @@ async function discover(
         ).size > 0;
       if (acp && wac) throw mixedModels(endpoint, "Mixed access-control vocabularies");
       const detected = acp ? "acp" : "wac";
+      if (current === resource) ownUrl = endpoint;
       // Detection decides only from an existing, non-empty document; a missing or empty one says
-      // nothing about the model, so the walk goes on to the nearest ancestor that does.
+      // nothing about the model, so the walk goes on to the nearest ancestor that does. A
+      // non-empty document with neither ACP terms nor a WAC authorization is not evidence of
+      // either model: detection stops there and reports unknown (fail closed).
+      if (detecting && exists && dataset.size > 0 && !acp && !wac)
+        return { resource, ownUrl, own, model: undefined, documents };
       const decides = !detecting || (exists && dataset.size > 0);
       if (decides) {
         if (model && exists && detected !== model)
           throw mixedModels(endpoint, "Mixed ancestor access models");
         model ??= detected;
       }
-      if (current === resource) ownUrl = endpoint;
       if (exists && !detecting) {
         // Outside detection every document decides, so the model is set.
         const settled = model as "wac" | "acp";

@@ -161,6 +161,22 @@ describe("detection fails closed on missing, empty and mixed access documents", 
     }
   });
 
+  it("a non-empty document with no recognised access vocabulary is unknown, not WAC", async () => {
+    const unrecognised = `@prefix ex: <https://example.org/>.\n<#x> ex:note "not an access document".\n`;
+    for (const suffix of ["?ext=acr", ".acl"] as const) {
+      const mem = memoryAccess("wac");
+      mem.advertise(resource, resource + suffix);
+      mem.put(resource + suffix, unrecognised);
+      // Even a recognisable WAC ancestor cannot vouch for an unrecognised own document.
+      mem.attach(folder, await fixture("wac", folder, undefined, true));
+      expect(await detectModel(resource, mem.options)).toEqual({
+        model: "unknown",
+        ownUrl: resource + suffix,
+      });
+      expect(writes(mem)).toEqual([]);
+    }
+  });
+
   it("an empty own document defers to the nearest non-empty ancestor", async () => {
     const mem = memoryAccess("wac");
     mem.advertise(resource);
