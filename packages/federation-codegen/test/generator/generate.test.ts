@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
@@ -10,14 +11,11 @@ import { serializeCanonicalTurtle } from "../../src/rdf.js";
 import { flat } from "../helpers.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const exampleDir = join(here, "..", "..", "examples", "bookmark");
-const generatedDir = join(exampleDir, "generated");
+const packageDir = join(here, "..", "..", "..", "solid-bookmark");
+const generatedDir = join(packageDir, "src", "generated");
 
 function readExample(name: string): string {
-  const dir = name.endsWith(".ttl")
-    ? join(exampleDir, "..", "..", "..", "solid-bookmark")
-    : exampleDir;
-  return readFileSync(join(dir, name), "utf8");
+  return readFileSync(join(packageDir, name), "utf8");
 }
 function readGenerated(name: string): string {
   return readFileSync(join(generatedDir, name), "utf8");
@@ -44,7 +42,7 @@ describe("generateModel — pilot generation", () => {
     expect(result.admission.violations.filter((v) => v.severity === "error")).toEqual([]);
   });
 
-  it("produces exactly the committed example artifacts (no drift)", () => {
+  it("produces exactly the committed package artifacts (no drift)", () => {
     const { artifacts } = generateModel(input());
     for (const name of [
       "shapes.ttl",
@@ -53,7 +51,7 @@ describe("generateModel — pilot generation", () => {
       "model.d.ts",
       "codegen-manifest.json",
     ]) {
-      expect(artifacts[name], `${name} drifted from the committed example`).toBe(
+      expect(artifacts[name], `${name} drifted from the committed package`).toBe(
         readGenerated(name),
       );
     }
@@ -101,7 +99,7 @@ describe("the generated model round-trips a bookmark", () => {
   it("build → serialize → parse a fully-populated bookmark", async () => {
     const { manifest } = generateModel(input());
     // Sanity: the model.js shim is importable and produces a working model.
-    const model = (await import("../../examples/bookmark/generated/model.js")).default;
+    const model = (await import("../../../solid-bookmark/src/generated/model.js")).default;
     const bm = model.entities.Bookmark;
     const res = "http://localhost:3000/alice/bm/x";
     const store = bm.build(res, {

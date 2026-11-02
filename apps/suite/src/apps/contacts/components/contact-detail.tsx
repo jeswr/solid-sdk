@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { useContact, useContactMutations, useStarred } from "../state/contacts-context";
 import { contactLabels, displayPhone, projectContact } from "../state/data";
+import { ContactExport } from "./contact-export";
 import { ContactAvatar } from "./contacts-list";
 
 export function ContactDetail({ contactRef, onClose }: { contactRef: string; onClose(): void }) {
@@ -126,6 +127,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                   Delete
                 </Button>
               </div>
+              <ContactExport contacts={[person.data]} />
               <div className="con-contact-points">
                 {(person.data.emails ?? []).map((email) => (
                   <a

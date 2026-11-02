@@ -31,7 +31,11 @@ export class TaskMove {
     private readonly modified: Date,
   ) {}
 
-  /** A definite rejection was fully compensated; Retry may use fresh resources. */
+  /**
+   * The last run failed and was fully compensated (destination removed,
+   * references restored): Retry must prepare afresh, since references, the
+   * source revision and its data may have changed since this plan was made.
+   */
   get canReplan(): boolean {
     return this.replan;
   }
@@ -141,7 +145,7 @@ export class TaskMove {
           "Couldn't finish moving the task; both copies were retained.",
         );
       }
-      this.replan = rejected;
+      this.replan = true;
       throw error;
     }
     this.result = moved;

@@ -199,7 +199,7 @@ test("the sidebar New contact uses a visible suite button in both themes", async
   // Axe checks text contrast while the responsive navigation surface is actually visible.
   await accessible(page);
   await create.click();
-  await expect(page.getByRole("heading", { name: "Coming next", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toBeVisible();
 });
 
 test("starring persists across navigation and reload for this WebID", async ({ page }) => {
@@ -254,7 +254,9 @@ test("PM contacts move into the address book and the dismissible banner disappea
   await expect(banner).toBeHidden();
 });
 
-test("missing and empty address books offer clear actions and placeholders", async ({ page }) => {
+test("missing and empty address books offer clear actions and working creation/import routes", async ({
+  page,
+}) => {
   await open(page, "contacts-no-book");
   await expect(
     page.getByRole("heading", { name: "Create your address book", exact: true }),
@@ -264,9 +266,9 @@ test("missing and empty address books offer clear actions and placeholders", asy
   await expect(page.getByRole("heading", { name: "No contacts yet", exact: true })).toBeVisible();
   await accessible(page);
   await page.locator("main").getByRole("link", { name: "New contact", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Coming next", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toBeVisible();
   await page.goto("/contacts/import");
-  await expect(page.getByRole("heading", { name: "Coming next", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a source", exact: true })).toBeVisible();
 });
 
 test("an existing book exposes registration retry when the private Type Index is missing", async ({
@@ -320,5 +322,5 @@ test("external WebIDs stay links and label edits persist", async ({ page }) => {
   await page.reload();
   await expect(detail.getByRole("button", { name: "Remove Work", exact: true })).toBeVisible();
   await detail.getByRole("link", { name: "Edit", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Coming next", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toBeVisible();
 });

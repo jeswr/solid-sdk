@@ -142,7 +142,7 @@ it.each([
       : mode === "people"
         ? "People you've shared with: 1"
         : mode === "demo"
-          ? "Only you (demo pod)"
+          ? "Only you"
           : "Access unknown";
   expect(view.host.querySelector(".drv-access-line")?.textContent).toBe(label);
   vi.stubGlobal("location", window.location);

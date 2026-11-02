@@ -592,6 +592,113 @@ function fieldOf(m: ReturnType<typeof scrobbleManifest>, ni: number, fi: number)
   return field;
 }
 
+/** The fixture with every link class-only (sh:class to the child's exact target type). */
+function classOnlyScrobble() {
+  const m = scrobbleManifest();
+  const links: Array<[number, number, string]> = [
+    [0, 2, `${MEDIA}Track`],
+    [0, 3, `${TIME}Instant`],
+    [1, 1, `${MEDIA}Artist`],
+    [1, 2, `${MEDIA}Album`],
+  ];
+  for (const [ni, fi, cls] of links)
+    Object.assign(fieldOf(m, ni, fi), { hasClass: cls, classOnly: true });
+  const S = defineModel(m).entities.Scrobble;
+  if (!S) throw new Error("expected the Scrobble composite");
+  return S;
+}
+
+describe("composite parse — optional link constraints under class-only (sh:class) links", () => {
+  // SHACL: sh:class checks only the target's type, so a class-only child's optional
+  // failures do not make its parent non-conforming. They degrade as at the root.
+
+  it("drops an ambiguous OPTIONAL link on a class-only child and keeps the composite", () => {
+    const S = classOnlyScrobble();
+    const store = S.build(RES, FULL);
+    store.addQuad(
+      DataFactory.namedNode(TRACK),
+      DataFactory.namedNode(`${MEDIA}performedByArtist`),
+      DataFactory.namedNode(`${RES}#artist2`),
+    );
+    const { artistName: _dropped, ...rest } = FULL;
+    expect(S.parse(RES, store)).toEqual(rest);
+  });
+
+  it("drops a malformed OPTIONAL scalar on a class-only child and keeps the composite", () => {
+    const S = classOnlyScrobble();
+    const store = S.build(RES, FULL);
+    store.removeQuads(store.getQuads(ARTIST, `${FOAF}name`, null, null));
+    store.addQuad(
+      DataFactory.namedNode(ARTIST),
+      DataFactory.namedNode(`${FOAF}name`),
+      DataFactory.literal("5", DataFactory.namedNode("http://www.w3.org/2001/XMLSchema#integer")),
+    );
+    const { artistName: _dropped, ...rest } = FULL;
+    expect(S.parse(RES, store)).toEqual(rest);
+  });
+
+  it("still rejects when a class-only REQUIRED child fails its own fail-closed MUST", () => {
+    const S = classOnlyScrobble();
+    const store = S.build(RES, FULL);
+    store.removeQuads(store.getQuads(TRACK, `${DCT}title`, null, null));
+    expect(S.parse(RES, store)).toBeUndefined();
+  });
+
+  it("still rejects an ambiguous REQUIRED class-only link and an untyped required target", () => {
+    const S = classOnlyScrobble();
+    const ambiguous = S.build(RES, FULL);
+    ambiguous.addQuad(
+      DataFactory.namedNode(`${RES}#it`),
+      DataFactory.namedNode(`${MEDIA}playedWork`),
+      DataFactory.namedNode(`${RES}#track2`),
+    );
+    expect(S.parse(RES, ambiguous)).toBeUndefined();
+    const untyped = S.build(RES, FULL);
+    untyped.removeQuads(untyped.getQuads(TRACK, RDF_TYPE, `${MEDIA}Track`, null));
+    expect(S.parse(RES, untyped)).toBeUndefined();
+  });
+
+  it("a class-only child under a strict sh:node parent still fails the parent on a required MUST", () => {
+    // event -(sh:node)-> track -(classOnly)-> artist, with the artist name required.
+    const m = scrobbleManifest();
+    Object.assign(fieldOf(m, 1, 1), { hasClass: `${MEDIA}Artist`, classOnly: true });
+    fieldOf(m, 3, 0).guards = { requiredFailClosed: true };
+    const S = defineModel(m).entities.Scrobble;
+    if (!S) throw new Error("expected the Scrobble composite");
+    const store = S.build(RES, FULL);
+    expect(S.parse(RES, store)).toEqual(FULL);
+    store.removeQuads(store.getQuads(ARTIST, `${FOAF}name`, null, null));
+    expect(S.parse(RES, store)).toBeUndefined();
+  });
+
+  it("an sh:node grandchild under a class-only child stays strict and drops its optional edge", () => {
+    // event -(classOnly)-> track -(sh:node)-> artist: an ambiguous artist name makes the
+    // artist non-conforming, so the optional track→artist edge drops; the scrobble stays.
+    const m = scrobbleManifest();
+    Object.assign(fieldOf(m, 0, 2), { hasClass: `${MEDIA}Track`, classOnly: true });
+    const S = defineModel(m).entities.Scrobble;
+    if (!S) throw new Error("expected the Scrobble composite");
+    const store = S.build(RES, FULL);
+    store.addQuad(
+      DataFactory.namedNode(ARTIST),
+      DataFactory.namedNode(`${FOAF}name`),
+      DataFactory.literal("Imposter"),
+    );
+    const { artistName: _dropped, ...rest } = FULL;
+    expect(S.parse(RES, store)).toEqual(rest);
+  });
+
+  it("keeps the sh:node behaviour: the same ambiguous optional link rejects without classOnly", () => {
+    const store = Scrobble.build(RES, FULL);
+    store.addQuad(
+      DataFactory.namedNode(TRACK),
+      DataFactory.namedNode(`${MEDIA}performedByArtist`),
+      DataFactory.namedNode(`${RES}#artist2`),
+    );
+    expect(Scrobble.parse(RES, store)).toBeUndefined();
+  });
+});
+
 describe("composite parse — optional link constraints inside sh:node", () => {
   // A present violation inside Track makes Track non-conforming. The required
   // event→Track edge therefore rejects the composite, even for optional artist edges.
