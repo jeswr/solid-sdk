@@ -275,3 +275,53 @@ describe("parseSchedulingTask over a dataset", () => {
     expect(out?.priority).toBe("low");
   });
 });
+
+describe("federation (wf:) fields are hardened on parse", () => {
+  const Prefixes = `
+    @prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+    @prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+    @prefix dct: <http://purl.org/dc/terms/> .
+    @prefix schema: <http://schema.org/> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .`;
+
+  it("drops non-http(s) assignee / relation IRIs read through parseTask", async () => {
+    const ttl = `${Prefixes}
+      <${RES}#it> a sched:Task, wf:Task, wf:Open ;
+        sched:summary "x" ; dct:title "x" ;
+        wf:assignee <javascript:alert(1)> ;
+        dct:isPartOf <data:text/html,x> ;
+        dct:requires <javascript:x>, <https://alice.pod.example/tasks/a#it> ;
+        dct:relation <javascript:y> ;
+        dct:isReplacedBy <javascript:z> .`;
+    const out = await parseSchedulingTaskTtl(RES, ttl, "text/turtle");
+    expect(out?.summary).toBe("x");
+    expect(out?.assignee).toBeUndefined();
+    expect(out?.parent).toBeUndefined();
+    expect(out?.blockedBy).toEqual(["https://alice.pod.example/tasks/a#it"]);
+    expect(out?.relatesTo).toBeUndefined();
+    expect(out?.duplicateOf).toBeUndefined();
+  });
+
+  it("a literal where a wf: IRI belongs drops the federation fields, never aborts the parse", async () => {
+    const ttl = `${Prefixes}
+      <${RES}#it> a sched:Task, wf:Task, wf:Open ;
+        sched:summary "Survivor" ; dct:title "Survivor" ;
+        wf:assignee "bob" .`;
+    const out = await parseSchedulingTaskTtl(RES, ttl, "text/turtle");
+    expect(out?.summary).toBe("Survivor");
+    expect(out?.assignee).toBeUndefined();
+  });
+
+  it("drops a non-finite position on build and on parse", async () => {
+    expect(
+      (await roundTrip({ summary: "T", position: Number.POSITIVE_INFINITY }))?.position,
+    ).toBeUndefined();
+    expect((await roundTrip({ summary: "T", position: Number.NaN }))?.position).toBeUndefined();
+  });
+
+  it("skips a non-string label instead of throwing", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: untyped JSON input
+    const out = await roundTrip({ summary: "T", labels: [1 as any, "ok"] });
+    expect(out?.labels).toEqual(["ok"]);
+  });
+});

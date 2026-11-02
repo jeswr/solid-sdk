@@ -14,8 +14,10 @@ the workspace charter now requires new domain models to be generated.
 Load-bearing behaviour (`DECISIONS.md` D2): every `sched:Task` is also written as the
 shared `wf:Task` from `@jeswr/solid-task-model` on the same `#it` subject.
 `buildSchedulingTask` builds the `wf:Task` store with task-model's `buildTask`, which owns
-untrusted http(s) IRI filtering and the `wf:Open`/`wf:Closed` state, then layers the
-`sched:` triples. Do not re-implement that logic here. The completion timestamp is computed
+build-side http(s) IRI filtering and the `wf:Open`/`wf:Closed` state, then layers the
+`sched:` triples. Do not re-implement that logic here. task-model's `parseTask` does not
+filter IRIs and throws on a wrong term kind, so `parseSchedulingTask` guards that read and
+http(s)-filters every `wf:` IRI it returns. The completion timestamp is computed
 once and written to both `sched:completedAt` and `prov:endedAtTime`; an explicit
 `completed: false` wins over a supplied `completedAt`.
 

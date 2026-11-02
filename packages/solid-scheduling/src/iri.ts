@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Pure IRI helpers — the one reviewed home for the small, total IRI predicate the
- * bookmark model uses to filter untrusted object-property values.
+ * scheduling model uses to filter untrusted object-property values.
  *
  * **Pure core, no platform.** This module depends only on the WHATWG `URL`
  * global (available in both Node and the browser) — no `node:*`, no DOM, no

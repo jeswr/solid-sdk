@@ -217,6 +217,16 @@ function tryRead<T>(fn: () => T | undefined): T | undefined {
   }
 }
 
+/** A finite number, else `undefined` (`NaN`/`Infinity` have no valid `xsd:double` form here). */
+function finiteOrUndefined(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** The absolute http(s) members of an untrusted IRI list. */
+function httpIris(values: readonly string[] | undefined): string[] {
+  return (values ?? []).filter((v) => httpIriOrUndefined(v) !== undefined);
+}
+
 /** A positive integer, else `undefined` — the `sched:interval`/`sched:count` filter. */
 function positiveIntOrUndefined(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : undefined;
@@ -482,7 +492,7 @@ function toWfTaskData(
   // Validated so an Invalid Date can't reach buildTask's LiteralFrom.dateTime.
   setIfDefined(wf, "dueDate", validDateOrUndefined(data.dueTime));
   setIfDefined(wf, "priority", data.priority);
-  setIfDefined(wf, "rank", data.position);
+  setIfDefined(wf, "rank", finiteOrUndefined(data.position));
   setIfDefined(wf, "parent", data.parent);
   setIfDefined(wf, "blockedBy", data.blockedBy);
   setIfDefined(wf, "relatesTo", data.relatesTo);
@@ -538,6 +548,7 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
   task.calendar = httpIriOrUndefined(data.calendar);
 
   for (const label of data.labels ?? []) {
+    if (typeof label !== "string") continue;
     const l = label.trim();
     if (l) task.labels.add(l);
   }
@@ -684,15 +695,19 @@ export function parseSchedulingTask(
 
   // Federation fields (wf-only): read through the shared wf:Task model so a
   // Vikunja task's assignee/priority/order/relations agree with the Pod Manager.
-  const wf = parseTask(resourceUrl, dataset);
+  // parseTask filters IRIs only on build and throws on a wrong term kind, so the read
+  // is tryRead-guarded and every IRI it returns is http(s)-filtered here.
+  const wf = tryRead(() => parseTask(resourceUrl, dataset));
   if (wf !== undefined) {
-    setIfDefined(data, "assignee", wf.assignee);
+    setIfDefined(data, "assignee", httpIriOrUndefined(wf.assignee));
     setIfDefined(data, "priority", wf.priority);
-    setIfDefined(data, "position", wf.rank);
-    setIfDefined(data, "parent", wf.parent);
-    if (wf.blockedBy !== undefined && wf.blockedBy.length > 0) data.blockedBy = wf.blockedBy;
-    if (wf.relatesTo !== undefined && wf.relatesTo.length > 0) data.relatesTo = wf.relatesTo;
-    setIfDefined(data, "duplicateOf", wf.duplicateOf);
+    setIfDefined(data, "position", finiteOrUndefined(wf.rank));
+    setIfDefined(data, "parent", httpIriOrUndefined(wf.parent));
+    const blockedBy = httpIris(wf.blockedBy);
+    if (blockedBy.length > 0) data.blockedBy = blockedBy;
+    const relatesTo = httpIris(wf.relatesTo);
+    if (relatesTo.length > 0) data.relatesTo = relatesTo;
+    setIfDefined(data, "duplicateOf", httpIriOrUndefined(wf.duplicateOf));
   }
 
   return data;

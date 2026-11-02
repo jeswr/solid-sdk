@@ -28,9 +28,9 @@ const { namedNode } = DataFactory;
  * Canonicalise + validate a resource/container URL that an ACL will be written
  * for. **Fail-closed:** rejects anything that is not an absolute http(s) URL, and
  * rejects a URL carrying a FRAGMENT. A fragment is the dangerous case — appending
- * `.acl` to a subject IRI like `…/meal.ttl#it` yields `…/meal.ttl#it.acl`, whose
+ * `.acl` to a subject IRI like `…/task.ttl#it` yields `…/task.ttl#it.acl`, whose
  * fragment `fetch` STRIPS, so the ACL body would be PUT to the DATA resource
- * itself (`…/meal.ttl`), overwriting it. Returns the canonical fragment-free URL.
+ * itself (`…/task.ttl`), overwriting it. Returns the canonical fragment-free URL.
  */
 function assertAclableResource(resourceUrl: string): string {
   let u: URL;
@@ -55,8 +55,8 @@ function assertAclableResource(resourceUrl: string): string {
   }
   if (u.search !== "") {
     // A query string is the same hazard as a fragment: `${href}.acl` appends AFTER
-    // the query (`…/health/?v=1` → `…/health/?v=1.acl`), so the ACL would be written
-    // for a DIFFERENT resource than the one being protected — leaving the health
+    // the query (`…/tasks/?v=1` → `…/tasks/?v=1.acl`), so the ACL would be written
+    // for a DIFFERENT resource than the one being protected — leaving the task
     // resource unprotected. A WAC-managed resource/container URL never carries one.
     throw new Error(
       `aclUrlFor: resourceUrl must be a resource/container URL with NO query string (got ${JSON.stringify(
@@ -70,7 +70,7 @@ function assertAclableResource(resourceUrl: string): string {
 /**
  * The ACL resource URL for a Solid resource/container — `${resourceUrl}.acl`
  * (the WAC convention). Not a Link-header discovery (that is the client's job on
- * a real server); this is the conventional default the diary writes to.
+ * a real server); this is the conventional default the scheduling fork writes to.
  *
  * @throws (fail-closed) if `resourceUrl` is not an absolute http(s) URL, or if it
  *   carries a fragment (see {@link assertAclableResource}).

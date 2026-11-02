@@ -136,7 +136,7 @@ These are **candidates**, not filed proposals — the sector is never edited her
 `schedulingTaskSubject`, `schedulingNodeIris`, `reminderIri`,
 `buildSchedulingTask`, `serializeSchedulingTask`, `storeToTurtle`,
 `parseSchedulingTask`, `parseSchedulingTaskTtl`, `TaskPriority`; the calendar model
-`Calendar`, `CalendarData`, `calendarSubject`, `buildCalendar`, `serializeCalendar`,
+`Calendar`, `CalendarData`, `calendarSubject`, `buildCalendar`, `serializeCalendar`, `calendarStoreToTurtle`,
 `parseCalendar`, `parseCalendarTtl`; the owner-only ACL helpers `buildOwnerOnlyAcl`,
 `writeOwnerOnlyAcl`, `aclUrlFor`; the IRI filter `isHttpIri`/`httpIriOrUndefined`;
 and the reused vocab constants/builders (`SCHED`, `TASK_CLASS`, `SCHED_SUMMARY`,
