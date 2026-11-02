@@ -89,8 +89,8 @@ describe("bulk writes", () => {
 
   it("produces summary copy with successes and partial failures", () => {
     expect(bulkSummary("Rescheduled", 3, 0)).toBe("Rescheduled 3 tasks");
-    expect(bulkSummary("Completed", 2, 1)).toBe("Completed 2 tasks · 1 failed");
+    expect(bulkSummary("Completed", 4, 1)).toBe("Completed 4 of 5 — 1 failed");
     expect(bulkSummary("Moved", 1, 0)).toBe("Moved 1 task");
-    expect(bulkSummary("Deleted", 0, 2)).toBe("Deleted 0 tasks · 2 failed");
+    expect(bulkSummary("Deleted", 0, 2)).toBe("Deleted 0 of 2 — 2 failed");
   });
 });

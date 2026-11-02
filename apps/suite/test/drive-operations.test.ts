@@ -89,7 +89,8 @@ describe("Drive usage", () => {
     await trashOne(client);
     const expected = pod
       .snapshot()
-      .resources.filter(([url]) => url.startsWith(DRIVE))
+      // Auxiliary ACL documents are not container members, so they are not counted.
+      .resources.filter(([url]) => url.startsWith(DRIVE) && !url.endsWith(".acl"))
       .reduce((sum, [, resource]) => sum + resource.body.byteLength, 0);
     expect(expected).toBeGreaterThan(0);
     expect(await measureUsage(client, DRIVE)).toBe(expected);
@@ -164,6 +165,8 @@ describe("Drive names and media types", () => {
     expect(childUrl(DRIVE, "Café 💡", true)).toBe(`${DRIVE}Caf%C3%A9%20%F0%9F%92%A1/`);
     expect(trashFolderOf(DRIVE)).toBe(`${DRIVE}.trash/`);
     expect(isHidden({ name: ".acl" })).toBe(true);
+    expect(isHidden({ name: "report.acl" })).toBe(true);
+    expect(isHidden({ name: "report.ACR" })).toBe(true);
     expect(isHidden({ name: "visible" })).toBe(false);
     expect(contentTypeFor("notes.md", "text/custom")).toBe("text/custom");
     expect(contentTypeFor("notes.md", "application/octet-stream")).toBe("text/markdown");

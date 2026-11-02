@@ -26,6 +26,7 @@ import {
   type LucideIcon,
   Pencil,
   RotateCcw,
+  Share2,
   Star,
   StarOff,
   Trash2,
@@ -70,6 +71,12 @@ export function useItemMenu(
       onSelect: () => actions.open(first, siblings, ui.setPreview),
     });
     entries.push("separator");
+    entries.push({
+      id: "share",
+      label: "Share",
+      icon: Share2,
+      onSelect: () => ui.openDialog({ kind: "share", item: first }),
+    });
     entries.push({
       id: "copy-link",
       label: "Copy link",
