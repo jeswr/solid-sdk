@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -67,7 +68,14 @@ import { normaliseAccessRequest } from './core/class-request';
 import { ResolutionBudget } from './core/class-resolution-budget';
 import { type ResolveFetch, resolveClassTargets } from './core/class-resolve';
 import { createInternalRead } from './core/class-resolve-read';
-import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
+import type { ResolvedTarget } from './core/class-resolve-sai';
+import {
+  type ApprovedTargets,
+  buildPendingConsent,
+  consentDecisionToGrants,
+  type PendingConsent,
+  validateApprovedTargets,
+} from './core/consent';
 import { fetchWithRedirects } from './core/manual-redirect';
 import {
   canonicalOrigin,
@@ -1325,9 +1333,10 @@ async function handleSetClientId(
 /** Pending consent requests awaiting a decision (consentId → record). */
 type ProfileConsent = { pending: PendingConsent; ctx: SessionContext; label: string };
 const pendingConsents = new Map<string, Map<string, ProfileConsent>>();
-/** Resolvers for the awaiting `requestAccess` calls (consentId → resolve(approvedClasses)). */
+/** Resolvers for the awaiting `requestAccess` calls (consentId → resolve(decision)). */
 type ConsentChoice = {
-  approved: string[];
+  /** Already validated against the chosen profile's pending snapshot. */
+  approved: ApprovedTargets;
   profileId?: string;
   respond?: (result: AccessResponse) => void;
 };
@@ -1364,7 +1373,7 @@ function invalidateOriginConsents(origin: string): void {
   for (const [consentId, choices] of pendingConsents) {
     if (![...choices.values()].some((choice) => choice.pending.origin === origin)) continue;
     pendingConsents.delete(consentId);
-    consentResolvers.get(consentId)?.({ approved: [] });
+    consentResolvers.get(consentId)?.({ approved: {} });
     consentResolvers.delete(consentId);
   }
 }
@@ -1549,16 +1558,16 @@ function openConsentAndAwait(consentId: string): Promise<ConsentChoice> {
       resolve(choice);
     };
     consentResolvers.set(consentId, finish);
-    timer = setTimeout(() => finish({ approved: [] }), CONSENT_TIMEOUT_MS);
+    timer = setTimeout(() => finish({ approved: {} }), CONSENT_TIMEOUT_MS);
     const url = chrome.runtime.getURL(
       `consent/consent.html?consentId=${encodeURIComponent(consentId)}`,
     );
     try {
       chrome.windows.create({ url, type: 'popup', width: 460, height: 640 }, () => {
-        if (chrome.runtime.lastError) finish({ approved: [] });
+        if (chrome.runtime.lastError) finish({ approved: {} });
       });
     } catch {
-      finish({ approved: [] });
+      finish({ approved: {} });
     }
   });
 }
@@ -1658,7 +1667,7 @@ async function handleRequestAccess(
             );
             const resolved = new Map<
               string,
-              { targets: readonly PinnedTarget[]; shape: string | null; truncated: boolean }
+              { targets: readonly ResolvedTarget[]; shape: string | null; truncated: boolean }
             >();
             for (const cls of spec.classes) {
               const { targets, shape, truncated } = await resolveClassTargets(cls, {
@@ -1708,6 +1717,7 @@ async function handleRequestAccess(
                 spec,
                 resolved,
                 now,
+                () => crypto.randomUUID(),
               ),
             };
           },
@@ -1755,10 +1765,11 @@ async function handleRequestAccess(
     return result;
   };
   const selected = decision.profileId ? choices.get(decision.profileId) : undefined;
-  if (!selected || decision.approved.length === 0)
+  if (!selected || Object.keys(decision.approved).length === 0)
     return finish({ requestId, ok: false, grants: [] });
   const { ctx, pending } = selected;
-  const grants = consentDecisionToGrants(pending, decision.approved, () => crypto.randomUUID());
+  const grants =
+    consentDecisionToGrants(pending, decision.approved, () => crypto.randomUUID()) ?? [];
   if (!grants.length || spec.expiresAt <= Date.now())
     return finish({ requestId, ok: false, error: CONSENT_EXPIRED, grants: [] });
   try {
@@ -1853,7 +1864,14 @@ function handleGetPendingConsent(
       modes: c.modes,
       purpose: c.purpose,
       expiresAt: c.expiresAt,
-      targets: c.targets.map((t) => ({ url: t.url, kind: t.kind })),
+      targets: c.targets.map((t) => ({
+        id: t.id,
+        url: t.url,
+        kind: t.kind,
+        source: t.source,
+        check: t.check,
+        preselected: t.preselected,
+      })),
       shape: c.shape,
       ...(c.truncated ? { truncated: true } : {}),
     })),
@@ -1871,12 +1889,17 @@ async function handleConsentDecision(
   consentResolvers.delete(message.consentId);
   const choices = pendingConsents.get(message.consentId);
   const selected = message.profileId ? choices?.get(message.profileId) : undefined;
-  const requested = new Set(selected?.pending.classes.map((c) => c.dataClass) ?? []);
-  const approved = Array.isArray(message.approvedClasses)
-    ? message.approvedClasses.filter((c) => requested.has(c))
-    : [];
-  if (approved.length === 0) {
-    resolver({ approved: [] });
+  // Ids are minted per profile snapshot, so they validate only against the chosen profile.
+  const approved = selected
+    ? validateApprovedTargets(selected.pending, message.approvedTargets)
+    : {};
+  if (!approved) {
+    // A forged or stale id fails the whole decision closed (C5).
+    resolver({ approved: {} });
+    return { error: 'This consent decision did not match the request.' };
+  }
+  if (Object.keys(approved).length === 0) {
+    resolver({ approved: {} });
     return { ok: true };
   }
   return new Promise((respond) =>

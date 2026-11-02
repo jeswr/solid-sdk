@@ -12,6 +12,14 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip.js";
 
+export interface PaneToggle {
+  open: boolean;
+  controls: string;
+  onToggle: () => void;
+  /** Advertise the `[` / `]` key via aria-keyshortcuts (default true). */
+  keyShortcut?: boolean;
+}
+
 export interface TopBarProps {
   appName: string;
   context?: ReactNode;
@@ -21,8 +29,8 @@ export interface TopBarProps {
   bell?: ReactNode;
   account?: ReactNode;
   back?: { href: string; label: string };
-  sidebarToggle?: { open: boolean; controls: string; onToggle: () => void };
-  detailsToggle?: { open: boolean; controls: string; onToggle: () => void };
+  sidebarToggle?: PaneToggle;
+  detailsToggle?: PaneToggle;
   refreshing?: boolean;
 }
 
@@ -64,7 +72,7 @@ export function TopBar({
           data-slot="top-bar-sidebar-toggle"
           className="suite-shell-icon-button"
           label="Toggle sidebar"
-          aria-keyshortcuts="["
+          aria-keyshortcuts={sidebarToggle.keyShortcut === false ? undefined : "["}
           aria-expanded={sidebarToggle.open}
           aria-controls={sidebarToggle.controls}
           onClick={sidebarToggle.onToggle}
@@ -86,7 +94,7 @@ export function TopBar({
           data-slot="top-bar-details-toggle"
           className="suite-shell-icon-button"
           label="Toggle details pane"
-          aria-keyshortcuts="]"
+          aria-keyshortcuts={detailsToggle.keyShortcut === false ? undefined : "]"}
           aria-expanded={detailsToggle.open}
           aria-controls={detailsToggle.controls}
           onClick={detailsToggle.onToggle}

@@ -15,9 +15,15 @@ import {
   CalendarDays,
   FileText,
   HardDrive,
+  HeartPulse,
+  House,
   Images,
   Menu,
+  Music,
   Search,
+  SquareCheckBig,
+  StickyNote,
+  Table2,
   Users,
   Wallet,
 } from "lucide-react";
@@ -25,15 +31,33 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs" | "calendar" | "contacts" | "photos" | "money";
+export type SuiteAppId =
+  | "home"
+  | "drive"
+  | "docs"
+  | "calendar"
+  | "contacts"
+  | "photos"
+  | "money"
+  | "health"
+  | "tasks"
+  | "music"
+  | "notes"
+  | "sheets";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
+  { id: "home", label: "Home", href: "/home", icon: House },
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "sheets", label: "Sheets", href: "/sheets", icon: Table2 },
+  { id: "notes", label: "Notes", href: "/notes", icon: StickyNote },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
+  { id: "health", label: "Health", href: "/health", icon: HeartPulse },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
+  { id: "music", label: "Music", href: "/music", icon: Music },
 ];
 
 export interface SuiteFrameProps {
