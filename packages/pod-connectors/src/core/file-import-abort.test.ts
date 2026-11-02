@@ -104,6 +104,17 @@ describe("runFileImport checks cancellation at the Pod writer boundary", () => {
       "read _provenance.ttl",
       ["read music/songs.ttl", "write music/songs.ttl", "register", "read _provenance.ttl"],
     ],
+    [
+      "finish()'s provenance write",
+      "write _provenance.ttl",
+      [
+        "read music/songs.ttl",
+        "write music/songs.ttl",
+        "register",
+        "read _provenance.ttl",
+        "write _provenance.ttl",
+      ],
+    ],
   ] as const)("sends no write when cancelled during %s and reports cancelled", async (_name, pausedAt, expected) => {
     const controller = new AbortController();
     const gate = pause();

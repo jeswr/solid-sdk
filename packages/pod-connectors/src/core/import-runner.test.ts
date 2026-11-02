@@ -562,6 +562,36 @@ describe("runImport enforces cancellation for adapters that ignore ctx.signal", 
     ).rejects.toBe(reason);
   });
 
+  it("reports a cancel during the final provenance write as cancelled, not complete", async () => {
+    const controller = new AbortController();
+    const { podWriter, sourceAuth } = ports();
+    const write = podWriter.write;
+    podWriter.write = async (doc, condition) => {
+      if (doc.slug === "_provenance.ttl") controller.abort(reason);
+      return write(doc, condition);
+    };
+    const states: { lastOutcome?: string; lastSync?: string }[] = [];
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        await ctx.write(doc());
+        return { cursor: "next" };
+      },
+    };
+    await expect(
+      runImport({
+        adapter,
+        mode: "live",
+        podWriter,
+        sourceAuth,
+        signal: controller.signal,
+        onState: (state) => states.push(state),
+      }),
+    ).rejects.toBe(reason);
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({ lastOutcome: "error", lastSync: undefined });
+  });
+
   it("does not write provenance when cancellation arrives during Type Index registration", async () => {
     const controller = new AbortController();
     const { calls, podWriter, sourceAuth } = ports(() => controller.abort(reason));

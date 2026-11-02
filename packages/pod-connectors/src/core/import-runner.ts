@@ -46,8 +46,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * at the PodWriter boundary, immediately before each port call, so a cancel during a pending
    * read (a session's implicit read before a write, the provenance read in finalisation) still
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
-   * before every HTTP request inside a port and to abort requests in flight. A run whose
-   * provenance write already finished is reported as complete.
+   * before every HTTP request inside a port and to abort requests in flight. A run cancelled
+   * before it resolves is reported as cancelled, even when the cancel lands while the final
+   * provenance write is in flight (that write may still complete).
    *
    * A cancelled run records no activity. Documents and items it already wrote keep
    * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
@@ -127,6 +128,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     const { indexUrl } = await podWriter.registerType(session.registrations());
     signal?.throwIfAborted();
     await session.finish();
+    // A cancel during the final provenance write is still a cancel: never report success.
+    signal?.throwIfAborted();
     const state = session.state(outcome);
     opts.onState?.(state);
     return {
