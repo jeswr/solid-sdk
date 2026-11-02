@@ -5,6 +5,7 @@ import type { CalendarEvent } from "../src/apps/calendar/lib/model";
 import {
   columnAt,
   dayDistance,
+  dayPinned,
   draggedEvent,
   dragThreshold,
   dropAnnouncement,
@@ -62,6 +63,28 @@ describe("pointer geometry", () => {
   });
 });
 
+describe("dayPinned", () => {
+  const base: CalendarEvent = {
+    name: "Gym",
+    start: new Date("2026-11-02T08:00:00Z"),
+    end: new Date("2026-11-02T09:00:00Z"),
+    recurrence: { frequency: "WEEKLY", byDay: ["MO", "WE", "FR"] },
+  };
+  const at = (start: string): CalendarEvent => ({ ...base, start: new Date(start) });
+  it("pins a by-day series moved to another day", () => {
+    expect(dayPinned(base, at("2026-11-03T08:00:00Z"), "UTC")).toBe(true);
+  });
+  it("allows time-only moves and series without by-rules", () => {
+    expect(dayPinned(base, at("2026-11-02T10:00:00Z"), "UTC")).toBe(false);
+    const plain: CalendarEvent = { ...base, recurrence: { frequency: "WEEKLY" } };
+    expect(dayPinned(plain, at("2026-11-03T08:00:00Z"), "UTC")).toBe(false);
+  });
+  it("compares civil days in the viewer's zone", () => {
+    // 11:30 UTC on the 2nd is a time-only move in UTC but already the 3rd in Auckland.
+    expect(dayPinned(base, at("2026-11-02T11:30:00Z"), "UTC")).toBe(false);
+    expect(dayPinned(base, at("2026-11-02T11:30:00Z"), "Pacific/Auckland")).toBe(true);
+  });
+});
 describe("sameTiming", () => {
   it("compares timed, all-day and open-ended timings", () => {
     expect(sameTiming(timed, { ...timed, name: "Other" })).toBe(true);

@@ -273,6 +273,11 @@ export async function applySeriesPlan({
         await mutations.update(source.url, plan.original, etag, compound);
       else await mutations.delete(source.url, etag, compound);
     } else if (plan.original) await create(plan.original, false);
+  } catch (failure) {
+    // Compensate before the preview goes, so the old occurrence never shows beside a
+    // replacement; if that delete fails, `replacement` keeps it for the caller to retry.
+    await removeReplacement(mutations, replacement).catch(() => undefined);
+    throw failure;
   } finally {
     release?.();
   }

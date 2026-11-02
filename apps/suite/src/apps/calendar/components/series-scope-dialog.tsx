@@ -15,10 +15,16 @@ export function SeriesScopeDialog({
   action,
   onChoose,
   onCancel,
+  modes = ["this", "following", "all"],
+  note,
 }: {
   action: "save" | "delete" | undefined;
   onChoose: (mode: SeriesMode) => void;
   onCancel: () => void;
+  /** The scopes on offer; defaults to all three. */
+  modes?: readonly SeriesMode[];
+  /** Why some scopes are missing. */
+  note?: string | undefined;
 }) {
   return (
     <AlertDialog
@@ -31,18 +37,22 @@ export function SeriesScopeDialog({
         <AlertDialogTitle>
           {action === "delete" ? "Delete recurring event" : "Edit recurring event"}
         </AlertDialogTitle>
-        <AlertDialogDescription>Which events should change?</AlertDialogDescription>
+        <AlertDialogDescription>
+          {note ? `${note} ` : ""}Which events should change?
+        </AlertDialogDescription>
         {(
           [
             ["this", "This event"],
             ["following", "This and following events"],
             ["all", "All events"],
           ] as const
-        ).map(([mode, label]) => (
-          <Button key={mode} onClick={() => onChoose(mode)}>
-            {label}
-          </Button>
-        ))}
+        )
+          .filter(([mode]) => modes.includes(mode))
+          .map(([mode, label]) => (
+            <Button key={mode} onClick={() => onChoose(mode)}>
+              {label}
+            </Button>
+          ))}
         <AlertDialogCancel>Cancel</AlertDialogCancel>
       </AlertDialogContent>
     </AlertDialog>

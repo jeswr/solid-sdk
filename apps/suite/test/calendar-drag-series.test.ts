@@ -134,12 +134,44 @@ describe("applySeriesPlan", () => {
     ]);
     expect(replacement.current).toBeUndefined();
   });
-  it("leaves a confirmed replacement for compensation when the original fails", async () => {
+  it("removes the replacement before releasing the preview when the original fails", async () => {
+    const plan = planSeriesEdit(series, occurrence, moved(series), "this", zone);
+    const failure = new Error("412");
+    const { value, calls } = mutations({
+      update: vi.fn(async () => {
+        throw failure;
+      }),
+      preview: () => () => {
+        calls.push(["release"]);
+      },
+    });
+    const replacement: SeriesReplacement = { current: undefined };
+    await expect(
+      applySeriesPlan({
+        plan,
+        source,
+        mode: "this",
+        target: work,
+        mutations: value,
+        replacement,
+        newId: counter(),
+      }),
+    ).rejects.toBe(failure);
+    expect(calls.slice(-2)).toEqual([
+      ["delete", `${work.container}id-1.ttl`, '"new"', true],
+      ["release"],
+    ]);
+    expect(replacement.current).toBeUndefined();
+  });
+  it("leaves a confirmed replacement for the caller when compensation also fails", async () => {
     const plan = planSeriesEdit(series, occurrence, moved(series), "this", zone);
     const failure = new Error("412");
     const { value } = mutations({
       update: vi.fn(async () => {
         throw failure;
+      }),
+      delete: vi.fn(async () => {
+        throw new TypeError("offline");
       }),
     });
     const replacement: SeriesReplacement = { current: undefined };

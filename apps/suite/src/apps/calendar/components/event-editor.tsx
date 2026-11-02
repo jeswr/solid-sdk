@@ -51,7 +51,6 @@ import {
   localEventItem,
   planSeriesEdit,
   quickDraft,
-  removeReplacement,
   type SeriesMode,
   type SeriesReplacement,
   withSourceCalendar,
@@ -515,11 +514,9 @@ function EventEditor({
     } catch (failure) {
       let message =
         failure instanceof Error ? failure.message : "Couldn't save this event. Please retry.";
-      try {
-        await removeReplacement(mutations, replacement);
-      } catch {
+      // applySeriesPlan already tried to remove any replacement; one left means that failed.
+      if (replacement.current)
         message = "Couldn't finish saving. Save again to retry cleanup; your draft is still here.";
-      }
       if (failure instanceof Error && "status" in failure && failure.status === 412) {
         const latest = await calendarIO(session.fetch, session.storageUrl)
           .loadEvent(item.url)

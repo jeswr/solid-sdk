@@ -16,6 +16,7 @@ import { useCalendarState, useEventMutations } from "../state/calendar-context";
 import {
   type DragGesture,
   type DragKind,
+  dayPinned,
   draggedEvent,
   dropAnnouncement,
   passedThreshold,
@@ -95,6 +96,8 @@ export function CalendarDragProvider({ children }: { children: ReactNode }) {
   const mutations = useEventMutations();
   const [active, setActiveState] = useState<ActiveDrag>();
   const [pending, setPending] = useState<Pending>();
+  // A replacement whose cleanup failed; the next drop removes it before writing anything else.
+  const leftover = useRef<SeriesReplacement>({ current: undefined });
   const [announcement, setAnnouncement] = useState("");
   const activeRef = useRef<ActiveDrag | undefined>(undefined);
   const gesture = useRef<Gesture | undefined>(undefined);
@@ -173,13 +176,15 @@ export function CalendarDragProvider({ children }: { children: ReactNode }) {
     const replacement: SeriesReplacement = { current: undefined };
     setActive((current) => current && { ...current, settling: "saving" });
     try {
+      await removeReplacement(mutations, leftover.current);
       const source = await sourcePromise;
+      // Start from the freshly loaded source, not the cached occurrence, so the write (sent with
+      // the source's etag) cannot overwrite fields another device changed since the range loaded.
       const edited: CalendarEvent = {
-        ...occurrence.data,
+        ...source.data,
         start: next.start,
         end: next.end,
-        inCalendar: source.data.inCalendar,
-        recurrence: editorRecurrence(occurrence.data.recurrence, next.start, zone),
+        recurrence: editorRecurrence(source.data.recurrence, next.start, zone),
       };
       const plan = planSeriesEdit(source.data, occurrence.data.start, edited, mode, zone);
       setAnnouncement(dropAnnouncement(occurrence.data.name, next, kind, zone));
@@ -193,17 +198,17 @@ export function CalendarDragProvider({ children }: { children: ReactNode }) {
       });
     } catch (failure) {
       let message: string | undefined;
-      try {
-        await removeReplacement(mutations, replacement);
+      if (replacement.current) {
+        // applySeriesPlan couldn't remove the replacement; the next drop retries it.
+        leftover.current.current = replacement.current;
+        message =
+          "Couldn't finish moving the event, so a copy of it may remain. Your next move removes it, or delete it yourself.";
+      } else if (!(failure instanceof CalendarHttpError))
         // The save path already reported (and reverted) a failed pod write.
-        if (!(failure instanceof CalendarHttpError))
-          message =
-            failure instanceof Error && failure.message.startsWith("Reconnect")
-              ? "Reconnect before moving a recurring event."
-              : "Couldn't move the event. Your change was reverted.";
-      } catch {
-        message = "Couldn't finish moving the event. Open it and save again to tidy up.";
-      }
+        message =
+          failure instanceof Error && failure.message.startsWith("Reconnect")
+            ? "Reconnect before moving a recurring event."
+            : "Couldn't move the event. Your change was reverted.";
       if (message) toast.error(message);
       setAnnouncement(`Couldn't move ${occurrence.data.name}.`);
     } finally {
@@ -326,6 +331,12 @@ export function CalendarDragProvider({ children }: { children: ReactNode }) {
       </div>
       <SeriesScopeDialog
         action={pending ? "save" : undefined}
+        {...(pending && dayPinned(pending.occurrence.data, pending.next, zone)
+          ? {
+              modes: ["this"] as const,
+              note: "This series repeats on set days, so only this event can move to another day.",
+            }
+          : {})}
         onChoose={(mode) => {
           if (!pending) return;
           setPending(undefined);

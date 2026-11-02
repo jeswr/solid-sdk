@@ -1,6 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
 import { applyDrag, SNAP_MINUTES } from "../lib/drag";
-import { asDate, type CalendarEvent, fromWallClock, wallClock } from "../lib/model";
+import {
+  asDate,
+  type CalendarDate,
+  type CalendarEvent,
+  fromWallClock,
+  wallClock,
+} from "../lib/model";
 
 /** The time grid draws 48px per hour. */
 export const PX_PER_MINUTE = 0.8;
@@ -151,4 +157,17 @@ export function dropAnnouncement(
   const at = kind === "resize-end" ? asDate(next.end as Date) : next.start;
   const when = `${day.format(at)}, ${time.format(at)}`;
   return kind === "resize-end" ? `Resized ${name} to end ${when}` : `Moved ${name} to ${when}`;
+}
+const civilDay = (date: CalendarDate, zone: string) =>
+  typeof date === "string" ? date : wallClock(date, zone).toISOString().slice(0, 10);
+/**
+ * A series pinned to weekdays, month days or months keeps its rule when the start shifts, so
+ * moving it to another day would misplace the rest of the series: offer only "This event".
+ */
+export function dayPinned(occurrence: CalendarEvent, next: CalendarEvent, zone: string): boolean {
+  const rule = occurrence.recurrence;
+  return Boolean(
+    (rule?.byDay?.length || rule?.byMonthDay?.length || rule?.byMonth?.length) &&
+      civilDay(occurrence.start, zone) !== civilDay(next.start, zone),
+  );
 }
