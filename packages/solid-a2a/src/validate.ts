@@ -142,6 +142,9 @@ const MULTI_VALUED = new Set(
 );
 /** Each of these components re-evaluates a property shape's path at every focus node. */
 const PATH_REEVALUATED = [
+  "minCount",
+  "maxCount",
+  "hasValue",
   "equals",
   "disjoint",
   "lessThan",
@@ -270,7 +273,8 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
       if (values.length !== 1) return undefined;
       const value = values[0] as Term;
       if (key === `${SH_NS}alternativePath`) {
-        parts = value.termType === "BlankNode" ? listMembers(value) : undefined;
+        // The validator reads the list whatever its head's term type.
+        parts = listMembers(value);
       } else if (key === `${SH_NS}inversePath`) {
         // The validator inverts only a predicate.
         parts = value.termType === "NamedNode" ? [value] : undefined;
@@ -491,6 +495,72 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
   return undefined;
 }
 
+/**
+ * The most graph operations (a match, each quad it yields, an add) one
+ * validation may make. The package's own shapes over an honest intent make a
+ * under 1,500; this bound keeps a refused validation to about a second.
+ */
+const MAX_VALIDATOR_OPERATIONS = 20_000;
+
+/** Thrown inside the validator once a validation has spent its budget. */
+class BudgetSpent extends Error {}
+
+type Budget = { left: number };
+
+function spend(budget: Budget): void {
+  budget.left -= 1;
+  if (budget.left < 0) throw new BudgetSpent("validation budget spent");
+}
+
+/**
+ * A view of `dataset` that charges `budget` for each match, each quad read and
+ * each write, including through the datasets a match returns.
+ */
+function meter<T extends object>(dataset: T, budget: Budget): T {
+  return new Proxy(dataset, {
+    get(target, prop, receiver) {
+      const value: unknown = Reflect.get(target, prop, target);
+      if (prop === Symbol.iterator) {
+        return function* () {
+          for (const quad of target as unknown as Iterable<Quad>) {
+            spend(budget);
+            yield quad;
+          }
+        };
+      }
+      if (typeof value !== "function") return value;
+      if (prop === "match") {
+        return (...args: unknown[]) => {
+          spend(budget);
+          return meter(value.apply(target, args) as object, budget);
+        };
+      }
+      if (prop === "add" || prop === "delete" || prop === "has") {
+        return (...args: unknown[]) => {
+          spend(budget);
+          const result = value.apply(target, args);
+          return result === target ? receiver : result;
+        };
+      }
+      return value.bind(target);
+    },
+  });
+}
+
+/** The validator's default RDF/JS environment, whose datasets are metered. */
+const DEFAULT_FACTORY = (new SHACLValidator(new Store()) as unknown as { factory: object })
+  .factory as { dataset: (...args: unknown[]) => object };
+
+type ValidatorFactory = NonNullable<
+  NonNullable<ConstructorParameters<typeof SHACLValidator>[1]>["factory"]
+>;
+
+function meteredFactory(budget: Budget): ValidatorFactory {
+  const factory = Object.create(DEFAULT_FACTORY) as typeof DEFAULT_FACTORY;
+  factory.dataset = (...args: unknown[]) => meter(DEFAULT_FACTORY.dataset(...args), budget);
+  return factory as unknown as ValidatorFactory;
+}
+
 async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
@@ -514,8 +584,28 @@ async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<V
   const unbounded = unboundedValidation(shapeGraph, dataGraph as Store);
   if (unbounded !== undefined) return { conforms: false, results: [{ message: unbounded }] };
 
-  const validator = new SHACLValidator(shapeGraph);
-  const report = await validator.validate(dataGraph);
+  // The pre-check above refuses known blow-ups cheaply, but it models the
+  // validator rather than bounding it. Every dataset operation the validator
+  // makes (reads of either graph, writes to its report) is metered here, and a
+  // validation that spends its budget stops and is refused.
+  const budget = { left: MAX_VALIDATOR_OPERATIONS };
+  let report: Awaited<ReturnType<SHACLValidator["validate"]>>;
+  try {
+    const validator = new SHACLValidator(shapeGraph, { factory: meteredFactory(budget) });
+    report = await validator.validate(meter(dataGraph as Store, budget));
+  } catch (error) {
+    if (error instanceof BudgetSpent) {
+      return {
+        conforms: false,
+        results: [
+          {
+            message: `Validations past ${MAX_VALIDATOR_OPERATIONS} graph operations ${UNBOUNDED}`,
+          },
+        ],
+      };
+    }
+    throw error;
+  }
 
   return {
     conforms: report.conforms,

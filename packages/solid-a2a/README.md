@@ -75,7 +75,10 @@ const protocol = await buildProtocolDocument({
   graph, or more than 5000 validation steps over this intent. Steps are counted the way the
   validator, which memoises nothing, spends them: each shape evaluation, value node and path
   step, including the path re-walks of `sh:equals`-style and qualified components and the
-  members a property shape's `sh:and` re-runs over its own path.
+  members a property shape's `sh:and` re-runs over its own path. That pre-check models the
+  validator, so the validator also runs under a hard budget of 20,000 graph operations (each
+  match, quad read and report write, metered through its datasets): a validation that spends it
+  stops and is refused, whatever drove the cost.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.

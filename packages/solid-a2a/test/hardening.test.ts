@@ -357,6 +357,29 @@ ${body}`,
     expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
   });
 
+  it("stops a validation whose results outgrow the graph-operation budget", async () => {
+    // sh:lessThan compares every value with every reference value and reports
+    // each failing pair: 120 x 120 results, which the step model does not see.
+    let data = "";
+    for (let i = 0; i < 120; i++)
+      data += `<urn:f> <urn:ex:p> "z${i}" .\n<urn:f> <urn:ex:r> "a${i}" .\n`;
+    const report = await quick(
+      "<urn:S> sh:targetNode <urn:f> ; sh:path <urn:ex:p> ; sh:lessThan <urn:ex:r> .",
+      await parseRdf(data, "text/turtle"),
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results).toHaveLength(1);
+    expect(report.results[0]?.message).toMatch(/graph operations are not evaluated/);
+  });
+
+  it("reads an sh:alternativePath list with a named head, as the validator does", async () => {
+    const report = await quick(
+      `<urn:S> sh:targetClass a2a:Intent ; sh:property [ sh:path [ sh:alternativePath <urn:alts> ] ; sh:minCount 1 ] .
+<urn:alts> rdf:first a2a:action ; rdf:rest () .`,
+    );
+    expect(report.conforms).toBe(true);
+  });
+
   it("refuses subclass reasoning in the intent graph, even against the package's own shapes", async () => {
     const data = await parseRdf(
       `@prefix a2a: <https://w3id.org/jeswr/a2a#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
