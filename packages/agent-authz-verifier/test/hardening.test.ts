@@ -956,6 +956,46 @@ describe("prohibition probes match the evaluator's reads (Codex round 2)", () =>
     expect(offset.code).toBe("POLICY_DENIED");
   });
 
+  it("an xsd:date bound denies under operators that would read it as midnight UTC", async () => {
+    const day = base.now.toISOString().slice(0, 10);
+    for (const [operator, rightOperand] of [
+      ["eq", day],
+      ["neq", day],
+      ["gt", day],
+      ["lteq", day],
+      ["isAnyOf", [day]],
+      ["isNoneOf", [day]],
+      ["isAllOf", [day]],
+    ] as const) {
+      const r = await verifyInternalWith(
+        prohibit([
+          {
+            leftOperand: "dateTime",
+            operator,
+            rightOperand: rightOperand as never,
+            datatype: XsdDate,
+          },
+        ]),
+        today(),
+      );
+      expect(r.authorized, operator).toBe(false);
+      expect(r.code, operator).toBe("POLICY_DENIED");
+    }
+    const after = await verifyInternalWith(
+      prohibit([
+        {
+          leftOperand: "dateTime",
+          operator: "gteq",
+          rightOperand: "2026-12-01",
+          datatype: XsdDate,
+        },
+      ]),
+      today(),
+    );
+    expect(after.code).toBeUndefined();
+    expect(after.authorized).toBe(true);
+  });
+
   it("a value for a numeric operand must read as a number", async () => {
     const over = prohibit([{ leftOperand: "count", operator: "gt", rightOperand: 100 }]);
     for (const count of ["", " ", "1,000", "-", true]) {

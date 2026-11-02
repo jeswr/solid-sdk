@@ -656,12 +656,22 @@ function temporal(c: OdrlConstraint): boolean {
 const XSD_DATE_LEXICAL = /^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
 
 /**
- * A right operand the evaluator compares as an instant: a zoned dateTime, or a
- * date under `xsd:date`. Anything else falls back to a lexical comparison.
+ * Operators under which a whole-day `xsd:date` bound read as its UTC midnight
+ * keeps its meaning: `lt` (before the day) and `gteq` (from the day on). Under
+ * any other operator the evaluator would compare one instant where a day is
+ * meant (`eq 2026-08-01` would match only midnight), so the bound denies.
+ */
+const DATE_BOUND_OPERATORS: ReadonlySet<string> = new Set(["lt", "gteq"]);
+
+/**
+ * A right operand the evaluator compares as an instant and that means what it
+ * says: a zoned dateTime, or a date under `xsd:date` with `lt` or `gteq`.
+ * Anything else falls back to a lexical comparison or a midnight reading.
  */
 function temporalOperand(value: unknown, c: OdrlConstraint): boolean {
   if (zonedDateTime(value)) return true;
   if (c.datatype !== XSD_DATE || typeof value !== "string") return false;
+  if (!DATE_BOUND_OPERATORS.has(c.operator)) return false;
   const m = XSD_DATE_LEXICAL.exec(value);
   // `Date.parse` reads a bare or `Z` date but not one with an offset, which the
   // evaluator would then compare as text.

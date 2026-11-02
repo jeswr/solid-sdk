@@ -21,7 +21,8 @@ request action, a multi-valued or malformed request attribute, a value for an op
 compares as an instant (`dateTime`, or any constraint typed `xsd:dateTime`/`xsd:date`) that is not a
 dateTime string with a timezone, a value for an operand the chain compares as numbers that does not
 read as a number, a signed bound the evaluator would compare as text (a temporal bound that is not an
-instant, such as an `xsd:date` with an offset, or an ordering over durations or names), or a chain
+instant, such as an `xsd:date` with an offset, an `xsd:date` under any operator but `lt` or `gteq`
+(which would match only its UTC midnight), or an ordering over durations or names), or a chain
 prohibition that may apply but constrains an operand the request leaves out,
 denies in Phase D, as does any evaluator failure. The prohibition check probes each policy exactly
 as the delegation walk reads it (the same agent, action and injected `delegationDepth`), dropping
