@@ -316,6 +316,11 @@ function AssigneeField({
             });
           }}
         />
+        {view.assignee && view.assignee !== tasks.webId && (
+          <p className="su-muted">
+            {new URL(view.assignee).hostname} will see this when they open the project
+          </p>
+        )}
         {error && <p role="alert">{error}</p>}
         {members.includes(tasks.webId) && (
           <Button

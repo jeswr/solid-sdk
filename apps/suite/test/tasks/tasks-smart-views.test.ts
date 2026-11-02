@@ -30,6 +30,9 @@ function api(snapshot = cache.getSnapshot()): TasksContextValue {
     cache,
     inboxUrl: cache.inboxUrl,
     webId: "https://alice.example/#me",
+    shareAdapter: () => {
+      throw new Error("Sharing is not used in this fixture");
+    },
     loadTasks: cache.loadTasks.bind(cache),
     retry: cache.retry,
     createTask: cache.createTask.bind(cache),

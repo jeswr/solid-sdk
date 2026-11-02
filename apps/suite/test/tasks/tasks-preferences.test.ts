@@ -25,6 +25,7 @@ describe("Tasks preferences", () => {
         }),
       ),
     ).toEqual({
+      sharedProjects: [],
       sort: { inbox: "name" },
       viewMode: { home: "board" },
       collapsedSections: ["one"],
@@ -65,4 +66,33 @@ describe("Tasks preferences", () => {
     });
     expect(defaultPreferences.collapsedSections).toEqual([]);
   });
+});
+
+it("validates and deduplicates opened shared projects in storage and reducer actions", () => {
+  const valid = { url: "https://bob.example/home.ttl", title: "Home" };
+  const invalid = [
+    null,
+    0,
+    {},
+    { ...valid, title: " " },
+    { ...valid, url: 1 },
+    { ...valid, url: "broken" },
+    ...[
+      "javascript:alert(1)",
+      "https://user:pass@bob.example/a",
+      "https://bob.example/a#this",
+      "https://bob.example/a?x=1",
+      "https://bob.example/",
+    ].map((url) => ({ ...valid, url })),
+  ];
+  const state = parsePreferences(JSON.stringify({ sharedProjects: [...invalid, valid, valid] }));
+  expect(state.sharedProjects).toEqual([valid]);
+  expect(preferencesReducer(state, { type: "sharedProject", ...valid })).toBe(state);
+  expect(
+    preferencesReducer(state, { type: "sharedProject", ...valid, title: "Renamed" }).sharedProjects,
+  ).toEqual([{ ...valid, title: "Renamed" }]);
+  expect(
+    preferencesReducer(defaultPreferences, { type: "sharedProject", ...valid }).sharedProjects,
+  ).toEqual([valid]);
+  expect(preferencesReducer(state, { type: "sharedProject", ...valid, url: "bad" })).toBe(state);
 });

@@ -12,10 +12,12 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
-import { TaskStore } from "../lib/model/store";
+import { type StoredProject, TaskStore } from "../lib/model/store";
+import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
+import { useTasksPreferences } from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
@@ -46,6 +48,11 @@ function useTasksValue(session: PodSession) {
         (message) => toast.info(message),
       ),
   );
+  const { preferences } = useTasksPreferences();
+  useEffect(() => {
+    void cache.setSharedProjects(preferences.sharedProjects);
+  }, [cache, preferences.sharedProjects]);
+  const sharing = useMemo(() => new Map<string, TasksSharingAdapter>(), []);
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
   useEffect(() => {
     const flush = () => {
@@ -90,6 +97,25 @@ function useTasksValue(session: PodSession) {
       ...snapshot,
       cache,
       webId: session.webId,
+      shareAdapter: (project: StoredProject) => {
+        const key = `${project.url} ${project.tracker.stateStore}`;
+        let adapter = sharing.get(key);
+        if (!adapter) {
+          adapter = new TasksSharingAdapter({
+            fetch: session.fetch,
+            webId: session.webId,
+            trackerUrl: project.url,
+            folderUrl: project.tracker.stateStore as string,
+            ensurePrivate: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
+            syncMembers: async (webId, granted) => {
+              if (!(await cache.syncProjectMember(project, webId, granted)))
+                throw new Error("Couldn't update project members");
+            },
+          });
+          sharing.set(key, adapter);
+        }
+        return adapter;
+      },
       inboxUrl: cache.inboxUrl,
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
@@ -109,7 +135,7 @@ function useTasksValue(session: PodSession) {
       moveSection: cache.moveSection.bind(cache),
       deleteSection: cache.deleteSection.bind(cache),
     }),
-    [snapshot, cache, session.webId],
+    [snapshot, cache, session, sharing],
   );
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.

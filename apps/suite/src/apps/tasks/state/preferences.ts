@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   defaultPreferences,
   type PreferenceAction,
@@ -45,14 +45,16 @@ export function useTasksPreferences() {
     window.addEventListener("storage", change);
     return () => window.removeEventListener("storage", change);
   }, []);
-  const dispatch = (action: PreferenceAction) => {
-    snapshot = preferencesReducer(snapshot, action);
+  const dispatch = useCallback((action: PreferenceAction) => {
+    const next = preferencesReducer(snapshot, action);
+    if (next === snapshot) return;
+    snapshot = next;
     try {
       window.localStorage.setItem(KEY, JSON.stringify(snapshot));
     } catch {
       /* Storage may be full or disabled. */
     }
     emit();
-  };
+  }, []);
   return { preferences, dispatch };
 }

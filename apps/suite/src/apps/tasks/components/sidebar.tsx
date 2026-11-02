@@ -42,6 +42,7 @@ import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { ShareProject } from "./share-project";
 
 /** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
 function ProjectDropItem({
@@ -73,6 +74,7 @@ function ProjectRow({
   const tasks = useTasks();
   const path = usePathname();
   const router = useRouter();
+  const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const renameRoot = useRef<HTMLDivElement>(null);
@@ -129,6 +131,9 @@ function ProjectRow({
           >
             Rename
           </DropdownMenuItem>
+          <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+            Share
+          </DropdownMenuItem>
           <DropdownMenuItem
             disabled={first || !project.etag}
             onSelect={() => {
@@ -160,6 +165,7 @@ function ProjectRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {sharing && <ShareProject project={project} onClose={() => setSharing(false)} />}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -202,7 +208,13 @@ export function TasksSidebar() {
   const overdue = dueToday.some((task) => isOverdue(task, now));
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
-  const projects = tasks.projects.filter((project) => project.url !== tasks.inboxUrl);
+  const shared = preferences.sharedProjects.filter(
+    (project) => !tasks.cache.isOwnProject(project.url),
+  );
+  const sharedUrls = new Set(shared.map((project) => project.url));
+  const projects = tasks.projects.filter(
+    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+  );
   const link = (
     href: string,
     title: string,
@@ -329,6 +341,21 @@ export function TasksSidebar() {
             />
           ))}
         </ul>
+      )}
+      {shared.length > 0 && (
+        <>
+          <h2 className="tsk-nav-heading">Shared with me</h2>
+          <ul className="tsk-nav-list">
+            {shared.map((project) =>
+              link(
+                `/tasks/p/${encodeRef(project.url)}`,
+                tasks.projects.find((loaded) => loaded.url === project.url)?.tracker.title ??
+                  project.title,
+                <span className="tsk-project-dot" aria-hidden="true" />,
+              ),
+            )}
+          </ul>
+        </>
       )}
       <div className="tsk-sidebar-footer">
         {creating ? (

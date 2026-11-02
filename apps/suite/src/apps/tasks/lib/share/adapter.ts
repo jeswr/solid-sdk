@@ -1,0 +1,230 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { safeHttpIri } from "@jeswr/rdf-serialize";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { Authorization } from "@solid/object";
+import { DataFactory, Store } from "n3";
+import {
+  ShareError,
+  type ShareRole,
+  type SharingAdapter,
+  type SharingState,
+} from "../../../../shell/share/types";
+import { WacSharingAdapter, wacShareCapabilities } from "../../../../shell/share/wac-adapter";
+import { readSharing, SharingError } from "../../../drive/lib/sharing";
+import { ModelError } from "../model/errors";
+import { RdfIO, type Resource, requireEtag } from "../model/io";
+
+const ACL = "http://www.w3.org/ns/auth/acl#";
+export const tasksShareCapabilities = {
+  ...wacShareCapabilities,
+  publicLinks: false,
+  notifyAgents: false,
+  accessRequests: false,
+};
+class Grant extends Authorization {
+  values(predicate: string) {
+    return SetFrom.subjectPredicate(
+      this,
+      ACL + predicate,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+}
+/** A complete, restricted ACL. Owners always retain Read, Write and Control. */
+function policy(folder: string, people: SharingState["people"]) {
+  const dataset = new Store();
+  for (const person of people) {
+    const grant = new Grant(DataFactory.blankNode(), dataset, DataFactory);
+    grant.type.add(`${ACL}Authorization`);
+    grant.values("accessTo").add(folder);
+    if (folder.endsWith("/")) grant.values("default").add(folder);
+    grant.values("agent").add(person.webId);
+    grant.mode.add(`${ACL}Read`);
+    if (person.role !== "viewer") grant.mode.add(`${ACL}Write`);
+    if (person.role === "owner") grant.mode.add(`${ACL}Control`);
+  }
+  return dataset;
+}
+interface Options {
+  fetch: typeof fetch;
+  webId: string;
+  trackerUrl: string;
+  folderUrl: string;
+  ensurePrivate: (url: string, owner: string) => Promise<boolean>;
+  syncMembers: (webId: string, granted: boolean) => Promise<void>;
+}
+/** Named grants only: narrow folder → tracker → folder. Ambiguous writes stop the plan. */
+export class TasksSharingAdapter implements SharingAdapter {
+  readonly caps = tasksShareCapabilities;
+  readonly supportsCommenter = false;
+  readonly supportsGeneralCommenter = false;
+  private readonly fetch: typeof fetch;
+  private readonly io: RdfIO;
+  private readonly tracker: WacSharingAdapter;
+  private tail: Promise<unknown> = Promise.resolve();
+  constructor(private readonly options: Options) {
+    this.fetch = refuseRedirects(options.fetch);
+    this.io = new RdfIO(this.fetch);
+    this.tracker = new WacSharingAdapter({ fetch: this.fetch, webId: options.webId });
+  }
+  private validate(url: string) {
+    const { trackerUrl, folderUrl, webId } = this.options;
+    for (const value of [trackerUrl, folderUrl, webId]) {
+      if (safeHttpIri(value) !== value) throw new ShareError("unsupported");
+      const parsed = new URL(value);
+      if (parsed.username || parsed.password || parsed.search) throw new ShareError("unsupported");
+    }
+    if (
+      url !== trackerUrl ||
+      new URL(trackerUrl).hash ||
+      trackerUrl.endsWith("/") ||
+      !folderUrl.endsWith("/") ||
+      new URL(folderUrl).origin !== new URL(trackerUrl).origin
+    )
+      throw new ShareError("unsupported");
+  }
+  private async acl(resource: string, signal: AbortSignal) {
+    const response = await this.fetch(resource, { method: "HEAD", signal });
+    if (!response.ok) throw new ShareError(response.status === 403 ? "forbidden" : "network");
+    // Limit direct ACL writes to the conventional, same-resource auxiliary document.
+    const links = [...(response.headers.get("link") ?? "").matchAll(/<([^>]+)>\s*;\s*rel="acl"/g)];
+    const target = links[0]?.[1];
+    if (links.length !== 1 || !target || new URL(target, resource).href !== `${resource}.acl`)
+      throw new ShareError("unsupported");
+    return this.io.optional(`${resource}.acl`);
+  }
+  private state(resource: string, document: Resource): SharingState {
+    requireEtag(document.etag);
+    const current = readSharing({
+      access: {
+        resource,
+        documents: [
+          {
+            model: "wac",
+            dataset: document.dataset,
+            source: document.url,
+            governingResource: resource,
+            inherited: false,
+          },
+        ],
+      },
+    });
+    if (current.link !== "none") throw new ShareError("unsupported");
+    return {
+      people: current.people.map(({ webId, role }) => ({ webId, role })),
+      general: { mode: "restricted" },
+      canManage: current.people.some(
+        (person) => person.webId === this.options.webId && person.role === "owner",
+      ),
+    };
+  }
+  async load(url: string, signal: AbortSignal): Promise<SharingState> {
+    this.validate(url);
+    try {
+      const acl = await this.acl(url, signal);
+      const folder = await this.acl(this.options.folderUrl, signal);
+      const folderState = folder ? this.state(this.options.folderUrl, folder) : undefined;
+      if (
+        !folder &&
+        !(await this.options.ensurePrivate(this.options.folderUrl, this.options.webId))
+      )
+        throw new ShareError("unsupported");
+      if (!acl) {
+        if (
+          !(await this.options.ensurePrivate(url, this.options.webId)) ||
+          folderState?.people.some((person) => person.webId !== this.options.webId)
+        )
+          throw new ShareError("unsupported");
+        signal.throwIfAborted();
+        await this.io.write(
+          `${url}.acl`,
+          policy(url, [{ webId: this.options.webId, role: "owner" }]),
+          { create: true },
+        );
+      } else this.state(url, acl);
+      const state = await this.tracker.load(url, signal);
+      return state;
+    } catch (error) {
+      throw this.error(error);
+    }
+  }
+  setPerson(
+    url: string,
+    webId: string,
+    role: ShareRole | null,
+    opts?: { expires?: Date; purpose?: string },
+  ): Promise<void> {
+    const pending = this.tail
+      .then(async () => {
+        this.validate(url);
+        if (
+          safeHttpIri(webId) !== webId ||
+          (role !== null && role !== "viewer" && role !== "editor") ||
+          opts?.expires ||
+          opts?.purpose
+        )
+          throw new ShareError("unsupported");
+        const signal = new AbortController().signal;
+        const before = await this.load(url, signal);
+        if (!before.canManage || before.readOnly) throw new ShareError("forbidden");
+        if (before.people.some((person) => person.webId === webId && person.role === "owner"))
+          throw new ShareError("forbidden");
+        const next = before.people.filter((person) => person.webId !== webId);
+        if (role) next.push({ webId, role });
+        const folderUrl = this.options.folderUrl;
+        const folder = await this.acl(folderUrl, signal);
+        if (!folder && !(await this.options.ensurePrivate(folderUrl, this.options.webId)))
+          throw new ShareError("unsupported");
+        const existing = folder ? this.state(folderUrl, folder) : before;
+        if (!existing.canManage) throw new ShareError("forbidden");
+        // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
+        const lower = before.people.flatMap((person) => {
+          const after = next.find((entry) => entry.webId === person.webId);
+          const old = existing.people.find((entry) => entry.webId === person.webId);
+          if (person.role === "owner") return [person];
+          if (!after || !old) return [];
+          return [
+            {
+              ...person,
+              role:
+                person.role === "editor" && after.role === "editor" && old.role === "editor"
+                  ? ("editor" as const)
+                  : ("viewer" as const),
+            },
+          ];
+        });
+        const narrowed = await this.io.write(
+          `${folderUrl}.acl`,
+          policy(folderUrl, lower),
+          folder ? { etag: folder.etag } : { create: true },
+        );
+        await this.tracker.setPerson(url, webId, role, opts);
+        const confirmed = await this.tracker.load(url, signal);
+        if (!confirmed.canManage || confirmed.readOnly || confirmed.general.mode !== "restricted")
+          throw new ShareError("forbidden");
+        await this.io.write(`${folderUrl}.acl`, policy(folderUrl, confirmed.people), {
+          etag: narrowed.etag,
+        });
+        await this.options.syncMembers(webId, role !== null);
+      })
+      .catch((error: unknown) => {
+        throw this.error(error);
+      });
+    this.tail = pending.catch(() => undefined);
+    return pending;
+  }
+  async setGeneral(): Promise<void> {
+    throw new ShareError("unsupported");
+  }
+  private error(error: unknown): ShareError {
+    if (error instanceof ShareError) return error;
+    if (error instanceof SharingError) return new ShareError("unsupported");
+    if (error instanceof ModelError)
+      return new ShareError(
+        error.status === 412 ? "conflict" : error.status === 403 ? "forbidden" : "network",
+      );
+    return new ShareError(error instanceof TypeError ? "unsupported" : "network");
+  }
+}

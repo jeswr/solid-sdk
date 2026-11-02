@@ -466,6 +466,9 @@ export class TaskStore {
     const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
     for (const item of await this.listTasks(container))
       await this.removeIfPresent(item.url, item.etag);
+    // Auxiliary ACLs are listed by some pods; remove them before the folder DELETE.
+    const acl = await this.io.optional(`${container}.acl`);
+    if (acl) await this.removeIfPresent(acl.url, acl.etag);
     const resource = await this.io.optional(container);
     if (resource) await this.removeIfPresent(container, resource.etag);
     await this.removeIfPresent(project.url, reserved.etag);

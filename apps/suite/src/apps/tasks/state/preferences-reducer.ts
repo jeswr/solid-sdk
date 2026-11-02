@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
+  sharedProjects: { url: string; title: string }[];
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
   collapsedSections: string[];
@@ -9,6 +10,7 @@ export interface TasksPreferences {
   weekStart: "monday" | "sunday" | "locale";
 }
 export const defaultPreferences: TasksPreferences = {
+  sharedProjects: [],
   viewMode: {},
   sort: {},
   collapsedSections: [],
@@ -17,6 +19,7 @@ export const defaultPreferences: TasksPreferences = {
   weekStart: "locale",
 };
 export type PreferenceAction =
+  | { type: "sharedProject"; url: string; title: string }
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
@@ -28,6 +31,18 @@ export function preferencesReducer(
   action: PreferenceAction,
 ): TasksPreferences {
   switch (action.type) {
+    case "sharedProject": {
+      if (!validSharedProject(action)) return state;
+      const previous = state.sharedProjects.find((project) => project.url === action.url);
+      if (previous?.title === action.title) return state;
+      return {
+        ...state,
+        sharedProjects: [
+          ...state.sharedProjects.filter((project) => project.url !== action.url),
+          { url: action.url, title: action.title },
+        ],
+      };
+    }
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
     case "viewMode":
@@ -66,6 +81,15 @@ export function parsePreferences(raw: string | null): TasksPreferences {
         ? (data.sidebar as Record<string, unknown>)
         : {};
     return {
+      sharedProjects: Array.isArray(data.sharedProjects)
+        ? [
+            ...new Map(
+              data.sharedProjects
+                .filter(validSharedProject)
+                .map((project) => [project.url, { url: project.url, title: project.title }]),
+            ).values(),
+          ]
+        : [],
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       collapsedSections: Array.isArray(data.collapsedSections)
@@ -81,5 +105,26 @@ export function parsePreferences(raw: string | null): TasksPreferences {
     };
   } catch {
     return defaultPreferences;
+  }
+}
+
+function validSharedProject(value: unknown): value is { url: string; title: string } {
+  if (!value || typeof value !== "object") return false;
+  const project = value as Record<string, unknown>;
+  if (typeof project.url !== "string" || typeof project.title !== "string" || !project.title.trim())
+    return false;
+  try {
+    const url = new URL(project.url);
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      !url.search &&
+      !url.pathname.endsWith("/") &&
+      url.href === project.url
+    );
+  } catch {
+    return false;
   }
 }

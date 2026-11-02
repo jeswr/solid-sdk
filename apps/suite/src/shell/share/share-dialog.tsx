@@ -30,10 +30,7 @@ import {
   SheetDescription,
   SheetTitle,
   Toaster,
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
   toast,
 } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
@@ -65,6 +62,7 @@ export interface ShareDialogProps {
   caps: ShareCapabilities;
   suiteHref: string;
   contacts?: SharingPerson[];
+  onPeopleAdded?: (count: number) => void;
   useProfile?: (webId: string) => SharingProfile;
 }
 const emptyProfile = () => ({ loading: false });
@@ -117,6 +115,7 @@ function SharingContent({
   caps,
   suiteHref,
   onOpenChange,
+  onPeopleAdded,
   contacts = [],
   useProfile = emptyProfile,
   mobile,
@@ -284,6 +283,7 @@ function SharingContent({
         }
       },
       () => {
+        if (added.length) onPeopleAdded?.(added.length);
         if (notify && caps.notifyAgents && adapter.notify)
           void adapter.notify(url, added, message || undefined).catch(() => {
             if (active())

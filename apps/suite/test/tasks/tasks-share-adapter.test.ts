@@ -1,0 +1,412 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { AclResource, Authorization } from "@solid/object";
+import { DataFactory, Parser, Store, Writer } from "n3";
+import { describe, expect, it, vi } from "vitest";
+import { TaskStore } from "../../src/apps/tasks/lib/model/store";
+import {
+  TasksSharingAdapter,
+  tasksShareCapabilities,
+} from "../../src/apps/tasks/lib/share/adapter";
+import { createDemoPod } from "../../src/lib/demo-pod/pod";
+import { WacSharingAdapter } from "../../src/shell/share/wac-adapter";
+
+const root = "https://alice.demo.pod/";
+const owner = `${root}profile#me`;
+const bob = "https://bob.example/profile#me";
+const ACL = "http://www.w3.org/ns/auth/acl#";
+async function fixture() {
+  const pod = createDemoPod({ root });
+  const store = new TaskStore({
+    storage: root,
+    webId: owner,
+    fetch: pod.fetch,
+    typeIndex: false,
+    ensurePrivateTasksAccess: async () => true,
+  });
+  const project = await store.createProject("Home");
+  const folder = project.tracker.stateStore as string;
+  const requests: { url: string; init: RequestInit }[] = [];
+  let intercept:
+    | ((url: string, init: RequestInit) => Promise<Response | undefined> | Response | undefined)
+    | undefined;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    return (await intercept?.(String(input), init)) ?? pod.fetch(input, init);
+  };
+  const ensurePrivate = vi.fn(async (_url: string, _owner: string) => true);
+  const syncMembers = vi.fn(async () => {});
+  const options = {
+    fetch,
+    webId: owner,
+    trackerUrl: project.url,
+    folderUrl: folder,
+    ensurePrivate,
+    syncMembers,
+  };
+  const adapter = new TasksSharingAdapter(options);
+  const load = () => adapter.load(project.url, new AbortController().signal);
+  const grants = async (url: string) => {
+    const response = await pod.fetch(`${url}.acl`);
+    const dataset = new Store(new Parser({ baseIRI: `${url}.acl` }).parse(await response.text()));
+    return [...new AclResource(dataset, DataFactory).authorizations].map((grant) => ({
+      agents: [...grant.agent],
+      modes: [...grant.mode],
+      accessTo: grant.accessTo,
+      defaults: grant.default,
+    }));
+  };
+  return {
+    pod,
+    store,
+    project,
+    folder,
+    requests,
+    options,
+    adapter,
+    load,
+    grants,
+    ensurePrivate,
+    syncMembers,
+    intercept: (next: typeof intercept) => {
+      intercept = next;
+    },
+  };
+}
+const puts = (f: Awaited<ReturnType<typeof fixture>>) =>
+  f.requests.filter((request) => request.init.method === "PUT");
+
+describe("Tasks named sharing", () => {
+  it("bootstraps only a verified private tracker, conditionally", async () => {
+    const f = await fixture();
+    expect(await f.load()).toMatchObject({
+      canManage: true,
+      people: [{ webId: owner, role: "owner" }],
+    });
+    expect(puts(f)).toHaveLength(1);
+    expect(new Headers(puts(f)[0]?.init.headers).get("if-none-match")).toBe("*");
+    expect(f.ensurePrivate).toHaveBeenCalledWith(f.project.url, owner);
+    expect(tasksShareCapabilities).toMatchObject({
+      publicLinks: false,
+      notifyAgents: false,
+      accessRequests: false,
+    });
+  });
+  it("does not bootstrap when privacy is unavailable", async () => {
+    const f = await fixture();
+    f.ensurePrivate.mockResolvedValue(false);
+    await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+    expect(puts(f)).toEqual([]);
+  });
+  it.each([
+    "viewer",
+    "editor",
+  ] as const)("grants %s with folder → tracker → folder, owner Control and conditional headers", async (role) => {
+    const f = await fixture();
+    await f.load();
+    f.requests.length = 0;
+    await f.adapter.setPerson(f.project.url, bob, role);
+    expect(puts(f).map((request) => request.url)).toEqual([
+      `${f.folder}.acl`,
+      `${f.project.url}.acl`,
+      `${f.folder}.acl`,
+    ]);
+    expect(new Headers(puts(f)[0]?.init.headers).get("if-none-match")).toBe("*");
+    for (const request of puts(f)) {
+      expect(
+        new Headers(request.init.headers).has("if-match") ||
+          new Headers(request.init.headers).get("if-none-match") === "*",
+      ).toBe(true);
+      const dataset = new Store(new Parser().parse(String(request.init.body)));
+      const owners = [...new AclResource(dataset, DataFactory).authorizations].filter((grant) =>
+        [...grant.agent].includes(owner),
+      );
+      expect(owners.some((grant) => [...grant.mode].includes(`${ACL}Control`))).toBe(true);
+    }
+    const grant = (await f.grants(f.folder)).find((grant) => grant.agents.includes(bob));
+    expect(grant?.accessTo).toBe(f.folder);
+    expect(grant?.defaults).toBe(f.folder);
+    expect(grant?.modes.includes(`${ACL}Write`)).toBe(role === "editor");
+    expect(f.syncMembers).toHaveBeenCalledWith(bob, true);
+    expect(await f.load()).toMatchObject({
+      people: expect.arrayContaining([{ webId: bob, role }]),
+    });
+  });
+  it.each([
+    "viewer",
+    null,
+  ] as const)("narrows editor to %s before touching the tracker", async (role) => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    f.requests.length = 0;
+    await f.adapter.setPerson(f.project.url, bob, role);
+    const first = puts(f)[0];
+    const dataset = new Store(new Parser().parse(String(first?.init.body)));
+    const rules = [...new AclResource(dataset, DataFactory).authorizations].filter((grant) =>
+      [...grant.agent].includes(bob),
+    );
+    expect(rules.some((grant) => [...grant.mode].includes(`${ACL}Write`))).toBe(false);
+    expect(rules.length).toBe(role ? 1 : 0);
+    expect(f.syncMembers).toHaveBeenLastCalledWith(bob, role !== null);
+  });
+  it.each([0, 1, 2])("fails closed at write %s, including lost responses", async (step) => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    f.requests.length = 0;
+    let writes = 0;
+    f.intercept(async (url, init) => {
+      if (init.method === "PUT" && writes++ === step) {
+        await f.pod.fetch(url, init);
+        throw new Error("Lost response");
+      }
+      return undefined;
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect(
+      (await f.grants(f.folder)).some(
+        (grant) => grant.agents.includes(owner) && grant.modes.includes(`${ACL}Control`),
+      ),
+    ).toBe(true);
+    f.intercept(undefined);
+    await f.adapter.setPerson(f.project.url, bob, null);
+    expect(f.syncMembers).toHaveBeenLastCalledWith(bob, false);
+  });
+  it.each([403, 404, 500])("does not bootstrap on tracker HEAD %s", async (status) => {
+    const f = await fixture();
+    f.intercept((url, init) =>
+      url === f.project.url && init.method === "HEAD" ? new Response(null, { status }) : undefined,
+    );
+    await expect(f.load()).rejects.toBeDefined();
+    expect(puts(f)).toEqual([]);
+  });
+  it("rejects unsupported ACL links and missing ETags", async () => {
+    const f = await fixture();
+    await f.load();
+    f.intercept((url, init) =>
+      init.method === "HEAD" && url === f.project.url
+        ? new Response(null, { headers: { link: '<https://evil.test/acl>; rel="acl"' } })
+        : undefined,
+    );
+    await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+    f.intercept(async (url, init) => {
+      if (url !== `${f.project.url}.acl` || init.method === "PUT") return;
+      const response = await f.pod.fetch(url, init);
+      response.headers.delete("etag");
+      return response;
+    });
+    await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  });
+  it("rejects owner changes, unsupported roles, general grants and durations before writes", async () => {
+    const f = await fixture();
+    await f.load();
+    f.requests.length = 0;
+    await expect(f.adapter.setPerson(f.project.url, owner, null)).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    for (const role of ["manager", "commenter"] as const)
+      await expect(f.adapter.setPerson(f.project.url, bob, role)).rejects.toMatchObject({
+        code: "unsupported",
+      });
+    await expect(
+      f.adapter.setPerson(f.project.url, "javascript:alert(1)", "editor"),
+    ).rejects.toMatchObject({ code: "unsupported" });
+    await expect(
+      f.adapter.setPerson(f.project.url, bob, "editor", { expires: new Date() }),
+    ).rejects.toMatchObject({ code: "unsupported" });
+    await expect(
+      f.adapter.setPerson(f.project.url, bob, "editor", { purpose: "test" }),
+    ).rejects.toMatchObject({ code: "unsupported" });
+    await expect(f.adapter.setGeneral()).rejects.toMatchObject({ code: "unsupported" });
+    expect(puts(f)).toEqual([]);
+  });
+  it.each([
+    "https://other.test/x",
+    "https://u:p@alice.demo.pod/x",
+    "https://alice.demo.pod/x?q=1",
+    "https://alice.demo.pod/x#it",
+    "https://alice.demo.pod/",
+  ])("rejects invalid tracker %s", async (trackerUrl) => {
+    const f = await fixture();
+    const adapter = new TasksSharingAdapter({ ...f.options, trackerUrl });
+    await expect(adapter.load(trackerUrl, new AbortController().signal)).rejects.toMatchObject({
+      code: "unsupported",
+    });
+  });
+  it("rejects wrong binding and folder scope", async () => {
+    const f = await fixture();
+    await expect(f.adapter.load(root, new AbortController().signal)).rejects.toBeDefined();
+    for (const folderUrl of ["https://elsewhere.test/folder/", "https://alice.demo.pod/file"])
+      await expect(
+        new TasksSharingAdapter({ ...f.options, folderUrl }).load(
+          f.project.url,
+          new AbortController().signal,
+        ),
+      ).rejects.toBeDefined();
+  });
+  it("reports conditional conflicts and sync errors; the queue remains usable", async () => {
+    const f = await fixture();
+    await f.load();
+    f.intercept((_url, init) =>
+      init.method === "PUT" ? new Response(null, { status: 412 }) : undefined,
+    );
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+      code: "conflict",
+    });
+    f.intercept(undefined);
+    f.syncMembers.mockRejectedValueOnce(new Error("members unavailable"));
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+      code: "network",
+    });
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+  });
+  it("rejects unverified folder creation and malformed or public ACLs", async () => {
+    const f = await fixture();
+    await f.load();
+    f.ensurePrivate.mockResolvedValue(false);
+    await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+    f.ensurePrivate.mockResolvedValue(true);
+    await f.adapter.setPerson(f.project.url, bob, "viewer");
+    const dataset = new Store();
+    const grant = new Authorization(DataFactory.blankNode(), dataset, DataFactory);
+    grant.type.add(`${ACL}Authorization`);
+    grant.accessTo = f.project.url;
+    grant.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
+    grant.mode.add(`${ACL}Read`);
+    const body = await new Promise<string>((resolve, reject) => {
+      const writer = new Writer();
+      writer.addQuads([...dataset]);
+      writer.end((err, body) => (err ? reject(err) : resolve(body)));
+    });
+    const response = await f.pod.fetch(`${f.project.url}.acl`);
+    await f.pod.fetch(`${f.project.url}.acl`, {
+      method: "PUT",
+      headers: {
+        "content-type": "text/turtle",
+        "if-match": response.headers.get("etag") as string,
+      },
+      body,
+    });
+    await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  });
+});
+
+async function installAcl(
+  f: Awaited<ReturnType<typeof fixture>>,
+  resource: string,
+  people: { webId: string; owner?: boolean; editor?: boolean }[],
+  defaults = true,
+) {
+  const dataset = new Store();
+  for (const person of people) {
+    const grant = new Authorization(DataFactory.blankNode(), dataset, DataFactory);
+    grant.type.add(`${ACL}Authorization`);
+    grant.accessTo = resource;
+    if (resource.endsWith("/") && defaults) grant.default = resource;
+    grant.agent.add(person.webId);
+    grant.mode.add(`${ACL}Read`);
+    if (person.owner || person.editor) grant.mode.add(`${ACL}Write`);
+    if (person.owner) grant.mode.add(`${ACL}Control`);
+  }
+  const writer = new Writer();
+  writer.addQuads([...dataset]);
+  const body = await new Promise<string>((resolve, reject) =>
+    writer.end((error, text) => (error ? reject(error) : resolve(text))),
+  );
+  const previous = await f.pod.fetch(`${resource}.acl`);
+  await f.pod.fetch(`${resource}.acl`, {
+    method: "PUT",
+    headers: {
+      "content-type": "text/turtle",
+      ...(previous.ok
+        ? { "if-match": previous.headers.get("etag") as string }
+        : { "if-none-match": "*" }),
+    },
+    body,
+  });
+}
+it("checks tracker privacy independently and refuses an already shared folder before bootstrap", async () => {
+  const f = await fixture();
+  f.ensurePrivate.mockImplementation(async (url: string) => url === f.folder);
+  await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  expect(puts(f)).toEqual([]);
+  f.ensurePrivate.mockResolvedValue(true);
+  await installAcl(f, f.folder, [
+    { webId: owner, owner: true },
+    { webId: bob, owner: true },
+  ]);
+  await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  await installAcl(f, f.folder, [{ webId: owner, owner: true }]);
+  expect(await f.load()).toMatchObject({ canManage: true });
+});
+it("rejects invalid IRIs, absent ACL links, unsupported folder defaults and forbidden ACL GETs", async () => {
+  const f = await fixture();
+  await expect(
+    new TasksSharingAdapter({ ...f.options, trackerUrl: "javascript:alert(1)" }).load(
+      "javascript:alert(1)",
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: "unsupported" });
+  f.intercept((_url, init) => (init.method === "HEAD" ? new Response() : undefined));
+  await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  f.intercept((url) =>
+    url === `${f.project.url}.acl` ? new Response(null, { status: 403 }) : undefined,
+  );
+  await expect(f.load()).rejects.toMatchObject({ code: "forbidden" });
+  f.intercept(undefined);
+  await installAcl(f, f.folder, [{ webId: owner, owner: true }], false);
+  await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+});
+it("requires Control on both resources and rechecks privacy before folder creation", async () => {
+  const f = await fixture();
+  await f.load();
+  const recipient = new TasksSharingAdapter({ ...f.options, webId: bob });
+  await expect(
+    recipient.setPerson(f.project.url, "https://carol.test/#me", "viewer"),
+  ).rejects.toMatchObject({ code: "forbidden" });
+  await installAcl(f, f.folder, [{ webId: owner }]);
+  await expect(f.adapter.setPerson(f.project.url, bob, "viewer")).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  const previous = await f.pod.fetch(`${f.folder}.acl`);
+  await f.pod.fetch(`${f.folder}.acl`, {
+    method: "DELETE",
+    headers: { "if-match": previous.headers.get("etag") as string },
+  });
+  let checks = 0;
+  f.ensurePrivate.mockImplementation(async () => ++checks === 1);
+  await expect(f.adapter.setPerson(f.project.url, bob, "viewer")).rejects.toMatchObject({
+    code: "unsupported",
+  });
+});
+it("intersects mismatched folder grants before expanding them again", async () => {
+  const f = await fixture();
+  await f.adapter.setPerson(f.project.url, bob, "editor");
+  await installAcl(f, f.folder, [{ webId: owner, owner: true }]);
+  await f.adapter.setPerson(f.project.url, bob, "editor");
+  await installAcl(f, f.folder, [{ webId: owner, owner: true }, { webId: bob }]);
+  await f.adapter.setPerson(f.project.url, bob, "editor");
+});
+it("refuses to expand the folder after the tracker loses manage permission", async () => {
+  const f = await fixture();
+  await f.load();
+  f.requests.length = 0;
+  const state = {
+    people: [{ webId: owner, role: "owner" as const }],
+    general: { mode: "restricted" as const },
+    canManage: true,
+  };
+  const loading = vi
+    .spyOn(WacSharingAdapter.prototype, "load")
+    .mockResolvedValueOnce(state)
+    .mockResolvedValueOnce({ ...state, canManage: false });
+  const changing = vi.spyOn(WacSharingAdapter.prototype, "setPerson").mockResolvedValueOnce();
+  try {
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    expect(puts(f)).toHaveLength(1);
+  } finally {
+    loading.mockRestore();
+    changing.mockRestore();
+  }
+});

@@ -37,7 +37,11 @@ export function ProjectView({
   const url = inbox ? tasks.inboxUrl : projectUrl;
   const project = tasks.projects.find((project) => project.url === url);
   const load = url ? tasks.tasks[url] : undefined;
-  const title = inbox ? "Inbox" : (project?.tracker.title ?? "Project");
+  const title = inbox
+    ? "Inbox"
+    : (project?.tracker.title ??
+      preferences.sharedProjects.find((shared) => shared.url === url)?.title ??
+      "Project");
   useEffect(() => {
     if (project) void tasks.cache.loadTasks(project);
   }, [project, tasks.cache]);
@@ -121,8 +125,7 @@ export function ProjectView({
       <BulkToolbar />
       {renderAsync({
         loading:
-          tasks.status === "loading" ||
-          (project && (!load || (load.status === "loading" && !load.items.length))) ? (
+          tasks.status === "loading" || load?.status === "loading" || (project && !load) ? (
             <LoadingSkeleton preset="list" count={8} />
           ) : undefined,
         error:
@@ -134,7 +137,10 @@ export function ProjectView({
               }}
             >
               {classifyError(load.error) === "forbidden" && (
-                <p>You no longer have access to {title}</p>
+                <>
+                  <p>You no longer have access to {title}</p>
+                  <p>Ask the owner to share this project</p>
+                </>
               )}
             </ProjectError>
           ) : !project && tasks.status === "ready" ? (
