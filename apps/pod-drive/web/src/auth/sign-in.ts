@@ -17,6 +17,8 @@ export function signInError(error: unknown): string {
     ((error instanceof Error || error instanceof DOMException) && error.name === "AbortError")
   )
     return "Sign-in was cancelled.";
+  if (error instanceof DOMException && error.name === "TimeoutError")
+    return "That address didn't respond. Check it, or choose your provider.";
   return "We couldn't sign you in. Try again.";
 }
 

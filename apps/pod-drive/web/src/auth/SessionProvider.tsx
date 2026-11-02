@@ -34,7 +34,8 @@ export interface SessionContextValue {
   loginWithAddress(input: string, kind?: "webid" | "custom"): Promise<void>;
   loginWithIssuer(issuer: string): Promise<void>;
   loginWithAccount(webId: string): Promise<void>;
-  /** Start again after the auth runtime failed to initialise. */
+  /** True when the auth runtime failed to initialise; `retry` starts it again. */
+  startupFailed: boolean;
   retry(): void;
 }
 
@@ -56,6 +57,8 @@ export function clearLegacyCredentials(): void {
   for (const [storage, key] of [
     ["localStorage", "pod-drive:remembered-account"],
     ["sessionStorage", "pod-drive:autologin-attempted"],
+    // The old full-page redirect record held a DPoP private key and a PKCE verifier.
+    ["sessionStorage", "pod-drive:pss.autologin.flow"],
   ] as const) {
     try {
       globalThis[storage]?.removeItem(key);
@@ -97,6 +100,7 @@ export function SessionProvider({
   // Remembered issuers, so an account row never needs to choose among several issuers again.
   const accountIssuers = useRef(new Map<string, string>());
   const [attempt, setAttempt] = useState(0);
+  const [startupFailed, setStartupFailed] = useState(false);
   const [auth, setAuth] = useState<PodAuth | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [session, setSession] = useState<DerivedSession | null>(null);
@@ -176,6 +180,7 @@ export function SessionProvider({
     })().catch(() => {
       if (!disposed) {
         setError("We couldn't start sign-in. Try again.");
+        setStartupFailed(true);
         setRestoringSession(false);
       }
     });
@@ -287,11 +292,13 @@ export function SessionProvider({
 
   const retry = useCallback(() => {
     setError(null);
+    setStartupFailed(false);
     setAttempt((count) => count + 1);
   }, []);
 
   const value: SessionContextValue = {
     retry,
+    startupFailed,
     webId: identity?.webId ?? null,
     session: session?.webId === identity?.webId ? session : null,
     fetch: auth?.fetch ?? publicFetch,

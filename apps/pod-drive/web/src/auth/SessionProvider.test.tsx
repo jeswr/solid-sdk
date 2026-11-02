@@ -119,6 +119,7 @@ function publicProfile(includeStorage = true) {
 beforeEach(async () => {
   vi.clearAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
   history.replaceState(null, "", "/");
   vi.stubEnv("VITE_HOME_IDP", ISSUER);
   vi.stubEnv("VITE_HOME_IDP_NAME", "Home provider");
@@ -136,6 +137,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -506,6 +508,7 @@ describe("Drive shared authentication", () => {
     vi.stubGlobal("indexedDB", { deleteDatabase });
     localStorage.setItem("pod-drive:remembered-account", '{"webId":"x"}');
     sessionStorage.setItem("pod-drive:autologin-attempted", "1");
+    sessionStorage.setItem("pod-drive:pss.autologin.flow", "{}");
     localStorage.setItem("unrelated", "kept");
     mount();
     await ready();
@@ -513,8 +516,8 @@ describe("Drive shared authentication", () => {
     expect(deleteDatabase).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("pod-drive:remembered-account")).toBeNull();
     expect(sessionStorage.getItem("pod-drive:autologin-attempted")).toBeNull();
+    expect(sessionStorage.getItem("pod-drive:pss.autologin.flow")).toBeNull();
     expect(localStorage.getItem("unrelated")).toBe("kept");
-    vi.unstubAllGlobals();
   });
 
   it("bounds address lookups with a timeout signal", async () => {
@@ -527,6 +530,19 @@ describe("Drive shared authentication", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(options.signal.aborted).toBe(false);
     expect(options.fetch).toBe(seams.publicFetch);
+    // When the signal fires, pending clears and the user sees a specific message.
+    expect(session.pending).toMatchObject({ kind: "webid" });
+  });
+
+  it("shows a specific message when an address lookup times out", async () => {
+    resolveSpy.mockImplementationOnce(() => {
+      throw new DOMException("timed out", "TimeoutError");
+    });
+    mount();
+    await ready();
+    submitAddress(WEB_ID);
+    expect(await screen.findByRole("alert")).toHaveTextContent("That address didn't respond.");
+    expect(session.pending).toBeNull();
   });
 
   it.each([

@@ -42,9 +42,13 @@ for the display name, avatar and drive root use the pristine public transport.
 
 The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
 A StrictMode-safe holder adapts its disposable result to the full callback URL.
-`allowInsecureLoopback` is enabled only when the app's hostname is localhost,
-127.0.0.0/8 or ::1. The popup supports cancellation; errors use plain messages
-without raw protocol details.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app deletes the refresh
+tokens and keys stored by builds before pod-auth.
 
 A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
 removed from the address bar. It never opens a popup or redirects without a click.

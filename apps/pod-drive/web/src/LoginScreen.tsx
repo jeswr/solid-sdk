@@ -39,6 +39,7 @@ export function LoginScreen() {
     recentAccounts,
     recentProviders,
     retry,
+    startupFailed,
   } = useSession();
   return (
     <main className="login-screen">
@@ -67,7 +68,7 @@ export function LoginScreen() {
           }}
         />
       </fieldset>
-      {!ready && error ? (
+      {startupFailed ? (
         <button type="button" className="login-retry" onClick={retry}>
           Try again
         </button>

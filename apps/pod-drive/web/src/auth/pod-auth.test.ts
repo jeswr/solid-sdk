@@ -91,6 +91,13 @@ describe("page-lifetime pod-auth core", () => {
     else expect(typeof options.clientId).toBe("string");
   });
 
+  it("keeps a production build HTTPS-only even on a loopback host", async () => {
+    vi.stubEnv("DEV", false);
+    const options = await coreAt("http://localhost:5173");
+    expect(options.allowInsecureLoopback).toBe(false);
+    expect(typeof options.clientId).toBe("string");
+  });
+
   it("captures the pristine public fetch at module load and omits cookies", async () => {
     const pristine = vi.fn<typeof fetch>(async () => new Response("public"));
     vi.stubGlobal("fetch", pristine);
