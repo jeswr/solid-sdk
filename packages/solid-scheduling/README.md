@@ -4,9 +4,11 @@
 
 > **Experimental, AI-agent-generated.** Lives in `packages/solid-scheduling` of the
 > [`jeswr/solid-sdk`](https://github.com/jeswr/solid-sdk) workspace; the standalone
-> `jeswr/solid-scheduling` repository becomes a read-only build mirror. The model is still
-> hand-written; flipping it to a generated core is codegen Phase S (bead sst-ild.7.5,
-> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md)).
+> `jeswr/solid-scheduling` repository becomes a read-only build mirror. Task and calendar
+> build/parse now run on a model generated from `codegen/` by `@jeswr/federation-codegen`
+> (codegen Phase S, bead sst-ild.7.5,
+> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md));
+> see [Exact divergences](#exact-divergences-from-the-hand-written-model).
 
 The RDF model for **scheduling** — tasks and calendars, one task per pod resource,
 owner-private. The data model a [Vikunja](https://vikunja.io)→Solid fork writes to
@@ -150,6 +152,36 @@ and the reused vocab constants/builders (`SCHED`, `TASK_CLASS`, `SCHED_SUMMARY`,
 Subpath exports: `@jeswr/solid-scheduling/vocab`, `/shape`,
 `/scheduling.shacl.ttl`, `/scheduling.proposals.ttl`.
 
+### Exact divergences from the hand-written model
+
+`buildSchedulingTask` / `parseSchedulingTask` and `buildCalendar` / `parseCalendar` now
+go through the model generated from `codegen/scheduling.shapes.ttl`, which runs on the
+audited `@jeswr/model-runtime` and follows that SHACL profile exactly. Compared with the
+hand-written model imported in #279, they differ as follows, pinned in
+`test/compatibility.test.ts`:
+
+- A required `sched:summary` that is not exactly one `xsd:string` rejects the task or
+  calendar: two summaries, a language-tagged summary, or a number, IRI or blank node. The
+  hand-written model kept the first value or its string form. Whether the profile should accept `rdf:langString` is the same open
+  normative question as bookmarks (sst-ild.7.7).
+- An ambiguous or mistyped optional value drops that field: two descriptions, a
+  language-tagged description, an `xsd:date` due time, an interval typed `xsd:integer`
+  instead of `xsd:positiveInteger`, or a positiveInteger that is padded with whitespace
+  or too large to be a safe integer.
+- A recurrence is read only when the task links exactly one node typed
+  `sched:RecurrenceRule` carrying exactly one canonical frequency. A lowercase frequency
+  (`"weekly"`), an untyped rule node, two frequencies or two rules now drop the recurrence.
+  Writes still trim and uppercase the frequency.
+- A root typed by a data-graph subclass of `sched:Task` or `sched:Calendar` is
+  recognised.
+- Writes keep an empty summary (`sched:summary ""`), so the document reads back; the
+  hand-written model wrote no summary, leaving an unreadable task. Control characters are
+  stripped from the written summary and description, in the `sched:` and `wf:` triples
+  alike.
+- An unsafe or relative resource URL (a space, `|`, `>`, or no scheme) makes build and
+  serialize throw a `TypeError`, and parse returns `undefined`. The hand-written model
+  wrote such IRIs into Turtle unchecked.
+
 ## Develop
 
 From the workspace root:
@@ -158,6 +190,13 @@ From the workspace root:
 pnpm exec turbo run lint build typecheck test --filter=@jeswr/solid-scheduling
 ```
 
+After editing anything in `codegen/`, regenerate and accept the input change:
+
+```bash
+pnpm --filter @jeswr/solid-scheduling run codegen --update-lock
+```
+
+`test/codegen.test.ts` fails if the committed `src/generated/` drifts from a fresh run.
 `dist/` is built fresh and never committed here. `@jeswr/solid-task-model` is a
 `workspace:*` dependency, so the `wf:Task` cross-serialisation always runs against the
 workspace task model.

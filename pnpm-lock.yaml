@@ -4855,6 +4855,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../solid-task-model
@@ -4868,6 +4871,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
