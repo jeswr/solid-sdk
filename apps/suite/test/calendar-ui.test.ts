@@ -1222,7 +1222,9 @@ it("parses and saves a quick-create title through the existing mutations", async
   // "tomorrow" resolves against the real clock; pin it to the day before the asserted date.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
-  onTestFinished(() => vi.useRealTimers());
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   mocks.path = "/calendar/month";
   const mounted = await mount(screen("month"));
   await settle();
