@@ -999,19 +999,19 @@ describe("prohibition probes match the evaluator's reads (Codex round 2)", () =>
   it("an instant finer than the evaluator's milliseconds denies (bound or request)", async () => {
     // Date.parse keeps milliseconds only, so each pair below would compare equal
     // and the prohibition (which should fire) would not.
-    const after = (bound: string) =>
+    const later = (bound: string) =>
       prohibit([{ leftOperand: "dateTime", operator: "gt", rightOperand: bound }]);
-    const bound = await verifyInternalWith(after("2026-08-01T00:00:00.0001Z"), {
+    const bound = await verifyInternalWith(later("2026-08-01T00:00:00.0001Z"), {
       dateTime: "2026-08-01T00:00:00.0002Z",
     });
     expect(bound.authorized).toBe(false);
     expect(bound.code).toBe("POLICY_DENIED");
-    const request = await verifyInternalWith(after("2026-08-01T00:00:00Z"), {
+    const request = await verifyInternalWith(later("2026-08-01T00:00:00Z"), {
       dateTime: "2026-08-01T00:00:00.0004Z",
     });
     expect(request.authorized).toBe(false);
     expect(request.code).toBe("POLICY_DENIED");
-    const padded = await verifyInternalWith(after("2026-08-01T00:00:00.123000Z"), {
+    const padded = await verifyInternalWith(later("2026-08-01T00:00:00.123000Z"), {
       dateTime: "2026-08-01T00:00:00.122Z",
     });
     expect(padded.code).toBeUndefined();
