@@ -286,6 +286,77 @@ ${body}`,
     expect(report.conforms).toBe(false);
   });
 
+  it("counts sh:and on a property shape as re-running its members over the same path", async () => {
+    const grant: Intent = {
+      id: "urn:i:5",
+      action: "grant",
+      target: "https://alice.example/x",
+      recipient: "https://bob.example/#me",
+      modes: ["Read", "Write", "Append", "Control"],
+    } as Intent;
+    let body = "<urn:S> sh:targetSubjectsOf a2a:mode ; sh:path a2a:mode ; sh:and ( <urn:A1> ) .\n";
+    for (let i = 1; i < 7; i++) body += `<urn:A${i}> sh:and ( <urn:A${i + 1}> ) .\n`;
+    body += "<urn:A7> sh:nodeKind sh:IRI .";
+    const report = await quick(body, grant);
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
+  });
+
+  for (const [name, path] of [
+    [
+      "a repeated path inside a repeated path",
+      "[ sh:zeroOrMorePath [ sh:oneOrMorePath a2a:action ] ]",
+    ],
+    [
+      "a path node with two path keys",
+      "[ sh:inversePath a2a:none ; sh:zeroOrMorePath a2a:action ]",
+    ],
+    [
+      "a path node with a list and a path key",
+      "[ rdf:first a2a:action ; rdf:rest () ; sh:zeroOrOnePath a2a:action ]",
+    ],
+  ] as const) {
+    it(`refuses ${name}`, async () => {
+      const report = await quick(
+        `<urn:S> sh:targetClass a2a:Intent ; sh:property [ sh:path ${path} ; sh:minCount 0 ] .`,
+      );
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/property path/);
+    });
+  }
+
+  it("reads a named path as a predicate, as the validator does, even if it heads a list", async () => {
+    let data = "";
+    for (let i = 0; i < 30; i++)
+      for (let j = 0; j < 30; j++) data += `<urn:a${i}> <urn:ex:fake> <urn:a${j}> .\n`;
+    let body =
+      "<urn:ex:fake> rdf:first <urn:ex:none> ; rdf:rest () .\n<urn:S0> sh:targetNode <urn:a0> ; sh:or ( <urn:S1> ) .\n";
+    for (let k = 1; k <= 3; k++)
+      body += `<urn:S${k}> sh:path <urn:ex:fake> ; ${k < 3 ? `sh:or ( <urn:S${k + 1}> )` : "sh:nodeKind sh:IRI"} .\n`;
+    const report = await quick(body, await parseRdf(data, "text/turtle"));
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
+  });
+
+  it("refuses a repeated constraint parameter (one constraint per combination)", async () => {
+    const report = await quick(
+      "<urn:S> sh:targetClass a2a:Intent ; sh:property [ sh:path [ sh:zeroOrOnePath a2a:none ] ; sh:qualifiedValueShape [ sh:nodeKind sh:IRI ] ; sh:qualifiedMinCount 0, 1, 2 ] .",
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/repeating/);
+  });
+
+  it("charges each walk of a repeated path", async () => {
+    let data = "";
+    for (let i = 0; i < 600; i++) data += `<urn:n${i}> <urn:ex:p> <urn:n${i + 1}> .\n`;
+    const report = await quick(
+      "<urn:S> sh:targetNode <urn:n0> ; sh:property [ sh:path [ sh:zeroOrMorePath <urn:ex:p> ] ; sh:minCount 0 ; sh:uniqueLang true ; sh:disjoint <urn:ex:q> ] .",
+      await parseRdf(data, "text/turtle"),
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
+  });
+
   it("refuses subclass reasoning in the intent graph, even against the package's own shapes", async () => {
     const data = await parseRdf(
       `@prefix a2a: <https://w3id.org/jeswr/a2a#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .

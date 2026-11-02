@@ -69,9 +69,13 @@ const protocol = await buildProtocolDocument({
   For the same reason a validation is refused before it starts when its cost is not bounded:
   SHACL outside the Core subset (no `sh:pattern`, `sh:qualifiedValueShapesDisjoint` or SPARQL),
   `rdfs:subClassOf` in the shapes or the intent graph, a looping, branching or long RDF list, a
-  property path that unfolds past 64 nodes or inverts anything but a predicate, a shape reference
-  cycle, an oversized graph, or more than 2000 shape evaluations over this intent (counted the way
-  the validator, which does not memoise, spends them).
+  property path that unfolds past 64 nodes, inverts anything but a predicate, nests a `*`/`+`
+  path inside another, or gives one path node two forms, a repeated constraint parameter (other
+  than shape references, `sh:class`, targets and labels), a shape reference cycle, an oversized
+  graph, or more than 5000 validation steps over this intent. Steps are counted the way the
+  validator, which memoises nothing, spends them: each shape evaluation, value node and path
+  step, including the path re-walks of `sh:equals`-style and qualified components and the
+  members a property shape's `sh:and` re-runs over its own path.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.
