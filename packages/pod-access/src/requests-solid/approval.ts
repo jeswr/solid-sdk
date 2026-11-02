@@ -377,9 +377,9 @@ async function validateSnapshot(
 }
 
 /**
- * Targets an approval may never grant: anything outside storage, access-control documents,
- * queries, fragments, empty path segments, percent-encodings a server may decode into another
- * name (unreserved characters, `%`, `/`, `\`, control characters), the storage root (with or
+ * Targets an approval may never grant: anything outside storage, access-control and metadata
+ * documents (`.acl`, `.acr`, `.meta`), queries, fragments, empty path segments, percent-encodings
+ * a server may decode into another name (unreserved characters, `%`, `/`, `\`, control characters), the storage root (with or
  * without its trailing slash), and the owner's settings (type indexes, preferences, records),
  * compared case-insensitively, and path segments ending in a dot or space or containing `::`
  * (Windows aliases). Ordinary encoded names (spaces, non-ASCII) stay grantable. The
@@ -399,7 +399,7 @@ function assertGrantable(target: string, storage: string): void {
   const base = decoded(root) as string;
   if (
     path === undefined ||
-    /\.(acl|acr)$/.test(path) ||
+    /\.(acl|acr|meta)$/.test(path) ||
     // Windows backends drop a trailing dot or space and expose `name::$DATA` streams.
     /[. ](?:\/|$)|::/.test(path) ||
     path === base ||

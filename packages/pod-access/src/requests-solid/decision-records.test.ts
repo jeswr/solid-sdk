@@ -260,6 +260,11 @@ describe("refused targets", () => {
       `${POD}contacts/a%C3.ttl`,
       `${POD}contacts/alice.ttl.ACL`,
       `${POD}contacts/x.ACR`,
+      `${POD}contacts/alice.ttl.meta`,
+      `${POD}contacts/alice.ttl.META`,
+      `${POD}contacts/alice.ttl.meta.`,
+      `${POD}contacts/alice.ttl.meta%20`,
+      `${POD}contacts/.meta`,
       `${POD}%C5%BFettings/prefs.ttl`,
       `${POD}contacts/alice.ttl.acl.`,
       `${POD}settings%20/prefs.ttl`,
@@ -297,6 +302,20 @@ describe("refused targets", () => {
       );
       await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
         "can't be shared",
+      );
+      expect(puts(pod)).toEqual([]);
+    }
+  });
+
+  it("refuses a Type Index registration naming an access-control or metadata document", async () => {
+    for (const instance of [`${POD}contacts/alice.ttl.meta`, `${POD}contacts/alice.ttl.Meta#it`]) {
+      const pod = buildPod();
+      pod.seed(
+        INDEX,
+        `${PREFIXES}<${INDEX}#r> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${instance}>.`,
+      );
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "metadata documents cannot be targets",
       );
       expect(puts(pod)).toEqual([]);
     }

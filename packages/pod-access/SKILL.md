@@ -60,7 +60,8 @@ under `<storage>settings/`, whether discovered or pinned; compare the decoded pa
 case-insensitively, never raw strings, and refuse any target with a query, fragment, empty segment
 or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls, invalid UTF-8),
 and segments ending in a dot or space or containing `::`;
-ordinary encoded names (spaces, non-ASCII) stay shareable. A resumed approval
+ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and metadata documents
+(`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
 (pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
 the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier

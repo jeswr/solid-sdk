@@ -293,8 +293,9 @@ append-only request is refused before any write. `role: "viewer"` narrows to req
 approval ever grants Control. The owner Type Index resolves classes
 to registered instances and bounded, recursively listed instance-container members. Unknown classes
 and off-storage targets fail before the Approving CAS, and so do targets an approval may never
-share: the storage root itself (with or without its trailing slash) and anything under
-`<storage>settings/` (Type Indexes, preferences, the access records). Targets are compared by their
+share: the storage root itself (with or without its trailing slash), anything under
+`<storage>settings/` (Type Indexes, preferences, the access records), and access-control or
+metadata documents (`.acl`, `.acr`, `.meta`). Targets are compared by their
 decoded path, case-insensitively, never as raw strings, so dot segments, case or encoding cannot
 hide a refused path. A target with a query, a fragment, an empty path segment (`//`), or a
 percent-encoding a server may decode into another name (an unreserved character, `%`, `/`, `\`, a
