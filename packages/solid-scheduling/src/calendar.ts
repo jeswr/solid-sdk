@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 5.5 (Phase S generated flip: build/parse over ./generated/)
 /**
  * The scheduling **Calendar** model — typed read/write accessors over a
  * `sched:Calendar` descriptor (the Vikunja "project" / "list" a task belongs to
@@ -22,8 +23,8 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
-import { httpIriOrUndefined } from "./iri.js";
+import { type Store, Writer } from "n3";
+import { entities } from "./generated/model.js";
 import {
   CALENDAR_CLASS,
   PREFIXES,
@@ -46,20 +47,6 @@ export interface CalendarData {
 /** The conventional subject IRI for the `sched:Calendar` at `resourceUrl`. */
 export function calendarSubject(resourceUrl: string): string {
   return `${resourceUrl}#it`;
-}
-
-/** Assign `target[key] = value` ONLY when `value` is defined. */
-function setIfDefined<T, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {
-  if (value !== undefined) target[key] = value;
-}
-
-/** Run an untrusted read, returning `undefined` on any throw. */
-function tryRead<T>(fn: () => T | undefined): T | undefined {
-  try {
-    return fn();
-  } catch {
-    return undefined;
-  }
 }
 
 /** Typed `@rdfjs/wrapper` view of a `sched:Calendar` subject. */
@@ -110,14 +97,13 @@ export class Calendar extends TermWrapper {
   }
 }
 
-/** Build the RDF `Store` for a calendar from a plain {@link CalendarData}. */
+/**
+ * Build the RDF `Store` for a calendar from a plain {@link CalendarData}, via the
+ * model GENERATED from the scheduling profile (`./generated/`): an empty description
+ * and a non-http(s) organizer are dropped by its guards.
+ */
 export function buildCalendar(resourceUrl: string, data: CalendarData): Store {
-  const store = new Store();
-  const cal = new Calendar(calendarSubject(resourceUrl), store, DataFactory).mark();
-  cal.summary = data.summary || undefined;
-  cal.description = data.description || undefined;
-  cal.organizer = httpIriOrUndefined(data.organizer);
-  return store;
+  return entities.Calendar.build(resourceUrl, data);
 }
 
 /** Serialise a `Store` to Turtle with the model's prefixes. */
@@ -136,22 +122,11 @@ export function serializeCalendar(resourceUrl: string, data: CalendarData): Prom
 
 /**
  * Read a {@link CalendarData} back from a dataset, or `undefined` unless the
- * subject is a `sched:Calendar` carrying a `sched:summary`. Untrusted-input
- * hardened (organizer is http(s)-filtered; reads are `tryRead`-guarded).
+ * generated model recognises a `sched:Calendar` with one `sched:summary`. Malformed
+ * optional fields drop; the organizer is http(s)-filtered.
  */
 export function parseCalendar(resourceUrl: string, dataset: DatasetCore): CalendarData | undefined {
-  const cal = new Calendar(calendarSubject(resourceUrl), dataset, DataFactory);
-  if (!cal.isCalendar) return undefined;
-  const summary = tryRead(() => cal.summary);
-  if (summary === undefined) return undefined;
-  const data: CalendarData = { summary };
-  setIfDefined(
-    data,
-    "description",
-    tryRead(() => cal.description),
-  );
-  setIfDefined(data, "organizer", httpIriOrUndefined(tryRead(() => cal.organizer)));
-  return data;
+  return entities.Calendar.parse(resourceUrl, dataset);
 }
 
 /**
