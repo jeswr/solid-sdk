@@ -296,6 +296,9 @@ export function createProviders(
   };
   let hint: LoginHint = {};
   let restoredContext: { selected: LoginHint; context: string } | undefined;
+  // Login before storage discovery keys its grant to the callback URL; that grant belongs to the
+  // first verified storage root, the context login would have used had the roots been known.
+  let loginContext: { selected: LoginHint; context: string; root: string } | undefined;
   let sessionRequest: Request | undefined;
   const selections = new Map<string, Promise<LoginHint>>();
   const requestSelections = new WeakMap<Request, Promise<LoginHint>>();
@@ -322,15 +325,19 @@ export function createProviders(
     }
     return selection;
   };
-  const contextFor = async (request: Request, selected: LoginHint) =>
-    restoredContext !== undefined &&
-    JSON.stringify(selected) === JSON.stringify(restoredContext.selected)
-      ? restoredContext.context
-      : JSON.stringify([
-          await boundary.contextKey(request),
-          selected.webId ?? null,
-          selected.issuer ?? null,
-        ]);
+  const contextFor = async (request: Request, selected: LoginHint) => {
+    const selection = JSON.stringify(selected);
+    if (restoredContext !== undefined && selection === JSON.stringify(restoredContext.selected))
+      return restoredContext.context;
+    const key = await boundary.contextKey(request);
+    if (
+      loginContext !== undefined &&
+      selection === JSON.stringify(loginContext.selected) &&
+      key === loginContext.root
+    )
+      return loginContext.context;
+    return JSON.stringify([key, selected.webId ?? null, selected.issuer ?? null]);
+  };
   const sessionContext: ContextKey = async (request) =>
     await contextFor(request, await selectionFor(request));
   const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
@@ -614,6 +621,7 @@ export function createProviders(
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
       restoredContext = { selected, context: account.context };
+      loginContext = undefined;
       hint = selected;
       selections.clear();
       const generation = await fence.generation();
@@ -649,6 +657,7 @@ export function createProviders(
       }
       hint = {};
       restoredContext = undefined;
+      loginContext = undefined;
       sessionRequest = undefined;
       selections.clear();
       authorizationServers.clear();
@@ -656,6 +665,7 @@ export function createProviders(
     },
     login: async (value: LoginHint, signal: AbortSignal) => {
       restoredContext = undefined;
+      loginContext = undefined;
       hint = value;
       selections.clear();
       // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
@@ -665,10 +675,17 @@ export function createProviders(
       });
       request.signal.throwIfAborted();
       const selected = await selectionFor(request);
+      const context = await contextFor(request, selected);
       await solidProvider.upgrade(request);
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Login did not establish an identity");
       await hooks.session(request, claims, "solid-oidc", selected);
+      // hooks.session loaded the verified roots; only the first inherits the login grant.
+      const root = boundary.roots()[0];
+      if (root !== undefined)
+        loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
+      // Later requests keep the account login selected instead of asking for a WebID again.
+      hint = selected;
       sessionRequest = request;
     },
   };

@@ -139,7 +139,8 @@ test.each([
     expect((await auth.identity())?.issuer).toBe(op.issuer);
   }
   expect(options.ui.getWebId).not.toHaveBeenCalled();
-  expect(op.stats.tokens).toBe(2);
+  // The login grant covers the first verified root; only a distinct static root needs another.
+  expect(op.stats.tokens).toBe(boundaryKind === "automatic" ? 1 : 2);
   expect(op.stats.accepted).toBe(4);
 });
 
@@ -508,4 +509,35 @@ describe("option validation", () => {
     vi.stubGlobal("location", { origin: "https://app.example" });
     expect(() => createPodAuth(f.options)).not.toThrow();
   });
+});
+
+test("automatic boundary: one interactive authorization covers login and the first private reads, before and after restore", async () => {
+  const op = createMockOp({ requireInteraction: true, refreshTokens: true });
+  vi.stubGlobal("fetch", op.fetch);
+  const getCode = vi.fn(op.getCode);
+  const options: PodAuthOptions = {
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    storage: { sessions: createMemoryStore(), caches: createMemoryStore() },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode },
+  };
+  for (const hint of [{ webId: op.webId! }, { issuer: op.issuer }]) {
+    const auth = createPodAuth(options);
+    await auth.logout();
+    getCode.mockClear();
+    const before = op.stats.authorizations;
+    expect((await auth.login(hint)).storages).toEqual([op.root]);
+    expect(getCode).toHaveBeenCalledTimes(1);
+    // The grant made before storage discovery must cover the discovered storage root.
+    expect(await (await auth.fetch(op.root + "private?x=1")).text()).toBe("protected Solid");
+    expect(await (await auth.fetch(op.root + "private?x=2")).text()).toBe("protected Solid");
+    expect(getCode).toHaveBeenCalledTimes(1);
+    expect(op.stats.authorizations - before).toBe(1);
+
+    const reloaded = createPodAuth(options);
+    expect((await reloaded.restore())?.webId).toBe(op.webId);
+    expect(await (await reloaded.fetch(op.root + "private?x=3")).text()).toBe("protected Solid");
+    expect(getCode).toHaveBeenCalledTimes(1);
+    expect(op.stats.authorizations - before).toBe(1);
+  }
 });
