@@ -78,6 +78,7 @@ export interface PodPort {
 // @public
 export interface PodReadOptions {
     accept?: string;
+    redirect?: "follow" | "error";
 }
 
 // @public
@@ -172,14 +173,11 @@ export type SharedContextResult = {
     contentType: string;
     etag?: string;
     text: string;
+    redactedCardNumbers: number;
 } | {
     status: "not_found";
     url: string;
     setup: string;
-} | {
-    status: "refused";
-    url: string;
-    reason: string;
 };
 
 // @public

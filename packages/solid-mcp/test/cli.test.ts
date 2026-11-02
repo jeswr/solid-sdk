@@ -164,6 +164,7 @@ describe("stdio executable", () => {
         url: `${POD}agent/context/shared-context.md`,
         contentType: "text/plain",
         text: "hello fixture",
+        redactedCardNumbers: 0,
       });
       // New registrations require a successful stdio exercise, not just a listing update.
       expect([...calledTools].sort()).toEqual(expectedNames);

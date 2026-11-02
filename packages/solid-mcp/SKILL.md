@@ -19,7 +19,8 @@ Shared-context tools (decisions/0004) live in context-tools.ts and register besi
 tools. context_read takes no arguments and reads only the fixed SHARED_CONTEXT_PATH; keep
 model input away from the URL, and keep writes to owner-approved proposals. It reads below
 the server's configured root (a sub-container server looks under that sub-container), refuses
-redirects/aliases, and refuses documents containing Luhn-valid card numbers.
+redirects/aliases (PodReadOptions.redirect "error"; no second request), and redacts
+Luhn-valid card numbers before returning text.
 
 The server and fetch adapter default to read-only independently. Scope-check tool
 and resource URLs even with injected PodPorts. The fetch adapter permits only the

@@ -31,17 +31,21 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
   the owner must go through the mandate path described below.
 - **No category data in shared context.** Addresses, health details, contacts and card data
   belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
-  refuses a document that contains what looks like a card number: a Luhn-valid 12–19 digit
-  window with a card-network prefix, found inside digit groups split by whitespace, `.`, `,`, `_`, `-`
-  or `/`. It returns a `refused` result that does not echo the digits. A Luhn-valid account
-  number with a card prefix also blocks the document; the owner moves it out, by design.
+  redacts anything that looks like a card number before it reaches a model: every Luhn-valid
+  12–19 digit window with a card-network prefix, at any offset in a run of digits split by any
+  amount of whitespace, `.`, `,`, `_`, `-` or `/`. Up to 19 digits from the match start are
+  replaced with `[card number removed]`, and the result reports how many were redacted. A
+  Luhn-valid account number with a card prefix is redacted too; that costs one number, not
+  the whole document.
 - The text is owner-authored data. Slice 2's setup helper and discovery must also check that
   nobody except the owner can write or append to it (`WAC-Allow`, or the ACL itself), so the
   document cannot carry someone else's injected instructions.
 - Slice 1 reads below the MCP server's configured root. A server scoped to a sub-container
   therefore looks under that sub-container until Type Index discovery (slice 2) lands.
-- A redirect or alias from the fixed path is refused, so the returned text and ETag always
-  describe that one document (slice 3's `If-Match` depends on it).
+- A redirect or alias from the fixed path is refused at the transport (`redirect: "error"`,
+  no request to the target) or, for portable ports, from the reported URL before any re-read,
+  so the returned text and ETag always describe that one document (slice 3's `If-Match`
+  depends on it).
 - **Tools** in `@jeswr/solid-mcp` (registered from a separate `context-tools.ts`, so the
   conversation-archive work in the same package stays free of conflicts):
   - `context_read` (read-only, slice 1): returns the document text, its ETag and its URL. A

@@ -3,9 +3,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import {
-  containsCardNumber,
+  CARD_REDACTION,
   createContextToolRegistry,
+  findCardNumbers,
   readSharedContext,
+  redactCardNumbers,
   SHARED_CONTEXT_PATH,
   sharedContextUrl,
 } from "../src/context-tools.js";
@@ -65,8 +67,9 @@ describe("shared context", () => {
       contentType: "text/markdown",
       etag: '"v1"',
       text: MARKDOWN,
+      redactedCardNumbers: 0,
     });
-    expect(pod.read).toHaveBeenCalledWith(CONTEXT, undefined);
+    expect(pod.read).toHaveBeenCalledExactlyOnceWith(CONTEXT, { redirect: "error" });
   });
 
   it("accepts plain text and omits a missing ETag", async () => {
@@ -79,6 +82,7 @@ describe("shared context", () => {
       url: CONTEXT,
       contentType: "text/plain",
       text: "plain",
+      redactedCardNumbers: 0,
     });
   });
 
@@ -134,25 +138,55 @@ describe("shared context", () => {
     await expect(readSharedContext(unrelated)).rejects.toThrow("ACL lookup");
   });
 
-  it("refuses a context that redirects or aliases to another resource", async () => {
-    const aliased = portablePod(async (url) => ({
-      body: new TextEncoder().encode("secret"),
-      contentType: "text/markdown",
-      url: url === CONTEXT ? `${ROOT}secret/health.md` : url,
+  it("refuses an alias, off-pod URL or container without a second read", async () => {
+    for (const reported of [`${ROOT}secret/health.md`, "https://evil.example/context.md"]) {
+      const aliased = portablePod(async () => ({
+        body: new TextEncoder().encode("secret"),
+        contentType: "text/markdown",
+        url: reported,
+      }));
+      await expect(readSharedContext(aliased)).rejects.toThrow("redirect refused");
+      expect(aliased.read).toHaveBeenCalledOnce();
+    }
+    const container = portablePod(async () => ({
+      body: new TextEncoder().encode("listing"),
+      contentType: "text/plain",
+      isContainer: true,
     }));
-    await expect(readSharedContext(aliased)).rejects.toThrow("redirect refused");
-    const offPod = portablePod(async () => ({
-      body: new TextEncoder().encode("secret"),
-      contentType: "text/markdown",
-      url: "https://evil.example/context.md",
-    }));
-    await expect(readSharedContext(offPod)).rejects.toThrow("pod-scope");
+    await expect(readSharedContext(container)).rejects.toThrow("redirect refused");
     const same = portablePod(async () => ({
       body: new TextEncoder().encode(MARKDOWN),
       contentType: "text/markdown",
       url: CONTEXT,
     }));
     expect(await readSharedContext(same)).toMatchObject({ status: "ok", text: MARKDOWN });
+  });
+
+  it("refuses an over-limit document", async () => {
+    const pod = portablePod(async () => ({
+      body: new Uint8Array(1024 * 1024 + 1),
+      contentType: "text/markdown",
+    }));
+    await expect(readSharedContext(pod)).rejects.toThrow("bounded read limit");
+  });
+
+  it("refuses a fetch-adapter redirect at the transport, without requesting its target", async () => {
+    for (const location of [`${ROOT}secret/health.md`, "https://evil.example/context.md"]) {
+      const fake = makeFakePod({
+        [CONTEXT]: { contentType: "text/markdown", body: "", redirectTo: location },
+        [`${ROOT}secret/health.md`]: { contentType: "text/markdown", body: "secret" },
+      });
+      const requested: string[] = [];
+      const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        requested.push(input instanceof Request ? input.url : input.toString());
+        return fake.fetch(input, init);
+      }) as typeof globalThis.fetch;
+      const client = await connect({ podRoot: ROOT, fetch });
+      const result = await client.callTool({ name: "context_read", arguments: {} });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).not.toContain("secret");
+      expect(requested).toEqual([CONTEXT]);
+    }
   });
 
   it("refuses invalid UTF-8", async () => {
@@ -163,27 +197,35 @@ describe("shared context", () => {
     await expect(readSharedContext(pod)).rejects.toThrow();
   });
 
-  it("refuses a context containing a payment card number, without echoing it", async () => {
+  it("redacts payment card numbers without echoing them", async () => {
     for (const card of ["4111111111111111", "4111 1111 1111 1111", "5500-0000-0000-0004"]) {
       const pod = portablePod(async () => ({
-        body: new TextEncoder().encode(`My card is ${card}.`),
+        body: new TextEncoder().encode(`My card is ${card}. Reply in English.`),
         contentType: "text/markdown",
       }));
       const result = await readSharedContext(pod);
-      expect(result).toMatchObject({ status: "refused", url: CONTEXT });
-      expect(JSON.stringify(result)).not.toContain(card.slice(-4));
+      expect(result).toEqual({
+        status: "ok",
+        url: CONTEXT,
+        contentType: "text/markdown",
+        text: `My card is ${CARD_REDACTION}. Reply in English.`,
+        redactedCardNumbers: 1,
+      });
     }
   });
 
-  it("detects only Luhn-valid 12-19 digit runs", () => {
-    expect(containsCardNumber("4111111111111111")).toBe(true);
+  it("finds card numbers in every documented format and at every offset", () => {
+    const found = (text: string) => findCardNumbers(text).length > 0;
     for (const formatted of [
+      "4111111111111111",
       "4111 1111 1111 1111 12/27",
       "4111111111111111 2024",
       "ref 99 4111111111111111",
       "4111.1111.1111.1111",
       "4111\u00a01111\u00a01111\u00a01111",
       "4111  1111  1111  1111",
+      "4111   -   1111 / 1111 , 1111",
+      "4111\n1111\t1111\r\n1111",
       "378282246310005",
       "41111111111111112024",
       "acct 004111111111111111",
@@ -192,18 +234,38 @@ describe("shared context", () => {
       "3530111333300000",
       "6011111111111117",
       "30569309025904",
+      `${"0".repeat(70)}4111111111111111`,
+      `${"0".repeat(70)} 4111111111111111`,
     ])
-      expect(containsCardNumber(formatted)).toBe(true);
-    // Luhn-valid but without a card-network prefix, e.g. an order number.
-    expect(containsCardNumber("0000000000000000")).toBe(false);
-    expect(containsCardNumber("1111 1111 1111 1117")).toBe(false);
-    expect(containsCardNumber("4111111111111112")).toBe(false);
-    expect(containsCardNumber("phone 07700 900123, born 1990")).toBe(false);
-    expect(containsCardNumber("12345678901")).toBe(false);
-    expect(containsCardNumber("")).toBe(false);
-    // Long runs are checked at group boundaries only.
-    expect(containsCardNumber(`${"0".repeat(70)} 4111111111111111`)).toBe(true);
-    expect(containsCardNumber(`${"0".repeat(70)}4111111111111111`)).toBe(false);
+      expect(found(formatted), formatted).toBe(true);
+    for (const plain of [
+      "0000000000000000",
+      "1111 1111 1111 1117",
+      "4111111111111112",
+      "phone 07700 900123, born 1990",
+      "12345678901",
+      "",
+      "4111 1111 card 1111 1111",
+    ])
+      expect(found(plain), plain).toBe(false);
+  });
+
+  it("redacts every digit of a match and leaves surrounding text", () => {
+    expect(redactCardNumbers("a 4111 1111 1111 1111 b 4111111111111111 c")).toEqual({
+      text: `a ${CARD_REDACTION} b ${CARD_REDACTION} c`,
+      count: 2,
+    });
+    // A 19-digit card whose 12-digit prefix also passes Luhn is still fully covered.
+    const { text } = redactCardNumbers("6011000990139424123");
+    expect(text).not.toMatch(/\d/);
+    expect(redactCardNumbers("no digits")).toEqual({ text: "no digits", count: 0 });
+  });
+
+  it("scans a large digit document in linear time", () => {
+    const big = "1234 ".repeat(200_000);
+    const started = Date.now();
+    findCardNumbers(big);
+    expect(Date.now() - started).toBeLessThan(4000);
   });
 
   it("registers one read-only tool that takes no arguments", async () => {
@@ -235,6 +297,7 @@ describe("shared context", () => {
       contentType: "text/markdown",
       etag: '"e"',
       text: MARKDOWN,
+      redactedCardNumbers: 0,
     });
     const absent = await connect({ podRoot: ROOT, fetch: makeFakePod({}).fetch });
     expect(parse(await absent.callTool({ name: "context_read", arguments: {} }))).toMatchObject({

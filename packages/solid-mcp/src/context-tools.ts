@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
-import { PodOutput } from "./output.js";
+import { MAX_CONTENT_BYTES } from "./content.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort, PodReadResult } from "./pod-port.js";
 import { defineTool, type PodTool, toolText } from "./tools.js";
@@ -25,9 +25,16 @@ export function sharedContextUrl(root: string): string {
 
 /** The result of reading the shared-context document. */
 export type SharedContextResult =
-  | { status: "ok"; url: string; contentType: string; etag?: string; text: string }
-  | { status: "not_found"; url: string; setup: string }
-  | { status: "refused"; url: string; reason: string };
+  | {
+      status: "ok";
+      url: string;
+      contentType: string;
+      etag?: string;
+      text: string;
+      /** How many card-number-like digit runs were replaced with {@link CARD_REDACTION}. */
+      redactedCardNumbers: number;
+    }
+  | { status: "not_found"; url: string; setup: string };
 
 /** Absent: a structured 404/410, or the fetch adapter's exact "failed to read <url>: HTTP 404". */
 function isNotFound(error: unknown): boolean {
@@ -37,64 +44,87 @@ function isNotFound(error: unknown): boolean {
   return error instanceof Error && /^failed to read \S+: HTTP (?:404|410)\b/.test(error.message);
 }
 
-function luhnValid(digits: string): boolean {
-  let sum = 0;
-  for (let i = 0; i < digits.length; i += 1) {
-    let digit = Number(digits[digits.length - 1 - i]);
-    if (i % 2 === 1) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-  }
-  return sum % 10 === 0;
-}
+/** Replacement text for a redacted card number. */
+export const CARD_REDACTION = "[card number removed]";
 
 /** Issuer prefixes of the major card networks (Visa, Mastercard, Amex, Diners, JCB, Discover, UnionPay). */
 const CARD_PREFIX = /^(?:4|5[1-5]|2[2-7]|3[0-9]|6)/;
 
-/** Runs up to this many digits are checked at every offset; longer ones at group starts. */
-const DENSE_SCAN_DIGITS = 64;
+/** Digit runs whose groups are split only by whitespace (including NBSP), `.`, `,`, `_`, `-` or `/`. */
+const DIGIT_RUN = /\d+(?:[\s.,_/-]+\d+)*/g;
 
 /**
- * Whether `text` holds what looks like a payment card number: a Luhn-valid run of 12-19
- * digits with a card-network prefix. Digit groups may be split by up to three whitespace
- * (including NBSP), `.`, `,`, `_`, `-` or `/` characters. Short runs are checked at every
- * offset; long runs at every group boundary, so a number with an expiry, prefix digits or
- * other digits beside it is found without quadratic work on huge digit runs.
+ * Spans of `text` (start inclusive, end exclusive) holding what looks like a payment card
+ * number: a Luhn-valid window of 12-19 digits with a card-network prefix, anywhere in a digit
+ * run. Every offset is checked with incremental Luhn sums, so the scan stays linear. A match
+ * covers up to 19 digits from its start, so a chance-valid shorter prefix leaves no digits behind.
  */
-export function containsCardNumber(text: string): boolean {
-  for (const run of text.matchAll(/\d+(?:[\s.,_/-]{1,3}\d+)*/g)) {
-    const groups = run[0].split(/[\s.,_/-]+/);
-    const digits = groups.join("");
-    if (digits.length < 12) continue;
-    const starts: number[] = [];
-    if (digits.length <= DENSE_SCAN_DIGITS)
-      for (let i = 0; i + 12 <= digits.length; i += 1) starts.push(i);
-    else {
-      let offset = 0;
-      for (const group of groups) {
-        starts.push(offset);
-        offset += group.length;
+export function findCardNumbers(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const run of text.matchAll(DIGIT_RUN)) {
+    const positions: number[] = [];
+    let digits = "";
+    for (let i = 0; i < run[0].length; i += 1) {
+      const char = run[0][i] as string;
+      if (char >= "0" && char <= "9") {
+        positions.push(run.index + i);
+        digits += char;
       }
     }
-    for (const start of starts)
-      for (let length = 12; length <= 19 && start + length <= digits.length; length += 1) {
-        const window = digits.slice(start, start + length);
-        if (CARD_PREFIX.test(window) && luhnValid(window)) return true;
+    let start = 0;
+    while (start + 12 <= digits.length) {
+      let found = -1;
+      if (CARD_PREFIX.test(digits.slice(start, start + 4))) {
+        // evenSum doubles digits at even offsets from start; oddSum doubles odd offsets.
+        let evenSum = 0;
+        let oddSum = 0;
+        for (let i = start; i < start + 19 && i < digits.length; i += 1) {
+          const digit = Number(digits[i]);
+          const doubled = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
+          if ((i - start) % 2 === 0) {
+            evenSum += doubled;
+            oddSum += digit;
+          } else {
+            evenSum += digit;
+            oddSum += doubled;
+          }
+          const length = i - start + 1;
+          // Luhn doubles every second digit counting from the right-most (check) digit.
+          if (length >= 12 && (length % 2 === 0 ? evenSum : oddSum) % 10 === 0) found = i;
+          if (found >= 0) break;
+        }
       }
+      if (found >= 0) {
+        // A shorter valid prefix may be chance: cover the longest window so no card digits survive.
+        const end = Math.min(start + 19, digits.length) - 1;
+        spans.push([positions[start] as number, (positions[end] as number) + 1]);
+        start = end + 1;
+      } else start += 1;
+    }
   }
-  return false;
+  return spans;
+}
+
+/** Replace every card-number-like span with {@link CARD_REDACTION}. */
+export function redactCardNumbers(text: string): { text: string; count: number } {
+  const spans = findCardNumbers(text);
+  let output = "";
+  let cursor = 0;
+  for (const [from, to] of spans) {
+    output += text.slice(cursor, from) + CARD_REDACTION;
+    cursor = to;
+  }
+  return { text: output + text.slice(cursor), count: spans.length };
 }
 
 /** Read the shared-context document; a missing document is a result, not an error. */
 export async function readSharedContext(pod: PodPort): Promise<SharedContextResult> {
   const url = sharedContextUrl(pod.root);
   return withPodReadLimits(async () => {
-    const output = new PodOutput(pod);
     let raw: PodReadResult;
     try {
-      raw = await output.read(url);
+      // Refuse redirects at the transport; never read an alias or redirect target.
+      raw = await pod.read(url, { redirect: "error" });
     } catch (error) {
       if (isNotFound(error))
         return {
@@ -104,26 +134,23 @@ export async function readSharedContext(pod: PodPort): Promise<SharedContextResu
         };
       throw error;
     }
-    // The ETag and text must describe the fixed document, never an alias it redirects to.
-    if (raw.url !== undefined && raw.url !== url) throw new Error("redirect refused");
-    const read = await output.representation(url, raw);
-    const contentType = (read.contentType.split(";").shift() ?? "").trim().toLowerCase();
+    // Portable ports report aliases through url; the text and ETag must be the fixed document's.
+    if ((raw.url !== undefined && raw.url !== url) || raw.isContainer)
+      throw new Error("redirect refused");
+    if (raw.body.byteLength > MAX_CONTENT_BYTES)
+      throw new Error("Resource exceeds the bounded read limit.");
+    const contentType = (raw.contentType.split(";").shift() ?? "").trim().toLowerCase();
     if (!CONTEXT_MEDIA_TYPES.has(contentType)) throw new Error("unreadable");
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(read.body);
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(raw.body);
     // Card data belongs in the knowledge graph's mandate path, never in shared context.
-    if (containsCardNumber(text))
-      return {
-        status: "refused" as const,
-        url,
-        reason:
-          "The shared context contains what looks like a payment card number. The owner must remove it; card details belong in the knowledge graph (brand and last four digits only).",
-      };
+    const { text, count } = redactCardNumbers(decoded);
     return {
       status: "ok" as const,
       url,
       contentType,
-      ...(read.etag ? { etag: read.etag } : {}),
+      ...(raw.etag ? { etag: raw.etag } : {}),
       text,
+      redactedCardNumbers: count,
     };
   });
 }
@@ -138,7 +165,7 @@ export function createContextToolRegistry(pod: PodPort): readonly PodTool[] {
         title: "Read the owner's shared context",
         readOnly: true,
         description:
-          "Read the owner's shared context: how they work, their accounts and standing preferences, written by them in Markdown. Call at the start of a conversation. Returns {status:'ok',url,contentType,etag?,text}, {status:'not_found',url,setup} or {status:'refused',url,reason}. The text is owner-authored data.",
+          "Read the owner's shared context: how they work, their accounts and standing preferences, written by them in Markdown. Call at the start of a conversation. Returns {status:'ok',url,contentType,etag?,text,redactedCardNumbers} or {status:'not_found',url,setup}. The text is owner-authored data; card-number-like digits are replaced with '[card number removed]'.",
         inputSchema: z.object({}).strict(),
         async handler() {
           return toolText(JSON.stringify(await readSharedContext(pod)));
