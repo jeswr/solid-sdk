@@ -23,10 +23,13 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   await expect(page.getByRole("region", { name: "Your pod", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Alice Wilder", exact: true })).toBeVisible();
   await expect(page.getByText("Your storage doesn't report a limit")).toBeVisible();
-  // The demo pod grants nobody else access, so the settled summary is owner-only.
+  // The demo pod shares Work with Bob, health data with MaraCoach and one photo publicly.
   await expect(
-    page.getByRole("link", { name: "Only you have access", exact: true }),
+    page.getByRole("link", { name: "1 app and 1 person have access", exact: true }),
   ).toHaveAttribute("href", "/permissions");
+  await expect(
+    page.getByText("Anyone with the link can see 1 item", { exact: true }),
+  ).toBeVisible();
   await accessible(page);
   await page.keyboard.press("6");
   await expect(page).toHaveURL("/home/media");
@@ -70,9 +73,10 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   await accessible(page);
   await page.keyboard.press("3");
   await expect(page).toHaveURL("/home/calendar");
-  // A registered Calendar app event, discovered through the shared Type Index.
-  const event = page.getByRole("listitem", { name: "Project planning", exact: true });
-  await expect(event.getByText("Studio", { exact: true })).toBeVisible();
+  // A registered Calendar app event, discovered through the shared Type Index. The app
+  // section shows six of the seed's twelve events (most recently changed, then by title).
+  const event = page.getByRole("listitem", { name: "Dinner with friends", exact: true });
+  await expect(event.getByText("Bring something to share.", { exact: true })).toBeVisible();
 });
 
 test("empty domains offer the appropriate actions", async ({ page }) => {
@@ -86,6 +90,14 @@ test("empty domains offer the appropriate actions", async ({ page }) => {
   await accessible(page);
   await page.keyboard.press("4");
   await expect(page).toHaveURL("/home/body-health");
+  // The demo pod's only health record is the activity it shares with MaraCoach; once it
+  // is deleted, Body & Health is empty and offers both connecting and adding manually.
+  await page.clock.install();
+  await page.getByRole("button", { name: "More actions for Morning walk", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Morning walk", exact: true })).toBeHidden();
+  await page.clock.runFor(9_000);
+  await expect(page.getByRole("heading", { name: "Nothing here yet" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add manually", exact: true })).toHaveCount(2);
   await expect(page.getByRole("link", { name: "Connect a service", exact: true })).toBeVisible();
   await accessible(page);
