@@ -12,6 +12,7 @@ import {
   discardDraft,
   documentOf,
   importMbox,
+  isAppDraft,
   loadFolders,
   loadThread,
   loadThreads,
@@ -22,6 +23,7 @@ import {
   mailRoot,
   persistImportedMail,
   readDraft,
+  type SavedDraft,
   setLabel,
   setRead,
   setStarred,
@@ -234,7 +236,9 @@ export class MailClient {
         ...(message.encoding === undefined ? {} : { originalUrl: message.encoding }),
         read: message.isRead,
         starred: [...message.folderIris].some((f) => folderKey(f) === "starred"),
-        draft: [...message.folderIris].some((f) => folderKey(f) === "drafts"),
+        draft:
+          isAppDraft(this.rootOf(message.value), message.value) &&
+          [...message.folderIris].some((f) => folderKey(f) === "drafts"),
         labels: [...message.folderIris],
         attachments: await mailAttachments(this.store, message.value),
       });
@@ -282,25 +286,35 @@ export class MailClient {
       throw new TypeError("Labels must belong to the same account");
     await setLabel(this.store, iri, folderIri, on);
   }
-  /** Saves a new draft (no iri) or rewrites an existing one; returns the draft message IRI. */
-  async saveDraft(account: string, input: DraftInput, iri?: string): Promise<string> {
+  /**
+   * Saves a new draft (no `draft`) or rewrites the version the caller read (its ETag); returns
+   * the draft and its new validator. A newer version saved elsewhere fails with `conflict`.
+   */
+  async saveDraft(account: string, input: DraftInput, draft?: SavedDraft): Promise<SavedDraft> {
     const root = this.root(account);
-    if (iri === undefined)
+    if (draft === undefined)
       return createDraft(this.store, root, this.webId, input, crypto.randomUUID(), new Date());
-    if (this.rootOf(iri) !== root) throw new TypeError("Drafts must belong to the same account");
-    await updateDraft(this.store, root, iri, input, new Date());
-    return iri;
+    if (this.rootOf(draft.iri) !== root)
+      throw new TypeError("Drafts must belong to the same account");
+    return updateDraft(this.store, root, draft, input, new Date());
   }
-  draft(iri: string): Promise<Draft> {
+  async draft(iri: string): Promise<Draft> {
     return readDraft(this.store, this.rootOf(iri), iri);
   }
-  async discardDraft(iri: string): Promise<void> {
-    await discardDraft(this.store, this.rootOf(iri), iri, async (url) => {
-      const response = await this.binaryFetch(url, { method: "DELETE" });
+  async discardDraft(draft: SavedDraft): Promise<void> {
+    await discardDraft(this.store, this.rootOf(draft.iri), draft, async (url, etag) => {
+      const response = await this.binaryFetch(url, {
+        method: "DELETE",
+        ...(etag ? { headers: { "if-match": etag } } : {}),
+      });
       // Already gone is the goal state.
       if (!response.ok && response.status !== 404)
         throw new MailError(
-          response.status === 401 || response.status === 403 ? "forbidden" : "http",
+          response.status === 401 || response.status === 403
+            ? "forbidden"
+            : response.status === 412
+              ? "conflict"
+              : "http",
           response.status,
         );
     });

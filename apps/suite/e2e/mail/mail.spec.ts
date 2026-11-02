@@ -227,6 +227,7 @@ test("composes, saves, edits and discards a draft in the pod", async ({ page }, 
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
     "Can you water on Thursday?",
   );
+  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Discard", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);

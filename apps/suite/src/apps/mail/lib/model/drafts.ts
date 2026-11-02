@@ -16,6 +16,12 @@ export interface Draft extends DraftInput {
   iri: string;
   thread: string;
   updated: Date;
+  /** The validator of the version read; pass it back so a save never overwrites newer edits. */
+  etag: string | null;
+}
+export interface SavedDraft {
+  iri: string;
+  etag: string | null;
 }
 const MAX_SUBJECT = 998;
 const MAX_TEXT = 1024 * 1024;
@@ -41,11 +47,41 @@ export function draftFields(input: DraftInput): DraftInput {
   if (text.length > MAX_TEXT) throw new TypeError("Message is too long");
   return { to: list(input.to), cc: list(input.cc), subject, text };
 }
+const DRAFT_ID = "draft-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+/** True only for drafts this app created: a UUID draft document under the account's messages. */
+export function isAppDraft(root: string, iri: string, kind: "messages" | "threads" = "messages") {
+  return (
+    iri.startsWith(`${root}${kind}/`) &&
+    new RegExp(`^${DRAFT_ID}\\.ttl#it$`).test(iri.slice(`${root}${kind}/`.length))
+  );
+}
 function draftsFolder(root: string): string {
   return `${systemFolderDocument(root, "drafts")}#it`;
 }
 function address(iri: string): string {
   return decodeURIComponent(iri.replace(/^mailto:/i, ""));
+}
+
+/** Files a message under Drafts; re-reads and retries when another tab changed the folder. */
+async function fileUnderDrafts(store: MailStore, root: string, iri: string, on: boolean) {
+  const folder = draftsFolder(root);
+  for (let attempt = 0; ; attempt++) {
+    const folderDoc = await store.load(documentOf(folder), true);
+    let drafts = folderDoc.mailbox.findFolder(folder);
+    if (on === Boolean(drafts?.messageIris.has(iri))) return;
+    if (!drafts) {
+      drafts = folderDoc.mailbox.createFolder(folder);
+      drafts.title = "Drafts";
+    }
+    if (on) drafts.addMessage(iri);
+    else drafts.removeMessage(iri);
+    try {
+      await store.save(folderDoc);
+      return;
+    } catch (error) {
+      if (!(error instanceof MailError && error.code === "conflict") || attempt === 2) throw error;
+    }
+  }
 }
 
 /**
@@ -59,13 +95,13 @@ export async function createDraft(
   input: DraftInput,
   id: string,
   at: Date,
-): Promise<string> {
+): Promise<SavedDraft> {
   const fields = draftFields(input);
   const url = mailDocument(root, "messages", `draft-${id}`);
   const threadUrl = mailDocument(root, "threads", `draft-${id}`);
   const iri = `${url}#it`;
   const thread = `${threadUrl}#it`;
-  const folder = draftsFolder(root);
+  if (!isAppDraft(root, iri)) throw new TypeError("Invalid draft identifier");
   const loaded = await store.load(url, true);
   if (loaded.exists) throw new MailError("conflict", 412);
   const message = loaded.mailbox.createMessage(iri);
@@ -73,7 +109,7 @@ export async function createDraft(
   message.sender = sender;
   message.partOfThread = thread;
   message.dateRead = at;
-  message.folderIris.add(folder);
+  message.folderIris.add(draftsFolder(root));
   write(message, fields, at);
   await store.save(loaded);
   const threadDoc = await store.load(threadUrl, true);
@@ -82,12 +118,8 @@ export async function createDraft(
   created.title = fields.subject || "(No subject)";
   created.addMessage(iri);
   await store.save(threadDoc);
-  const folderDoc = await store.load(documentOf(folder), true);
-  const drafts = folderDoc.mailbox.findFolder(folder) ?? folderDoc.mailbox.createFolder(folder);
-  if (drafts.title === undefined) drafts.title = "Drafts";
-  drafts.addMessage(iri);
-  await store.save(folderDoc);
-  return iri;
+  await fileUnderDrafts(store, root, iri, true);
+  return { iri, etag: loaded.etag };
 }
 function write(message: Message, fields: DraftInput, at: Date): void {
   message.subjectLine = fields.subject || undefined;
@@ -100,17 +132,18 @@ function write(message: Message, fields: DraftInput, at: Date): void {
     message.cc.add(iri);
   message.dateSent = at;
 }
-async function loadDraft(store: MailStore, root: string, iri: string) {
-  if (documentOf(iri) === iri || !iri.startsWith(`${root}messages/draft-`))
-    throw new MailError("not-found", 404);
+async function loadDraft(store: MailStore, root: string, iri: string, etag?: string | null) {
+  if (!isAppDraft(root, iri)) throw new MailError("not-found", 404);
   const loaded = await store.load(documentOf(iri));
   const message = loaded.mailbox.findMessage(iri);
   // Only messages still filed under Drafts are editable; a sent or imported mail never is.
   if (!message?.folderIris.has(draftsFolder(root))) throw new MailError("not-found", 404);
+  // The caller's validator covers the version the person was editing, not just this read.
+  if (etag !== undefined && etag !== loaded.etag) throw new MailError("conflict", 412);
   return { loaded, message };
 }
 export async function readDraft(store: MailStore, root: string, iri: string): Promise<Draft> {
-  const { message } = await loadDraft(store, root, iri);
+  const { loaded, message } = await loadDraft(store, root, iri);
   return {
     iri,
     thread: message.partOfThread ?? iri,
@@ -119,46 +152,45 @@ export async function readDraft(store: MailStore, root: string, iri: string): Pr
     subject: message.subjectLine ?? "",
     text: message.body ?? "",
     updated: message.dateSent ?? new Date(0),
+    etag: loaded.etag,
   };
 }
-/** Rewrites the draft's fields under its ETag, then retitles its thread. */
+/** Rewrites the draft's fields under the caller's ETag, refiles it, then retitles its thread. */
 export async function updateDraft(
   store: MailStore,
   root: string,
-  iri: string,
+  draft: SavedDraft,
   input: DraftInput,
   at: Date,
-): Promise<void> {
+): Promise<SavedDraft> {
   const fields = draftFields(input);
-  const { loaded, message } = await loadDraft(store, root, iri);
+  const { loaded, message } = await loadDraft(store, root, draft.iri, draft.etag);
   write(message, fields, at);
   await store.save(loaded);
+  // Repairs a Drafts entry lost to an earlier partial create.
+  await fileUnderDrafts(store, root, draft.iri, true);
   const thread = message.partOfThread;
-  if (thread)
+  if (thread && isAppDraft(root, thread, "threads"))
     await store.mutate(documentOf(thread), (mailbox) => {
       const found = mailbox.findThread(thread);
       if (found) found.title = fields.subject || "(No subject)";
     });
+  return { iri: draft.iri, etag: loaded.etag };
 }
 /**
  * Discards a draft: leaves Drafts first, so a failed delete leaves a harmless orphan rather than
- * a folder entry pointing at a missing document; then deletes the message and thread documents.
+ * a folder entry pointing at a missing document; then deletes the message (under the caller's
+ * ETag) and the draft's own thread document.
  */
 export async function discardDraft(
   store: MailStore,
   root: string,
-  iri: string,
-  remove: (url: string) => Promise<void>,
+  draft: SavedDraft,
+  remove: (url: string, etag: string | null) => Promise<void>,
 ): Promise<void> {
-  const { message } = await loadDraft(store, root, iri);
-  const folder = draftsFolder(root);
-  const folderDoc = await store.load(documentOf(folder), true);
-  const drafts = folderDoc.mailbox.findFolder(folder);
-  if (drafts?.messageIris.has(iri)) {
-    drafts.removeMessage(iri);
-    await store.save(folderDoc);
-  }
-  await remove(documentOf(iri));
+  const { loaded, message } = await loadDraft(store, root, draft.iri, draft.etag);
+  await fileUnderDrafts(store, root, draft.iri, false);
+  await remove(documentOf(draft.iri), loaded.etag);
   const thread = message.partOfThread;
-  if (thread?.startsWith(`${root}threads/draft-`)) await remove(documentOf(thread));
+  if (thread && isAppDraft(root, thread, "threads")) await remove(documentOf(thread), null);
 }
