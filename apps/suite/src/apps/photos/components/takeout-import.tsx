@@ -5,6 +5,7 @@ import { FolderInput, Images, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { planTakeout, type TakeoutPlan } from "../lib/data/takeout";
+import type { TakeoutImportResult } from "../lib/data/takeout-import";
 import { usePhotos } from "../state/photos-context";
 
 const count = (value: number, noun: string, plural = `${noun}s`) =>
@@ -14,8 +15,8 @@ type Phase =
   | { name: "idle" }
   | { name: "reading" }
   | { name: "preview"; plan: TakeoutPlan }
-  | { name: "saving"; plan: TakeoutPlan }
-  | { name: "done"; saved: number; failed: number; albums: number };
+  | { name: "saving"; plan: TakeoutPlan; done: number; total: number }
+  | ({ name: "done" } & TakeoutImportResult);
 
 export function TakeoutImport() {
   const photos = usePhotos();
@@ -32,6 +33,14 @@ export function TakeoutImport() {
       /* Storage may be disabled. */
     }
   }, []);
+  const changeStrip = (value: boolean) => {
+    setStrip(value);
+    try {
+      localStorage.setItem("photos-remove-location", String(value));
+    } catch {
+      /* Storage may be disabled; the choice still applies to this import. */
+    }
+  };
   // Each step's first element takes focus, so keyboard users keep their place.
   const focusTarget = useRef<HTMLElement | null>(null);
   const moved = useRef(false);
@@ -58,13 +67,16 @@ export function TakeoutImport() {
     try {
       const plan = await planTakeout(
         files.map((file) => ({ path: file.webkitRelativePath || file.name, file })),
+        { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       );
       if (!plan.items.length) {
         go({ name: "idle" });
         fail(
           plan.videos
             ? "That folder only has videos, which Photos can't import yet."
-            : "No photos were found in that folder. Choose the Google Photos folder from your Takeout download.",
+            : plan.trashed
+              ? "That folder only has deleted photos from Google Photos' bin, which aren't imported."
+              : "No photos were found in that folder. Choose the Google Photos folder from your Takeout download.",
         );
         return;
       }
@@ -77,8 +89,10 @@ export function TakeoutImport() {
 
   async function save(plan: TakeoutPlan) {
     setError(undefined);
-    go({ name: "saving", plan });
-    const result = await photos.importTakeout(plan, strip);
+    go({ name: "saving", plan, done: 0, total: plan.items.length });
+    const result = await photos.importTakeout(plan, strip, (done, total) =>
+      setPhase({ name: "saving", plan, done, total }),
+    );
     go({ name: "done", ...result });
   }
 
@@ -114,7 +128,7 @@ export function TakeoutImport() {
             type="checkbox"
             checked={strip}
             disabled={phase.name === "saving"}
-            onChange={(event) => setStrip(event.target.checked)}
+            onChange={(event) => changeStrip(event.target.checked)}
           />
           <label htmlFor={stripId}>Remove location from imported photos</label>
         </div>
@@ -161,7 +175,10 @@ export function TakeoutImport() {
                 <dd>{phase.plan.albums.length.toLocaleString("en")}</dd>
               </div>
             </dl>
-            {(phase.plan.videos > 0 || phase.plan.duplicates > 0 || phase.plan.unsupported > 0) && (
+            {(phase.plan.videos > 0 ||
+              phase.plan.duplicates > 0 ||
+              phase.plan.unsupported > 0 ||
+              phase.plan.trashed > 0) && (
               <ul className="pho-takeout-notes">
                 {phase.plan.duplicates > 0 && (
                   <li>
@@ -175,6 +192,12 @@ export function TakeoutImport() {
                     yet.
                   </li>
                 )}
+                {phase.plan.trashed > 0 && (
+                  <li>
+                    {count(phase.plan.trashed, "deleted item")} from the Google Photos bin will be
+                    left out.
+                  </li>
+                )}
                 {phase.plan.unsupported > 0 && (
                   <li>{count(phase.plan.unsupported, "other file")} will be left out.</li>
                 )}
@@ -183,10 +206,16 @@ export function TakeoutImport() {
           </div>
         )}
         {phase.name === "saving" && (
-          <p ref={target} tabIndex={-1} className="pho-takeout-panel">
-            Importing {count(phase.plan.items.length, "photo")}. You can follow each one in the
-            upload panel.
-          </p>
+          <div className="pho-takeout-panel">
+            <p ref={target} tabIndex={-1}>
+              Importing {count(phase.plan.items.length, "photo")}. Keep this page open until it
+              finishes.
+            </p>
+            <progress aria-label="Import progress" max={phase.total || 1} value={phase.done} />
+            <p className="pho-takeout-count">
+              {phase.done.toLocaleString("en")} of {phase.total.toLocaleString("en")}
+            </p>
+          </div>
         )}
         {phase.name === "done" && (
           <div className="pho-takeout-panel">
@@ -196,8 +225,11 @@ export function TakeoutImport() {
             <p>
               Imported {count(phase.saved, "photo")}
               {phase.albums ? ` into ${count(phase.albums, "album")}` : ""}.
-              {phase.failed
-                ? ` ${count(phase.failed, "photo")} didn't import; retry them in the upload panel.`
+              {phase.retry
+                ? ` ${count(phase.retry.items.length, "photo")} didn't import. Retrying adds them to their albums too.`
+                : ""}
+              {phase.failedAlbums
+                ? ` ${count(phase.failedAlbums, "album")} couldn't be saved; the photos are in your library.`
                 : ""}
             </p>
           </div>
@@ -220,7 +252,12 @@ export function TakeoutImport() {
               </>
             ) : (
               <>
-                <Button asChild>
+                {phase.retry && (
+                  <Button onClick={() => phase.retry && void save(phase.retry)}>
+                    Retry {count(phase.retry.items.length, "photo")}
+                  </Button>
+                )}
+                <Button asChild variant={phase.retry ? "outline" : "default"}>
                   <Link href="/photos">
                     <Images size={16} aria-hidden="true" />
                     View photos

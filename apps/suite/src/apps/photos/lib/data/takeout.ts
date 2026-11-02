@@ -30,6 +30,8 @@ export interface TakeoutPlan {
   unsupported: number;
   /** The same photo (name and size) found again: Takeout copies album photos into year folders. */
   duplicates: number;
+  /** Photos in Takeout's Trash or Bin folder, which were deleted in Google Photos. */
+  trashed: number;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -48,6 +50,8 @@ const SUPPLEMENTAL = ".supplemental-metadata";
 const TRUNCATED_NAME_LENGTH = 46;
 const MAX_SIDECAR_BYTES = 1024 * 1024;
 const NOT_ALBUMS = /^(Photos from \d{4}|Trash|Bin|Archive)$/u;
+/** Deleted photos: not imported. */
+const TRASH = /^(Trash|Bin)$/u;
 
 const extension = (name: string) => /\.([^.]+)$/u.exec(name)?.[1]?.toLowerCase() ?? "";
 const splitPath = (path: string) => {
@@ -57,9 +61,36 @@ const splitPath = (path: string) => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Reads a photo sidecar; returns undefined for any other JSON. */
+/**
+ * The wall-clock time of `date` in `timeZone`, written as if it were UTC. Photo
+ * EXIF dates carry no zone and are stored this way, so sidecar dates (real
+ * instants) are converted to match and sort alongside them.
+ */
+export function wallClock(date: Date, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.000Z`;
+}
+
+/**
+ * Reads a photo sidecar; returns undefined for any other JSON. The date is the
+ * wall-clock time in `timeZone` (the importing device's zone), like EXIF dates.
+ */
 export function parseSidecar(
   text: string,
+  timeZone = "UTC",
 ): { title?: string; metadata: CaptureMetadata } | undefined {
   let raw: unknown;
   try {
@@ -71,7 +102,7 @@ export function parseSidecar(
   const metadata: CaptureMetadata = {};
   const seconds = Number(raw.photoTakenTime.timestamp);
   if (Number.isSafeInteger(seconds) && seconds > 0)
-    metadata.dateTimeOriginal = new Date(seconds * 1000).toISOString();
+    metadata.dateTimeOriginal = wallClock(new Date(seconds * 1000), timeZone);
   for (const key of ["geoData", "geoDataExif"]) {
     const geo = raw[key];
     if (metadata.location || !isRecord(geo)) continue;
@@ -106,28 +137,50 @@ export function sidecarTarget(name: string): { base: string; index: string } {
   return { base, index };
 }
 
-/** The names a media file's sidecar may use: itself, and the original of an edited copy. */
-function mediaTargets(name: string): { base: string; index: string }[] {
+/**
+ * The names a media file's sidecar may use: its whole name (a file already
+ * called "image (1).jpg"), the name without Takeout's duplicate index, and the
+ * original of an edited copy.
+ */
+function mediaTargets(name: string): { base: string; index: string; exact?: boolean }[] {
   // Media names always carry an image extension, so this always matches.
   const match = /^(.*?)(\(\d+\))?(\.[^.]+)$/u.exec(name) as RegExpExecArray;
   const stem = match[1] as string;
   const index = match[2] ?? "";
   const ext = match[3] as string;
-  const targets = [{ base: `${stem}${ext}`, index }];
+  // The whole name is tried only as an exact match: as a prefix it would also
+  // match the original's shortened sidecar.
+  const targets: { base: string; index: string; exact?: boolean }[] = index
+    ? [{ base: name, index: "", exact: true }]
+    : [];
+  targets.push({ base: `${stem}${ext}`, index });
   if (/-edited$/iu.test(stem)) targets.push({ base: `${stem.slice(0, -7)}${ext}`, index });
   return targets;
+}
+
+export interface PlanOptions {
+  /** The IANA zone sidecar dates are converted into (default UTC). */
+  timeZone?: string;
 }
 
 /**
  * Pairs Takeout photos with their JSON sidecars and album folders. Photos found in
  * more than one folder (an album and its year folder) become one item in every album.
  */
-export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<TakeoutPlan> {
+export async function planTakeout(
+  entries: readonly TakeoutEntry[],
+  { timeZone = "UTC" }: PlanOptions = {},
+): Promise<TakeoutPlan> {
   const folders = new Map<string, { media: TakeoutEntry[]; json: TakeoutEntry[] }>();
   let videos = 0;
   let unsupported = 0;
+  let trashed = 0;
   for (const entry of entries) {
     const { folder, name } = splitPath(entry.path);
+    if (TRASH.test(folder.split("/").at(-1) as string)) {
+      if (IMAGE_TYPES[extension(name)] || VIDEO.test(name)) trashed += 1;
+      continue;
+    }
     const group = folders.get(folder) ?? { media: [], json: [] };
     folders.set(folder, group);
     if (/\.json$/iu.test(name)) group.json.push(entry);
@@ -136,7 +189,7 @@ export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<Tak
     else unsupported += 1;
   }
   const items = new Map<string, TakeoutItem>();
-  const albums = new Map<string, TakeoutAlbum>();
+  const albums = new Map<string, { title: string; keys: Set<string> }>();
   let withDetails = 0;
   let duplicates = 0;
   for (const [folder, group] of [...folders].sort(([a], [b]) => a.localeCompare(b))) {
@@ -157,7 +210,7 @@ export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<Tak
         }
         continue;
       }
-      const sidecar = parseSidecar(text);
+      const sidecar = parseSidecar(text, timeZone);
       if (!sidecar) continue;
       const target = sidecarTarget(name);
       sidecars.set(`${target.base}\u0000${target.index}`, sidecar.metadata);
@@ -166,7 +219,7 @@ export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<Tak
     const folderName = folder.split("/").at(-1) as string;
     const album =
       albumTitle && !NOT_ALBUMS.test(folderName)
-        ? (albums.get(albumTitle) ?? { title: albumTitle, keys: [] })
+        ? (albums.get(albumTitle) ?? { title: albumTitle, keys: new Set<string>() })
         : undefined;
     if (album) albums.set(album.title, album);
     for (const entry of group.media) {
@@ -174,6 +227,7 @@ export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<Tak
       let metadata: CaptureMetadata | undefined;
       for (const target of mediaTargets(name)) {
         metadata ??= sidecars.get(`${target.base}\u0000${target.index}`);
+        if (target.exact) continue;
         metadata ??= truncated
           .filter(
             (candidate) =>
@@ -203,15 +257,18 @@ export async function planTakeout(entries: readonly TakeoutEntry[]): Promise<Tak
         });
         if (detailed(metadata)) withDetails += 1;
       }
-      if (album && !album.keys.includes(key)) album.keys.push(key);
+      album?.keys.add(key);
     }
   }
   return {
     items: [...items.values()],
-    albums: [...albums.values()].filter((album) => album.keys.length),
+    albums: [...albums.values()]
+      .filter((album) => album.keys.size)
+      .map((album) => ({ title: album.title, keys: [...album.keys] })),
     withDetails,
     videos,
     unsupported,
     duplicates,
+    trashed,
   };
 }

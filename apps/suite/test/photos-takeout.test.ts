@@ -5,6 +5,7 @@ import {
   planTakeout,
   sidecarTarget,
   type TakeoutEntry,
+  wallClock,
 } from "../src/apps/photos/lib/data/takeout";
 
 const sidecar = (fields: Record<string, unknown>) =>
@@ -49,6 +50,13 @@ describe("Takeout sidecars", () => {
         }),
       ),
     ).toEqual({ metadata: { location: { lat: 1, long: 2 } } });
+    // Dates become wall-clock time in the importing device's zone, like EXIF dates.
+    expect(parseSidecar(sidecar({}), "America/Los_Angeles")?.metadata.dateTimeOriginal).toBe(
+      "2019-05-01T03:00:00.000Z",
+    );
+    expect(wallClock(new Date("2019-12-31T23:30:00Z"), "Asia/Tokyo")).toBe(
+      "2020-01-01T08:30:00.000Z",
+    );
     expect(parseSidecar(JSON.stringify({ geoData: "x", photoTakenTime: {} }))).toEqual({
       metadata: {},
     });
@@ -102,6 +110,11 @@ describe("planning a Takeout import", () => {
       image("archive_browser.html", "<html>", "text/html"),
       image("Takeout/README", "text", "text/plain"),
       image("", "nameless", ""),
+      // Deleted photos in Takeout's bin are counted and left out.
+      image(`${root}/Trash/IMG_8.jpg`, "eight"),
+      json(`${root}/Trash/IMG_8.jpg.json`, sidecar({})),
+      image(`${root}/Bin/VID_2.mp4`, "video", "video/mp4"),
+      image(`${root}/Bin/notes.txt`, "text", "text/plain"),
       // Two shortened sidecars could fit; the longest (most specific) wins.
       json(`${root}/Photos from 2019/${long.slice(0, 42)}.json`, sidecar({ description: "Short" })),
     ]);
@@ -138,7 +151,33 @@ describe("planning a Takeout import", () => {
       },
     ]);
     expect(byName.get(long)?.metadata?.description).toBeUndefined();
-    expect(plan).toMatchObject({ withDetails: 5, videos: 1, unsupported: 3, duplicates: 1 });
+    expect(plan).toMatchObject({
+      withDetails: 5,
+      videos: 1,
+      unsupported: 3,
+      duplicates: 1,
+      trashed: 2,
+    });
+  });
+
+  it("pairs files whose own names end in a number in brackets", async () => {
+    const long = "PXL_20190501_100000123_a_very_long_file_name(1).jpg";
+    const plan = await planTakeout(
+      [
+        image("Year/image (1).jpg", "web"),
+        json("Year/image (1).jpg.json", sidecar({ description: "From the web" })),
+        image("Year/IMG_2(1).jpg", "dup"),
+        json("Year/IMG_2.jpg(1).json", sidecar({ description: "Duplicate" })),
+        // A long duplicate must not take the original's shortened sidecar.
+        image(`Year/${long}`, "long"),
+        json(`Year/${long.slice(0, 43)}.json`, sidecar({ description: "Original" })),
+      ],
+      { timeZone: "UTC" },
+    );
+    const byName = new Map(plan.items.map((item) => [item.name, item]));
+    expect(byName.get("image (1).jpg")?.metadata?.description).toBe("From the web");
+    expect(byName.get("IMG_2(1).jpg")?.metadata?.description).toBe("Duplicate");
+    expect(byName.get(long)?.metadata).toBeUndefined();
   });
 
   it("takes the sidecar from a later copy when the first copy had none", async () => {

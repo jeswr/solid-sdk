@@ -26,6 +26,7 @@ import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data
 import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import type { TakeoutItem, TakeoutPlan } from "../lib/data/takeout";
+import { importTakeoutPlan, type TakeoutImportResult } from "../lib/data/takeout-import";
 import {
   emptyTrash,
   listTrash,
@@ -35,7 +36,7 @@ import {
   type TrashedPhoto,
   trashPhoto,
 } from "../lib/data/trash";
-import { uploadFiles } from "../lib/data/upload";
+import { type UploadResult, uploadFiles } from "../lib/data/upload";
 import type { CaptureMetadata } from "../lib/model";
 
 interface Snapshot {
@@ -477,55 +478,65 @@ function usePhotosState(session: PodSession) {
     },
     [startUpload],
   );
+  /** Takeout upload IDs per item, so a retry reuses the prepared upload. */
+  const takeoutIds = useRef(new WeakMap<TakeoutItem, string>());
   /**
-   * Uploads a Takeout plan through the upload panel, then files the saved photos
-   * into albums (adding to an album of the same name when one exists).
+   * Imports a Takeout plan in batches (each one queued write) and files the saved
+   * photos into albums. Progress goes to `onProgress` rather than the upload panel,
+   * so a large library doesn't add thousands of rows, toasts or announcements.
    */
   const importTakeout = useCallback(
-    async (plan: TakeoutPlan, stripLocation: boolean) => {
-      const added = plan.items.map((item) => {
-        const id = crypto.randomUUID();
-        uploadInputs.current.set(id, {
-          file: item.file,
-          name: item.name,
-          stripLocation,
-          metadata: item.metadata,
-        });
-        return {
-          id,
-          name: item.name,
-          total: item.file.size,
-          sent: 0,
-          status: "queued" as const,
-          attempt: 0,
-        };
-      });
-      setUploads((items) => [...items, ...added]);
-      const saved = new Map<string, string>();
-      await Promise.all(
-        added.map(async (entry, index) => {
-          const url = await startUpload(entry.id);
-          const item = plan.items[index] as TakeoutItem;
-          if (url) saved.set(item.key, `${url}#it`);
-        }),
-      );
-      let albums = 0;
-      for (const album of plan.albums) {
-        const refs = album.keys.flatMap((key) => saved.get(key) ?? []);
-        if (!refs.length) continue;
-        const existing = baseline.current.albums.find((entry) => entry.name === album.title);
-        const ok = existing
-          ? await editAlbum(
-              existing.url,
-              (current) => changeMembers(current, refs, true),
-              `Added photos to ${album.title}`,
-            )
-          : await newAlbum(album.title, refs);
-        if (ok) albums += 1;
-      }
-      return { saved: saved.size, failed: plan.items.length - saved.size, albums };
-    },
-    [startUpload, editAlbum, newAlbum],
+    (
+      plan: TakeoutPlan,
+      stripLocation: boolean,
+      onProgress?: (done: number, total: number) => void,
+    ): Promise<TakeoutImportResult> =>
+      importTakeoutPlan(plan, {
+        upload: async (items) => {
+          let results: UploadResult[] = [];
+          // uploadFiles asks for one ID per file, in order.
+          let next = 0;
+          await run(
+            (s) => s,
+            async () => {
+              results = await uploadFiles(
+                io,
+                items.map((item) => ({
+                  name: item.name,
+                  original: item.file,
+                  metadata: item.metadata,
+                })),
+                {
+                  encoder: browserEncoder,
+                  stripLocation,
+                  now: new Date().toISOString(),
+                  id: () => {
+                    const item = items[next++] as TakeoutItem;
+                    const id = takeoutIds.current.get(item) ?? crypto.randomUUID();
+                    takeoutIds.current.set(item, id);
+                    return id;
+                  },
+                },
+              );
+              return (s) => s;
+            },
+          );
+          return items.map((_, index) => {
+            const result = results[index];
+            return result?.ok ? `${result.url}#it` : undefined;
+          });
+        },
+        findAlbum: (title) => baseline.current.albums.find((album) => album.name === title)?.url,
+        addToAlbum: (url, title, refs) =>
+          editAlbum(
+            url,
+            (current) => changeMembers(current, refs, true),
+            `Added photos to ${title}`,
+          ),
+        createAlbum: (title, refs) => newAlbum(title, refs),
+        ...(onProgress ? { onProgress } : {}),
+      }),
+    [io, run, editAlbum, newAlbum],
   );
   const cancelUpload = (id: string) => {
     // The model's atomic file pipeline cannot be interrupted safely. Queued files

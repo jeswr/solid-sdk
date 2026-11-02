@@ -426,6 +426,7 @@ test("imports a Google Takeout folder with sidecar dates and album folders", asy
     ["Lisbon/Tram.png", png(2)],
     ["Lisbon/Tram.png.supplemental-metadata.json", sidecar("Tram.png", "")],
     ["Lisbon/metadata.json", JSON.stringify({ title: "Lisbon" })],
+    ["Trash/Deleted.png", png(3)],
   ];
   for (const [path, body] of files) {
     await mkdir(resolve(root, path, ".."), { recursive: true });
@@ -459,13 +460,13 @@ test("imports a Google Takeout folder with sidecar dates and album folders", asy
     "1 copy of photos that are also in an album will be imported once.",
   );
   await expect(panel).toContainText("1 video will be left out.");
+  await expect(panel).toContainText("1 deleted item from the Google Photos bin will be left out.");
   await capture(page, info, "takeout-preview");
   await page.getByRole("button", { name: "Import 2 photos", exact: true }).click();
   await expect(panel.getByRole("heading", { name: "Import finished" })).toBeFocused({
     timeout: 60_000,
   });
   await expect(panel).toContainText("Imported 2 photos into 1 album.");
-  await page.getByRole("button", { name: "Dismiss uploads", exact: true }).click();
   await page.getByRole("link", { name: "View photos", exact: true }).click();
   await expect(opens(page)).toHaveCount(14);
   await expect(page.getByRole("link", { name: "Open Beach.png", exact: true })).toBeVisible();
