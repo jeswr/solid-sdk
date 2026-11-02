@@ -231,6 +231,40 @@ describe("MCP chat tools over the scoped fetch port", () => {
     }
   });
 
+  // AUTHORED-BY Claude Opus 5.5
+  it("stores chat_save input redacted, even when the caller did not redact", async () => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    const token = "sk-fixture-mcp-token";
+    try {
+      const saved = await client.callTool({
+        name: "chat_save",
+        arguments: {
+          ...input,
+          title: `Key ${token}`,
+          messages: [{ id: "m1", role: "user", text: `My key is ${token}`, createdAt: DAY1 }],
+        },
+      });
+      expect(saved.isError).toBeFalsy();
+      for (const resource of pod.resources.values()) expect(resource.body).not.toContain(token);
+      const got = json(
+        await client.callTool({
+          name: "chat_get",
+          arguments: { provider: "claude", conversationId: input.conversationId },
+        }),
+      );
+      expect(got.title).toBe("Key [REDACTED TOKEN]");
+      expect(got.messages[0].text).toBe("My key is [REDACTED TOKEN]");
+    } finally {
+      await client.close();
+    }
+  });
+
   it("retains the read-only default, including saves without an owner", async () => {
     const pod = fakePod();
     const client = await connect({ fetch: pod.fetch, podRoot: ROOT });
