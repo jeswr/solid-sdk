@@ -323,8 +323,13 @@ test("delayed Delete supports Undo, expires after eight seconds, and flushes on 
     .getByRole("button", { name: "Undo", exact: true })
     .click();
   await expect(row).toBeVisible();
+  // A pointer resting on the toaster pauses the countdown (next test), so leave it first.
+  await page.mouse.move(0, 0);
   await row.focus();
   await row.press("Backspace");
+  // The countdown starts when the new toast mounts; only then can the clock jump past it.
+  await expect(undoToast(page, "Deleted 'Remove me'")).toHaveCount(1);
+  await expect(undoToast(page, "Deleted 'Remove me'")).toBeVisible();
   await page.clock.fastForward(8100);
   await expect.poll(async () => (await (await durablePod(page)).fetch(url)).status).toBe(404);
   const flushing = rowFor(page, "Flush me");
