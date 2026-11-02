@@ -153,6 +153,8 @@ const PATH_REEVALUATED = [
   "qualifiedMinCount",
   "qualifiedMaxCount",
 ].map((p) => SH_NS + p);
+/** Components that compare a property shape's values with another predicate's values. */
+const PAIRWISE = ["equals", "disjoint", "lessThan", "lessThanOrEquals"].map((p) => SH_NS + p);
 /** Each qualified count re-evaluates `sh:qualifiedValueShape` at every value node. */
 const QUALIFIED_COUNTS = ["qualifiedMinCount", "qualifiedMaxCount"].map((p) => SH_NS + p);
 /** The keys that make a blank node a complex path, as the validator reads them. */
@@ -185,6 +187,34 @@ const MAX_PATH_SIZE = 64;
 const UNBOUNDED = "are not evaluated (unbounded cost)";
 
 /**
+ * Term length caps. The validator keys, copies and pattern-matches whole term
+ * values outside any dataset operation: it serialises the focus term on every
+ * shape evaluation, copies each message into every result, and checks typed
+ * literals against backtracking lexical patterns. An intent is short text.
+ */
+const MAX_TERM_LENGTH = 4_096;
+const MAX_LABEL_LENGTH = 1_024;
+const MAX_TYPED_LITERAL_LENGTH = 128;
+const LABELS = new Set(["message", "name", "description"].map((p) => SH_NS + p));
+/** Datatypes whose lexical form is a plain string, checked without a pattern. */
+const PLAIN_DATATYPES = new Set(["http://www.w3.org/2001/XMLSchema#string", `${RDF_NS}langString`]);
+
+/** Why a term is too long to evaluate, or undefined. */
+function oversizedTerm(term: Term, predicate?: string): string | undefined {
+  if (term.termType === "Quad") return "Quoted triples";
+  const length = term.value.length;
+  if (length > MAX_TERM_LENGTH) return `Terms over ${MAX_TERM_LENGTH} characters`;
+  if (term.termType !== "Literal") return undefined;
+  if (predicate !== undefined && LABELS.has(predicate) && length > MAX_LABEL_LENGTH) {
+    return `Shape labels over ${MAX_LABEL_LENGTH} characters`;
+  }
+  if (!PLAIN_DATATYPES.has(term.datatype.value) && length > MAX_TYPED_LITERAL_LENGTH) {
+    return `Typed literals over ${MAX_TYPED_LITERAL_LENGTH} characters`;
+  }
+  return undefined;
+}
+
+/**
  * Why a validation is refused before it starts, or undefined when its cost is
  * bounded. Refused: SHACL outside {@link ALLOWED_SH}; `rdfs:subClassOf` in either
  * graph (walked with no visited set); an RDF list that loops, branches or runs
@@ -196,6 +226,18 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
   if (shapes.size > MAX_SHAPE_QUADS) return `Shapes over ${MAX_SHAPE_QUADS} triples ${UNBOUNDED}`;
   if (data.size > MAX_DATA_QUADS)
     return `Intent graphs over ${MAX_DATA_QUADS} triples ${UNBOUNDED}`;
+  for (const [graph, q] of [
+    ...shapes.getQuads(null, null, null, null).map((q) => [shapes, q] as const),
+    ...data.getQuads(null, null, null, null).map((q) => [data, q] as const),
+  ]) {
+    for (const term of [q.subject, q.predicate, q.object, q.graph]) {
+      const why = oversizedTerm(
+        term,
+        graph === shapes && term === q.object ? q.predicate.value : undefined,
+      );
+      if (why !== undefined) return `${why} ${UNBOUNDED}`;
+    }
+  }
   const seen = new Set<string>();
   for (const q of shapes.getQuads(null, null, null, null)) {
     const p = q.predicate.value;
@@ -446,6 +488,15 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
     const walked = path === undefined ? { values: [focus], steps: 0 } : path(focus);
     const values = walked.values;
     let total = 1 + values.length + walked.steps * (1 + present(shape, PATH_REEVALUATED));
+    // sh:lessThan(OrEquals) compares every value with every value of the other
+    // predicate at the focus (each comparison runs regexes, unmetered), and
+    // sh:equals / sh:disjoint compare the two sets.
+    for (const p of PAIRWISE) {
+      for (const other of objects(shapes, shape, p)) {
+        total +=
+          values.length * data.getObjects(focus as Quad["subject"], other.value, null).length;
+      }
+    }
     const qualified = Math.max(1, present(shape, QUALIFIED_COUNTS));
     const ands = path === undefined ? [] : andMembers(shape);
     const refs = (refsOf(shape) ?? []).map((ref) => ({
@@ -589,10 +640,11 @@ async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<V
   // makes (reads of either graph, writes to its report) is metered here, and a
   // validation that spends its budget stops and is refused.
   const budget = { left: MAX_VALIDATOR_OPERATIONS };
-  let report: Awaited<ReturnType<SHACLValidator["validate"]>>;
   try {
     const validator = new SHACLValidator(shapeGraph, { factory: meteredFactory(budget) });
-    report = await validator.validate(meter(dataGraph as Store, budget));
+    const report = await validator.validate(meter(dataGraph as Store, budget));
+    // Reading the results also matches over the metered report.
+    return { conforms: report.conforms, results: report.results.map(projectResult) };
   } catch (error) {
     if (error instanceof BudgetSpent) {
       return {
@@ -606,11 +658,6 @@ async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<V
     }
     throw error;
   }
-
-  return {
-    conforms: report.conforms,
-    results: report.results.map(projectResult),
-  };
 }
 
 /** Lower an {@link IntentInput} to quads. */

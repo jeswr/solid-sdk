@@ -358,18 +358,55 @@ ${body}`,
   });
 
   it("stops a validation whose results outgrow the graph-operation budget", async () => {
-    // sh:lessThan compares every value with every reference value and reports
-    // each failing pair: 120 x 120 results, which the step model does not see.
+    // Each sh:class value is its own constraint at every value node, with a
+    // result per failure: 200 x 200 results, which the step model does not see.
     let data = "";
-    for (let i = 0; i < 120; i++)
-      data += `<urn:f> <urn:ex:p> "z${i}" .\n<urn:f> <urn:ex:r> "a${i}" .\n`;
+    for (let i = 0; i < 200; i++) data += `<urn:d${i}> <urn:ex:p> "x" .\n`;
+    const classes = Array.from({ length: 200 }, (_, i) => `<urn:C${i}>`).join(", ");
     const report = await quick(
-      "<urn:S> sh:targetNode <urn:f> ; sh:path <urn:ex:p> ; sh:lessThan <urn:ex:r> .",
+      `<urn:S> sh:targetSubjectsOf <urn:ex:p> ; sh:class ${classes} .`,
       await parseRdf(data, "text/turtle"),
     );
     expect(report.conforms).toBe(false);
     expect(report.results).toHaveLength(1);
     expect(report.results[0]?.message).toMatch(/graph operations are not evaluated/);
+  });
+
+  for (const [name, body, data] of [
+    [
+      "a long typed literal (backtracking lexical pattern)",
+      "<urn:S> sh:targetNode <urn:f> ; sh:path <urn:ex:p> ; sh:datatype <http://www.w3.org/2001/XMLSchema#double> .",
+      `<urn:f> <urn:ex:p> "${"1".repeat(20_000)}x"^^<http://www.w3.org/2001/XMLSchema#double> .`,
+    ],
+    [
+      "a long term (serialised on every shape evaluation)",
+      "<urn:S> sh:targetObjectsOf <urn:ex:p> ; sh:nodeKind sh:Literal .",
+      `<urn:s> <urn:ex:p> "${"v".repeat(10_000)}" .`,
+    ],
+    [
+      "a long sh:message (copied into every result)",
+      `<urn:S> sh:targetSubjectsOf <urn:ex:p> ; sh:nodeKind sh:Literal ; sh:message "${"x".repeat(2_000)}" .`,
+      "<urn:s> <urn:ex:p> <urn:o> .",
+    ],
+  ] as const) {
+    it(`refuses ${name}`, async () => {
+      const report = await quick(body, await parseRdf(data, "text/turtle"));
+      expect(report.conforms).toBe(false);
+      expect(report.results).toHaveLength(1);
+      expect(report.results[0]?.message).toMatch(/characters are not evaluated/);
+    });
+  }
+
+  it("charges pairwise comparisons even when every comparison passes", async () => {
+    let data = "";
+    for (let i = 0; i < 80; i++)
+      data += `<urn:f> <urn:ex:p> "a${i}" .\n<urn:f> <urn:ex:r> "z${i}" .\n`;
+    const report = await quick(
+      "<urn:S> sh:targetNode <urn:f> ; sh:path <urn:ex:p> ; sh:lessThan <urn:ex:r> .",
+      await parseRdf(data, "text/turtle"),
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
   });
 
   it("reads an sh:alternativePath list with a named head, as the validator does", async () => {
