@@ -40,7 +40,9 @@ import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
+import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
 import "@univerjs/preset-sheets-core/lib/index.css";
+import "@univerjs/preset-sheets-data-validation/lib/index.css";
 
 declare global {
   interface Window {

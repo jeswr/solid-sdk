@@ -44,16 +44,31 @@ const mock = vi.hoisted(() => {
     subscription,
     emit: (event: Parameters<typeof handler>[0]) => handler(event),
     create: vi.fn(() => ({ univer, univerAPI: api })),
-    preset: vi.fn(),
+    preset: vi.fn((_options: unknown) => ({ plugins: ["core"] })),
+    dataValidationPreset: vi.fn(() => ({ plugins: ["data-validation"] })),
+    conditionalFormattingPreset: vi.fn(() => ({ plugins: ["conditional-formatting"] })),
+    mergeLocales: vi.fn((...values: object[]) => Object.assign({}, ...values)),
   };
 });
 vi.mock("@univerjs/preset-sheets-core", () => ({ UniverSheetsCorePreset: mock.preset }));
-vi.mock("@univerjs/preset-sheets-core/locales/en-US", () => ({ default: {} }));
+vi.mock("@univerjs/preset-sheets-core/locales/en-US", () => ({ default: { core: "Core" } }));
+vi.mock("@univerjs/preset-sheets-data-validation", () => ({
+  UniverSheetsDataValidationPreset: mock.dataValidationPreset,
+}));
+vi.mock("@univerjs/preset-sheets-data-validation/locales/en-US", () => ({
+  default: { dataValidation: "Data validation" },
+}));
+vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
+  UniverSheetsConditionalFormattingPreset: mock.conditionalFormattingPreset,
+}));
+vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
+  default: { conditionalFormatting: "Conditional formatting" },
+}));
 vi.mock("@univerjs/presets", () => ({
   CommandType: { MUTATION: 1 },
   createUniver: mock.create,
   LocaleType: { EN_US: "en-US" },
-  mergeLocales: (value: unknown) => value,
+  mergeLocales: mock.mergeLocales,
 }));
 
 import { loadEngine } from "../src/apps/sheets/lib/engine";
@@ -85,6 +100,114 @@ beforeEach(() => {
 });
 
 describe("Univer engine adapter", () => {
+  it("registers data validation and conditional formatting after core with their locales", async () => {
+    const engine = await mount();
+    expect(mock.dataValidationPreset).toHaveBeenCalledExactlyOnceWith();
+    expect(mock.conditionalFormattingPreset).toHaveBeenCalledExactlyOnceWith();
+    expect(mock.mergeLocales).toHaveBeenCalledExactlyOnceWith(
+      { core: "Core" },
+      { dataValidation: "Data validation" },
+      { conditionalFormatting: "Conditional formatting" },
+    );
+    expect(mock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        presets: [
+          { plugins: ["core"] },
+          { plugins: ["data-validation"] },
+          { plugins: ["conditional-formatting"] },
+        ],
+        locales: {
+          "en-US": {
+            core: "Core",
+            dataValidation: "Data validation",
+            conditionalFormatting: "Conditional formatting",
+          },
+        },
+      }),
+    );
+    engine.dispose();
+  });
+
+  it.each([
+    "data-validation.mutation.addRule",
+    "data-validation.mutation.updateRule",
+    "data-validation.mutation.removeRule",
+    "sheet.mutation.add-conditional-rule",
+    "sheet.mutation.set-conditional-rule",
+    "sheet.mutation.move-conditional-rule",
+    "sheet.mutation.delete-conditional-rule",
+    "sheet.mutation.set-frozen",
+    "sheet.mutation.add-worksheet-merge",
+    "sheet.mutation.remove-worksheet-merge",
+  ])("marks persisted user mutation %s dirty, including after reload", async (id) => {
+    const engine = await mount();
+    const change = vi.fn();
+    engine.onChange(change);
+    mock.emit({ ...mutation, id });
+    await Promise.resolve();
+    expect(change).toHaveBeenCalledTimes(1);
+    engine.load(initial());
+    mock.emit({ ...mutation, id });
+    await Promise.resolve();
+    expect(change).toHaveBeenCalledTimes(2);
+    engine.dispose();
+  });
+
+  it.each([
+    "sheet.mutation.data-validation-formula-mark-dirty",
+    "formula.mutation.set-other-formula",
+    "formula.mutation.remove-other-formula",
+    "formula.mutation.set-formula-calculation-result",
+  ])("ignores calculation-only mutation %s before and after a user edit", async (id) => {
+    const engine = await mount();
+    const change = vi.fn();
+    engine.onChange(change);
+    mock.emit({ ...mutation, id });
+    await Promise.resolve();
+    expect(change).not.toHaveBeenCalled();
+    mock.emit(mutation);
+    await Promise.resolve();
+    change.mockClear();
+    mock.emit({ ...mutation, id });
+    await Promise.resolve();
+    expect(change).not.toHaveBeenCalled();
+    // Ignored traffic must not count as an edit after reloading either.
+    engine.load(initial());
+    mock.emit({ ...mutation, id });
+    mock.emit({ ...mutation, options: { fromFormula: true } });
+    await Promise.resolve();
+    expect(change).not.toHaveBeenCalled();
+    engine.dispose();
+  });
+
+  it("round-trips plugin resources, freeze and merge state through save and reload", async () => {
+    const engine = await mount();
+    const data = initial();
+    data.resources = [
+      { name: "SHEET_DATA_VALIDATION_PLUGIN", data: JSON.stringify({ data: [{ uid: "dv" }] }) },
+      {
+        name: "SHEET_CONDITIONAL_FORMATTING_PLUGIN",
+        data: JSON.stringify({ data: [{ cfId: "cf" }] }),
+      },
+      { name: "FUTURE_PLUGIN", data: '{"opaque":true}' },
+    ];
+    const sheet = (data.sheets as Record<string, Snapshot>).data as Snapshot;
+    sheet.freeze = { startRow: 1, startColumn: -1, ySplit: 1, xSplit: 0 };
+    sheet.mergeData = [{ startRow: 2, endRow: 2, startColumn: 0, endColumn: 1 }];
+    engine.load(data);
+    const saved = engine.snapshot();
+    expect(saved).toEqual(data);
+    engine.dispose();
+    const reloaded = await (await loadEngine())({} as HTMLElement, {
+      snapshot: JSON.parse(JSON.stringify(saved)),
+      dark: false,
+      compact: false,
+    });
+    expect(mock.api.createWorkbook).toHaveBeenLastCalledWith(data);
+    expect(reloaded.snapshot()).toEqual(data);
+    reloaded.dispose();
+  });
+
   it("mounts with the requested chrome, snapshots safely, exports and switches dark mode", async () => {
     const engine = await mount();
     expect(mock.preset.mock.calls[0]?.[0]).toMatchObject({

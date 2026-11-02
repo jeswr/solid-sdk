@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
+import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
+import { UniverSheetsDataValidationPreset } from "@univerjs/preset-sheets-data-validation";
+import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-validation/locales/en-US";
 import {
   CommandType,
   createUniver,
@@ -26,10 +30,20 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
   "formula.mutation.set-super-table-option",
 ]);
 
+// Univer 1.2.0's DV/CF calculation signal has no persisted payload. CF viewport
+// and style caches update services directly, without executing mutations.
+const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
+
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.EN_US,
-    locales: { [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS) },
+    locales: {
+      [LocaleType.EN_US]: mergeLocales(
+        UniverPresetSheetsCoreEnUS,
+        UniverPresetSheetsDataValidationEnUS,
+        UniverPresetSheetsConditionalFormattingEnUS,
+      ),
+    },
     darkMode: options.dark,
     presets: [
       UniverSheetsCorePreset({
@@ -44,6 +58,8 @@ export const mountUniver: MountEngine = async (container, options) => {
           zoomSlider: !options.compact,
         },
       }),
+      UniverSheetsDataValidationPreset(),
+      UniverSheetsConditionalFormattingPreset(),
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
@@ -68,6 +84,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       event.type !== CommandType.MUTATION ||
       loading ||
       event.options?.fromChangeset ||
+      RECOMPUTE_MUTATIONS.has(event.id) ||
       (event.id.startsWith("formula.") && !PERSISTED_FORMULA_MUTATIONS.has(event.id)) ||
       event.params?.unitId !== workbook.getId()
     )
