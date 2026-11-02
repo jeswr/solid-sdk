@@ -83,4 +83,21 @@ describe("Today and overdue across projects", () => {
       today: [midnight],
     });
   });
+
+  it("ignores invalid due dates without losing valid Today and Overdue groups", () => {
+    const invalid = view("invalid", { due: new Date(Number.NaN) });
+    const allDay = view("invalid all-day instant", {
+      due: new Date(Number.NaN),
+      allDay: "2026-07-01",
+    });
+    const overdue = view("late", { due: new Date(2026, 5, 30) });
+    const today = view("today", { due: now });
+    expect(taskDayKey(invalid)).toBeUndefined();
+    expect(taskDayKey(allDay)).toBeUndefined();
+    expect(todayGroups([invalid, today, allDay, overdue], now)).toEqual({
+      overdue: [overdue],
+      today: [today],
+    });
+    expect(todayCount([invalid, today, allDay, overdue], now)).toBe(2);
+  });
 });

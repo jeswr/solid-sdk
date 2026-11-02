@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -68,16 +69,17 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
 
 ## The bookmarks pilot + the parity bar
 
-`examples/bookmark/` generates the `@jeswr/solid-bookmark` model from that package's own ontology +
-SHACL profile, read directly from `../solid-bookmark/bookmark{,.shacl}.ttl` (the detailed
-`book:` vocabulary the fed-vocab bookmarks *sector* aligns to). Stale pilot copies are not kept. The
-package's **unmodified** test suite runs against the generated wrapper via a thin facade
-(`examples/bookmark/facade.ts`) — the parity bar. **Result: 78/78 of the current solid-bookmark suite passes**
-against the generated model (`test/parity/`), including dual-namespace reads and adversarial
-SHACL alias tests. The four oracle files are copied verbatim except imports. SHACL tests use
-the same workspace RDF engine as the source package, imported through its built relative path
-in this test harness (no new dependency); they validate the generated `shapes.ttl`. The facade adapts the public
-exports and artifact readers; it contains no alias behavior.
+[`examples/bookmark/`](./examples/bookmark/README.md) points to the production
+[`@jeswr/solid-bookmark`](../solid-bookmark/README.md) package. That package owns the
+hand-written ontology + SHACL profile, `codegen.config.json`, generated artifacts, and
+public facade. The example re-exports the facade for generator integration tests; no
+second config or generated core is kept. **Result: 78/78 of the current solid-bookmark
+oracle passes** against the generated model (`test/parity/`). The four oracle copies
+remain verbatim except imports; their SHACL tests validate the package's generated
+`shapes.ttl` using the workspace RDF engine, complementing the package's unmodified tests
+of its normative `bookmark.shacl.ttl`. Generator determinism/fidelity tests read the
+package's artifacts directly. The package also tests byte-identical regeneration,
+including its lockfile.
 
 `test/generator/sector-divergence.test.ts` documents (honestly) why the fed-vocab **sector** profile
 cannot yet drive this generation: it uses `https://jeswr.org/ns/sectors/bookmarks#Bookmark` instead of the package's
@@ -262,8 +264,10 @@ Workspace consumers depend on `workspace:*`. External consumers keep using
 pnpm turbo run lint build typecheck test --filter=@jeswr/federation-codegen
 ```
 
-Regenerate the bookmarks example after a generator change with
-`pnpm --filter @jeswr/federation-codegen run build && pnpm --filter @jeswr/federation-codegen run gen:example`.
+Regenerate the bookmark package after a generator change with
+`pnpm --filter @jeswr/federation-codegen... run build` then
+`pnpm --filter @jeswr/solid-bookmark run codegen`. The `gen:example` script forwards to
+the package command.
 
 ## Licence
 

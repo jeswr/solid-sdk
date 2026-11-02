@@ -1,0 +1,138 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.bell {
+  display: inline-flex;
+  position: relative;
+}
+.mobileBell {
+  display: none;
+  position: relative;
+}
+.badge {
+  position: absolute;
+  inset-block-start: -4px;
+  inset-inline-end: -8px;
+  pointer-events: none;
+}
+.panel {
+  width: 400px;
+  max-width: calc(100vw - 24px);
+  padding: 0;
+  background: var(--elevation-2-fill);
+  box-shadow: var(--shadow-2);
+}
+.tray {
+  min-width: 0;
+  color: var(--foreground);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.header h1,
+.header h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.list {
+  max-height: min(720px, calc(100dvh - 120px));
+  overflow: auto;
+  outline-offset: -2px;
+}
+.list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.group {
+  padding: 12px 16px 4px;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+  font-weight: 600;
+}
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.item[data-unread="true"] {
+  background: var(--surface-2);
+}
+.leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+.content {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.title {
+  font-weight: 600;
+}
+.muted {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.request {
+  display: grid;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+.actions > button {
+  flex: 1;
+}
+.open {
+  width: fit-content;
+  min-height: 24px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.error {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+.page {
+  max-width: 720px;
+  margin-inline: auto;
+}
+.page .list {
+  max-height: none;
+  overflow: visible;
+}
+.fixture {
+  padding: 16px;
+  max-width: 800px;
+  margin-inline: auto;
+  display: grid;
+  gap: 16px;
+}
+.fixtureControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (width < 768px) {
+  .mobileBell {
+    display: inline-flex;
+  }
+  .bell {
+    display: none;
+  }
+}

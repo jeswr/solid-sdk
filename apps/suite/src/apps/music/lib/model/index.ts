@@ -5,6 +5,7 @@ export {
   computeTopArtists,
   historyShard,
   monthKey,
+  nameKey,
   type Playback,
   PlaybackEvent,
   periodStart,
@@ -14,11 +15,15 @@ export {
 } from "./history";
 export {
   appendPlayback,
+  appendPlaybacks,
+  type ImportedPlayback,
+  type ImportedRecording,
   loadHistory,
   loadLibrary,
   loadMusic,
   type MusicDocument,
   MusicWriteError,
+  NEAR_DUPLICATE_MS,
   saveMusic,
   type WriteCondition,
 } from "./io";
