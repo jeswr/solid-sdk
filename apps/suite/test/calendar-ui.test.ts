@@ -96,6 +96,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   unsubscribe?.();
+  vi.useRealTimers();
 });
 function screen(view: CalendarView = "week") {
   return h(CalendarApp, { children: h(CalendarScreen, { view }) });
@@ -1219,6 +1220,9 @@ it("does not write before discovery has identified the user's calendars", async 
   });
 });
 it("parses and saves a quick-create title through the existing mutations", async () => {
+  // "tomorrow" resolves against the wall clock, so pin it to the fixture's NOW (1 Nov, noon UTC).
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   mocks.path = "/calendar/month";
   const mounted = await mount(screen("month"));
   await settle();
