@@ -100,6 +100,20 @@ async function boundedBody(response: Response, url: string): Promise<string> {
   }
 }
 const mismatches = new WeakMap<object, "wac" | "acp">();
+const mixed = new WeakSet<object>();
+/**
+ * Whether `error` is a refusal for access documents that mix models (both vocabularies in one
+ * document, or ancestors of different models), so the resource's model cannot be decided.
+ */
+export function isMixedModel(error: unknown): boolean {
+  // WeakSet lookups of non-objects are simply misses.
+  return mixed.has(error as object);
+}
+function mixedModels(url: string, message: string) {
+  const error = roleError("invalid-response", url, message);
+  mixed.add(error);
+  return error;
+}
 /** The model a resource really uses when `load` refused it for differing from a pinned model. */
 export function mismatchedModel(error: unknown): "wac" | "acp" | undefined {
   // WeakMap lookups of non-objects are simply misses.
@@ -111,7 +125,8 @@ export function mismatchedModel(error: unknown): "wac" | "acp" | undefined {
  * planned from this snapshot can write that model's documents.
  */
 export async function load(resource: string, options: RolesOptions): Promise<Snapshot> {
-  const snapshot = await discover(resource, options, false);
+  // Outside detection the resource's own advertised document always sets the model.
+  const snapshot = (await discover(resource, options, false)) as Snapshot;
   if (options.model !== undefined && snapshot.model !== options.model) {
     const error = roleError(
       "unsupported",
@@ -126,21 +141,23 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
 /**
  * Read-only model detection through the same discovery walk as `load`. It builds no policies (so
  * a policy this layer cannot map still reports its model) and admits a query on an access
- * document's URL, as ESS uses for its ACRs. Refuses `unsupported` when the resource advertises no
- * access document; every other failure is thrown.
+ * document's URL, as ESS uses for its ACRs. It fails closed: only an existing, non-empty access
+ * document decides the model, so a missing or empty one never counts as WAC, and a walk that
+ * finds no deciding document reports "unknown". Refuses `unsupported` when the resource advertises
+ * no access document; every other failure (including mixed models, see `isMixedModel`) is thrown.
  */
 export async function detectModel(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root">,
-): Promise<Pick<Snapshot, "model" | "ownUrl">> {
+): Promise<{ model: "wac" | "acp" | "unknown"; ownUrl: string }> {
   const { model, ownUrl } = await discover(resource, options, true);
-  return { model, ownUrl };
+  return { model: model ?? "unknown", ownUrl };
 }
 async function discover(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
   detecting: boolean,
-): Promise<Snapshot> {
+): Promise<Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined }> {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
   scoped(resource, root);
@@ -206,24 +223,30 @@ async function discover(
           DataFactory.namedNode(`${RDF}type`),
           DataFactory.namedNode(`${ACL}Authorization`),
         ).size > 0;
-      if (acp && wac)
-        throw roleError("invalid-response", endpoint, "Mixed access-control vocabularies");
+      if (acp && wac) throw mixedModels(endpoint, "Mixed access-control vocabularies");
       const detected = acp ? "acp" : "wac";
-      if (model && exists && detected !== model)
-        throw roleError("invalid-response", endpoint, "Mixed ancestor access models");
-      model ??= detected;
+      // Detection decides only from an existing, non-empty document; a missing or empty one says
+      // nothing about the model, so the walk goes on to the nearest ancestor that does.
+      const decides = !detecting || (exists && dataset.size > 0);
+      if (decides) {
+        if (model && exists && detected !== model)
+          throw mixedModels(endpoint, "Mixed ancestor access models");
+        model ??= detected;
+      }
       if (current === resource) ownUrl = endpoint;
       if (exists && !detecting) {
+        // Outside detection every document decides, so the model is set.
+        const settled = model as "wac" | "acp";
         const document: Document = {
           url: endpoint,
           resource: current,
-          model,
+          model: settled,
           dataset,
           policy: readPolicy(
             dataset,
             current,
             endpoint,
-            model,
+            settled,
             options.implementation ?? "css",
             resource,
           ),
@@ -232,10 +255,10 @@ async function discover(
         documents.push(document);
         if (current === resource) own = document;
       }
-      if (exists && model === "wac") break;
+      if (exists && decides && model === "wac") break;
     }
     if (current === root) break;
     current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
   }
-  return { resource, ownUrl, own, model: model as "wac" | "acp", documents };
+  return { resource, ownUrl, own, model, documents };
 }

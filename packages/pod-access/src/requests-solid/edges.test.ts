@@ -14,6 +14,8 @@ import {
   PREFIXES,
   REQUESTER,
 } from "../../test/requests/fixtures.js";
+import { serialize } from "../rdf.js";
+import { appendAcp } from "../roles/rdf.js";
 import { applyGrant, roleFor } from "./acl.js";
 import { httpUrl, put, read, transport } from "./http.js";
 import { project } from "./inbox.js";
@@ -140,7 +142,13 @@ describe("protocol and RDF boundaries", () => {
     ]) {
       const model = await accessModel({
         storage: POD,
-        fetch: async () => new Response(null, { headers: link === undefined ? {} : { link } }),
+        // Only an existing, non-empty access document decides the model.
+        fetch: async (_url, init) =>
+          init?.method === "HEAD"
+            ? new Response(null, { headers: link === undefined ? {} : { link } })
+            : new Response(`${PREFIXES}<#owner> a acl:Authorization.`, {
+                headers: { "content-type": "text/turtle" },
+              }),
       });
       expect(model).toBe(
         link?.endsWith("rel=acl") || link?.endsWith('other acl"') ? "wac" : "unknown",
@@ -531,6 +539,44 @@ describe("forward-only approval reconciliation", () => {
       model: "acp",
     });
     expect(pending.log.some(({ method }) => method === "PUT")).toBe(false);
+  });
+
+  it("a resumed approval writes no grant to a target that became ACP behind rel=acl", async () => {
+    const pod = buildPod();
+    await orphan(pod);
+    // After the decision the target moves to an ESS-style ACR, advertised only as rel="acl".
+    const acr = `${ALICE}?ext=acr`;
+    const dataset = new Store();
+    appendAcp(
+      dataset,
+      ALICE,
+      acr,
+      [{ agent: { type: "webid", id: OWNER }, modes: new Set(["read", "write"] as const) }],
+      "ess",
+    );
+    const body = await serialize(dataset);
+    const before = pod.log.length;
+    pod.intercept = (method, url) => {
+      if (method === "HEAD" && url === ALICE)
+        return new Response(null, { headers: { link: `<${acr}>; rel="acl"` } });
+      if (url === acr)
+        return method === "GET"
+          ? new Response(body, { headers: { "content-type": "text/turtle" } })
+          : new Response(null, { status: 405 });
+    };
+    // Under the pod's WAC root ACL the target's ACR mixes models, so it is refused as unknown.
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toMatchObject({
+      name: "UnsupportedAccessModelError",
+      model: "unknown",
+    });
+    const resumed = pod.log.slice(before);
+    expect(resumed.some(({ url }) => url === acr)).toBe(true);
+    expect(
+      resumed.filter(
+        ({ method, url }) => method !== "GET" && method !== "HEAD" && /\.acl$|\?ext=acr$/.test(url),
+      ),
+    ).toEqual([]);
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
   });
 
   it("viewer cannot escalate a write request; editor supports requested write and append; purpose labels remain literals", async () => {

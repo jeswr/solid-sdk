@@ -339,6 +339,12 @@ describe("refused targets", () => {
     const storage = `${POD}alice/`;
     const id = `${storage}inbox/request-1.ttl`;
     const index = `${storage}settings/publicTypeIndex.ttl`;
+    // Model detection never walks above the storage root, so the storage has its own ACL.
+    const ownAcl = (pod: PodStub) =>
+      pod.seed(
+        `${storage}.acl`,
+        `${PREFIXES}<#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read, acl:Write, acl:Control.`,
+      );
     for (const instance of [
       `${POD}alice`,
       `${storage}?x`,
@@ -349,6 +355,7 @@ describe("refused targets", () => {
     ]) {
       const pod = buildPod();
       pod.seed(id, accessRequestTurtle(id));
+      ownAcl(pod);
       const typeIndex = await parseRdf(
         `${PREFIXES}<${index}#r> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${instance}>.`,
         "text/turtle",
@@ -361,6 +368,7 @@ describe("refused targets", () => {
     // A slashless storage option names the same root.
     const pod = buildPod();
     pod.seed(id, accessRequestTurtle(id));
+    ownAcl(pod);
     const typeIndex = await parseRdf(
       `${PREFIXES}<${index}#r> a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:instance <${storage}>.`,
       "text/turtle",

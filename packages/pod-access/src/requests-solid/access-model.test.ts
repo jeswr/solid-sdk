@@ -1,8 +1,17 @@
 // AUTHORED-BY Claude Opus 5.5
-import { Store } from "n3";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { buildPod, INBOX, OWNER, POD, RECORDS, REQUESTER } from "../../test/requests/fixtures.js";
-import { serialize } from "../rdf.js";
+import {
+  buildPod,
+  INBOX,
+  OWNER,
+  POD,
+  RECORDS,
+  REQUESTER,
+  rootAclTurtle,
+} from "../../test/requests/fixtures.js";
+import { RDF, serialize } from "../rdf.js";
 import { appendAcp } from "../roles/rdf.js";
 import {
   accessModel,
@@ -13,6 +22,7 @@ import {
   UnsupportedAccessModelError,
 } from "./acl.js";
 import { decide } from "./approval.js";
+import { ACL } from "./vocab.js";
 
 const ID = `${INBOX}request-1.ttl`;
 const ALICE = `${POD}contacts/alice.ttl`;
@@ -22,6 +32,30 @@ const ALICE = `${POD}contacts/alice.ttl`;
  * or as a CSS ACP pod may (`.acr`). Every request is recorded, including any to an ACR.
  */
 function acpPod(suffix: "?ext=acr" | ".acr") {
+  return advertisingPod(suffix, async (resource, url) => {
+    const dataset = new Store();
+    appendAcp(
+      dataset,
+      resource,
+      url,
+      [{ agent: { type: "webid", id: OWNER }, modes: new Set(["read", "write"] as const) }],
+      suffix === ".acr" ? "css" : "ess",
+    );
+    return turtleResponse(await serialize(dataset));
+  });
+}
+
+const turtleResponse = (body: string) =>
+  new Response(body, { headers: { "content-type": "text/turtle", etag: '"1"' } });
+
+/**
+ * The fixture pod with each resource advertising `<resource><suffix>` as `rel="acl"`, its access
+ * documents answered by `document` (read-only). Every request is recorded.
+ */
+function advertisingPod(
+  suffix: string,
+  document: (resource: string, url: string) => Promise<Response>,
+) {
   const pod = buildPod();
   const calls: { method: string; url: string }[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -30,18 +64,7 @@ function acpPod(suffix: "?ext=acr" | ".acr") {
     calls.push({ method, url });
     if (url.endsWith(suffix)) {
       if (method !== "GET") return new Response(null, { status: 405 });
-      const resource = url.slice(0, -suffix.length);
-      const dataset = new Store();
-      appendAcp(
-        dataset,
-        resource,
-        url,
-        [{ agent: { type: "webid", id: OWNER }, modes: new Set(["read", "write"] as const) }],
-        suffix === ".acr" ? "css" : "ess",
-      );
-      return new Response(await serialize(dataset), {
-        headers: { "content-type": "text/turtle", etag: '"1"' },
-      });
+      return document(url.slice(0, -suffix.length), url);
     }
     const response = await pod.fetch(input, init);
     if (method !== "GET" && method !== "HEAD") return response;
@@ -190,5 +213,103 @@ describe("WAC pods are unchanged", () => {
     const key = await ensureOwnerOnlyContainer(RECORDS, POD, OWNER, pod.fetch);
     expect(await recordsKey(RECORDS, POD, OWNER, pod.fetch)).toBe(key);
     expect(pod.body(`${RECORDS}.acl`)).toContain(OWNER);
+  });
+});
+
+describe("detection decides only from existing, non-empty access documents", () => {
+  const acpDocument = async (resource: string, url: string, dialect: "ess" | "css" = "ess") => {
+    const dataset = new Store();
+    appendAcp(
+      dataset,
+      resource,
+      url,
+      [{ agent: { type: "webid", id: OWNER }, modes: new Set(["read", "write"] as const) }],
+      dialect,
+    );
+    return turtleResponse(await serialize(dataset));
+  };
+  const missing = async () => new Response(null, { status: 404 });
+
+  it("a target whose own ACR is missing under an existing ACP ancestor is ACP and refused", async () => {
+    const ess = advertisingPod("?ext=acr", (resource, url) =>
+      resource === ALICE ? missing() : acpDocument(resource, url),
+    );
+    expect(await accessModel({ fetch: ess.fetch, storage: POD, target: ALICE })).toBe("acp");
+    await expect(decide({ id: ID }, { approve: true }, opts(ess.fetch))).rejects.toMatchObject({
+      name: "UnsupportedAccessModelError",
+      model: "acp",
+    });
+    expect(ess.writes()).toEqual([]);
+  });
+
+  it("refuses an existing records folder whose ESS ACRs are missing at every level", async () => {
+    const ess = advertisingPod("?ext=acr", missing);
+    ess.pod.seed(RECORDS, "");
+    await expect(ensureOwnerOnlyContainer(RECORDS, POD, OWNER, ess.fetch)).rejects.toMatchObject({
+      name: "UnsupportedAccessModelError",
+      model: "unknown",
+    });
+    expect(await accessModel({ fetch: ess.fetch, storage: POD })).toBe("unknown");
+    expect(ess.writes()).toEqual([]);
+  });
+
+  it("empty access documents everywhere are unknown and refused", async () => {
+    const empty = advertisingPod(".acl", async () => turtleResponse(""));
+    expect(await accessModel({ fetch: empty.fetch, storage: POD, target: ALICE })).toBe("unknown");
+    await expect(decide({ id: ID }, { approve: true }, opts(empty.fetch))).rejects.toMatchObject({
+      name: "UnsupportedAccessModelError",
+      model: "unknown",
+    });
+    empty.pod.seed(RECORDS, "");
+    await expect(ensureOwnerOnlyContainer(RECORDS, POD, OWNER, empty.fetch)).rejects.toMatchObject({
+      model: "unknown",
+    });
+    expect(empty.writes()).toEqual([]);
+  });
+
+  it("mixed access models are unknown, in detection and in the sharing layer", async () => {
+    // Both vocabularies in one document, and an ACP document under a WAC root ACL.
+    const mixedVocabulary = async (resource: string, url: string) => {
+      const response = await acpDocument(resource, url, "css");
+      const dataset = await parseRdf(await response.text(), "text/turtle", { baseIRI: url });
+      dataset.addQuad(
+        DataFactory.namedNode(`${url}#wac`),
+        DataFactory.namedNode(`${RDF}type`),
+        DataFactory.namedNode(ACL.Authorization),
+      );
+      return turtleResponse(await serialize(dataset));
+    };
+    for (const pod of [
+      advertisingPod(".acl", mixedVocabulary),
+      advertisingPod(".acl", async (resource, url) =>
+        resource === POD ? turtleResponse(rootAclTurtle()) : acpDocument(resource, url, "css"),
+      ),
+    ]) {
+      expect(await accessModel({ fetch: pod.fetch, storage: POD, target: ALICE })).toBe("unknown");
+      for (const step of [checkGrant, applyGrant]) {
+        const error = await step(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch).catch(
+          (thrown: unknown) => thrown,
+        );
+        expect(error).toBeInstanceOf(UnsupportedAccessModelError);
+        expect(error).toMatchObject({ model: "unknown" });
+      }
+      pod.pod.seed(RECORDS, "");
+      await expect(ensureOwnerOnlyContainer(RECORDS, POD, OWNER, pod.fetch)).rejects.toMatchObject({
+        name: "UnsupportedAccessModelError",
+        model: "unknown",
+      });
+      expect(pod.writes()).toEqual([]);
+    }
+  });
+
+  it("other sharing-layer refusals still propagate unchanged", async () => {
+    const pod = buildPod();
+    pod.intercept = (method, url) =>
+      method === "GET" && url === `${ALICE}.acl` ? new Response(null, { status: 500 }) : undefined;
+    const error = await checkGrant(ALICE, POD, OWNER, REQUESTER, ["read"], pod.fetch).catch(
+      (thrown: unknown) => thrown,
+    );
+    expect(error).not.toBeInstanceOf(UnsupportedAccessModelError);
+    expect(error).toMatchObject({ code: "invalid-response" });
   });
 });

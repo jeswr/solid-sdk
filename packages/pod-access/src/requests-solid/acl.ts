@@ -6,7 +6,7 @@ import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { addGrant, planAddGrant } from "../roles/client.js";
 import { isRoleError } from "../roles/errors.js";
-import { detectModel, mismatchedModel } from "../roles/http.js";
+import { detectModel, isMixedModel, mismatchedModel } from "../roles/http.js";
 import { put, read, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { set, turtle, values } from "./rdf.js";
@@ -25,8 +25,9 @@ const ACP_ACCESS_CONTROL = "http://www.w3.org/ns/solid/acp#accessControl";
  * The target's access model. An explicit ACP `accessControl` link means ACP. ACP servers (ESS)
  * also advertise their access control resources with `rel="acl"`, so an `acl` link alone proves
  * nothing: the advertised document is read, with the roles layer's detection (its content and
- * type links, walking to the nearest existing ancestor), to tell WAC from ACP. No access link at
- * all is "unknown"; any other failure is thrown, so nothing proceeds on a guess.
+ * type links, walking to the nearest existing, non-empty ancestor), to tell WAC from ACP. No access
+ * link at all, no deciding document, or documents that mix models are "unknown"; any other failure
+ * is thrown, so nothing proceeds on a guess.
  */
 export async function accessModel(options: {
   fetch: typeof fetch;
@@ -49,12 +50,16 @@ function container(storage: string): string {
   return storage.endsWith("/") ? storage : `${storage}/`;
 }
 
-/** The roles layer's read-only detection; undefined when no access document is advertised. */
+/**
+ * The roles layer's read-only detection; undefined (an unknown model) when no access document is
+ * advertised or the documents mix models.
+ */
 async function detect(resource: string, storage: string, fetchFn: typeof fetch) {
   try {
     return await detectModel(resource, { fetch: fetchFn, root: container(storage) });
   } catch (error) {
-    if (isRoleError(error) && error.code === "unsupported") return undefined;
+    if ((isRoleError(error) && error.code === "unsupported") || isMixedModel(error))
+      return undefined;
     throw error;
   }
 }
@@ -87,9 +92,13 @@ async function aclUrl(resource: string, storage: string, fetchFn: typeof fetch):
   return url;
 }
 
-/** A sharing-layer refusal for a resource that is not WAC, as the error callers expect. */
+/**
+ * A sharing-layer refusal for a resource that is not WAC, or whose access documents mix models, as
+ * the error callers expect.
+ */
 function modelRefusal(error: unknown): unknown {
-  return mismatchedModel(error) === "acp" ? new UnsupportedAccessModelError("acp") : error;
+  if (mismatchedModel(error) === "acp") return new UnsupportedAccessModelError("acp");
+  return isMixedModel(error) ? new UnsupportedAccessModelError("unknown") : error;
 }
 
 function authSubject(auth: Authorization) {
