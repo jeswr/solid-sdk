@@ -2,31 +2,53 @@
 import type { ChecklistItem } from "./capture";
 
 /** The part of the Tasks store a checklist hand-off needs. */
-export interface TaskSink<Project> {
+export interface TaskSink<Project extends { tracker: { stateStore?: string | undefined } }> {
   bootstrapInbox(): Promise<Project>;
+  listTasks(stateStore: string): Promise<readonly { task: { rank?: number | undefined } }[]>;
   createTask(
     project: Project,
-    data: { title: string; state: "open"; creator: string },
+    data: { title: string; state: "open"; creator: string; rank: number },
     id: string,
   ): Promise<unknown>;
 }
 
-/** One planned task per unchecked, nonempty checklist line, each with a stable id. */
+/** One planned task per unchecked, nonempty checklist line. */
 export interface PlannedTask {
   readonly id: string;
   readonly title: string;
 }
 
-/** Task titles are single-line; collapse whitespace and keep the visible text. */
-export function plannedTasks(
-  items: readonly ChecklistItem[],
-  uuid: () => string = () => crypto.randomUUID(),
-): PlannedTask[] {
+const PRIME = BigInt("0x100000001b3");
+const MASK = BigInt("0xffffffffffffffff");
+const SEEDS = [BigInt("0xcbf29ce484222325"), BigInt("0x84222325cbf29ce4")] as const;
+
+/** 64-bit FNV-1a, hex. Not a security hash: it only names a task resource stably. */
+function fnv(text: string, seed: bigint): string {
+  let hash = seed;
+  for (const unit of new TextEncoder().encode(text)) {
+    hash ^= BigInt(unit);
+    hash = (hash * PRIME) & MASK;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+/**
+ * Task ids are derived from the note and the item (and its repeat count), so sending the
+ * same note again, or retrying after a lost response, addresses the same task resources.
+ * Creates are conditional, so an item already in Tasks is found, not duplicated.
+ */
+export function plannedTasks(items: readonly ChecklistItem[], noteKey: string): PlannedTask[] {
+  const seen = new Map<string, number>();
   return items
     .filter((item) => !item.checked)
     .map((item) => item.text.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .map((title) => ({ id: uuid(), title }));
+    .map((title) => {
+      const occurrence = seen.get(title) ?? 0;
+      seen.set(title, occurrence + 1);
+      const key = JSON.stringify([noteKey, title, occurrence]);
+      return { id: `note-${fnv(key, SEEDS[0])}${fnv(key, SEEDS[1])}`, title };
+    });
 }
 
 const status = (error: unknown) =>
@@ -35,26 +57,34 @@ const status = (error: unknown) =>
     : undefined;
 
 /**
- * Create the planned tasks in the Tasks Inbox. Ids are fixed per plan and creates are
- * conditional, so a retry after a lost response finds the task already there (412) and
- * counts it as created instead of adding a duplicate.
+ * Append the planned tasks to the Tasks Inbox after its last ranked task. A 412 means the
+ * task resource already exists (sent before, or a lost response), so it is counted as
+ * already there. Inbox setup errors are thrown for the caller to classify.
  */
-export async function sendToTasks<Project>(
+export async function sendToTasks<Project extends { tracker: { stateStore?: string | undefined } }>(
   store: TaskSink<Project>,
   tasks: readonly PlannedTask[],
   creator: string,
-): Promise<{ created: number; failed: PlannedTask[] }> {
+): Promise<{ created: number; existing: number; failed: PlannedTask[] }> {
   const inbox = await store.bootstrapInbox();
+  const stateStore = inbox.tracker.stateStore;
+  if (!stateStore) throw new TypeError("Inbox has no stateStore.");
+  const ranks = (await store.listTasks(stateStore))
+    .map((item) => item.task.rank)
+    .filter((rank): rank is number => rank !== undefined && Number.isFinite(rank));
+  let rank = Math.max(0, ...ranks);
   let created = 0;
+  let existing = 0;
   const failed: PlannedTask[] = [];
   for (const task of tasks) {
+    rank += 1;
     try {
-      await store.createTask(inbox, { title: task.title, state: "open", creator }, task.id);
+      await store.createTask(inbox, { title: task.title, state: "open", creator, rank }, task.id);
       created++;
     } catch (error) {
-      if (status(error) === 412) created++;
+      if (status(error) === 412) existing++;
       else failed.push(task);
     }
   }
-  return { created, failed };
+  return { created, existing, failed };
 }

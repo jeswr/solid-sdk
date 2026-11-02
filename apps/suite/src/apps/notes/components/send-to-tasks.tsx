@@ -10,6 +10,7 @@ import {
 } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { classifyError } from "@/apps/tasks/lib/model/errors";
 import { TaskStore } from "@/apps/tasks/lib/model/store";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "@/apps/tasks/state/access";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -28,44 +29,69 @@ function tasksStore(session: PodSession) {
   });
 }
 
+type Failure = { kind: "retry"; partial: number } | { kind: "blocked"; message: string };
+
 /**
- * Add a checklist's unchecked items to the Tasks Inbox. The plan (and each task's id)
- * is fixed when the dialog opens, so Try again never duplicates a task that was created.
+ * Add a checklist's unchecked items to the Tasks Inbox. Task ids come from the note and
+ * the item, so sending again or trying again never duplicates a task already added.
  */
 export function SendToTasksDialog({
   items,
+  noteKey,
   session,
   close,
   createStore = tasksStore,
 }: {
   items: readonly ChecklistItem[];
+  /** Stable across archive and restore: the note's file name, not its container. */
+  noteKey: string;
   session: PodSession;
   close: () => void;
   createStore?: typeof tasksStore;
 }) {
   const router = useRouter();
-  const [pending, setPending] = useState<PlannedTask[]>(() => plannedTasks(items));
+  const [store] = useState(() => createStore(session));
+  const [pending, setPending] = useState<PlannedTask[]>(() => plannedTasks(items, noteKey));
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [done, setDone] = useState(0);
+  const [failure, setFailure] = useState<Failure>();
+  const [totals, setTotals] = useState({ created: 0, existing: 0 });
   const send = async () => {
     setBusy(true);
-    setFailed(false);
+    setFailure(undefined);
     try {
-      const result = await sendToTasks(createStore(session), pending, session.webId);
-      const total = done + result.created;
-      setDone(total);
+      const result = await sendToTasks(store, pending, session.webId);
+      const next = {
+        created: totals.created + result.created,
+        existing: totals.existing + result.existing,
+      };
+      setTotals(next);
       if (result.failed.length) {
         setPending(result.failed);
-        setFailed(true);
+        setFailure({ kind: "retry", partial: next.created + next.existing });
         return;
       }
       close();
-      toast.success(`Added ${count(total)} to your Tasks Inbox`, {
-        action: { label: "Open Tasks", onClick: () => router.push("/tasks") },
-      });
-    } catch {
-      setFailed(true);
+      toast.success(
+        next.created
+          ? `Added ${count(next.created)} to your Tasks Inbox${next.existing ? ` (${next.existing} already there)` : ""}`
+          : "These items are already in your Tasks Inbox",
+        { action: { label: "Open Tasks", onClick: () => router.push("/tasks") } },
+      );
+    } catch (error) {
+      const category = classifyError(error, navigator.onLine);
+      setFailure(
+        category === "forbidden"
+          ? {
+              kind: "blocked",
+              message: "Tasks isn't available for this account, so nothing was added.",
+            }
+          : category === "reauth"
+            ? {
+                kind: "blocked",
+                message: "Your sign-in has expired. Sign in again, then try again.",
+              }
+            : { kind: "retry", partial: totals.created + totals.existing },
+      );
     } finally {
       setBusy(false);
     }
@@ -87,19 +113,22 @@ export function SendToTasksDialog({
             <li key={task.id}>{task.title}</li>
           ))}
         </ul>
-        {failed && (
+        {failure && (
           <p role="alert">
-            {done > 0 ? `Added ${count(done)}, but ` : ""}
-            {count(pending.length)} couldn't be added. Check your connection and try again.
+            {failure.kind === "blocked"
+              ? failure.message
+              : `${failure.partial > 0 ? `Added ${count(failure.partial)}, but ` : ""}${count(pending.length)} couldn't be added. Check your connection and try again.`}
           </p>
         )}
         <div className="notes-confirm-actions">
           <Button variant="outline" disabled={busy} onClick={close}>
-            Cancel
+            {failure?.kind === "blocked" ? "Close" : "Cancel"}
           </Button>
-          <Button disabled={busy} onClick={() => void send()}>
-            {busy ? "Adding…" : failed ? "Try again" : `Add ${count(pending.length)}`}
-          </Button>
+          {failure?.kind !== "blocked" && (
+            <Button disabled={busy} onClick={() => void send()}>
+              {busy ? "Adding…" : failure ? "Try again" : `Add ${count(pending.length)}`}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -108,4 +137,4 @@ export function SendToTasksDialog({
 
 /** Whether a note body has any unchecked item to send. */
 export const hasOpenItems = (items: readonly ChecklistItem[]) =>
-  plannedTasks(items, () => "").length > 0;
+  items.some((item) => !item.checked && item.text.trim());

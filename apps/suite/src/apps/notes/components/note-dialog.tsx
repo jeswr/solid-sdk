@@ -33,7 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Hint } from "@/apps/docs/components/common";
 import { validLink } from "@/apps/docs/lib/editor/logic";
 import { buildDocument, parseDocument } from "@/apps/docs/lib/model/document";
@@ -68,6 +68,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   );
   const [confirmDocs, setConfirmDocs] = useState(false);
   const [sendingTasks, setSendingTasks] = useState(false);
+  const checklist = useMemo(() => checklistItems(draft.body), [draft.body]);
   const [linkOpen, setLinkOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
@@ -406,7 +407,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                   <FileText size={16} aria-hidden="true" />
                   Open in Docs
                 </Button>
-                {hasOpenItems(checklistItems(draft.body)) && (
+                {hasOpenItems(checklist) && (
                   <Button variant="ghost" disabled={busy} onClick={() => setSendingTasks(true)}>
                     <ListTodo size={16} aria-hidden="true" />
                     Add to Tasks
@@ -445,7 +446,8 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       </DialogContent>
       {sendingTasks && (
         <SendToTasksDialog
-          items={checklistItems(draft.body)}
+          items={checklist}
+          noteKey={note.url.slice(note.url.lastIndexOf("/") + 1)}
           session={session}
           close={() => setSendingTasks(false)}
         />
