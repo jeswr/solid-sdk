@@ -67,7 +67,8 @@
   color: var(--foreground-muted);
   font-size: var(--text-xs);
 }
-.tsk-week-controls > button {
+/* Outranks suite-ui's [data-slot="button"][data-size="sm"] min-height (the Today button). */
+.tsk-week-controls > button[data-slot="button"] {
   min-width: 44px;
   min-height: 44px;
 }
