@@ -186,6 +186,12 @@ describe("shared context", () => {
       "4111  1111  1111  1111",
       "378282246310005",
       "41111111111111112024",
+      "acct 004111111111111111",
+      "4111,1111,1111,1111",
+      "4111_1111_1111_1111",
+      "3530111333300000",
+      "6011111111111117",
+      "30569309025904",
     ])
       expect(containsCardNumber(formatted)).toBe(true);
     // Luhn-valid but without a card-network prefix, e.g. an order number.
@@ -195,6 +201,9 @@ describe("shared context", () => {
     expect(containsCardNumber("phone 07700 900123, born 1990")).toBe(false);
     expect(containsCardNumber("12345678901")).toBe(false);
     expect(containsCardNumber("")).toBe(false);
+    // Long runs are checked at group boundaries only.
+    expect(containsCardNumber(`${"0".repeat(70)} 4111111111111111`)).toBe(true);
+    expect(containsCardNumber(`${"0".repeat(70)}4111111111111111`)).toBe(false);
   });
 
   it("registers one read-only tool that takes no arguments", async () => {

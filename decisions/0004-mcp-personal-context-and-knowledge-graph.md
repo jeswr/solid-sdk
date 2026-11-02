@@ -32,7 +32,7 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
 - **No category data in shared context.** Addresses, health details, contacts and card data
   belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
   refuses a document that contains what looks like a card number: a Luhn-valid 12–19 digit
-  window with a card-network prefix, found inside digit groups split by whitespace, `.`, `-`
+  window with a card-network prefix, found inside digit groups split by whitespace, `.`, `,`, `_`, `-`
   or `/`. It returns a `refused` result that does not echo the digits. A Luhn-valid account
   number with a card prefix also blocks the document; the owner moves it out, by design.
 - The text is owner-authored data. Slice 2's setup helper and discovery must also check that

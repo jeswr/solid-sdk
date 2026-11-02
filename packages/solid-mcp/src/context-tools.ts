@@ -53,25 +53,36 @@ function luhnValid(digits: string): boolean {
 /** Issuer prefixes of the major card networks (Visa, Mastercard, Amex, Diners, JCB, Discover, UnionPay). */
 const CARD_PREFIX = /^(?:4|5[1-5]|2[2-7]|3[0-9]|6)/;
 
+/** Runs up to this many digits are checked at every offset; longer ones at group starts. */
+const DENSE_SCAN_DIGITS = 64;
+
 /**
  * Whether `text` holds what looks like a payment card number: a Luhn-valid run of 12-19
  * digits with a card-network prefix. Digit groups may be split by up to three whitespace
- * (including NBSP), `.`, `-` or `/` characters, and every window that starts at a group
- * boundary is checked, so a number followed by an expiry or preceded by other digits is found.
+ * (including NBSP), `.`, `,`, `_`, `-` or `/` characters. Short runs are checked at every
+ * offset; long runs at every group boundary, so a number with an expiry, prefix digits or
+ * other digits beside it is found without quadratic work on huge digit runs.
  */
 export function containsCardNumber(text: string): boolean {
-  for (const run of text.matchAll(/\d+(?:[\s./-]{1,3}\d+)*/g)) {
-    const groups = run[0].split(/[\s./-]+/);
+  for (const run of text.matchAll(/\d+(?:[\s.,_/-]{1,3}\d+)*/g)) {
+    const groups = run[0].split(/[\s.,_/-]+/);
     const digits = groups.join("");
     if (digits.length < 12) continue;
-    let offset = 0;
-    for (const group of groups) {
-      for (let length = 12; length <= 19 && offset + length <= digits.length; length += 1) {
-        const window = digits.slice(offset, offset + length);
+    const starts: number[] = [];
+    if (digits.length <= DENSE_SCAN_DIGITS)
+      for (let i = 0; i + 12 <= digits.length; i += 1) starts.push(i);
+    else {
+      let offset = 0;
+      for (const group of groups) {
+        starts.push(offset);
+        offset += group.length;
+      }
+    }
+    for (const start of starts)
+      for (let length = 12; length <= 19 && start + length <= digits.length; length += 1) {
+        const window = digits.slice(start, start + length);
         if (CARD_PREFIX.test(window) && luhnValid(window)) return true;
       }
-      offset += group.length;
-    }
   }
   return false;
 }
