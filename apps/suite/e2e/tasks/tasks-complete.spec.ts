@@ -205,6 +205,7 @@ test("scenario 4: recurring completion advances in place, Undo removes its copy,
         title: "Water plants",
         state: "open",
         allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
         recurrence: { frequency: "DAILY", interval: 2 },
       })
     ).url;
@@ -389,9 +390,15 @@ test("a selection that leaves Today does not complete a hidden task", async ({ p
         title: "Selected today",
         state: "open",
         allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
       })
     ).url;
-    await store.createTask(inbox, { title: "Still today", state: "open", allDay: "2026-11-02" });
+    await store.createTask(inbox, {
+      title: "Still today",
+      state: "open",
+      allDay: "2026-11-02",
+      dueDate: new Date("2026-11-02T00:00:00Z"),
+    });
   });
   await page.goto("/tasks/today");
   const selected = rowFor(page, "Selected today");
