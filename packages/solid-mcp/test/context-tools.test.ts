@@ -177,6 +177,20 @@ describe("shared context", () => {
 
   it("detects only Luhn-valid 12-19 digit runs", () => {
     expect(containsCardNumber("4111111111111111")).toBe(true);
+    for (const formatted of [
+      "4111 1111 1111 1111 12/27",
+      "4111111111111111 2024",
+      "ref 99 4111111111111111",
+      "4111.1111.1111.1111",
+      "4111\u00a01111\u00a01111\u00a01111",
+      "4111  1111  1111  1111",
+      "378282246310005",
+      "41111111111111112024",
+    ])
+      expect(containsCardNumber(formatted)).toBe(true);
+    // Luhn-valid but without a card-network prefix, e.g. an order number.
+    expect(containsCardNumber("0000000000000000")).toBe(false);
+    expect(containsCardNumber("1111 1111 1111 1117")).toBe(false);
     expect(containsCardNumber("4111111111111112")).toBe(false);
     expect(containsCardNumber("phone 07700 900123, born 1990")).toBe(false);
     expect(containsCardNumber("12345678901")).toBe(false);

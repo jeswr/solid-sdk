@@ -31,8 +31,10 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
   the owner must go through the mandate path described below.
 - **No category data in shared context.** Addresses, health details, contacts and card data
   belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
-  refuses a document that contains a Luhn-valid 12–19 digit number (spaces and dashes
-  allowed), and returns a `refused` result that does not echo the digits.
+  refuses a document that contains what looks like a card number: a Luhn-valid 12–19 digit
+  window with a card-network prefix, found inside digit groups split by whitespace, `.`, `-`
+  or `/`. It returns a `refused` result that does not echo the digits. A Luhn-valid account
+  number with a card prefix also blocks the document; the owner moves it out, by design.
 - The text is owner-authored data. Slice 2's setup helper and discovery must also check that
   nobody except the owner can write or append to it (`WAC-Allow`, or the ACL itself), so the
   document cannot carry someone else's injected instructions.
@@ -97,7 +99,7 @@ owner to approve in one batch.
 - A card fact stores only the **brand, the last four digits, the expiry month and year, and a
   billing-address reference**. The schema has no field for a full card number (PAN) or a CVV.
 - The template validator requires the last-four field to match `^\d{4}$`. A Luhn-valid
-  12–19 digit sequence anywhere in the claim, with or without spaces or dashes, is refused
+  12–19 digit sequence anywhere in the claim, with any of the separators above, is refused
   before anything is written, and the refusal never echoes the digits.
 - Form filling that needs a full card asks the owner every time. A vault design is a separate
   decision for Jesse (bead sst-b8c.20.7, `needs:jesse`).

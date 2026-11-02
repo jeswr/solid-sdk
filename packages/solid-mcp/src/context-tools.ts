@@ -37,20 +37,41 @@ function isNotFound(error: unknown): boolean {
   return error instanceof Error && /^failed to read \S+: HTTP (?:404|410)\b/.test(error.message);
 }
 
-/** Luhn-valid 12-19 digit runs, allowing single spaces or dashes between digits. */
-export function containsCardNumber(text: string): boolean {
-  for (const match of text.matchAll(/\d(?:[ -]?\d){11,18}/g)) {
-    const digits = match[0].replace(/[ -]/g, "");
-    let sum = 0;
-    for (let i = 0; i < digits.length; i += 1) {
-      let digit = Number(digits[digits.length - 1 - i]);
-      if (i % 2 === 1) {
-        digit *= 2;
-        if (digit > 9) digit -= 9;
-      }
-      sum += digit;
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i += 1) {
+    let digit = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
     }
-    if (sum % 10 === 0) return true;
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
+/** Issuer prefixes of the major card networks (Visa, Mastercard, Amex, Diners, JCB, Discover, UnionPay). */
+const CARD_PREFIX = /^(?:4|5[1-5]|2[2-7]|3[0-9]|6)/;
+
+/**
+ * Whether `text` holds what looks like a payment card number: a Luhn-valid run of 12-19
+ * digits with a card-network prefix. Digit groups may be split by up to three whitespace
+ * (including NBSP), `.`, `-` or `/` characters, and every window that starts at a group
+ * boundary is checked, so a number followed by an expiry or preceded by other digits is found.
+ */
+export function containsCardNumber(text: string): boolean {
+  for (const run of text.matchAll(/\d+(?:[\s./-]{1,3}\d+)*/g)) {
+    const groups = run[0].split(/[\s./-]+/);
+    const digits = groups.join("");
+    if (digits.length < 12) continue;
+    let offset = 0;
+    for (const group of groups) {
+      for (let length = 12; length <= 19 && offset + length <= digits.length; length += 1) {
+        const window = digits.slice(offset, offset + length);
+        if (CARD_PREFIX.test(window) && luhnValid(window)) return true;
+      }
+      offset += group.length;
+    }
   }
   return false;
 }
