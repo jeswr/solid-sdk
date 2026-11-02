@@ -5,7 +5,11 @@ import {
   importTakeoutPlan,
   STOP_AFTER_FAILED_BATCHES,
   TAKEOUT_BATCH,
+  type TakeoutFailure,
+  takeoutFailure,
 } from "../src/apps/photos/lib/data/takeout-import";
+
+const pod: TakeoutFailure = { kind: "pod" };
 
 const item = (name: string, metadata?: TakeoutItem["metadata"]): TakeoutItem => ({
   key: `${name}\u00001`,
@@ -67,7 +71,7 @@ describe("importing a Takeout plan", () => {
       "https://pod/IMG_4.jpg#it",
     ]);
     expect(onAlbums).toHaveBeenCalledOnce();
-    expect(result).toEqual({ saved: 5, albums: 2, failedAlbums: 0 });
+    expect(result).toEqual({ saved: 5, albums: 2, failedAlbums: 0, unreadable: [] });
     expect(TAKEOUT_BATCH).toBeGreaterThan(1);
   });
 
@@ -82,8 +86,7 @@ describe("importing a Takeout plan", () => {
         { title: "Failed only", keys: [c] },
       ]),
       {
-        upload: async (batch) =>
-          batch.map((value) => (value.name === "A.jpg" ? "a#it" : undefined)),
+        upload: async (batch) => batch.map((value) => (value.name === "A.jpg" ? "a#it" : pod)),
         findAlbum: () => undefined,
         addToAlbum: async () => true,
         createAlbum: async (title) => title !== "Mixed",
@@ -107,7 +110,8 @@ describe("importing a Takeout plan", () => {
     const one = item("A.jpg");
     const createAlbum = vi.fn(async () => true);
     const result = await importTakeoutPlan(plan([one], [{ title: "Lost", keys: [one.key] }]), {
-      upload: async (batch) => batch.map(() => undefined),
+      // A short answer counts the missing photos as pod failures.
+      upload: async () => [],
       findAlbum: () => undefined,
       addToAlbum: async () => true,
       createAlbum,
@@ -120,7 +124,7 @@ describe("importing a Takeout plan", () => {
   it("stops after batches that save nothing and keeps the rest for a retry", async () => {
     const items = Array.from({ length: 10 }, (_, n) => item(`IMG_${n}.jpg`));
     const upload = vi.fn(async (batch: readonly TakeoutItem[]) =>
-      batch.map((value) => (value.name === "IMG_0.jpg" ? "zero#it" : undefined)),
+      batch.map((value) => (value.name === "IMG_0.jpg" ? "zero#it" : pod)),
     );
     const onAlbums = vi.fn();
     const result = await importTakeoutPlan(
@@ -139,5 +143,44 @@ describe("importing a Takeout plan", () => {
     expect(onAlbums).not.toHaveBeenCalled();
     expect(result).toMatchObject({ saved: 1, stopped: true });
     expect(result.retry?.items).toEqual(items.slice(1));
+  });
+
+  it("leaves photos that can't be read out of the retry, and doesn't stop for them", async () => {
+    const items = Array.from({ length: 8 }, (_, n) => item(`IMG_${n}.heic`));
+    const upload = vi.fn(async (batch: readonly TakeoutItem[]) =>
+      batch.map((value): string | TakeoutFailure =>
+        value.name === "IMG_7.heic" ? pod : { kind: "photo", reason: `Can't read ${value.name}` },
+      ),
+    );
+    const result = await importTakeoutPlan(
+      plan(items),
+      {
+        upload,
+        findAlbum: () => undefined,
+        addToAlbum: async () => true,
+        createAlbum: async () => true,
+      },
+      2,
+    );
+    expect(upload).toHaveBeenCalledTimes(4);
+    expect(result.stopped).toBeUndefined();
+    expect(result.unreadable).toHaveLength(7);
+    expect(result.unreadable[0]).toEqual({ name: "IMG_0.heic", reason: "Can't read IMG_0.heic" });
+    expect(result.retry?.items.map((value) => value.name)).toEqual(["IMG_7.heic"]);
+  });
+
+  it("sorts upload errors into pod problems and photos this browser can't import", () => {
+    expect(
+      takeoutFailure(Object.assign(new Error("x"), { status: 503 }), "image/jpeg", true),
+    ).toEqual(pod);
+    expect(takeoutFailure(new TypeError("Failed to fetch"), "image/jpeg", true)).toEqual(pod);
+    expect(takeoutFailure(new Error("decode"), "image/heic", true)).toMatchObject({
+      kind: "photo",
+      reason: expect.stringContaining("Turn off Remove location"),
+    });
+    expect(takeoutFailure(new Error("decode"), "image/heic", false)).toEqual({
+      kind: "photo",
+      reason: "This browser couldn't read this photo.",
+    });
   });
 });

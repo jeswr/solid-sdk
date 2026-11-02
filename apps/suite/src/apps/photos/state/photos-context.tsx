@@ -26,7 +26,12 @@ import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data
 import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import type { TakeoutItem, TakeoutPlan } from "../lib/data/takeout";
-import { importTakeoutPlan, type TakeoutImportResult } from "../lib/data/takeout-import";
+import {
+  importTakeoutPlan,
+  type TakeoutFailure,
+  type TakeoutImportResult,
+  takeoutFailure,
+} from "../lib/data/takeout-import";
 import {
   emptyTrash,
   listTrash,
@@ -537,9 +542,13 @@ function usePhotosState(session: PodSession) {
                 return (s) => s;
               },
             );
-            return items.map((_, index) => {
+            return items.map((item, index): string | TakeoutFailure => {
               const result = results[index];
-              return result?.ok ? `${result.url}#it` : undefined;
+              if (!result) return { kind: "pod" };
+              if (result.ok) return `${result.url}#it`;
+              return result.error instanceof LocationStripError
+                ? { kind: "photo", reason: result.error.message }
+                : takeoutFailure(result.error, item.file.type, stripLocation);
             });
           },
           findAlbum: (title) => baseline.current.albums.find((album) => album.name === title)?.url,

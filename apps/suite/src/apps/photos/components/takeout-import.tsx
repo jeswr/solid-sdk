@@ -90,7 +90,14 @@ export function TakeoutImport() {
   // Frees the copies kept for a retry the user moves on from, or leaves behind.
   const pendingRetry = useRef<TakeoutPlan | undefined>(undefined);
   const { discardTakeout } = photos;
-  useEffect(() => () => discardTakeout(pendingRetry.current?.items ?? []), [discardTakeout]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      discardTakeout(pendingRetry.current?.items ?? []);
+    };
+  }, [discardTakeout]);
   const startOver = () => {
     discardTakeout(pendingRetry.current?.items ?? []);
     pendingRetry.current = undefined;
@@ -113,6 +120,11 @@ export function TakeoutImport() {
           albums: true,
         }),
     });
+    // Nobody can retry once the page is gone, so free what a retry would need.
+    if (!mounted.current) {
+      discardTakeout(result.retry?.items ?? []);
+      return;
+    }
     pendingRetry.current = result.retry;
     go({ name: "done", strip: removeLocation, ...result });
   }
@@ -255,6 +267,23 @@ export function TakeoutImport() {
                 ? ` ${count(phase.failedAlbums, "album")} couldn't be saved; the photos are in your library.`
                 : ""}
             </p>
+            {phase.unreadable.length > 0 && (
+              <details className="pho-takeout-unreadable">
+                <summary>
+                  {`${count(phase.unreadable.length, "photo")} couldn't be imported`}
+                </summary>
+                <ul>
+                  {phase.unreadable.slice(0, 50).map((photo, index) => (
+                    <li key={`${index}:${photo.name}`}>
+                      {photo.name}: {photo.reason}
+                    </li>
+                  ))}
+                </ul>
+                {phase.unreadable.length > 50 && (
+                  <p>And {count(phase.unreadable.length - 50, "more photo")}.</p>
+                )}
+              </details>
+            )}
           </div>
         )}
         {error && (

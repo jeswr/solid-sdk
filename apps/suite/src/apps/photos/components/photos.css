@@ -843,6 +843,19 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
+.pho-takeout-unreadable {
+  font-size: var(--text-sm);
+}
+.pho-takeout-unreadable summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pho-takeout-unreadable ul {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-5);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
 .pho-takeout-error {
   color: var(--destructive);
 }

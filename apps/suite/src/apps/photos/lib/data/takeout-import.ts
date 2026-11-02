@@ -1,9 +1,37 @@
 // AUTHORED-BY Claude Opus 5.5
+import { statusOf } from "./shared";
 import type { TakeoutItem, TakeoutPlan } from "./takeout";
 
+/**
+ * Why a photo didn't save: the pod (worth retrying, and a run of these means the
+ * pod has stopped saving) or the photo itself (retrying won't help).
+ */
+export type TakeoutFailure = { kind: "pod" } | { kind: "photo"; reason: string };
+export interface UnreadablePhoto {
+  name: string;
+  reason: string;
+}
+
+/** Sorts an upload error into a pod problem or a photo this browser can't import. */
+export function takeoutFailure(
+  error: unknown,
+  type: string,
+  stripLocation: boolean,
+): TakeoutFailure {
+  // HTTP errors carry a status; fetch reports network failures as TypeError.
+  if (statusOf(error) !== undefined || error instanceof TypeError) return { kind: "pod" };
+  if (stripLocation && /^image\/(heic|heif|tiff|avif)$/u.test(type))
+    return {
+      kind: "photo",
+      reason:
+        "Location can't be removed from this format here. Turn off Remove location to import it.",
+    };
+  return { kind: "photo", reason: "This browser couldn't read this photo." };
+}
+
 export interface TakeoutImportSteps {
-  /** Saves one batch; resolves with each item's photo IRI, or undefined when it failed. */
-  upload(items: readonly TakeoutItem[]): Promise<(string | undefined)[]>;
+  /** Saves one batch; resolves with each item's photo IRI, or why it failed. */
+  upload(items: readonly TakeoutItem[]): Promise<(string | TakeoutFailure)[]>;
   /** The URL of an existing album with this title. */
   findAlbum(title: string): string | undefined;
   addToAlbum(url: string, title: string, refs: string[]): Promise<boolean>;
@@ -17,15 +45,17 @@ export interface TakeoutImportResult {
   albums: number;
   /** Albums whose photos saved but which couldn't be written. */
   failedAlbums: number;
-  /** The photos that didn't save, with their albums, ready to import again. */
+  /** The photos that didn't save because of the pod, with their albums, ready to import again. */
   retry?: TakeoutPlan;
+  /** Photos that can't be imported as they are; retrying won't help. */
+  unreadable: UnreadablePhoto[];
   /** The import stopped early because whole batches kept failing (e.g. the pod is offline). */
   stopped?: boolean;
 }
 
 /** Photos per upload batch: keeps the UI responsive in libraries of many thousands. */
 export const TAKEOUT_BATCH = 20;
-/** Consecutive batches with no saved photo before the import gives up. */
+/** Consecutive batches with pod failures and no saved photo before the import gives up. */
 export const STOP_AFTER_FAILED_BATCHES = 3;
 
 /**
@@ -40,6 +70,7 @@ export async function importTakeoutPlan(
 ): Promise<TakeoutImportResult> {
   const saved = new Map<string, string>();
   const failed: TakeoutItem[] = [];
+  const unreadable: UnreadablePhoto[] = [];
   let stopped = false;
   let failedBatches = 0;
   steps.onProgress?.(0, plan.items.length);
@@ -53,14 +84,22 @@ export async function importTakeoutPlan(
     const items = plan.items.slice(start, start + batch);
     const refs = await steps.upload(items);
     let any = false;
+    let pod = false;
     items.forEach((item, index) => {
-      const ref = refs[index];
-      if (ref) {
-        saved.set(item.key, ref);
+      const outcome = refs[index] ?? { kind: "pod" };
+      if (typeof outcome === "string") {
+        saved.set(item.key, outcome);
         any = true;
-      } else failed.push(item);
+      } else if (outcome.kind === "photo") {
+        unreadable.push({ name: item.name, reason: outcome.reason });
+      } else {
+        failed.push(item);
+        pod = true;
+      }
     });
-    failedBatches = any ? 0 : failedBatches + 1;
+    // Photos that can't be read say nothing about the pod.
+    if (any) failedBatches = 0;
+    else if (pod) failedBatches += 1;
     steps.onProgress?.(Math.min(start + batch, plan.items.length), plan.items.length);
   }
   if (plan.albums.length && saved.size) steps.onAlbums?.();
@@ -76,12 +115,13 @@ export async function importTakeoutPlan(
     if (ok) albums += 1;
     else failedAlbums += 1;
   }
-  if (!failed.length) return { saved: saved.size, albums, failedAlbums };
+  if (!failed.length) return { saved: saved.size, albums, failedAlbums, unreadable };
   const keys = new Set(failed.map((item) => item.key));
   return {
     saved: saved.size,
     albums,
     failedAlbums,
+    unreadable,
     ...(stopped ? { stopped } : {}),
     retry: {
       ...plan,

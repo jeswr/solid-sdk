@@ -353,7 +353,7 @@ it("imports Takeout batches with one refresh, and a retry reuses the upload and 
     await act(async () => {
       second = await s.state.importTakeout(first.retry as typeof plan, true);
     });
-    expect(second).toEqual({ saved: 1, albums: 1, failedAlbums: 0 });
+    expect(second).toEqual({ saved: 1, albums: 1, failedAlbums: 0, unreadable: [] });
     expect(originals.at(-1)).toBe(failedUrl);
     expect(listings).toBe(1);
     expect(s.state.photos).toHaveLength(3);
