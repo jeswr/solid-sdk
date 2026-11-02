@@ -21,7 +21,7 @@
     <p>Signing you in…</p>
     <!--
       Hands the authorization code back to the app window that opened this popup.
-      Required by @solid/reactive-authentication (AGENTS.md §Authentication).
+      Returns the complete callback URL to @jeswr/pod-auth.
 
       SECURITY (review SEC-5): the URL carries the OAuth `code`, so target the
       message at OUR origin only — never broadcast it to "*". callback.html is

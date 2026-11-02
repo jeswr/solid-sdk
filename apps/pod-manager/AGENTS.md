@@ -13,14 +13,14 @@ library ecosystem has churned and most material you were trained on recommends s
 
 | Concern | Use | Verified version (June 2026) |
 |---|---|---|
-| Authentication (browser) | `@solid/reactive-authentication` | 0.1.x |
+| Authentication (browser) | `@jeswr/pod-auth` | workspace |
 | Fetch + parse RDF resources | `@jeswr/fetch-rdf` | 0.1.x |
 | Typed access to Solid data (WebID profiles, containers, WAC/ACP) | `@solid/object` | 0.6.x |
 | Your own typed RDF classes | `@rdfjs/wrapper` | 0.34.x |
 | RDF terms, in-memory store, Turtle serialisation | `n3` | latest |
 
 ```sh
-npm install @solid/reactive-authentication @jeswr/fetch-rdf @solid/object @rdfjs/wrapper n3
+pnpm add @jeswr/pod-auth @jeswr/fetch-rdf @solid/object @rdfjs/wrapper n3
 npm install -D @rdfjs/types @types/n3
 ```
 
@@ -40,9 +40,9 @@ re-verify against the installed `.d.ts` before trusting any example.
 
 | Banned | Why | Use instead |
 |---|---|---|
-| `@inrupt/solid-client`, `@inrupt/solid-client-authn-*`, `@inrupt/vocab-*` | Plain-function data model that doesn't compose with the typed-wrapper pattern; two parallel ways to read/write the same pod | `@solid/object` + `@rdfjs/wrapper`; `@solid/reactive-authentication` |
+| `@inrupt/solid-client`, `@inrupt/solid-client-authn-*`, `@inrupt/vocab-*` | Plain-function data model that doesn't compose with the typed-wrapper pattern; two parallel ways to read/write the same pod | `@solid/object` + `@rdfjs/wrapper`; `@jeswr/pod-auth` |
 | `ldo`, `@ldo/*` | Different shape-codegen paradigm; do not mix | `@rdfjs/wrapper` `TermWrapper` subclasses |
-| `@uvdsl/solid-oidc-client-browser` | Named in `@jeswr/fetch-rdf`'s TSDoc — ignore that | reactive-authentication's global-fetch patch (pass no `fetch` to `fetchRdf`) |
+| `@uvdsl/solid-oidc-client-browser` | Named in `@jeswr/fetch-rdf`'s TSDoc — ignore that | `@jeswr/pod-auth` and explicit `podFetch` |
 | `rdf-parse` | Heavyweight; Solid needs only Turtle + JSON-LD | `@jeswr/fetch-rdf` (both formats, content-type dispatched) |
 | Hand-built triples (`DataFactory.quad(...)` inline, string-concatenated Turtle) | Drifts from vocabularies, misses datatype coercion, unreviewable | Typed accessors — see "Writing data" |
 
@@ -70,127 +70,50 @@ skill files are plain markdown — read them at
 [github.com/jeswr/solid-ai-coding/tree/main/skills](https://github.com/jeswr/solid-ai-coding/tree/main/skills)
 or copy them into the project.
 
-### Authentication — `@solid/reactive-authentication`
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Authentication — `@jeswr/pod-auth`
 
-Mental model: there is **no session object and no authenticated-fetch wrapper**.
-`ReactiveFetchManager.registerGlobally()` patches `globalThis.fetch` (the constructor does
-**not** — call `registerGlobally()` explicitly in 0.1.3); afterwards you call plain `fetch()`
-and a `401` transparently triggers login and a retry with a DPoP-bound token.
+Use the shared core exclusively. `src/lib/pod-auth.ts` constructs one browser singleton with
+an HTTPS `/clientid.jsonld` client ID, `/callback.html` redirect and the default automatic
+credential boundary. Only development builds on loopback use dynamic registration and allow
+loopback HTTP. Read [the package skill](../../packages/pod-auth/SKILL.md) for its API and policy.
 
-```html
-<!-- Registered as a side effect of importing the module -->
-<authorization-code-flow></authorization-code-flow>
-```
+`SessionProvider` restores once across StrictMode replay, fences stale operations, loads public
+profile metadata and preserves `IssueAssignmentAnnouncer`. `auth.remembered()` supplies account
+rows with their issuers; the directory's recent-provider store records successful sign-ins only.
+`SignInCard` from `@jeswr/suite-ui/sign-in` owns the logged-out UI. Resolve typed WebID/provider
+addresses with `resolveLoginTarget`, pristine `publicFetch` and a 15-second abort timeout.
 
-```ts
-import { DPoPTokenProvider, ReactiveFetchManager } from "@solid/reactive-authentication";
-import type { AuthorizationCodeFlow } from "@solid/reactive-authentication";
+Never patch global fetch or call `registerGlobally`. Every Pod read/write receives `podFetch`
+from `useSession()` explicitly, including stores, ACLs, notifications and forms. Source APIs use
+`sourceFetch`; public discovery uses `publicFetch` with `credentials: "omit"`. Pod binary previews
+and linked Pod artwork use object URLs loaded with `podFetch` and revoked on cleanup.
 
-const ui = document.querySelector<AuthorizationCodeFlow>("authorization-code-flow")!;
+The click handler opens the popup synchronously. `ui.getCode` only navigates that existing window,
+returns the complete callback URL and honors abort. Always decline `prompt=none` and requests
+without a gesture-opened window. The callback posts `location.href` to `location.origin` only;
+accept messages only from that popup and origin. pod-auth owns tokens, keys, refresh and logout.
+The legacy app database and account-pointer keys are deleted once during startup.
 
-const provider = new DPoPTokenProvider(
-  new URL("/callback.html", location.href).toString(), // callbackUri
-  ui.getCode.bind(ui),                                 // opens the login popup on demand
-);
+#### Mounting in Next.js
 
-const manager = new ReactiveFetchManager([provider]);
-manager.registerGlobally(); // patches globalThis.fetch — construct + register ONCE, early
-                            // (0.1.3: the constructor alone does NOT patch the global)
-```
-
-The typed `querySelector<AuthorizationCodeFlow>` matters: the library does not augment
-`HTMLElementTagNameMap`, so an untyped query returns `Element` and `.getCode` fails to compile.
-
-`/callback.html` must exist at that URL and contain the line:
-
-```html
-<script>opener.postMessage(location.href)</script>
-```
-
-**Issuer resolution is built in** (v0.1.2): a fixed host list (`localhost:3000`,
-`*.solidcommunity.net`, `storage.inrupt.com`, `*.solidweb.org`, `*.solidweb.app`,
-`teamid.live`, `datapod.igrant.io`); any other host **throws `Unknown issuer`**. ⚠️ Interactive
-login against local CSS **still fails in 0.1.2** (`only requests to HTTPS are allowed` — the
-`http://` issuer is hard-coded, no override). Fix: the e2e-verified `WebIdDPoPTokenProvider`
-in the `solid-reactive-authentication` skill (WebID-driven issuer selection +
-`allowInsecureLoopback`); details + alternatives in `docs/local-ops.md`.
-
-Rules:
-- **Authentication goes through `@solid/reactive-authentication` only.** Do not use
-  `@inrupt/solid-client-authn-*`, LDO's connected datasets, or any other auth layer — even if a
-  tutorial, skill file, or your training data suggests them.
-- Use `DPoPTokenProvider`. `BearerTokenProvider` is demo-grade;
-  `ClientCredentialsTokenProvider` is for server-to-server only.
-- **Deployed apps publish a static Client Identifier Document** (stable `client_id`, your app's
-  name on the consent screen) — the `solid-client-id` skill has the verified template, the
-  Next.js hosting recipe (route handler — `public/*.jsonld` 404s in dev), and the provider
-  wiring. Dynamic registration is for quick local spikes — and is **required** when a
-  localhost app logs into a *live* server: remote IdPs cannot dereference a `localhost`
-  client-id document (matrix in the skill).
-- Construct `ReactiveFetchManager` and call `registerGlobally()` before any library captures a
-  reference to `fetch`.
-- **Page reloads**: tokens live in memory only — a hard reload drops them. The next `401`
-  re-runs the flow with `prompt=none` first, so while the IdP cookie session lives, re-auth is
-  silent; don't build your own token persistence.
-- Debugging note: if auth works on PodSpaces but CSS rejects with
-  `invalid_dpop_proof / iat is not recent enough`, a DPoP proof is carrying a milliseconds `iat`
-  (must be seconds). The library gets this right — suspect any second auth layer you added.
-
-#### Mounting in Next.js (same guard for any SSR framework)
-
-The library is **browser-only** and calls `customElements.define` at module top level with no
-guard — any import reachable during SSR throws and breaks `next build` (`'use client'` alone
-does **not** prevent the server-side module evaluation). In a pure-SPA framework (Vite etc.) a
-plain import is fine. Next.js bridge:
-
-```tsx
-"use client";
-import { useEffect, useRef } from "react";
-
-export function SolidLogin() {
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    // Dynamic import keeps the module out of the server bundle entirely.
-    import("@solid/reactive-authentication").then(({ DPoPTokenProvider, ReactiveFetchManager }) => {
-      const ui = ref.current as import("@solid/reactive-authentication").AuthorizationCodeFlow;
-      const manager = new ReactiveFetchManager([
-        new DPoPTokenProvider(new URL("/callback.html", location.href).toString(), ui.getCode.bind(ui)),
-      ]);
-      manager.registerGlobally(); // 0.1.3: required to patch globalThis.fetch
-    });
-  }, []);
-  return <authorization-code-flow ref={ref} />;
-}
-```
-
-Declare the element for JSX once, in a `.d.ts` (React 19 form — the JSX namespace lives in the
-`react` module now, not on the global):
-
-```ts
-import type React from "react";
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "authorization-code-flow": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
-    }
-  }
-}
-```
-
-Put `callback.html` in `public/`. Keep server components free of any import of this module.
+Import `src/lib/pod-auth.ts` dynamically from the provider's client effect so authentication
+initialization never runs during SSR or static export. `"use client"` alone does not prevent
+server module evaluation. Keep browser globals and singleton construction out of render paths.
+The shared sign-in directory and type imports do not initialize a session.
 
 ### Reading data
 
 `fetchRdf` GETs a resource (Turtle or JSON-LD), parses it, and returns an RDF/JS `DatasetCore`
-(an `n3.Store` at runtime) plus the ETag. It defaults to the (patched) global `fetch`, so
-authentication is automatic — pass no `fetch` option.
+(an `n3.Store` at runtime) plus the ETag. Pass the session
+transport explicitly: `fetchRdf(url, { fetch: podFetch })`. Global fetch remains public.
 
 ```ts
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { WebIdDataset } from "@solid/object";
 import { DataFactory } from "n3";
 
-const { dataset, etag } = await fetchRdf(webId);      // etag: string | null — keep for writes
+const { dataset, etag } = await fetchRdf(webId, { fetch: podFetch });      // etag: string | null — keep for writes
 
 const profile = new WebIdDataset(dataset, DataFactory);
 const me = profile.mainSubject;                       // Agent | undefined
@@ -202,7 +125,7 @@ List a container the same way:
 ```ts
 import { ContainerDataset } from "@solid/object";
 
-const { dataset } = await fetchRdf(containerUrl);
+const { dataset } = await fetchRdf(containerUrl, { fetch: podFetch });
 const container = new ContainerDataset(dataset, DataFactory).container;
 for (const r of container?.contains ?? []) console.log(r.id, r.name, r.isContainer);
 ```
@@ -215,9 +138,8 @@ for (const r of container?.contains ?? []) console.log(r.id, r.name, r.isContain
   new `TermWrapper` subclass (see "Writing data"), not a different library.
 - Wrap errors: `fetchRdf` throws `RdfFetchError` with `.status`/`.url` — branch on it, don't
   string-match messages.
-- For testability, any injected `fetch` parameter must be **strictly optional and omitted by
-  default** — never default it to a captured `fetch` reference. Passing any `fetch` to
-  `fetchRdf` bypasses the auth-patched global, so the 401→login upgrade silently never runs.
+- Pass `podFetch` to every data-layer fetch parameter (`fetchImpl`, or `{ fetch }` for SDK
+  APIs). Tests inject a transport too; use a throwing global fetch to catch accidental omissions.
 
 ### WebID profiles and discovery
 
@@ -291,7 +213,7 @@ const writer = new Writer({ format: "text/turtle" });
 for (const quad of dataset) writer.addQuad(quad);
 writer.end(async (err, turtle) => {
   if (err) throw err;
-  const res = await fetch(resourceUrl, {
+  const res = await podFetch(resourceUrl, {
     method: "PUT",
     headers: { "content-type": "text/turtle", ...(etag ? { "if-match": etag } : {}) },
     body: turtle,
@@ -412,9 +334,7 @@ seeded accounts at boot (`--seedConfig`), the account API recipe, **fixing the b
 profile** (custom pod templates in `config/pod-templates/`, or client-credentials seeding),
 and the troubleshooting table. The three traps to know before you hit them:
 
-- **Interactive login against local CSS fails in 0.1.2** (`only requests to HTTPS are
-  allowed`) → the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` is the
-  e2e-verified fix (drop-in snippet in the ops doc).
+- **Local HTTP sign-in** requires a development build on loopback. Production builds stay HTTPS-only.
 - **Fresh CSS pod profiles are bare** — no `foaf:name`, no `pim:storage`, hence no write path
   → seed via pod templates or client-credentials PUT (ops doc; never the `rel="type"` Link
   header).
@@ -508,8 +428,7 @@ encounter it.
   golden path), implement to green, refactor. The `test-driven-development` skill below carries
   the discipline.
 - **Vitest** for `src/lib/` unit/integration tests. Inject `fetch` as an **optional** parameter
-  so tests can mock it — but omit it everywhere in production code paths, or you bypass the
-  auth-patched global (see Part 1 §Reading data).
+  so tests can mock it; production callers always supply `podFetch` (see Part 1 §Reading data).
 - **Playwright** for golden-path e2e against a local Community Solid Server: start **one** CSS
   instance per suite (global setup — startup is slow), use a **fresh account per write test**
   for isolation, share a read-only fixture account otherwise.

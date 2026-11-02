@@ -10,6 +10,8 @@ import { readResourceProperties, type PropertyGroup } from "@/lib/resource-view"
 /** A fetched resource ready to render: its viewer choice + decoded content. */
 export interface LoadedResource {
   url: string;
+  /** Authenticated binary preview, revoked when the resource changes or unmounts. */
+  objectUrl?: string;
   viewer: ViewerChoice;
   contentType?: string;
   size?: number;
@@ -33,10 +35,8 @@ export interface LoadedResource {
 }
 
 /**
- * Fetch a single pod resource for the detail view. Uses the auth-patched global
- * `fetch` (no `fetch` arg passed anywhere) so protected resources upgrade
- * transparently. Only text/RDF bodies are read into memory; binary kinds are
- * left to the browser (the viewer points an `<img>`/`<object>` at the URL).
+ * Fetch a single Pod resource through the session transport. Binary previews
+ * use object URLs so browser elements can render authenticated responses.
  */
 export function useResource(url: string): {
   data?: LoadedResource;
@@ -45,7 +45,7 @@ export function useResource(url: string): {
   /** Re-fetch the resource (e.g. after a stale-ETag write conflict). */
   reload: () => void;
 } {
-  const { status } = useSession();
+  const { status, podFetch } = useSession();
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const [state, setState] = useState<{
@@ -55,14 +55,15 @@ export function useResource(url: string): {
   }>({ loading: true });
 
   useEffect(() => {
-    if (status !== "logged-in") return;
+    if (status !== "logged-in") { setState({ loading: true }); return; }
     let cancelled = false;
+    let objectUrl: string | undefined;
     setState({ loading: true });
 
     (async () => {
       // Always revalidate (no-cache) so a reload after an edit reads the fresh
       // body + ETag rather than a heuristically-cached copy (see rdf-read.ts).
-      const res = await fetch(url, { headers: { accept: "*/*", "cache-control": "no-cache" } });
+      const res = await podFetch(url, { headers: { accept: "*/*", "cache-control": "no-cache" } });
       if (!res.ok) {
         throw Object.assign(new Error(`Request failed (${res.status})`), {
           status: res.status,
@@ -91,9 +92,14 @@ export function useResource(url: string): {
         loaded.dataset = dataset;
       } else if (viewer.kind === "text" && viewer.embeddable) {
         loaded.text = await res.text();
+      } else {
+        const blob = await res.blob();
+        if (cancelled) return;
+        // Unknown/active formats are download-only, including when a link is opened in a new tab.
+        const preview = viewer.embeddable ? blob : new Blob([blob], { type: "application/octet-stream" });
+        objectUrl = URL.createObjectURL(preview);
+        loaded.objectUrl = objectUrl;
       }
-      // Binary kinds (image/pdf/audio/video/generic): no body read — the viewer
-      // references the URL directly, keeping memory and bandwidth low.
 
       if (!cancelled) setState({ loading: false, data: loaded });
     })().catch((e: unknown) => {
@@ -104,8 +110,9 @@ export function useResource(url: string): {
 
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [url, status, refresh]);
+  }, [url, status, refresh, podFetch]);
 
   return { ...state, reload };
 }

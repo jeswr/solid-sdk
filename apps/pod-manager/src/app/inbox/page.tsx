@@ -177,6 +177,7 @@ function NotificationRow({
 }
 
 function ComposeNotification({ actorWebId, onSent }: { actorWebId: string; onSent: () => void }) {
+  const { podFetch } = useSession();
   const [recipients, setRecipients] = useState<string[]>([]);
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
@@ -191,14 +192,14 @@ function ComposeNotification({ actorWebId, onSent }: { actorWebId: string; onSen
     setSending(true);
     try {
       // sendNotification discovers + STRICT-validates the recipient inbox before
-      // any POST (SSRF guard) — production passes no fetch (auth-patched global).
+      // any POST (SSRF guard) — the session supplies the Pod transport.
       await sendNotification({
         recipientWebId: recipient,
         actorWebId,
         type: "Announce",
         summary: summary.trim() || undefined,
         content: content.trim() || undefined,
-      });
+      }, podFetch);
       toast.success("Notification sent");
       onSent();
     } catch (e) {

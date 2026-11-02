@@ -18,7 +18,7 @@ import {
 } from "@/components/permissions-ui";
 import {
   freshGrantsForAgent,
-  permissionsBackend,
+  usePermissionsBackend,
   useConnectedApps,
   type ConnectedApp,
 } from "@/components/use-permissions";
@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const EMPTY_APPS: ConnectedApp[] = [];
 
 export default function ConnectedAppsPage() {
+  const permissionsBackend = usePermissionsBackend();
   const { data: apps, loading, error, revalidating, reload, getFreshModel } =
     useConnectedApps();
   // Optimistic removals: hide immediately, restore on failure.
