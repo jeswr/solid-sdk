@@ -265,9 +265,7 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
   };
   const store = new Store([...buildTask(resourceUrl, toWfTaskData(text, closed, completedAt))]);
 
-  // The generated type marks the recurrence's required frequency as required on the
-  // whole flat object (sst-ild.4.12), so the optional-recurrence core is built loosely.
-  const core: Partial<GeneratedTaskData> = {
+  let core: GeneratedTaskData = {
     summary: text.summary,
     description: text.description || undefined,
     startTime: data.startTime,
@@ -277,12 +275,14 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
     organizer: data.organizer,
     calendar: data.calendar,
   };
+  // Recurrence fields go in only with a known frequency, so no frequency-less rule
+  // node is ever built.
   const frequency = normalizeFrequency(data.recurrence?.frequency);
   if (data.recurrence && frequency !== undefined) {
     const { interval, count, until } = data.recurrence;
-    Object.assign(core, { frequency, interval, count, until });
+    core = { ...core, frequency, interval, count, until };
   }
-  for (const quad of generatedTask.build(resourceUrl, core as GeneratedTaskData)) store.add(quad);
+  for (const quad of generatedTask.build(resourceUrl, core)) store.add(quad);
 
   const task = new SchedulingTask(schedulingTaskSubject(resourceUrl), store, DataFactory);
   for (const label of data.labels ?? []) {
