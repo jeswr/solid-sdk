@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 
 import * as jose from 'jose';
 import { describe, expect, it, type Mock, vi } from 'vitest';
@@ -252,6 +253,35 @@ describe('authenticatedFetch — credential boundary', () => {
     >;
     const proof = jose.decodeJwt(retryHeaders.DPoP);
     expect(proof.nonce).toBe('server-nonce-xyz');
+  });
+
+  it.each([
+    'resolve',
+    'reject',
+  ])('cancels a streamed challenge before retry when cancellation promises %s', async (outcome) => {
+    const session = await makeSession();
+    const cancel = vi.fn(() =>
+      outcome === 'reject' ? Promise.reject(new Error('closed')) : undefined,
+    );
+    const fetchImpl = mockFetch(async () => {
+      if (fetchImpl.mock.calls.length === 1)
+        return new Response(new ReadableStream({ cancel }), {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      expect(cancel).toHaveBeenCalledOnce();
+      return ok();
+    });
+    expect(
+      (
+        await authenticatedFetch(session, {
+          url: 'https://alice.pod.example/x',
+          method: 'GET',
+          headers: {},
+          fetchImpl,
+        })
+      ).response.status,
+    ).toBe(200);
   });
 
   it('does NOT retry on a non-nonce 401 (e.g. invalid_token)', async () => {

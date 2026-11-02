@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
+import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
+import { TaskMove } from "./move";
 import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
@@ -12,6 +13,7 @@ const initializationState = `${NS.SCHEDULING}initializationState`;
 const initializationOwner = `${NS.SCHEDULING}initializationOwner`;
 const cleanupResources = `${NS.SCHEDULING}cleanupResources`;
 const cleanupEtag = `${NS.SCHEDULING}cleanupEtag`;
+const deletionState = `${NS.SCHEDULING}deletionState`;
 interface ProjectCleanup {
   resource: Resource;
   resources: Pick<Resource, "url" | "etag">[];
@@ -23,6 +25,11 @@ export interface StoredTask extends Resource {
 }
 export interface StoredProject extends Resource {
   tracker: TaskTracker;
+}
+/** Kept by one create operation, including when a PUT commits without a response. */
+export interface ProjectCreation {
+  owner: string;
+  reservation?: { name: string; dataset: Store } | undefined;
 }
 export interface StoreOptions {
   storage: string;
@@ -71,21 +78,32 @@ export class TaskStore {
     if (!tracker.isTracker) throw new TypeError("Expected a wf:Tracker.");
     return { ...resource, tracker };
   }
-  async listProjects(): Promise<StoredProject[]> {
+  async listProjects(onError?: (url: string, error: unknown) => void): Promise<StoredProject[]> {
     const urls = new Set((await this.io.list(this.projects)).filter((url) => url.endsWith(".ttl")));
     if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
-        else
-          for (const url of await this.io.list(reg.location))
-            if (url.endsWith(".ttl")) urls.add(url);
+        else {
+          try {
+            const listed = await this.io.list(reg.location);
+            for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
+          } catch (error) {
+            if (!onError) throw error;
+            onError(reg.location, error);
+          }
+        }
       }
     const projects: StoredProject[] = [];
     for (const url of urls) {
-      const resource = await this.readListedResource(url);
-      if (!resource) continue;
-      const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
-      if (tracker.isTracker) projects.push({ ...resource, tracker });
+      try {
+        const resource = await this.readListedResource(url);
+        if (!resource) continue;
+        const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
+        if (tracker.isTracker) projects.push({ ...resource, tracker });
+      } catch (error) {
+        if (!onError) throw error;
+        onError(url, error);
+      }
     }
     return projects.sort((a, b) => (a.tracker.position ?? 0) - (b.tracker.position ?? 0));
   }
@@ -151,7 +169,11 @@ export class TaskStore {
       }
     }
   }
-  async createProject(title: string, inbox = false): Promise<StoredProject> {
+  async createProject(
+    title: string,
+    inbox = false,
+    operation: ProjectCreation = { owner: crypto.randomUUID() },
+  ): Promise<StoredProject> {
     requireTitle(title);
     await this.protectTasks();
     await this.protectTasks(this.projects);
@@ -163,26 +185,48 @@ export class TaskStore {
       return path.slice(path.lastIndexOf("/") + 1).replace(/\.ttl$/, "");
     });
     for (let attempt = 0; attempt < 100; attempt++) {
-      const name = inbox ? "inbox" : uniqueSlug(title, used);
+      const reservation = operation.reservation;
+      const name = reservation?.name ?? (inbox ? "inbox" : uniqueSlug(title, used));
       const url = `${this.projects}${name}.ttl`;
       const stateStore = `${this.projects}${name}/`;
       await this.protectTasks(url);
       await this.protectTasks(stateStore);
-      const { dataset } = createTracker(url, title, stateStore, [this.options.webId], this.now());
-      let resource: Resource;
-      try {
-        resource = await this.io.write(url, dataset, { create: true });
-      } catch (error) {
-        if (!(error instanceof ModelError && error.status === 412) || inbox) throw error;
-        used.push(name);
-        continue;
+      let intended = reservation;
+      if (!intended) {
+        const { dataset } = createTracker(url, title, stateStore, [this.options.webId], this.now());
+        node(`${url}#this`, dataset).setText(initializationOwner, operation.owner);
+        intended = { name, dataset };
+        operation.reservation = intended;
+      }
+      let resource = reservation ? await this.io.optional(url) : undefined;
+      if (resource) {
+        const tracker = new TaskTracker(`${url}#this`, resource.dataset, DataFactory);
+        if (
+          !tracker.isTracker ||
+          tracker.stateStore !== stateStore ||
+          node(tracker.id, resource.dataset).text(initializationOwner) !== operation.owner
+        )
+          throw new ModelError(412, url, resource.etag);
+        if (node(tracker.id, resource.dataset).text(initializationState) === "ready")
+          return { ...resource, tracker };
+      } else {
+        try {
+          resource = await this.io.write(url, intended.dataset, { create: true });
+        } catch (error) {
+          // Only a definite collision before acquiring a reservation may choose a new slug.
+          if (!(error instanceof ModelError && error.status === 412) || inbox || reservation)
+            throw error;
+          operation.reservation = undefined;
+          used.push(name);
+          continue;
+        }
       }
       let container: Resource | undefined;
       try {
         container = await this.taskContainer(stateStore);
         await this.register(stateStore);
         // Finalize only while this attempt still owns its tracker revision.
-        resource = await this.claimResource(resource, `${url}#this`);
+        resource = await this.claimResource(resource, `${url}#this`, true);
       } catch (error) {
         const cleanup = { resource, resources: container ? [container] : [], title, inbox };
         this.pendingCleanup.set(resource.url, cleanup);
@@ -201,11 +245,16 @@ export class TaskStore {
     throw new ModelError(409, this.projects);
   }
   /** Change representation bytes so even content-based strong validators advance. */
-  private async claimResource(resource: Resource, subject: string): Promise<Resource> {
+  private async claimResource(
+    resource: Resource,
+    subject: string,
+    ready = false,
+  ): Promise<Resource> {
     const dataset = new Store([...resource.dataset]);
     const value = node(subject, dataset);
-    if (value.text(initializationState) === "cleanup")
+    if (value.text(initializationState) === "cleanup" || value.text(deletionState) === "pending")
       throw new ModelError(412, resource.url, resource.etag);
+    if (ready) value.setText(initializationState, "ready");
     const previous = value.date(`${NS.DCT}modified`)?.getTime() ?? -Infinity;
     value.setDate(`${NS.DCT}modified`, new Date(Math.max(this.now().getTime(), previous + 1)));
     return this.io.write(resource.url, dataset, { etag: resource.etag });
@@ -274,6 +323,8 @@ export class TaskStore {
     project: StoredProject,
     change: (tracker: TaskTracker) => void,
   ): Promise<StoredProject> {
+    if (node(project.tracker.id, project.dataset).text(deletionState) === "pending")
+      throw new ModelError(412, project.url, project.etag);
     const dataset = new Store([...project.dataset]);
     const tracker = new TaskTracker(`${project.url}#this`, dataset, DataFactory);
     change(tracker);
@@ -288,21 +339,32 @@ export class TaskStore {
     if (!task.isTask) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task };
   }
-  async listTasks(stateStore: string): Promise<StoredTask[]> {
+  /** Strict listings are mutation gates: no missing, unreadable or invalid task may be skipped. */
+  async listTasks(stateStore: string, { strict = false } = {}): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
-    for (const url of await this.io.list(stateStore)) {
-      if (!url.endsWith(".ttl")) continue;
-      const resource = await this.readListedResource(url);
+    for (const url of await this.io.list(stateStore, { strict })) {
+      if (!isTaskMember(url, stateStore)) continue;
+      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
       if (!resource) continue;
+      if (strict) {
+        const data = taskDetails(resource.url, resource.dataset);
+        if (!data) throw new TypeError("Expected a wf:Task.");
+        validateTask(data);
+      }
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }
     return tasks;
   }
-  async createTask(project: StoredProject, data: TaskDetails): Promise<StoredTask> {
+  async createTask(
+    project: StoredProject,
+    data: TaskDetails,
+    id = this.uuid(),
+    /** Capture the exact payload before a possibly ambiguous write, for ownership checks. */
+    onReserved?: (resource: Resource) => void,
+  ): Promise<StoredTask> {
     const container = project.tracker.stateStore;
     if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
-    const id = this.uuid();
     if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
     const url = `${container}${id}.ttl`;
     const now = this.now();
@@ -312,6 +374,7 @@ export class TaskStore {
       created: data.created ?? now,
       modified: now,
     });
+    onReserved?.({ url, dataset: new Store([...dataset]), etag: null });
     const resource = await this.io.write(url, dataset, { create: true });
     return { ...resource, task: new TaskItem(`${url}#it`, resource.dataset, DataFactory) };
   }
@@ -326,7 +389,116 @@ export class TaskStore {
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
   }
+  /** Prepare once so Retry uses the same data, destination and reference revisions. */
+  prepareTaskMove(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): TaskMove {
+    const container = target.tracker.stateStore;
+    if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
+    const url = `${container}${id}.ttl`;
+    const now = this.now();
+    const dataset = createTask(url, {
+      ...projectMoveData(item, source, target),
+      created: item.task.created ?? now,
+      modified: now,
+    });
+    return new TaskMove(
+      this.io,
+      item,
+      { url, dataset },
+      async () => {
+        // Children and occurrences (including reopened copies) may remain in other projects.
+        const projects = new Map(
+          [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
+        );
+        const references = new Map<string, StoredTask>();
+        for (const project of projects.values())
+          for (const child of await this.listTasks(project.tracker.stateStore as string))
+            if (child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
+              references.set(child.url, child);
+        return [...references.values()];
+      },
+      now,
+    );
+  }
+  /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
+  async moveTaskToProject(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): Promise<StoredTask> {
+    if (source.url === target.url) return item;
+    return this.prepareTaskMove(item, source, target, id).run();
+  }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);
+  }
+  /** Each resource keeps its own read validator; a conflict stops further removal. */
+  async deleteSection(project: StoredProject, id: string): Promise<StoredProject> {
+    if (!project.tracker.sections.some((section) => section.id === id))
+      throw new TypeError("Unknown section.");
+    for (const item of await this.listTasks(project.tracker.stateStore as string)) {
+      if (item.task.types.has(id)) {
+        await this.updateTask(item, (task) => task.types.delete(id));
+      }
+    }
+    return this.updateProject(project, (tracker) => tracker.removeSection(id));
+  }
+  /** Reserve the tracker before removing anything; the persisted marker permits recovery after a restart. */
+  async deleteProject(project: StoredProject): Promise<void> {
+    const current = await this.io.optional(project.url);
+    if (!current) return;
+    const pending = node(project.tracker.id, current.dataset).text(deletionState) === "pending";
+    if (!pending && current.etag !== project.etag)
+      throw new ModelError(412, project.url, current.etag);
+    const container = project.tracker.stateStore as string;
+    const tracker = new TaskTracker(project.tracker.id, current.dataset, DataFactory);
+    if (tracker.stateStore !== container) throw new ModelError(412, project.url, current.etag);
+    const dataset = new Store([...current.dataset]);
+    const marker = node(project.tracker.id, dataset);
+    marker.setText(deletionState, "pending");
+    marker.setText(initializationOwner, crypto.randomUUID());
+    const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
+    for (const item of await this.listTasks(container))
+      await this.removeIfPresent(item.url, item.etag);
+    const resource = await this.io.optional(container);
+    if (resource) await this.removeIfPresent(container, resource.etag);
+    await this.removeIfPresent(project.url, reserved.etag);
+  }
+  private async removeIfPresent(url: string, etag: string | null): Promise<void> {
+    try {
+      await this.io.remove(url, etag);
+    } catch (error) {
+      if (!(error instanceof ModelError && error.status === 404)) throw error;
+    }
+  }
+}
+
+/** The suite app has no ldp-container dependency. Keep this stricter task-resource policy local. */
+function isTaskMember(value: string, container: string): boolean {
+  try {
+    const scope = new URL(container);
+    const member = new URL(value);
+    const child = member.pathname.slice(scope.pathname.length);
+    return (
+      ["http:", "https:"].includes(scope.protocol) &&
+      scope.pathname.endsWith("/") &&
+      !/[?#]/.test(container) &&
+      member.origin === scope.origin &&
+      !member.username &&
+      !member.password &&
+      !/[?#]/.test(value) &&
+      member.pathname.startsWith(scope.pathname) &&
+      !/[/\\]/.test(decodeURIComponent(child)) &&
+      child.endsWith(".ttl") &&
+      child.length > 4
+    );
+  } catch {
+    return false;
   }
 }

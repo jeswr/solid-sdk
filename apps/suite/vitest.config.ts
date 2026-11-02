@@ -1,36 +1,59 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Recurrence fixtures exercise browser-local calendar arithmetic over UK DST changes.
 process.env.TZ = "Europe/London";
 export default defineConfig({
+  // Match Next's Yjs singleton when testing the workspace persistence provider.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      yjs: fileURLToPath(new URL("./node_modules/yjs/dist/yjs.mjs", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
-    include: ["test/**/*.test.ts"],
-    setupFiles: ["test/drive-locks.setup.ts"],
+    server: { deps: { inline: ["@jeswr/y-solid"] } },
+    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
+    setupFiles: ["test/drive-locks.setup.ts", "test/setup-web-crypto.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
     coverage: {
       enabled: true,
       provider: "v8",
       include: [
+        "src/shell/lib/**/*.ts",
+        "src/shell/search/local-source.ts",
         "src/apps/tasks/lib/model/**/*.ts",
+        "src/apps/tasks/lib/detail/**/*.ts",
+        "src/apps/tasks/lib/views/**/*.ts",
+        "src/apps/tasks/lib/format/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/state/*.{ts,tsx}",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
+        "src/apps/home/lib/permissions/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
+        "src/apps/docs/lib/editor/**/*.ts",
+        "src/apps/docs/lib/convert/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
         "src/apps/health/lib/fhir/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
+        "src/apps/sheets/lib/autosave.ts",
+        "src/apps/sheets/lib/pending-saves.ts",
+        "src/apps/sheets/hooks/use-workbook.ts",
+        "src/apps/sheets/lib/engine/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/docs/lib/find/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
+        "src/apps/tasks/lib/compose/**/*.ts",
+        "src/apps/tasks/lib/reminders/**/*.ts",
         "src/apps/tasks/lib/todoist/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/music/lib/lyrics/**/*.ts",
@@ -39,6 +62,7 @@ export default defineConfig({
         "src/apps/contacts/lib/phone/**/*.ts",
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
+        "src/apps/contacts/lib/{form-schema,carddav,import-export}.ts",
         "src/apps/contacts/state/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/money/lib/model/**/*.ts",
@@ -46,6 +70,7 @@ export default defineConfig({
         "src/apps/calendar/lib/quickadd/**/*.ts",
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
+        "src/apps/drive/components/share-dialog.tsx",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/chat/lib/model/**/*.ts",
@@ -61,6 +86,7 @@ export default defineConfig({
         "src/apps/notes/lib/organise/**/*.ts",
         "src/apps/notes/lib/convert/**/*.ts",
         "src/apps/notes/lib/keep/**/*.ts",
+        "src/apps/notes/state/pending-drafts.ts",
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/tasks/lib/tree/**/*.ts",
@@ -97,6 +123,7 @@ export default defineConfig({
         "src/apps/money/lib/reports/**/*.ts",
         "src/apps/mail/lib/compose/**/*.ts",
         "src/apps/tasks/lib/board/**/*.ts",
+        "src/apps/tasks/lib/dnd/**/*.ts",
         "src/apps/mail/lib/search/**/*.ts",
         "src/apps/music/lib/library/**/*.ts",
         "src/apps/music/lib/smart/**/*.ts",
@@ -115,6 +142,11 @@ export default defineConfig({
         "src/apps/drive/lib/operations/**/*.ts",
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
+        "src/apps/music/lib/data/**/*.ts",
+        "src/apps/health/lib/data/**/*.ts",
+        "src/apps/money/lib/data/**/*.ts",
+        "src/apps/photos/lib/data/**/*.ts",
+        "src/apps/sheets/lib/workbook/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
       ],
       exclude: ["src/apps/contacts/state/**/*.tsx"],

@@ -148,6 +148,7 @@ export {
   type SharingRole,
 } from "./sharing/role-select.js";
 export type { SharingError, SharingState } from "./sharing/state.js";
+export * from "./sync/index.js";
 export type { SuiteToken, TokenName } from "./tokens.js";
 export { tokens } from "./tokens.js";
 export {

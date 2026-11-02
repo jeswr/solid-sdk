@@ -2,6 +2,13 @@
 "use client";
 import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect } from "react";
+import { accountFixtureProps } from "@/shell/account/test-backends";
+import { SuiteEnvironmentContext } from "@/shell/environment";
+import type { SuiteEnv } from "@/shell/lib/env";
+import { NotificationsProvider } from "@/shell/notifications/provider";
+import { ShellSearchProvider } from "@/shell/search/search-context";
+import { AccountsProvider } from "@/shell/session/accounts-provider";
+import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
 
 function ThemeAttribute() {
   const { theme } = useTheme();
@@ -10,11 +17,26 @@ function ThemeAttribute() {
   }, [theme]);
   return null;
 }
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  environment,
+}: {
+  children: React.ReactNode;
+  environment: SuiteEnv;
+}) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
-      {children}
+      <SuiteEnvironmentContext.Provider value={environment}>
+        <AccountsProvider {...accountFixtureProps()}>
+          <PreferencesProvider>
+            <AppearanceEffect />
+            <ShellSearchProvider>
+              <NotificationsProvider>{children}</NotificationsProvider>
+            </ShellSearchProvider>
+          </PreferencesProvider>
+        </AccountsProvider>
+      </SuiteEnvironmentContext.Provider>
     </ThemeProvider>
   );
 }

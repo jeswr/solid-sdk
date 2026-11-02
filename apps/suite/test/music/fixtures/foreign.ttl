@@ -1,0 +1,42 @@
+# AUTHORED-BY Codex GPT-6
+@prefix schema: <https://schema.org/> .
+@prefix mo: <http://purl.org/ontology/mo/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+
+<#lead> a mo:MusicArtist; foaf:name " The Junipers " .
+<#guest> a schema:MusicGroup; schema:name " Guest Artist " .
+<#album-credit> a schema:MusicGroup; schema:name " Album Collective " .
+<#legacy> a mo:Record; dct:title " A real album ";
+  mo:performer <#lead>, <#guest>;
+  mo:track <#zebra>, <#apple>, <#moon> .
+<#schema> a schema:MusicAlbum; schema:name " Schema album ";
+  schema:byArtist <#album-credit>;
+  schema:track <#schema-track>, <#zebra> .
+<#empty> a schema:MusicAlbum; schema:name " Empty release ";
+  schema:byArtist <#album-credit>, <#untyped> .
+
+<#zebra> a mo:Track; dct:title " A real title ";
+  mo:performer <#lead>, <#guest>; mo:track_number "1";
+  schema:discNumber "1"; schema:duration "PT180.5S" .
+<#apple> a mo:Track; dct:title " Apple ";
+  mo:performer <#lead>; mo:track_number "3";
+  schema:position "2"; schema:discNumber "1" .
+<#moon> a mo:Track; dct:title " A prelude ";
+  mo:performer <#lead>; mo:track_number "3";
+  schema:position "0"; schema:trackNumber "not a number";
+  schema:discNumber "-1"; schema:inAlbum <#schema> .
+<#schema-track> a schema:MusicRecording; schema:name " Schema song ";
+  schema:byArtist <#guest>; schema:position "1" .
+<#literal> a schema:MusicRecording; schema:name " Literal song ";
+  schema:byArtist " Literal guest "; schema:inAlbum " Literal album " .
+<#untyped-reference> a schema:MusicRecording; schema:name " Untyped references ";
+  schema:byArtist <#untyped>; schema:inAlbum <#untyped-album> .
+<#anonymous> a schema:MusicRecording; schema:name "\u0000";
+  schema:byArtist []; schema:inAlbum [] .
+
+<urn:track:123> a schema:MusicRecording; schema:name " URN song ";
+  schema:byArtist <urn:artist:123>; schema:inAlbum <urn:album:123> .
+<urn:artist:123> a schema:MusicGroup; schema:name " URN artist " .
+<urn:album:123> a schema:MusicAlbum; schema:name " URN album " .
+<urn:playlist:123> a schema:MusicPlaylist; schema:name " Imported playlist " .

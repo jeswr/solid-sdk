@@ -1,6 +1,6 @@
 ---
 name: suite-native
-description: Use when working on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
+description: Use when working on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, refresh-token secure store, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -14,10 +14,11 @@ D5 redirect + Client ID Document, D7 share, D9 hardening) and sdk-core `ADR-004-
 
 - Security critical: 100% coverage, adversarial tests for every check. Never relax a fail-closed
   check in `auth-session.ts` without a design change; never return anything but the code from the
-  driver, and never let tokens, PKCE verifiers or DPoP keys pass through native code.
+  driver, and never let access tokens, PKCE verifiers or DPoP keys pass through native code.
+  Refresh tokens may cross only the `SuiteSecureStore` seam (MOB-P4 S11/S12).
 - `src/index.ts` must not import `@capacitor/core` (web bundles load it); native bindings live only
   in `src/capacitor.ts` and are registered by the native plugin names `SuiteAuthSession`,
-  `SuiteShareIntake`, `SuiteShareStaging` and `Share`. Changing a plugin method means changing the Swift/Java plugin
+  `SuiteShareIntake`, `SuiteShareStaging`, `SuiteSecureStore` and `Share`. Changing a plugin method means changing the Swift/Java plugin
   in `apps/mobile` in the same PR.
 - Everything from native code is untrusted: validate with `validateShareBatch` and enforce sizes in
   `readFile`; native code validates too.
@@ -51,3 +52,28 @@ Validate with this package's `lint`, `build`, `typecheck` and `test` scripts.
   share-out files and https URLs without credentials. Keep that override registered.
 - Keep store logic independent of Android/Capacitor APIs, test it with JVM JUnit, and maintain
   mobile guard tests for registration, FileProvider scope, and Xcode App target source entries.
+
+## Refresh-token secure store (MOB-P4 S11/S12)
+
+Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before changing this seam.
+
+- `createSecureStore(plugin)` exposes `status()`, `get(key, signal?)`,
+  `set(key, value, { userPresence, version })`, `delete(key)`, `clear()` and `cancel()`.
+  `get` returns `{ value, version }`; `set` returns the committed `{ version }`.
+  Keep that version beside the in-memory token for rotations. Native `remove` and `clear`
+  invalidate earlier versions through tombstones and the namespace epoch.
+- Validate keys against `^[a-z0-9][a-z0-9:._-]{0,127}$` and values against the 16 KiB UTF-8
+  byte cap before the bridge. Versions must be non-negative safe integers, and `userPresence`
+  must be boolean. Validate every native response's exact fields and types; malformed results
+  become `failed`, including a committed set version that does not increase.
+- `SecureStoreError` extends `SuiteNativeError` with a typed `code`: `cancelled`, `background`,
+  `lockout`, `unavailable`, `stale`, `full`, `invalid` or `failed`. Its message is the code alone;
+  never expose native details or use native messages to infer a code. Unknown codes become `failed`.
+- An aborted `get` rejects immediately with `cancelled`, requests native `cancel()`, drops late
+  results and removes its listener. An already-aborted signal calls neither native method.
+  `cancelled`, `background` and `lockout` never justify deleting a session.
+- `refreshTokenKey({ issuer, webId, clientId })` is `pod-auth:refresh:` plus the lowercase hex
+  WebCrypto SHA-256 of `JSON.stringify([issuer, webId, clientId])`, without URL normalisation.
+  Store only refresh tokens. Gate them when user presence is supported and unlock is enabled.
+- Keep the root pure and `secureStorePlugin` in `./capacitor`. There is no web fallback;
+  off native, keep IndexedDB. pod-auth wiring belongs to MOB-06 after T-031 lands.
