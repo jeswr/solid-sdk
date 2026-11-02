@@ -133,6 +133,8 @@ const OWN_TOASTER = [
   "/money",
   "/music",
   "/health",
+  "/mail",
+  "/chat",
 ];
 
 /** True where the page mounts its own toast region, so the shell must not add a second. */
