@@ -14,6 +14,7 @@
  * singleton's stable `getCode` (captured once) must end up calling element-2's
  * `getCode`, not the removed element-1's.
  */
+import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/elements";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -61,6 +62,23 @@ function makeFakeFlowElement(): {
 }
 
 describe("getCodeThroughHolder — drives the latest mounted element (StrictMode-safe)", () => {
+  it("declines a silent prompt=none request without opening the element's popup", async () => {
+    const element = vi.fn(async () => "https://app.example/callback.html?code=one");
+    authFlowHolder.current = element;
+    const url = new URL("https://issuer.example/auth?prompt=none&state=s");
+    await expect(getCodeThroughHolder(url, new AbortController().signal)).rejects.toBeInstanceOf(
+      CodeRequestCancelledError,
+    );
+    expect(element).not.toHaveBeenCalled();
+    // An interactive request still reaches the element.
+    await getCodeThroughHolder(
+      new URL("https://issuer.example/auth?prompt=consent"),
+      new AbortController().signal,
+    );
+    expect(element).toHaveBeenCalledTimes(1);
+    authFlowHolder.current = null;
+  });
+
   it("throws when no element is mounted", async () => {
     authFlowHolder.current = null;
     await expect(

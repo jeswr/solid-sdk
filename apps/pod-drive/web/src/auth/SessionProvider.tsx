@@ -34,9 +34,36 @@ export interface SessionContextValue {
   loginWithAddress(input: string, kind?: "webid" | "custom"): Promise<void>;
   loginWithIssuer(issuer: string): Promise<void>;
   loginWithAccount(webId: string): Promise<void>;
+  /** Start again after the auth runtime failed to initialise. */
+  retry(): void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+
+/** Address lookups give up after this long, so a silent host cannot freeze the card. */
+export const LOOKUP_TIMEOUT_MS = 15_000;
+
+/**
+ * Builds before pod-auth kept refresh tokens and DPoP keys in their own stores. pod-auth's
+ * logout cannot reach them, so remove them once (they are never read again).
+ */
+export function clearLegacyCredentials(): void {
+  try {
+    globalThis.indexedDB?.deleteDatabase("pod-drive:sessions");
+  } catch {
+    // Storage may be unavailable (private mode); there is then nothing to clear.
+  }
+  for (const [storage, key] of [
+    ["localStorage", "pod-drive:remembered-account"],
+    ["sessionStorage", "pod-drive:autologin-attempted"],
+  ] as const) {
+    try {
+      globalThis[storage]?.removeItem(key);
+    } catch {
+      // As above.
+    }
+  }
+}
 
 export function useSession(): SessionContextValue {
   const value = useContext(SessionContext);
@@ -67,6 +94,9 @@ export function SessionProvider({
   const generation = useRef(0);
   const activeLogin = useRef<symbol | null>(null);
   const deepLink = useRef<string | null | undefined>(undefined);
+  // Remembered issuers, so an account row never needs to choose among several issuers again.
+  const accountIssuers = useRef(new Map<string, string>());
+  const [attempt, setAttempt] = useState(0);
   const [auth, setAuth] = useState<PodAuth | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [session, setSession] = useState<DerivedSession | null>(null);
@@ -78,6 +108,7 @@ export function SessionProvider({
   const store = useMemo(recentProvidersStore, []);
   const [recentProviders, setRecentProviders] = useState(() => store.list());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs start-up on retry.
   useEffect(() => {
     mounted.current = true;
     let disposed = false;
@@ -86,13 +117,17 @@ export function SessionProvider({
     const element = flowRef.current;
     const getCode = element ? lazyElementGetCode(element) : null;
     authFlowHolder.current = getCode;
-    if (deepLink.current === undefined) deepLink.current = consumeAutologinAccount();
+    if (deepLink.current === undefined) {
+      deepLink.current = consumeAutologinAccount();
+      clearLegacyCredentials();
+    }
     const suggestedAccounts = (): SignInRecentAccount[] =>
       deepLink.current ? [{ webId: deepLink.current }] : [];
 
     void (async () => {
       const core = suppliedAuth ?? (await getPodAuth());
       if (disposed) return;
+      if (authRef.current !== core) restoreRef.current = null;
       authRef.current = core;
       setAuth(core);
       for (const type of ["login", "restore", "logout", "expired"] as const) {
@@ -127,6 +162,7 @@ export function SessionProvider({
       }
       const remembered = await core.remembered().catch(() => []);
       if (disposed) return;
+      for (const account of remembered) accountIssuers.current.set(account.webId, account.issuer);
       const accounts: SignInRecentAccount[] = remembered.map((account) => ({
         webId: account.webId,
         name: account.displayName,
@@ -137,9 +173,9 @@ export function SessionProvider({
       }
       setRecentAccounts(accounts);
       setReady(true);
-    })().catch((failure: unknown) => {
+    })().catch(() => {
       if (!disposed) {
-        setError(signInError(failure));
+        setError("We couldn't start sign-in. Try again.");
         setRestoringSession(false);
       }
     });
@@ -151,7 +187,7 @@ export function SessionProvider({
       for (const stop of stops) stop();
       if (authFlowHolder.current === getCode) authFlowHolder.current = null;
     };
-  }, [suppliedAuth]);
+  }, [suppliedAuth, attempt]);
 
   useEffect(() => {
     let disposed = false;
@@ -216,6 +252,7 @@ export function SessionProvider({
       runLogin({ kind, key: input }, async () => {
         const target = await resolveLoginTarget(input, {
           fetch: publicFetch,
+          signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
           allowInsecureLoopback: allowInsecureLoopback(),
         });
         return target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer };
@@ -227,7 +264,11 @@ export function SessionProvider({
     [runLogin],
   );
   const loginWithAccount = useCallback(
-    (webId: string) => runLogin({ kind: "account", key: webId }, async () => ({ webId })),
+    (webId: string) =>
+      runLogin({ kind: "account", key: webId }, async () => {
+        const issuer = accountIssuers.current.get(webId);
+        return issuer ? { webId, issuer } : { webId };
+      }),
     [runLogin],
   );
   const logout = useCallback(async () => {
@@ -244,7 +285,13 @@ export function SessionProvider({
     }
   }, []);
 
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((count) => count + 1);
+  }, []);
+
   const value: SessionContextValue = {
+    retry,
     webId: identity?.webId ?? null,
     session: session?.webId === identity?.webId ? session : null,
     fetch: auth?.fetch ?? publicFetch,

@@ -38,6 +38,7 @@ export function LoginScreen() {
     ready,
     recentAccounts,
     recentProviders,
+    retry,
   } = useSession();
   return (
     <main className="login-screen">
@@ -66,6 +67,11 @@ export function LoginScreen() {
           }}
         />
       </fieldset>
+      {!ready && error ? (
+        <button type="button" className="login-retry" onClick={retry}>
+          Try again
+        </button>
+      ) : null}
     </main>
   );
 }

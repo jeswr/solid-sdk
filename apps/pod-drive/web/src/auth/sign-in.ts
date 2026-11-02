@@ -2,6 +2,7 @@
 import { AmbiguousIssuerError, IssuerNotAuthorizedError } from "@jeswr/pod-auth";
 import { InvalidLoginAddressError, NotALoginAddressError } from "@jeswr/pod-auth/directory";
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
+import { allowInsecureLoopback, isLoopbackHost } from "./pod-auth";
 
 /** Deliberately exclude raw protocol errors, URLs, codes and token material from the UI. */
 export function signInError(error: unknown): string {
@@ -27,10 +28,12 @@ export function consumeAutologinAccount(): string | null {
   url.hash = "";
   history.replaceState(history.state, "", url.href);
   try {
+    if (encoded.length > 2048) return null;
     const input = decodeURIComponent(encoded);
     if (/[\s\\]/u.test(input)) return null;
     const webId = new URL(input);
-    return (webId.protocol === "https:" || webId.protocol === "http:") &&
+    return (webId.protocol === "https:" ||
+      (webId.protocol === "http:" && allowInsecureLoopback() && isLoopbackHost(webId.hostname))) &&
       !webId.username &&
       !webId.password
       ? webId.href

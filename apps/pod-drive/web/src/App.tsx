@@ -70,7 +70,8 @@ function AppContent() {
       </header>
       {session.podRootIsFallback && (
         <p className="app-note" role="note">
-          Your profile doesn't list a storage address. Showing files at {session.podRoot}.
+          Your profile doesn't list a storage address, so Drive can only show public files at{" "}
+          {session.podRoot}.
         </p>
       )}
       <main className="app-main">

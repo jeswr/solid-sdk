@@ -30,6 +30,17 @@ vi.mock("./pod-auth", async (original) => ({
   publicFetch: seams.publicFetch,
   getPodAuth: seams.getPodAuth,
 }));
+const resolveSpy = vi.hoisted(() => vi.fn());
+vi.mock("@jeswr/pod-auth/directory", async (original) => {
+  const actual = await original<typeof import("@jeswr/pod-auth/directory")>();
+  return {
+    ...actual,
+    resolveLoginTarget: (...args: Parameters<typeof actual.resolveLoginTarget>) => {
+      resolveSpy(...args);
+      return actual.resolveLoginTarget(...args);
+    },
+  };
+});
 vi.mock("@jeswr/pod-drive/ui", () => ({
   FileBrowser: (props: unknown) => {
     seams.browser(props);
@@ -189,7 +200,8 @@ describe("Drive shared authentication", () => {
       );
       kind = "account";
       key = WEB_ID;
-      hint = { webId: WEB_ID };
+      // A remembered account keeps its issuer; a deep link only knows the WebID.
+      hint = path === "account row" ? { webId: WEB_ID, issuer: ISSUER } : { webId: WEB_ID };
     } else if (path === "provider pill") {
       await chooseProvider();
       kind = "provider";
@@ -391,7 +403,8 @@ describe("Drive shared authentication", () => {
       podRootIsFallback: true,
     });
     expect(screen.getByRole("note")).toHaveTextContent(
-      "Your profile doesn't list a storage address.",
+      // pod-auth grants credentials only inside the profile's pim:storage, never this fallback.
+      "Your profile doesn't list a storage address, so Drive can only show public files",
     );
   });
 
@@ -466,7 +479,8 @@ describe("Drive shared authentication", () => {
   });
 
   it("runtime initialization failure clears the restoring state and shows a safe error", async () => {
-    seams.getPodAuth.mockRejectedValue(new Error("SECRET"));
+    const fake = fakePodAuth();
+    seams.getPodAuth.mockRejectedValueOnce(new Error("SECRET")).mockResolvedValueOnce(fake.auth);
     render(
       <SessionProvider>
         <Observer />
@@ -474,10 +488,59 @@ describe("Drive shared authentication", () => {
       </SessionProvider>,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "We couldn't sign you in. Try again.",
+      "We couldn't start sign-in. Try again.",
     );
     expect(session.restoringSession).toBe(false);
+    expect(session.ready).toBe(false);
     expect(document.body).not.toHaveTextContent("SECRET");
+    // The card is disabled until start-up succeeds; retrying starts the core again.
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await ready();
+    expect(seams.getPodAuth).toHaveBeenCalledTimes(2);
+    expect(fake.auth.restore).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("removes the pre-pod-auth refresh-token store and pointers once on mount", async () => {
+    const deleteDatabase = vi.fn();
+    vi.stubGlobal("indexedDB", { deleteDatabase });
+    localStorage.setItem("pod-drive:remembered-account", '{"webId":"x"}');
+    sessionStorage.setItem("pod-drive:autologin-attempted", "1");
+    localStorage.setItem("unrelated", "kept");
+    mount();
+    await ready();
+    expect(deleteDatabase).toHaveBeenCalledWith("pod-drive:sessions");
+    expect(deleteDatabase).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("pod-drive:remembered-account")).toBeNull();
+    expect(sessionStorage.getItem("pod-drive:autologin-attempted")).toBeNull();
+    expect(localStorage.getItem("unrelated")).toBe("kept");
+    vi.unstubAllGlobals();
+  });
+
+  it("bounds address lookups with a timeout signal", async () => {
+    seams.publicFetch.mockImplementation(() => new Promise<Response>(() => {}));
+    mount();
+    await ready();
+    submitAddress(WEB_ID);
+    await waitFor(() => expect(resolveSpy).toHaveBeenCalled());
+    const options = resolveSpy.mock.calls.at(-1)?.[1];
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+    expect(options.signal.aborted).toBe(false);
+    expect(options.fetch).toBe(seams.publicFetch);
+  });
+
+  it.each([
+    ["http://alice.example/profile#me", null],
+    [`https://alice.example/${"a".repeat(2100)}`, null],
+    ["https://alice.example/profile#me", "https://alice.example/profile#me"],
+  ])("accepts only safe deep-link WebIDs: %s", async (webId, expected) => {
+    history.replaceState(null, "", `/#autologin/${encodeURIComponent(webId)}`);
+    mount();
+    await ready();
+    expect(session.recentAccounts.map((account) => account.webId)).toEqual(
+      expected ? [expected] : [],
+    );
+    expect(location.hash).toBe("");
   });
 
   it("removes subscriptions on unmount", async () => {

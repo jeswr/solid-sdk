@@ -19,7 +19,12 @@ export function isLoopbackHost(hostname: string): boolean {
 }
 
 export function allowInsecureLoopback(): boolean {
-  return typeof location !== "undefined" && isLoopbackHost(location.hostname);
+  // Development builds only: a production bundle served on localhost stays HTTPS-only.
+  return (
+    import.meta.env.DEV === true &&
+    typeof location !== "undefined" &&
+    isLoopbackHost(location.hostname)
+  );
 }
 
 let singleton: Promise<PodAuth> | undefined;
@@ -32,7 +37,7 @@ export function getPodAuth(): Promise<PodAuth> {
     const loopback = allowInsecureLoopback();
     return createPodAuth({
       // pod-auth requires an HTTPS Client Identifier Document; local HTTP development uses
-      // its loopback-only dynamic registration instead (rejected in production builds).
+      // its loopback-only dynamic registration instead (development builds only, see above).
       clientId: loopback ? { dynamicRegistration: true } : appUrl("clientid.jsonld"),
       redirectUri: appUrl("callback.html"),
       allowInsecureLoopback: loopback,

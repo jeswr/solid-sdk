@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/elements";
 
 type GetCode = (url: URL, signal: AbortSignal) => Promise<string>;
@@ -38,6 +39,10 @@ export function lazyElementGetCode(ui: AuthorizationCodeFlow): GetCode {
 }
 
 export const getCodeThroughHolder: GetCode = async (authorizationUri, signal) => {
+  // pod-auth's restore may try one prompt=none grant after invalid_grant. A popup without a user
+  // gesture is blocked or intrusive, so decline it; restore then returns no session.
+  if (authorizationUri.searchParams.get("prompt") === "none")
+    throw new CodeRequestCancelledError(authorizationUri);
   const getCode = authFlowHolder.current;
   if (!getCode) throw new Error("No <authorization-code-flow> element is mounted for login");
   return getCode(authorizationUri, signal);

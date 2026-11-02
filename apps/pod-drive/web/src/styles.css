@@ -108,6 +108,16 @@ a {
   padding: 0;
   border: 0;
 }
+.login-retry {
+  min-height: 44px;
+  padding: 0 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 .pod-drive-error button {
   cursor: pointer;
   border: none;
