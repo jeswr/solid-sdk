@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-scheduling",
   "version": "0.1.0",
-  "description": "The scheduling-sector RDF model (the data model a Vikunja→Solid fork writes to a pod) — a sched:Task / sched:Calendar / sched:RecurrenceRule / sched:Reminder reusing the @jeswr/solid-federation-vocab scheduling sector, that ALSO cross-serialises through @jeswr/solid-task-model's wf:Task so a Vikunja task surfaces 'assigned to me' in Pod Manager / solid-issues. Typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real task data surfaced.",
+  "description": "The scheduling-sector RDF model (the data model a Vikunja\u2192Solid fork writes to a pod) \u2014 a sched:Task / sched:Calendar / sched:RecurrenceRule / sched:Reminder reusing the @jeswr/solid-federation-vocab scheduling sector, that ALSO cross-serialises through @jeswr/solid-task-model's wf:Task so a Vikunja task surfaces 'assigned to me' in Pod Manager / solid-issues. Typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real task data surfaced.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",

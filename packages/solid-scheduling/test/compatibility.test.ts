@@ -8,7 +8,12 @@
 // recognised. README "Exact divergences" lists them.
 import { Parser, Store } from "n3";
 import { expect, it } from "vitest";
-import { parseCalendar, parseSchedulingTask, serializeSchedulingTask } from "../src/index.js";
+import {
+  buildCalendar,
+  parseCalendar,
+  parseSchedulingTask,
+  serializeSchedulingTask,
+} from "../src/index.js";
 
 const RES = "https://alice.pod.example/tasks/x";
 
@@ -81,9 +86,48 @@ it("writes an empty summary, so the document reads back", async () => {
   });
 });
 
-it("strips control characters from written text", async () => {
-  const ttl = await serializeSchedulingTask(RES, { summary: "a\u0000b" });
+it("strips control characters from written text in both graphs", async () => {
+  const ttl = await serializeSchedulingTask(RES, { summary: "a\u0000b", description: "d\u0001e" });
+  const quads = new Parser({ baseIRI: RES }).parse(ttl);
+  const text = (p: string) =>
+    quads.filter((q) => q.predicate.value === p).map((q) => q.object.value);
+  expect(text("https://w3id.org/jeswr/sectors/scheduling#summary")).toEqual(["ab"]);
+  expect(text("http://purl.org/dc/terms/title")).toEqual(["ab"]);
+  expect(text("https://w3id.org/jeswr/sectors/scheduling#description")).toEqual(["de"]);
+  expect(quads.some((q) => q.object.value.includes("\u0001"))).toBe(false);
+});
+
+it("rejects an unsafe or relative resource URL", async () => {
+  expect(() => serializeSchedulingTask("https://a.example/x y", { summary: "x" })).toThrow(
+    TypeError,
+  );
+  expect(() => buildCalendar("tasks/x", { summary: "x" })).toThrow(TypeError);
+  expect(parseSchedulingTask("tasks/x", store(`<#it> a sched:Task ; sched:summary "x" .`))).toBe(
+    undefined,
+  );
+});
+
+it("rejects a non-string summary and recognises Calendar subclasses", () => {
+  expect(task(`<#it> a sched:Task ; sched:summary 5 .`)).toBeUndefined();
+  expect(task(`<#it> a sched:Task ; sched:summary <https://e.example/s> .`)).toBeUndefined();
   expect(
-    parseSchedulingTask(RES, new Store(new Parser({ baseIRI: RES }).parse(ttl)))?.summary,
-  ).toBe("ab");
+    parseCalendar(
+      RES,
+      store(`<https://e.example/Cal> rdfs:subClassOf sched:Calendar .
+             <#it> a <https://e.example/Cal> ; sched:summary "x" .`),
+    ),
+  ).toEqual({ summary: "x" });
+});
+
+it("drops a padded or out-of-range positiveInteger", () => {
+  expect(
+    rule(
+      `a sched:RecurrenceRule ; sched:frequency "WEEKLY" ; sched:interval " 2"^^xsd:positiveInteger`,
+    ),
+  ).toEqual({ frequency: "WEEKLY" });
+  expect(
+    rule(
+      `a sched:RecurrenceRule ; sched:frequency "WEEKLY" ; sched:count "99999999999999999999"^^xsd:positiveInteger`,
+    ),
+  ).toEqual({ frequency: "WEEKLY" });
 });

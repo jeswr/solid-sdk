@@ -161,20 +161,26 @@ hand-written model imported in #279, they differ as follows, pinned in
 `test/compatibility.test.ts`:
 
 - A required `sched:summary` that is not exactly one `xsd:string` rejects the task or
-  calendar: two summaries or a language-tagged summary. The hand-written model kept the
-  first value. Whether the profile should accept `rdf:langString` is the same open
+  calendar: two summaries, a language-tagged summary, or a number, IRI or blank node. The
+  hand-written model kept the first value or its string form. Whether the profile should accept `rdf:langString` is the same open
   normative question as bookmarks (sst-ild.7.7).
 - An ambiguous or mistyped optional value drops that field: two descriptions, a
-  language-tagged description, an `xsd:date` due time, or an interval typed `xsd:integer`
-  instead of `xsd:positiveInteger`.
+  language-tagged description, an `xsd:date` due time, an interval typed `xsd:integer`
+  instead of `xsd:positiveInteger`, or a positiveInteger that is padded with whitespace
+  or too large to be a safe integer.
 - A recurrence is read only when the task links exactly one node typed
   `sched:RecurrenceRule` carrying exactly one canonical frequency. A lowercase frequency
   (`"weekly"`), an untyped rule node, two frequencies or two rules now drop the recurrence.
   Writes still trim and uppercase the frequency.
-- A root typed by a data-graph subclass of `sched:Task` is recognised.
+- A root typed by a data-graph subclass of `sched:Task` or `sched:Calendar` is
+  recognised.
 - Writes keep an empty summary (`sched:summary ""`), so the document reads back; the
   hand-written model wrote no summary, leaving an unreadable task. Control characters are
-  stripped from written text.
+  stripped from the written summary and description, in the `sched:` and `wf:` triples
+  alike.
+- An unsafe or relative resource URL (a space, `|`, `>`, or no scheme) makes build and
+  serialize throw a `TypeError`, and parse returns `undefined`. The hand-written model
+  wrote such IRIs into Turtle unchecked.
 
 ## Develop
 

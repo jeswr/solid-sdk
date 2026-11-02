@@ -23,6 +23,7 @@
  *     generated enum sees it; a recurrence with no known frequency is dropped whole.
  */
 
+import { sanitizeText } from "@jeswr/model-runtime";
 import {
   buildTask,
   parseTask,
@@ -255,13 +256,21 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
     data.completed === true || (data.completed !== false && explicitCompletedAt !== undefined);
   // The ONE completion timestamp, written to BOTH graphs.
   const completedAt = closed ? (explicitCompletedAt ?? new Date()) : undefined;
-  const store = new Store([...buildTask(resourceUrl, toWfTaskData(data, closed, completedAt))]);
+  // The generated build strips control characters from text; apply the same runtime
+  // sanitiser before buildTask so dct:title / wf:description match the sched: values.
+  const text: SchedulingTaskData = {
+    ...data,
+    summary: typeof data.summary === "string" ? sanitizeText(data.summary) : data.summary,
+    description:
+      typeof data.description === "string" ? sanitizeText(data.description) : data.description,
+  };
+  const store = new Store([...buildTask(resourceUrl, toWfTaskData(text, closed, completedAt))]);
 
   // The generated type marks the recurrence's required frequency as required on the
   // whole flat object (sst-ild.4.12), so the optional-recurrence core is built loosely.
   const core: Partial<GeneratedTaskData> = {
-    summary: data.summary,
-    description: data.description || undefined,
+    summary: text.summary,
+    description: text.description || undefined,
     startTime: data.startTime,
     dueTime: data.dueTime,
     completed: closed ? true : data.completed === false ? false : undefined,
