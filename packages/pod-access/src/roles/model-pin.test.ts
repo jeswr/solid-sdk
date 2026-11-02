@@ -177,6 +177,19 @@ describe("detection fails closed on missing, empty and mixed access documents", 
     }
   });
 
+  it("an unrecognised ancestor document stops detection when the own document is missing", async () => {
+    const mem = memoryAccess("wac");
+    mem.advertise(resource);
+    mem.advertise(folder);
+    mem.put(`${folder}.acl`, `<#x> <https://example.org/note> "not an access document".\n`);
+    mem.attach(root, await fixture("wac", root, undefined, true));
+    expect(await detectModel(resource, mem.options)).toEqual({
+      model: "unknown",
+      ownUrl: `${resource}.acl`,
+    });
+    expect(writes(mem)).toEqual([]);
+  });
+
   it("an empty own document defers to the nearest non-empty ancestor", async () => {
     const mem = memoryAccess("wac");
     mem.advertise(resource);
