@@ -64,8 +64,10 @@ import {
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
 import {
   EXPIRY_UNAVAILABLE,
+  FINISHING_ONLY_TEXT,
   FINISHING_TEXT,
   FROZEN_NOTE,
+  RECORDED_ONLY_TEXT,
   RECORDED_TEXT,
   RequestReview,
 } from "../src/apps/home/components/requests/request-review";
@@ -517,11 +519,13 @@ it("finishes this sheet's own pinned approval with exactly the choices it shows"
   const [sent, , finished] = mocks.decide.mock.calls.map((call) => call[1]);
   expect(finished).toBe(sent);
   expect(sent).toMatchObject({ approve: true, dataTypes: [ACTIVITY_CLASS] });
-  // It was another pin after all: the cards go, and finishing now sends no choices.
+  // It was another pin after all: the cards go, and finishing now sends no choices. Denying was
+  // already refused, so the copy doesn't offer it.
   sheet = dialog();
   expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
   expect(sheet.textContent).not.toContain(FROZEN_NOTE);
-  expect(sheet.textContent).toContain(RECORDED_TEXT);
+  expect(sheet.textContent).toContain(RECORDED_ONLY_TEXT);
+  expect(button(sheet, "Deny").disabled).toBe(true);
   await click(button(sheet, "Finish approving"));
   expect(mocks.decide.mock.calls[3]?.[1]).toEqual({ approve: true });
   expect(onDone).toHaveBeenCalledWith("approved");
@@ -701,10 +705,101 @@ it("plain-words a denial refused because approving already started, then offers 
   // An approval this sheet never sent is pinned: no cards claim to be what finishing applies.
   expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
   expect(sheet.textContent).not.toContain(FROZEN_NOTE);
-  expect(sheet.textContent).toContain(RECORDED_TEXT);
+  expect(sheet.textContent).toContain(RECORDED_ONLY_TEXT);
   expect(() => button(sheet, "Share")).toThrow();
   await click(button(sheet, "Finish approving"));
   expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });
+});
+
+it("never offers Deny again once it was refused because approving already started", async () => {
+  // A pending request: the refusal pins an approval this sheet never sent.
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  const first = await review();
+  await click(button(dialog(), "Cancel"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  let sheet = dialog();
+  expect(sheet.textContent).toContain(RECORDED_ONLY_TEXT);
+  // Nothing in the sheet still offers the denial it just refused.
+  expect(sheet.textContent).not.toContain("or deny it");
+  expect(RECORDED_ONLY_TEXT.endsWith("may differ from what you picked here.")).toBe(true);
+  const deny = button(sheet, "Deny");
+  expect(deny.disabled).toBe(true);
+  await click(deny);
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
+  expect(button(sheet, "Finish approving").disabled).toBe(false);
+  await key(sheet, "Escape");
+  expect(first.onDone).toHaveBeenCalledWith("dismissed");
+  await first.view.unmount();
+
+  // An interrupted approval: the same refusal leaves Finish and Not now, never Deny.
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  const second = await review(vi.fn(), { ...request, status: "approving" });
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  sheet = dialog();
+  expect(sheet.textContent).toContain(FINISHING_ONLY_TEXT);
+  expect(sheet.textContent).not.toContain("or deny it");
+  expect(FINISHING_ONLY_TEXT).toBe("This request says an approval was started. Finish it.");
+  expect(button(sheet, "Deny").disabled).toBe(true);
+  expect(button(sheet, "Finish approving").disabled).toBe(false);
+  await click(button(sheet, "Not now"));
+  expect(second.onDone).toHaveBeenCalledWith("dismissed");
+  expect(mocks.decide).toHaveBeenCalledTimes(2);
+});
+
+it("treats a denial refused after a non-retryable approval as someone else's recorded pin", async () => {
+  mocks.decide.mockRejectedValueOnce(
+    new Error("Every approved data type needs an owner registration"),
+  );
+  const { onDone } = await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  expect(button(dialog(), "Try again").disabled).toBe(true);
+  // That approval was refused outright, so it can't be what is pinned.
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  const sheet = dialog();
+  expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  expect(sheet.textContent).toContain(RECORDED_ONLY_TEXT);
+  expect(button(sheet, "Deny").disabled).toBe(true);
+  await click(button(sheet, "Finish approving"));
+  // Finishing sends no choices: the frozen ones were never pinned.
+  expect(mocks.decide.mock.calls[2]?.[1]).toEqual({ approve: true });
+  expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("keeps Finish approving on after a retryable failure and resends the same frozen payload", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const { onDone } = await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  // This sheet's own approval may be the pin: its choices stay shown, frozen.
+  expect(dialog().textContent).toContain(FROZEN_NOTE);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.decide.mockRejectedValueOnce(new Error("socket hang up"));
+  await click(button(dialog(), "Finish approving"));
+  const sheet = dialog();
+  expect(sheet.querySelector('[role="alert"]')?.textContent).toContain(NOT_SAVED);
+  expect(sheet.textContent).toContain(FROZEN_NOTE);
+  expect(button(sheet, "Finish approving").disabled).toBe(false);
+  expect(button(sheet, "Deny").disabled).toBe(true);
+  await click(button(sheet, "Finish approving"));
+  const [sent, , failed, finished] = mocks.decide.mock.calls.map((call) => call[1]);
+  expect(mocks.decide).toHaveBeenCalledTimes(4);
+  expect(failed).toBe(sent);
+  expect(finished).toBe(sent);
+  expect(sent).toMatchObject({ approve: true, dataTypes: [ACTIVITY_CLASS] });
+  expect(onDone).toHaveBeenCalledWith("approved");
+  logged.mockRestore();
 });
 
 it("leaves unsorted classes unchecked, named by class with the full IRI beneath", async () => {

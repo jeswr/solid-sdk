@@ -63,12 +63,17 @@ export const FROZEN_NOTE =
 export const FROZEN_DURATION = "Kept as you sent it";
 /** The request's own status claims an approval; the requester could have written that. */
 export const FINISHING_TEXT = "This request says an approval was started. Finish it, or deny it.";
+/** FINISHING_TEXT once denying was refused for good: finishing is all that is left. */
+export const FINISHING_ONLY_TEXT = "This request says an approval was started. Finish it.";
+const RECORDED =
+  "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here";
 /**
  * An approval is pinned that this sheet didn't send (or can't show): finishing applies the choices
  * recorded when it started, which the SDK doesn't expose, so no cards are shown for it.
  */
-export const RECORDED_TEXT =
-  "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here, or deny it.";
+export const RECORDED_TEXT = `${RECORDED}, or deny it.`;
+/** RECORDED_TEXT once denying was refused for good. */
+export const RECORDED_ONLY_TEXT = `${RECORDED}.`;
 
 export type ReviewOutcome = "approved" | "denied" | "already-decided" | "dismissed";
 
@@ -218,6 +223,8 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const [finishRefused, setFinishRefused] = useState(false);
   // The SDK refused approving outright (a claimed approval with no record): only Deny is left.
   const [denyOnly, setDenyOnly] = useState(false);
+  // Denying was refused for good (e.g. approving already started): Deny isn't offered again.
+  const [denyRefused, setDenyRefused] = useState(false);
   const done = useRef(false);
   // One decision at a time, even for clicks that land before the disabled state renders.
   const busy = useRef(false);
@@ -280,6 +287,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
       // this sheet's own frozen approval, if it could have pinned; finishing then resends it.
       if (failure.finish) setPinned(attempt === "deny" && frozen?.retry ? "frozen" : "recorded");
       else if (attempt === "finish" && !failure.retry) setFinishRefused(true);
+      if (attempt === "deny" && !failure.retry) setDenyRefused(true);
       if (failure.deny) setDenyOnly(true);
       setError({ ...failure, attempt });
       busy.current = false;
@@ -316,9 +324,13 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           <DialogTitle>{headline(name, entry.purpose)}</DialogTitle>
           <DialogDescription>
             {finishing
-              ? FINISHING_TEXT
+              ? denyRefused
+                ? FINISHING_ONLY_TEXT
+                : FINISHING_TEXT
               : pinned === "recorded"
-                ? RECORDED_TEXT
+                ? denyRefused
+                  ? RECORDED_ONLY_TEXT
+                  : RECORDED_TEXT
                 : "Choose what to share. You can revoke access at any time."}
           </DialogDescription>
           {host && host !== name && <p className="hm-request-muted">Request from {host}</p>}
@@ -389,7 +401,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               <DenyButton
                 name={name}
                 label="Cancel"
-                disabled={saving}
+                disabled={saving || denyRefused}
                 onDeny={() => void run("deny")}
               />
               <Button
@@ -414,7 +426,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
                 name={name}
                 label="Deny"
                 prominent={denyOnly}
-                disabled={saving}
+                disabled={saving || denyRefused}
                 onDeny={() => void run("deny")}
               />
               {denyOnly ? null : finishing || pinned ? (
