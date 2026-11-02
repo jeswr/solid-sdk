@@ -71,7 +71,11 @@ describe("Drive client against a seeded demo pod", () => {
       modified: new Date(NOW - 30 * 86_400_000),
     });
     expect(await client.list(`${DRIVE}Archive/`)).toEqual([]);
-    expect((await client.list(DEMO_ROOT)).some((item) => item.name === ".acl")).toBe(true);
+    await pod.fetch(`${DEMO_ROOT}.hidden`, { method: "PUT", body: "dot" });
+    const rootNames = (await client.list(DEMO_ROOT)).map((item) => item.name);
+    expect(rootNames).toContain(".hidden");
+    // ACL documents are auxiliary resources, never container members (as on CSS).
+    expect(rootNames).not.toContain(".acl");
     const signal = new AbortController().signal;
     const fetch = vi.fn<typeof globalThis.fetch>(pod.fetch);
     const withSignal = stubClient(fetch);

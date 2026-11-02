@@ -113,6 +113,7 @@ const supported = new Set([
   "BDAY",
   "NOTE",
   "PHOTO",
+  "URL",
   "CATEGORIES",
 ]);
 
@@ -194,6 +195,10 @@ function cardFrom(properties: Property[]): VCard {
         break;
       case "NOTE":
         card.note = value;
+        break;
+      case "URL":
+        card.urls ??= [];
+        card.urls.push({ ...field, value: unescapeUri(raw, version) });
         break;
       case "PHOTO":
         if (/^[a-z][a-z\d+.-]*:[^\s]*$/i.test(raw)) card.photo = unescapeUri(raw, version);

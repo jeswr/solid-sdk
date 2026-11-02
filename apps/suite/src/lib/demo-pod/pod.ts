@@ -14,6 +14,8 @@
  * - strong ETags, `If-Match` / `If-None-Match` preconditions (412);
  * - POST with `Slug` (and a BasicContainer `Link` type) mints a child;
  * - DELETE of a non-empty container is 409; the root cannot be deleted;
+ * - the `.acl` document of an existing resource is auxiliary: like CSS, it is
+ *   not listed in `ldp:contains` and is deleted together with its subject;
  * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type;
  * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
@@ -236,10 +238,19 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     }
   }
 
+  // An ACL document of an existing subject is auxiliary: addressable, but not a
+  // container member. An orphan "x.acl" stays listed so clients' guards against
+  // ACL-named files remain testable against this fixture.
+  const isAuxiliary = (url: string): boolean => {
+    if (!url.endsWith(".acl")) return false;
+    const subject = url.slice(0, -4);
+    return isContainerUrl(subject) ? containers.has(subject) : resources.has(subject);
+  };
+
   const children = (container: string): string[] => {
     const out: string[] = [];
     for (const url of [...containers.keys(), ...resources.keys()]) {
-      if (url !== container && parentOf(url) === container) out.push(url);
+      if (url !== container && parentOf(url) === container && !isAuxiliary(url)) out.push(url);
     }
     return out.sort();
   };
@@ -412,7 +423,9 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
 
   const remove = (url: string): Response => {
     if (url === root) return respond(405);
+    const auxiliary = isAuxiliary(url);
     if (resources.delete(url)) {
+      if (!auxiliary) resources.delete(`${url}.acl`);
       touch(parentOf(url) as string, now());
       const receipt = parentValidators(url);
       notify(url);
@@ -421,6 +434,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     if (containers.has(url)) {
       if (children(url).length > 0) return respond(409);
       containers.delete(url);
+      resources.delete(`${url}.acl`);
       touch(parentOf(url) as string, now());
       const receipt = parentValidators(url);
       notify(url);
