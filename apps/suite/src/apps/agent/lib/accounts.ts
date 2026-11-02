@@ -81,7 +81,10 @@ export async function readAccountSettings(
 ): Promise<Row<Account>[]> {
   const [accounts, controls] = await Promise.all([
     readAccounts(client),
-    readControl(client, createAgentVerifier(session, () => new Date(now))),
+    readControl(
+      client,
+      createAgentVerifier(session, () => new Date(now)),
+    ),
   ]);
   return [
     ...accounts.map((row) =>
