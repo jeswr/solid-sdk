@@ -15,8 +15,8 @@ type Phase =
   | { name: "idle" }
   | { name: "reading" }
   | { name: "preview"; plan: TakeoutPlan }
-  | { name: "saving"; plan: TakeoutPlan; done: number; total: number }
-  | ({ name: "done" } & TakeoutImportResult);
+  | { name: "saving"; plan: TakeoutPlan; done: number; total: number; albums?: boolean }
+  | ({ name: "done"; strip: boolean } & TakeoutImportResult);
 
 export function TakeoutImport() {
   const photos = usePhotos();
@@ -87,13 +87,34 @@ export function TakeoutImport() {
     }
   }
 
-  async function save(plan: TakeoutPlan) {
+  // Frees the copies kept for a retry the user moves on from, or leaves behind.
+  const pendingRetry = useRef<TakeoutPlan | undefined>(undefined);
+  const { discardTakeout } = photos;
+  useEffect(() => () => discardTakeout(pendingRetry.current?.items ?? []), [discardTakeout]);
+  const startOver = () => {
+    discardTakeout(pendingRetry.current?.items ?? []);
+    pendingRetry.current = undefined;
+    go({ name: "idle" });
+  };
+
+  /** A retry keeps the location choice its photos were first prepared with. */
+  async function save(plan: TakeoutPlan, removeLocation = strip) {
     setError(undefined);
+    pendingRetry.current = undefined;
     go({ name: "saving", plan, done: 0, total: plan.items.length });
-    const result = await photos.importTakeout(plan, strip, (done, total) =>
-      setPhase({ name: "saving", plan, done, total }),
-    );
-    go({ name: "done", ...result });
+    const result = await photos.importTakeout(plan, removeLocation, {
+      onProgress: (done, total) => setPhase({ name: "saving", plan, done, total }),
+      onAlbums: () =>
+        setPhase({
+          name: "saving",
+          plan,
+          done: plan.items.length,
+          total: plan.items.length,
+          albums: true,
+        }),
+    });
+    pendingRetry.current = result.retry;
+    go({ name: "done", strip: removeLocation, ...result });
   }
 
   return (
@@ -127,7 +148,7 @@ export function TakeoutImport() {
             id={stripId}
             type="checkbox"
             checked={strip}
-            disabled={phase.name === "saving"}
+            disabled={phase.name === "saving" || (phase.name === "done" && !!phase.retry)}
             onChange={(event) => changeStrip(event.target.checked)}
           />
           <label htmlFor={stripId}>Remove location from imported photos</label>
@@ -211,6 +232,7 @@ export function TakeoutImport() {
               Importing {count(phase.plan.items.length, "photo")}. Keep this page open until it
               finishes.
             </p>
+            {phase.albums && <p>Adding photos to albums…</p>}
             <progress aria-label="Import progress" max={phase.total || 1} value={phase.done} />
             <p className="pho-takeout-count">
               {phase.done.toLocaleString("en")} of {phase.total.toLocaleString("en")}
@@ -225,6 +247,7 @@ export function TakeoutImport() {
             <p>
               Imported {count(phase.saved, "photo")}
               {phase.albums ? ` into ${count(phase.albums, "album")}` : ""}.
+              {phase.stopped ? " The import stopped because your pod isn't saving photos." : ""}
               {phase.retry
                 ? ` ${count(phase.retry.items.length, "photo")} didn't import. Retrying adds them to their albums too.`
                 : ""}
@@ -253,7 +276,7 @@ export function TakeoutImport() {
             ) : (
               <>
                 {phase.retry && (
-                  <Button onClick={() => phase.retry && void save(phase.retry)}>
+                  <Button onClick={() => phase.retry && void save(phase.retry, phase.strip)}>
                     Retry {count(phase.retry.items.length, "photo")}
                   </Button>
                 )}
@@ -263,7 +286,7 @@ export function TakeoutImport() {
                     View photos
                   </Link>
                 </Button>
-                <Button variant="outline" onClick={() => go({ name: "idle" })}>
+                <Button variant="outline" onClick={startOver}>
                   Import another folder
                 </Button>
               </>

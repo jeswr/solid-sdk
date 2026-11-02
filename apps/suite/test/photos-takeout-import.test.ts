@@ -1,7 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it, vi } from "vitest";
 import type { TakeoutItem, TakeoutPlan } from "../src/apps/photos/lib/data/takeout";
-import { importTakeoutPlan, TAKEOUT_BATCH } from "../src/apps/photos/lib/data/takeout-import";
+import {
+  importTakeoutPlan,
+  STOP_AFTER_FAILED_BATCHES,
+  TAKEOUT_BATCH,
+} from "../src/apps/photos/lib/data/takeout-import";
 
 const item = (name: string, metadata?: TakeoutItem["metadata"]): TakeoutItem => ({
   key: `${name}\u00001`,
@@ -30,6 +34,7 @@ describe("importing a Takeout plan", () => {
     const addToAlbum = vi.fn(async () => true);
     const createAlbum = vi.fn(async () => true);
     const progress: [number, number][] = [];
+    const onAlbums = vi.fn();
     const result = await importTakeoutPlan(
       plan(items, [
         { title: "Lisbon", keys: [a as string, b as string] },
@@ -41,6 +46,7 @@ describe("importing a Takeout plan", () => {
         addToAlbum,
         createAlbum,
         onProgress: (done, total) => progress.push([done, total]),
+        onAlbums,
       },
       2,
     );
@@ -60,6 +66,7 @@ describe("importing a Takeout plan", () => {
       "https://pod/IMG_3.jpg#it",
       "https://pod/IMG_4.jpg#it",
     ]);
+    expect(onAlbums).toHaveBeenCalledOnce();
     expect(result).toEqual({ saved: 5, albums: 2, failedAlbums: 0 });
     expect(TAKEOUT_BATCH).toBeGreaterThan(1);
   });
@@ -108,5 +115,29 @@ describe("importing a Takeout plan", () => {
     expect(createAlbum).not.toHaveBeenCalled();
     expect(result).toMatchObject({ saved: 0, albums: 0, failedAlbums: 0 });
     expect(result.retry?.items).toEqual([one]);
+  });
+
+  it("stops after batches that save nothing and keeps the rest for a retry", async () => {
+    const items = Array.from({ length: 10 }, (_, n) => item(`IMG_${n}.jpg`));
+    const upload = vi.fn(async (batch: readonly TakeoutItem[]) =>
+      batch.map((value) => (value.name === "IMG_0.jpg" ? "zero#it" : undefined)),
+    );
+    const onAlbums = vi.fn();
+    const result = await importTakeoutPlan(
+      plan(items),
+      {
+        upload,
+        findAlbum: () => undefined,
+        addToAlbum: async () => true,
+        createAlbum: async () => true,
+        onAlbums,
+      },
+      2,
+    );
+    // The first batch saved one photo; then three empty batches stop the import.
+    expect(upload).toHaveBeenCalledTimes(1 + STOP_AFTER_FAILED_BATCHES);
+    expect(onAlbums).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ saved: 1, stopped: true });
+    expect(result.retry?.items).toEqual(items.slice(1));
   });
 });

@@ -300,3 +300,88 @@ it.each([
   expect((await s.pod.fetch(album.url)).status).toBe(404);
   expect(s.state.albums).toHaveLength(0);
 });
+
+it("imports Takeout batches with one refresh, and a retry reuses the upload and files its album", async () => {
+  const s = await setup();
+  const png = Uint8Array.from(atob(scenes[0][0]), (c) => c.charCodeAt(0));
+  const items = ["A.png", "B.png"].map((name) => ({
+    key: `${name}\u0000${png.length}`,
+    name,
+    path: `Takeout/${name}`,
+    file: new Blob([png], { type: "image/png" }),
+    metadata: { dateTimeOriginal: "2019-05-01T10:00:00.000Z" },
+  }));
+  const plan = {
+    items,
+    albums: [{ title: "Lisbon", keys: items.map((item) => item.key) }],
+    withDetails: 2,
+    videos: 0,
+    unsupported: 0,
+    duplicates: 0,
+    trashed: 0,
+  };
+  const spies = [
+    vi.spyOn(browserEncoder, "dimensions").mockResolvedValue({ width: 160, height: 100 }),
+    vi.spyOn(browserEncoder, "stripLocation").mockImplementation(async (value) => value),
+    vi
+      .spyOn(browserEncoder, "thumbnail")
+      .mockResolvedValue(new Blob(["t"], { type: "image/webp" })),
+  ];
+  try {
+    // B's original fails once; library listings are counted to show one refresh per import.
+    const originals: string[] = [];
+    let listings = 0;
+    s.intercept(async (url, method) => {
+      if (method === "GET" && url.endsWith("/items/")) listings += 1;
+      if (method !== "PUT" || !url.includes("/photos/originals/") || url.endsWith("/"))
+        return undefined;
+      originals.push(url);
+      // Only B's first attempt fails.
+      return originals.length === 2 ? new Response(null, { status: 500 }) : undefined;
+    });
+    let first!: Awaited<ReturnType<typeof s.state.importTakeout>>;
+    await act(async () => {
+      first = await s.state.importTakeout(plan, true, {});
+    });
+    expect(first).toMatchObject({ saved: 1, albums: 1, failedAlbums: 0 });
+    expect(first.retry?.items.map((item) => item.name)).toEqual(["B.png"]);
+    expect(s.state.photos).toHaveLength(2);
+    // The retry reuses B's upload ID, so it writes to the same original URL.
+    const failedUrl = originals[1];
+    let second!: typeof first;
+    listings = 0;
+    await act(async () => {
+      second = await s.state.importTakeout(first.retry as typeof plan, true);
+    });
+    expect(second).toEqual({ saved: 1, albums: 1, failedAlbums: 0 });
+    expect(originals.at(-1)).toBe(failedUrl);
+    expect(listings).toBe(1);
+    expect(s.state.photos).toHaveLength(3);
+    expect(s.state.albums.map((album) => [album.name, album.members.length])).toEqual([
+      ["Lisbon", 2],
+    ]);
+    expect(messages.error).not.toHaveBeenCalled();
+    // A discarded retry starts again with a new upload ID.
+    const c = { ...(items[0] as (typeof items)[number]), key: "C" };
+    const count = originals.length;
+    s.intercept(async (url, method) => {
+      if (method === "PUT" && url.includes("/photos/originals/") && !url.endsWith("/")) {
+        originals.push(url);
+        return new Response(null, { status: 500 });
+      }
+      return undefined;
+    });
+    await act(async () => {
+      await s.state.importTakeout({ ...plan, items: [c], albums: [] }, false);
+      await s.state.importTakeout({ ...plan, items: [c], albums: [] }, false);
+    });
+    expect(originals[count]).toBe(originals[count + 1]);
+    s.state.discardTakeout([c]);
+    await act(async () => {
+      await s.state.importTakeout({ ...plan, items: [c], albums: [] }, false);
+    });
+    expect(originals[count + 2]).not.toBe(originals[count]);
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+});

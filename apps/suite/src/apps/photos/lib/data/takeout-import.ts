@@ -9,6 +9,8 @@ export interface TakeoutImportSteps {
   addToAlbum(url: string, title: string, refs: string[]): Promise<boolean>;
   createAlbum(title: string, refs: string[]): Promise<boolean>;
   onProgress?(done: number, total: number): void;
+  /** Called once the photos are saved, before albums are written. */
+  onAlbums?(): void;
 }
 export interface TakeoutImportResult {
   saved: number;
@@ -17,10 +19,14 @@ export interface TakeoutImportResult {
   failedAlbums: number;
   /** The photos that didn't save, with their albums, ready to import again. */
   retry?: TakeoutPlan;
+  /** The import stopped early because whole batches kept failing (e.g. the pod is offline). */
+  stopped?: boolean;
 }
 
 /** Photos per upload batch: keeps the UI responsive in libraries of many thousands. */
 export const TAKEOUT_BATCH = 20;
+/** Consecutive batches with no saved photo before the import gives up. */
+export const STOP_AFTER_FAILED_BATCHES = 3;
 
 /**
  * Imports a Takeout plan in batches, then files the saved photos into albums
@@ -34,17 +40,30 @@ export async function importTakeoutPlan(
 ): Promise<TakeoutImportResult> {
   const saved = new Map<string, string>();
   const failed: TakeoutItem[] = [];
+  let stopped = false;
+  let failedBatches = 0;
   steps.onProgress?.(0, plan.items.length);
   for (let start = 0; start < plan.items.length; start += batch) {
+    if (failedBatches >= STOP_AFTER_FAILED_BATCHES) {
+      // Keep the rest for a retry rather than reading and failing every photo.
+      failed.push(...plan.items.slice(start));
+      stopped = true;
+      break;
+    }
     const items = plan.items.slice(start, start + batch);
     const refs = await steps.upload(items);
+    let any = false;
     items.forEach((item, index) => {
       const ref = refs[index];
-      if (ref) saved.set(item.key, ref);
-      else failed.push(item);
+      if (ref) {
+        saved.set(item.key, ref);
+        any = true;
+      } else failed.push(item);
     });
+    failedBatches = any ? 0 : failedBatches + 1;
     steps.onProgress?.(Math.min(start + batch, plan.items.length), plan.items.length);
   }
+  if (plan.albums.length && saved.size) steps.onAlbums?.();
   let albums = 0;
   let failedAlbums = 0;
   for (const album of plan.albums) {
@@ -63,6 +82,7 @@ export async function importTakeoutPlan(
     saved: saved.size,
     albums,
     failedAlbums,
+    ...(stopped ? { stopped } : {}),
     retry: {
       ...plan,
       items: failed,
