@@ -131,6 +131,8 @@ comment access. WAC is the mapping default; for ACP pass `model: "acp"` and the 
 writing functions (`grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`),
 `model` pins the access model instead: a resource whose detected model differs is refused with an
 `unsupported` `RoleError` before anything is written. Leave it unset to work with either model.
+This is a behaviour change: these functions used to ignore `model` and go on with whichever model
+the resource used, so a caller that passed it for mapping now gets a refusal on the other model.
 
 `AgentRef` supports WebIDs, public and authenticated agents, WAC groups, and ACP apps
 (client matchers). ACP groups require a membership snapshot and WAC cannot express apps;
@@ -390,7 +392,9 @@ foreign JSON-LD label or tag cannot inject Turtle.
 `accessControl` link means `acp`. ACP servers such as ESS also advertise their access control
 resources with `rel="acl"` (ESS as `?ext=acr`), so an `acl` link alone is not taken as WAC: the
 advertised document is read with the roles layer's detection (its RDF vocabulary and ACP type
-links, walking to the nearest existing ancestor) to tell the two apart. No access link is
+links, walking to the nearest existing ancestor) to tell the two apart. Only an existing, non-empty
+access document decides: a missing or empty one never counts as WAC. No access link, no deciding
+document, or documents that mix models (both vocabularies, or ancestors of different models) are
 `unknown`; any other discovery failure propagates. Decisions throw typed
 `UnsupportedAccessModelError` for ACP or unknown models before writing anything, and the model is
 enforced again where writes happen: the records folder's ACL is used only once its document is

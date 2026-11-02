@@ -96,8 +96,11 @@ and preserve materializedFrom provenance across reapplication, including descend
 Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
 redirect refusal and fetch-rdf remote-context refusal. No network in tests. A pinned
 `options.model` refuses (`unsupported`, before any write) a resource whose detected model
-differs; `detectModel` is read-only and the only path that admits a query-addressed access
-document (ESS `?ext=acr`). Writing paths keep refusing queries.
+differs (a behaviour change: these functions used to ignore it); `detectModel` is
+read-only and the only path that admits a query-addressed access document (ESS `?ext=acr`).
+Writing paths keep refusing queries. `detectModel` fails closed: only an existing, non-empty
+access document decides the model, otherwise it reports `unknown`; `isMixedModel` tags its
+mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelError("unknown")`.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 
