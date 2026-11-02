@@ -66,6 +66,7 @@ import {
   EXPIRY_UNAVAILABLE,
   FINISHING_TEXT,
   FROZEN_NOTE,
+  RECORDED_TEXT,
   RequestReview,
 } from "../src/apps/home/components/requests/request-review";
 import {
@@ -74,7 +75,7 @@ import {
   RequestsPage,
   unreadableText,
 } from "../src/apps/home/components/requests/requests-page";
-import { NOT_SAVED } from "../src/apps/home/lib/requests/model";
+import { EXPIRY_NOT_ENFORCED, NOT_SAVED } from "../src/apps/home/lib/requests/model";
 import { ACTIVITY_CLASS } from "../src/lib/demo-pod/seed-requests";
 
 vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
@@ -441,13 +442,127 @@ it("offers Finish approving (no choices) when an earlier approval is still finis
   );
   expect(sheet.textContent).not.toContain("Try again");
   expect(() => button(sheet, "Share")).toThrow();
+  // The pin holds other choices: the cards picked here are hidden, never shown as what is sent.
+  expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+  expect(sheet.querySelector('[role="radio"]')).toBeNull();
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  expect(sheet.textContent).toContain(RECORDED_TEXT);
   await click(button(sheet, "Finish approving"));
   expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });
-  // The pinned choices may differ from the cards on screen, so the toast names none.
+  // The pinned choices may differ from the cards picked, so the toast names none, and it can't
+  // know whether they had an end date the storage won't enforce.
   expect(mocks.toast.success).toHaveBeenCalledWith(
-    "You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check.",
+    `You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
   );
   expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("after closing and reopening, a pin from the first sheet's choices hides the new ones", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const first = await review();
+  // Both cards are sent; the network fails after the SDK may have pinned them.
+  await click(button(dialog(), "Share"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  await key(dialog(), "Escape");
+  expect(first.onDone).toHaveBeenCalledWith("dismissed");
+  await first.view.unmount();
+  // A fresh sheet knows nothing of that pin: the owner picks fewer cards and is refused.
+  const second = await review();
+  mocks.decide.mockRejectedValueOnce(
+    new Error(
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+    ),
+  );
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  expect(mocks.decide.mock.calls[1]?.[1]).toMatchObject({ dataTypes: [ACTIVITY_CLASS] });
+  const sheet = dialog();
+  expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+  expect(sheet.querySelector('[role="radio"]')).toBeNull();
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  expect(sheet.textContent).not.toContain("Activity");
+  expect(sheet.textContent).toContain(RECORDED_TEXT);
+  await click(button(sheet, "Finish approving"));
+  expect(mocks.decide.mock.calls[2]?.[1]).toEqual({ approve: true });
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    `You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
+  );
+  expect(second.onDone).toHaveBeenCalledWith("approved");
+});
+
+it("finishes this sheet's own pinned approval with exactly the choices it shows", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const { onDone } = await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  // Denying is refused: the approval just sent (or another one) was pinned.
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  let sheet = dialog();
+  expect(sheet.textContent).toContain(FROZEN_NOTE);
+  expect(checkbox(sheet, "Activity").disabled).toBe(true);
+  // Finishing resends the frozen payload, so the SDK applies the cards shown or refuses.
+  mocks.decide.mockRejectedValueOnce(
+    new Error(
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+    ),
+  );
+  await click(button(sheet, "Finish approving"));
+  const [sent, , finished] = mocks.decide.mock.calls.map((call) => call[1]);
+  expect(finished).toBe(sent);
+  expect(sent).toMatchObject({ approve: true, dataTypes: [ACTIVITY_CLASS] });
+  // It was another pin after all: the cards go, and finishing now sends no choices.
+  sheet = dialog();
+  expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  expect(sheet.textContent).toContain(RECORDED_TEXT);
+  await click(button(sheet, "Finish approving"));
+  expect(mocks.decide.mock.calls[3]?.[1]).toEqual({ approve: true });
+  expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("finishing this sheet's pin names its choices and notes an unenforced end date", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  await review();
+  await click(checkbox(dialog(), "Vitals"));
+  await click(button(dialog(), "Share"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot deny an approval"));
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  await click(button(dialog(), "Finish approving"));
+  const [sent, , finished] = mocks.decide.mock.calls.map((call) => call[1]);
+  expect(finished).toBe(sent);
+  expect(sent.expiresAt).toBeInstanceOf(Date);
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    `MaraCoach can now see your Activity. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
+  );
+});
+
+it("keeps Try again off after a non-retryable approval, even when a later denial is retryable", async () => {
+  mocks.decide.mockRejectedValueOnce(
+    new Error("Every approved data type needs an owner registration"),
+  );
+  await review();
+  await click(button(dialog(), "Share"));
+  expect(button(dialog(), "Try again").disabled).toBe(true);
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  mocks.decide.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  await click(button(dialog(), "Deny"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  expect(dialog().textContent).toContain("You're offline. Reconnect and try again.");
+  // The offline denial can be retried from its error, but the approval still can't.
+  expect(button(dialog(), "Try again").disabled).toBe(true);
+  expect(mocks.decide).toHaveBeenCalledTimes(2);
 });
 
 it("shows known SDK refusals in plain words; Retry re-runs a retryable denial", async () => {
@@ -506,19 +621,35 @@ it("finishes an interrupted approval read-only, resuming the pinned choices", as
   expect(sheet.textContent).not.toContain("You already chose");
   const names = [...sheet.querySelectorAll("button")].map((item) => item.textContent?.trim());
   expect(names).toEqual(expect.arrayContaining(["Not now", "Deny", "Finish approving"]));
-  mocks.decide.mockRejectedValueOnce(new Error("Cannot approve a denial"));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.decide.mockRejectedValueOnce(new Error("socket hang up"));
   await click(button(sheet, "Finish approving"));
-  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
-    "You already denied this request, so it can't be approved.",
-  );
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(NOT_SAVED);
+  expect(button(dialog(), "Finish approving").disabled).toBe(false);
   await click(button(dialog(), "Finish approving"));
   expect(mocks.decide).toHaveBeenCalledTimes(2);
   for (const call of mocks.decide.mock.calls) expect(call[1]).toEqual({ approve: true });
-  // The toast comes from the result, never from cards nobody chose here.
+  // The toast comes from the result, never from cards nobody chose here, and notes that any
+  // recorded end date isn't enforced.
   expect(mocks.toast.success).toHaveBeenCalledWith(
-    "You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check.",
+    `You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
   );
   expect(onDone).toHaveBeenCalledWith("approved");
+  logged.mockRestore();
+});
+
+it("stops offering Finish approving once it was refused for good", async () => {
+  const approving: Readable = { ...request, status: "approving" };
+  mocks.decide.mockRejectedValueOnce(new Error("Cannot approve a denial"));
+  const { onDone } = await review(vi.fn(), approving);
+  await click(button(dialog(), "Finish approving"));
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(
+    "You already denied this request, so it can't be approved.",
+  );
+  expect(button(dialog(), "Finish approving").disabled).toBe(true);
+  await click(button(dialog(), "Finish approving"));
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
+  expect(onDone).not.toHaveBeenCalled();
 });
 
 it("can deny a claimed approval, after asking, and puts Deny first when no approval was recorded", async () => {
@@ -567,8 +698,10 @@ it("plain-words a denial refused because approving already started, then offers 
   expect(sheet.querySelector('[role="alert"]')?.textContent).toContain(
     "Approving this request has already started, so it can't be denied now.",
   );
-  // An approval is pinned: the choices lock and only finishing it is offered.
-  expect(sheet.textContent).toContain(FROZEN_NOTE);
+  // An approval this sheet never sent is pinned: no cards claim to be what finishing applies.
+  expect(sheet.querySelectorAll('[role="checkbox"]')).toHaveLength(0);
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  expect(sheet.textContent).toContain(RECORDED_TEXT);
   expect(() => button(sheet, "Share")).toThrow();
   await click(button(sheet, "Finish approving"));
   expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });

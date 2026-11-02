@@ -63,6 +63,12 @@ export const FROZEN_NOTE =
 export const FROZEN_DURATION = "Kept as you sent it";
 /** The request's own status claims an approval; the requester could have written that. */
 export const FINISHING_TEXT = "This request says an approval was started. Finish it, or deny it.";
+/**
+ * An approval is pinned that this sheet didn't send (or can't show): finishing applies the choices
+ * recorded when it started, which the SDK doesn't expose, so no cards are shown for it.
+ */
+export const RECORDED_TEXT =
+  "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here, or deny it.";
 
 export type ReviewOutcome = "approved" | "denied" | "already-decided" | "dismissed";
 
@@ -127,7 +133,10 @@ function CardItem({
  * account) whenever the account changes.
  */
 
-/** share: the editable choices; retry: the frozen payload again; finish: no choices at all. */
+/**
+ * share: the editable choices; retry: the frozen payload again; finish: the pinned approval, sent
+ * as the frozen payload when that is what this sheet pinned, else with no choices at all.
+ */
 type Attempt = "share" | "retry" | "finish" | "deny";
 
 interface FrozenApproval {
@@ -135,7 +144,16 @@ interface FrozenApproval {
   decision: { approve: true; dataTypes: string[]; expiresAt?: Date };
   /** The card ids it was built from, for the success message. */
   selected: string[];
+  /** Whether resending it can succeed: its own last failure's, never a later denial's. */
+  retry: boolean;
 }
+
+/**
+ * Whose choices a pinned approval holds. "frozen": possibly this sheet's own failed approval, so
+ * finishing resends that exact payload (the SDK refuses it if the pin differs). "recorded": choices
+ * this sheet can't know, so finishing sends none and the cards are hidden.
+ */
+type PinnedChoices = "frozen" | "recorded";
 
 type ShownError = Extract<ReviewError, { kind: "error" }> & { attempt: Attempt };
 
@@ -194,8 +212,10 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const [error, setError] = useState<ShownError>();
   // After any failed approval the decision may already be pinned: its choices never change again.
   const [frozen, setFrozen] = useState<FrozenApproval>();
-  // The SDK reported an approval already pinned: only finishing it (no choices) can succeed.
-  const [pinned, setPinned] = useState(false);
+  // The SDK reported an approval already pinned: only finishing it can succeed.
+  const [pinned, setPinned] = useState<PinnedChoices>();
+  // Finishing was refused for good (e.g. the request was denied): it can't be offered again.
+  const [finishRefused, setFinishRefused] = useState(false);
   // The SDK refused approving outright (a claimed approval with no record): only Deny is left.
   const [denyOnly, setDenyOnly] = useState(false);
   const done = useRef(false);
@@ -213,7 +233,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const run = async (attempt: Attempt) => {
     if (busy.current) return;
     let approval: FrozenApproval | undefined;
-    if (attempt === "retry") approval = frozen;
+    if (attempt === "retry" || (attempt === "finish" && pinned === "frozen")) approval = frozen;
     else if (attempt === "share") {
       const sentExpiry = expiresAt ?? undefined;
       approval = {
@@ -223,17 +243,14 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           ...(sentExpiry ? { expiresAt: sentExpiry } : {}),
         },
         selected: [...selected],
+        retry: true,
       };
     }
     if (attempt === "retry" && !approval) return;
-    // finish sends no choices, so the SDK resumes the pinned decision exactly as it was recorded;
-    // retry resends the frozen choices, which the SDK accepts only if they match any pin.
+    // A choice-less finish resumes the pinned decision exactly as it was recorded; the frozen
+    // choices are accepted only if they match the pin, so what the cards show is what is applied.
     const decision: RequestDecision =
-      attempt === "deny"
-        ? { approve: false }
-        : attempt === "finish"
-          ? { approve: true }
-          : (approval as FrozenApproval).decision;
+      attempt === "deny" ? { approve: false } : approval ? approval.decision : { approve: true };
     busy.current = true;
     setSaving(true);
     setError(undefined);
@@ -245,8 +262,10 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           : approval
             ? approvedMessage(name, cards, approval.selected, result.notified)
             : finishedMessage(name, result.notified);
-      if (approval?.decision.expiresAt && !result.expiryEnforced)
-        message = `${message} ${EXPIRY_NOT_ENFORCED}`;
+      // A choice-less finish can't know whether the recorded choices had an end date: say it
+      // whenever the result doesn't promise to enforce one.
+      const endDate = approval ? approval.decision.expiresAt !== undefined : attempt === "finish";
+      if (endDate && !result.expiryEnforced) message = `${message} ${EXPIRY_NOT_ENFORCED}`;
       toast.success(message);
       finish(attempt === "deny" ? "denied" : "approved");
     } catch (caught) {
@@ -256,8 +275,11 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
         finish("already-decided");
         return;
       }
-      if (attempt === "share") setFrozen(approval);
-      if (failure.finish) setPinned(true);
+      if (approval) setFrozen({ ...approval, retry: failure.retry });
+      // A pin refused while sending choices holds other choices. A refused denial may have hit
+      // this sheet's own frozen approval, if it could have pinned; finishing then resends it.
+      if (failure.finish) setPinned(attempt === "deny" && frozen?.retry ? "frozen" : "recorded");
+      else if (attempt === "finish" && !failure.retry) setFinishRefused(true);
       if (failure.deny) setDenyOnly(true);
       setError({ ...failure, attempt });
       busy.current = false;
@@ -267,8 +289,10 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
 
   const chosen = selected.filter((id) => shareable.some((card) => card.id === id));
   const allChecked = shareable.length > 0 && chosen.length === shareable.length;
+  // The pinned choices aren't known here: show no cards, as for an interrupted approval.
+  const unknownChoices = finishing || pinned === "recorded";
   // The choices can't change once an approval failed or is known to be pinned.
-  const fixed = frozen !== undefined || pinned;
+  const fixed = frozen !== undefined || pinned !== undefined;
   const locked = saving || fixed;
   const durationProps = !caps.grantExpiry
     ? { disabled: true as const, reason: EXPIRY_UNAVAILABLE }
@@ -293,11 +317,13 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
           <DialogDescription>
             {finishing
               ? FINISHING_TEXT
-              : "Choose what to share. You can revoke access at any time."}
+              : pinned === "recorded"
+                ? RECORDED_TEXT
+                : "Choose what to share. You can revoke access at any time."}
           </DialogDescription>
           {host && host !== name && <p className="hm-request-muted">Request from {host}</p>}
         </DialogHeader>
-        {!finishing && (
+        {!unknownChoices && (
           <>
             {fixed && <p className="hm-request-muted">{FROZEN_NOTE}</p>}
             <div className="hm-request-check hm-request-all">
@@ -394,7 +420,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               {denyOnly ? null : finishing || pinned ? (
                 <Button
                   variant="outline"
-                  disabled={saving}
+                  disabled={saving || finishRefused}
                   aria-busy={saving || undefined}
                   onClick={() => void run("finish")}
                 >
@@ -403,7 +429,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               ) : (
                 <Button
                   variant="outline"
-                  disabled={saving || error?.retry === false}
+                  disabled={saving || frozen?.retry === false}
                   aria-busy={saving || undefined}
                   onClick={() => void run("retry")}
                 >

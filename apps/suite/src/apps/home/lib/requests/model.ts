@@ -37,8 +37,10 @@ function plainText(value: string): string {
     .trim();
 }
 
+/** Cap by code points, so an emoji or other astral character is never cut in half. */
 function capped(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+  const points = Array.from(value);
+  return points.length > max ? `${points.slice(0, max - 1).join("")}…` : value;
 }
 
 export function isReadable(entry: AccessRequestEntry): entry is ReadableRequest {

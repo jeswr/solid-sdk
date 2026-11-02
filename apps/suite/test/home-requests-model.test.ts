@@ -171,6 +171,10 @@ describe("requesters and purposes", () => {
   it("names the requester from the notification, else its host, never a raw IRI", () => {
     expect(requesterName(request({ requesterName: "  Mara \n Coach " }))).toBe("Mara Coach");
     expect(requesterName(request({ requesterName: "x".repeat(100) }))).toBe(`${"x".repeat(79)}…`);
+    // Caps count code points: an emoji at the cut is kept whole, never split into a lone surrogate.
+    const emoji = requesterName(request({ requesterName: "😀".repeat(100) }));
+    expect(emoji).toBe(`${"😀".repeat(79)}…`);
+    expect(requesterName(request({ requesterName: "😀".repeat(80) }))).toBe("😀".repeat(80));
     expect(requesterName(request({ requesterName: " " }))).toBe("coach.example");
     expect(requesterName(request({ requester: "urn:uuid:1" }))).toBe("Someone");
     expect(requesterHost(request())).toBe("coach.example");
