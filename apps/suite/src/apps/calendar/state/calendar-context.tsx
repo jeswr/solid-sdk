@@ -276,6 +276,7 @@ function SessionCalendarProvider({
 }
 export function CalendarProvider({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
+  if (state.status === "signed-out") return <p role="status">Sign in to open your Calendar</p>;
   if (state.status === "loading") return <LoadingSkeleton preset="grid" label="Opening Calendar" />;
   if (state.status === "error")
     return <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />;
