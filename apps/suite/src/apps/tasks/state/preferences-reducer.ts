@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { isSharedTrackerUrl } from "../lib/model/rdf";
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
   sharedProjects: { url: string; title: string }[];
@@ -20,6 +21,7 @@ export const defaultPreferences: TasksPreferences = {
 };
 export type PreferenceAction =
   | { type: "sharedProject"; url: string; title: string }
+  | { type: "removeSharedProject"; url: string }
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
@@ -43,6 +45,11 @@ export function preferencesReducer(
         ],
       };
     }
+    case "removeSharedProject":
+      return {
+        ...state,
+        sharedProjects: state.sharedProjects.filter((project) => project.url !== action.url),
+      };
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
     case "viewMode":
@@ -113,18 +120,5 @@ function validSharedProject(value: unknown): value is { url: string; title: stri
   const project = value as Record<string, unknown>;
   if (typeof project.url !== "string" || typeof project.title !== "string" || !project.title.trim())
     return false;
-  try {
-    const url = new URL(project.url);
-    return (
-      ["http:", "https:"].includes(url.protocol) &&
-      !url.username &&
-      !url.password &&
-      !url.hash &&
-      !url.search &&
-      !url.pathname.endsWith("/") &&
-      url.href === project.url
-    );
-  } catch {
-    return false;
-  }
+  return isSharedTrackerUrl(project.url);
 }

@@ -131,9 +131,11 @@ function ProjectRow({
           >
             Rename
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
-            Share
-          </DropdownMenuItem>
+          {tasks.sharingAvailable && (
+            <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+              Share
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={first || !project.etag}
             onSelect={() => {
@@ -346,14 +348,43 @@ export function TasksSidebar() {
         <>
           <h2 className="tsk-nav-heading">Shared with me</h2>
           <ul className="tsk-nav-list">
-            {shared.map((project) =>
-              link(
-                `/tasks/p/${encodeRef(project.url)}`,
+            {shared.map((project) => {
+              const href = `/tasks/p/${encodeRef(project.url)}`;
+              const title =
                 tasks.projects.find((loaded) => loaded.url === project.url)?.tracker.title ??
-                  project.title,
-                <span className="tsk-project-dot" aria-hidden="true" />,
-              ),
-            )}
+                project.title;
+              return (
+                <li key={project.url} className="tsk-project-row">
+                  <span className="tsk-project-dot" aria-hidden="true" />
+                  <Link href={href} aria-current={path === href ? "page" : undefined}>
+                    {title}
+                  </Link>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <IconButton
+                        className="tsk-project-actions"
+                        label={`Project actions for ${title}`}
+                        variant="ghost"
+                      >
+                        <Ellipsis size={16} aria-hidden="true" />
+                      </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          tasks.cache.forgetSharedProject(project.url);
+                          dispatch({ type: "removeSharedProject", url: project.url });
+                          if (path === href || path === `${href}/board`)
+                            router.push("/tasks/inbox");
+                        }}
+                      >
+                        Remove from Shared with me
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}

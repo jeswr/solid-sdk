@@ -8,7 +8,12 @@ export function AssigneeAvatar({ task }: { task: TaskView }) {
   const members =
     tasks.projects.find((project) => project.url === task.projectUrl)?.tracker.groupMembers ?? [];
   if (!task.assignee || members.length < 2) return null;
-  const name = new URL(task.assignee).hostname.split(".")[0] as string;
+  let name = task.assignee;
+  try {
+    name = new URL(task.assignee).hostname.split(".")[0] as string;
+  } catch {
+    /* Use the raw IRI for foreign RDF. */
+  }
   return (
     <Avatar
       className="tsk-assignee-avatar"

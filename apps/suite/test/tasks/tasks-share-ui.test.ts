@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type ReactNode, useSyncExternalStore } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { encodeRef } from "../../src/lib/refs";
 import { MemorySharingAdapter } from "../../src/shell/share/memory-adapter";
+import { ShareError } from "../../src/shell/share/types";
 import { act, click, h, key, mount } from "../drive-ui-dom";
 import { now, webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
@@ -14,6 +15,7 @@ let cache: TasksCache;
 let path = "/tasks/inbox";
 let ref: string | undefined;
 let adapter: MemorySharingAdapter;
+let sharingAvailable = true;
 const bob = "https://bob.example/profile#me";
 vi.mock("next/navigation", () => ({
   usePathname: () => path,
@@ -46,6 +48,7 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
     webId,
     inboxUrl: cache.inboxUrl,
     shareAdapter: () => adapter,
+    sharingAvailable,
     updateTask: cache.updateTask.bind(cache),
     updateProject: cache.updateProject.bind(cache),
     renameProject: cache.renameProject,
@@ -56,7 +59,12 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   Toaster: () => null,
-  toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+  toast: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  }),
 }));
 
 import { toast } from "@jeswr/suite-ui";
@@ -87,6 +95,10 @@ beforeEach(() => {
     value: vi.fn(),
   });
   localStorage.clear();
+  vi.mocked(toast).mockClear();
+  vi.mocked(toast.error).mockClear();
+  vi.mocked(toast.success).mockClear();
+  sharingAvailable = true;
   ref = undefined;
   path = "/tasks/inbox";
   vi.stubGlobal("matchMedia", window.matchMedia);
@@ -182,4 +194,190 @@ it("shows the assignee hint and avatar only for shared assigned tasks", async ()
     }),
   );
   expect(host.textContent).not.toContain("will see this when they open the project");
+});
+
+it("hides Share from TopBar and the row menu when session sharing is unavailable", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const home = await cache.createProject("Home");
+  if (!home) throw new Error("Missing project");
+  ref = encodeRef(home.url);
+  path = `/tasks/p/${ref}`;
+  sharingAvailable = false;
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  expect(host.querySelector("header")?.textContent).not.toContain("Share");
+  const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Project actions for Home"]');
+  if (!trigger) throw new Error("Missing row menu");
+  await key(trigger, "Enter");
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain("Rename");
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain("Share");
+});
+it("removes a shared sidebar entry from preferences and the refresh cache", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const url = "https://bob.example/home.ttl";
+  const shared = createTracker(url, "Bob's Home", url.replace(/\.ttl$/, "/"), [bob, webId], now);
+  f.pod.seed(url, await serialize(shared.dataset));
+  ref = encodeRef(url);
+  path = `/tasks/p/${ref}`;
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  await act(async () => {
+    await vi.waitFor(() => expect(host.textContent).toContain("Shared with me"));
+  });
+  const trigger = host.querySelector<HTMLButtonElement>(
+    `[aria-label="Project actions for Bob's Home"]`,
+  );
+  if (!trigger) throw new Error("Missing shared row menu");
+  await key(trigger, "Enter");
+  await click(
+    button("Remove from Shared with me", document.querySelector('[role="menu"]') as HTMLElement),
+  );
+  expect(JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").sharedProjects).toEqual([]);
+  expect(host.querySelector(`nav a[href="${path}"]`)).toBeNull();
+  f.pod.requests.length = 0;
+  await act(() => cache.refreshProjects());
+  expect(f.pod.requests.some((request) => request.url === url)).toBe(false);
+});
+it.each([
+  "http://bob.example/home.ttl",
+  "https://bob.example/bad.ttl",
+])("does not persist an unsuccessful shared link %s", async (url) => {
+  const f = await frameCache();
+  cache = f.cache;
+  if (url.startsWith("https:")) {
+    const shared = createTracker(url, "Bad", "https://bob.example/drive/", [bob], now);
+    f.pod.seed(url, await serialize(shared.dataset));
+  }
+  ref = encodeRef(url);
+  path = `/tasks/p/${ref}`;
+  await mount(h(TasksApp, null, h(ProjectView, { projectUrl: url })));
+  await act(() => cache.openProject(url));
+  expect(
+    JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").sharedProjects ?? [],
+  ).toEqual([]);
+});
+it("renders malformed foreign assignee IRIs in the row, picker and detail hint", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const invalid = "http://a%zz/";
+  const project = await f.store.updateProject(f.inbox, (tracker) =>
+    tracker.setGroupMembers([webId, bob]),
+  );
+  const task = await f.store.createTask(project, { title: "Foreign assignment", state: "open" });
+  const data = await f.pod.dataset(task.url);
+  node(task.task.id, data).setIri(`${NS.WF}assignee`, invalid);
+  f.pod.seed(task.url, await serialize(data));
+  await cache.refreshProjects();
+  await cache.loadTasks(project, true);
+  const item = await f.store.readTask(task.url);
+  const { host } = await mount(
+    h(
+      "main",
+      null,
+      h(ProjectView, { inbox: true }),
+      h(TaskDetail, { stored: item, project, onClose: vi.fn() }),
+    ),
+  );
+  expect(host.querySelector('[aria-label="Assigned to http://a%zz/"]')).toBeTruthy();
+  expect(host.textContent).toContain("http://a%zz/ will see this when they open the project");
+});
+it.each([
+  true,
+  false,
+])("restores task assignments through dialog Undo only when used (%s)", async (undo) => {
+  const f = await frameCache();
+  cache = f.cache;
+  await cache.syncProjectMember(f.inbox, bob, true);
+  const task = await cache.createTask(f.inbox, { title: "Assigned", assignee: bob });
+  if (!task) throw new Error("Missing task");
+  await adapter.setPerson(f.inbox.url, bob, "editor");
+  const setPerson = adapter.setPerson.bind(adapter);
+  vi.spyOn(adapter, "setPerson").mockImplementation(async (url, person, role, options) => {
+    await setPerson(url, person, role, options);
+    await cache.syncProjectMember(f.inbox, person, role !== null);
+  });
+  ref = encodeRef(f.inbox.url);
+  path = `/tasks/p/${ref}`;
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  await click(button("Share", host.querySelector("header") as HTMLElement));
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain(bob),
+    );
+  });
+  const row = document.querySelector(`[role="dialog"] li[aria-label="${bob}"]`);
+  const select = row?.querySelector<HTMLButtonElement>('button[role="combobox"]');
+  if (!select) throw new Error("Missing role select");
+  await key(select, " ");
+  const remove = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent === "Remove access",
+  );
+  if (!remove) throw new Error("Missing Remove access");
+  await key(remove, "Enter");
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(`Removed access for ${bob}`, expect.anything()),
+    );
+  });
+  expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
+  if (undo) {
+    const options = vi
+      .mocked(toast)
+      .mock.calls.find(([message]) => message === `Removed access for ${bob}`)?.[1];
+    await act(async () => {
+      options?.action &&
+        typeof options.action === "object" &&
+        "onClick" in options.action &&
+        options.action.onClick(new MouseEvent("click") as never);
+    });
+    await act(async () => {
+      await vi.waitFor(async () =>
+        expect((await f.store.readTask(task.url)).task.assignee).toBe(bob),
+      );
+    });
+  } else {
+    await click(button("Done", document.querySelector('[role="dialog"]') as HTMLElement));
+    expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
+  }
+});
+
+it("shows saved-access member-sync copy without a contradictory success toast", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const home = await cache.createProject("Home");
+  if (!home) throw new Error("Missing project");
+  ref = encodeRef(home.url);
+  path = `/tasks/p/${ref}`;
+  const setPerson = adapter.setPerson.bind(adapter);
+  vi.spyOn(adapter, "setPerson").mockImplementationOnce(async (...args) => {
+    await setPerson(...args);
+    throw new ShareError("members-sync");
+  });
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  await click(button("Share", host.querySelector("header") as HTMLElement));
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Only you"),
+    );
+  });
+  const query = document.querySelector<HTMLInputElement>('[role="dialog"] input[role="combobox"]');
+  if (!query) throw new Error("Missing people picker");
+  await act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(query, bob);
+    query.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await key(query, "Enter");
+  await click(button("Add", document.querySelector('[role="dialog"]') as HTMLElement));
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+        "Access was saved, but the project's member list wasn't updated.",
+      ),
+    );
+  });
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+    "Can't reach your storage",
+  );
+  expect(toast.success).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
 });

@@ -14,6 +14,8 @@ import { WacSharingAdapter, wacShareCapabilities } from "../../../../shell/share
 import { readSharing, SharingError } from "../../../drive/lib/sharing";
 import { ModelError } from "../model/errors";
 import { RdfIO, type Resource, requireEtag } from "../model/io";
+import { requireProjectFolder } from "../model/rdf";
+import { TaskTracker } from "../model/tracker";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 export const tasksShareCapabilities = {
@@ -52,6 +54,7 @@ interface Options {
   webId: string;
   trackerUrl: string;
   folderUrl: string;
+  projectsContainer?: string | undefined;
   ensurePrivate: (url: string, owner: string) => Promise<boolean>;
   syncMembers: (webId: string, granted: boolean) => Promise<void>;
 }
@@ -76,14 +79,12 @@ export class TasksSharingAdapter implements SharingAdapter {
       const parsed = new URL(value);
       if (parsed.username || parsed.password || parsed.search) throw new ShareError("unsupported");
     }
-    if (
-      url !== trackerUrl ||
-      new URL(trackerUrl).hash ||
-      trackerUrl.endsWith("/") ||
-      !folderUrl.endsWith("/") ||
-      new URL(folderUrl).origin !== new URL(trackerUrl).origin
-    )
+    if (url !== trackerUrl) throw new ShareError("unsupported");
+    try {
+      requireProjectFolder(trackerUrl, folderUrl, this.options.projectsContainer);
+    } catch {
       throw new ShareError("unsupported");
+    }
   }
   private async acl(resource: string, signal: AbortSignal) {
     const response = await this.fetch(resource, { method: "HEAD", signal });
@@ -123,6 +124,10 @@ export class TasksSharingAdapter implements SharingAdapter {
   async load(url: string, signal: AbortSignal): Promise<SharingState> {
     this.validate(url);
     try {
+      const document = await this.io.read(url);
+      const tracker = new TaskTracker(`${url}#this`, document.dataset, DataFactory);
+      if (!tracker.isTracker || tracker.stateStore !== this.options.folderUrl)
+        throw new ShareError("unsupported");
       const acl = await this.acl(url, signal);
       const folder = await this.acl(this.options.folderUrl, signal);
       const folderState = folder ? this.state(this.options.folderUrl, folder) : undefined;
@@ -179,6 +184,17 @@ export class TasksSharingAdapter implements SharingAdapter {
           throw new ShareError("unsupported");
         const existing = folder ? this.state(folderUrl, folder) : before;
         if (!existing.canManage) throw new ShareError("forbidden");
+        // A folder-only Control holder cannot be reconstructed from tracker grants.
+        if (
+          existing.people.some(
+            (person) =>
+              person.role === "owner" &&
+              !before.people.some(
+                (entry) => entry.webId === person.webId && entry.role === "owner",
+              ),
+          )
+        )
+          throw new ShareError("conflict");
         // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
         const lower = before.people.flatMap((person) => {
           const after = next.find((entry) => entry.webId === person.webId);
@@ -207,7 +223,11 @@ export class TasksSharingAdapter implements SharingAdapter {
         await this.io.write(`${folderUrl}.acl`, policy(folderUrl, confirmed.people), {
           etag: narrowed.etag,
         });
-        await this.options.syncMembers(webId, role !== null);
+        try {
+          await this.options.syncMembers(webId, role !== null);
+        } catch {
+          throw new ShareError("members-sync");
+        }
       })
       .catch((error: unknown) => {
         throw this.error(error);

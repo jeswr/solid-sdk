@@ -96,3 +96,35 @@ it("validates and deduplicates opened shared projects in storage and reducer act
   ).toEqual([valid]);
   expect(preferencesReducer(state, { type: "sharedProject", ...valid, url: "bad" })).toBe(state);
 });
+
+it("requires HTTPS except loopback and removes remembered shared projects", () => {
+  for (const url of [
+    "https://bob.example/home.ttl",
+    "http://localhost:3000/home.ttl",
+    "http://127.0.0.2/home.ttl",
+    "http://[::1]/home.ttl",
+  ]) {
+    const state = preferencesReducer(defaultPreferences, {
+      type: "sharedProject",
+      url,
+      title: "Home",
+    });
+    expect(state.sharedProjects).toEqual([{ url, title: "Home" }]);
+    expect(preferencesReducer(state, { type: "removeSharedProject", url }).sharedProjects).toEqual(
+      [],
+    );
+  }
+  for (const url of [
+    "http://bob.example/home.ttl",
+    "http://localhost.example/home.ttl",
+    "http://192.168.0.1/home.ttl",
+    "https://bob.example/home",
+  ]) {
+    expect(
+      preferencesReducer(defaultPreferences, { type: "sharedProject", url, title: "Home" }),
+    ).toBe(defaultPreferences);
+    expect(
+      parsePreferences(JSON.stringify({ sharedProjects: [{ url, title: "Home" }] })).sharedProjects,
+    ).toEqual([]);
+  }
+});

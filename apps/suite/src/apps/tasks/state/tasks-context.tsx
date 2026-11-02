@@ -14,7 +14,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { type StoredProject, TaskStore } from "../lib/model/store";
 import { TasksSharingAdapter } from "../lib/share/adapter";
-import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "./access";
+import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
 import { useTasksPreferences } from "./preferences";
@@ -97,6 +97,7 @@ function useTasksValue(session: PodSession) {
       ...snapshot,
       cache,
       webId: session.webId,
+      sharingAvailable: supportsTasksSharing(session),
       shareAdapter: (project: StoredProject) => {
         const key = `${project.url} ${project.tracker.stateStore}`;
         let adapter = sharing.get(key);
@@ -105,7 +106,8 @@ function useTasksValue(session: PodSession) {
             fetch: session.fetch,
             webId: session.webId,
             trackerUrl: project.url,
-            folderUrl: project.tracker.stateStore as string,
+            folderUrl: project.url.replace(/\.ttl$/, "/"),
+            projectsContainer: cache.isOwnProject(project.url) ? cache.store.projects : undefined,
             ensurePrivate: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
             syncMembers: async (webId, granted) => {
               if (!(await cache.syncProjectMember(project, webId, granted)))

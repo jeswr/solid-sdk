@@ -66,3 +66,10 @@ export class ModelError extends Error {
     return classifyError(this);
   }
 }
+
+export class ProjectMembersSyncError extends Error {
+  constructor(cause: unknown) {
+    super("Access was saved, but the project's member list wasn't updated.", { cause });
+    this.name = "ProjectMembersSyncError";
+  }
+}

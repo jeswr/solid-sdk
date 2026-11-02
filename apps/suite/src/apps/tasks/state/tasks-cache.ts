@@ -3,9 +3,9 @@
 import { isomorphic } from "rdf-isomorphic";
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
-import { ModelError } from "../lib/model/errors";
+import { ModelError, ProjectMembersSyncError } from "../lib/model/errors";
 import type { TaskMove } from "../lib/model/move";
-import { DataFactory } from "../lib/model/rdf";
+import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
@@ -137,12 +137,21 @@ export class TasksCache {
   private undoRepairs = new Map<string, UndoRepair>();
   private sharedProjects = new Map<string, string>();
   private ownProjects = new Set<string>();
+  private removedSharedProjects = new Set<string>();
+  private removedAssignments = new Map<string, Map<string, Map<string, string | null>>>();
   readonly inboxUrl: string;
   isOwnProject(url: string) {
     return this.ownProjects.has(url) || url.startsWith(this.store.projects);
   }
   async setSharedProjects(projects: readonly { url: string; title: string }[]) {
-    for (const project of projects) this.sharedProjects.set(project.url, project.title);
+    const next = new Map(
+      projects
+        .filter((project) => isSharedTrackerUrl(project.url))
+        .map((project) => [project.url, project.title]),
+    );
+    for (const url of this.sharedProjects.keys()) if (!next.has(url)) this.forgetSharedProject(url);
+    for (const url of next.keys()) this.removedSharedProjects.delete(url);
+    this.sharedProjects = next;
     await this.start();
     if (this.baseline.status === "error") return;
     await this.refreshProjects().catch((error: unknown) => {
@@ -151,7 +160,30 @@ export class TasksCache {
       });
     });
   }
+  hasSharedProject(url: string): boolean {
+    return this.sharedProjects.has(url);
+  }
+  forgetSharedProject(url: string) {
+    this.removedSharedProjects.add(url);
+    this.sharedProjects.delete(url);
+    this.projectFailures.delete(url);
+    ++this.projectRead;
+    this.taskReadGenerations.set(url, (this.taskReadGenerations.get(url) ?? 0) + 1);
+    const tasks = { ...this.baseline.tasks };
+    delete tasks[url];
+    this.baseline = {
+      ...this.baseline,
+      projects: this.baseline.projects.filter((project) => project.url !== url),
+      tasks,
+    };
+    this.emit();
+  }
+  private validateSharedProject(project: StoredProject) {
+    if (!isSharedTrackerUrl(project.url)) throw new ModelError(400, project.url);
+    requireProjectFolder(project.url, project.tracker.stateStore);
+  }
   async openProject(url: string): Promise<StoredProject | undefined> {
+    if (!isSharedTrackerUrl(url) || this.removedSharedProjects.has(url)) return undefined;
     await this.start();
     const existing = this.baseline.projects.find((project) => project.url === url);
     if (existing) return existing;
@@ -162,12 +194,15 @@ export class TasksCache {
     this.emit();
     try {
       const project = await this.store.readProject(url);
+      this.validateSharedProject(project);
+      if (this.removedSharedProjects.has(url)) return undefined;
       this.sharedProjects.set(url, project.tracker.title ?? "Project");
       this.baseline = replaceProject(this.baseline, project);
       this.projectFailures.delete(url);
       this.emit();
       return project;
     } catch (error) {
+      if (this.removedSharedProjects.has(url)) return undefined;
       this.baseline = {
         ...this.baseline,
         tasks: { ...this.baseline.tasks, [url]: { status: "error", items: [], error } },
@@ -265,7 +300,9 @@ export class TasksCache {
     for (const url of this.sharedProjects.keys()) {
       if (ownProjects.has(url)) continue;
       try {
-        projects.push(await this.store.readProject(url));
+        const project = await this.store.readProject(url);
+        this.validateSharedProject(project);
+        projects.push(project);
       } catch (error) {
         failures.set(url, error);
       }
@@ -434,6 +471,7 @@ export class TasksCache {
     write: () => Promise<{ result: T; commit: Patch }>,
     retry: () => void,
     urls: string[] = [],
+    onFailure: MutationFailure = this.onFailure,
   ): Promise<T | undefined> {
     const entry = { apply, urls };
     this.pending.push(entry);
@@ -454,7 +492,7 @@ export class TasksCache {
         } catch {
           /* The baseline plus the remaining queue is still safe to render. */
         }
-        this.onFailure(error, retry);
+        onFailure(error, retry);
         return undefined;
       } finally {
         this.pending = this.pending.filter((item) => item !== entry);
@@ -1511,36 +1549,76 @@ export class TasksCache {
   /** Strict fresh reads and conditional writes share the task mutation queue, including Retry. */
   syncProjectMember(project: StoredProject, webId: string, granted: boolean) {
     const unassigned = new Set<string>();
+    const restored = new Set<string>();
+    let byMember = this.removedAssignments.get(project.url);
+    if (!byMember) {
+      byMember = new Map();
+      this.removedAssignments.set(project.url, byMember);
+    }
+    let removed = byMember.get(webId);
+    if (!removed) {
+      removed = new Map();
+      byMember.set(webId, removed);
+    }
+    const assignments = removed;
     const attempt = (): Promise<StoredProject | undefined> =>
       this.mutate(
         (state) => state,
         async () => {
+          const projects = this.isOwnProject(project.url) ? this.store.projects : undefined;
+          requireProjectFolder(project.url, project.tracker.stateStore, projects);
           const current = await this.store.readProject(project.url);
-          if (current.tracker.stateStore !== project.tracker.stateStore)
-            throw new ModelError(409, project.url);
+          const folder = requireProjectFolder(project.url, current.tracker.stateStore, projects);
           const confirmed: StoredTask[] = [];
           if (!granted) {
-            const items = await this.store.listTasks(current.tracker.stateStore as string, {
-              strict: true,
-            });
+            const items = await this.store.listTasks(folder, { strict: true });
             for (const item of items) {
               if (item.task.assignee !== webId) {
                 confirmed.push(item);
                 continue;
               }
+              let updated: StoredTask;
+              try {
+                updated = await this.store.updateTask(item, (task) => {
+                  task.assignee = undefined;
+                });
+              } catch (error) {
+                // A lost response can still have committed. Confirm before counting or retrying.
+                updated = await this.store.readTask(item.url);
+                if (updated.task.assignee !== undefined) throw error;
+              }
+              confirmed.push(updated);
+              assignments.set(item.url, updated.etag);
+              unassigned.add(item.url);
+            }
+          } else {
+            for (const [url, etag] of assignments) {
+              let item: StoredTask;
+              try {
+                item = await this.store.readTask(url);
+              } catch (error) {
+                if (!(error instanceof ModelError && error.status === 404)) throw error;
+                assignments.delete(url);
+                continue;
+              }
+              if (!etag || item.etag !== etag || item.task.assignee !== undefined) {
+                assignments.delete(url);
+                continue;
+              }
               try {
                 confirmed.push(
                   await this.store.updateTask(item, (task) => {
-                    task.assignee = undefined;
+                    task.assignee = webId;
                   }),
                 );
               } catch (error) {
-                // A lost response can still have committed. Confirm before counting or retrying.
-                const latest = await this.store.readTask(item.url);
-                if (latest.task.assignee !== undefined) throw error;
-                confirmed.push(latest);
+                // A concurrent edit always wins. Retry still uses the saved post-unassign ETag.
+                if (!(error instanceof ModelError && error.status === 412)) throw error;
+                assignments.delete(url);
+                continue;
               }
-              unassigned.add(item.url);
+              assignments.delete(url);
+              restored.add(url);
             }
           }
           const members = new Set(current.tracker.groupMembers);
@@ -1553,7 +1631,9 @@ export class TasksCache {
                   tracker.setGroupMembers([...members]),
                 );
           if (unassigned.size) this.onNotice(`Unassigned ${unassigned.size} tasks`);
+          if (restored.size) this.onNotice(`Restored ${restored.size} assignments`);
           unassigned.clear();
+          restored.clear();
           return {
             result,
             commit: (state) => {
@@ -1567,6 +1647,7 @@ export class TasksCache {
           void attempt();
         },
         [project.url],
+        (error, retry) => this.onFailure(new ProjectMembersSyncError(error), retry),
       );
     return attempt();
   }

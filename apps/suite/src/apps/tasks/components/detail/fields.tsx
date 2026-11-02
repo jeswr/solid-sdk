@@ -276,8 +276,17 @@ function LabelsField({
     </div>
   );
 }
+function memberName(webId: string) {
+  let displayName = webId;
+  try {
+    displayName = new URL(webId).hostname;
+  } catch {
+    /* Keep foreign IRIs renderable. */
+  }
+  return displayName;
+}
 function useMemberProfile(webId: string) {
-  return { displayName: new URL(webId).hostname, loading: false };
+  return { displayName: memberName(webId), loading: false };
 }
 
 function AssigneeField({
@@ -318,7 +327,7 @@ function AssigneeField({
         />
         {view.assignee && view.assignee !== tasks.webId && (
           <p className="su-muted">
-            {new URL(view.assignee).hostname} will see this when they open the project
+            {memberName(view.assignee)} will see this when they open the project
           </p>
         )}
         {error && <p role="alert">{error}</p>}

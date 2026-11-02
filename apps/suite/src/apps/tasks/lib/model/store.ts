@@ -4,7 +4,16 @@ import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { TaskMove } from "./move";
-import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
+import {
+  DataFactory,
+  documentUrl,
+  NS,
+  node,
+  requireProjectFolder,
+  requireTitle,
+  Store,
+  uniqueSlug,
+} from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
 import { type PrivateIndexAccess, TypeIndex } from "./type-index";
@@ -451,14 +460,15 @@ export class TaskStore {
   }
   /** Reserve the tracker before removing anything; the persisted marker permits recovery after a restart. */
   async deleteProject(project: StoredProject): Promise<void> {
+    const container = requireProjectFolder(project.url, project.tracker.stateStore, this.projects);
     const current = await this.io.optional(project.url);
     if (!current) return;
     const pending = node(project.tracker.id, current.dataset).text(deletionState) === "pending";
     if (!pending && current.etag !== project.etag)
       throw new ModelError(412, project.url, current.etag);
-    const container = project.tracker.stateStore as string;
     const tracker = new TaskTracker(project.tracker.id, current.dataset, DataFactory);
     if (tracker.stateStore !== container) throw new ModelError(412, project.url, current.etag);
+    requireProjectFolder(project.url, tracker.stateStore, this.projects);
     const dataset = new Store([...current.dataset]);
     const marker = node(project.tracker.id, dataset);
     marker.setText(deletionState, "pending");
@@ -472,6 +482,9 @@ export class TaskStore {
     const resource = await this.io.optional(container);
     if (resource) await this.removeIfPresent(container, resource.etag);
     await this.removeIfPresent(project.url, reserved.etag);
+    // Tracker access stays in place until its document has been removed.
+    const trackerAcl = await this.io.optional(`${project.url}.acl`);
+    if (trackerAcl) await this.removeIfPresent(trackerAcl.url, trackerAcl.etag);
   }
   private async removeIfPresent(url: string, etag: string | null): Promise<void> {
     try {

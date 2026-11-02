@@ -42,13 +42,14 @@ export interface SharingAdapter {
   supportsCommenter?: boolean;
   supportsGeneralCommenter?: boolean;
 }
-export type ShareErrorCode = "forbidden" | "network" | "conflict" | "unsupported";
+export type ShareErrorCode = "forbidden" | "network" | "conflict" | "unsupported" | "members-sync";
 export class ShareError extends Error {
   constructor(public readonly code: ShareErrorCode) {
     super(
       {
         forbidden: "You can't change who has access to this",
         network: "Can't reach your storage. Try again.",
+        "members-sync": "Access was saved, but the project's member list wasn't updated.",
         conflict: "Sharing changed somewhere else. Review the updated access and try again.",
         unsupported: "Not available on this storage",
       }[code],

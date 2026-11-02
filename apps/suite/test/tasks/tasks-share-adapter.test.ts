@@ -2,6 +2,7 @@
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { NS, node } from "../../src/apps/tasks/lib/model/rdf";
 import { TaskStore } from "../../src/apps/tasks/lib/model/store";
 import {
   TasksSharingAdapter,
@@ -40,6 +41,7 @@ async function fixture() {
     webId: owner,
     trackerUrl: project.url,
     folderUrl: folder,
+    projectsContainer: store.projects,
     ensurePrivate,
     syncMembers,
   };
@@ -255,8 +257,12 @@ describe("Tasks named sharing", () => {
     f.intercept(undefined);
     f.syncMembers.mockRejectedValueOnce(new Error("members unavailable"));
     await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
-      code: "network",
+      code: "members-sync",
+      message: "Access was saved, but the project's member list wasn't updated.",
     });
+    expect((await f.grants(f.folder)).find((grant) => grant.agents.includes(bob))?.modes).toContain(
+      `${ACL}Write`,
+    );
     await f.adapter.setPerson(f.project.url, bob, "editor");
   });
   it("rejects unverified folder creation and malformed or public ACLs", async () => {
@@ -381,10 +387,27 @@ it("requires Control on both resources and rechecks privacy before folder creati
 it("intersects mismatched folder grants before expanding them again", async () => {
   const f = await fixture();
   await f.adapter.setPerson(f.project.url, bob, "editor");
-  await installAcl(f, f.folder, [{ webId: owner, owner: true }]);
-  await f.adapter.setPerson(f.project.url, bob, "editor");
-  await installAcl(f, f.folder, [{ webId: owner, owner: true }, { webId: bob }]);
-  await f.adapter.setPerson(f.project.url, bob, "editor");
+  for (const present of [false, true]) {
+    await installAcl(f, f.folder, [
+      { webId: owner, owner: true },
+      ...(present ? [{ webId: bob }] : []),
+    ]);
+    f.requests.length = 0;
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    const dataset = new Store(new Parser().parse(String(puts(f)[0]?.init.body)));
+    const rules = [...new AclResource(dataset, DataFactory).authorizations];
+    expect(rules.map((grant) => [...grant.agent])).toEqual(present ? [[owner], [bob]] : [[owner]]);
+    expect(
+      rules.filter((grant) => [...grant.agent].includes(bob)).map((grant) => [...grant.mode]),
+    ).toEqual(present ? [[`${ACL}Read`]] : []);
+    expect((await f.grants(f.folder)).find((grant) => grant.agents.includes(bob))?.modes).toEqual([
+      `${ACL}Read`,
+      `${ACL}Write`,
+    ]);
+    expect(await f.load()).toMatchObject({
+      people: expect.arrayContaining([{ webId: bob, role: "editor" }]),
+    });
+  }
 });
 it("refuses to expand the folder after the tracker loses manage permission", async () => {
   const f = await fixture();
@@ -409,4 +432,62 @@ it("refuses to expand the folder after the tracker loses manage permission", asy
     loading.mockRestore();
     changing.mockRestore();
   }
+});
+
+it("refuses tampered stateStore in both the adapter binding and freshly read tracker", async () => {
+  const f = await fixture();
+  const other = new TasksSharingAdapter({ ...f.options, folderUrl: `${root}drive/` });
+  await expect(other.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+    code: "unsupported",
+  });
+  await f.store.updateProject(f.project, (tracker) => {
+    tracker.stateStore = `${root}drive/`;
+  });
+  f.requests.length = 0;
+  await expect(f.load()).rejects.toMatchObject({ code: "unsupported" });
+  await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+    code: "unsupported",
+  });
+  expect(puts(f)).toEqual([]);
+});
+it("refuses an owned tracker outside the direct projects container", async () => {
+  const f = await fixture();
+  const trackerUrl = `${f.store.projects}nested/home.ttl`;
+  const adapter = new TasksSharingAdapter({
+    ...f.options,
+    trackerUrl,
+    folderUrl: trackerUrl.replace(/\.ttl$/, "/"),
+  });
+  await expect(adapter.load(trackerUrl, new AbortController().signal)).rejects.toMatchObject({
+    code: "unsupported",
+  });
+  expect(f.requests).toEqual([]);
+});
+it("keeps folder-only Control holders by refusing to rewrite their ACL", async () => {
+  const f = await fixture();
+  await f.load();
+  await installAcl(f, f.folder, [
+    { webId: owner, owner: true },
+    { webId: bob, owner: true },
+  ]);
+  f.requests.length = 0;
+  await expect(
+    f.adapter.setPerson(f.project.url, "https://carol.test/#me", "viewer"),
+  ).rejects.toMatchObject({ code: "conflict" });
+  expect(puts(f)).toEqual([]);
+  expect((await f.grants(f.folder)).find((grant) => grant.agents.includes(bob))?.modes).toContain(
+    `${ACL}Control`,
+  );
+});
+
+it("rejects documents that cease to be trackers before writing access", async () => {
+  const f = await fixture();
+  await f.store.updateProject(f.project, (tracker) => {
+    node(tracker.id, tracker.dataset).types.delete(`${NS.WF}Tracker`);
+  });
+  f.requests.length = 0;
+  await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+    code: "unsupported",
+  });
+  expect(puts(f)).toEqual([]);
 });

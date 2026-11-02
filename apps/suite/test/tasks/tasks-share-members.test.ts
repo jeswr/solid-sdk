@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
-import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { NS, node, requireProjectFolder, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { now, webId } from "./pod";
@@ -99,10 +99,16 @@ describe("sharing membership mutation queue", () => {
     const data = await pod.dataset(folder);
     node(`${folder}.acl`, data).types.add(`${NS.LDP}Resource`);
     pod.seed(`${folder}.acl`, await serialize(data));
+    pod.seed(`${home.url}.acl`, await serialize(data));
     pod.requests.length = 0;
     await store.deleteProject(home);
     const deletes = pod.requests.filter((request) => request.method === "DELETE");
-    expect(deletes.map((request) => request.url)).toEqual([`${folder}.acl`, folder, home.url]);
+    expect(deletes.map((request) => request.url)).toEqual([
+      `${folder}.acl`,
+      folder,
+      home.url,
+      `${home.url}.acl`,
+    ]);
     expect(deletes.every((request) => request.headers.has("If-Match"))).toBe(true);
   });
 });
@@ -142,4 +148,150 @@ describe("opened shared trackers", () => {
     expect(cold.getSnapshot().tasks[url]?.status).toBe("error");
     expect(await cold.openProject(url)).toBeUndefined();
   });
+});
+
+describe("sharing regressions", () => {
+  it("rejects a tampered stateStore before membership writes and project deletion", async () => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const other = await store.createProject("Other");
+    const tampered = await store.updateProject(inbox, (tracker) => {
+      tracker.stateStore = other.tracker.stateStore;
+    });
+    const listing = vi.spyOn(store, "listTasks");
+    expect(await cache.syncProjectMember(tampered, bob, false)).toBeUndefined();
+    expect(failures.mock.calls.at(-1)?.[0].cause).toMatchObject({ status: 400 });
+    expect(listing).not.toHaveBeenCalledWith(other.tracker.stateStore, { strict: true });
+    pod.requests.length = 0;
+    await expect(store.deleteProject(tampered)).rejects.toMatchObject({ status: 400 });
+    await expect(store.deleteProject(inbox)).rejects.toMatchObject({ status: 412 });
+    expect(pod.requests.filter((request) => ["PUT", "DELETE"].includes(request.method))).toEqual(
+      [],
+    );
+  });
+  it("rejects an owned tracker nested below the projects container", async () => {
+    const { cache, store, pod, failures } = await frameCache();
+    const url = `${store.projects}nested/home.ttl`;
+    const data = createTracker(url, "Nested", url.replace(/\.ttl$/, "/"), [webId], now);
+    pod.seed(url, await serialize(data.dataset));
+    const project = await store.readProject(url);
+    expect(await cache.syncProjectMember(project, bob, true)).toBeUndefined();
+    expect(failures.mock.calls.at(-1)?.[0].cause).toMatchObject({ status: 400 });
+    await expect(store.deleteProject(project)).rejects.toMatchObject({ status: 400 });
+  });
+  it("restores unchanged assignments on any re-add; no re-add leaves them unassigned", async () => {
+    const { store, failures, inbox, pod } = await frameCache();
+    const notice = vi.fn();
+    const cache = new TasksCache(store, failures, webId, notice);
+    await cache.start();
+    await cache.syncProjectMember(inbox, bob, true);
+    const first = await cache.createTask(inbox, { title: "Restore", assignee: bob });
+    const second = await cache.createTask(inbox, { title: "Edited", assignee: bob });
+    const third = await cache.createTask(inbox, { title: "Reassigned", assignee: bob });
+    if (!first || !second || !third) throw new Error("Missing tasks");
+    await cache.syncProjectMember(inbox, bob, false);
+    const unassigned = await store.readTask(first.url);
+    expect(unassigned.task.assignee).toBeUndefined();
+    expect(notice).not.toHaveBeenCalledWith(expect.stringContaining("Restored"));
+    await store.updateTask(await store.readTask(second.url), (task) => {
+      task.title = "Changed elsewhere";
+    });
+    await store.updateTask(await store.readTask(third.url), (task) => {
+      task.assignee = webId;
+    });
+    pod.requests.length = 0;
+    await cache.syncProjectMember(inbox, bob, true);
+    expect((await store.readTask(first.url)).task.assignee).toBe(bob);
+    expect((await store.readTask(second.url)).task.assignee).toBeUndefined();
+    expect((await store.readTask(third.url)).task.assignee).toBe(webId);
+    expect(
+      pod.requests
+        .find((request) => request.method === "PUT" && request.url === first.url)
+        ?.headers.get("If-Match"),
+    ).toBe(unassigned.etag);
+    expect(notice).toHaveBeenLastCalledWith("Restored 1 assignments");
+    await cache.syncProjectMember(inbox, bob, true);
+    expect(notice.mock.calls.filter(([message]) => message.startsWith("Restored"))).toHaveLength(1);
+  });
+  it("skips a concurrent assignment restoration conflict", async () => {
+    const { cache, store, inbox, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const item = await cache.createTask(inbox, { title: "Race", assignee: bob });
+    if (!item) throw new Error("Missing task");
+    await cache.syncProjectMember(inbox, bob, false);
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url === item.url
+        ? new Response(null, { status: 412 })
+        : undefined;
+    expect(await cache.syncProjectMember(inbox, bob, true)).toBeDefined();
+    expect((await store.readTask(item.url)).task.assignee).toBeUndefined();
+    expect(failures).not.toHaveBeenCalled();
+  });
+  it.each([
+    "http://bob.example/home.ttl",
+    "https://a%zz/home.ttl",
+  ])("rejects unsafe shared links before reading %s", async (url) => {
+    const { cache, pod } = await frameCache();
+    pod.requests.length = 0;
+    expect(await cache.openProject(url)).toBeUndefined();
+    await cache.setSharedProjects([{ url, title: "Unsafe" }]);
+    expect(pod.requests.some((request) => request.url === url)).toBe(false);
+  });
+  it.each([
+    "https://elsewhere.example/home/",
+    "https://bob.example/drive/",
+  ])("refuses shared stateStore %s and does not remember failed reads", async (folder) => {
+    const { cache, pod } = await frameCache();
+    const url = "https://bob.example/home.ttl";
+    const data = createTracker(url, "Unsafe", folder, [bob], now);
+    pod.seed(url, await serialize(data.dataset));
+    expect(await cache.openProject(url)).toBeUndefined();
+    expect(cache.hasSharedProject(url)).toBe(false);
+    pod.requests.length = 0;
+    await cache.refreshProjects();
+    expect(pod.requests.some((request) => request.url === url || request.url === folder)).toBe(
+      false,
+    );
+  });
+  it("forgets removed projects and stops refreshing them", async () => {
+    const { cache, pod } = await frameCache();
+    const url = "https://bob.example/home.ttl";
+    const data = createTracker(url, "Shared", url.replace(/\.ttl$/, "/"), [bob], now);
+    pod.seed(url, await serialize(data.dataset));
+    expect(await cache.openProject(url)).toBeDefined();
+    await cache.setSharedProjects([]);
+    pod.requests.length = 0;
+    await cache.refreshProjects();
+    await cache.invalidate(url);
+    expect(cache.getSnapshot().projects.some((project) => project.url === url)).toBe(false);
+    expect(pod.requests.some((request) => request.url === url)).toBe(false);
+  });
+  it("reports partial sharing success once with a retry that repairs membership", async () => {
+    const { cache, store, inbox, failures } = await frameCache();
+    vi.spyOn(store, "updateProject").mockRejectedValueOnce(new ModelError(503, inbox.url));
+    expect(await cache.syncProjectMember(inbox, bob, true)).toBeUndefined();
+    expect(failures).toHaveBeenCalledOnce();
+    expect(failures.mock.calls[0]?.[0].message).toBe(
+      "Access was saved, but the project's member list wasn't updated.",
+    );
+    failures.mock.calls[0]?.[1]();
+    await vi.waitFor(() =>
+      expect(cache.getSnapshot().projects[0]?.tracker.groupMembers).toContain(bob),
+    );
+  });
+});
+
+it.each([
+  "https://BOB.example/home.ttl",
+  "https://bob.example/home.ttl?q=1",
+  "https://bob.example/home.ttl#this",
+  "https://bob.example/home",
+  "https://bob.example/.ttl",
+  "https://bob.example/encoded%2fhome.ttl",
+  "https://bob.example/encoded%5chome.ttl",
+  "https://bob.example/home.tt%6c",
+])("refuses ambiguous project folder derivation for %s", (url) => {
+  expect(() => requireProjectFolder(url, url.replace(/\.ttl$/, "/"))).toThrow(ModelError);
+});
+it("rejects missing stateStore even on a valid tracker", () => {
+  expect(() => requireProjectFolder("https://bob.example/home.ttl", undefined)).toThrow(ModelError);
 });

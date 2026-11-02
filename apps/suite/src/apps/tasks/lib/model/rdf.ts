@@ -17,6 +17,8 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 
+import { ModelError } from "./errors";
+
 export { DataFactory, NS, Store };
 /** Tasks retains the shared model's HTTP schema.org wire contract (DECISIONS V7). */
 export const SCHEMA = NS.SCHEMA.replace("https:", "http:");
@@ -181,4 +183,48 @@ export function documentUrl(value: string): string {
   const url = new URL(requireHttp(value));
   url.hash = "";
   return url.href;
+}
+
+/** A tracker may only govern its conventional sibling task folder. */
+export function requireProjectFolder(
+  trackerUrl: string,
+  stateStore: string | undefined,
+  projects?: string,
+): string {
+  try {
+    const url = new URL(requireHttp(trackerUrl));
+    const folder = trackerUrl.replace(/\.ttl$/, "/");
+    const slug = decodeURIComponent(url.pathname.slice(url.pathname.lastIndexOf("/") + 1));
+    if (
+      url.href !== trackerUrl ||
+      url.search ||
+      url.hash ||
+      !slug.endsWith(".ttl") ||
+      slug.length <= 4 ||
+      /[/\\]/.test(slug) ||
+      !trackerUrl.endsWith(".ttl") ||
+      stateStore !== folder ||
+      (projects !== undefined && new URL("./", url).href !== projects)
+    )
+      throw new Error("Invalid project folder");
+    return folder;
+  } catch (cause) {
+    throw new ModelError(400, trackerUrl, null, { cause });
+  }
+}
+/** Shared links must use TLS, except local development loopback endpoints. */
+export function isSharedTrackerUrl(value: string): boolean {
+  try {
+    requireProjectFolder(value, value.replace(/\.ttl$/, "/"));
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" ||
+      (url.protocol === "http:" &&
+        (url.hostname === "localhost" ||
+          url.hostname === "[::1]" ||
+          /^127\.\d+\.\d+\.\d+$/.test(url.hostname)))
+    );
+  } catch {
+    return false;
+  }
 }

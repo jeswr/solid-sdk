@@ -71,7 +71,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
       void tasks.cache.openProject(projectUrl);
   }, [projectUrl, activeProject, projectLoad, tasks.status, tasks.cache]);
   useEffect(() => {
-    if (activeProject && !tasks.cache.isOwnProject(activeProject.url))
+    if (
+      activeProject &&
+      !tasks.cache.isOwnProject(activeProject.url) &&
+      tasks.cache.hasSharedProject(activeProject.url)
+    )
       dispatch({
         type: "sharedProject",
         url: activeProject.url,
@@ -222,7 +226,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
         actions={
           supportsSort || projectUrl ? (
             <>
-              {activeProject && (
+              {activeProject && tasks.sharingAvailable && (
                 <Button variant="outline" onClick={() => setSharing(true)}>
                   Share
                 </Button>
