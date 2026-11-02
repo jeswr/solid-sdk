@@ -33,8 +33,9 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
   belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
   redacts anything that looks like a card number before it reaches a model: every Luhn-valid
   12–19 digit window with a card-network prefix, at any offset in a run of digits split by any
-  amount of whitespace, `.`, `,`, `_`, `-` or `/`. Up to 19 digits from the match start are
-  replaced with `[card number removed]`, and the result reports how many were redacted. A
+  amount of whitespace, `.`, `,`, `_`, `-` or `/`. Every start is checked, and up to 19 digits
+  from each match start are covered; overlapping covered ranges merge into one
+  `[card number removed]`, and the result reports how many were redacted. A
   Luhn-valid account number with a card prefix is redacted too; that costs one number, not
   the whole document.
 - The text is owner-authored data. Slice 2's setup helper and discovery must also check that

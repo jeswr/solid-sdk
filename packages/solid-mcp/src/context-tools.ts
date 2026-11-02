@@ -71,36 +71,38 @@ export function findCardNumbers(text: string): Array<[number, number]> {
         digits += char;
       }
     }
-    let start = 0;
-    while (start + 12 <= digits.length) {
-      let found = -1;
-      if (CARD_PREFIX.test(digits.slice(start, start + 4))) {
-        // evenSum doubles digits at even offsets from start; oddSum doubles odd offsets.
-        let evenSum = 0;
-        let oddSum = 0;
-        for (let i = start; i < start + 19 && i < digits.length; i += 1) {
-          const digit = Number(digits[i]);
-          const doubled = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
-          if ((i - start) % 2 === 0) {
-            evenSum += doubled;
-            oddSum += digit;
-          } else {
-            evenSum += digit;
-            oddSum += doubled;
-          }
-          const length = i - start + 1;
-          // Luhn doubles every second digit counting from the right-most (check) digit.
-          if (length >= 12 && (length % 2 === 0 ? evenSum : oddSum) % 10 === 0) found = i;
-          if (found >= 0) break;
+    // Covered digit ranges [from, to], merged; every start is checked so a chance match
+    // earlier in the run cannot hide a real card that starts inside its range.
+    const ranges: Array<[number, number]> = [];
+    for (let start = 0; start + 12 <= digits.length; start += 1) {
+      if (!CARD_PREFIX.test(digits.slice(start, start + 4))) continue;
+      // evenSum doubles digits at even offsets from start; oddSum doubles odd offsets.
+      let evenSum = 0;
+      let oddSum = 0;
+      for (let i = start; i < start + 19 && i < digits.length; i += 1) {
+        const digit = Number(digits[i]);
+        const doubled = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
+        if ((i - start) % 2 === 0) {
+          evenSum += doubled;
+          oddSum += digit;
+        } else {
+          evenSum += digit;
+          oddSum += doubled;
+        }
+        const length = i - start + 1;
+        // Luhn doubles every second digit counting from the right-most (check) digit.
+        if (length >= 12 && (length % 2 === 0 ? evenSum : oddSum) % 10 === 0) {
+          // A shorter valid prefix may be chance: cover the longest window.
+          const end = Math.min(start + 19, digits.length) - 1;
+          const last = ranges[ranges.length - 1];
+          if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+          else ranges.push([start, end]);
+          break;
         }
       }
-      if (found >= 0) {
-        // A shorter valid prefix may be chance: cover the longest window so no card digits survive.
-        const end = Math.min(start + 19, digits.length) - 1;
-        spans.push([positions[start] as number, (positions[end] as number) + 1]);
-        start = end + 1;
-      } else start += 1;
     }
+    for (const [from, to] of ranges)
+      spans.push([positions[from] as number, (positions[to] as number) + 1]);
   }
   return spans;
 }

@@ -171,9 +171,15 @@ describe("shared context", () => {
   });
 
   it("refuses a fetch-adapter redirect at the transport, without requesting its target", async () => {
-    for (const location of [`${ROOT}secret/health.md`, "https://evil.example/context.md"]) {
+    for (const [location, redirectStatus] of [
+      [`${ROOT}secret/health.md`, 301],
+      [`${ROOT}secret/health.md`, 303],
+      [`${ROOT}secret/health.md`, 307],
+      [`${ROOT}secret/health.md`, 308],
+      ["https://evil.example/context.md", 302],
+    ] as const) {
       const fake = makeFakePod({
-        [CONTEXT]: { contentType: "text/markdown", body: "", redirectTo: location },
+        [CONTEXT]: { contentType: "text/markdown", body: "", redirectTo: location, redirectStatus },
         [`${ROOT}secret/health.md`]: { contentType: "text/markdown", body: "secret" },
       });
       const requested: string[] = [];
@@ -259,6 +265,23 @@ describe("shared context", () => {
     const { text } = redactCardNumbers("6011000990139424123");
     expect(text).not.toMatch(/\d/);
     expect(redactCardNumbers("no digits")).toEqual({ text: "no digits", count: 0 });
+    // A chance-valid match earlier in the same run must not hide the card that follows it.
+    expect(redactCardNumbers("Contact 07524 455523, 4111 1111 1111 1111 exp 09/28").text).toBe(
+      `Contact 07${CARD_REDACTION} exp 09/28`,
+    );
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let n = 0; n < 2000; n += 1) {
+      const prefix = Array.from({ length: 1 + Math.floor(random() * 18) }, () =>
+        Math.floor(random() * 10),
+      ).join("");
+      expect(redactCardNumbers(`${prefix} 4570 1927 0436 2323`).text).toMatch(
+        new RegExp(`${CARD_REDACTION.replace(/[[\]]/g, "\\$&")}$`),
+      );
+    }
   });
 
   it("scans a large digit document in linear time", () => {
