@@ -209,3 +209,41 @@ describe("vocabulary IRIs are the converged standard terms", () => {
     expect(store.getQuads(subject, schema("position"), null, null).length).toBe(1);
   });
 });
+
+describe("parseTask hardens untrusted reads (sst-ild.7.9)", () => {
+  const Pre = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+    @prefix dct: <http://purl.org/dc/terms/> .
+    @prefix schema: <http://schema.org/> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .`;
+
+  it("drops non-http(s) object-property IRIs", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee <javascript:alert(1)> ; dct:creator <data:text/html,x> ;
+          wf:tracker <javascript:p> ; dct:isPartOf <javascript:q> ;
+          dct:isReplacedBy <javascript:r> ;
+          dct:requires <javascript:s>, <https://pod.example/tasks/a#it> ;
+          dct:relation <javascript:t> .`),
+    );
+    expect(back).toMatchObject({ title: "T", blockedBy: ["https://pod.example/tasks/a#it"] });
+    for (const key of ["assignee", "creator", "project", "parent", "duplicateOf", "relatesTo"]) {
+      expect(back).not.toHaveProperty(key);
+    }
+  });
+
+  it("drops a literal where an IRI belongs and a malformed date instead of throwing", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "Survivor" ;
+          wf:assignee "bob" ; dct:requires "x" ;
+          wf:dateDue "not-a-date"^^xsd:dateTime .`),
+    );
+    expect(back?.title).toBe("Survivor");
+    expect(back?.assignee).toBeUndefined();
+    expect(back?.blockedBy).toBeUndefined();
+    expect(back?.dueDate).toBeUndefined();
+  });
+});

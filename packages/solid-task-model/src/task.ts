@@ -328,33 +328,69 @@ export function taskSubject(resourceUrl: string): string {
  */
 export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData | undefined {
   const doc = new Task(taskSubject(resourceUrl), dataset, DataFactory);
-  if (!doc.isTask) return undefined;
+  if (!tryRead(() => doc.isTask)) return undefined;
 
-  // title + state are the two always-present fields; every other field is copied
-  // through only when the accessor returned a value (setIfDefined), so the result
-  // omits absent fields exactly as before.
-  const data: TaskData = { title: doc.title ?? "", state: doc.state };
-  setIfDefined(data, "description", doc.description);
-  setIfDefined(data, "created", doc.created);
-  setIfDefined(data, "modified", doc.modified);
-  setIfDefined(data, "endedAt", doc.endedAt);
-  setIfDefined(data, "creator", doc.creator);
-  setIfDefined(data, "assignee", doc.assignee);
-  setIfDefined(data, "project", doc.project);
-  setIfDefined(data, "dueDate", doc.dueDate);
-  setIfDefined(data, "priority", doc.priority);
-  setIfDefined(data, "rank", doc.rank);
-  setIfDefined(data, "parent", doc.parent);
-  setIfDefined(data, "duplicateOf", doc.duplicateOf);
-  setIfDefined(data, "clonedFrom", doc.clonedFrom);
+  // Pod data is untrusted. Every read is guarded so a malformed value (a literal where
+  // an IRI belongs, a wrong datatype) drops that field instead of aborting the parse,
+  // and every object-property IRI is http(s)-filtered, mirroring buildTask's write-side
+  // filter, so a `javascript:` or `data:` IRI never reaches a consumer.
+  const data: TaskData = {
+    title: tryRead(() => doc.title) ?? "",
+    state: tryRead(() => doc.state) ?? "open",
+  };
+  setIfDefined(
+    data,
+    "description",
+    tryRead(() => doc.description),
+  );
+  setIfDefined(data, "created", validDate(tryRead(() => doc.created)));
+  setIfDefined(data, "modified", validDate(tryRead(() => doc.modified)));
+  setIfDefined(data, "endedAt", validDate(tryRead(() => doc.endedAt)));
+  setIfDefined(data, "creator", httpIriOrUndefined(tryRead(() => doc.creator)));
+  setIfDefined(data, "assignee", httpIriOrUndefined(tryRead(() => doc.assignee)));
+  setIfDefined(data, "project", httpIriOrUndefined(tryRead(() => doc.project)));
+  setIfDefined(data, "dueDate", validDate(tryRead(() => doc.dueDate)));
+  setIfDefined(
+    data,
+    "priority",
+    tryRead(() => doc.priority),
+  );
+  setIfDefined(data, "rank", finite(tryRead(() => doc.rank)));
+  setIfDefined(data, "parent", httpIriOrUndefined(tryRead(() => doc.parent)));
+  setIfDefined(data, "duplicateOf", httpIriOrUndefined(tryRead(() => doc.duplicateOf)));
+  setIfDefined(data, "clonedFrom", httpIriOrUndefined(tryRead(() => doc.clonedFrom)));
 
   // The two set-valued relations are omitted when empty (their absence vs an
   // empty array is observable to consumers, so this is kept explicit).
-  const blockedBy = [...doc.blockedBy];
-  const relatesTo = [...doc.relatesTo];
+  const blockedBy = httpIris(tryRead(() => [...doc.blockedBy]));
+  const relatesTo = httpIris(tryRead(() => [...doc.relatesTo]));
   if (blockedBy.length > 0) data.blockedBy = blockedBy;
   if (relatesTo.length > 0) data.relatesTo = relatesTo;
   return data;
+}
+
+/** Run an untrusted read, returning `undefined` on any throw. */
+function tryRead<T>(read: () => T | undefined): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+}
+
+/** A valid `Date`, else `undefined` (a malformed literal reads as `Invalid Date`). */
+function validDate(value: Date | undefined): Date | undefined {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : undefined;
+}
+
+/** A finite number, else `undefined`. */
+function finite(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** The absolute http(s) members of an untrusted IRI list. */
+function httpIris(values: readonly string[] | undefined): string[] {
+  return (values ?? []).filter((v) => isHttpIri(v));
 }
 
 /**

@@ -178,9 +178,11 @@ hand-written model imported in #279, they differ as follows, pinned in
   hand-written model wrote no summary, leaving an unreadable task. Control characters are
   stripped from the written summary and description, in the `sched:` and `wf:` triples
   alike.
-- An unsafe or relative resource URL (a space, `|`, `>`, or no scheme) makes build and
-  serialize throw a `TypeError`, and parse returns `undefined`. The hand-written model
-  wrote such IRIs into Turtle unchecked.
+- A resource URL that is not a canonical absolute http(s) URL without a fragment (a
+  space, `>`, `#frag`, a relative path or another scheme) makes the subject helpers,
+  build and serialize throw a `TypeError`, and parse returns `undefined`. The
+  hand-written model wrote such IRIs into Turtle unchecked. `isResourceUrl` and
+  `assertResourceUrl` expose the check.
 
 ## Develop
 

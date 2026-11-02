@@ -33,7 +33,7 @@ import {
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store, Writer } from "n3";
 import { entities, type TaskData as GeneratedTaskData } from "./generated/model.js";
-import { httpIriOrUndefined } from "./iri.js";
+import { assertResourceUrl, httpIriOrUndefined, isResourceUrl } from "./iri.js";
 import { Reminder, SchedulingTask } from "./nodes.js";
 import { PREFIXES } from "./vocab.js";
 
@@ -135,7 +135,7 @@ export interface SchedulingTaskData {
 
 /** The conventional subject IRI for the task (`sched:Task` + `wf:Task`) at `resourceUrl`. */
 export function schedulingTaskSubject(resourceUrl: string): string {
-  return `${resourceUrl}#it`;
+  return `${assertResourceUrl(resourceUrl)}#it`;
 }
 
 /** The conventional subject IRIs of the nodes in a task document. */
@@ -143,15 +143,13 @@ export function schedulingNodeIris(resourceUrl: string): {
   task: string;
   recurrence: string;
 } {
-  return {
-    task: `${resourceUrl}#it`,
-    recurrence: `${resourceUrl}#recurrence`,
-  };
+  const url = assertResourceUrl(resourceUrl);
+  return { task: `${url}#it`, recurrence: `${url}#recurrence` };
 }
 
 /** The conventional subject IRI of the i-th reminder in a task document. */
 export function reminderIri(resourceUrl: string, index: number): string {
-  return `${resourceUrl}#reminder${index}`;
+  return `${assertResourceUrl(resourceUrl)}#reminder${index}`;
 }
 
 /** Assign `target[key] = value` ONLY when `value` is defined. */
@@ -251,6 +249,7 @@ function toWfTaskData(
  * well-formed `xsd:duration` offset is skipped.
  */
 export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskData): Store {
+  assertResourceUrl(resourceUrl);
   const explicitCompletedAt = validDateOrUndefined(data.completedAt);
   const closed =
     data.completed === true || (data.completed !== false && explicitCompletedAt !== undefined);
@@ -345,6 +344,7 @@ export function parseSchedulingTask(
   resourceUrl: string,
   dataset: DatasetCore,
 ): SchedulingTaskData | undefined {
+  if (!isResourceUrl(resourceUrl)) return undefined;
   const core = generatedTask.parse(resourceUrl, dataset);
   if (core === undefined) return undefined;
   const data: SchedulingTaskData = { summary: core.summary };

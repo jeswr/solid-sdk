@@ -33,6 +33,11 @@ const turtle = await serializeTask(resourceUrl, {
 const task: TaskData | undefined = await parseTaskTtl(resourceUrl, turtle, "text/turtle");
 ```
 
+Pod data is untrusted. `buildTask` drops object-property values that are not absolute
+http(s) IRIs, and `parseTask` applies the same filter on read: a `javascript:` or `data:`
+assignee, creator, project or relation is left out. A malformed value, such as a literal
+where an IRI belongs or an invalid date, drops that field instead of aborting the parse.
+
 ## Key API
 
 - Tasks: `Task`, `TaskData`, `buildTask`, `parseTask`, `parseTaskTtl`, `serializeTask`,
