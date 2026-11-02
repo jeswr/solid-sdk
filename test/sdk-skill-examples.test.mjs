@@ -63,4 +63,5 @@ it("exits unsuccessfully for a bad example or an empty selection", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).not.toBe("");
   }
-});
+  // Two type-checking CLI runs; CI runners take just over vitest's 5 s default.
+}, 30000);
