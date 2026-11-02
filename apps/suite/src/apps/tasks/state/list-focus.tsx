@@ -20,6 +20,12 @@ interface ListFocus {
   selectedUrls: () => ReadonlySet<string>;
   toggleSelection: (url: string) => void;
   clearSelection: () => void;
+  /** Cmd/Ctrl+A: select every visible row. */
+  selectAll: () => void;
+  /** Shift+↑/↓ and Shift+click: select from the range anchor through `to`, then focus it. */
+  selectRange: (from: string, to: string) => void;
+  /** Shift+↑/↓ from a focused row. */
+  extendSelection: (url: string, direction: -1 | 1) => void;
   announce: (message: string) => void;
 }
 const ListFocusContext = createContext<ListFocus | undefined>(undefined);
@@ -37,6 +43,7 @@ export function TaskListFocus({
   const [activeUrl, setActive] = useState<string>();
   const [selection, dispatch] = useReducer(selectionReducer, new Set<string>());
   const [announcement, announce] = useState("");
+  const anchor = useRef<{ url: string; base: string[] } | undefined>(undefined);
   const focused = useRef<{ element: HTMLElement; url: string; order: string[] } | undefined>(
     undefined,
   );
@@ -83,6 +90,28 @@ export function TaskListFocus({
     }
   };
   useLayoutEffect(refresh);
+  const selectRange = (from: string, to: string) => {
+    const rows = visibleRows();
+    const urls = rows.map((row) => row.dataset.tskRow as string);
+    if (!anchor.current || !urls.includes(anchor.current.url))
+      anchor.current = { url: from, base: [...selection].filter((url) => url !== from) };
+    const next = selectionReducer(selection, {
+      type: "range",
+      base: anchor.current.base,
+      visible: urls,
+      anchor: anchor.current.url,
+      to,
+    });
+    dispatch({
+      type: "range",
+      base: anchor.current.base,
+      visible: urls,
+      anchor: anchor.current.url,
+      to,
+    });
+    rows.find((row) => row.dataset.tskRow === to)?.focus();
+    announce(`${next.size} selected`);
+  };
   return (
     <ListFocusContext.Provider
       value={{
@@ -95,8 +124,26 @@ export function TaskListFocus({
               .map((row) => row.dataset.tskRow as string)
               .filter((url) => selection.has(url)),
           ),
-        toggleSelection: (url) => dispatch({ type: "toggle", url }),
-        clearSelection: () => dispatch({ type: "clear" }),
+        toggleSelection: (url) => {
+          // The toggled row anchors a later Shift+↑/↓ or Shift+click range.
+          anchor.current = { url, base: [...selection].filter((item) => item !== url) };
+          dispatch({ type: "toggle", url });
+        },
+        clearSelection: () => {
+          anchor.current = undefined;
+          dispatch({ type: "clear" });
+        },
+        selectAll: () => {
+          const urls = visibleRows().map((row) => row.dataset.tskRow as string);
+          dispatch({ type: "add", urls });
+          announce(`Selected ${urls.length} ${urls.length === 1 ? "task" : "tasks"}`);
+        },
+        selectRange,
+        extendSelection: (url, direction) => {
+          const urls = visibleRows().map((row) => row.dataset.tskRow as string);
+          const to = urls[urls.indexOf(url) + direction];
+          if (to) selectRange(url, to);
+        },
         announce,
         onFocus: setActive,
         onMove: (url, direction) => {

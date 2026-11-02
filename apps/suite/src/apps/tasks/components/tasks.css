@@ -523,23 +523,6 @@
 .tsk-row[aria-selected="true"] {
   background: var(--primary-soft);
 }
-.tsk-row[aria-selected="true"] .tsk-check-target {
-  position: relative;
-}
-.tsk-row[aria-selected="true"] .tsk-check {
-  opacity: 0;
-}
-.tsk-row[aria-selected="true"] .tsk-check-target::after {
-  content: "✓";
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  color: var(--primary);
-  pointer-events: none;
-}
 .tsk-inline-title {
   width: 100%;
 }
@@ -559,9 +542,21 @@ button.tsk-due:hover {
   text-decoration: underline;
 }
 @media (pointer: coarse) {
+  /*
+   * The row itself is the 44px touch target. Its title and due date keep their line height so a
+   * row stays compact; the due button reaches 44px with an invisible hit area instead.
+   */
+  .tsk-row .tsk-task-title {
+    min-height: 0;
+  }
   button.tsk-due {
-    min-width: 44px;
-    min-height: 44px;
+    position: relative;
+    min-height: 24px;
+  }
+  button.tsk-due::before {
+    content: "";
+    position: absolute;
+    inset: -10px -8px;
   }
 }
 .tsk-property-anchor {

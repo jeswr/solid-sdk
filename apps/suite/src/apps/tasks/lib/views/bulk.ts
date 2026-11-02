@@ -35,7 +35,12 @@ export async function runBulk<T>(
   return { done, failed };
 }
 
-/** Action is past-tense display copy, e.g. "Rescheduled" or "Completed". */
+/**
+ * Action is past-tense display copy, e.g. "Rescheduled" or "Completed":
+ * "Completed 5 tasks", or "Completed 4 of 5 — 1 failed" (06-tasks §4.5).
+ */
 export function bulkSummary(action: string, done: number, failed: number): string {
-  return `${action} ${done} ${done === 1 ? "task" : "tasks"}${failed > 0 ? ` · ${failed} failed` : ""}`;
+  return failed > 0
+    ? `${action} ${done} of ${done + failed} — ${failed} failed`
+    : `${action} ${done} ${done === 1 ? "task" : "tasks"}`;
 }
