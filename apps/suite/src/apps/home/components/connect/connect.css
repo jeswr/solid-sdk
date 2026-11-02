@@ -1,0 +1,306 @@
+/* AUTHORED-BY Codex GPT-6 */
+.hm-connect {
+  color: var(--foreground);
+}
+.hm-connect-page {
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  max-width: 1600px;
+  margin-inline: auto;
+  width: 100%;
+}
+.hm-connect-description,
+.hm-connect-about p,
+.hm-connect header p {
+  color: var(--foreground-muted);
+}
+.hm-connect header p {
+  margin-top: var(--space-2);
+}
+.hm-connect-search {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 32rem;
+}
+.hm-connect input[type="search"] {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+}
+.hm-connect-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.hm-connect-card,
+.hm-connect-about,
+.hm-connect-flow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: var(--space-5);
+  min-width: 0;
+}
+.hm-connect-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.hm-connect-card h2 {
+  margin: 0;
+}
+.hm-connect-card-heading,
+.hm-connect-flow-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.hm-connect-logo {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-weight: 600;
+}
+.hm-connect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-connect-tags li,
+.hm-connect-badge {
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+}
+.hm-connect-badge {
+  display: inline-flex;
+}
+.hm-connect-flow-header .hm-connect-badge {
+  margin-top: var(--space-2);
+}
+.hm-connect-badge[data-status="demo"],
+.hm-connect-incomplete,
+.hm-connect-offline {
+  color: var(--warning-foreground);
+  background: var(--warning);
+}
+.hm-connect-incomplete,
+.hm-connect-offline {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+.hm-connect-sync {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.hm-connect-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.hm-connect-card-action {
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+.hm-connect-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  min-width: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.hm-connect-secondary {
+  color: var(--foreground);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.hm-connect-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hm-connect :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.hm-connect-columns {
+  display: grid;
+  align-items: start;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.hm-connect-stepper {
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.hm-connect-stepper li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+}
+.hm-connect-stepper li > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+.hm-connect-stepper [aria-current="step"] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.hm-connect-stepper [aria-current="step"] > span {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.hm-connect-result {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+}
+.hm-connect-result h2 {
+  margin: 0;
+}
+.hm-connect-result [role="progressbar"] {
+  min-width: 100%;
+}
+.hm-connect-scopes {
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.hm-connect-scopes legend {
+  margin-bottom: var(--space-2);
+}
+.hm-connect-scopes label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+.hm-connect-scopes input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+.hm-connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.hm-connect-about {
+  display: grid;
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.hm-connect-about h2 {
+  margin: 0;
+}
+.hm-connect-about ul {
+  list-style: disc;
+  padding-inline-start: var(--space-5);
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.hm-connect-drop {
+  display: grid;
+  gap: var(--space-3);
+  place-items: center;
+  width: 100%;
+  min-height: 140px;
+  padding: var(--space-4);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.hm-connect-drop:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.hm-connect-file {
+  width: 100%;
+  min-height: 44px;
+  font: inherit;
+}
+.hm-connect summary,
+.hm-connect-back,
+.hm-connect details a {
+  min-height: 44px;
+  cursor: pointer;
+  align-content: center;
+}
+.hm-connect details p {
+  margin-block: var(--space-3);
+}
+.hm-connect-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.hm-connect .suite-chip,
+.hm-connect .suite-small {
+  min-height: 40px;
+}
+@media (min-width: 768px) {
+  .hm-connect-grid {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .hm-connect-columns {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+@media (min-width: 1280px) {
+  .hm-connect-grid {
+    grid-template-columns: repeat(3, minmax(280px, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .hm-connect-page {
+    padding: var(--space-4);
+  }
+}
