@@ -13,6 +13,11 @@ import {
   readGrantRecords,
   resolveClientName,
 } from "../src/apps/home/lib/permissions";
+import {
+  CLIENT_RETRY_MS,
+  CLIENT_TIMEOUT_MS,
+  isClientIdDocument,
+} from "../src/apps/home/lib/permissions/client";
 import { mergeRecord, recordForGrant, recordsFrom } from "../src/apps/home/lib/permissions/records";
 import { UnsupportedAccessError } from "../src/apps/home/lib/permissions/vocab";
 import { accessSystem, aclLink, acpHeaders } from "../src/apps/home/lib/permissions/walk";
@@ -271,13 +276,14 @@ describe("bounded Home permission discovery", () => {
       [endpoint]: {
         body: acl(
           file,
-          `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${file}>; acl:mode acl:Read.`,
+          `<#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:accessTo <${file}>; acl:mode acl:Read.`,
         ),
       },
     });
     const snapshot = await pod.load();
     expect(snapshot.failures).toEqual([{ url: file, reason: "unreadable" }]);
-    expect(snapshot.summary.people).toBe(1);
+    expect(snapshot.summary.publicItems).toBe(1);
+    expect(snapshot.rows[0]!.kind).toBe("public");
     const line = snapshot.rows[0]!.lines[0]!;
     expect(line.dataType).toBeUndefined();
     expect(line.domainId).toBe("other");
@@ -448,6 +454,19 @@ describe("bounded Home permission discovery", () => {
               : "unreadable",
       },
     ]);
+  });
+  it("reports each failing item once even when several children reach the same document", async () => {
+    const children = ["a", "b", "c"].map((name) => `${ROOT}${name}`);
+    const pod = fixture({
+      [ROOT]: { body: listing(ROOT, children) },
+      [`${ROOT}.acl`]: { status: 500 },
+      ...Object.fromEntries(
+        children.map((child) => [child, { body: "binary", type: "application/octet-stream" }]),
+      ),
+    });
+    const { failures } = await pod.load();
+    expect(failures.length).toBeGreaterThan(0);
+    expect(new Set(failures.map((failure) => failure.url)).size).toBe(failures.length);
   });
   it("reports resource failures, network/parse errors and unsupported WAC selectors", async () => {
     expect((await fixture({ [ROOT]: { status: 404 } }).load()).failures).toContainEqual({
@@ -830,6 +849,7 @@ describe("public Client ID Document resolver", () => {
       headers: { accept: "application/ld+json, application/json" },
       credentials: "omit",
       redirect: "error",
+      signal: expect.any(AbortSignal),
     });
     await resolveClientName(clientId, undefined, 86_400_000);
     expect(publicFetch).toHaveBeenCalledTimes(2);
@@ -880,6 +900,50 @@ describe("public Client ID Document resolver", () => {
       expect(await resolveClientName(id, transport)).toEqual({});
       expect(await resolveClientName(id, transport)).toEqual({});
       expect(transport).toHaveBeenCalledTimes(1);
+    }
+  });
+  it("never fetches a bare origin, only Client ID Documents with a path", async () => {
+    const transport = vi.fn<typeof fetch>(async () => Response.json({ client_name: "Origin" }));
+    for (const id of ["https://app.test", "https://app.test/", "https://app.test/?q=1"])
+      expect(await resolveClientName(id, transport)).toEqual({});
+    expect(transport).not.toHaveBeenCalled();
+    expect(isClientIdDocument("https://app.test/id")).toBe(true);
+    expect(isClientIdDocument("https://app.test/")).toBe(false);
+  });
+  it("times out a hanging document and retries failures soon instead of caching them for a day", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const hanging = vi.fn<typeof fetch>((_input, init) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {});
+      });
+      const id = "https://hanging.test/client.json";
+      const pending = resolveClientName(id, hanging, 0);
+      await vi.advanceTimersByTimeAsync(CLIENT_TIMEOUT_MS);
+      expect(await pending).toEqual({});
+      expect(signal?.aborted).toBe(true);
+      expect(await resolveClientName(id, hanging, CLIENT_RETRY_MS - 1)).toEqual({});
+      expect(hanging).toHaveBeenCalledTimes(1);
+      const recovered = vi.fn<typeof fetch>(async () => Response.json({ client_name: "Back" }));
+      expect((await resolveClientName(id, recovered, CLIENT_RETRY_MS)).name).toBe("Back");
+      // A body that stalls after the headers is bounded by the same timeout.
+      const stalled = vi.fn<typeof fetch>(
+        async () =>
+          ({
+            ok: true,
+            headers: new Headers({ "content-type": "application/json" }),
+            json: () => new Promise(() => {}),
+          }) as unknown as Response,
+      );
+      const slow = resolveClientName("https://stalled.test/id.json", stalled, 0);
+      await vi.advanceTimersByTimeAsync(CLIENT_TIMEOUT_MS);
+      expect(await slow).toEqual({});
+      expect(
+        (await resolveClientName("https://stalled.test/id.json", recovered, CLIENT_RETRY_MS)).name,
+      ).toBe("Back");
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

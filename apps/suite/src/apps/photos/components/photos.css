@@ -586,6 +586,91 @@
 .pho-page .pho-tile > a:focus-visible {
   outline-offset: -4px;
 }
+/* Storage usage (AUTHORED-BY Claude Opus 5.5) */
+.pho-storage-summary {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pho-storage-total {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.pho-storage-total p:last-child,
+.pho-storage-note,
+.pho-storage-meta {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.pho-storage-figure {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pho-storage-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+.pho-storage-breakdown dt {
+  font-weight: 600;
+}
+.pho-storage-breakdown dd {
+  margin: 0;
+  color: var(--foreground-muted);
+}
+.pho-storage h2 {
+  margin-bottom: var(--space-4);
+}
+.pho-storage-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.pho-storage-row {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+.pho-storage-row:hover {
+  background: var(--surface-muted, var(--surface));
+}
+.pho-storage-thumb {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.pho-storage-thumb .pho-image,
+.pho-storage-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pho-storage-name {
+  display: grid;
+  min-width: 0;
+}
+.pho-storage-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pho-storage-size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 @media (max-width: 767px) {
   .pho-page {
     padding: var(--space-4);

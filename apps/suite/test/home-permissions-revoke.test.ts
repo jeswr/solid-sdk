@@ -15,6 +15,7 @@ import {
   LockoutError,
   PartialRevokeError,
   planRevoke,
+  RestoreConflictError,
   type RevokeChange,
   type RevokePlan,
   UnsupportedAccessError,
@@ -108,6 +109,120 @@ async function snapshot(initial: string) {
     truncated: false,
   };
 }
+/** Effective access per target: who may do what, without redundant narrower clauses. */
+function access(dataset: import("@rdfjs/types").DatasetCore): string[] {
+  const targets = new Set([ROOT]);
+  for (const scope of ["accessTo", "default", "defaultForNew"])
+    for (const quad of dataset.match(null, DataFactory.namedNode(ACL + scope)))
+      targets.add(quad.object.value);
+  const atoms: { key: string; clause: Set<string> }[] = [];
+  for (const target of targets)
+    for (const grant of readWacPolicy(dataset, target, DOC).grants)
+      for (const scope of grant.appliesTo === "both" ? ["resource", "members"] : [grant.appliesTo])
+        for (const clause of grant.who)
+          for (const mode of grant.modes)
+            atoms.push({
+              key: JSON.stringify([
+                target,
+                scope,
+                mode,
+                grant.except.map((s) => JSON.stringify(s)).sort(),
+              ]),
+              clause: new Set(
+                clause.map((subject) => JSON.stringify(Object.entries(subject).sort())),
+              ),
+            });
+  const implied = (a: (typeof atoms)[number], b: (typeof atoms)[number]) =>
+    a.key === b.key && b.clause.size < a.clause.size && [...b.clause].every((s) => a.clause.has(s));
+  return [
+    ...new Set(
+      atoms
+        .filter((atom) => !atoms.some((other) => implied(atom, other)))
+        .map((atom) => JSON.stringify([atom.key, [...atom.clause].sort()])),
+    ),
+  ].sort();
+}
+/** The documents the tests below revoke from, for the effective-access property test. */
+const FIXTURES: string[] = (() => {
+  const other = `${ROOT}elsewhere`;
+  const carolRule = bobRule.replaceAll("#bob", "#carol").replace(BOB, CAROL);
+  const blank = (rest: string) => `[] a acl:Authorization; ${rest}.`;
+  return [
+    body(),
+    body(
+      `${bobRule} <#public> a acl:Authorization; acl:accessTo <${ROOT}>; acl:agentClass foaf:Agent; acl:mode acl:Read. <#signed> a acl:Authorization; acl:accessTo <${ROOT}>; acl:agentClass acl:AuthenticatedAgent; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>, <${other}>; acl:default <${ROOT}>; acl:mode acl:Read; <urn:purpose> "retain".`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agentClass foaf:Agent, acl:AuthenticatedAgent; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:origin <https://app.test>, <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+    ),
+    ...["<#bob>", "[]"].map((root) =>
+      body(
+        `${root} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://a.test>, <https://b.test>; acl:accessTo <${ROOT}>, <${other}>; acl:default <${ROOT}>; acl:mode acl:Read; <urn:purpose> "retain".`,
+      ),
+    ),
+    body(
+      ["Read", "Write"]
+        .map((mode) => blank(`acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:${mode}`))
+        .join(" "),
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`)} ${blank(`acl:agent <${BOB}>; acl:origin <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`)}`,
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read`)} `.repeat(
+        2,
+      ),
+    ),
+    ...["named", "blank"].map((kind) =>
+      body(
+        `${kind === "named" ? "<#temporary>" : "[]"} a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <http://www.w3.org/ns/odrl/2/purpose> "Preview"; <${NS.ACCESS_MANAGER}expiresAt> "2030-01-01". ${kind === "named" ? "<#permanent>" : "[]"} a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <http://www.w3.org/ns/odrl/2/purpose> "Archive".`,
+      ),
+    ),
+    body(
+      `${blank(`acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <urn:annotation> _:detail; <urn:also> _:detail`)} _:detail <urn:value> "retain"; <urn:self> _:detail.`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>, <${other}>; acl:mode acl:Read; <urn:annotation> [ <urn:value> "retain" ].`,
+    ),
+    body(
+      blank(
+        `acl:agentClass foaf:Agent; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`,
+      ),
+    ),
+    body(
+      blank(
+        `acl:origin <https://app.test>, <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`,
+      ),
+    ),
+    body(
+      `${bobRule} ${carolRule} ${blank(`acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Write`)}`,
+    ),
+    body(
+      `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}drive/>, <${ROOT}docs/>; acl:mode acl:Read.`,
+    ),
+    ...["<#shared>", "[]"].map((root) =>
+      body(
+        `${root} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+      ),
+    ),
+    body(
+      [
+        blank(`acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`),
+        blank(`acl:origin <https://one.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read`),
+        blank(`acl:origin <https://two.test>; acl:default <${ROOT}>; acl:mode acl:Read`),
+      ].join(" "),
+    ),
+  ];
+})();
 describe("pure revoke planning", () => {
   it("plans one line, all agent lines and both make-private pseudo agents, deduplicating scopes", async () => {
     const data =
@@ -335,6 +450,40 @@ describe("WAC revocation and inverse plans", () => {
     await pod.apply(undo);
     await same(await pod.graph(), body(rules));
   });
+  it.each([
+    ["agent set", `acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read`],
+    ["mode set", `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Write`],
+    [
+      "accessTo targets",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>, <${ROOT}other>; acl:mode acl:Read`,
+    ],
+    [
+      "default targets",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read`,
+    ],
+    [
+      "conditions",
+      `acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:origin <https://app.test>; acl:mode acl:Read`,
+    ],
+  ])("matches a selected blank rule structurally by %s after labels and order change", async (_name, properties) => {
+    const selected = `[] a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const other = `[] a acl:Authorization; ${properties}.`;
+    const state = await snapshot(body(`${selected} ${other}`));
+    const expected = await parseRdf(`${PREFIX} ${selected}`, "text/turtle", { baseIRI: DOC });
+    const candidates = planRevoke(state.rows.find((row) => row.id === BOB)!, "all").changes;
+    const changes: RevokeChange[] = [];
+    for (const candidate of candidates) {
+      const original = await parseRdf(candidate.authorization!, "text/turtle", { baseIRI: DOC });
+      if (isomorphic([...original], [...expected])) changes.push(candidate);
+    }
+    expect(changes).toHaveLength(1);
+    const fresh = body(`${other} ${selected}`);
+    const pod = fixture(fresh);
+    const { undo } = await pod.apply({ changes });
+    await same(await pod.graph(), body(other));
+    await pod.apply(undo);
+    await same(await pod.graph(), fresh);
+  });
   it("matches complete principal and origin conditions before mutating shared blank rules", async () => {
     const shared = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`;
     const other = `[] a acl:Authorization; acl:agent <${BOB}>; acl:origin <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
@@ -395,7 +544,8 @@ describe("WAC revocation and inverse plans", () => {
     const state = await snapshot(data);
     const pod = fixture(data);
     const { undo } = await pod.apply(planRevoke(state.rows[0]!, "all"));
-    await same(await pod.graph(), body(detail));
+    // Annotations only the revoked rule referenced leave with it; undo restores both.
+    await same(await pod.graph(), body(""));
     await pod.apply(undo);
     await same(await pod.graph(), data);
     pod.docs.get(DOC)!.body = data.replace('"retain"', '"changed"');
@@ -403,6 +553,33 @@ describe("WAC revocation and inverse plans", () => {
       AclConflictError,
     );
     expect(pod.puts()).toHaveLength(2);
+  });
+  it("keeps a nested annotation another rule still references, and undo restores the split", async () => {
+    const other = `${ROOT}elsewhere`;
+    const rule = `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>, <${other}>; acl:mode acl:Read; <urn:annotation> [ <urn:value> "retain" ].`;
+    const carol = `<#carol> a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read; <urn:annotation> _:shared; <urn:also> _:shared; <urn:note> [ <urn:value> "own"; <urn:detail> [ <urn:value> "own detail" ] ]. <#bob2> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${other}>; acl:mode acl:Read; <urn:annotation> _:shared. _:shared <urn:value> "shared"; <urn:detail> _:deeper. _:deeper <urn:value> "deeper".`;
+    const pod = fixture(body(rule));
+    const { undo } = await pod.apply({ changes: [change()] });
+    // The split copy for this folder is dropped; the retained scope keeps its annotation.
+    await same(
+      await pod.graph(),
+      body(
+        `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${other}>; acl:mode acl:Read; <urn:annotation> [ <urn:value> "retain" ].`,
+      ),
+    );
+    await pod.apply(undo);
+    await same(await pod.graph(), body(rule));
+    // The shared annotation (and what it references) stays; Carol's own nested notes go.
+    const shared = fixture(body(carol));
+    await shared.apply({
+      changes: [change({ node: `${DOC}#carol`, subject: { kind: "agent", webId: CAROL } })],
+    });
+    await same(
+      await shared.graph(),
+      body(
+        `<#bob2> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${other}>; acl:mode acl:Read; <urn:annotation> _:shared. _:shared <urn:value> "shared"; <urn:detail> _:deeper. _:deeper <urn:value> "deeper".`,
+      ),
+    );
   });
   it("accepts neutral snapshots and legacy blank-node plans without stored authorization graphs", async () => {
     const rules = ["Read", "Write"]
@@ -522,32 +699,48 @@ describe("WAC revocation and inverse plans", () => {
     expect(pod.puts()).toHaveLength(0);
   });
   it("does not count Control over another resource or an origin-constrained owner as protection", async () => {
+    const ownerOff = change({ node: `${DOC}#owner`, subject: { kind: "agent", webId: OWNER } });
     const unrelated = body().replace(
       `<${ROOT}>; acl:default <${ROOT}>`,
       `<${ROOT}other>; acl:default <${ROOT}other>`,
     );
-    await expect(fixture(unrelated).apply({ changes: [change()] })).rejects.toBeInstanceOf(
+    const otherResource = `${body()} ${unrelated.slice(PREFIX.length).replaceAll("#owner", "#elsewhere")}`;
+    await expect(fixture(otherResource).apply({ changes: [ownerOff] })).rejects.toBeInstanceOf(
       LockoutError,
     );
     const constrained = body().replace(
       "<#owner> a acl:Authorization;",
       "<#owner> a acl:Authorization; acl:origin <https://app.test>;",
     );
-    await expect(fixture(constrained).apply({ changes: [change()] })).rejects.toBeInstanceOf(
+    const constrainedCopy = `${body()} ${constrained.slice(PREFIX.length).replaceAll("#owner", "#viaApp")}`;
+    await expect(fixture(constrainedCopy).apply({ changes: [ownerOff] })).rejects.toBeInstanceOf(
       LockoutError,
     );
     const sharedOwner = body().replace(`<${OWNER}>;`, `<${OWNER}>, <${BOB}>;`);
     const pod = fixture(sharedOwner);
-    await expect(
-      pod.apply({
-        changes: [change({ node: `${DOC}#owner`, subject: { kind: "agent", webId: OWNER } })],
-      }),
-    ).rejects.toBeInstanceOf(LockoutError);
+    await expect(pod.apply({ changes: [ownerOff] })).rejects.toBeInstanceOf(LockoutError);
     pod.docs.get(DOC)!.body +=
       ` <#fallback> a acl:Authorization; acl:agentClass acl:AuthenticatedAgent; acl:accessTo <${ROOT}>; acl:mode acl:Control.`;
-    await pod.apply({
-      changes: [change({ node: `${DOC}#owner`, subject: { kind: "agent", webId: OWNER } })],
-    });
+    await pod.apply({ changes: [ownerOff] });
+  });
+  it("allows harmless revocations where the owner never had Control of that scope", async () => {
+    // Only a change that loses the owner's Control is refused, not one where it was absent.
+    for (const data of [
+      body().replace(
+        `<${ROOT}>; acl:default <${ROOT}>`,
+        `<${ROOT}other>; acl:default <${ROOT}other>`,
+      ),
+      body().replace(
+        "<#owner> a acl:Authorization;",
+        "<#owner> a acl:Authorization; acl:origin <https://app.test>;",
+      ),
+    ]) {
+      const pod = fixture(data);
+      const { undo } = await pod.apply({ changes: [change()] });
+      await same(await pod.graph(), data.replace(bobRule, ""));
+      await pod.apply(undo);
+      await same(await pod.graph(), data);
+    }
   });
   it("rejects non-WAC plans, ACP documents and foreign URLs before writes", async () => {
     const pod = fixture();
@@ -569,7 +762,7 @@ describe("WAC revocation and inverse plans", () => {
     await expect(
       pod.apply({
         changes: [],
-        restore: [{ source: "https://evil.test/.acl", before: "", after: "" }],
+        restore: [{ source: "https://evil.test/.acl", remove: [], add: [] }],
       }),
     ).rejects.toThrow();
     pod.docs.get(DOC)!.body =
@@ -611,25 +804,259 @@ describe("WAC revocation and inverse plans", () => {
       );
     expect(pod.puts()).toHaveLength(0);
   });
-  it("refuses undo over a concurrent graph change instead of overwriting unrelated work", async () => {
+  it("undoes over unrelated concurrent edits, adding back only the removed rule", async () => {
     const pod = fixture();
     const { undo } = await pod.apply({ changes: [change()] });
+    expect(undo.restore).toEqual([{ source: DOC, remove: [], add: [expect.any(String)] }]);
     const graph = new Store([...(await pod.graph())]);
     graph.addQuad(
       DataFactory.namedNode("urn:new"),
       DataFactory.namedNode("urn:p"),
       DataFactory.literal("keep"),
     );
-    pod.docs.get(DOC)!.body = await serializeTurtle(graph);
-    await expect(pod.apply(undo)).rejects.toBeInstanceOf(AclConflictError);
+    pod.docs.get(DOC)!.body =
+      `${await serializeTurtle(graph)} <#carol> a <${ACL}Authorization>; <${ACL}agent> <${CAROL}>; <${ACL}accessTo> <${ROOT}>; <${ACL}mode> <${ACL}Read>.`;
+    const concurrent = [...(await pod.graph())];
+    await pod.apply(undo);
+    const bob = await parseRdf(`${PREFIX} ${bobRule}`, "text/turtle", { baseIRI: DOC });
+    // Exactly the concurrent graph plus Bob's rule: nothing else is added or dropped.
+    expect(isomorphic([...(await pod.graph())], [...concurrent, ...bob])).toBe(true);
+    expect(pod.puts()).toHaveLength(2);
+  });
+  it("undoes two revocations in one ACL document in either order, including a rule both changed", async () => {
+    const carolRule = bobRule.replaceAll("#bob", "#carol").replace(BOB, CAROL);
+    const shared = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Write.`;
+    const data = body(`${bobRule} ${carolRule} ${shared}`);
+    for (const order of ["earlier first", "later first"]) {
+      const pod = fixture(data);
+      // Each revoke is planned from a fresh read, as the page does after refreshing.
+      const revoke = async (id: string) =>
+        pod.apply(
+          planRevoke(
+            (await snapshot(pod.docs.get(DOC)!.body)).rows.find((row) => row.id === id)!,
+            "all",
+          ),
+        );
+      const { undo: undoBob } = await revoke(BOB);
+      const { undo: undoCarol } = await revoke(CAROL);
+      await same(await pod.graph(), body(""));
+      const [first, second] =
+        order === "earlier first" ? [undoBob, undoCarol] : [undoCarol, undoBob];
+      await pod.apply(first);
+      // Only the first undo's grants return: Bob's (or Carol's) part of the shared rule.
+      const back = order === "earlier first" ? BOB : CAROL;
+      const policy = readWac(await pod.graph(), ROOT, DOC);
+      const people = policy.grants.flatMap((g) =>
+        g.who.flatMap((clause) => clause.flatMap((s) => (s.kind === "agent" ? [s.webId] : []))),
+      );
+      expect(new Set(people)).toEqual(new Set([OWNER, back]));
+      await pod.apply(second);
+      await same(await pod.graph(), data);
+      expect(pod.puts()).toHaveLength(4);
+    }
+    // Separate rules: the earlier revoke can be undone first.
+    const separate = body(`${bobRule} ${carolRule}`);
+    const second = fixture(separate);
+    const separateState = await snapshot(separate);
+    const first = await second.apply(
+      planRevoke(separateState.rows.find((r) => r.id === BOB)!, "all"),
+    );
+    const later = await second.apply(
+      planRevoke(separateState.rows.find((r) => r.id === CAROL)!, "all"),
+    );
+    await second.apply(first.undo);
+    await same(await second.graph(), body(bobRule));
+    await second.apply(later.undo);
+    await same(await second.graph(), separate);
+  });
+  it.each([
+    ["earlier first", true],
+    ["later first", false],
+  ])("restores one rule's targets turned off one at a time, undoing the %s", async (_name, earlier) => {
+    const drive = `${ROOT}drive/`;
+    const docs = `${ROOT}docs/`;
+    const rule = `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${drive}>, <${docs}>; acl:mode acl:Read.`;
+    const pod = fixture(body(rule));
+    const files = await pod.apply({ changes: [change({ resource: drive })] });
+    const documents = await pod.apply({ changes: [change({ resource: docs })] });
+    await same(await pod.graph(), body(""));
+    const [first, second] = earlier ? [files, documents] : [documents, files];
+    await pod.apply(first.undo);
+    await same(
+      await pod.graph(),
+      body(
+        rule
+          .replace(`<${earlier ? docs : drive}>, `, "")
+          .replace(`, <${earlier ? docs : drive}>`, ""),
+      ),
+    );
+    await pod.apply(second.undo);
+    await same(await pod.graph(), body(rule));
+  });
+  it.each([
+    ["named", "<#shared>"],
+    ["blank", "[]"],
+  ])("undoes Revoke all for two people sharing a %s rule in either order", async (_kind, root) => {
+    const rule = `${root} a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    for (const bobFirst of [true, false]) {
+      const pod = fixture(body(rule));
+      const revoke = async (id: string) =>
+        pod.apply(
+          planRevoke(
+            (await snapshot(pod.docs.get(DOC)!.body)).rows.find((row) => row.id === id)!,
+            "all",
+          ),
+        );
+      const bob = await revoke(BOB);
+      const carol = await revoke(CAROL);
+      await same(await pod.graph(), body(""));
+      await pod.apply((bobFirst ? bob : carol).undo);
+      await same(
+        await pod.graph(),
+        body(rule.replace(bobFirst ? `, <${CAROL}>` : `<${BOB}>, `, "")),
+      );
+      await pod.apply((bobFirst ? carol : bob).undo);
+      await same(await pod.graph(), body(rule));
+    }
+  });
+  it("refuses undo once someone else changed or re-created the same rule", async () => {
+    const shared = `<#bob> a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const pod = fixture(body(shared));
+    const { undo } = await pod.apply({ changes: [change()] });
+    const changed = body(
+      shared.replace(`<${BOB}>, `, "").replace("acl:Read", "acl:Read, acl:Write"),
+    );
+    pod.docs.get(DOC)!.body = changed;
+    await expect(pod.apply(undo)).rejects.toBeInstanceOf(RestoreConflictError);
+    await expect(pod.apply(undo)).rejects.toThrow("changed elsewhere");
+    expect(pod.docs.get(DOC)!.body).toBe(changed);
     expect(pod.puts()).toHaveLength(1);
+    // A removed named rule that someone re-created differently is never overwritten.
+    const removed = fixture();
+    const { undo: restoreBob } = await removed.apply({ changes: [change()] });
+    removed.docs.get(DOC)!.body = body(bobRule.replace("acl:Read", "acl:Write"));
+    await expect(removed.apply(restoreBob)).rejects.toBeInstanceOf(RestoreConflictError);
+    expect(removed.puts()).toHaveLength(1);
+  });
+  it("restores into one of two isomorphic blank rules instead of reporting a false conflict", async () => {
+    const blank = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const twin = fixture(body(blank));
+    const { undo: twinUndo } = await twin.apply(
+      planRevoke((await snapshot(body(blank))).rows.find((r) => r.id === BOB)!, "all"),
+    );
+    const left = blank.replace(`<${BOB}>, `, "");
+    twin.docs.get(DOC)!.body = body(`${left} ${left}`);
+    await twin.apply(twinUndo);
+    // Bob rejoins one copy; the other copy now grants nothing more and is folded in.
+    await same(await twin.graph(), body(blank));
+    expect(twin.puts()).toHaveLength(2);
+  });
+  it("puts back only missing grants, re-creating a named rule and splitting what can't merge", async () => {
+    const x = `${ROOT}x/`;
+    const y = `${ROOT}y/`;
+    const z = `${ROOT}z/`;
+    const rule = (root: string, agents: string[], targets: string[]) =>
+      `${PREFIX} ${root} a acl:Authorization; acl:agent ${agents.map((a) => `<${a}>`).join(", ")}; acl:accessTo ${targets.map((t) => `<${t}>`).join(", ")}; acl:mode acl:Read.`;
+    // The rules the write left are gone, so only the cells it removed are put back:
+    // Bob on y and Carol on x and y, which no single rule can express exactly.
+    const pod = fixture(body(""));
+    const delta = {
+      source: DOC,
+      remove: [rule("<#r>", [BOB], [x])],
+      add: [rule("<#r>", [BOB, CAROL], [x, y])],
+    };
+    await pod.apply({ changes: [], restore: [delta] });
+    await same(
+      await pod.graph(),
+      body(
+        `${rule("<#r>", [BOB], [y]).slice(PREFIX.length)} ${rule("[]", [CAROL], [x, y]).slice(PREFIX.length)}`,
+      ),
+    );
+    // Carol on x alone: adding her to the existing <#r> would also grant her z, so her
+    // grant goes in a separate rule and <#r> keeps exactly what it had.
+    const named = fixture(body(rule("<#r>", [BOB], [x, z]).slice(PREFIX.length)));
+    await named.apply({
+      changes: [],
+      restore: [
+        {
+          source: DOC,
+          remove: [rule("<#r>", [BOB, CAROL], [z])],
+          add: [rule("<#r>", [BOB, CAROL], [x, z])],
+        },
+      ],
+    });
+    await same(
+      await named.graph(),
+      body(
+        `${rule("<#r>", [BOB], [x, z]).slice(PREFIX.length)} ${rule("[]", [CAROL], [x]).slice(PREFIX.length)}`,
+      ),
+    );
+  });
+  it("succeeds without adding anything when the grants were already put back elsewhere", async () => {
+    const shared = `<#bob> a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const pod = fixture(body(shared));
+    const { undo } = await pod.apply({ changes: [change()] });
+    pod.docs.get(DOC)!.body = body(shared);
+    await pod.apply(undo);
+    await same(await pod.graph(), body(shared));
+  });
+  it("undoes origin-only revocations in either order", async () => {
+    const rule = `[] a acl:Authorization; acl:origin <https://app.test>, <https://other.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    for (const appFirst of [true, false]) {
+      const pod = fixture(body(rule));
+      const revoke = async (id: string) =>
+        pod.apply(
+          planRevoke(
+            (await snapshot(pod.docs.get(DOC)!.body)).rows.find((row) => row.id === id)!,
+            "all",
+          ),
+        );
+      const app = await revoke("https://app.test");
+      const other = await revoke("https://other.test");
+      await same(await pod.graph(), body(""));
+      await pod.apply((appFirst ? app : other).undo);
+      await same(
+        await pod.graph(),
+        body(rule.replace(appFirst ? ", <https://other.test>" : "<https://app.test>, ", "")),
+      );
+      await pod.apply((appFirst ? other : app).undo);
+      await same(await pod.graph(), body(rule));
+    }
+  });
+  it("refuses an inverse delta that would grant access outside the pod", async () => {
+    const pod = fixture(body(""));
+    await expect(
+      pod.apply({
+        changes: [],
+        restore: [
+          {
+            source: DOC,
+            remove: [],
+            add: [`${PREFIX} ${bobRule.replace(`<${ROOT}>`, "<https://evil.test/data>")}`],
+          },
+        ],
+      }),
+    ).rejects.toThrow();
+    expect(pod.puts()).toHaveLength(0);
+  });
+  it("refuses malformed inverse deltas that would add more than one whole rule", async () => {
+    const pod = fixture(body(""));
+    for (const add of [
+      `${PREFIX} ${bobRule} <urn:other> <urn:p> "extra".`,
+      `${PREFIX} ${bobRule} ${bobRule.replaceAll("#bob", "#second")}`,
+      `<urn:other> <urn:p> "not a rule".`,
+    ])
+      await expect(
+        pod.apply({ changes: [], restore: [{ source: DOC, remove: [], add: [add] }] }),
+      ).rejects.toBeInstanceOf(UnsupportedAccessError);
+    expect(pod.puts()).toHaveLength(0);
   });
   it("protects owner Control in caller-supplied inverse plans and refuses ambiguous bare lines", async () => {
     const pod = fixture();
     await expect(
       pod.apply({
         changes: [],
-        restore: [{ source: DOC, before: `${PREFIX} ${bobRule}`, after: body() }],
+        restore: [{ source: DOC, remove: [`${PREFIX} ${ownerRule}`], add: [] }],
       }),
     ).rejects.toBeInstanceOf(LockoutError);
     const state = await snapshot(body());
@@ -656,6 +1083,128 @@ describe("WAC revocation and inverse plans", () => {
     });
     row.kind = "app";
     expect(() => planRevoke(row, "all")).toThrow(UnsupportedAccessError);
+  });
+  it("never widens origin rules through an inert rule when undoing an app revoke", async () => {
+    const o1 = "https://one.test";
+    const o2 = "https://two.test";
+    const data = body(
+      [
+        `[] a acl:Authorization; acl:accessTo <${ROOT}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+        `[] a acl:Authorization; acl:origin <${o1}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+        `[] a acl:Authorization; acl:origin <${o2}>; acl:default <${ROOT}>; acl:mode acl:Read.`,
+      ].join(" "),
+    );
+    const pod = fixture(data);
+    const before = access(await pod.graph());
+    const state = await snapshot(data);
+    const { undo } = await pod.apply(planRevoke(state.rows.find((row) => row.id === o2)!, "all"));
+    expect(access(await pod.graph())).not.toEqual(before);
+    await pod.apply(undo);
+    expect(access(await pod.graph())).toEqual(before);
+    await same(await pod.graph(), data);
+  });
+  it("restores the effective access of every revoke and undo sequence in these fixtures", async () => {
+    let sequences = 0;
+    for (const data of FIXTURES) {
+      const original = access(await parseRdf(data, "text/turtle", { baseIRI: DOC }));
+      const state = await snapshot(data);
+      const plans: RevokePlan[] = [planRevoke(state, "make-private")];
+      for (const row of state.rows) {
+        plans.push(planRevoke(row, "all"));
+        for (const line of row.lines)
+          try {
+            plans.push(planRevoke(line, "line"));
+          } catch {
+            /* A bare line without a subject is refused before any write. */
+          }
+      }
+      for (const plan of plans.filter((plan) => plan.changes.length)) {
+        const pod = fixture(data);
+        let undo: RevokePlan;
+        try {
+          ({ undo } = await pod.apply(plan));
+        } catch {
+          continue; // A refused revoke writes nothing, so there is nothing to undo.
+        }
+        await pod.apply(undo);
+        expect(access(await pod.graph()), data).toEqual(original);
+        sequences++;
+      }
+      // Two revokes, each planned from a fresh read, undone in either order.
+      for (const [a, b] of state.rows.flatMap((x, i) => state.rows.slice(i + 1).map((y) => [x, y])))
+        for (const earlierFirst of [true, false]) {
+          const pod = fixture(data);
+          const revoke = async (id: string) => {
+            const row = (await snapshot(pod.docs.get(DOC)!.body)).rows.find((r) => r.id === id);
+            return row ? pod.apply(planRevoke(row, "all")) : undefined;
+          };
+          let first: Awaited<ReturnType<typeof revoke>>;
+          let second: Awaited<ReturnType<typeof revoke>>;
+          try {
+            first = await revoke(a!.id);
+            second = await revoke(b!.id);
+          } catch {
+            continue;
+          }
+          const undos = [first?.undo, second?.undo].filter((undo) => !!undo);
+          for (const undo of earlierFirst ? undos : undos.reverse()) await pod.apply(undo);
+          expect(access(await pod.graph()), data).toEqual(original);
+          sequences++;
+        }
+    }
+    expect(sequences).toBeGreaterThan(100);
+  });
+  it.each([
+    ["re-created", ""],
+    [
+      "merged",
+      ` [] a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`,
+    ],
+  ])("refuses an undo whose named rule now describes something untyped (%s)", async (_name, extra) => {
+    const pod = fixture();
+    const { undo } = await pod.apply({ changes: [change()] });
+    // Another writer left <#bob> without a type: Undo must not switch Eve's grant on.
+    const eve = `<#bob> acl:agent <https://eve.test/profile#me>; acl:accessTo <${ROOT}>; acl:mode acl:Write.`;
+    const tampered = body(`${eve}${extra}`);
+    pod.docs.get(DOC)!.body = tampered;
+    await expect(pod.apply(undo)).rejects.toBeInstanceOf(RestoreConflictError);
+    await expect(pod.apply(undo)).rejects.toMatchObject({ source: DOC });
+    expect(pod.docs.get(DOC)!.body).toBe(tampered);
+    expect(pod.puts()).toHaveLength(1);
+    // The same holds when the delta is not an exact inverse any more.
+    await expect(
+      pod.apply({
+        changes: [],
+        restore: [
+          {
+            ...undo.restore![0]!,
+            remove: [
+              `${PREFIX} ${bobRule.replace("#bob", "#gone").replace("acl:Read", "acl:Write")}`,
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(RestoreConflictError);
+    expect(pod.puts()).toHaveLength(1);
+  });
+  it("rejoins only the pieces the undone write left, never another writer's covered rule", async () => {
+    const left = `[] a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const foreign = `[] a acl:Authorization; acl:agent <${CAROL}>; acl:origin <https://app.test>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    const shared = `[] a acl:Authorization; acl:agent <${BOB}>, <${CAROL}>; acl:accessTo <${ROOT}>; acl:mode acl:Read.`;
+    // The write also changed a rule that has since gone, so this is not an exact inverse.
+    const gone = `[] a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${ROOT}>; acl:mode acl:Write.`;
+    const pod = fixture(body(`${left} ${foreign}`));
+    await pod.apply({
+      changes: [],
+      restore: [
+        {
+          source: DOC,
+          remove: [`${PREFIX} ${left}`, `${PREFIX} ${gone}`],
+          add: [`${PREFIX} ${shared}`],
+        },
+      ],
+    });
+    await same(await pod.graph(), body(`${shared} ${foreign}`));
   });
   it("returns undo for completed documents if a later document fails", async () => {
     const pod = fixture();

@@ -329,13 +329,14 @@ export async function loadPermissions(
     }
   }
   // First already-known child class supplies an otherwise unclassified folder's data type.
-  for (const node of [...nodes].reverse())
+  for (const node of [...nodes].reverse()) {
     if (node.isContainer && !classes.get(node.url)?.dataType) {
       const child = [...classes].find(
         ([url, cls]) => url !== node.url && parent(url, storage) === node.url && cls.dataType,
       );
       if (child) classes.set(node.url, child[1]);
     }
+  }
   let records: GrantRecordIndex | undefined;
   try {
     records = await readGrantRecords(scoped, storage);
@@ -350,7 +351,10 @@ export async function loadPermissions(
       classify: (url) => classes.get(url),
       ...(records ? { records } : {}),
     }),
-    failures,
+    // One entry per item: several children can reach the same failing document.
+    failures: failures.filter(
+      (failure, index) => failures.findIndex((other) => other.url === failure.url) === index,
+    ),
     warnings,
     truncated,
   };

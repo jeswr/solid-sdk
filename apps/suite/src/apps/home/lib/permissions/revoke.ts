@@ -7,10 +7,10 @@
 // so materializeOwnAcl is intentionally unnecessary here.
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import type { Grant, PodImplementation, Subject } from "@jeswr/pod-access";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { DataFactory, Store, Writer } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { parseResource, readResource, serializeTurtle } from "../model/rdf";
 import type { AgentRow, ModeId, PermissionLine, PermissionsSnapshot } from "./types";
@@ -19,6 +19,7 @@ import {
   AccessNode,
   AUTHENTICATED,
   authorizationQuads,
+  authorizationTurtle,
   clauseSignature,
   grantSignature,
   PUBLIC,
@@ -40,6 +41,16 @@ export class AclConflictError extends Error {
     super("The access policy changed; refresh before trying again");
   }
 }
+/** An undo whose rules were changed or re-created by someone else since the revoke. */
+export class RestoreConflictError extends AclConflictError {
+  override name = "RestoreConflictError";
+  /** The ACL document whose restore was refused, once known. */
+  source?: string;
+  constructor() {
+    super();
+    this.message = "This access was changed elsewhere, so it can't be restored here";
+  }
+}
 export interface RevokeChange {
   source: string;
   system: "wac" | "acp" | "unknown";
@@ -57,10 +68,23 @@ export interface RevokeChange {
   /** Trusted discovery dialect used when re-reading the current WAC policy. */
   implementation?: PodImplementation;
 }
+/**
+ * The inverse of one ACL document write, as whole authorization rules (each with its
+ * nested blank annotations, serialised alone). `remove` holds the rules the write
+ * created or rewrote, exactly as written; `add` holds the rules it removed or
+ * rewrote, exactly as they were. Undo puts back only the grants `add` has and
+ * `remove` lacks, into whatever form of each rule exists now, so later edits to the
+ * same document survive and undos of several revokes apply in any order.
+ */
+export interface RestoreDelta {
+  source: string;
+  remove: string[];
+  add: string[];
+}
 export interface RevokePlan {
   changes: RevokeChange[];
-  /** Exact inverse; conditional restoration refuses any intervening graph change. */
-  restore?: { source: string; before: string; after: string }[];
+  /** Rule-level inverse; refuses (RestoreConflictError) only when a rule was changed elsewhere. */
+  restore?: RestoreDelta[];
 }
 export function planRevoke(
   target: AgentRow | PermissionLine | PermissionsSnapshot,
@@ -133,6 +157,22 @@ function authorizations(dataset: DatasetCore): AccessNode[] {
     (auth) => new AccessNode(auth as Term, dataset, DataFactory),
   );
 }
+function termKey(term: Term): string {
+  return `${term.termType}:${term.value}`;
+}
+/** Owner Control may only be lost when the owner never had it for that scope. */
+function assertNoLockout(before: DatasetCore, after: DatasetCore, owner: string): void {
+  for (const node of authorizations(before))
+    for (const name of SCOPES)
+      for (const resource of node.iris(ACL + name)) {
+        const members = name !== "accessTo";
+        if (
+          ownerRetainsAnyControl(before, owner, resource, members) &&
+          !ownerRetainsAnyControl(after, owner, resource, members)
+        )
+          throw new LockoutError();
+      }
+}
 function ownerRetainsAnyControl(
   dataset: DatasetCore,
   owner: string,
@@ -150,8 +190,379 @@ function ownerRetainsAnyControl(
       !node.iris(`${ACL}origin`).length,
   );
 }
+/**
+ * Delete a rule with the nested blank annotations only it references. A nested node
+ * another description still references stays, with everything it references in turn.
+ */
+function deleteRule(dataset: DatasetCore, root: Term): void {
+  const quads = authorizationQuads(dataset, root);
+  const inside = new Set(quads.map((quad) => termKey(quad.subject)));
+  const nested = (term: Term) => term.termType === "BlankNode" && termKey(term) !== termKey(root);
+  const queue = quads
+    .map((quad) => quad.object)
+    .filter(
+      (object) =>
+        nested(object) &&
+        [...dataset.match(null, null, object)].some(
+          (reference) => !inside.has(termKey(reference.subject)),
+        ),
+    );
+  const kept = new Set<string>();
+  for (const node of queue) {
+    if (kept.has(termKey(node))) continue;
+    kept.add(termKey(node));
+    for (const quad of dataset.match(node)) if (nested(quad.object)) queue.push(quad.object);
+  }
+  for (const quad of quads) if (!kept.has(termKey(quad.subject))) dataset.delete(quad);
+}
 function dropDescription(node: AccessNode): void {
-  for (const q of [...node.dataset.match(TermAs.term(node))]) node.dataset.delete(q);
+  deleteRule(node.dataset, TermAs.term(node));
+}
+/** Same-parse rule identity: terms (including blank labels) compared exactly. */
+function ruleDescriptions(dataset: DatasetCore): Map<string, { root: Term; text: string }> {
+  const writer = new Writer();
+  return new Map(
+    authorizations(dataset).map((node) => {
+      const root = TermAs.term(node);
+      const text = authorizationQuads(dataset, root)
+        .map((q) => writer.quadToString(q.subject, q.predicate, q.object))
+        .sort()
+        .join("");
+      return [termKey(root), { root, text }];
+    }),
+  );
+}
+/** The rules a write changed, as the inverse delta of that write. */
+function ruleDelta(before: DatasetCore, after: DatasetCore, source: string): RestoreDelta {
+  const was = ruleDescriptions(before);
+  const now = ruleDescriptions(after);
+  const changed = (from: typeof was, to: typeof was, dataset: DatasetCore): string[] =>
+    [...from]
+      .filter(([key, rule]) => to.get(key)?.text !== rule.text)
+      .map(([, rule]) => authorizationTurtle(dataset, rule.root));
+  return { source, remove: changed(now, was, after), add: changed(was, now, before) };
+}
+interface DeltaRule {
+  root: Term;
+  quads: Quad[];
+}
+/** One serialised rule: exactly one authorization and nothing outside its description. */
+async function parseRule(turtle: string, url: string): Promise<DeltaRule> {
+  const dataset = await parseResource(turtle, "text/turtle", url);
+  const roots = authorizations(dataset);
+  if (roots.length !== 1) throw new UnsupportedAccessError();
+  const root = TermAs.term(roots[0] as AccessNode);
+  const quads = authorizationQuads(dataset, root);
+  if (quads.length !== [...dataset].length) throw new UnsupportedAccessError();
+  return { root, quads };
+}
+function sameRoot(a: Term, b: Term): boolean {
+  return a.termType === "NamedNode"
+    ? b.termType === "NamedNode" && a.value === b.value
+    : b.termType === "BlankNode";
+}
+const PRINCIPALS: readonly string[] = ["agent", "agentClass", "agentGroup"];
+const RULE = DataFactory.namedNode("urn:x-suite-permissions:rule");
+/** The principals, origins and targets a rule grants over, as sets of statements. */
+interface Grants {
+  principals: Set<string>;
+  origins: Set<string>;
+  targets: Set<string>;
+}
+/** A rule split into its grants and the rest of its description, without its identity. */
+interface RuleShape extends Grants {
+  root: Term;
+  body: Quad[];
+}
+function shapeOf(quads: Quad[], root: Term): RuleShape {
+  const shape: RuleShape = {
+    root,
+    body: [],
+    principals: new Set(),
+    origins: new Set(),
+    targets: new Set(),
+  };
+  const own = (term: Term) => termKey(term) === termKey(root);
+  for (const quad of quads) {
+    const name = quad.predicate.value.startsWith(ACL) ? quad.predicate.value.slice(ACL.length) : "";
+    if (own(quad.subject) && quad.object.termType === "NamedNode") {
+      if (PRINCIPALS.includes(name)) {
+        shape.principals.add(`${name} ${quad.object.value}`);
+        continue;
+      }
+      if (name === "origin") {
+        shape.origins.add(quad.object.value);
+        continue;
+      }
+      if ((SCOPES as readonly string[]).includes(name)) {
+        shape.targets.add(`${name} ${quad.object.value}`);
+        continue;
+      }
+    }
+    const swap = (term: Term) => (own(term) ? RULE : term);
+    shape.body.push(
+      DataFactory.quad(
+        swap(quad.subject) as Quad["subject"],
+        quad.predicate,
+        swap(quad.object) as Quad["object"],
+        quad.graph,
+      ),
+    );
+  }
+  return shape;
+}
+function shapes(dataset: DatasetCore): RuleShape[] {
+  return authorizations(dataset).map((node) => {
+    const root = TermAs.term(node);
+    return shapeOf(authorizationQuads(dataset, root), root);
+  });
+}
+function sameBody(a: RuleShape, b: RuleShape): boolean {
+  return isomorphic(a.body, b.body);
+}
+/**
+ * What a rule grants, as principal x origin x target cells. An empty principal or
+ * origin set is its own cell value: an origin-free rule applies to every origin. A
+ * rule with neither principals nor origins grants nothing, so it has no cells.
+ */
+function cells(grants: Grants): Set<string> {
+  const result = new Set<string>();
+  if (!grants.principals.size && !grants.origins.size) return result;
+  for (const principal of grants.principals.size ? grants.principals : [""])
+    for (const origin of grants.origins.size ? grants.origins : [""])
+      for (const target of grants.targets) result.add(JSON.stringify([principal, origin, target]));
+  return result;
+}
+/** An origin-free cell covers every origin, but only for a real principal. */
+function covered(granted: Set<string>, cell: string): boolean {
+  const [principal, , target] = JSON.parse(cell) as string[];
+  return (
+    granted.has(cell) || (principal !== "" && granted.has(JSON.stringify([principal, "", target])))
+  );
+}
+function covers(granted: Set<string>, wanted: Iterable<string>): boolean {
+  return [...wanted].every((cell) => covered(granted, cell));
+}
+function grantsOf(values: Iterable<string>): Grants {
+  const grants: Grants = { principals: new Set(), origins: new Set(), targets: new Set() };
+  for (const cell of values) {
+    const [principal, origin, target] = JSON.parse(cell) as string[];
+    if (principal) grants.principals.add(principal);
+    if (origin) grants.origins.add(origin);
+    grants.targets.add(target as string);
+  }
+  return grants;
+}
+/** Partition cells into products, each expressible as one rule. */
+function products(values: Set<string>): Grants[] {
+  const group = <T>(entries: [string, T][]) => {
+    const groups = new Map<string, T[]>();
+    for (const [key, value] of entries) groups.set(key, [...(groups.get(key) ?? []), value]);
+    return [...groups.values()];
+  };
+  const pairs = new Map<string, Set<string>>();
+  for (const cell of values) {
+    const [principal, origin, target] = JSON.parse(cell) as string[];
+    const set = pairs.get(principal as string) ?? new Set<string>();
+    set.add(JSON.stringify([origin, target]));
+    pairs.set(principal as string, set);
+  }
+  // An empty principal or origin is never merged with a real one: that would drop it.
+  return group(
+    [...pairs].map(([principal, set]) => [
+      JSON.stringify([!principal, [...set].sort()]),
+      principal,
+    ]),
+  ).flatMap((principals) => {
+    const targets = new Map<string, Set<string>>();
+    for (const pair of pairs.get(principals[0] as string) as Set<string>) {
+      const [origin, target] = JSON.parse(pair) as string[];
+      targets.set(
+        origin as string,
+        (targets.get(origin as string) ?? new Set()).add(target as string),
+      );
+    }
+    return group(
+      [...targets].map(([origin, set]) => [JSON.stringify([!origin, [...set].sort()]), origin]),
+    ).map((origins) =>
+      grantsOf(
+        principals.flatMap((principal) =>
+          origins.flatMap((origin) =>
+            [...(targets.get(origin) as Set<string>)].map((target) =>
+              JSON.stringify([principal, origin, target]),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+}
+/**
+ * Widen a rule by the missing cells only when the result grants exactly its own cells,
+ * the missing ones and what the document already grants: never more, never fewer.
+ */
+function merged(rule: RuleShape, missing: Set<string>, granted: Set<string>): Grants | undefined {
+  const extra = grantsOf(missing);
+  const next: Grants = {
+    principals: new Set([...rule.principals, ...extra.principals]),
+    origins: new Set([...rule.origins, ...extra.origins]),
+    targets: new Set([...rule.targets, ...extra.targets]),
+  };
+  const result = cells(next);
+  return covers(result, [...cells(rule), ...missing]) &&
+    covers(new Set([...granted, ...missing]), result)
+    ? next
+    : undefined;
+}
+function addGrants(dataset: DatasetCore, root: Term, grants: Grants): void {
+  const statement = (value: string) => {
+    const split = value.indexOf(" ");
+    return [value.slice(0, split), value.slice(split + 1)] as const;
+  };
+  for (const [name, iri] of [
+    ...[...grants.principals, ...grants.targets].map(statement),
+    ...[...grants.origins].map((origin) => ["origin", origin] as const),
+  ])
+    dataset.add(
+      DataFactory.quad(
+        root as Quad["subject"],
+        DataFactory.namedNode(ACL + name),
+        DataFactory.namedNode(iri),
+      ),
+    );
+}
+function createRule(dataset: DatasetCore, template: RuleShape, root: Term, grants: Grants): void {
+  // Fresh blank labels: a parser-local label must never merge with an existing node.
+  const blanks = new Map<string, Term>();
+  const term = (value: Term): Term =>
+    value.equals(RULE)
+      ? root
+      : value.termType === "BlankNode"
+        ? (blanks.get(value.value) ??
+          (blanks.set(value.value, DataFactory.blankNode()).get(value.value) as Term))
+        : value;
+  for (const quad of template.body)
+    dataset.add(
+      DataFactory.quad(
+        term(quad.subject) as Quad["subject"],
+        quad.predicate,
+        term(quad.object) as Quad["object"],
+        quad.graph,
+      ),
+    );
+  addGrants(dataset, root, grants);
+}
+/**
+ * Exact inverse: when every rule the write left is still present unchanged (equivalent
+ * blank rules only as a complete set), take those rules out so the originals replace them.
+ */
+function takeExact(dataset: DatasetCore, remove: DeltaRule[]): boolean {
+  const nodes = authorizations(dataset).map((node) => TermAs.term(node));
+  const selected = new Map<string, Term>();
+  for (const rule of remove) {
+    const candidates = nodes.filter(
+      (node) =>
+        sameRoot(rule.root, node) && isomorphic(rule.quads, authorizationQuads(dataset, node)),
+    );
+    const twins = remove.filter(
+      (other) => sameRoot(rule.root, other.root) && isomorphic(rule.quads, other.quads),
+    );
+    if (candidates.length !== twins.length) return false;
+    for (const node of candidates) selected.set(termKey(node), node);
+  }
+  for (const node of selected.values()) deleteRule(dataset, node);
+  return true;
+}
+/**
+ * Put one removed rule's grants back into whatever form of that rule exists now: its
+ * named rule, or for a blank rule another blank rule with the same description; else
+ * re-create it. `exact` re-adds the whole rule after takeExact removed its successors;
+ * otherwise only the cells still missing are added, so undos apply in any order.
+ * `leftovers` are the blank rules the undone write left behind: only those may be
+ * folded into a widened rule, and each at most once.
+ */
+function restoreRule(
+  dataset: DatasetCore,
+  rule: RuleShape,
+  wanted: Set<string>,
+  exact: boolean,
+  leftovers: DeltaRule[],
+): void {
+  const current = shapes(dataset);
+  const named =
+    rule.root.termType === "NamedNode"
+      ? current.find((shape) => termKey(shape.root) === termKey(rule.root))
+      : undefined;
+  // Someone else changed this rule's modes or annotations: restoring would widen theirs.
+  if (named && !sameBody(named, rule)) throw new RestoreConflictError();
+  const family = current.filter((shape) => sameBody(shape, rule));
+  const granted = new Set(family.flatMap((shape) => [...cells(shape)]));
+  const missing = exact ? wanted : new Set([...wanted].filter((cell) => !covered(granted, cell)));
+  if (!missing.size) return;
+  const blanks = family
+    .filter((shape) => shape.root.termType === "BlankNode")
+    .sort((a, b) => cells(b).size - cells(a).size);
+  const candidates = named ? [named] : rule.root.termType === "BlankNode" ? blanks : [];
+  for (const candidate of candidates) {
+    const own = cells(candidate);
+    // An exact undo keeps equivalent and nested blank rules as separate rules.
+    if (exact && candidate !== named && (covers(own, missing) || covers(missing, own))) continue;
+    const next = merged(candidate, missing, granted);
+    if (!next) continue;
+    addGrants(dataset, candidate.root, next);
+    // A piece the undone write split off, now wholly granted by the merged rule, is
+    // rejoined. Other writers' rules stay as they are, even when they are covered.
+    if (!exact)
+      for (const other of blanks) {
+        if (other === candidate || !covers(cells(next), cells(other))) continue;
+        const quads = authorizationQuads(dataset, other.root);
+        const index = leftovers.findIndex((piece) => isomorphic(piece.quads, quads));
+        if (index < 0) continue;
+        leftovers.splice(index, 1);
+        deleteRule(dataset, other.root);
+      }
+    return;
+  }
+  const reuse = rule.root.termType === "NamedNode" && !named;
+  // The rule's name now describes something else (say, an untyped rule another writer
+  // left): adding these grants to it would switch that description on, so refuse.
+  if (reuse && dataset.match(rule.root as Quad["subject"]).size) throw new RestoreConflictError();
+  for (const [index, grants] of (exact ? [rule] : products(missing)).entries())
+    createRule(dataset, rule, index === 0 && reuse ? rule.root : DataFactory.blankNode(), grants);
+}
+/**
+ * Apply an inverse delta to a fresh read. Only grants this revoke removed are put back:
+ * changes made since, here or elsewhere, are kept, and undos work in any order. A
+ * conflict is raised only when someone else changed a rule so it can't take them back.
+ */
+async function applyDelta(
+  dataset: DatasetCore,
+  delta: RestoreDelta,
+  url: string,
+  storage: string,
+): Promise<void> {
+  const remove = await Promise.all(delta.remove.map((rule) => parseRule(rule, url)));
+  const add = (await Promise.all(delta.add.map((rule) => parseRule(rule, url)))).map((rule) =>
+    shapeOf(rule.quads, rule.root),
+  );
+  for (const rule of add)
+    for (const target of rule.targets)
+      assertWithinPodScope(storage, target.slice(target.indexOf(" ") + 1));
+  const left = remove.map((rule) => shapeOf(rule.quads, rule.root));
+  const leftovers = remove.filter((rule) => rule.root.termType === "BlankNode");
+  const exact = takeExact(dataset, remove);
+  for (const rule of add) {
+    const kept = new Set(
+      left.filter((shape) => sameBody(shape, rule)).flatMap((shape) => [...cells(shape)]),
+    );
+    restoreRule(
+      dataset,
+      rule,
+      new Set([...cells(rule)].filter((cell) => exact || !covered(kept, cell))),
+      exact,
+      leftovers,
+    );
+  }
 }
 function copyDescription(node: AccessNode): AccessNode {
   const copy = new AccessNode(DataFactory.blankNode(), node.dataset, DataFactory);
@@ -364,41 +775,21 @@ export async function applyRevoke(
         if (accessSystem(current.dataset, url, current.headers) !== "wac")
           throw new UnsupportedAccessError();
         if (!current.etag || current.etag.startsWith("W/")) throw new AclConflictError();
-        const before = await serializeTurtle(current.dataset);
         const inverse = plan.restore?.find((r) => r.source === url);
-        let dataset: DatasetCore = new Store([...current.dataset]);
-        if (inverse) {
-          const expected = await parseResource(inverse.after, "text/turtle", url);
-          if (!isomorphic([...expected], [...current.dataset])) throw new AclConflictError();
-          dataset = await parseResource(inverse.before, "text/turtle", url);
-          // Inverse plans obey the same no-lockout rule, including every original
-          // resource/default scope, even if a caller constructs a plan themselves.
-          for (const node of authorizations(current.dataset))
-            for (const name of SCOPES) {
-              for (const resource of node.iris(ACL + name)) {
-                const members = name !== "accessTo";
-                if (
-                  ownerRetainsAnyControl(current.dataset, options.webId, resource, members) &&
-                  !ownerRetainsAnyControl(dataset, options.webId, resource, members)
-                )
-                  throw new LockoutError();
-              }
-            }
-        } else {
+        const dataset: DatasetCore = new Store([...current.dataset]);
+        if (inverse)
+          await applyDelta(dataset, inverse, url, options.storage).catch((error: unknown) => {
+            if (error instanceof RestoreConflictError) error.source = url;
+            throw error;
+          });
+        else {
           const detached = new Map<string, string[]>();
           for (const change of await resolveChanges(dataset, changes))
             removeSubject(dataset, change, detached);
-          for (const change of changes)
-            if (
-              !ownerRetainsAnyControl(
-                dataset,
-                options.webId,
-                change.resource,
-                change.scope === "members",
-              )
-            )
-              throw new LockoutError();
         }
+        // Revocations and inverse plans (even caller-built ones) obey one rule: the
+        // owner keeps Control of every scope where they had it before this write.
+        assertNoLockout(current.dataset, dataset, options.webId);
         const after = await serializeTurtle(dataset);
         // Every authenticated write passes the scope guard immediately before dispatch.
         const response = await http(assertWithinPodScope(options.storage, url), {
@@ -411,7 +802,7 @@ export async function applyRevoke(
           throw new AclConflictError();
         }
         if (!response.ok) throw new Error(`Access update failed (${response.status})`);
-        undo.restore?.push({ source: url, before, after });
+        undo.restore?.push(ruleDelta(current.dataset, dataset, url));
         break;
       }
     }

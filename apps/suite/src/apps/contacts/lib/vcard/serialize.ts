@@ -69,6 +69,8 @@ function serializeCard(card: VCard): string {
       ),
     );
   }
+  for (const url of card.urls ?? [])
+    lines.push(fieldLine("URL", url, uri(url.value, card.version), card.version));
   for (const address of card.addresses) {
     const a = address.value;
     const value = [a.poBox, a.extended, a.street, a.locality, a.region, a.postalCode, a.country]

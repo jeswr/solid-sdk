@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 export { aggregateHoldings, classifyAgent, modeLabel, roleForModes, roleLabel } from "./aggregate";
-export { type ClientMetadata, resolveClientName } from "./client";
+export { type ClientMetadata, isClientIdDocument, resolveClientName } from "./client";
 export { dpvPurposeLabel } from "./dpvLabels";
 export { readGrantRecords } from "./records";
 export {
@@ -9,6 +9,8 @@ export {
   LockoutError,
   PartialRevokeError,
   planRevoke,
+  RestoreConflictError,
+  type RestoreDelta,
   type RevokeChange,
   type RevokePlan,
 } from "./revoke";
