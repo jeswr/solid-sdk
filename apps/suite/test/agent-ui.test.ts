@@ -185,6 +185,9 @@ it.each([
   "approvals",
   "outbox",
 ])("retries an unreachable %s query for the sidebar and approval queue", async (container) => {
+  // The seeded proposals expire relative to NOW, so the queue must read the same clock.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   const f = await fixture();
   let fail = true;
   vi.spyOn(f.session, "fetch").mockImplementation(async (url, init) =>
