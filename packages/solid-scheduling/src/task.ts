@@ -266,7 +266,7 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
   };
   const store = new Store([...buildTask(resourceUrl, toWfTaskData(text, closed, completedAt))]);
 
-  const core: GeneratedTaskData = {
+  let core: GeneratedTaskData = {
     summary: text.summary,
     description: text.description || undefined,
     startTime: data.startTime,
@@ -281,7 +281,7 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
   const frequency = normalizeFrequency(data.recurrence?.frequency);
   if (data.recurrence && frequency !== undefined) {
     const { interval, count, until } = data.recurrence;
-    Object.assign(core, { frequency, interval, count, until });
+    core = { ...core, frequency, interval, count, until };
   }
   for (const quad of generatedTask.build(resourceUrl, core)) store.add(quad);
 

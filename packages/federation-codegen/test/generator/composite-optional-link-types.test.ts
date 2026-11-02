@@ -5,6 +5,7 @@
 // when the caller supplies none of its fields, so the static type has to accept that.
 // Required links keep their children's required fields required.
 import { defineModel } from "@jeswr/model-runtime";
+import type { Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { type CodegenConfig, generateModel } from "../../src/index.js";
 
@@ -18,6 +19,7 @@ const ONTOLOGY = `
 ex:Task a owl:Class ; rdfs:label "Task"@en ; skos:definition "A to-do item."@en .
 ex:Rule a owl:Class ; rdfs:label "Rule"@en ; skos:definition "A recurrence rule."@en .
 ex:Owner a owl:Class ; rdfs:label "Owner"@en ; skos:definition "The owning agent."@en .
+ex:Anchor a owl:Class ; rdfs:label "Anchor"@en ; skos:definition "A rule's anchor date."@en .
 `;
 
 const SHAPES = `
@@ -36,7 +38,12 @@ exs:RuleShape a sh:NodeShape ; sh:targetClass ex:Rule ;
   sh:property [ sh:path ex:frequency ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:severity sh:Violation ] ;
   sh:property [ sh:path ex:interval ; sh:datatype xsd:positiveInteger ; sh:maxCount 1 ;
-    sh:severity sh:Info ] .
+    sh:severity sh:Info ] ;
+  sh:property [ sh:path ex:anchor ; sh:nodeKind sh:IRI ; sh:class ex:Anchor ; sh:minCount 1 ;
+    sh:maxCount 1 ; sh:severity sh:Violation ] .
+exs:AnchorShape a sh:NodeShape ; sh:targetClass ex:Anchor ;
+  sh:property [ sh:path ex:label ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:severity sh:Violation ] .
 exs:OwnerShape a sh:NodeShape ; sh:targetClass ex:Owner ;
   sh:property [ sh:path ex:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:severity sh:Violation ] .
@@ -61,7 +68,9 @@ const CONFIG: CodegenConfig = {
           targetClass: `${EX}Rule`,
           fragment: "rule",
           fields: { frequency: {}, interval: {} },
+          links: { anchor: "anchor" },
         },
+        anchor: { targetClass: `${EX}Anchor`, fragment: "anchor", fields: { label: {} } },
         owner: { targetClass: `${EX}Owner`, fragment: "owner", fields: { name: {} } },
       },
     },
@@ -81,21 +90,35 @@ describe("composite *Data requiredness across optional links", () => {
     expect(dataBlock).toContain('"name": string;');
   });
 
-  it("types an optional link's MUST fields optional", () => {
+  it("types an optional link's MUST fields optional, including behind a required grandchild link", () => {
     expect(dataBlock).toContain('"frequency"?: string;');
-    expect(dataBlock).toContain('"interval"?: number;');
+    expect(dataBlock).toContain('"label"?: string;');
   });
 
-  it("matches the runtime: build omits the optional child when none of its fields is given", () => {
-    const manifest = JSON.parse(generated.artifacts["model.json"] ?? "{}");
-    const Task = defineModel(manifest).entities.Task as unknown as {
-      build(
-        url: string,
-        data: Record<string, unknown>,
-      ): { getQuads: (...a: unknown[]) => unknown[] };
-    };
-    const store = Task.build("https://pod.example/t", { summary: "s", name: "n" });
+  const manifest = JSON.parse(generated.artifacts["model.json"] ?? "{}");
+  const Task = defineModel(manifest).entities.Task as unknown as {
+    build(url: string, data: Record<string, unknown>): Store;
+    parse(url: string, dataset: Store): Record<string, unknown> | undefined;
+  };
+  const Url = "https://pod.example/t";
+
+  it("matches the runtime: build omits the optional subtree when none of its fields is given", () => {
+    const store = Task.build(Url, { summary: "s", name: "n" });
     expect(store.getQuads(null, `${EX}rule`, null, null)).toHaveLength(0);
+    expect(store.getQuads(null, `${EX}anchor`, null, null)).toHaveLength(0);
     expect(store.getQuads(null, `${EX}owner`, null, null)).toHaveLength(1);
+  });
+
+  it("matches the runtime: parse returns the object without the optional subtree's fields", () => {
+    expect(Task.parse(Url, Task.build(Url, { summary: "s", name: "n" }))).toEqual({
+      summary: "s",
+      name: "n",
+    });
+    expect(
+      Task.parse(
+        Url,
+        Task.build(Url, { summary: "s", name: "n", frequency: "WEEKLY", label: "l" }),
+      ),
+    ).toEqual({ summary: "s", name: "n", frequency: "WEEKLY", label: "l" });
   });
 });
