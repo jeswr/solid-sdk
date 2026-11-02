@@ -59,6 +59,8 @@ interface CalendarContextValue {
   writes: EventWrite[];
   syncStatus: string;
   mutate: (write: EventWrite, requireConfirmation?: boolean) => Promise<void>;
+  /** Show a write's result without sending it; the returned function removes the preview. */
+  preview: (write: EventWrite) => () => void;
   resolveEventEtag: (
     url: string,
     etag: string | null,
@@ -86,6 +88,11 @@ function SessionCalendarProvider({
   const cache = useMemo(() => new Map<string, Promise<RangeResult>>(), []);
   const [writes, setWrites] = useState<EventWrite[]>([]);
   const [queuedWrites, setQueuedWrites] = useState<EventWrite[]>([]);
+  const [previews, setPreviews] = useState<EventWrite[]>([]);
+  const preview = useCallback((write: EventWrite) => {
+    setPreviews((current) => [...current, write]);
+    return () => setPreviews((current) => current.filter((item) => item !== write));
+  }, []);
   const [syncStatus, setSyncStatus] = useState("");
   const calendarRef = useRef(calendars);
   calendarRef.current = calendars;
@@ -246,7 +253,11 @@ function SessionCalendarProvider({
     },
     [selected, closeEvent],
   );
-  const visibleWrites = useMemo(() => [...writes, ...queuedWrites], [writes, queuedWrites]);
+  // Previews go first so real writes for the same event take precedence once they exist.
+  const visibleWrites = useMemo(
+    () => [...previews, ...writes, ...queuedWrites],
+    [previews, writes, queuedWrites],
+  );
   return (
     <Context
       value={{
@@ -260,6 +271,7 @@ function SessionCalendarProvider({
         writes: visibleWrites,
         syncStatus,
         mutate: outbox.save,
+        preview,
         resolveEventEtag: outbox.resolve,
         create,
         selected,
@@ -394,10 +406,11 @@ export function useEventsInRange(
   return { ...state, reload };
 }
 export function useEventMutations() {
-  const { mutate, resolveEventEtag } = useCalendarState();
+  const { mutate, preview, resolveEventEtag } = useCalendarState();
   return useMemo(
     () => ({
       resolve: resolveEventEtag,
+      preview,
       create: (url: string, data: CalendarEvent, requireConfirmation?: boolean) =>
         mutate({ kind: "create", url, data }, requireConfirmation),
       update: (url: string, data: CalendarEvent, etag: string, requireConfirmation?: boolean) =>
@@ -405,7 +418,7 @@ export function useEventMutations() {
       delete: (url: string, etag: string, requireConfirmation?: boolean) =>
         mutate({ kind: "delete", url, etag }, requireConfirmation),
     }),
-    [mutate, resolveEventEtag],
+    [mutate, preview, resolveEventEtag],
   );
 }
 export type { CalendarInfo, CalendarView };
