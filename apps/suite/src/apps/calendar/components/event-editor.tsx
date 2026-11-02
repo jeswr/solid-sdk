@@ -548,8 +548,12 @@ function EventEditor({
       const etag = source.url ? await mutations.resolve(source.url, source.etag, compound) : "";
       // The replacement is written before the series changes; preview the series change at once
       // so the old occurrence doesn't sit beside its replacement while that write confirms.
-      if (compound && source.url && plan.original && !moving)
-        release = mutations.preview({ kind: "update", url: source.url, data: plan.original, etag });
+      if (compound && source.url)
+        release = mutations.preview(
+          plan.original && !moving
+            ? { kind: "update", url: source.url, data: plan.original, etag }
+            : { kind: "delete", url: source.url, etag },
+        );
       if (moving && plan.original) await create(plan.original, true);
       else if (plan.created) await create(plan.created, true);
       if (source.url) {
