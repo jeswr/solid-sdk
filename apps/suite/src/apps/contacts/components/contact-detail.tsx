@@ -179,7 +179,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                 <AlertDialogContent>
                   <AlertDialogTitle>Delete {person.data.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    You can undo this deletion from the notification.
+                    It moves to Trash, where you can restore it for 30 days.
                   </AlertDialogDescription>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>

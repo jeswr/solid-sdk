@@ -2,7 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Toaster, toast } from "@jeswr/suite-ui";
-import { Download, Merge, Plus, Star, Tag, Users, X } from "lucide-react";
+import { Download, Merge, Plus, Star, Tag, Trash2, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -69,6 +69,12 @@ function Sidebar() {
           "Merge duplicates",
           <Merge size={18} aria-hidden="true" />,
           duplicates || undefined,
+        )}
+        {link(
+          "/contacts/trash",
+          "Trash",
+          <Trash2 size={18} aria-hidden="true" />,
+          data.trash.length,
         )}
       </nav>
       <h2>Labels</h2>
