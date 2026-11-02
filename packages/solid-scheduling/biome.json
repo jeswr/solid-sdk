@@ -1,0 +1,9 @@
+{
+  "extends": "//",
+  "overrides": [
+    {
+      "includes": ["src/task.test.ts"],
+      "linter": { "rules": { "correctness": { "noUnsafeOptionalChaining": "off" } } }
+    }
+  ]
+}
