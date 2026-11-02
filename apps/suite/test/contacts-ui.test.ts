@@ -8,6 +8,7 @@ const env = vi.hoisted(() => ({
   width: 1280,
   state: {} as object,
   listeners: new Set<() => void>(),
+  refresh: async () => {},
   push: (href: string) => {
     env.href = href;
     for (const listener of env.listeners) listener();
@@ -70,12 +71,20 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
 }));
 
 import { toast } from "@jeswr/suite-ui";
+import { ContactEditor } from "../src/apps/contacts/components/contact-form";
+import { ContactImport } from "../src/apps/contacts/components/contact-import";
 import { ContactsApp } from "../src/apps/contacts/components/contacts-app";
+import { ContactsModel } from "../src/apps/contacts/lib/model/book";
+import { useAddressBook } from "../src/apps/contacts/state/contacts-context";
+import { decodeContactRef } from "../src/apps/contacts/state/data";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import { seedContacts } from "../src/lib/demo-pod/seed-contacts";
 
 beforeEach(() => {
+  vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
+  vi.stubGlobal("DocumentFragment", window.DocumentFragment);
+  vi.stubGlobal("HTMLOptionElement", window.HTMLOptionElement);
   env.href = "/contacts";
   env.width = 1280;
   env.listeners.clear();
@@ -127,6 +136,29 @@ async function settle(test: () => void) {
     }
   }
 }
+function ContactRoute() {
+  env.refresh = useAddressBook().retry;
+  const href = useSyncExternalStore(
+    (listener) => {
+      env.listeners.add(listener);
+      return () => {
+        env.listeners.delete(listener);
+      };
+    },
+    () => env.href,
+  ).split("?")[0];
+  if (href === "/contacts/new") return h(ContactEditor);
+  if (href === "/contacts/import") return h(ContactImport);
+  const edit = /^\/contacts\/c\/([^/]+)\/edit$/.exec(href ?? "");
+  return edit ? h(ContactEditor, { contactRef: edit[1] as string }) : null;
+}
+async function fill(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
 async function setup(count = 40) {
   const files = await buildDemoSeed(1000);
   const seed =
@@ -151,7 +183,7 @@ async function setup(count = 40) {
       reset: async () => {},
     },
   };
-  const view = await mount(h(ContactsApp, null, h("p", null, "Coming next")));
+  const view = await mount(h(ContactsApp, null, h(ContactRoute)));
   await settle(() => expect(view.host.querySelector("[data-collection-item]")).not.toBeNull());
   return { ...view, fetch };
 }
@@ -234,6 +266,170 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
       expect(env.href).toBe("/contacts");
       expect(document.activeElement).toBe(next);
     });
+    await view.unmount();
+  });
+  it.each([
+    375, 1280,
+  ])("restores focus to the empty-state action after unstarring the only rendered contact at %spx", async (width) => {
+    env.width = width;
+    const view = await setup();
+    await click(
+      findRow(view.host, "Ada Fern").querySelector('[aria-label="Star Ada Fern"]') as Element,
+    );
+    await act(async () => env.push("/contacts/starred"));
+    await settle(() =>
+      expect(view.host.querySelectorAll("[data-collection-item]")).toHaveLength(1),
+    );
+    await key(findRow(view.host, "Ada Fern"), "Enter");
+    await settle(() => expect(view.host.querySelector(".con-detail")).not.toBeNull());
+    await click(view.host.querySelector('.con-detail [aria-label="Star Ada Fern"]') as Element);
+    await click(button(view.host.querySelector(".con-detail") as Element, "Back to contacts"));
+    await settle(() => {
+      expect(env.href).toBe("/contacts/starred");
+      expect(view.host.querySelectorAll("[data-collection-item]")).toHaveLength(0);
+      expect(document.activeElement).toBe(
+        view.host.querySelector('.con-list a[href="/contacts/new"]'),
+      );
+    });
+    await view.unmount();
+  });
+  it.each([375, 1280])("creates and edits contacts through the form at %spx", async (width) => {
+    env.width = width;
+    const view = await setup();
+    await act(async () => env.push("/contacts/new"));
+    const form = () => document.querySelector(".con-form") as HTMLFormElement;
+    const field = (name: string) =>
+      form().querySelector<HTMLInputElement>(`[name="${name}"]`) as HTMLInputElement;
+    await fill(field("name"), "Lane Person");
+    await fill(field("emails.0.value"), "lane@example.org");
+    await click(button(form(), "Add email"));
+    await fill(field("emails.1.value"), "lane.work@example.org");
+    await fill(field("phones.0.value"), "+1 (202) 555-0193");
+    await act(async () => {
+      form().dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await settle(() =>
+      expect(view.host.querySelector(".con-detail-header")?.textContent).toContain("Lane Person"),
+    );
+    await settle(() => expect(view.host.querySelector(".con-save")?.textContent).toBe(""));
+    expect(
+      view.host.querySelector('.con-detail a[href="mailto:lane.work@example.org"]'),
+    ).not.toBeNull();
+    expect(view.host.querySelector('.con-detail a[href="tel:+12025550193"]')).not.toBeNull();
+    await click(view.host.querySelector('.con-detail a[href$="/edit"]') as Element);
+    await fill(field("name"), "Edited Lane Person");
+    await act(async () => {
+      form().dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await settle(() =>
+      expect(view.host.querySelector(".con-detail-header")?.textContent).toContain(
+        "Edited Lane Person",
+      ),
+    );
+    await settle(() => expect(view.host.querySelector(".con-save")?.textContent).toBe(""));
+    await view.unmount();
+  });
+  it("updates only locally edited fields after a refreshed remote change", async () => {
+    env.width = 375;
+    const view = await setup();
+    await key(findRow(view.host, "Ada Fern"), "Enter");
+    await settle(() => expect(view.host.querySelector(".con-detail")).not.toBeNull());
+    await click(view.host.querySelector('.con-detail a[href$="/edit"]') as Element);
+    const form = view.host.querySelector(".con-form") as HTMLFormElement;
+    await fill(form.querySelector('[name="name"]') as HTMLInputElement, "Ada Edited");
+    const model = new ContactsModel(view.fetch, DEMO_ROOT);
+    const book = await model.loadAddressBook();
+    const ref = env.href.split("/")[3] as string;
+    const person = await model.loadContact(decodeContactRef(book.url, ref));
+    await act(async () => {
+      await model.updateContact(book, person, {
+        ...person.data,
+        organization: "Changed elsewhere",
+      });
+    });
+    // Refresh through the real controller while the draft retains its original inputs.
+    await act(async () => {
+      await env.refresh();
+    });
+    expect((form.querySelector('[name="organization"]') as HTMLInputElement).value).toBe(
+      "Fictional Observatory",
+    );
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await settle(() =>
+      expect(view.host.querySelector(".con-detail-header")?.textContent).toContain(
+        "Changed elsewhere",
+      ),
+    );
+    await settle(() => expect(view.host.querySelector(".con-save")?.textContent).toBe(""));
+    const saved = await model.loadContact(person.url);
+    expect(saved.data).toMatchObject({ name: "Ada Edited", organization: "Changed elsewhere" });
+    await view.unmount();
+  });
+  it("announces validation and focuses the first invalid field, then confirms dirty cancellation", async () => {
+    env.width = 375;
+    const view = await setup();
+    await act(async () => env.push("/contacts/new"));
+    const form = view.host.querySelector(".con-form") as HTMLFormElement;
+    await fill(form.querySelector('[name="name"]') as HTMLInputElement, "Draft");
+    const email = form.querySelector('[name="emails.0.value"]') as HTMLInputElement;
+    await fill(email, "broken");
+    await fill(form.querySelector('[name="webId"]') as HTMLInputElement, "http://example.org/me");
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await settle(() => {
+      expect(form.querySelector(".con-form-summary")?.textContent).toBe("2 fields need attention");
+      expect(document.activeElement).toBe(email);
+      expect(form.querySelectorAll('[role="alert"]')).toHaveLength(2);
+    });
+    await fill(email, "mira.quill@example.org");
+    expect(form.textContent).toContain("Mira Quill already uses this email");
+    await click(button(form, "Cancel"));
+    const dialog = document.querySelector('[role="alertdialog"]') as Element;
+    expect(dialog.textContent).toContain("Discard changes?");
+    await click(button(dialog, "Keep editing"));
+    expect(env.href).toBe("/contacts/new");
+    await click(button(form, "Cancel"));
+    await click(
+      button(document.querySelector('[role="alertdialog"]') as Element, "Discard changes"),
+    );
+    await settle(() => expect(env.href).toBe("/contacts"));
+    await view.unmount();
+  });
+  it("previews vCards, excludes the existing email, and imports only selected rows", async () => {
+    const view = await setup();
+    await act(async () => env.push("/contacts/import"));
+    const picker = view.host.querySelector('[aria-label="Choose files"]') as HTMLInputElement;
+    const file = new File(
+      [
+        "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Copy\r\nEMAIL:mira.quill@example.org\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:4.0\r\nFN:Imported Person\r\nEMAIL:imported@example.org\r\nEND:VCARD\r\n",
+      ],
+      "contacts.vcf",
+    );
+    Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+    await act(async () => {
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(() =>
+      expect(view.host.querySelector(".con-wizard h2")?.textContent).toBe("Preview contacts"),
+    );
+    expect(
+      view.host.querySelector('[aria-label="Include Copy"]')?.getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(view.host.querySelector(".con-wizard")?.textContent).toContain(
+      "Possible duplicate: Mira Quill",
+    );
+    await click(button(view.host, "Import 1 contacts"));
+    await settle(() =>
+      expect(view.host.querySelector(".con-wizard")?.textContent).toContain(
+        "1 contacts imported. 0 failed.",
+      ),
+    );
+    await click(view.host.querySelector('.con-wizard a[href*="created="]') as Element);
+    await settle(() => expect(findRow(view.host, "Imported Person")).not.toBeNull());
+    expect(view.host.querySelectorAll("[data-collection-item]")).toHaveLength(1);
     await view.unmount();
   });
   it("filters labels and highlights search while keeping search inside the current label", async () => {

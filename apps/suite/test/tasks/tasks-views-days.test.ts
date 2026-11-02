@@ -48,4 +48,29 @@ describe("local calendar days", () => {
       spy.mockRestore();
     }
   });
+
+  it.each([
+    true,
+    false,
+  ])("supports the legacy weekInfo property or falls back to Monday (weekInfo: %s)", (hasWeekInfo) => {
+    const method = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "getWeekInfo");
+    const property = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "weekInfo");
+    Object.defineProperties(Intl.Locale.prototype, {
+      getWeekInfo: { configurable: true, value: undefined },
+      weekInfo: { configurable: true, value: hasWeekInfo ? { firstDay: 7 } : undefined },
+    });
+    try {
+      expect(startOfWeek(new Date(2026, 9, 28), "locale")).toEqual(
+        new Date(2026, 9, hasWeekInfo ? 25 : 26),
+      );
+    } finally {
+      for (const [key, descriptor] of [
+        ["getWeekInfo", method],
+        ["weekInfo", property],
+      ] as const) {
+        if (descriptor) Object.defineProperty(Intl.Locale.prototype, key, descriptor);
+        else Reflect.deleteProperty(Intl.Locale.prototype, key);
+      }
+    }
+  });
 });
