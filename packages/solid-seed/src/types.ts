@@ -7,6 +7,11 @@ import type { DatasetCore } from "@rdfjs/types";
 export interface SeedTarget {
   webid: string;
   baseUrl: string;
+  /**
+   * Must honour `init.redirect`: the seeder passes `redirect: "error"` so a
+   * redirect cannot carry a PUT body or DPoP proof to another origin. A wrapper
+   * that rebuilds the request must keep that option.
+   */
   authFetch: typeof fetch;
 }
 
