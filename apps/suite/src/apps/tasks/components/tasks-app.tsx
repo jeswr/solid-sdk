@@ -107,8 +107,10 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
-    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
-  }, [params, pathname, router]);
+    // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
+    // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
+    history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+  }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;
     const keydown = (event: KeyboardEvent) => {
