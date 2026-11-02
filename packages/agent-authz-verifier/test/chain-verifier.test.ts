@@ -21,6 +21,7 @@ async function assemble(
     rootPrincipal: "urn:root",
     now: new Date("2026-08-01T00:00:00Z"),
     resolveKey: () => undefined,
+    isControlledBy: () => false,
   });
   return { phase: r.phase, ...(r.code !== undefined && { code: r.code }) };
 }
