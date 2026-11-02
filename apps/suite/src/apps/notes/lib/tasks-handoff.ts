@@ -57,17 +57,21 @@ const status = (error: unknown) =>
     ? (error as { status: unknown }).status
     : undefined;
 
+/** How many completed or replaced generations of one item are probed before giving up. */
+export const MAX_GENERATIONS = 50;
+
 /**
- * Append the planned tasks to the Tasks Inbox after its last ranked task. A 412 means a
- * task already exists at the planned address: it counts as already there only when it is
- * still open with the same title; otherwise (completed since, or a different note's item)
- * the item is created afresh under a new id. Inbox setup errors are thrown for the caller.
+ * Append the planned tasks to the Tasks Inbox after its last ranked task. Each item has a
+ * series of addresses: its planned id, then `<id>-2`, `<id>-3`, … A task found at one
+ * (412) counts as already there when it is still open with the same title; a completed
+ * or different task moves on to the next address. So sending again and retrying both stay
+ * idempotent, and an item completed in Tasks can be sent again. Inbox setup errors are
+ * thrown for the caller to classify.
  */
 export async function sendToTasks<Project extends { tracker: { stateStore?: string | undefined } }>(
   store: TaskSink<Project>,
   tasks: readonly PlannedTask[],
   creator: string,
-  uuid: () => string = () => crypto.randomUUID(),
 ): Promise<{ created: number; existing: number; failed: PlannedTask[] }> {
   const inbox = await store.bootstrapInbox();
   const stateStore = inbox.tracker.stateStore;
@@ -82,25 +86,29 @@ export async function sendToTasks<Project extends { tracker: { stateStore?: stri
   for (const task of tasks) {
     rank += 1;
     const data = { title: task.title, state: "open" as const, creator, rank };
+    let outcome: "created" | "existing" | "failed" = "failed";
     try {
-      await store.createTask(inbox, data, task.id);
-      created++;
-    } catch (error) {
-      if (status(error) !== 412) {
-        failed.push(task);
-        continue;
-      }
-      try {
-        const found = await store.readTask(`${stateStore}${task.id}.ttl`);
-        if (found.task.state === "open" && found.task.title === task.title) existing++;
-        else {
-          await store.createTask(inbox, data, uuid());
-          created++;
+      for (let generation = 1; generation <= MAX_GENERATIONS; generation++) {
+        const id = generation === 1 ? task.id : `${task.id}-${generation}`;
+        try {
+          await store.createTask(inbox, data, id);
+          outcome = "created";
+          break;
+        } catch (error) {
+          if (status(error) !== 412) throw error;
         }
-      } catch {
-        failed.push(task);
+        const found = await store.readTask(`${stateStore}${id}.ttl`);
+        if (found.task.state === "open" && found.task.title === task.title) {
+          outcome = "existing";
+          break;
+        }
       }
+    } catch {
+      outcome = "failed";
     }
+    if (outcome === "created") created++;
+    else if (outcome === "existing") existing++;
+    else failed.push(task);
   }
   return { created, existing, failed };
 }

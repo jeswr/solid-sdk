@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { beforeEach, expect, it, vi } from "vitest";
-import { plannedTasks, sendToTasks } from "../src/apps/notes/lib/tasks-handoff";
+import { MAX_GENERATIONS, plannedTasks, sendToTasks } from "../src/apps/notes/lib/tasks-handoff";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
@@ -234,42 +234,53 @@ it("can't be dismissed while adding, and cancels otherwise", async () => {
   await ui.unmount();
 });
 
-it("checks a task found at the planned address before counting it as already there", async () => {
+it("probes an item's later addresses past completed or different tasks", async () => {
+  const open = (title: string) => ({ task: { title, state: "open" } });
+  const closed = (title: string) => ({ task: { title, state: "closed" } });
   const store = sink({
     createTask: vi
       .fn()
-      .mockRejectedValueOnce(conflict)
-      .mockRejectedValueOnce(conflict)
-      .mockResolvedValueOnce({})
-      .mockRejectedValueOnce(conflict)
-      .mockRejectedValueOnce(conflict)
-      .mockRejectedValueOnce(conflict),
+      .mockRejectedValueOnce(conflict) // a: open, same title
+      .mockRejectedValueOnce(conflict) // b: closed
+      .mockResolvedValueOnce({}) // b-2: free
+      .mockRejectedValueOnce(conflict) // c: another title
+      .mockRejectedValueOnce(conflict) // c-2: open, same title
+      .mockRejectedValueOnce(conflict) // d: unreadable
+      .mockRejectedValueOnce(new Error("offline")), // e: fails
     readTask: vi
       .fn()
-      .mockResolvedValueOnce({ task: { title: "Same", state: "open" } })
-      .mockResolvedValueOnce({ task: { title: "Done", state: "closed" } })
-      .mockResolvedValueOnce({ task: { title: "Other", state: "open" } })
+      .mockResolvedValueOnce(open("Same"))
+      .mockResolvedValueOnce(closed("Done"))
+      .mockResolvedValueOnce(open("Other"))
+      .mockResolvedValueOnce(open("Renamed"))
       .mockRejectedValueOnce(new Error("offline")),
   });
-  const tasks = [
-    { id: "a", title: "Same" },
-    { id: "b", title: "Done" },
-    { id: "c", title: "Renamed" },
-    { id: "d", title: "Unreadable" },
-  ];
-  const result = await sendToTasks(store as never, tasks, session.webId, () => "fresh");
+  const tasks = ["Same", "Done", "Renamed", "Unreadable", "Offline"].map((title, n) => ({
+    id: "abcde"[n] as string,
+    title,
+  }));
+  const result = await sendToTasks(store as never, tasks, session.webId);
   expect(store.readTask).toHaveBeenNthCalledWith(1, `${inbox.tracker.stateStore}a.ttl`);
-  // A completed task, or another item's task, never hides this one: it is created afresh.
-  expect(store.createTask.mock.calls[2]?.[2]).toBe("fresh");
-  expect(store.createTask.mock.calls[2]?.[1].title).toBe("Done");
-  expect(result).toEqual({ created: 1, existing: 1, failed: [tasks[2], tasks[3]] });
+  expect(store.createTask.mock.calls.map((call) => call[2])).toEqual([
+    "a",
+    "b",
+    "b-2",
+    "c",
+    "c-2",
+    "d",
+    "e",
+  ]);
+  expect(store.readTask.mock.calls[3]?.[0]).toBe(`${inbox.tracker.stateStore}c-2.ttl`);
+  expect(result).toEqual({ created: 1, existing: 2, failed: [tasks[3], tasks[4]] });
 });
 
-it("names a fresh task with a random id by default", async () => {
+it("gives up on an item after the last generation", async () => {
   const store = sink({
-    createTask: vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue({}),
+    createTask: vi.fn().mockRejectedValue(conflict),
     readTask: vi.fn(async () => ({ task: { title: "Old", state: "closed" } })),
   });
-  await sendToTasks(store as never, [{ id: "a", title: "Old" }], session.webId);
-  expect(store.createTask.mock.calls[1]?.[2]).toMatch(/^[0-9a-f-]{36}$/);
+  const result = await sendToTasks(store as never, [{ id: "a", title: "Old" }], session.webId);
+  expect(store.createTask).toHaveBeenCalledTimes(MAX_GENERATIONS);
+  expect(store.createTask.mock.lastCall?.[2]).toBe(`a-${MAX_GENERATIONS}`);
+  expect(result.failed).toHaveLength(1);
 });
