@@ -93,7 +93,8 @@
     "@jeswr/suite-native",
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
-    "@jeswr/solid-listening"
+    "@jeswr/solid-listening",
+    "@jeswr/solid-scheduling"
   ],
   "applications": [
     {

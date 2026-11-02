@@ -44,6 +44,8 @@ It never treats a policy denial as permission to transmit.
 
 - `refuse-all`: missing/invalid mandate, expired or future validity, wrong agent.
 - `prohibited`: a matching prohibition in any set, before any permit or indeterminate result.
+  A prohibition also matches a request for a broader action that covers it (a `write` request
+  matches an `append` prohibition).
 - `confirm-required`: with-approval permission, missing context, outstanding duty,
   unsupported vocabulary, engine failure, or no matching rule.
 - `permit`: autonomous permission after every preceding check passes.
@@ -60,6 +62,12 @@ Typed decimal values must retain their decimal identity through the evaluator's 
 conversion; insignificant zeros and exponent formatting do not change that identity.
 Date-time operands must have millisecond precision (additional trailing zeros are accepted).
 Values that would lose precision require confirmation, including in prohibitions and duties.
+A set-valued request operand requires confirmation under an `isAnyOf` permission, duty or obligation
+constraint (one allowed value cannot carry others through an allowlist) and under an `isNoneOf`
+prohibition constraint (one listed value cannot switch the prohibition off). Under an `isAllOf`
+permission, duty or obligation constraint it requires confirmation when it holds a value the
+constraint does not list (`isAllOf` alone accepts any superset). Targets and actions match exactly; the
+executor must canonicalise target IRIs before evaluation.
 Typed float values also require confirmation whenever binary32 rounding changes their value.
 
 `issueApproval({ id, approves, termsDigest, expires, decision }, p256Key, now)` produces

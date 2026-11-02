@@ -1,0 +1,52 @@
+{
+  "shapesBase": "https://w3id.org/jeswr/sectors/scheduling/shapes#",
+  "prefixes": {
+    "sched": "https://w3id.org/jeswr/sectors/scheduling#",
+    "core": "https://w3id.org/jeswr/core#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Task",
+      "kind": "composite",
+      "root": "task",
+      "nodes": {
+        "task": {
+          "targetClass": "https://w3id.org/jeswr/sectors/scheduling#Task",
+          "fragment": "it",
+          "fields": {
+            "summary": {},
+            "description": { "emptyStringDrop": true },
+            "startTime": {},
+            "dueTime": {},
+            "completed": {},
+            "completedAt": {},
+            "organizer": { "iriScheme": "http-https" },
+            "inCalendar": { "rename": "calendar", "iriScheme": "http-https" }
+          },
+          "links": { "recurrence": "recurrence" }
+        },
+        "recurrence": {
+          "targetClass": "https://w3id.org/jeswr/sectors/scheduling#RecurrenceRule",
+          "fragment": "recurrence",
+          "fields": {
+            "frequency": {},
+            "interval": {},
+            "count": {},
+            "until": {}
+          }
+        }
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/sectors/scheduling#Calendar",
+      "name": "Calendar",
+      "subject": { "convention": "hash-it" },
+      "fields": {
+        "description": { "emptyStringDrop": true },
+        "organizer": { "iriScheme": "http-https" }
+      }
+    }
+  ]
+}
