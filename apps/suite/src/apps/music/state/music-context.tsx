@@ -25,6 +25,7 @@ import {
   type PlaylistEdit,
 } from "../lib/data/playlists";
 import { type PreferencesSnapshot, preferencesStore } from "../lib/data/preferences";
+import { type ScrobblePlan, saveScrobbles } from "../lib/data/scrobbles";
 import { type MusicDocument, MusicWriteError, type Playback } from "../lib/model";
 
 export interface MusicSnapshot {
@@ -50,6 +51,13 @@ interface MusicContextValue extends State {
   remove(playlist: MusicPlaylist): Promise<boolean>;
   artwork(enabled: boolean): void;
   importFixture(): Promise<boolean>;
+  /** The pod storage root Music reads and writes. */
+  storage: string;
+  /** Saves imported listens, then reloads Music so they appear. */
+  importListens(
+    plan: ScrobblePlan,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ added: number; existing: number }>;
   older(): Promise<void>;
   olderLoading: boolean;
   olderError: boolean;
@@ -415,6 +423,15 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
         () => importSpotifyFixture(session.fetch, session.storageUrl),
         "Spotify sample imported",
       );
+    },
+    storage: session.storageUrl,
+    async importListens(plan, onProgress) {
+      try {
+        return await saveScrobbles(session.fetch, session.storageUrl, plan, onProgress);
+      } finally {
+        // Months saved before a failure are kept, so show them either way.
+        await refresh();
+      }
     },
     olderLoading,
     olderError,

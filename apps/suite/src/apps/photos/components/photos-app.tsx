@@ -14,7 +14,7 @@ import {
   Toaster,
   UploadDock,
 } from "@jeswr/suite-ui";
-import { Album, Heart, Images, Trash2, Upload } from "lucide-react";
+import { Album, HardDrive, Heart, Images, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -82,6 +82,7 @@ function Chrome({ children }: { children: ReactNode }) {
       count: photos.photos.filter((photo) => photos.favourites.includes(photo.ref)).length,
     },
     { href: "/photos/trash", name: "Trash", icon: Trash2, count: photos.trash.length },
+    { href: "/photos/storage", name: "Storage", icon: HardDrive, count: undefined },
   ];
   return (
     <UploadContext value={request}>
@@ -99,9 +100,11 @@ function Chrome({ children }: { children: ReactNode }) {
                     <Link href={href} aria-current={pathname === href ? "page" : undefined}>
                       <Icon size={20} aria-hidden="true" />
                       <span>{name}</span>
-                      <span className="pho-count" title={`${count} items`}>
-                        {count}
-                      </span>
+                      {count !== undefined && (
+                        <span className="pho-count" title={`${count} items`}>
+                          {count}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 ))}

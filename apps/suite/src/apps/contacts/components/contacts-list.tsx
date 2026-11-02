@@ -25,7 +25,7 @@ import {
   sectionContacts,
 } from "../lib/list";
 import { useContacts, useStarred } from "../state/contacts-context";
-import { decodeContactRef, filterContacts } from "../state/data";
+import { decodeContactRef, encodeContactRef, filterContacts } from "../state/data";
 
 export function ContactAvatar({
   contact,
@@ -100,7 +100,23 @@ export function ContactsList({
     /* Invalid references use the same not-found state as a removed label. */
   }
   const group = state.data.groups.find((g) => g.url === groupUrl);
-  const filtered = filterContacts(state.contacts, stars, group, path === "/contacts/starred");
+  const created = params.get("created")?.split(",");
+  const imported =
+    created && state.book
+      ? new Set(
+          state.data.people
+            .filter((person) =>
+              created.includes(encodeContactRef(state.book?.url as string, person.url)),
+            )
+            .map((person) => `${person.url}#this`),
+        )
+      : undefined;
+  const filtered = filterContacts(
+    state.contacts,
+    stars,
+    group,
+    path === "/contacts/starred",
+  ).filter((contact) => !imported || imported.has(contact.id));
   const missingLabel = path.startsWith("/contacts/label/") && !group;
   let invalidQuery = false;
   let hits: ReturnType<typeof searchContacts> = [];
@@ -231,7 +247,9 @@ export function ContactsList({
         </Button>
       </section>
     );
-  const title = group?.data.name ?? (path === "/contacts/starred" ? "Starred" : "All contacts");
+  const title =
+    group?.data.name ??
+    (path === "/contacts/starred" ? "Starred" : imported ? "Imported contacts" : "All contacts");
   return (
     <section className="con-list" aria-labelledby="con-list-title">
       <div className="con-list-heading">
