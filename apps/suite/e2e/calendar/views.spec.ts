@@ -111,7 +111,7 @@ test("hides Work in week and month and retains the WebID preference after reload
   await expect(page.getByRole("button", { name: /, Work$/ })).toHaveCount(0);
 });
 
-test("moves through month days with the keyboard and opens a day", async ({ page }) => {
+test("moves through month days with the keyboard and opens quick-create", async ({ page }) => {
   await open(page, "month");
   await page.locator('.cal-month [data-day="2026-11-01"]').focus();
   await page.keyboard.press("ArrowRight");
@@ -128,7 +128,9 @@ test("moves through month days with the keyboard and opens a day", async ({ page
   await page.keyboard.press("PageUp");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("November 2026");
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/calendar\/day\?d=2026-11-09/);
+  await expect(page.getByRole("dialog", { name: "Create event", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator('.cal-month [data-day="2026-11-09"]')).toBeFocused();
 });
 
 test("moves across week slots, enters events with Tab, opens and closes details by keyboard", async ({
@@ -162,7 +164,9 @@ test("moves across week slots, enters events with Tab, opens and closes details 
   await expect(event).toBeFocused();
   await monday.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/calendar\/day\?d=2026-10-26/);
+  await expect(page.getByRole("dialog", { name: "Create event", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(monday).toBeFocused();
 });
 
 test("shows recurring stand-ups on Mon/Wed/Fri, lays overlaps side by side and opens month overflow", async ({

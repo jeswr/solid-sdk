@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -14,6 +14,8 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { TaskStore } from "../lib/model/store";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "./access";
+import { pendingDeletes } from "./actions";
+import { completionVisuals } from "./completion-visuals";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
@@ -41,9 +43,21 @@ function useTasksValue(session: PodSession) {
           );
         },
         session.webId,
+        (message) => toast.info(message),
       ),
   );
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
+  useEffect(() => {
+    const flush = () => {
+      completionVisuals(cache).flush();
+      pendingDeletes(cache).flush();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [cache]);
   useEffect(() => {
     void cache.start();
   }, [cache]);
@@ -75,13 +89,17 @@ function useTasksValue(session: PodSession) {
     () => ({
       ...snapshot,
       cache,
+      webId: session.webId,
       inboxUrl: cache.inboxUrl,
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
       updateTask: cache.updateTask.bind(cache),
+      updateProject: cache.updateProject.bind(cache),
+      moveTaskToProject: cache.moveTaskToProject.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),
       createProject: cache.createProject.bind(cache),
+      ensureLabels: cache.ensureLabels.bind(cache),
       renameProject: cache.renameProject,
       archiveProject: cache.archiveProject,
       deleteProject: cache.deleteProject.bind(cache),
@@ -91,7 +109,7 @@ function useTasksValue(session: PodSession) {
       moveSection: cache.moveSection.bind(cache),
       deleteSection: cache.deleteSection.bind(cache),
     }),
-    [snapshot, cache],
+    [snapshot, cache, session.webId],
   );
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.

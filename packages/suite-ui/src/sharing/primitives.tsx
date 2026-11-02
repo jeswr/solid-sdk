@@ -49,6 +49,7 @@ export function ConfirmAction({
   disabled = false,
   destructive = true,
   closeFocusFallback,
+  confirmFocus,
 }: {
   trigger: string;
   title: string;
@@ -59,8 +60,11 @@ export function ConfirmAction({
   disabled?: boolean;
   destructive?: boolean;
   closeFocusFallback?: RefObject<HTMLElement | null>;
+  /** Where focus goes after a confirmed action that will disable the trigger. */
+  confirmFocus?: RefObject<HTMLElement | null>;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const confirmed = useRef(false);
   return (
     <AlertDialog.Root>
       <AlertDialog.Trigger asChild ref={triggerRef}>
@@ -73,9 +77,17 @@ export function ConfirmAction({
         <AlertDialog.Content
           className="su-confirm su-stack"
           onCloseAutoFocus={(event) => {
-            if (triggerRef.current?.disabled && closeFocusFallback?.current) {
+            // Confirmed: the trigger is (or is about to be) disabled, so never return to it.
+            const target =
+              confirmed.current && confirmFocus?.current
+                ? confirmFocus.current
+                : triggerRef.current?.disabled
+                  ? closeFocusFallback?.current
+                  : undefined;
+            confirmed.current = false;
+            if (target) {
               event.preventDefault();
-              closeFocusFallback.current.focus();
+              target.focus();
             }
           }}
         >
@@ -90,7 +102,9 @@ export function ConfirmAction({
                 className="su-destructive"
                 disabled={disabled}
                 onClick={() => {
-                  if (!disabled) onConfirm();
+                  if (disabled) return;
+                  confirmed.current = true;
+                  onConfirm();
                 }}
               >
                 {action}
