@@ -1,0 +1,377 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+"use client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  EditableText,
+  IconButton,
+  Input,
+} from "@jeswr/suite-ui";
+import {
+  CalendarDays,
+  CalendarRange,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Ellipsis,
+  Inbox,
+  Plus,
+  Tag,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useRef, useState } from "react";
+import { encodeRef } from "@/lib/refs";
+import { dueDate, isOverdue, localDay } from "../lib/format/due";
+import type { StoredProject } from "../lib/model/store";
+import { unionLabels } from "../lib/model/tracker";
+import { openAddTask } from "../state/add-focus";
+import { useNow } from "../state/clock";
+import { useTasksPreferences } from "../state/preferences";
+import { useTasks } from "../state/tasks-context";
+import { useDropTarget } from "./dnd/use-task-drag";
+
+/** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
+function ProjectDropItem({
+  projectUrl,
+  className,
+  children,
+}: {
+  projectUrl: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const drop = useDropTarget(`project:${projectUrl}`, { kind: "project", projectUrl });
+  return (
+    <li ref={drop.ref} className={className} data-drop-over={drop.over || undefined}>
+      {children}
+    </li>
+  );
+}
+
+function ProjectRow({
+  project,
+  first,
+  last,
+}: {
+  project: StoredProject;
+  first: boolean;
+  last: boolean;
+}) {
+  const tasks = useTasks();
+  const path = usePathname();
+  const router = useRouter();
+  const [renaming, setRenaming] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const renameRoot = useRef<HTMLDivElement>(null);
+  const name = project.tracker.title ?? "Untitled";
+  const href = `/tasks/p/${encodeRef(project.url)}`;
+  const count = tasks.views.filter(
+    (task) => task.projectUrl === project.url && task.state === "open",
+  ).length;
+  return (
+    <ProjectDropItem projectUrl={project.url} className="tsk-project-row">
+      <span className="tsk-project-dot" aria-hidden="true" />
+      {renaming ? (
+        <div className="tsk-inline-edit" ref={renameRoot}>
+          <EditableText
+            label="Project name"
+            value={name}
+            validate={(value) => (value.trim() ? undefined : "A name is required")}
+            onCommit={(value) => {
+              void tasks.renameProject(project, value);
+              setRenaming(false);
+            }}
+          />
+          <button type="button" className="tsk-ghost" onClick={() => setRenaming(false)}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <Link href={href} aria-current={path === href ? "page" : undefined}>
+          <span>{name}</span>
+          <span role="img" className="tsk-count" aria-label={`${count} open tasks`}>
+            {count}
+          </span>
+        </Link>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton
+            className="tsk-project-actions"
+            label={`Project actions for ${name}`}
+            variant="ghost"
+          >
+            <Ellipsis size={16} aria-hidden="true" />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem
+            disabled={!project.etag}
+            onSelect={() => {
+              setRenaming(true);
+              requestAnimationFrame(() =>
+                renameRoot.current?.querySelector<HTMLButtonElement>(".suite-editable")?.click(),
+              );
+            }}
+          >
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={first || !project.etag}
+            onSelect={() => {
+              void tasks.moveProject(project, "up");
+            }}
+          >
+            Move up
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={last || !project.etag}
+            onSelect={() => {
+              void tasks.moveProject(project, "down");
+            }}
+          >
+            Move down
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!project.etag}
+            onSelect={() => {
+              void tasks.archiveProject(project).then((result) => {
+                if (result && path === href) router.push("/tasks/inbox");
+              });
+            }}
+          >
+            Archive
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!project.etag} onSelect={() => setConfirm(true)}>
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes the project and its tasks. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void tasks.deleteProject(project).then((result) => {
+                  if (result && path === href) router.push("/tasks/inbox");
+                });
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ProjectDropItem>
+  );
+}
+export function TasksSidebar() {
+  const router = useRouter();
+  const tasks = useTasks();
+  const { preferences, dispatch } = useTasksPreferences();
+  const path = usePathname();
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  const open = tasks.views.filter((task) => task.state === "open");
+  const now = useNow();
+  const dueToday = open.filter((task) => {
+    const due = dueDate(task);
+    return due && localDay(due) <= localDay(now);
+  });
+  const overdue = dueToday.some((task) => isOverdue(task, now));
+  const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
+  const labels = unionLabels(tasks.projects.map((project) => project.tracker));
+  const projects = tasks.projects.filter((project) => project.url !== tasks.inboxUrl);
+  const link = (
+    href: string,
+    title: string,
+    icon: ReactNode,
+    count?: number,
+    destructive = false,
+    projectUrl?: string,
+  ) => {
+    const content = (
+      <Link href={href} aria-current={path === href ? "page" : undefined}>
+        {icon}
+        <span>{title}</span>
+        {count !== undefined && (
+          <span
+            role="img"
+            className="tsk-count"
+            data-destructive={destructive || undefined}
+            aria-label={`${count} open tasks`}
+          >
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+    return projectUrl ? (
+      <ProjectDropItem key={href} projectUrl={projectUrl}>
+        {content}
+      </ProjectDropItem>
+    ) : (
+      <li key={href}>{content}</li>
+    );
+  };
+  return (
+    <nav className="tsk-sidebar" aria-label="Tasks">
+      <Button
+        className="tsk-primary-add"
+        onClick={() => {
+          // Close the interim mobile drawer before moving focus back into the list.
+          document
+            .querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')
+            ?.click();
+          requestAnimationFrame(() => {
+            openAddTask();
+          });
+        }}
+      >
+        <Plus size={18} aria-hidden="true" />
+        Add task
+      </Button>
+      <h2 className="tsk-nav-heading">Views</h2>
+      <ul className="tsk-nav-list">
+        {link(
+          "/tasks/inbox",
+          "Inbox",
+          <Inbox size={18} aria-hidden="true" />,
+          inboxCount,
+          false,
+          tasks.inboxUrl,
+        )}
+        {link(
+          "/tasks/today",
+          "Today",
+          <CalendarDays size={18} aria-hidden="true" />,
+          dueToday.length,
+          overdue,
+        )}
+        {link("/tasks/upcoming", "Upcoming", <CalendarRange size={18} aria-hidden="true" />)}
+        {link("/tasks/completed", "Completed", <Check size={18} aria-hidden="true" />)}
+      </ul>
+      {labels.size > 0 && (
+        <>
+          <button
+            type="button"
+            className="tsk-nav-heading tsk-disclosure"
+            aria-expanded={preferences.sidebar.labelsOpen}
+            onClick={() => dispatch({ type: "sidebar", group: "labelsOpen" })}
+          >
+            {preferences.sidebar.labelsOpen ? (
+              <ChevronDown size={14} aria-hidden="true" />
+            ) : (
+              <ChevronRight size={14} aria-hidden="true" />
+            )}
+            Labels
+          </button>
+          {preferences.sidebar.labelsOpen && (
+            <ul className="tsk-nav-list">
+              {[...labels]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, categories]) =>
+                  link(
+                    `/tasks/l/${encodeURIComponent(name)}`,
+                    `@${categories[0]?.name}`,
+                    <Tag size={16} aria-hidden="true" />,
+                    open.filter((task) =>
+                      task.labelIds.some((id) => categories.some((category) => category.id === id)),
+                    ).length,
+                  ),
+                )}
+            </ul>
+          )}
+        </>
+      )}
+      <button
+        type="button"
+        className="tsk-nav-heading tsk-disclosure"
+        aria-expanded={preferences.sidebar.projectsOpen}
+        onClick={() => dispatch({ type: "sidebar", group: "projectsOpen" })}
+      >
+        {preferences.sidebar.projectsOpen ? (
+          <ChevronDown size={14} aria-hidden="true" />
+        ) : (
+          <ChevronRight size={14} aria-hidden="true" />
+        )}
+        Projects
+      </button>
+      {preferences.sidebar.projectsOpen && (
+        <ul className="tsk-nav-list tsk-projects">
+          {projects.map((project, index) => (
+            <ProjectRow
+              key={project.url}
+              project={project}
+              first={index === 0}
+              last={index === projects.length - 1}
+            />
+          ))}
+        </ul>
+      )}
+      <div className="tsk-sidebar-footer">
+        {creating ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!name.trim()) return;
+              const title = name.trim();
+              setCreating(false);
+              setName("");
+              void tasks.createProject(title).then((project) => {
+                if (project) router.push(`/tasks/p/${encodeRef(project.url)}`);
+              });
+            }}
+          >
+            <Input
+              ref={field}
+              aria-label="New project name"
+              placeholder="Project name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setCreating(false);
+                  setName("");
+                }
+              }}
+            />
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="tsk-ghost"
+            onClick={() => {
+              setCreating(true);
+              requestAnimationFrame(() => field.current?.focus());
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            New project
+          </button>
+        )}
+      </div>
+    </nav>
+  );
+}

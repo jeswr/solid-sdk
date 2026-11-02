@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
@@ -20,6 +19,10 @@ export class RdfIO {
         fetch: this.fetch,
         headers: { "Cache-Control": "no-cache" },
       });
+      // A validator belongs to the requested resource, never to a redirect target.
+      // In particular, listed members must not escape their stateStore after GET.
+      if (result.url !== url)
+        throw new TypeError("The RDF response URL must match the requested resource.");
       return { url: result.url, dataset: new Store([...result.dataset]), etag: result.etag };
     } catch (error) {
       if (error instanceof RdfFetchError)
@@ -69,7 +72,11 @@ export class RdfIO {
     return current;
   }
   async remove(url: string, etag: string | null): Promise<void> {
-    await this.request(url, { method: "DELETE", headers: { "If-Match": requireEtag(etag) } });
+    await this.request(url, {
+      method: "DELETE",
+      headers: { "If-Match": requireEtag(etag) },
+      keepalive: true,
+    });
   }
   private async request(url: string, init: RequestInit): Promise<Response> {
     requireHttp(url);
@@ -104,9 +111,10 @@ export class RdfIO {
     if (!types.has(`${NS.LDP}BasicContainer`) && !types.has(`${NS.LDP}Container`))
       throw new TypeError("Expected an LDP container.");
   }
-  async list(url: string): Promise<string[]> {
-    const resource = await this.optional(url);
+  async list(url: string, { strict = false } = {}): Promise<string[]> {
+    const resource = strict ? await this.read(url) : await this.optional(url);
     if (!resource) return [];
+    if (strict) this.requireContainer(resource);
     return [...node(resource.url, resource.dataset).iris(`${NS.LDP}contains`)];
   }
 }

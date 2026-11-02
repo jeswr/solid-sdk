@@ -1,0 +1,83 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 24px;
+  gap: 16px;
+}
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding-right: 32px;
+}
+.header > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.section h2 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.people {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.account {
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+.check input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+@media (max-width: 767px) {
+  .dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: 16px;
+  }
+}
