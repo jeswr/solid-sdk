@@ -175,3 +175,27 @@ it("CommandSeparator is presentational inside the listbox and hides while search
   rerender(<Palette alwaysRender />);
   await waitFor(() => expect(separator()).not.toBeNull());
 });
+
+it("a closed Select never makes another layer's hidden content inert", async () => {
+  // Radix renders a closed Select's content into a detached fragment, so its InertOutside
+  // mounts while closed; a dialog that opens next must not have its hidden page made inert.
+  render(
+    <Page>
+      <Select>
+        <SelectTrigger aria-label="Sort by">
+          <SelectValue placeholder="Sort by" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="name">Name</SelectItem>
+        </SelectContent>
+      </Select>
+    </Page>,
+  );
+  const hidden = document.createElement("section");
+  hidden.setAttribute("aria-hidden", "true");
+  hidden.setAttribute("data-aria-hidden", "true");
+  document.body.append(hidden);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(document.querySelectorAll("[inert]")).toHaveLength(0);
+  hidden.remove();
+});

@@ -116,6 +116,7 @@ function CommandGroup({
 function CommandSeparator({
   className,
   alwaysRender = false,
+  asChild: _asChild,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
   const searching = useCommandState((state) => state.search !== "");
