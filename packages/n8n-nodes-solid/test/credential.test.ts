@@ -47,3 +47,14 @@ describe("SolidApi credential", () => {
     expect(cred.test.request.baseURL).toBe("={{$credentials.podBaseUrl}}");
   });
 });
+
+describe("SolidApi credential test request", () => {
+  it("refuses redirects so the Bearer token cannot follow a cross-origin hop", () => {
+    const request = new SolidApi().test.request as {
+      disableFollowRedirect?: boolean;
+      sendCredentialsOnCrossOriginRedirect?: boolean;
+    };
+    expect(request.disableFollowRedirect).toBe(true);
+    expect(request.sendCredentialsOnCrossOriginRedirect).toBe(false);
+  });
+});

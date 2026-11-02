@@ -59,7 +59,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | P1 workspace codegen task plus a second migration (`solid-health-diary`, the closest sector match) | guard in #263; health-diary blocked on generator gaps (sst-ild.4.3.1 to .4) | turbo `codegen` check, `packages/solid-health-diary` | sst-ild.4.3 |
 | M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | imported; already flipped in July, regenerated with the hardened generator | `packages/solid-listening` | sst-ild.7.3 |
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
-| S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | open | `packages/solid-scheduling` | sst-ild.7.5 |
+| S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | implemented: generated Task + RecurrenceRule composite and Calendar behind facades; sector ratchet still open (normative) | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |

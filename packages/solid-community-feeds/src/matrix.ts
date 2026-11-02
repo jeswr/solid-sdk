@@ -179,10 +179,19 @@ export class MatrixFeedSource {
     const raw = await this.getJson<RawMessages>(
       `${CSAPI}/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=${limit}`,
     );
-    const events = raw.chunk ?? [];
+    // Federated servers control these fields: keep only well-formed events, so
+    // one hostile event cannot throw and empty the whole room's thread.
+    const events = (Array.isArray(raw.chunk) ? raw.chunk : []).filter(wellFormed);
     const messages: CommunityMessage[] = events
       .filter(isTextMessage)
-      .map((e) => this.toMessage(e, roomId))
+      .flatMap((e) => {
+        // Backstop: an event that still fails to map is skipped, not fatal.
+        try {
+          return [this.toMessage(e, roomId)];
+        } catch {
+          return [];
+        }
+      })
       // dir=b is already newest-first, but sort defensively for determinism.
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -207,8 +216,11 @@ export class MatrixFeedSource {
   }
 
   private toMessage(e: RawEvent, roomId: string): CommunityMessage {
+    const formatted = e.content?.formatted_body;
     const html =
-      e.content?.format === "org.matrix.custom.html" ? e.content.formatted_body : undefined;
+      e.content?.format === "org.matrix.custom.html" && typeof formatted === "string"
+        ? formatted
+        : undefined;
     const text = html ? htmlToText(html) : (e.content?.body ?? "");
     const msg: CommunityMessage = {
       id: e.event_id,
@@ -224,6 +236,27 @@ export class MatrixFeedSource {
     }
     return msg;
   }
+}
+
+/** The largest `Date` timestamp, in ms (ECMAScript time-value range). */
+const MAX_TIME_VALUE = 8.64e15;
+
+/** A UTF-16 surrogate without its pair: `encodeURIComponent` throws on it. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** An event whose id, sender and timestamp are safe to map. */
+function wellFormed(e: RawEvent): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    typeof e.event_id === "string" &&
+    !LONE_SURROGATE.test(e.event_id) &&
+    typeof e.sender === "string" &&
+    !LONE_SURROGATE.test(e.sender) &&
+    Number.isSafeInteger(e.origin_server_ts) &&
+    (e.origin_server_ts as number) >= 0 &&
+    (e.origin_server_ts as number) <= MAX_TIME_VALUE
+  );
 }
 
 /** A textual room message we surface (m.room.message with a non-empty body). */
