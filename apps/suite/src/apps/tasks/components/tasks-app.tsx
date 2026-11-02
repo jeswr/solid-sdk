@@ -9,6 +9,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -85,6 +86,20 @@ function TasksChrome({ children }: { children: ReactNode }) {
     router.push(`${pathname}?${query}`, { scroll: false });
   });
   const origin = useRef<string | undefined>(undefined);
+  const returnTo = useRef<string | undefined>(undefined);
+  // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
+  // originating row (06-tasks §2.8) rather than the link that opened it, which re-renders.
+  const detailsReturnFocus = useMemo(
+    () => ({
+      get current() {
+        const url = origin.current ?? returnTo.current;
+        return url
+          ? document.querySelector<HTMLElement>(`[data-task-url="${CSS.escape(url)}"]`)
+          : null;
+      },
+    }),
+    [],
+  );
   useEffect(() => {
     if (taskRef !== null && origin.current === undefined) {
       const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
@@ -92,6 +107,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
     }
     if (taskRef === null && origin.current) {
       const url = origin.current;
+      returnTo.current = url;
       origin.current = undefined;
       requestAnimationFrame(() =>
         requestAnimationFrame(() =>
@@ -216,6 +232,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
           ) : undefined
         }
         details={details}
+        detailsReturnFocus={detailsReturnFocus}
         onDetailsClose={closeDetails}
       >
         {quickAdd && inbox && (
