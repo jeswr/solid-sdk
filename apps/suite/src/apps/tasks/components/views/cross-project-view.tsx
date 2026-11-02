@@ -7,6 +7,7 @@ import type { TaskView } from "../../lib/views/types";
 import { openAddTask } from "../../state/add-focus";
 import { TaskListFocus } from "../../state/list-focus";
 import { useTasks } from "../../state/tasks-context";
+import { BulkToolbar } from "../bulk-toolbar";
 import { TaskList } from "../task-list";
 import { ProjectError } from "./project-error";
 /** Shared state handling; smart-view bodies stay in their own replaceable files. */
@@ -63,6 +64,7 @@ export function CrossProjectView({
         {subtitle && <p className="tsk-date-subtitle">{subtitle}</p>}
       </header>
       {toolbar}
+      <BulkToolbar />
       {failures.map(([url, load]) => {
         const title =
           tasks.projects.find((project) => project.url === url)?.tracker.title ?? "Project";

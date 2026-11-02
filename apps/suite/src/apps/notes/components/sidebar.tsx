@@ -12,12 +12,13 @@ import {
   Input,
   toast,
 } from "@jeswr/suite-ui";
-import { Archive, Pencil, StickyNote, Tag, Trash2 } from "lucide-react";
+import { Archive, Import, Pencil, StickyNote, Tag, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { useNotesContext } from "../state/notes-context";
 import { ConfirmDialog } from "./controls";
+import { KeepImportDialog } from "./keep-import";
 
 function LabelRow({ label }: { label: string }) {
   const { store, refresh, labels, persistLabels } = useNotesContext();
@@ -93,6 +94,7 @@ export function NotesSidebar() {
   const { labels, persistLabels } = useNotesContext();
   const pathname = useRoutePathname();
   const [editing, setEditing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
   const destinations = [
     { href: "/notes", label: "Notes", icon: StickyNote },
@@ -137,7 +139,12 @@ export function NotesSidebar() {
             {label}
           </Link>
         ))}
+        <Button variant="ghost" onClick={() => setImporting(true)}>
+          <Import size={18} aria-hidden="true" />
+          Import from Keep
+        </Button>
       </nav>
+      {importing && <KeepImportDialog open close={() => setImporting(false)} />}
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="notes-edit-labels">
           <DialogTitle>Edit labels</DialogTitle>

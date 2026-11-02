@@ -116,7 +116,13 @@ describe("recurring completion action", () => {
       ["PUT", "*", null],
       ["PUT", null, original.etag],
     ]);
-    expect(toast.success).toHaveBeenCalledWith("Completed · next: Tue 3 Nov");
+    expect(toast.success).toHaveBeenCalledWith(
+      "Completed · next: Tue 3 Nov",
+      expect.objectContaining({
+        duration: 8000,
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
   });
 
   it("removes the copy if advancing fails and retries both writes together", async () => {
@@ -158,5 +164,22 @@ describe("recurring completion action", () => {
     expect(await completeTask(view, context(cache))).toEqual({ kind: "close" });
     expect((await store.readTask(original.url)).task.state).toBe("closed");
     expect(await store.listTasks(inbox.tracker.stateStore as string)).toHaveLength(1);
+  });
+});
+
+it("the completion toast's Undo reopens the original and removes endedAt", async () => {
+  const { cache, inbox, store } = await frameCache();
+  const created = await cache.createTask(inbox, { title: "Done once" });
+  const view = cache.getSnapshot().views[0];
+  if (!created || !view) throw new Error("Missing task");
+  await completeTask(view, context(cache));
+  const action = vi.mocked(toast.success).mock.calls.at(-1)?.[1]?.action;
+  if (!action || typeof action !== "object" || !("onClick" in action))
+    throw new Error("Missing Undo action");
+  action.onClick({} as never);
+  await vi.waitFor(async () => {
+    const task = (await store.readTask(created.url)).task;
+    expect(task.state).toBe("open");
+    expect(task.endedAt).toBeUndefined();
   });
 });

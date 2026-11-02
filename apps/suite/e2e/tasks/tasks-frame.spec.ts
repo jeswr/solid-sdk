@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
@@ -117,7 +116,7 @@ test("view links resolve, invalid refs show a not-found state, and rows support 
   await input.press("Enter");
   await expect(input).toHaveValue("");
   await input.press("Escape");
-  const rows = page.locator("li[data-tsk-row]");
+  const rows = page.locator("[data-tsk-row]");
   await expect(rows).toHaveCount(2);
   await rows.first().focus();
   await page.keyboard.press("j");

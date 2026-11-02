@@ -14,14 +14,15 @@ import {
   ErrorState,
   FilterChips,
 } from "@jeswr/suite-ui";
-import { ArrowRight, Disc3, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
+import { ArrowRight, Disc3, FileUp, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
+import { SCROBBLE_AGENTS } from "../lib/data/scrobbles";
 import { formatDuration } from "../lib/library";
 import type { ArtistPeriod } from "../lib/model";
 import { albumHref, artistHref, playlistHref } from "../lib/navigation";
@@ -279,12 +280,33 @@ function DeletePlaylist({ playlist }: { playlist: MusicPlaylist }) {
     </Dialog>
   );
 }
+const SOURCES: Record<string, string> = {
+  "https://open.spotify.com/": "Spotify",
+  [SCROBBLE_AGENTS.lastfm]: "Last.fm",
+  [SCROBBLE_AGENTS.listenbrainz]: "ListenBrainz",
+};
+const playSource = (agent: string | undefined) => (agent && SOURCES[agent]) || "Music";
+const HISTORY_PAGE = 300;
 function HistoryView() {
   const music = useMusic();
   const snapshot = music.snapshot;
+  // Imported history can hold tens of thousands of plays; render them in pages.
+  const [shown, setShown] = useState(HISTORY_PAGE);
+  // "Show more" moves focus to the first newly shown play, since the button can disappear.
+  const focusFrom = useRef<number | null>(null);
+  const timeline = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusFrom.current === null) return;
+    timeline.current
+      ?.querySelector<HTMLElement>(`[data-play-index="${focusFrom.current}"]`)
+      ?.focus();
+    focusFrom.current = null;
+  });
   if (!snapshot) return null;
   const groups = new Map<string, typeof snapshot.history>();
-  for (const play of snapshot.history) {
+  const order = new Map<string, number>();
+  for (const play of snapshot.history.slice(0, shown)) {
+    order.set(play.iri, order.size);
     const key = play.startTime.toISOString().slice(0, 10);
     const group = groups.get(key) ?? [];
     group.push(play);
@@ -294,7 +316,7 @@ function HistoryView() {
   return (
     <>
       {groups.size ? (
-        <div className="mus-timeline">
+        <div className="mus-timeline" ref={timeline}>
           {[...groups].map(([date, plays]) => (
             <section key={date}>
               <h2>
@@ -310,7 +332,7 @@ function HistoryView() {
                 {plays.map((play) => {
                   const track = tracks.get(play.trackIri);
                   return (
-                    <li key={play.iri}>
+                    <li key={play.iri} data-play-index={order.get(play.iri)} tabIndex={-1}>
                       <time className="mus-number" dateTime={play.startTime.toISOString()}>
                         {play.startTime.toLocaleTimeString("en-GB", {
                           hour: "2-digit",
@@ -318,10 +340,17 @@ function HistoryView() {
                           timeZone: "UTC",
                         })}
                       </time>
-                      {track ? <TrackName track={track} /> : <span>Unavailable song</span>}
-                      <Badge variant="secondary">
-                        {play.agent === "https://open.spotify.com/" ? "Spotify" : "Music"}
-                      </Badge>
+                      {track ? (
+                        <TrackName track={track} />
+                      ) : play.title ? (
+                        <span className="mus-track-name">
+                          <strong>{play.title}</strong>
+                          {play.artist && <span className="mus-muted">{play.artist}</span>}
+                        </span>
+                      ) : (
+                        <span>Unavailable song</span>
+                      )}
+                      <Badge variant="secondary">{playSource(play.agent)}</Badge>
                     </li>
                   );
                 })}
@@ -332,8 +361,25 @@ function HistoryView() {
       ) : (
         <Empty
           title="No listening history yet"
-          body="Your listening history will appear here, grouped by day."
+          body="Your listening history will appear here, grouped by day. You can also import it from Last.fm or ListenBrainz."
         />
+      )}
+      {snapshot.history.length > shown && (
+        <div className="mus-load-older">
+          <Button
+            variant="outline"
+            onClick={() => {
+              focusFrom.current = shown;
+              setShown((value) => value + HISTORY_PAGE);
+            }}
+          >
+            Show more plays
+          </Button>
+          <p className="mus-muted">
+            Showing {shown.toLocaleString("en")} of {snapshot.history.length.toLocaleString("en")}{" "}
+            plays
+          </p>
+        </div>
       )}
       {music.olderError && <ErrorState error="unreachable" actions={{ retry: music.older }} />}
       <div className="mus-load-older">
@@ -606,6 +652,14 @@ export function MusicScreen({
           {view === "home" && <p className="mus-muted">Good music. All yours.</p>}
         </div>
         {view === "playlists" && <CreatePlaylist />}
+        {view === "history" && (
+          <Button asChild variant="outline">
+            <Link href="/music/import">
+              <FileUp size={16} aria-hidden="true" />
+              Import history
+            </Link>
+          </Button>
+        )}
         {view === "liked" && (
           <span className="mus-header-icon">
             <Heart size={28} aria-hidden="true" />
