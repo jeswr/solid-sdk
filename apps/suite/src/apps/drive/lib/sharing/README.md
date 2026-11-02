@@ -19,6 +19,8 @@ Both flags may be true for ACP grants composed from own and ancestor policies.
 - Editor: resource Read+Write (an explicit redundant Append is retained).
 - Owner: editor plus WAC Control, or Read+Write on the own ACR itself for ACP.
   This is a permission summary, not proof of legal ownership; existing owner rows are immutable.
+  ACP management modes may combine own policies and ancestor member policies targeting
+  that own ACR. Access to an ancestor's ACR does not confer management of the item.
 
 ACP permissions on the ACR are supported only as part of a named owner's full
 Read+Write access to both the resource and its ACR. Management-only principals,
@@ -54,3 +56,44 @@ The core targets the ACP authorization graph exposed by `@solid/object` 0.6.0.
 Tests use fictional `example.org` identities and typed writers. The app's normal Vitest
 command enforces 100% statements, branches, functions and lines for every `.ts` file here,
 including the barrel and type declarations in the coverage include glob.
+
+<!-- AUTHORED-BY Codex -->
+
+## Drive persistence adapter
+
+`apply.ts` adds `loadSharing(session, resource)` and `applySharing(session, snapshot,
+selection)`. The session supplies authenticated fetch, the selected storage root and
+signed-in WebID. Reads use advertised endpoints and stay inside that storage. WAC
+resolves the nearest ACL (including legacy `defaultForNew`); ACP loads the own ACR
+and ancestors. Unsupported graphs still fail closed through `readSharing`.
+
+Before creating an own WAC ACL, the adapter copies every effective inherited grant,
+including Control, and retains child defaults when the resource is a folder.
+Changes preserve other principals, targets, defaults and metadata. Ancestors are
+never written. Sources and discovery are revalidated, and PUT uses the captured
+strong ETag or `If-None-Match: *`. A 412 produces `SharingConflictError` with a fresh
+snapshot and the message “Sharing changed elsewhere, review and try again”. Existing
+owners and inherited rows remain immutable; a non-owner cannot save changes.
+
+A changed WAC folder grant applies to both the folder and inheriting descendants:
+`accessTo`, `default`, and legacy `defaultForNew` scopes for that folder are edited
+together. If a folder's own permissions differ from its effective defaults, projection
+and diff planning reject the configuration explicitly; the dialog cannot summarize two
+different scopes with one control. Write and redundant Append compare as equivalent.
+ACP folder changes likewise set the selected principal's final permissions in both
+`accessControl` and `memberAccessControl`, including new grants and descendant-only
+modes. Unchanged principals and unrelated targets retain their grants. ACP discovery also checks the
+access document's type Link header and RDF type, including empty ACRs advertised
+through `rel="acl"` at arbitrary URLs. A missing own ACR remains a conditional-create
+destination when inherited policies permit management.
+
+If PUT succeeds but reloading fails, `SharingRefreshError` carries `committed: true`
+and the read failure as its cause. The dialog reports that sharing was saved, clears
+its stale controls, and offers Retry to reload access without repeating the write.
+If the PUT transport fails, the same error carries `committed: false`: the write outcome
+is unknown. The dialog clears stale controls and offers the same read-only Retry, without
+claiming the save succeeded. HTTP failures use sharing-specific instructions.
+All dismissal routes remain guarded while a save is pending so failures stay visible.
+
+The Drive dialog uses Viewer and Editor. Commenter stays disabled until Drive has a
+separate comments resource; it never substitutes Append on the file for commenting.
