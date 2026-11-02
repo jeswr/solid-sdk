@@ -53,14 +53,14 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 |---|---|---|---|
 | P0 mapping, admission, generator, bookmarks pilot | done in standalone; imported here | `packages/federation-codegen`, `packages/model-runtime` | sst-ild.4.1 |
 | G1 to G4 generator readiness | done; imported | same | (in .4.1) |
-| G5 legacy-IRI read aliases: read old and canonical IRIs, canonical first, write canonical only | implemented; landing in PR #213 | derived from SHACL multiple `sh:targetClass` and `sh:alternativePath`; canonical member is the ontology-declared one | sst-ild.4.2 |
-| B bookmarks reference migration | open, needs G5 | `packages/solid-bookmark` flips to generated core plus facade | sst-ild.7.1 |
+| G5 legacy-IRI read aliases: read old and canonical IRIs, canonical first, write canonical only | implemented; merged in #213 | derived from SHACL multiple `sh:targetClass` and `sh:alternativePath`; canonical member is the ontology-declared one | sst-ild.4.2 |
+| B bookmarks reference migration | done (#232) | `packages/solid-bookmark` flips to generated core plus facade | sst-ild.7.1 |
 | Bookmarks sector ratchet: package profile (`book:`, `schema:keywords`, timestamps) versus `sectors/bookmarks` | needs Jesse (normative vocabulary) | `packages/solid-federation-vocab` | sst-ild.7.2 |
-| P1 workspace codegen task plus a second migration (`solid-health-diary`, the closest sector match) | open | turbo `codegen` check, `packages/solid-health-diary` | sst-ild.4.3 |
-| M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | open (unblocked) | `packages/solid-listening` | sst-ild.7.3 |
+| P1 workspace codegen task plus a second migration (`solid-health-diary`, the closest sector match) | guard in #263; health-diary blocked on generator gaps (sst-ild.4.3.1 to .4) | turbo `codegen` check, `packages/solid-health-diary` | sst-ild.4.3 |
+| M media: import `jeswr/solid-listening`, generate `ScrobbleData` composite, flip | imported; already flipped in July, regenerated with the hardened generator | `packages/solid-listening` | sst-ild.7.3 |
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | open | `packages/solid-scheduling` | sst-ild.7.5 |
-| R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | open | `AGENTS.md`, lane briefs | sst-ild.7.6 |
+| R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |

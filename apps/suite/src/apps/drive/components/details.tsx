@@ -53,7 +53,7 @@ export function DetailsPane({
   onClose: () => void;
   items?: readonly DriveItem[];
 }) {
-  const { detailsItems: selectedItems } = useDriveUi();
+  const { detailsItems: selectedItems, openDialog } = useDriveUi();
   const detailsItems = useLiveItems(items ?? selectedItems);
   const accessId = useId();
   const factsId = useId();
@@ -105,8 +105,8 @@ export function DetailsPane({
         <p className="drv-access-line" role="status" aria-live="polite">
           {access}
         </p>
-        <Button variant="outline" size="sm" disabled title="Sharing arrives with the share dialog">
-          Manage access
+        <Button variant="outline" size="sm" onClick={() => openDialog({ kind: "share", item })}>
+          Share
         </Button>
       </section>
       <section aria-labelledby={factsId}>

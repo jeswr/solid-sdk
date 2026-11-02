@@ -6,6 +6,7 @@
  * `TaskStore` with the original `StoredTask`, addressed by `url`.
  */
 
+import { requireDate } from "../model/rdf";
 import type { StoredProject, StoredTask } from "../model/store";
 
 /** P1 is the most urgent; P4 means no `schema:priority` (06-tasks §4.7). */
@@ -50,6 +51,12 @@ export function priorityValue(level: PriorityLevel): "high" | "medium" | "low" |
   return level === 1 ? "high" : level === 2 ? "medium" : level === 3 ? "low" : undefined;
 }
 
+/** Foreign RDF can contain Invalid Date values even when it parses successfully. */
+function viewDate(value: Date | undefined): Date | undefined {
+  if (value !== undefined) requireDate(value);
+  return value;
+}
+
 /** Project a stored task through its project's tracker into the view shape. */
 export function toTaskView(stored: StoredTask, project: StoredProject): TaskView {
   const task = stored.task;
@@ -64,7 +71,7 @@ export function toTaskView(stored: StoredTask, project: StoredProject): TaskView
     title: task.title ?? "",
     description: task.description,
     state: task.state === "closed" ? "closed" : "open",
-    due: task.dueDate,
+    due: viewDate(task.dueDate),
     allDay: task.allDay,
     priority: (task.priority && PRIORITY[task.priority]) || 4,
     position: task.rank,
@@ -74,8 +81,8 @@ export function toTaskView(stored: StoredTask, project: StoredProject): TaskView
     assignee: task.assignee,
     recurring: task.recurrence !== undefined,
     hasReminders: task.reminders.length > 0,
-    created: task.created,
-    completedAt: task.endedAt,
+    created: viewDate(task.created),
+    completedAt: viewDate(task.endedAt),
     derivedFrom: task.clonedFrom,
   };
 }

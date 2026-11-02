@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 import type { Term } from "@rdfjs/types";
 import { DatasetWrapper, NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import {
@@ -85,11 +86,15 @@ function checkContext(context: ResourceAccess): void {
   }
 }
 
-function wac(document: AccessDocument, resource: string): Grant[] {
+function wac(document: AccessDocument, resource: string, members: boolean): Grant[] {
   const result: Grant[] = [];
   for (const auth of new AclResource(document.dataset, DataFactory).authorizations) {
     const scoped = new ScopedAuthorization(auth as Term, document.dataset, DataFactory);
-    const targets = scoped.values(ACL + (document.inherited ? "default" : "accessTo"));
+    const targets = new Set(
+      (document.inherited || members ? ["default", "defaultForNew"] : ["accessTo"]).flatMap(
+        (predicate) => [...scoped.values(ACL + predicate)],
+      ),
+    );
     if (!targets.has(document.governingResource)) continue;
     if (auth.origin.size || scoped.values(`${ACL}agentGroup`).size) {
       throw new SharingError("Conditional or group WAC grants cannot be summarized");
@@ -144,15 +149,20 @@ function intersect(left: Set<string>, right: Set<string>): Set<string> {
   return new Set([...left].filter((value) => right.has(value)));
 }
 
-function acp(document: AccessDocument, resource: string): Grant[] {
+function acp(
+  document: AccessDocument,
+  resource: string,
+  members: boolean,
+  managementResource?: string,
+): Grant[] {
   const result: Grant[] = [];
   for (const acr of new Acrs(document.dataset, DataFactory).resources) {
-    // Include explicit permissions on the ACR itself to recognize policy editors.
+    // Management targets the own ACR even when its modes come from ancestor member policies.
     const targets = acr.resourceAll;
-    const management = !document.inherited && targets.has(document.source);
+    const management = managementResource !== undefined && targets.has(managementResource);
     const applies = targets.has(document.governingResource);
     if (!management && !applies) continue;
-    const controls = document.inherited ? acr.memberAccessControl : acr.accessControl;
+    const controls = document.inherited || members ? acr.memberAccessControl : acr.accessControl;
     for (const control of controls) {
       for (const policy of control.apply) {
         const allowed = modes(policy.allow);
@@ -161,7 +171,7 @@ function acp(document: AccessDocument, resource: string): Grant[] {
         for (const principal of policyAgents(policy)) {
           for (const target of new Set([
             ...(applies ? [resource] : []),
-            ...(management ? [document.source] : []),
+            ...(management ? [managementResource as string] : []),
           ])) {
             result.push({ principal, modes: allowed, document, resource: target });
           }
@@ -173,11 +183,17 @@ function acp(document: AccessDocument, resource: string): Grant[] {
 }
 
 /** Wrappers can reject malformed foreign terms. Surface failure, never a misleading empty summary. */
-export function readGrants(context: ResourceAccess): Grant[] {
+export function readGrants(
+  context: ResourceAccess,
+  scope: "resource" | "members" = "resource",
+): Grant[] {
   checkContext(context);
+  const managementResource = context.documents.find((document) => !document.inherited)?.source;
   try {
     return context.documents.flatMap((document) =>
-      document.model === "wac" ? wac(document, context.resource) : acp(document, context.resource),
+      document.model === "wac"
+        ? wac(document, context.resource, scope === "members")
+        : acp(document, context.resource, scope === "members", managementResource),
     );
   } catch (error) {
     if (error instanceof SharingError) throw error;
