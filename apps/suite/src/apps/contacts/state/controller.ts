@@ -609,8 +609,14 @@ export class ContactsController {
     return this.mutate({
       apply: (data) => ({ ...data, trash: data.trash.filter((entry) => !targets.has(entry.url)) }),
       write: async (data) => {
+        // Try every item, so one conflict doesn't strand the rest; report the first failure.
+        let failure: unknown;
         for (const item of data.trash)
-          if (targets.has(item.url)) await ensureDeleted(this.model, item);
+          if (targets.has(item.url))
+            await ensureDeleted(this.model, item).catch((error: unknown) => {
+              failure ??= error;
+            });
+        if (failure !== undefined) throw failure;
       },
     });
   }

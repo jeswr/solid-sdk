@@ -378,6 +378,18 @@ describe("Contacts app-managed trash", () => {
     expect(errors).toHaveBeenCalled();
     expect(controller.getSnapshot().data.trash.map((item) => item.url)).toEqual([one]);
   });
+  it("keeps emptying the trash past a conflict and reports it", async () => {
+    const { controller, pod, trashFiles } = await harness();
+    const one = await seedTrash(pod, "one.ttl", 1);
+    await seedTrash(pod, "two.ttl", 2);
+    await controller.refresh();
+    // Newest first, so the conflicting item is tried before the other one.
+    pod.fail = (url, method) =>
+      url === one && method === "DELETE" ? new Response(null, { status: 412 }) : undefined;
+    await expect(controller.emptyTrash()).rejects.toMatchObject({ status: 412 });
+    expect(trashFiles()).toEqual([one]);
+    expect(controller.getSnapshot().data.trash.map((item) => item.url)).toEqual([one]);
+  });
   it("resumes an interrupted move after reload without a second copy", async () => {
     const { controller, pod, fresh, storage, trashFiles, deleted } = await harness();
     pod.fail = (url, method) =>

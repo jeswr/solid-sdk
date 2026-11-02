@@ -37,7 +37,16 @@ export function ContactTrash() {
   const mutations = useContactMutations();
   const items = state.data.trash;
   const [confirm, setConfirm] = useState<Confirm>();
-  const [announcement, setAnnouncement] = useState("");
+  // Keyed by a counter so a repeated message (two "Trash emptied.") is a new node and is read.
+  const [announcement, setAnnouncementState] = useState({ text: "", n: 0 });
+  const setAnnouncement = (text: string) =>
+    setAnnouncementState((current) => ({ text, n: current.n + 1 }));
+  // Set while a confirmation closes: an aria-hidden page would swallow it, so it waits.
+  const queued = useRef<string | null>(null);
+  // The dialog keeps its last content while its close animation runs.
+  const shown = useRef<Confirm | undefined>(undefined);
+  if (confirm) shown.current = confirm;
+  const dialog = confirm ?? shown.current;
   const restoreButtons = useRef(new Map<string, HTMLButtonElement>());
   const emptyHeading = useRef<HTMLHeadingElement>(null);
   // After an item leaves the list, focus the item now in its place (or the previous one, or
@@ -71,19 +80,33 @@ export function ContactTrash() {
   const restore = (item: Item, index: number) => {
     pendingFocus.current = index;
     setAnnouncement(`${name(item)} restored to your contacts.`);
-    void mutations.restoreTrash(item.url).catch(() => setAnnouncement(""));
+    void mutations.restoreTrash(item.url).catch(() => {
+      setAnnouncement("");
+      pendingFocus.current = index;
+    });
+  };
+  // On failure the items come back: focus the first of them once they re-render.
+  const failed = (index: number) => () => {
+    queued.current = null;
+    setAnnouncement("");
+    pendingFocus.current = index;
   };
   const deleteForever = (item: Item) => {
-    pendingFocus.current = items.indexOf(item);
+    // By URL: the list may have reloaded since the dialog opened.
+    const index = Math.max(
+      0,
+      latest.current.findIndex((entry) => entry.url === item.url),
+    );
+    pendingFocus.current = index;
     closing.current = true;
-    setAnnouncement(`${name(item)} deleted for ever.`);
-    void mutations.purge([item.url]).catch(() => setAnnouncement(""));
+    queued.current = `${name(item)} deleted for ever.`;
+    void mutations.purge([item.url]).catch(failed(index));
   };
   const empty = () => {
     pendingFocus.current = 0;
     closing.current = true;
-    setAnnouncement("Trash emptied.");
-    void mutations.emptyTrash().catch(() => setAnnouncement(""));
+    queued.current = "Trash emptied.";
+    void mutations.emptyTrash().catch(failed(0));
   };
   const count = items.length;
   return (
@@ -108,7 +131,7 @@ export function ContactTrash() {
         Contacts in the trash are deleted for ever after {TRASH_RETENTION_DAYS} days.
       </p>
       <p className="con-trash-status" role="status" aria-live="polite">
-        {announcement}
+        <span key={announcement.n}>{announcement.text}</span>
       </p>
       {state.status === "ready" && state.data.trashIncomplete && (
         <div className="con-dup-warning" role="alert">
@@ -206,16 +229,18 @@ export function ContactTrash() {
               return;
             }
             closing.current = false;
+            if (queued.current !== null) setAnnouncement(queued.current);
+            queued.current = null;
             applyFocus();
           }}
         >
           <AlertDialogTitle>
-            {confirm?.kind === "one" ? `Delete ${name(confirm.item)} for ever?` : "Empty trash?"}
+            {dialog?.kind === "one" ? `Delete ${name(dialog.item)} for ever?` : "Empty trash?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {confirm?.kind === "one"
+            {dialog?.kind === "one"
               ? "The contact is deleted permanently. This can't be undone."
-              : `${confirm?.count === 1 ? "1 contact is" : `All ${confirm?.count ?? 0} contacts are`} deleted permanently. This can't be undone.`}
+              : `${dialog?.count === 1 ? "1 contact is" : `All ${dialog?.count ?? 0} contacts are`} deleted permanently. This can't be undone.`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -226,7 +251,7 @@ export function ContactTrash() {
                 else empty();
               }}
             >
-              {confirm?.kind === "one" ? "Delete for ever" : "Empty trash"}
+              {dialog?.kind === "one" ? "Delete for ever" : "Empty trash"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
