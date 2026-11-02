@@ -447,7 +447,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       {sendingTasks && (
         <SendToTasksDialog
           items={checklist}
-          noteKey={note.url.slice(note.url.lastIndexOf("/") + 1)}
+          noteKey={note.created ?? note.url}
           session={session}
           close={() => setSendingTasks(false)}
         />

@@ -5,6 +5,7 @@ import type { ChecklistItem } from "./capture";
 export interface TaskSink<Project extends { tracker: { stateStore?: string | undefined } }> {
   bootstrapInbox(): Promise<Project>;
   listTasks(stateStore: string): Promise<readonly { task: { rank?: number | undefined } }[]>;
+  readTask(url: string): Promise<{ task: { title?: string | undefined; state: string } }>;
   createTask(
     project: Project,
     data: { title: string; state: "open"; creator: string; rank: number },
@@ -33,9 +34,9 @@ function fnv(text: string, seed: bigint): string {
 }
 
 /**
- * Task ids are derived from the note and the item (and its repeat count), so sending the
- * same note again, or retrying after a lost response, addresses the same task resources.
- * Creates are conditional, so an item already in Tasks is found, not duplicated.
+ * Task ids are derived from the note's identity and the item (and its repeat count), so
+ * sending the same note again, or retrying after a lost response, addresses the same task
+ * resources. Creates are conditional, so an item already in Tasks is found, not duplicated.
  */
 export function plannedTasks(items: readonly ChecklistItem[], noteKey: string): PlannedTask[] {
   const seen = new Map<string, number>();
@@ -57,14 +58,16 @@ const status = (error: unknown) =>
     : undefined;
 
 /**
- * Append the planned tasks to the Tasks Inbox after its last ranked task. A 412 means the
- * task resource already exists (sent before, or a lost response), so it is counted as
- * already there. Inbox setup errors are thrown for the caller to classify.
+ * Append the planned tasks to the Tasks Inbox after its last ranked task. A 412 means a
+ * task already exists at the planned address: it counts as already there only when it is
+ * still open with the same title; otherwise (completed since, or a different note's item)
+ * the item is created afresh under a new id. Inbox setup errors are thrown for the caller.
  */
 export async function sendToTasks<Project extends { tracker: { stateStore?: string | undefined } }>(
   store: TaskSink<Project>,
   tasks: readonly PlannedTask[],
   creator: string,
+  uuid: () => string = () => crypto.randomUUID(),
 ): Promise<{ created: number; existing: number; failed: PlannedTask[] }> {
   const inbox = await store.bootstrapInbox();
   const stateStore = inbox.tracker.stateStore;
@@ -78,12 +81,25 @@ export async function sendToTasks<Project extends { tracker: { stateStore?: stri
   const failed: PlannedTask[] = [];
   for (const task of tasks) {
     rank += 1;
+    const data = { title: task.title, state: "open" as const, creator, rank };
     try {
-      await store.createTask(inbox, { title: task.title, state: "open", creator, rank }, task.id);
+      await store.createTask(inbox, data, task.id);
       created++;
     } catch (error) {
-      if (status(error) === 412) existing++;
-      else failed.push(task);
+      if (status(error) !== 412) {
+        failed.push(task);
+        continue;
+      }
+      try {
+        const found = await store.readTask(`${stateStore}${task.id}.ttl`);
+        if (found.task.state === "open" && found.task.title === task.title) existing++;
+        else {
+          await store.createTask(inbox, data, uuid());
+          created++;
+        }
+      } catch {
+        failed.push(task);
+      }
     }
   }
   return { created, existing, failed };

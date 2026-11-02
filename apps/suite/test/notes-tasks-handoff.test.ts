@@ -35,8 +35,8 @@ const inbox = {
 };
 type Fn = ReturnType<typeof vi.fn>;
 const sink = (
-  overrides: Partial<Record<"bootstrapInbox" | "listTasks" | "createTask", Fn>> = {},
-): Record<"bootstrapInbox" | "listTasks" | "createTask", Fn> => ({
+  overrides: Partial<Record<"bootstrapInbox" | "listTasks" | "createTask" | "readTask", Fn>> = {},
+): Record<"bootstrapInbox" | "listTasks" | "createTask" | "readTask", Fn> => ({
   bootstrapInbox: vi.fn(async () => inbox),
   listTasks: vi.fn(async () => [
     { task: { rank: 3 } },
@@ -44,6 +44,7 @@ const sink = (
     { task: { rank: Number.NaN } },
   ]),
   createTask: vi.fn(async () => ({})),
+  readTask: vi.fn(async () => ({ task: { title: "Buy milk", state: "open" } })),
   ...overrides,
 });
 
@@ -94,6 +95,7 @@ it("appends open tasks after the Inbox's last rank and counts existing ones", as
       .mockRejectedValueOnce(conflict)
       .mockRejectedValueOnce(new Error("offline"))
       .mockRejectedValueOnce("odd"),
+    readTask: vi.fn(async () => ({ task: { title: "Task 2", state: "open" } })),
   });
   const tasks = [1, 2, 3, 4].map((n) => ({ id: `t${n}`, title: `Task ${n}` }));
   const result = await sendToTasks(store as never, tasks, session.webId);
@@ -142,7 +144,13 @@ it("reports items already in Tasks instead of duplicating them", async () => {
     "Added 1 task to your Tasks Inbox (1 already there)",
   );
   await ui.unmount();
-  const again = sink({ createTask: vi.fn().mockRejectedValue(conflict) });
+  const again = sink({
+    createTask: vi.fn().mockRejectedValue(conflict),
+    readTask: vi
+      .fn()
+      .mockResolvedValueOnce({ task: { title: "Buy milk", state: "open" } })
+      .mockResolvedValueOnce({ task: { title: "Call Sam", state: "open" } }),
+  });
   const second = await dialog(again);
   await click(button("Add 2 tasks"));
   expect(mocks.toast.success.mock.lastCall?.[0]).toBe(
@@ -224,4 +232,44 @@ it("can't be dismissed while adding, and cancels otherwise", async () => {
     ),
   );
   await ui.unmount();
+});
+
+it("checks a task found at the planned address before counting it as already there", async () => {
+  const store = sink({
+    createTask: vi
+      .fn()
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict),
+    readTask: vi
+      .fn()
+      .mockResolvedValueOnce({ task: { title: "Same", state: "open" } })
+      .mockResolvedValueOnce({ task: { title: "Done", state: "closed" } })
+      .mockResolvedValueOnce({ task: { title: "Other", state: "open" } })
+      .mockRejectedValueOnce(new Error("offline")),
+  });
+  const tasks = [
+    { id: "a", title: "Same" },
+    { id: "b", title: "Done" },
+    { id: "c", title: "Renamed" },
+    { id: "d", title: "Unreadable" },
+  ];
+  const result = await sendToTasks(store as never, tasks, session.webId, () => "fresh");
+  expect(store.readTask).toHaveBeenNthCalledWith(1, `${inbox.tracker.stateStore}a.ttl`);
+  // A completed task, or another item's task, never hides this one: it is created afresh.
+  expect(store.createTask.mock.calls[2]?.[2]).toBe("fresh");
+  expect(store.createTask.mock.calls[2]?.[1].title).toBe("Done");
+  expect(result).toEqual({ created: 1, existing: 1, failed: [tasks[2], tasks[3]] });
+});
+
+it("names a fresh task with a random id by default", async () => {
+  const store = sink({
+    createTask: vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue({}),
+    readTask: vi.fn(async () => ({ task: { title: "Old", state: "closed" } })),
+  });
+  await sendToTasks(store as never, [{ id: "a", title: "Old" }], session.webId);
+  expect(store.createTask.mock.calls[1]?.[2]).toMatch(/^[0-9a-f-]{36}$/);
 });

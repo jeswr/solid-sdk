@@ -43,7 +43,7 @@ export function SendToTasksDialog({
   createStore = tasksStore,
 }: {
   items: readonly ChecklistItem[];
-  /** Stable across archive and restore: the note's file name, not its container. */
+  /** The note's identity: its creation time, which survives archive, restore and renames. */
   noteKey: string;
   session: PodSession;
   close: () => void;
