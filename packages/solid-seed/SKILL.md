@@ -29,7 +29,12 @@ Use `create` for fresh e2e pods, `ensure` for long-lived development pods, and `
 deliberate deterministic rewrite. `ensure` leaves an existing primary resource unchanged but
 creates or rewrites its requested ACL so policy converges, but only to narrow access: it never
 grants more than the existing ACL does over content it did not write (use `replace` for that), and
-`replace` never broadens an existing container's ACL, whose `acl:default` reaches other children. It treats expander groups as all-or-none:
+`replace` never broadens an existing container's ACL, whose `acl:default` reaches other children.
+"Narrower" means the existing ACL already holds every desired statement and the authorizations it
+shares carry only grant predicates; a restriction such as `acl:origin` makes it refuse. These ACL
+rewrites are conditional on the checked ETag (`If-Match`), so a server that sends only weak ETags
+answers 412 and the seed fails closed. Grants on a container this run created apply only after a
+Turtle listing (status 200) shows no `ldp:contains` member. `ensure` treats expander groups as all-or-none:
 if every primary resource and requested ACL sidecar exists, primary resources skip while ACLs
 converge; if none exists, the whole group is created; a partial set errors. `create` also preflights
 the group and keeps `If-None-Match: *` on every actual write.

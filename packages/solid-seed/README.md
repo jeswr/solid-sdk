@@ -55,8 +55,9 @@ The main entry contains no Node built-ins.
   always answers 412, so the rewrite fails closed. In a group, every member is checked before any
   ACL is written, so a broadening is refused before any change. For an expander group it first requires every primary resource and requested
   ACL sidecar to exist or none to exist; partial groups fail before writes.
-- `replace` unconditionally rewrites every selected resource and ACL, except that it will not
-  broaden the ACL of an existing container: its `acl:default` reaches children this run did not
+- `replace` rewrites every selected resource and ACL whatever their current content, except that
+  it will not broaden the ACL of an existing container (and rewrites that ACL with `If-Match` on
+  the ETag it checked, so a server with only weak ETags answers 412 and the seed fails closed): its `acl:default` reaches children this run did not
   write. Delete the container first, or grant that access by hand. Grants on a container this run
   created apply only once a Turtle read of it lists no members, since a 201 alone does not prove it
   new.
