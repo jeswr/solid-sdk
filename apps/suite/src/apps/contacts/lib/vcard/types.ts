@@ -35,6 +35,7 @@ export interface VCard {
   emails: VCardField<string>[];
   tels: VCardField<string>[];
   addresses: VCardField<VCardAddress>[];
+  urls?: VCardField<string>[];
   org?: string[];
   title?: string;
   /** Kept verbatim: full/reduced dates, text birthdays and Apple's year-1604 sentinel. */

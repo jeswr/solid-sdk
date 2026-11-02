@@ -215,7 +215,7 @@ export function eventMutations(
   const etags = new Map<string, string>();
   const conflicts = new Map<string, number>();
   let next = 0;
-  return async (write: EventWrite): Promise<void> => {
+  return async (write: EventWrite): Promise<string | null> => {
     const id = ++next;
     pending.set(id, write);
     publish();
@@ -242,6 +242,7 @@ export function eventMutations(
           else etags.delete(write.url);
         }
         confirmed.set(write.url, { ...write, confirmation: { etag: savedEtag } });
+        return savedEtag;
       } catch (error) {
         const conflict = error instanceof CalendarHttpError && error.status === 412;
         if (conflict) {
@@ -262,7 +263,7 @@ export function eventMutations(
     const settled = task.catch(() => undefined);
     tails.set(write.url, settled);
     try {
-      await task;
+      return await task;
     } finally {
       if (tails.get(write.url) === settled) tails.delete(write.url);
     }
