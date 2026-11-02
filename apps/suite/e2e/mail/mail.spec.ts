@@ -106,10 +106,12 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   const compose = page
-    .getByRole("button", { name: "Compose", exact: true })
+    .getByRole("link", { name: "Compose", exact: true })
     .filter({ visible: true });
-  await expect(compose).toBeDisabled();
-  await expect(compose).toHaveAccessibleDescription("Sending needs a connected mail account");
+  await expect(compose).toHaveAttribute("href", "/mail/compose");
+  await expect(compose).toHaveAccessibleDescription(
+    "Drafts save to your pod. Sending needs a connected mail account.",
+  );
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
     // The drawer autofocuses its Close button, whose tooltip takes the first Escape.
     const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
