@@ -59,8 +59,9 @@ export class SharingRefreshError extends Error {
 
 // SDK gap: role writes edit WAC acl:accessTo / ACP acp:accessControl only, so a folder
 // grant would not reach its contents and a removal would leave descendant access behind.
+// Decision: folders stay read-only in the dialog until the SDK can write member access.
 export const FOLDER_READ_ONLY =
-  "Folder sharing can't be changed here yet, because changes would not apply to the items inside. This list shows access to the folder itself.";
+  "Folder sharing is read-only for now. Changes here would not reach the files and folders inside, so this dialog only shows who can access the folder itself. To change access to a file, share that file.";
 const NOT_SAVED = "Permissions were not saved.";
 const LOAD_MESSAGES: Partial<Record<RoleError["code"], string>> = {
   unsupported: "This item's sharing uses access rules that this dialog can't show.",

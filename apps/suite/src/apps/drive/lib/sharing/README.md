@@ -85,8 +85,10 @@ re-read fails. Other `RoleError` codes map to fixed copy in `saveError`/`loadErr
 unclassified failure after the PUT began is `SharingRefreshError` with `committed: false`;
 a failed reload after a successful save is `SharingRefreshError` with `committed: true`.
 
-Folders are read-only in the dialog: the SDK edits `acl:accessTo` / `acp:accessControl`
-only, so a folder grant would not reach its contents and a removal would leave descendant
-access in place. The dialog shows `FOLDER_READ_ONLY` instead of the edit controls.
+Folders are read-only in the dialog for now: the SDK edits `acl:accessTo` /
+`acp:accessControl` only, so a folder grant would not reach its contents and a removal
+would leave descendant access in place. For an owner, every edit control is disabled and
+`FOLDER_READ_ONLY` explains why and points to sharing each file directly; `applySharing`
+refuses folder snapshots without a request.
 The ACP dialect is the SDK default (CSS: managers hold resource Control). Commenter stays
 disabled until Drive has a separate comments resource.

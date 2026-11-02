@@ -223,9 +223,20 @@ it("shows an owner why folder sharing is read-only", async () => {
   load.mockResolvedValue({ ...snapshot(state, false), readOnly: FOLDER_READ_ONLY });
   show();
   await ready();
-  expect(screen.getByText(FOLDER_READ_ONLY)).toBeTruthy();
+  expect(screen.getByText(FOLDER_READ_ONLY).getAttribute("role")).toBe("status");
+  expect(FOLDER_READ_ONLY).toMatch(/read-only for now/);
+  expect(FOLDER_READ_ONLY).toMatch(/would not reach the files and folders inside/);
+  expect(FOLDER_READ_ONLY).toMatch(/share that file/);
   expect(screen.queryByText(/Only an owner with Control/)).toBeNull();
-  expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).disabled).toBe(true);
+  // Every edit control is disabled; people and general access stay visible.
+  for (const label of [`Role for ${ALICE}`, `Role for ${BOB}`, "Role for added people"])
+    expect((screen.getByLabelText(label) as HTMLSelectElement).disabled).toBe(true);
+  for (const name of [`Remove access for ${BOB}`, "Share"])
+    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(true);
+  expect(screen.getByRole("group", { name: "Add people" }).hasAttribute("disabled")).toBe(true);
+  expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(apply).not.toHaveBeenCalled();
 });
 
 it("reloads and displays the exact conflict message without retrying a save", async () => {

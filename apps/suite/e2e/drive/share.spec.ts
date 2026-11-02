@@ -1,11 +1,10 @@
 // AUTHORED-BY Codex
-import { expect, test } from "@playwright/test";
+// AUTHORED-BY Claude Opus 5.5
+import { expect, type Page, test } from "@playwright/test";
 
 const BOB = "https://bob.example.org/profile#me";
 
-test("shares a file as Editor, persists across reload, enables link access and removes the person", async ({
-  page,
-}) => {
+async function resetDemo(page: Page) {
   await page.route("**/__share-test-reset", (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Reset demo</title>" }),
   );
@@ -21,6 +20,12 @@ test("shares a file as Editor, persists across reload, enables link access and r
     });
   });
   await page.unroute("**/__share-test-reset");
+}
+
+test("shares a file as Editor, persists across reload, enables link access and removes the person", async ({
+  page,
+}) => {
+  await resetDemo(page);
   await page.goto("/drive");
   const row = page
     .locator("tr[data-url]")
@@ -56,4 +61,28 @@ test("shares a file as Editor, persists across reload, enables link access and r
   await dialog.getByRole("button", { name: `Remove access for ${BOB}` }).click();
   await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done" }).click();
+});
+
+test("shows folder sharing as read-only with every edit control disabled", async ({ page }) => {
+  await resetDemo(page);
+  await page.goto("/drive");
+  const row = page.locator("tr[data-url]").filter({ has: page.getByText("Work", { exact: true }) });
+  await row.focus();
+  await row.press("Space");
+  await page
+    .getByRole("toolbar", { name: "Selection actions" })
+    .getByRole("button", { name: "Share", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Share “Work”" });
+  await expect(
+    dialog.getByRole("status").filter({ hasText: "Folder sharing is read-only for now" }),
+  ).toContainText("To change access to a file, share that file.");
+  await expect(dialog.getByRole("region", { name: "People with access" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Share", exact: true })).toBeDisabled();
+  await expect(dialog.getByLabel("Role for added people")).toBeDisabled();
+  await expect(dialog.getByLabel("Who can access")).toBeDisabled();
+  for (const select of await dialog.getByLabel(/^Role for https:/).all())
+    await expect(select).toBeDisabled();
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toHaveCount(0);
 });
