@@ -66,6 +66,8 @@ beforeEach(() => {
         sizes.push(callback);
       }
       observe() {}
+      // A focused icon button's tooltip measures its arrow and stops when it closes.
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -539,10 +541,13 @@ it("edits font family and point size with typing, bounds, steppers and reset", a
     editor.commands.setFontSize(value);
     view.rerender(h("div", null, h(FontSelect, { editor }), h(FontSizeControl, { editor })));
     expect(
-      (value === "6pt" ? button("Decrease font size") : button("Increase font size")).hasAttribute(
-        "disabled",
+      (value === "6pt" ? button("Decrease font size") : button("Increase font size")).getAttribute(
+        "aria-disabled",
       ),
-    ).toBe(true);
+    ).toBe("true");
+    // A size button at its bound stays focusable for its tooltip but does nothing.
+    fireEvent.click(value === "6pt" ? button("Decrease font size") : button("Increase font size"));
+    expect(editor.getAttributes("textStyle").fontSize).toBe(value);
   }
 });
 

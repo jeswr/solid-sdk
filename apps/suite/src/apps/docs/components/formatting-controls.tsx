@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 "use client";
-import { Button, Popover, PopoverAnchor, PopoverContent } from "@jeswr/suite-ui";
+import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -45,16 +45,16 @@ export function FontSizeControl({ editor }: { editor: Editor }) {
   };
   return (
     <fieldset className="docs-font-size" aria-label="Font size">
-      <Button
+      <IconButton
         variant="ghost"
         size="icon-sm"
-        aria-label="Decrease font size"
+        label="Decrease font size"
         disabled={current <= 6}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => apply(String(Math.max(6, current - 1)))}
       >
         <Minus aria-hidden="true" size={14} />
-      </Button>
+      </IconButton>
       <input
         aria-label="Font size in points"
         type="number"
@@ -81,16 +81,16 @@ export function FontSizeControl({ editor }: { editor: Editor }) {
           }
         }}
       />
-      <Button
+      <IconButton
         variant="ghost"
         size="icon-sm"
-        aria-label="Increase font size"
+        label="Increase font size"
         disabled={current >= 96}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => apply(String(Math.min(96, current + 1)))}
       >
         <Plus aria-hidden="true" size={14} />
-      </Button>
+      </IconButton>
     </fieldset>
   );
 }

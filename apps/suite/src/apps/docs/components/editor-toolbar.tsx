@@ -11,6 +11,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
+  IconButton,
   Kbd,
   Tooltip,
   TooltipContent,
@@ -196,9 +197,9 @@ export function EditorToolbar({
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label={label}>
+          <IconButton variant="ghost" size="icon-sm" label={label}>
             <Icon aria-hidden="true" size={18} />
-          </Button>
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="docs-editor-menu" onCloseAutoFocus={afterClose}>
           {items}
@@ -228,9 +229,9 @@ export function EditorToolbar({
     label: "Print",
     width: 34,
     control: (
-      <Button variant="ghost" size="icon-sm" aria-label="Print" onClick={print}>
+      <IconButton variant="ghost" size="icon-sm" label="Print" onClick={print}>
         <Printer aria-hidden="true" size={18} />
-      </Button>
+      </IconButton>
     ),
     overflow: <DropdownMenuItem onSelect={choose(print)}>Print</DropdownMenuItem>,
   });
@@ -344,16 +345,16 @@ export function EditorToolbar({
       label,
       width: 34,
       control: (
-        <Button
+        <IconButton
           variant="ghost"
           size="icon-sm"
-          aria-label={label}
+          label={label}
           aria-haspopup="dialog"
           aria-expanded={colour === kind}
           onClick={() => setColour(kind)}
         >
           <Icon aria-hidden="true" size={18} />
-        </Button>
+        </IconButton>
       ),
       overflow: (
         <DropdownMenuItem onSelect={choose(() => setColour(kind))}>{label}</DropdownMenuItem>
@@ -401,15 +402,15 @@ export function EditorToolbar({
       label,
       width: 34,
       control: (
-        <Button
+        <IconButton
           variant="ghost"
           size="icon-sm"
-          aria-label={label}
+          label={label}
           onMouseDown={(event) => event.preventDefault()}
           onClick={run}
         >
           <Icon aria-hidden="true" size={18} />
-        </Button>
+        </IconButton>
       ),
       overflow: <DropdownMenuItem onSelect={choose(run)}>{label}</DropdownMenuItem>,
     });
@@ -468,16 +469,16 @@ export function EditorToolbar({
         }
       }}
     >
-      <Button
+      <IconButton
         variant="ghost"
         size="icon-sm"
-        aria-label={outline ? "Hide outline" : "Show outline"}
+        label={outline ? "Hide outline" : "Show outline"}
         aria-pressed={outline}
         data-docs-outline-toggle=""
         onClick={toggleOutline}
       >
         <PanelLeft aria-hidden="true" size={18} />
-      </Button>
+      </IconButton>
       {visible.map((group) => (
         <div className="docs-toolbar-control" key={group.label}>
           {group.control}
@@ -485,9 +486,9 @@ export function EditorToolbar({
       ))}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="More formatting">
+          <IconButton variant="ghost" size="icon-sm" label="More formatting">
             <MoreHorizontal aria-hidden="true" />
-          </Button>
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
