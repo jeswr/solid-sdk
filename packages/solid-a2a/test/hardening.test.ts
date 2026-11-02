@@ -384,6 +384,16 @@ ${body}`,
       `<urn:s> <urn:ex:p> "${"v".repeat(10_000)}" .`,
     ],
     [
+      "a long language tag on a short literal",
+      "<urn:S> sh:targetObjectsOf <urn:ex:p> ; sh:nodeKind sh:Literal .",
+      `<urn:s> <urn:ex:p> "v"@${"abcdefgh-".repeat(5)}x .`,
+    ],
+    [
+      "a long datatype IRI on a short literal",
+      "<urn:S> sh:targetObjectsOf <urn:ex:p> ; sh:nodeKind sh:Literal .",
+      `<urn:s> <urn:ex:p> "v"^^<urn:dt:${"d".repeat(5_000)}> .`,
+    ],
+    [
       "a long sh:message (copied into every result)",
       `<urn:S> sh:targetSubjectsOf <urn:ex:p> ; sh:nodeKind sh:Literal ; sh:message "${"x".repeat(2_000)}" .`,
       "<urn:s> <urn:ex:p> <urn:o> .",
@@ -393,7 +403,9 @@ ${body}`,
       const report = await quick(body, await parseRdf(data, "text/turtle"));
       expect(report.conforms).toBe(false);
       expect(report.results).toHaveLength(1);
-      expect(report.results[0]?.message).toMatch(/characters are not evaluated/);
+      expect(report.results[0]?.message).toMatch(
+        /(characters|tags over \d+ characters) are not evaluated/,
+      );
     });
   }
 

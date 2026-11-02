@@ -79,7 +79,8 @@ const protocol = await buildProtocolDocument({
   validator, so the validator also runs under a hard budget of 20,000 graph operations (each
   match, quad read and report write, metered through its datasets): a validation that spends it
   stops and is refused, whatever drove the cost. Work the validator does on term text, outside
-  any graph operation, is bounded by refusing terms over 4096 characters, shape labels
+  any graph operation, is bounded by refusing terms over 4096 characters (a literal counted
+  with its language tag and datatype IRI), language tags over 35, shape labels
   (`sh:message`, `sh:name`, `sh:description`) over 1024, and typed literals other than strings
   over 128 (their lexical patterns backtrack); `sh:lessThan`-style pairwise comparisons count
   as steps.

@@ -195,6 +195,8 @@ const UNBOUNDED = "are not evaluated (unbounded cost)";
 const MAX_TERM_LENGTH = 4_096;
 const MAX_LABEL_LENGTH = 1_024;
 const MAX_TYPED_LITERAL_LENGTH = 128;
+/** BCP 47 tags in practice; a long tag is copied with its literal everywhere. */
+const MAX_LANGUAGE_TAG_LENGTH = 35;
 const LABELS = new Set(["message", "name", "description"].map((p) => SH_NS + p));
 /** Datatypes whose lexical form is a plain string, checked without a pattern. */
 const PLAIN_DATATYPES = new Set(["http://www.w3.org/2001/XMLSchema#string", `${RDF_NS}langString`]);
@@ -202,9 +204,16 @@ const PLAIN_DATATYPES = new Set(["http://www.w3.org/2001/XMLSchema#string", `${R
 /** Why a term is too long to evaluate, or undefined. */
 function oversizedTerm(term: Term, predicate?: string): string | undefined {
   if (term.termType === "Quad") return "Quoted triples";
-  const length = term.value.length;
+  // A literal's serialised id carries its language tag and datatype IRI too.
+  const length =
+    term.termType === "Literal"
+      ? term.value.length + term.language.length + term.datatype.value.length
+      : term.value.length;
   if (length > MAX_TERM_LENGTH) return `Terms over ${MAX_TERM_LENGTH} characters`;
   if (term.termType !== "Literal") return undefined;
+  if (term.language.length > MAX_LANGUAGE_TAG_LENGTH) {
+    return `Language tags over ${MAX_LANGUAGE_TAG_LENGTH} characters`;
+  }
   if (predicate !== undefined && LABELS.has(predicate) && length > MAX_LABEL_LENGTH) {
     return `Shape labels over ${MAX_LABEL_LENGTH} characters`;
   }
