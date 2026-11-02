@@ -57,6 +57,8 @@ async function verify(overrides: {
   actor?: string | undefined;
   actorChain?: PresentedChain | undefined;
   maxChainLength?: number;
+  /** Accept hops presented without signed content (Phase-D semantics cases). */
+  allowProvisionalPolicy?: boolean;
   /** `undefined` (with the key present) = NO status resolver — the fail-closed case. */
   resolveStatus?: ReturnType<typeof makeStatusResolver> | undefined;
 }): Promise<VerifyAuthorityResult> {
@@ -100,6 +102,9 @@ async function verify(overrides: {
       statusUnreachable: overrides.statusUnreachable,
     }),
     ...(overrides.maxChainLength !== undefined && { maxChainLength: overrides.maxChainLength }),
+    ...(overrides.allowProvisionalPolicy !== undefined && {
+      allowProvisionalPolicy: overrides.allowProvisionalPolicy,
+    }),
     actor: "actor" in overrides ? overrides.actor : CAST.agentR,
     ...(overrides.actorChain !== undefined
       ? { actorChain: overrides.actorChain }
@@ -221,7 +226,7 @@ describe("the four-phase chain verifier — golden-master decision matrix", () =
     expect(r.code).toBe("POLICY_INTEGRITY");
   });
 
-  it("CONTENT NOT PRESENTED (G1): a chain without raw policy content still permits, but stays policyIntegrityProvisional", async () => {
+  it("CONTENT NOT PRESENTED (G1): a chain without raw policy content denies by default", async () => {
     const r = await verify({
       primary: {
         credentials: [base.credentials.mandate, base.credentials.agreement],
@@ -231,6 +236,23 @@ describe("the four-phase chain verifier — golden-master decision matrix", () =
         credentials: [base.credentials.instituteAgent],
         policies: [base.instituteInternal],
       },
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("B");
+    expect(r.code).toBe("POLICY_INTEGRITY");
+  });
+
+  it("CONTENT NOT PRESENTED, opted in: permits, but stays policyIntegrityProvisional", async () => {
+    const r = await verify({
+      primary: {
+        credentials: [base.credentials.mandate, base.credentials.agreement],
+        policies: [base.mandate, base.agreement],
+      },
+      actorChain: {
+        credentials: [base.credentials.instituteAgent],
+        policies: [base.instituteInternal],
+      },
+      allowProvisionalPolicy: true,
     });
     expect(r.authorized).toBe(true);
     expect(r.policyIntegrityProvisional).toBe(true);
@@ -249,9 +271,22 @@ describe("the four-phase chain verifier — golden-master decision matrix", () =
         credentials: [base.credentials.instituteAgent],
         policies: [base.instituteInternal],
       },
+      allowProvisionalPolicy: true,
     });
     expect(r.authorized).toBe(true);
     expect(r.policyIntegrityProvisional).toBe(true);
+  });
+
+  it("PROVISIONAL ACTOR CHAIN without opt-in: the identity composition denies", async () => {
+    const r = await verify({
+      actorChain: {
+        credentials: [base.credentials.instituteAgent],
+        policies: [base.instituteInternal],
+      },
+    });
+    expect(r.authorized).toBe(false);
+    expect(r.phase).toBe("composition");
+    expect(r.actorResult?.code).toBe("POLICY_INTEGRITY");
   });
 
   it("KEY UNRESOLVABLE: a credential signed with a key its issuer never published → Phase A deny", async () => {
@@ -413,6 +448,8 @@ describe("the four-phase chain verifier — golden-master decision matrix", () =
         credentials: [base.credentials.mandate, base.credentials.agreement],
         policies: [base.mandate, pastAgreement],
       },
+      // Exercises the evaluator on an unsigned object, so opt in explicitly.
+      allowProvisionalPolicy: true,
     });
     expect(r.phase).toBe("D");
     expect(r.code).toBe("POLICY_DENIED");
@@ -439,15 +476,17 @@ describe("the four-phase chain verifier — golden-master decision matrix", () =
         policies: [base.mandate, launderAgreement],
       },
       request: { action: "distribute", target: CAST.records },
+      // Exercises the evaluator on an unsigned object, so opt in explicitly.
+      allowProvisionalPolicy: true,
     });
     expect(r.phase).toBe("D");
     expect(r.code).toBe("POLICY_DENIED");
   });
 
-  it("OVER LENGTH: chain longer than maxChainLength → Phase D POLICY_DENIED", async () => {
+  it("OVER LENGTH: chain longer than maxChainLength → refused at assembly, before any key resolution", async () => {
     const r = await verify({ maxChainLength: 1 });
-    expect(r.phase).toBe("D");
-    expect(r.code).toBe("POLICY_DENIED");
+    expect(r.phase).toBe("assembly");
+    expect(r.code).toBe("CHAIN_MALFORMED");
   });
 
   it("IDENTITY COMPOSITION (missing): actor ≠ leaf assignee, no second chain → denied", async () => {
