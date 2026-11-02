@@ -13,54 +13,42 @@ root from the session → mount the `FileBrowser` → let it read the pod. All t
 data logic (LDP container reads, RDF, WAC handling) lives in the library; the
 host only wires **auth + a pod root**.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
 ## How it works
 
 ```
 index.html → src/main.tsx
   └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
+            ├─ logged out → <LoginScreen>          (shared account and provider card)
             └─ logged in  → <FileBrowser           (@jeswr/pod-drive/ui)
-                              rootUrl={podRoot} />
+                              rootUrl={podRoot} fetch={auth.fetch} />
 ```
 
 ### Auth (standalone, no server)
 
-`SessionProvider` is the only place auth is wired, and it is **copied verbatim**
-from `pod-docs/web/src/auth/` — the security-hardened seam that went through two
-roborev rounds (cross-user-leak fix, StrictMode auth-flow holder,
-generation-fenced `reset()`, per-probe login proof). On mount it:
+Drive uses one page-lifetime `@jeswr/pod-auth` core and the shared
+`@jeswr/suite-ui/sign-in` card. Recent accounts appear first; users can also enter
+an address, choose the home provider or another listed provider, or enter a custom
+provider address. Addresses are resolved through a pristine public fetch. A WebID
+with several providers asks the user to choose a provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR / prerender
-   time — verified by the build: `customElements.define` is `0` in the main
-   bundle and lives only in the lazily-imported chunk);
-3. builds a `WebIdDPoPTokenProvider` (ported from `create-solid-app`) bound to
-   this origin's **static Client Identifier Document** at
-   `${origin}/clientid.jsonld`, so the consent screen shows "Pod Drive" instead
-   of a throwaway dynamic registration;
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT). Forgetting it is the #1
-   reactive-auth bug.
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+`FileBrowser`; global fetch stays public. The default automatic credential boundary
+uses only the authenticated WebID's advertised storage roots. Public profile reads
+for the display name, avatar and drive root use the pristine public transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-drive` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<FileBrowser>` is mounted with **no `fetch` prop**: its `fetch?:`
-seam falls back to the now-authenticated ambient global.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` is enabled only when the app's hostname is localhost,
+127.0.0.0/8 or ::1. The popup supports cancellation; errors use plain messages
+without raw protocol details.
 
-Login is WebID-first: the user enters their WebID, the issuer is resolved from
-the WebID profile (never a hard-coded IdP), the popup mints a DPoP token, and a
-probe of the (private) storage root proves the session
-(`assessLoginProbe` — per-attempt token-attach delta, not a sticky flag).
-`allowInsecureLoopback` is enabled **only** for a `localhost` origin (dev against
-a local CSS over HTTP); a deployed HTTPS origin stays strict.
-
-> Tokens are in-memory only — closing the tab logs out. Durable session restore
-> (DPoP refresh token in IndexedDB, proactive refresh) is the Pod-Manager
-> enhancement and a documented follow-up for this shell; `scope` already requests
-> `offline_access` so it's a provider-level add, not a redesign.
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the drive root is derived from the session
 
@@ -93,8 +81,8 @@ files from a single `APP_ORIGIN` env, written into `public/` before every build:
   message at **our origin only** (`postMessage(href, "${origin}")`), never `"*"`,
   because the URL carries the authorization code.
 
-Both are git-ignored (a per-origin artifact; the script + `APP_ORIGIN` are the
-source of truth) and copied by Vite into `dist/` at the root.
+Both are generated per-origin artifacts; the script and `APP_ORIGIN` are the source of truth,
+and the checked-in files provide the local development defaults. They are copied by Vite into `dist/` at the root.
 
 > `ignore-scripts=true` (supply-chain hardening) means **npm lifecycle hooks do
 > NOT run** — so the generator is chained INLINE in the `build`/`dev` scripts
@@ -125,7 +113,7 @@ directly** — no pre-built `dist/ui` is required.
 
 Gates: `npm run lint` (Biome), `npm run typecheck` (tsc — the library source is
 NOT re-typechecked here; `src/pod-drive-ui.d.ts` declares the consumed surface),
-`npm test` (the verbatim auth-seam unit tests), `npm run build`.
+`npm test` (shared auth and UI integration tests), `npm run build`.
 
 ## Env
 
@@ -133,4 +121,6 @@ NOT re-typechecked here; `src/pod-drive-ui.d.ts` declares the consumed surface),
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | Sign-in card | `https://idp.solid-test.jeswr.org` | Home provider, shown first. |
+| `VITE_HOME_IDP_NAME` | Sign-in card | Provider host | Home provider display name. |
+| `VITE_KNOWN_PROVIDERS` | Sign-in card | Shared provider directory | Comma-separated HTTPS provider URLs. |

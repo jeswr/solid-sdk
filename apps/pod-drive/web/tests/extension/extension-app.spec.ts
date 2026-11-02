@@ -131,7 +131,9 @@ test.describe("extension ↔ Pod Drive integration", () => {
       .toEqual({ hasSolid: true, marker: "1" });
 
     // The logged-out app shows its login screen (no gesture yet) and NO error output.
-    await expect(page.locator("#webid-input")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("textbox", { name: "WebID", exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
     expect(consoleErrors, `unexpected console/page errors: ${consoleErrors.join(" | ")}`).toEqual(
       [],
     );
@@ -164,7 +166,7 @@ test.describe("extension ↔ Pod Drive integration", () => {
   // which does NOT open inside the persistent browser context that loading an MV3 extension
   // REQUIRES — a Playwright/Chromium limitation, NOT the extension (isolation-verified: the same
   // login popup fails to open in a persistent context even with NO extension loaded, while it
-  // completes in the normal-context suite tests/e2e/auth-401-budget.spec.ts). The full
+  // completes in the normal-context suite tests/e2e/sign-in.spec.ts). The full
   // "app consumes the extension's identity so it needs no popup of its own" path is the bead's
   // follow-up ("apps skip own login when extension present"); once wired, this test can drive
   // login through the extension popup (which DOES work in a persistent context) instead.
@@ -183,16 +185,16 @@ test.describe("extension ↔ Pod Drive integration", () => {
 });
 
 /** Drive the app's WebID-first OIDC popup login against the local CSS. Returns true once the
- * file browser is on screen. Adapted from tests/e2e/auth-401-budget.spec.ts (same known
+ * file browser is on screen. Adapted from tests/e2e/sign-in.spec.ts (same known
  * headless-popup flakiness handling). */
 async function login(page: Page, seeded: Seeded): Promise<boolean> {
-  const webIdInput = page.locator("#webid-input");
+  const webIdInput = page.getByRole("textbox", { name: "WebID", exact: true });
   await expect(webIdInput).toBeVisible();
   await webIdInput.fill(seeded.webId);
 
   const popups: Page[] = [];
   page.context().on("page", (p) => popups.push(p));
-  await page.getByRole("button", { name: /log in/i }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
 
   const openWindowBtn = page.getByRole("button", { name: /open new window/i });
   let loginPopup: Page | undefined;

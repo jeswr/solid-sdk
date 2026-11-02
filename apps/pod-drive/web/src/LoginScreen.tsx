@@ -1,65 +1,71 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-//
-// LoginScreen — the logged-out entry. WebID-first (the reactive-auth UX spec):
-// ONE input, the user's WebID URL. No identity-provider dropdown — the issuer is
-// resolved from the WebID profile. Errors bubble up from the session layer.
-import { type FormEvent, useState } from "react";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import {
+  classifyLoginInput,
+  KNOWN_PROVIDERS,
+  providersFromConfig,
+} from "@jeswr/pod-auth/directory";
+import { sameIssuer } from "@jeswr/reactive-authentication";
+import { SignInCard, type SignInProvider } from "@jeswr/suite-ui/sign-in";
+import "@jeswr/suite-ui/styles/sign-in.css";
+import { allowInsecureLoopback } from "./auth/pod-auth";
 import { useSession } from "./auth/SessionProvider";
 
-const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+export function signInProviders(): SignInProvider[] {
+  const providers = providersFromConfig(import.meta.env.VITE_KNOWN_PROVIDERS, KNOWN_PROVIDERS);
+  const home = import.meta.env.VITE_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+  if (classifyLoginInput(home, { allowInsecureLoopback: allowInsecureLoopback() }) === "invalid")
+    return providers;
+  const issuer = new URL(home.trim()).href;
+  const known = KNOWN_PROVIDERS.find((provider) => sameIssuer(provider.issuer, issuer));
+  return [
+    {
+      ...known,
+      id: "home",
+      issuer,
+      name: import.meta.env.VITE_HOME_IDP_NAME?.trim() || new URL(issuer).host,
+    },
+    ...providers.filter((provider) => !sameIssuer(provider.issuer, issuer)),
+  ];
+}
 
 export function LoginScreen() {
-  const { login, loggingIn, error, ready } = useSession();
-  const [webIdInput, setWebIdInput] = useState("");
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const id = webIdInput.trim();
-    if (!id) return;
-    try {
-      await login(id);
-    } catch {
-      // The error is already surfaced via the session context's `error`.
-    }
-  }
-
+  const {
+    loginWithAddress,
+    loginWithIssuer,
+    loginWithAccount,
+    pending,
+    error,
+    ready,
+    recentAccounts,
+    recentProviders,
+  } = useSession();
   return (
     <main className="login-screen">
-      <section className="login-card" aria-labelledby="login-title">
-        <h1 id="login-title">Pod Drive</h1>
-        <p className="login-sub">
-          Browse the files and folders in your Solid pod. Enter your WebID — the URL that identifies
-          you across Solid.
-        </p>
-        <form className="login-form" onSubmit={submit}>
-          <label htmlFor="webid-input">WebID</label>
-          <input
-            id="webid-input"
-            type="url"
-            inputMode="url"
-            autoComplete="url"
-            placeholder="https://you.solid-test.jeswr.org/profile/card#me"
-            value={webIdInput}
-            onChange={(ev) => setWebIdInput(ev.target.value)}
-            disabled={loggingIn}
-          />
-          <button type="submit" disabled={loggingIn || !ready || !webIdInput.trim()}>
-            {loggingIn ? "Logging in…" : ready ? "Log in" : "Loading…"}
-          </button>
-        </form>
-        {error ? (
-          <p className="login-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <p className="login-hint">
-          New to Solid? Get a pod and WebID from{" "}
-          <a href={HOME_IDP} target="_blank" rel="noopener noreferrer">
-            {new URL(HOME_IDP).host}
-          </a>
-          .
-        </p>
-      </section>
+      <fieldset className="login-sign-in" disabled={!ready}>
+        <legend className="sr-only">Drive sign-in</legend>
+        <SignInCard
+          accountsTitle="Choose an account"
+          subtitle="to continue to Drive"
+          title="Sign in"
+          providers={signInProviders()}
+          recentAccounts={recentAccounts}
+          recentProviders={recentProviders}
+          pending={pending}
+          error={error}
+          onWebId={(input) => {
+            void loginWithAddress(input);
+          }}
+          onCustomProvider={(input) => {
+            void loginWithAddress(input, "custom");
+          }}
+          onProvider={(provider) => {
+            void loginWithIssuer(provider.issuer);
+          }}
+          onAccount={(account) => {
+            void loginWithAccount(account.webId);
+          }}
+        />
+      </fieldset>
     </main>
   );
 }
