@@ -206,6 +206,68 @@ describe("keyboard reorder and multi-select", () => {
     expect(status(host)).toBe("Moved 'Third' to No section, position 2.");
   });
 
+  it("never moves a task twice when Retry follows a Move up with an unknown outcome", async () => {
+    const { pod, failures } = await project(["First", "Second", "Third"]);
+    const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));
+    const third = viewOf("Third").url;
+    // A proxy answers 502 although the pod applied the PUT, and the read-back fails once.
+    let readBack = false;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === third) {
+        pod.seed(request.url, request.body);
+        readBack = true;
+        return new Response(null, { status: 502 });
+      }
+      if (readBack && request.method === "GET" && request.url === third) {
+        readBack = false;
+        throw new TypeError("Read unavailable");
+      }
+    };
+    const row3 = row(host, "Third");
+    await act(() => row3.focus());
+    await press(row3, { key: "ArrowUp", altKey: true });
+    await settle();
+    pod.intercept = undefined;
+    expect(failures).toHaveBeenCalledOnce();
+    expect(status(host)).toBe("Couldn't move 'Third'.");
+    // The failure refresh shows the move already landed; Retry must not move it again.
+    expect([...host.querySelectorAll(".tsk-task-title")].map((title) => title.textContent)).toEqual(
+      ["First", "Third", "Second"],
+    );
+    pod.requests.length = 0;
+    const [, retry] = failures.mock.calls[0] as [unknown, () => void];
+    await act(async () => retry());
+    await settle();
+    expect(pod.mutations()).toEqual([]);
+    expect([...host.querySelectorAll(".tsk-task-title")].map((title) => title.textContent)).toEqual(
+      ["First", "Third", "Second"],
+    );
+    expect(status(host)).toBe("Moved 'Third' to No section, position 2.");
+  });
+
+  it("offers no reordering in a sorted list: no Move up/down, Alt+↓ writes nothing", async () => {
+    localStorage.setItem(PREFS, JSON.stringify({ sort: { "/tasks/p/board": "name" } }));
+    const { pod } = await project(["Second", "First"], ["Doing"]);
+    const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));
+    expect([...host.querySelectorAll(".tsk-task-title")].map((title) => title.textContent)).toEqual(
+      ["First", "Second"],
+    );
+    const first = row(host, "First");
+    await act(() => first.focus());
+    pod.requests.length = 0;
+    await press(first, { key: "ArrowDown", altKey: true });
+    await settle();
+    expect(pod.mutations()).toEqual([]);
+    await key(first, "F10", true);
+    const items = [...document.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    );
+    expect(items).not.toContain("Move up");
+    expect(items).not.toContain("Move down");
+    expect(items).toContain("Move to section…");
+    expect(items).toContain("Move to project…");
+  });
+
   it("extends with Shift+↓, selects all with Ctrl+A and sets priority for the whole selection", async () => {
     const { store } = await project(["a", "b", "c", "d"]);
     const { host } = await mount(h("main", null, h(ProjectView, { inbox: true })));

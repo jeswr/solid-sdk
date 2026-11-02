@@ -2,6 +2,7 @@
 "use client";
 import {
   Button,
+  IconButton,
   PeoplePicker,
   Popover,
   PopoverContent,
@@ -499,10 +500,9 @@ export function TaskProperties({
             {reminders.map((reminder, index) => (
               <li key={reminder.id ?? index}>
                 <span>{reminderName(reminder)}</span>
-                <Button
+                <IconButton
                   variant="ghost"
-                  size="icon"
-                  aria-label={`Remove reminder ${reminderName(reminder)}`}
+                  label={`Remove reminder ${reminderName(reminder)}`}
                   onClick={() => {
                     const id = reminder.id;
                     void tasks.updateTask(stored, (task) => {
@@ -511,7 +511,7 @@ export function TaskProperties({
                   }}
                 >
                   <X size={14} aria-hidden="true" />
-                </Button>
+                </IconButton>
               </li>
             ))}
           </ul>

@@ -140,7 +140,11 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   canonical-first projection. A failed child rejects a required incoming link or drops an
   optional root link's subtree. Root field parsing retains its drop-invalid-optional policy.
   Explicit `hasClass` still applies. `classOnly: true` records `sh:class` without `sh:node`;
-  require `hasClass` to equal the child's sole canonical target class exactly.
+  require `hasClass` to equal the child's sole canonical target class exactly. The strict
+  every-present-value rule applies to `sh:node` children only. A class-only child is its own
+  class-targeted focus node, so it parses with the root policy: its optional failures
+  (ambiguous optional links, malformed optional values) drop only that field, and only its
+  required fail-closed constraints reject it.
   Reject a link whose `hasClass` names a type alias owned by ANY entity or node in the
   manifest, including optional links: type migration can delete that assertion.
 - Domain policy the schema cannot express (network fetches, SSRF policy, reconciliation)

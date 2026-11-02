@@ -48,6 +48,8 @@ export default function ComponentsPage() {
         <a href="/dev/components/consent-sheet">ConsentSheet</a>
         <a href="/dev/components/permission-row">PermissionRow</a>
         <a href="/dev/components/sign-in">SignInCard</a>
+        <a href="/dev/components/notifications-tray">NotificationsTray</a>
+        <a href="/dev/components/share-dialog">ShareDialog and request access</a>
       </nav>
     </main>
   );

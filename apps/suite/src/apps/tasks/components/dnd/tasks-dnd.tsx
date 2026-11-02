@@ -22,6 +22,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { getEventCoordinates, isKeyboardEvent } from "@dnd-kit/utilities";
 import { toast } from "@jeswr/suite-ui";
 import { GripVertical } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   createContext,
   type PointerEvent,
@@ -34,16 +35,18 @@ import {
 import {
   cancelMessage,
   dropMessage,
+  failedMessage,
+  movingMessage,
   overMessage,
   pickupMessage,
   projectNames,
   sectionToast,
 } from "../../lib/dnd/announce";
 import { dropPriority, placementFor, sameContainer } from "../../lib/dnd/placement";
-import { planDrop, visibleTasks } from "../../lib/dnd/plan";
+import { planDrop, sortedTarget, visibleTasks } from "../../lib/dnd/plan";
 import type { DropContainer, DropPlan, DropTarget, Placement } from "../../lib/dnd/types";
 import type { TaskView } from "../../lib/views/types";
-import { applyDropPlan } from "../../state/drop-actions";
+import { announceRetries, applyDropPlan, replanner } from "../../state/drop-actions";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import "./dnd.css";
@@ -192,8 +195,13 @@ const hintOf = (target: DropTarget | undefined, over: Over | null): Hint =>
 export function TasksDnd({ children }: { children: ReactNode }) {
   const tasks = useTasks();
   const { preferences } = useTasksPreferences();
+  const pathname = usePathname();
+  // A list sorted by due date, priority or name has no manual order to drop into.
+  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
   const [store] = useState(hintStore);
   const [active, setActive] = useState<TaskView>();
+  /** The drop outcome, announced once its write settles (dnd-kit's region has moved on). */
+  const [status, setStatus] = useState("");
   const target = useRef<DropTarget | undefined>(undefined);
   const plan = useRef<DropPlan>({ kind: "none" });
   const sensors = useSensors(
@@ -202,16 +210,25 @@ export function TasksDnd({ children }: { children: ReactNode }) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const projects = () => projectNames(tasks.projects);
-  /** Reorders count the visible rows of the active task's own project. */
-  const listing = (task: TaskView) =>
-    visibleTasks(
-      tasks.views.filter((view) => view.projectUrl === task.projectUrl),
-      preferences.showCompletedInProject,
-    );
+  const showCompleted = preferences.showCompletedInProject;
+  /** Reorders count the visible rows of the active task's own project; nesting checks all. */
+  const planFor = (task: TaskView, project: readonly TaskView[], drop: DropTarget) =>
+    planDrop(task, drop, visibleTasks(project, showCompleted), { all: project, manual });
+  const projectTasks = (task: TaskView) =>
+    tasks.views.filter((view) => view.projectUrl === task.projectUrl);
+  /** What a sorted list makes of the target: a row stands for its section. */
+  const effective = (drop: DropTarget | undefined) => (drop && !manual ? sortedTarget(drop) : drop);
   const taskOf = (activeItem: Active) => (activeItem.data.current as DragData | undefined)?.task;
   const track = (event: DragMoveEvent) => {
     target.current = targetFor(event.active, event.over, event.activatorEvent, event.delta);
-    store.set(hintOf(target.current, event.over));
+    const task = taskOf(event.active);
+    // In a sorted list a row in the dragged task's own section is no target at all.
+    const inert =
+      !manual &&
+      task &&
+      target.current &&
+      planFor(task, projectTasks(task), target.current).kind === "none";
+    store.set(inert ? undefined : hintOf(effective(target.current), event.over));
   };
   const announcements: Announcements = {
     onDragStart: ({ active: item }) => {
@@ -221,11 +238,15 @@ export function TasksDnd({ children }: { children: ReactNode }) {
     onDragOver: ({ active: item, over }) => {
       const task = taskOf(item);
       if (!task || over?.id === item.id) return undefined;
-      return overMessage(task, target.current, tasks.views, projects());
+      return overMessage(task, effective(target.current), tasks.views, projects());
     },
     onDragEnd: ({ active: item }) => {
       const task = taskOf(item);
-      return task ? dropMessage(task, plan.current, tasks.views, projects()) : undefined;
+      if (!task) return undefined;
+      // The outcome follows in `status` once the write settles; a rollback is never "Moved".
+      return plan.current.kind === "none"
+        ? dropMessage(task, plan.current, tasks.views, projects())
+        : movingMessage(task);
     },
     onDragCancel: ({ active: item }) => {
       const task = taskOf(item);
@@ -249,6 +270,7 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           },
         }}
         onDragStart={(event: DragStartEvent) => {
+          setStatus("");
           target.current = undefined;
           plan.current = { kind: "none" };
           setActive(taskOf(event.active));
@@ -268,12 +290,28 @@ export function TasksDnd({ children }: { children: ReactNode }) {
             plan.current = { kind: "none" };
             return;
           }
-          const next = planDrop(task, target.current, listing(task));
+          const drop = target.current;
+          const next = planFor(task, projectTasks(task), drop);
           plan.current = next;
+          if (next.kind === "none") return;
           const names = projects();
-          void applyDropPlan(next, tasks).then((written) => {
-            const message = written && sectionToast(next, names);
-            if (message) toast.success(message);
+          const message = dropMessage(task, next, tasks.views, names, manual);
+          const replan = replanner(tasks.cache, task.url, (fresh, project) =>
+            planFor(fresh, project, drop),
+          );
+          const retried = announceRetries(tasks.cache, {
+            task,
+            plan: next,
+            message,
+            showCompleted,
+            describe: (plan) =>
+              dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+            announce: setStatus,
+          });
+          void applyDropPlan(next, tasks, replan, retried).then((written) => {
+            setStatus(written ? message : failedMessage(task));
+            const moved = written && sectionToast(next, names);
+            if (moved) toast.success(moved);
           });
         }}
       >
@@ -287,6 +325,15 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           ) : null}
         </DragOverlay>
       </DndContext>
+      <span
+        className="suite-sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-tsk-drop-status
+      >
+        {status}
+      </span>
     </HintContext>
   );
 }

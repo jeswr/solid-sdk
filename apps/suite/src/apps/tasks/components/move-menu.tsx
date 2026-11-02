@@ -10,53 +10,91 @@ import {
   DropdownMenuSubTrigger,
   toast,
 } from "@jeswr/suite-ui";
-import { dropMessage, projectNames, sectionToast } from "../lib/dnd/announce";
+import { usePathname } from "next/navigation";
+import { dropMessage, failedMessage, projectNames, sectionToast } from "../lib/dnd/announce";
 import {
   effectiveParent,
+  moveTarget,
   nestCandidates,
+  planDrop,
   planMove,
   planNest,
   planPromote,
   planToSection,
   visibleTasks,
 } from "../lib/dnd/plan";
-import type { DropPlan } from "../lib/dnd/types";
+import type { DropPlan, PlanOptions } from "../lib/dnd/types";
 import type { TaskView } from "../lib/views/types";
-import { applyDropPlan } from "../state/drop-actions";
+import { announceRetries, applyDropPlan, replanner } from "../state/drop-actions";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 
 const NO_SECTION = "__none";
 
+type Plan = (task: TaskView, views: readonly TaskView[], options: PlanOptions) => DropPlan;
+/** Plans one move from a task, its listing's visible rows and the project context. */
+export interface Planner extends Plan {
+  /**
+   * Fixes a relative move to an absolute target when first planned, so a
+   * Retry that finds the task already moved plans nothing instead of moving it again.
+   */
+  anchor?: (task: TaskView, views: readonly TaskView[], options: PlanOptions) => Plan;
+}
+const relative = (direction: -1 | 1): Planner =>
+  Object.assign(
+    (task: TaskView, views: readonly TaskView[], options: PlanOptions) =>
+      planMove(task, direction, views, options),
+    {
+      anchor: (task: TaskView, views: readonly TaskView[], options: PlanOptions): Plan => {
+        const target = moveTarget(task, direction, views, options);
+        return (fresh, rows, current) =>
+          target ? planDrop(fresh, target, rows, current) : { kind: "none" };
+      },
+    },
+  );
+export const moveUp = relative(-1);
+export const moveDown = relative(1);
+
 /** The keyboard equivalents of every drag (06-tasks §4.4), for row and card ⋯ menus. */
 export function useTaskMoves(task: TaskView) {
   const tasks = useTasks();
   const focus = useTaskListFocus();
+  const pathname = usePathname();
   const { preferences } = useTasksPreferences();
-  const views = visibleTasks(
-    tasks.views.filter((view) => view.projectUrl === task.projectUrl),
-    preferences.showCompletedInProject,
-  );
-  const run = (plan: DropPlan) => {
-    if (plan.kind === "none") return Promise.resolve(false);
+  // A list sorted by due date, priority or name offers no manual reordering.
+  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
+  const all = tasks.views.filter((view) => view.projectUrl === task.projectUrl);
+  const options: PlanOptions = { all, manual };
+  const views = visibleTasks(all, preferences.showCompletedInProject);
+  const plan = (make: Planner) => make(task, views, options);
+  /** Announces the outcome once the write settles; Retry plans again from fresh state. */
+  const run = (relativeMake: Planner) => {
+    const make = relativeMake.anchor?.(task, views, options) ?? relativeMake;
+    const first = make(task, views, options);
+    if (first.kind === "none") return Promise.resolve(false);
     const names = projectNames(tasks.projects);
-    const message = dropMessage(task, plan, views, names);
-    return applyDropPlan(plan, tasks).then((written) => {
-      if (written) {
-        focus?.announce(message);
-        const moved = sectionToast(plan, names);
-        if (moved) toast.success(moved);
-      }
+    const message = dropMessage(task, first, views, names, manual);
+    const showCompleted = preferences.showCompletedInProject;
+    const replan = replanner(tasks.cache, task.url, (fresh, project) =>
+      make(fresh, visibleTasks(project, showCompleted), { all: project, manual }),
+    );
+    const retried = announceRetries(tasks.cache, {
+      task,
+      plan: first,
+      message,
+      showCompleted,
+      describe: (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+      announce: (text) => focus?.announce(text),
+    });
+    return applyDropPlan(first, tasks, replan, retried).then((written) => {
+      focus?.announce(written ? message : failedMessage(task));
+      const moved = written && sectionToast(first, names);
+      if (moved) toast.success(moved);
       return written;
     });
   };
-  return {
-    views,
-    run,
-    up: () => planMove(task, -1, views),
-    down: () => planMove(task, 1, views),
-  };
+  return { views, options, manual, plan, run };
 }
 
 export function MoveMenuItems({
@@ -75,20 +113,20 @@ export function MoveMenuItems({
   const tasks = useTasks();
   const moves = useTaskMoves(task);
   const project = tasks.projects.find((item) => item.url === task.projectUrl);
-  const up = moves.up();
-  const down = moves.down();
-  const parents = nesting ? nestCandidates(task, moves.views) : [];
+  const up = moves.plan(moveUp);
+  const down = moves.plan(moveDown);
+  const parents = nesting ? nestCandidates(task, moves.views, moves.options.all) : [];
   const parent = nesting ? effectiveParent(task, moves.views) : undefined;
   const section = (parent ?? task).sectionId;
   return (
     <>
       <DropdownMenuSeparator />
-      {reorder && (
+      {reorder && moves.manual && (
         <>
           <DropdownMenuItem
             disabled={disabled || up.kind === "none"}
             onSelect={() => {
-              void moves.run(up);
+              void moves.run(moveUp);
             }}
           >
             Move up
@@ -96,7 +134,7 @@ export function MoveMenuItems({
           <DropdownMenuItem
             disabled={disabled || down.kind === "none"}
             onSelect={() => {
-              void moves.run(down);
+              void moves.run(moveDown);
             }}
           >
             Move down
@@ -110,8 +148,9 @@ export function MoveMenuItems({
             <DropdownMenuRadioGroup
               value={section ?? NO_SECTION}
               onValueChange={(value) => {
-                void moves.run(
-                  planToSection(task, value === NO_SECTION ? undefined : value, moves.views),
+                const sectionId = value === NO_SECTION ? undefined : value;
+                void moves.run((fresh, views, options) =>
+                  planToSection(fresh, sectionId, views, options),
                 );
               }}
             >
@@ -133,7 +172,7 @@ export function MoveMenuItems({
             value={task.projectUrl}
             onValueChange={(url) => {
               if (url !== task.projectUrl)
-                void moves.run({ kind: "project", url: task.url, projectUrl: url });
+                void moves.run((fresh) => ({ kind: "project", url: fresh.url, projectUrl: url }));
             }}
           >
             {tasks.projects.map((item) => (
@@ -152,7 +191,9 @@ export function MoveMenuItems({
               <DropdownMenuItem
                 key={candidate.url}
                 onSelect={() => {
-                  void moves.run(planNest(task, candidate, moves.views));
+                  void moves.run((fresh, views, options) =>
+                    planNest(fresh, candidate, views, options),
+                  );
                 }}
               >
                 {candidate.title}
@@ -165,7 +206,7 @@ export function MoveMenuItems({
         <DropdownMenuItem
           disabled={disabled}
           onSelect={() => {
-            void moves.run(planPromote(task, moves.views));
+            void moves.run((fresh, views) => planPromote(fresh, views));
           }}
         >
           Promote to task

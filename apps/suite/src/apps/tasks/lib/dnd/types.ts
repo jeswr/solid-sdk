@@ -4,6 +4,7 @@
  * collisions into a `DropTarget`; `planDrop` maps it onto one `DropPlan`
  * that the state layer writes. Everything here is pure and DOM-free.
  */
+import type { TaskView } from "../views/types";
 
 /** Where a row is rendered: a project section, or a smart-view day group. */
 export type DropContainer =
@@ -58,6 +59,21 @@ export type DropPlan =
     }
   | { readonly kind: "reschedule"; readonly url: string; readonly dayKey: string }
   | { readonly kind: "project"; readonly url: string; readonly projectUrl: string };
+
+/** What a listing knows beyond its visible rows. */
+export interface PlanOptions {
+  /**
+   * Every task of the project, closed ones included (visible rows hide them
+   * when show-completed is off); nesting checks children against these.
+   * Defaults to the visible rows.
+   */
+  readonly all?: readonly TaskView[] | undefined;
+  /**
+   * False when the list is sorted by due date, priority or name: rows show no
+   * manual order, so only section and project moves apply (06-tasks §4.4).
+   */
+  readonly manual?: boolean | undefined;
+}
 
 /** Minimal naming context for announcements; StoredProject satisfies it via `projectNames`. */
 export interface ProjectName {

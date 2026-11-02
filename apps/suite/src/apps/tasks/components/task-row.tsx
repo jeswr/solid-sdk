@@ -34,7 +34,7 @@ import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { useTaskDrag } from "./dnd/use-task-drag";
-import { MoveMenuItems, useTaskMoves } from "./move-menu";
+import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
 import { RowProperties } from "./row-properties";
 import { TaskCheck, useCompleting } from "./task-check";
 import { ReschedulePopover } from "./views/reschedule-popover";
@@ -104,7 +104,8 @@ export function TaskRow({
   const longPressed = useRef(0);
   const drag = useTaskDrag(task, container, {
     disabled: pending || completing || editing,
-    allowChild: container?.kind === "section",
+    // A sorted list has no manual order: its rows accept only section moves, never nesting.
+    allowChild: container?.kind === "section" && moves.manual,
     onLongPress: focus
       ? () => {
           longPressed.current = Date.now();
@@ -173,8 +174,7 @@ export function TaskRow({
         });
       focus?.announce(`Priority P${command.level}`);
     }
-    if (command.type === "reorder")
-      void moves.run(command.direction === -1 ? moves.up() : moves.down());
+    if (command.type === "reorder") void moves.run(command.direction === -1 ? moveUp : moveDown);
   });
   return (
     <tr
