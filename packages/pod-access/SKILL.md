@@ -39,7 +39,10 @@ On 412 re-read and observe the winner. Require strong ETags for request updates;
 `./roles` `addGrant` (roles, additive, conditional) and rethrow its refusals unretried. Reject off-storage targets and credentialed discovery links.
 Keep parsing lenient, byte/member work bounded, and requester metadata notification-local.
 Approvals grant Viewer or Editor only (append-only requests are refused). Reject ACP/unknown materialisation with the typed
-error. WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
+error, and never read a `rel="acl"` link as proof of WAC (ESS advertises ACRs with it): detect the
+model from the advertised document with the roles layer's `detectModel`, check it before using the
+records folder ACL, and pin grants to `model: "wac"` (the roles layer then refuses an ACP target
+before writing; translate that into `UnsupportedAccessModelError`). WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
 Delivery through unauthenticated `publicFetch` is best effort and cannot roll back committed decisions;
 it never falls back to global fetch, and requester URLs must be public HTTPS (a URL check only: in
 Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr/guarded-fetch`).
@@ -90,7 +93,10 @@ and retain successful results accurately. Re-read discovery and governing valida
 conditional persistence; never retry a 412 silently. Copy WAC defaults through typed setters
 and preserve materializedFrom provenance across reapplication, including descendant defaults.
 Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
-redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+redirect refusal and fetch-rdf remote-context refusal. No network in tests. A pinned
+`options.model` refuses (`unsupported`, before any write) a resource whose detected model
+differs; `detectModel` is read-only and the only path that admits a query-addressed access
+document (ESS `?ext=acr`). Writing paths keep refusing queries.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 

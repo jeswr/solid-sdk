@@ -23,7 +23,12 @@ export interface Snapshot {
   model: "wac" | "acp";
   documents: Document[];
 }
-export function scoped(url: string, root: string): string {
+/**
+ * Refuses (`scope`) a URL outside `root` or not in canonical form. `query` admits a query string,
+ * which only read-only model detection allows on an access document (ESS addresses its ACRs as
+ * `?ext=acr`); every path that writes keeps refusing it.
+ */
+export function scoped(url: string, root: string, query = false): string {
   safeIri(url);
   const parsed = new URL(url);
   const base = new URL(root);
@@ -31,7 +36,7 @@ export function scoped(url: string, root: string): string {
     !/^https?:$/.test(parsed.protocol) ||
     parsed.username ||
     parsed.password ||
-    parsed.search ||
+    (parsed.search && !query) ||
     parsed.hash ||
     /%(?:2f|5c|2e|25|00)/i.test(parsed.pathname) ||
     parsed.href !== url ||
@@ -59,7 +64,7 @@ function links(headers: Headers, base: string, rel: string): string[] {
 }
 export async function request(
   url: string,
-  options: RolesOptions,
+  options: Pick<RolesOptions, "fetch">,
   init: RequestInit,
 ): Promise<Response> {
   const response = await options.fetch(url, { ...init, redirect: "error", cache: "no-store" });
@@ -94,8 +99,48 @@ async function boundedBody(response: Response, url: string): Promise<string> {
     reader.releaseLock();
   }
 }
-/** Own ACL or nearest WAC ancestor; ACP collects member controls through the root. */
+const mismatches = new WeakMap<object, "wac" | "acp">();
+/** The model a resource really uses when `load` refused it for differing from a pinned model. */
+export function mismatchedModel(error: unknown): "wac" | "acp" | undefined {
+  // WeakMap lookups of non-objects are simply misses.
+  return mismatches.get(error as object);
+}
+/**
+ * Own ACL or nearest WAC ancestor; ACP collects member controls through the root. With a pinned
+ * `options.model`, a resource that uses the other model is refused (`unsupported`), so nothing
+ * planned from this snapshot can write that model's documents.
+ */
 export async function load(resource: string, options: RolesOptions): Promise<Snapshot> {
+  const snapshot = await discover(resource, options, false);
+  if (options.model !== undefined && snapshot.model !== options.model) {
+    const error = roleError(
+      "unsupported",
+      resource,
+      `Resource uses the ${snapshot.model} access model, not the required ${options.model} model`,
+    );
+    mismatches.set(error, snapshot.model);
+    throw error;
+  }
+  return snapshot;
+}
+/**
+ * Read-only model detection through the same discovery walk as `load`. It builds no policies (so
+ * a policy this layer cannot map still reports its model) and admits a query on an access
+ * document's URL, as ESS uses for its ACRs. Refuses `unsupported` when the resource advertises no
+ * access document; every other failure is thrown.
+ */
+export async function detectModel(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root">,
+): Promise<Pick<Snapshot, "model" | "ownUrl">> {
+  const { model, ownUrl } = await discover(resource, options, true);
+  return { model, ownUrl };
+}
+async function discover(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
+  detecting: boolean,
+): Promise<Snapshot> {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
   scoped(resource, root);
@@ -121,7 +166,7 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
-      scoped(endpoint, root);
+      scoped(endpoint, root, detecting);
       const response = await request(endpoint, options, {
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });
@@ -168,7 +213,7 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
         throw roleError("invalid-response", endpoint, "Mixed ancestor access models");
       model ??= detected;
       if (current === resource) ownUrl = endpoint;
-      if (exists) {
+      if (exists && !detecting) {
         const document: Document = {
           url: endpoint,
           resource: current,
@@ -186,8 +231,8 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
         };
         documents.push(document);
         if (current === resource) own = document;
-        if (model === "wac") break;
       }
+      if (exists && model === "wac") break;
     }
     if (current === root) break;
     current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
