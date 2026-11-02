@@ -100,6 +100,16 @@ const FROM_SDK: Record<Role, SharingRole> = {
   manager: "owner",
 };
 const RANK: readonly SharingRole[] = ["viewer", "commenter", "editor", "owner"];
+// ACP dialect: no `implementation` is passed, so the SDK applies its CSS default (managers
+// hold resource acl:Control) and an Inrupt ESS pod is not recognised as owned. Both ESS
+// shapes fail closed without writing: the SDK refuses ESS's query-string ACR URL
+// (`?ext=acr`) as a `scope` error for every implementation, and rejects ESS acp:* modes
+// under the CSS dialect. ESS support therefore needs SDK work first. Passing
+// `implementation: "ess"` also needs a trusted signal, and none exists yet: the SDK treats
+// the value as a caller assertion, storage capabilities report only the access model
+// (WAC/ACP), and the ACP Link relation only selects ACP (this suite's CSS-dialect fixtures
+// use it too). A wrong "ess" guess on a CSS-dialect server could write management in a
+// vocabulary that server does not enforce.
 function options(session: SharingSession, resource: string): RolesOptions {
   return {
     fetch: session.fetch,

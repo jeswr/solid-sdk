@@ -539,6 +539,46 @@ it("fails closed with readable messages on unavailable, unsupported and off-pod 
   );
 });
 
+it("fails closed on ESS-shaped ACRs, which the SDK cannot read even when told it is ESS", async () => {
+  // ESS links a query-string ACR (`?ext=acr`) and grants acp:* modes.
+  async function ess(acr: string) {
+    const pod = createDemoPod({ root: ROOT });
+    await pod.fetch(FILE, { method: "PUT", body: "report" });
+    const doc = { ...document("acp"), source: acr };
+    const owner = policy(doc, ALICE, []);
+    for (const mode of ["Read", "Write"]) owner.allow.add(`${ACP}${mode}`);
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+      if (String(url) === acr)
+        return new Response(await serialize([...doc.dataset]), {
+          headers: { "content-type": "text/turtle", etag: '"ess-1"' },
+        });
+      const response = await pod.fetch(url, init);
+      const headers = new Headers(response.headers);
+      headers.set("link", `<${acr}>; rel="${ACP}accessControl"`);
+      return new Response(response.body, { status: response.status, headers });
+    });
+    return { fetch, session: { fetch, webId: ALICE, storageUrl: ROOT } };
+  }
+  // The real ESS shape: the SDK refuses non-canonical (query) access URLs for any implementation.
+  const real = await ess(`${FILE}?ext=acr`);
+  await expect(loadSharing(real.session, FILE)).rejects.toMatchObject({
+    message: "This item's access document is outside your pod, so its sharing can't be shown.",
+    cause: { code: "scope" },
+  });
+  await expect(
+    readGrants(FILE, { fetch: real.fetch, root: ROOT, kind: "resource", implementation: "ess" }),
+  ).rejects.toMatchObject({ code: "scope" });
+  // ESS modes behind a canonical ACR URL: the SDK's default CSS dialect rejects acp:* modes
+  // (an unclassified TypeError, so the dialog shows its generic load failure).
+  const modes = await ess(`${FILE}.acr`);
+  await expect(loadSharing(modes.session, FILE)).rejects.toMatchObject({
+    message: "Couldn't load sharing. Try again.",
+    cause: { message: "Unknown access mode" },
+  });
+  for (const { fetch } of [real, modes])
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+});
+
 it("returns read-only access for a non-owner", async () => {
   const env = await setup();
   const snapshot = await loadSharing({ ...env.session, webId: BOB }, FILE);

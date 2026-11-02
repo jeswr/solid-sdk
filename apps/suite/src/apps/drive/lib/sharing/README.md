@@ -89,6 +89,12 @@ Folders are read-only in the dialog for now: the SDK edits `acl:accessTo` /
 `acp:accessControl` only, so a folder grant would not reach its contents and a removal
 would leave descendant access in place. For an owner, every edit control is disabled and
 `FOLDER_READ_ONLY` explains why and points to sharing each file directly; `applySharing`
-refuses folder snapshots without a request.
-The ACP dialect is the SDK default (CSS: managers hold resource Control). Commenter stays
-disabled until Drive has a separate comments resource.
+refuses folder snapshots without a request. Commenter stays disabled until Drive has a
+separate comments resource.
+
+The ACP dialect is the SDK default (CSS: managers hold resource Control); no
+`implementation` is passed, so Inrupt ESS pods are not recognised as owned. They fail
+closed without writes: the SDK refuses ESS's query-string ACR URL (`?ext=acr`) for every
+implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
+that SDK work and a trusted implementation signal, which the session does not provide;
+see the comment above `options` in `adapter.ts`.
