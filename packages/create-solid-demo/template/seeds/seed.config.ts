@@ -28,7 +28,11 @@ export async function generateSeedData(): Promise<SyntheticRdfResult> {
   });
 }
 
-/** The starter layout: the persona card in the data subject's pod (owner-only access). */
+/**
+ * The starter layout: the persona card in the data subject's pod. It sets no
+ * `access`, so it inherits the `/public/` container's ACL; add an `access` entry
+ * to restrict it.
+ */
 export function layoutFor(target: SeedTarget): PodLayout {
   return {
     pods: [
