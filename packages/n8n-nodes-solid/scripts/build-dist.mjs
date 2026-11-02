@@ -15,7 +15,8 @@
  * external is constrained by the CJS format: an ESM-ONLY dependency cannot be
  * `require()`d, so it MUST be bundled in.
  *   - INLINED (bundled into dist):
- *       - `@jeswr/fetch-rdf` — inlined to keep the CommonJS dist self-contained.
+ *       - `@jeswr/fetch-rdf` and `@jeswr/ldp-container` — inlined to keep the
+ *         CommonJS dist self-contained.
  *       - `@solid/object` + `@rdfjs/wrapper` — ESM-ONLY (`"type":"module"`, no CJS
  *         export). A CJS `require()` of them would FAIL, so they are bundled in.
  *   - EXTERNAL (resolved by the consumer / provided by the n8n runtime):
