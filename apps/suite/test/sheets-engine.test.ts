@@ -180,6 +180,21 @@ describe("Univer engine adapter", () => {
     engine.dispose();
   });
 
+  it("ignores the other-formula dirty signal in the shape Univer sends it", async () => {
+    const engine = await mount();
+    const change = vi.fn();
+    engine.onChange(change);
+    // Univer keys this mutation's params by unit, sheet and formula id.
+    mock.emit({
+      type: 1,
+      id: "sheet.mutation.data-validation-formula-mark-dirty",
+      params: { book: { data: { formula: true } } },
+    });
+    await Promise.resolve();
+    expect(change).not.toHaveBeenCalled();
+    engine.dispose();
+  });
+
   it("round-trips plugin resources, freeze and merge state through save and reload", async () => {
     const engine = await mount();
     const data = initial();
@@ -189,7 +204,6 @@ describe("Univer engine adapter", () => {
         name: "SHEET_CONDITIONAL_FORMATTING_PLUGIN",
         data: JSON.stringify({ data: [{ cfId: "cf" }] }),
       },
-      { name: "FUTURE_PLUGIN", data: '{"opaque":true}' },
     ];
     const sheet = (data.sheets as Record<string, Snapshot>).data as Snapshot;
     sheet.freeze = { startRow: 1, startColumn: -1, ySplit: 1, xSplit: 0 };

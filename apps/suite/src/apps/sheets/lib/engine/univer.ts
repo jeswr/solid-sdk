@@ -30,8 +30,9 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
   "formula.mutation.set-super-table-option",
 ]);
 
-// Univer 1.2.0's DV/CF calculation signal has no persisted payload. CF viewport
-// and style caches update services directly, without executing mutations.
+// The other-formula dirty signal (used by DV and CF formulas) carries no persisted
+// state. Its params are keyed by unit id, so the unitId check below drops it too; this
+// names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
 
 export const mountUniver: MountEngine = async (container, options) => {
