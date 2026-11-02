@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
+import { projectMoveData } from "../detail/task-data";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
+import { TaskMove } from "./move";
 import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
@@ -338,12 +339,18 @@ export class TaskStore {
     if (!task.isTask) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task };
   }
-  async listTasks(stateStore: string): Promise<StoredTask[]> {
+  /** Strict listings are mutation gates: no missing, unreadable or invalid task may be skipped. */
+  async listTasks(stateStore: string, { strict = false } = {}): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
-    for (const url of await this.io.list(stateStore)) {
+    for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
-      const resource = await this.readListedResource(url);
+      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
       if (!resource) continue;
+      if (strict) {
+        const data = taskDetails(resource.url, resource.dataset);
+        if (!data) throw new TypeError("Expected a wf:Task.");
+        validateTask(data);
+      }
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }
@@ -353,6 +360,8 @@ export class TaskStore {
     project: StoredProject,
     data: TaskDetails,
     id = this.uuid(),
+    /** Capture the exact payload before a possibly ambiguous write, for ownership checks. */
+    onReserved?: (resource: Resource) => void,
   ): Promise<StoredTask> {
     const container = project.tracker.stateStore;
     if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
@@ -365,6 +374,7 @@ export class TaskStore {
       created: data.created ?? now,
       modified: now,
     });
+    onReserved?.({ url, dataset: new Store([...dataset]), etag: null });
     const resource = await this.io.write(url, dataset, { create: true });
     return { ...resource, task: new TaskItem(`${url}#it`, resource.dataset, DataFactory) };
   }
@@ -378,6 +388,52 @@ export class TaskStore {
     validateTask(data);
     const resource = await this.io.write(item.url, dataset, { etag: item.etag });
     return { ...resource, task };
+  }
+  /** Prepare once so Retry uses the same data, destination and reference revisions. */
+  prepareTaskMove(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): TaskMove {
+    const container = target.tracker.stateStore;
+    if (!container?.endsWith("/")) throw new TypeError("Expected a stateStore container.");
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
+    const url = `${container}${id}.ttl`;
+    const now = this.now();
+    const dataset = createTask(url, {
+      ...projectMoveData(item, source, target),
+      created: item.task.created ?? now,
+      modified: now,
+    });
+    return new TaskMove(
+      this.io,
+      item,
+      { url, dataset },
+      async () => {
+        // Children and occurrences (including reopened copies) may remain in other projects.
+        const projects = new Map(
+          [source, target, ...(await this.listProjects())].map((project) => [project.url, project]),
+        );
+        const references = new Map<string, StoredTask>();
+        for (const project of projects.values())
+          for (const child of await this.listTasks(project.tracker.stateStore as string))
+            if (child.task.parent === item.task.id || child.task.clonedFrom === item.task.id)
+              references.set(child.url, child);
+        return [...references.values()];
+      },
+      now,
+    );
+  }
+  /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
+  async moveTaskToProject(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id = this.uuid(),
+  ): Promise<StoredTask> {
+    if (source.url === target.url) return item;
+    return this.prepareTaskMove(item, source, target, id).run();
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);

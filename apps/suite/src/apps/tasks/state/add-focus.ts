@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** A DOM event seam shared by q, the sidebar, empty states and section menus. */
 export function focusAddTask(sectionId?: string): boolean {
@@ -6,6 +7,10 @@ export function focusAddTask(sectionId?: string): boolean {
   if (!target) return false;
   target.dispatchEvent(new Event("tasks:add"));
   return true;
+}
+/** Open over the current view when it has no ghost row. */
+export function openAddTask(sectionId?: string): void {
+  if (!focusAddTask(sectionId)) window.dispatchEvent(new Event("tasks:quick-add"));
 }
 export function isEditing(target: EventTarget | null): boolean {
   return (

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { ChevronDown } from "lucide-react";
@@ -27,6 +28,7 @@ export interface PermissionRowProps {
   onItemChange: (id: string, checked: boolean) => void;
   onRevoke: () => void;
   revokeLabel?: string;
+  revokeConfirmation?: { title: string; description: string };
   state?: SharingState;
   onRetry?: () => void;
   onClear?: () => void;
@@ -41,6 +43,7 @@ export function PermissionRow({
   onItemChange,
   onRevoke,
   revokeLabel = "Revoke all",
+  revokeConfirmation,
   state = { kind: "ready" },
   onRetry,
   onClear,
@@ -80,11 +83,15 @@ export function PermissionRow({
         </button>
         <ConfirmAction
           trigger={revokeLabel}
-          title={`Remove all access for ${name}?`}
-          description={`${name} will no longer be able to see or change ${labels.join(", ") || "your data"}. You can share again later.`}
+          title={revokeConfirmation?.title ?? `Remove all access for ${name}?`}
+          description={
+            revokeConfirmation?.description ??
+            `${name} will no longer be able to see or change ${labels.join(", ") || "your data"}. You can share again later.`
+          }
           action="Remove access"
           onConfirm={onRevoke}
           closeFocusFallback={headerRef}
+          confirmFocus={headerRef}
           disabled={blocked || items.every((item) => !item.checked || item.disabled)}
         />
       </header>

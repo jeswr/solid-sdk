@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -36,10 +37,29 @@ import { encodeRef } from "@/lib/refs";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
-import { focusAddTask } from "../state/add-focus";
+import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
+import { useDropTarget } from "./dnd/use-task-drag";
+
+/** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
+function ProjectDropItem({
+  projectUrl,
+  className,
+  children,
+}: {
+  projectUrl: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const drop = useDropTarget(`project:${projectUrl}`, { kind: "project", projectUrl });
+  return (
+    <li ref={drop.ref} className={className} data-drop-over={drop.over || undefined}>
+      {children}
+    </li>
+  );
+}
 
 function ProjectRow({
   project,
@@ -62,7 +82,7 @@ function ProjectRow({
     (task) => task.projectUrl === project.url && task.state === "open",
   ).length;
   return (
-    <li className="tsk-project-row">
+    <ProjectDropItem projectUrl={project.url} className="tsk-project-row">
       <span className="tsk-project-dot" aria-hidden="true" />
       {renaming ? (
         <div className="tsk-inline-edit" ref={renameRoot}>
@@ -162,14 +182,14 @@ function ProjectRow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </li>
+    </ProjectDropItem>
   );
 }
 export function TasksSidebar() {
+  const router = useRouter();
   const tasks = useTasks();
   const { preferences, dispatch } = useTasksPreferences();
   const path = usePathname();
-  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -189,8 +209,9 @@ export function TasksSidebar() {
     icon: ReactNode,
     count?: number,
     destructive = false,
-  ) => (
-    <li key={href}>
+    projectUrl?: string,
+  ) => {
+    const content = (
       <Link href={href} aria-current={path === href ? "page" : undefined}>
         {icon}
         <span>{title}</span>
@@ -205,8 +226,15 @@ export function TasksSidebar() {
           </span>
         )}
       </Link>
-    </li>
-  );
+    );
+    return projectUrl ? (
+      <ProjectDropItem key={href} projectUrl={projectUrl}>
+        {content}
+      </ProjectDropItem>
+    ) : (
+      <li key={href}>{content}</li>
+    );
+  };
   return (
     <nav className="tsk-sidebar" aria-label="Tasks">
       <Button
@@ -217,7 +245,7 @@ export function TasksSidebar() {
             .querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')
             ?.click();
           requestAnimationFrame(() => {
-            if (!focusAddTask()) router.push("/tasks/inbox?add=1");
+            openAddTask();
           });
         }}
       >
@@ -226,7 +254,14 @@ export function TasksSidebar() {
       </Button>
       <h2 className="tsk-nav-heading">Views</h2>
       <ul className="tsk-nav-list">
-        {link("/tasks/inbox", "Inbox", <Inbox size={18} aria-hidden="true" />, inboxCount)}
+        {link(
+          "/tasks/inbox",
+          "Inbox",
+          <Inbox size={18} aria-hidden="true" />,
+          inboxCount,
+          false,
+          tasks.inboxUrl,
+        )}
         {link(
           "/tasks/today",
           "Today",

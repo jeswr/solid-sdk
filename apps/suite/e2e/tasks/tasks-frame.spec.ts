@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
@@ -59,9 +59,10 @@ test("Tasks redirects to Inbox, adds a task, creates a project and section, and 
   await page.keyboard.press("q");
   await page.getByRole("textbox", { name: "Task title", exact: true }).fill("Pay rent");
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("link", { name: "Pay rent", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Task title", exact: true })).toHaveValue("");
   await expect(page.getByRole("textbox", { name: "Task title", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: "Pay rent", exact: true })).toBeVisible();
   const nav = await sidebar(page);
   await expect(nav.getByRole("link", { name: /Inbox/ })).toContainText("1");
   await nav.getByRole("button", { name: "New project", exact: true }).click();
@@ -78,10 +79,13 @@ test("Tasks redirects to Inbox, adds a task, creates a project and section, and 
   const section = page.getByRole("region", { name: "Doing", exact: true });
   await expect(section).toBeVisible();
   await section.getByRole("button", { name: "Add task", exact: true }).click();
-  await section
-    .getByRole("textbox", { name: "Task title in section", exact: true })
-    .fill("Clean kitchen");
+  const sectionInput = page.getByRole("textbox", { name: "Task title in section", exact: true });
+  await sectionInput.fill("Clean kitchen");
+  await expect(page.getByRole("button", { name: "Remove Doing", exact: true })).toBeVisible();
   await page.keyboard.press("Enter");
+  await expect(sectionInput).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Remove Doing", exact: true })).toBeVisible();
+  await sectionInput.press("Escape");
   await expect(section.getByRole("link", { name: "Clean kitchen", exact: true })).toBeVisible();
   const complete = section.getByRole("checkbox", { name: "Complete 'Clean kitchen'", exact: true });
   await expect(complete).toBeEnabled();
@@ -107,10 +111,12 @@ test("view links resolve, invalid refs show a not-found state, and rows support 
   const input = page.getByRole("textbox", { name: "Task title", exact: true });
   await input.fill("First");
   await input.press("Enter");
+  await expect(input).toHaveValue("");
   await input.fill("Second");
   await input.press("Enter");
+  await expect(input).toHaveValue("");
   await input.press("Escape");
-  const rows = page.locator("li[data-tsk-row]");
+  const rows = page.locator("[data-tsk-row]");
   await expect(rows).toHaveCount(2);
   await rows.first().focus();
   await page.keyboard.press("j");
@@ -121,13 +127,17 @@ test("view links resolve, invalid refs show a not-found state, and rows support 
   await expect(page).toHaveURL(/\?task=/);
   for (const [view, empty] of [
     ["today", "Nothing due today"],
-    ["upcoming", "Nothing upcoming"],
     ["completed", "Nothing completed yet"],
     ["l/bills", "No tasks with @bills"],
   ] as const) {
     await page.goto(`/tasks/${view}`);
     await expect(page.getByRole("heading", { name: empty, exact: true })).toBeVisible();
   }
+  await page.goto("/tasks/upcoming");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Upcoming", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".tsk-day-cell")).toHaveCount(7);
   await page.goto("/tasks/p/invalid!");
   await expect(page.locator('[data-category="not-found"]')).toBeVisible();
 });
