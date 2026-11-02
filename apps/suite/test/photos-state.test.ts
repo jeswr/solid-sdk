@@ -381,6 +381,23 @@ it("imports Takeout batches with one refresh, and a retry reuses the upload and 
       await s.state.importTakeout({ ...plan, items: [c], albums: [] }, false);
     });
     expect(originals[count + 2]).not.toBe(originals[count]);
+    // A status about the one photo is reported, not offered for retry.
+    s.intercept(async (url, method) =>
+      method === "PUT" && url.includes("/photos/originals/") && !url.endsWith("/")
+        ? new Response(null, { status: 413 })
+        : undefined,
+    );
+    let refused!: typeof first;
+    await act(async () => {
+      refused = await s.state.importTakeout(
+        { ...plan, items: [{ ...c, key: "D" }], albums: [] },
+        false,
+      );
+    });
+    expect(refused.retry).toBeUndefined();
+    expect(refused.unreadable).toEqual([
+      { key: "D", name: "A.png", reason: "Your pod refused this photo (error 413)." },
+    ]);
   } finally {
     for (const spy of spies) spy.mockRestore();
   }

@@ -8,6 +8,7 @@ import type { TakeoutItem, TakeoutPlan } from "./takeout";
  */
 export type TakeoutFailure = { kind: "pod" } | { kind: "photo"; reason: string };
 export interface UnreadablePhoto {
+  key: string;
   name: string;
   reason: string;
 }
@@ -18,8 +19,19 @@ export function takeoutFailure(
   type: string,
   stripLocation: boolean,
 ): TakeoutFailure {
-  // HTTP errors carry a status; fetch reports network failures as TypeError.
-  if (statusOf(error) !== undefined || error instanceof TypeError) return { kind: "pod" };
+  // Server errors, timeouts, rate limits and network failures are the pod's; other
+  // statuses (413, 415, …) and validation errors are about this one photo.
+  const status = statusOf(error);
+  if (status !== undefined && (status >= 500 || status === 408 || status === 429))
+    return { kind: "pod" };
+  if (
+    status === undefined &&
+    error instanceof TypeError &&
+    /fetch|network|load failed/iu.test(error.message)
+  )
+    return { kind: "pod" };
+  if (status !== undefined)
+    return { kind: "photo", reason: `Your pod refused this photo (error ${status}).` };
   if (stripLocation && /^image\/(heic|heif|tiff|avif)$/u.test(type))
     return {
       kind: "photo",
@@ -91,7 +103,7 @@ export async function importTakeoutPlan(
         saved.set(item.key, outcome);
         any = true;
       } else if (outcome.kind === "photo") {
-        unreadable.push({ name: item.name, reason: outcome.reason });
+        unreadable.push({ key: item.key, name: item.name, reason: outcome.reason });
       } else {
         failed.push(item);
         pod = true;

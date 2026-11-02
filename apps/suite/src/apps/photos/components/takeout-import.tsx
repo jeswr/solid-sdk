@@ -273,8 +273,8 @@ export function TakeoutImport() {
                   {`${count(phase.unreadable.length, "photo")} couldn't be imported`}
                 </summary>
                 <ul>
-                  {phase.unreadable.slice(0, 50).map((photo, index) => (
-                    <li key={`${index}:${photo.name}`}>
+                  {phase.unreadable.slice(0, 50).map((photo) => (
+                    <li key={photo.key}>
                       {photo.name}: {photo.reason}
                     </li>
                   ))}

@@ -165,7 +165,11 @@ describe("importing a Takeout plan", () => {
     expect(upload).toHaveBeenCalledTimes(4);
     expect(result.stopped).toBeUndefined();
     expect(result.unreadable).toHaveLength(7);
-    expect(result.unreadable[0]).toEqual({ name: "IMG_0.heic", reason: "Can't read IMG_0.heic" });
+    expect(result.unreadable[0]).toEqual({
+      key: "IMG_0.heic\u00001",
+      name: "IMG_0.heic",
+      reason: "Can't read IMG_0.heic",
+    });
     expect(result.retry?.items.map((value) => value.name)).toEqual(["IMG_7.heic"]);
   });
 
@@ -173,7 +177,19 @@ describe("importing a Takeout plan", () => {
     expect(
       takeoutFailure(Object.assign(new Error("x"), { status: 503 }), "image/jpeg", true),
     ).toEqual(pod);
+    for (const status of [408, 429])
+      expect(takeoutFailure({ status }, "image/jpeg", true)).toEqual(pod);
     expect(takeoutFailure(new TypeError("Failed to fetch"), "image/jpeg", true)).toEqual(pod);
+    expect(
+      takeoutFailure(new TypeError("NetworkError when attempting"), "image/png", false),
+    ).toEqual(pod);
+    expect(takeoutFailure({ status: 413 }, "image/jpeg", true)).toEqual({
+      kind: "photo",
+      reason: "Your pod refused this photo (error 413).",
+    });
+    expect(
+      takeoutFailure(new TypeError("Unsupported image media type"), "image/gif", true),
+    ).toEqual({ kind: "photo", reason: "This browser couldn't read this photo." });
     expect(takeoutFailure(new Error("decode"), "image/heic", true)).toMatchObject({
       kind: "photo",
       reason: expect.stringContaining("Turn off Remove location"),
