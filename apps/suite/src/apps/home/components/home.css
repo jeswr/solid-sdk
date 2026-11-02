@@ -102,7 +102,9 @@
   font-size: var(--text-sm);
 }
 .hm-warning {
-  color: var(--warning);
+  /* --warning is a fill colour (3.7:1 on the light surface). Mixing it toward the
+     text colour keeps the amber cue at 6.2:1 (light) and 11.7:1 (dark). */
+  color: color-mix(in oklab, var(--warning) 70%, var(--foreground));
   font-size: var(--text-sm);
 }
 .hm-header {
