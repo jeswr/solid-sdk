@@ -639,6 +639,18 @@ function zonedDateTime(value: unknown): boolean {
   );
 }
 
+/**
+ * A zoned dateTime the evaluator compares without loss: `Date.parse` keeps
+ * milliseconds and drops any further digit, so `…00.0001Z` would equal
+ * `…00.0002Z` and a prohibition on one instant could miss the other. Digits past
+ * the third are allowed only when they are zeros.
+ */
+function exactInstant(value: unknown): boolean {
+  if (!zonedDateTime(value)) return false;
+  const fraction = /\.(\d+)/.exec((value as string).slice(19))?.[1];
+  return fraction === undefined || /^\d{0,3}0*$/.test(fraction);
+}
+
 /** A validity bound that is absent, or a well-formed zoned dateTime. */
 function validBound(value: unknown): boolean {
   return value === undefined || zonedDateTime(value);
@@ -669,7 +681,7 @@ const DATE_BOUND_OPERATORS: ReadonlySet<string> = new Set(["lt", "gteq"]);
  * Anything else falls back to a lexical comparison or a midnight reading.
  */
 function temporalOperand(value: unknown, c: OdrlConstraint): boolean {
-  if (zonedDateTime(value)) return true;
+  if (exactInstant(value)) return true;
   if (c.datatype !== XSD_DATE || typeof value !== "string") return false;
   if (!DATE_BOUND_OPERATORS.has(c.operator)) return false;
   const m = XSD_DATE_LEXICAL.exec(value);
@@ -1325,7 +1337,7 @@ export async function verifyAgentAuthority(
     key === "delegationDepth"
       ? false
       : instants.has(key)
-        ? !zonedDateTime(v) || numbers.has(key)
+        ? !exactInstant(v) || numbers.has(key)
         : numbers.has(key)
           ? !numeric(v)
           : Array.isArray(v) ||

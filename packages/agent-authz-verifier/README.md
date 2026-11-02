@@ -19,10 +19,10 @@ denies unless `allowProvisionalPolicy: true` is set, which marks the permit
 `INVALID_OPTIONS`. The chain-length cap (default 8) applies before any key is resolved. An unknown
 request action, a multi-valued or malformed request attribute, a value for an operand the chain
 compares as an instant (`dateTime`, or any constraint typed `xsd:dateTime`/`xsd:date`) that is not a
-dateTime string with a timezone, a value for an operand the chain compares as numbers that does not
+dateTime string with a timezone (and no precision past milliseconds, which the evaluator drops), a value for an operand the chain compares as numbers that does not
 read as a number, a signed bound the evaluator would compare as text (a temporal bound that is not an
 instant, such as an `xsd:date` with an offset, an `xsd:date` under any operator but `lt` or `gteq`
-(which would match only its UTC midnight), or an ordering over durations or names), or a chain
+(which would match only its UTC midnight), a dateTime finer than milliseconds, or an ordering over durations or names), or a chain
 prohibition that may apply but constrains an operand the request leaves out,
 denies in Phase D, as does any evaluator failure. The prohibition check probes each policy exactly
 as the delegation walk reads it (the same agent, action and injected `delegationDepth`), dropping
