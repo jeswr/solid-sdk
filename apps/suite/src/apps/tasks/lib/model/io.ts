@@ -72,7 +72,11 @@ export class RdfIO {
     return current;
   }
   async remove(url: string, etag: string | null): Promise<void> {
-    await this.request(url, { method: "DELETE", headers: { "If-Match": requireEtag(etag) } });
+    await this.request(url, {
+      method: "DELETE",
+      headers: { "If-Match": requireEtag(etag) },
+      keepalive: true,
+    });
   }
   private async request(url: string, init: RequestInit): Promise<Response> {
     requireHttp(url);

@@ -163,5 +163,6 @@ describe("R14: one focus check per write, so the shared budget is not double-cou
       expect(ds.countQuads(DOC, `${EX}old`, null, null)).toBe(0);
       expect(ds.countQuads(DOC, `${EX}p`, null, null)).toBe(3000);
     }
-  });
+    // About 1 s alone; CI runs packages in parallel and has exceeded the 5 s default.
+  }, 30_000);
 });

@@ -1,0 +1,173 @@
+// AUTHORED-BY Codex GPT-6
+import { decodeRef, encodeRef } from "../../../../lib/refs";
+import type { AgentRow, PermissionLine } from "./types";
+
+export type PermissionsView = "overview" | "advanced";
+
+export function agentName(row: AgentRow): string {
+  if (row.kind === "public") return "Anyone with the link";
+  if (row.kind === "authenticated") return "Anyone signed in";
+  if (row.name?.trim()) return row.name;
+  try {
+    return new URL(row.id).host || "Unknown account";
+  } catch {
+    return "Unknown account";
+  }
+}
+
+export function permissionDate(value?: string): string {
+  return value && Number.isFinite(Date.parse(value))
+    ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(
+        new Date(value),
+      )
+    : "Date unknown";
+}
+
+export function dataTypeLabel(line: PermissionLine, storage: string): string {
+  if (line.dataType) return line.dataType.label;
+  // Binary files have no primary subject. Drive is the suite's known Files location,
+  // relative to the pod root wherever the pod is mounted.
+  if (
+    line.resources.length &&
+    line.resources.every((r) => relativePath(r.url, storage).startsWith("drive/"))
+  )
+    return "Files";
+  return "Other data";
+}
+
+export function featureLabel(line: PermissionLine, name: string): string {
+  return line.purpose?.label || `Used by ${name}`;
+}
+
+export function durationLabel(line: PermissionLine): string {
+  return line.expiresAt ? `Until ${permissionDate(line.expiresAt)}` : "Until revoked";
+}
+
+export function consequenceText(line: PermissionLine, name: string, storage: string): string {
+  return line.purpose?.label
+    ? `${line.purpose.label} will stop working in ${name}`
+    : `${name} will lose access to your ${dataTypeLabel(line, storage)}`;
+}
+
+export function dataTypeLabels(row: AgentRow, storage: string): string[] {
+  return [...new Set(row.lines.map((line) => dataTypeLabel(line, storage)))];
+}
+
+export function revokeCopy(row: AgentRow, storage: string): { title: string; description: string } {
+  if (row.kind === "public" || row.kind === "authenticated")
+    return {
+      title: "Make private?",
+      description:
+        "Remove all public and signed-in access. People and apps you've shared with individually will keep their access. You can share again later.",
+    };
+  const name = agentName(row);
+  return {
+    title: `Remove all access for ${name}?`,
+    description: `${name} will no longer be able to see or change ${dataTypeLabels(row, storage).join(", ") || "your data"}. You can share again later.`,
+  };
+}
+
+export function visibleRows(
+  rows: readonly AgentRow[],
+  tab: "people" | "apps",
+  search: string,
+  storage: string,
+): AgentRow[] {
+  const query = search.trim().toLocaleLowerCase();
+  const rank = (row: AgentRow) =>
+    row.kind === "public" ? 0 : row.kind === "authenticated" ? 1 : 2;
+  return rows
+    .filter(
+      (row) =>
+        (tab === "apps" ? row.kind === "app" : row.kind !== "app") &&
+        (!query ||
+          [agentName(row), ...dataTypeLabels(row, storage)].some((text) =>
+            text.toLocaleLowerCase().includes(query),
+          )),
+    )
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (Date.parse(b.lastChanged || b.since || "") || 0) -
+          (Date.parse(a.lastChanged || a.since || "") || 0) ||
+        agentName(a).localeCompare(agentName(b)),
+    );
+}
+
+export function relativePath(url: string, storage: string): string {
+  const root = new URL(storage);
+  const target = new URL(url);
+  if (target.origin !== root.origin || !target.pathname.startsWith(root.pathname))
+    return "Outside your pod";
+  const path = target.pathname.slice(root.pathname.length);
+  try {
+    return decodeURIComponent(path) || "/";
+  } catch {
+    return path;
+  }
+}
+
+export function parentNames(line: PermissionLine): string[] {
+  return [
+    ...new Set(
+      line.resources
+        .filter((r) => r.inherited)
+        .map((r) => {
+          const url = new URL(r.inheritedFrom || r.url);
+          const part = url.pathname.split("/").filter(Boolean).at(-1);
+          if (!part) return "your pod";
+          try {
+            return decodeURIComponent(part);
+          } catch {
+            return part;
+          }
+        }),
+    ),
+  ];
+}
+
+export function agentHref(row: AgentRow): string {
+  if (row.kind === "public" || row.kind === "authenticated") return `/permissions/a/${row.kind}`;
+  try {
+    return `/permissions/a/${encodeRef(row.id)}`;
+  } catch {
+    return "/permissions/a/unknown";
+  }
+}
+
+export function agentId(ref: string): string | undefined {
+  if (ref === "public" || ref === "authenticated") return ref;
+  try {
+    return decodeRef(ref);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Route refs carry the URL parser's href, so an origin-only app id
+ * ("https://app.example") comes back with a trailing slash; compare by href.
+ */
+export function sameAgent(rowId: string, id: string | undefined): boolean {
+  if (id === undefined) return false;
+  if (rowId === id) return true;
+  try {
+    return new URL(rowId).href === id;
+  } catch {
+    return false;
+  }
+}
+
+/** "1 item couldn't be checked", deduplicated by URL. */
+export function failureNotice(failures: readonly { url: string }[]): string {
+  const count = new Set(failures.map((failure) => failure.url)).size;
+  return `${count} ${count === 1 ? "item" : "items"} couldn't be checked`;
+}
+
+export function accessRequestsEnabled(json?: string): boolean {
+  try {
+    return JSON.parse(json || "{}").accessRequests === true;
+  } catch {
+    return false;
+  }
+}
