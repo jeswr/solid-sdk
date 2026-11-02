@@ -26,6 +26,7 @@ export default defineConfig({
       include: [
         "src/shell/lib/**/*.ts",
         "src/shell/search/local-source.ts",
+        "src/shell/registration/{demo-backend,types}.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/tasks/lib/detail/**/*.ts",
         "src/apps/tasks/lib/views/**/*.ts",
