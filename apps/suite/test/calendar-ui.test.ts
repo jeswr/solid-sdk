@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+// AUTHORED-BY Claude Opus 5.5
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -96,7 +97,6 @@ beforeEach(async () => {
 });
 afterEach(() => {
   unsubscribe?.();
-  vi.useRealTimers();
 });
 function screen(view: CalendarView = "week") {
   return h(CalendarApp, { children: h(CalendarScreen, { view }) });
@@ -1220,9 +1220,11 @@ it("does not write before discovery has identified the user's calendars", async 
   });
 });
 it("parses and saves a quick-create title through the existing mutations", async () => {
-  // "tomorrow" resolves against the wall clock, so pin it to the fixture's NOW (1 Nov, noon UTC).
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW);
+  // "tomorrow" is relative to the clock: pin it to the day before the asserted date.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T12:00:00Z") });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   mocks.path = "/calendar/month";
   const mounted = await mount(screen("month"));
   await settle();

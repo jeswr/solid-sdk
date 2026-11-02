@@ -171,6 +171,9 @@ it.each([
   [`${AGENT}SendMessage`, `${AGENT}Transfer`, false],
 ] as const)("matches %s rules against %s requests (applies: %s)", async (action, requested, applies) => {
   const q = intent({ action: requested });
+  // A prohibition also covers a broader request that includes the prohibited
+  // act (write includes append), so it applies in either direction.
+  const prohibits = applies || (action === "append" && requested === "write");
   const permission: Rule = { type: "permission", action };
   const prohibition: Rule = { type: "prohibition", action };
   expect(await solidOdrlEngine.evaluate(policy({ permissions: [permission] }), q)).toEqual({
@@ -188,7 +191,7 @@ it.each([
         ? { ...m, prohibitions: [prohibition] }
         : { ...m, [placement]: { ...m[placement], prohibitions: [prohibition] } };
     expect(await evaluateIntent(withProhibition, q)).toEqual(
-      applies
+      prohibits
         ? { decision: "prohibited", reason: "prohibition" }
         : { decision: "permit", reason: "autonomous" },
     );
@@ -630,6 +633,8 @@ it.each([
   operator,
   rightOperand,
 }) => {
+  // isAnyOf over a set-valued request permits when ANY element matches, which
+  // would let unlisted values through a permission allowlist: confirmation.
   expect(
     await solidOdrlEngine.evaluate(
       policy({
@@ -639,7 +644,7 @@ it.each([
       }),
       intent({ action: "read", attributes: { count: [1, 2] } }),
     ),
-  ).toEqual({ effect: "permit" });
+  ).toEqual({ effect: operator === "isAnyOf" ? "indeterminate" : "permit" });
 });
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";

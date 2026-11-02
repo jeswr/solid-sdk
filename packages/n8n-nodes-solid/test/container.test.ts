@@ -116,3 +116,20 @@ describe("parseContainerListing — scope guard (defence in depth)", () => {
     expect(members.map((m) => m.url)).toEqual([`${CONTAINER}ok.ttl`]);
   });
 });
+
+describe("parseContainerListing — hostile members", () => {
+  it("drops blank-node members and members outside the listed container", async () => {
+    const container = "https://pod.example/alice/public/";
+    const body = `
+      @prefix ldp: <http://www.w3.org/ns/ldp#> .
+      <> a ldp:Container ; ldp:contains _:x , <../private/secret.ttl> , <ok.ttl> , <https://evil.example/x> .
+    `;
+    const members = await parseContainerListing(
+      body,
+      "text/turtle",
+      container,
+      "https://pod.example/alice/",
+    );
+    expect(members.map((m) => m.url)).toEqual([`${container}ok.ttl`]);
+  });
+});
