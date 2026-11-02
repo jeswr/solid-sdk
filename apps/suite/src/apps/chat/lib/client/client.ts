@@ -152,9 +152,10 @@ export class ChatClient {
     }: { before?: Date; days?: number; since?: Date } = {},
   ) {
     const page = await loadMessages(this.fetch, url, before, since, days);
-    const reactions = new Map(
-      page.documents.flatMap((document) => [...readReactions(document.dataset)]),
-    );
+    const reactions = new Map<string, Reaction[]>();
+    for (const document of page.documents)
+      for (const [message, found] of readReactions(document.dataset, document.url))
+        reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
     return { messages: this.remember(page.messages, reactions), next: page.next };
   }
   async send(
@@ -172,7 +173,10 @@ export class ChatClient {
       // sendMessage re-reads the day, merging the append against the winner.
       document = await send();
     }
-    const messages = this.remember(readMessages(document.dataset), readReactions(document.dataset));
+    const messages = this.remember(
+      readMessages(document.dataset),
+      readReactions(document.dataset, document.url),
+    );
     return messages.find((message) => message.id === messageSubject(room, at, id)) as Message;
   }
   async react(room: string, subject: string, emoji: string): Promise<void> {
@@ -189,7 +193,7 @@ export class ChatClient {
     const message = readMessages(document.dataset).find((message) => message.id === subject);
     if (!message || message.tombstone || message.deletedAt !== undefined)
       throw new ChatClientError("missing-message");
-    const mine = (readReactions(document.dataset).get(subject) ?? []).filter(
+    const mine = (readReactions(document.dataset, url).get(subject) ?? []).filter(
       (reaction) => reaction.actorId === this.webId && reaction.emoji === emoji,
     );
     const input = { message: subject, actor: this.webId, at: new Date() };
@@ -204,7 +208,7 @@ export class ChatClient {
     } else {
       document = await react(this.fetch, room, { ...input, id: crypto.randomUUID(), emoji });
     }
-    this.remember(readMessages(document.dataset), readReactions(document.dataset));
+    this.remember(readMessages(document.dataset), readReactions(document.dataset, url));
   }
   private own(subject: string): void {
     if (this.known.get(subject)?.author !== this.webId)

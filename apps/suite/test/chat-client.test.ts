@@ -168,6 +168,30 @@ it("toggles all of my matching Likes while counting each person once and preserv
   await client.react(room.url, message.id, "👍");
   expect(await reactions()).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
 });
+it("never lets forged triples in one day replace another day's reactions", async () => {
+  const room = await client.createRoom({ name: "Two days", members: [] });
+  const earlier = new Date(NOW.getTime() - 86_400_000);
+  const first = await client.send(room.url, "Day one", { at: earlier });
+  const second = await client.send(room.url, "Day two", { at: NOW });
+  await client.react(room.url, second.id, "👍");
+  const day = first.id.split("#")[0] as string;
+  const document = await loadChat(pod.fetch, room.url, day);
+  const reaction = `${second.id.split("#")[0]}#reaction-forged`;
+  const like = new ChatNode(reaction, document.dataset, DataFactory);
+  like.types.add(`${NS.AS}Like`);
+  like.setIri(`${NS.AS}object`, second.id);
+  like.setIri(`${NS.AS}attributedTo`, BOB);
+  like.setText(`${NS.AS}content`, "🎉");
+  like.setDate(`${NS.AS}published`, NOW);
+  for (const q of (await loadChat(pod.fetch, room.url, second.id.split("#")[0] as string)).dataset)
+    if (q.subject.value === second.id) document.dataset.add(q);
+  await saveChat(pod.fetch, room.url, day, document.dataset, { ifMatch: document.etag as string });
+  const { messages } = await client.messages(room.url);
+  const copies = messages.filter((message) => message.id === second.id);
+  expect(copies.length).toBeGreaterThan(0);
+  for (const copy of copies)
+    expect(copy.reactions).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
+});
 it("refuses reactions on missing, tombstoned and foreign-deleted messages, and propagates read failures", async () => {
   const room = await client.createRoom({ name: "Deleted reactions", members: [] });
   const message = await client.send(room.url, "Soon gone");

@@ -252,6 +252,15 @@
   background: var(--accent);
   color: var(--accent-foreground);
 }
+.chat-reaction[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: progress;
+}
+.chat-reaction-more {
+  align-self: center;
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
 .chat-reaction-picker {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

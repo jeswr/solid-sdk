@@ -25,9 +25,19 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   Task overlays use the SAME message subject and existing wf:Task vocabulary.
   The corresponding I/O functions re-read the original day and conditionally PUT.
 - `appendReaction` / `appendUndo`: return only a new `as:Like` / `as:Undo`
-  subject in the target message's day, retaining the emoji in `as:content`.
-  `readReactions` ignores malformed and cross-document events and subtracts only
-  Undos from the Like's author. Reaction events never appear in `readMessages`.
+  subject in the target message's day, retaining the sanitised emoji in `as:content`.
+  Reactions are emoji only (`isReactionEmoji`: at most 32 UTF-16 units). `appendUndo`
+  returns `null` when the same author already undid the Like, so a race with
+  another tab is not an error. `readReactions(dataset, document)` ignores
+  malformed, non-emoji and cross-document events, and events stored in any
+  document other than `document`, and subtracts only Undos from the Like's author.
+  `#reaction-`/`#undo-` subjects, and Like/Undo subjects not also typed as a
+  message, never appear in `readMessages`; adding `a as:Like` to a message does
+  not hide it.
+  Authorship is what the writer claims in `as:attributedTo`: a member with Append
+  can write Likes or Undos in another member's name, as with message authorship.
+  The author check holds between honest clients only; the timeline caps chips at
+  `MAX_REACTION_CHIPS` per message.
   `react` / `unreact` use only PATCH INSERT DATA with the day's strong If-Match,
   re-reading and retrying one 412. Missing or deleted messages cannot be reacted to.
 - `createRoom`: creates parents, then a new room, its advertised WAC ACL and

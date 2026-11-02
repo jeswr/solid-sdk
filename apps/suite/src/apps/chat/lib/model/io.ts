@@ -232,7 +232,7 @@ async function appendEvent(
   fetch: typeof globalThis.fetch,
   room: string,
   message: string,
-  change: (dataset: Store) => Store,
+  change: (dataset: Store) => Store | null,
 ): Promise<ChatDocument> {
   const url = messageResource(room, message);
   const base = roomContainer(room);
@@ -240,6 +240,7 @@ async function appendEvent(
     try {
       const document = await optionalChat(fetch, base, url);
       const delta = change(document.dataset);
+      if (!delta) return document;
       const response = checked(
         await scoped(fetch, base)(url, {
           method: "PATCH",

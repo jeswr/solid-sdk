@@ -68,7 +68,13 @@ it("round-trips Like/Undo events in the message's day, preserving the source and
     datatype: DataFactory.namedNode(`${NS.XSD}dateTime`),
     value: at.toISOString(),
   });
-  const undo = appendUndo(dataset, room, { id: "off", message, actor: alice, reaction: id, at });
+  const undo = appendUndo(dataset, room, {
+    id: "off",
+    message,
+    actor: alice,
+    reaction: id,
+    at,
+  }) as Store;
   expect([...undo].every((q) => q.subject.value === `${day}#undo-off`)).toBe(true);
   const undone = await parseChat(await serializeChat(new Store([...dataset, ...undo])), day);
   expect(readReactions(undone).size).toBe(0);
@@ -120,12 +126,63 @@ it("fails closed on malformed, ambiguous, cross-day and named-graph reactions", 
 it("never surfaces Likes or Undos as messages even if they have Note types or sioc:content", () => {
   const dataset = messages();
   for (const type of ["Like", "Undo"]) {
-    const node = foreign(dataset, `${day}#${type}`, type);
+    const node = foreign(dataset, `${day}#${type === "Like" ? "reaction" : "undo"}-x`, type);
     node.types.add(`${NS.SIOC}Note`);
     node.types.add(`${NS.AS}Note`);
     node.setText(`${NS.SIOC}content`, "This must not be a chat message");
   }
   expect(readMessages(dataset).map((message) => message.id)).toEqual([message]);
+  // Other subjects typed only as events are skipped too; a typed message is never hidden.
+  foreign(dataset, `${day}#plain-like`, "Like");
+  const forged = new ChatNode(message, dataset, DataFactory);
+  forged.types.add(`${NS.AS}Like`);
+  forged.setIri(`${NS.AS}object`, message);
+  expect(readMessages(dataset).map((message) => message.id)).toEqual([message]);
+});
+
+it("accepts only emoji, stores the sanitised value and reads only the named document", () => {
+  const dataset = messages();
+  for (const emoji of ["abc", "123", "#", "👍 ok"])
+    expect(() => appendReaction(dataset, room, { ...input, id: "text", emoji })).toThrow(
+      expect.objectContaining({ code: "invalid-input" }),
+    );
+  dataset.addQuads([...appendReaction(dataset, room, { ...input, emoji: " ❤️ " })]);
+  expect(readReactions(dataset).get(message)?.[0]?.emoji).toBe("❤️");
+  for (const emoji of ["🇳🇿", "👍🏽", "1️⃣", "👩‍👩‍👧"])
+    expect(appendReaction(dataset, room, { ...input, id: `e${emoji.length}`, emoji }).size).toBe(5);
+  foreign(dataset, `${day}#reaction-text`, "Like", message, bob, "spam");
+  expect(readReactions(dataset).get(message)).toHaveLength(1);
+  expect(readReactions(dataset, day).get(message)).toHaveLength(1);
+  expect(readReactions(dataset, `${room}2026/11/02.ttl`).size).toBe(0);
+});
+
+it("treats an Undo that another tab already wrote as done, without writing again", async () => {
+  const dataset = withLike();
+  const reaction = `${day}#reaction-one`;
+  const undo = { id: "off", message, actor: alice, reaction, at };
+  const undone = new Store([...dataset, ...(appendUndo(dataset, room, undo) as Store)]);
+  expect(appendUndo(undone, room, { ...undo, id: "again" })).toBeNull();
+  // Bob's Undo of Alice's Like does not count as Alice's.
+  const forged = withLike();
+  foreign(forged, `${day}#undo-bob`, "Undo", reaction, bob);
+  expect(() => appendUndo(forged, room, { ...undo, actor: bob })).toThrow(
+    expect.objectContaining({ code: "not-author" }),
+  );
+  // An inactive (non-emoji) Like that only Bob "undid" is still missing for Alice.
+  const spam = `${day}#reaction-spam`;
+  foreign(forged, spam, "Like", message, alice, "spam");
+  foreign(forged, `${day}#undo-spam`, "Undo", spam, bob);
+  expect(() => appendUndo(forged, room, { ...undo, reaction: spam })).toThrow(
+    expect.objectContaining({ code: "missing-message" }),
+  );
+  const pod = createDemoPod({ root });
+  await sendMessage(pod.fetch, room, { id: "m1", author: alice, content: "Hello", at });
+  await react(pod.fetch, room, input);
+  await unreact(pod.fetch, room, undo);
+  const fetch = vi.fn(pod.fetch);
+  const result = await unreact(fetch, room, { ...undo, id: "late" });
+  expect(readReactions(result.dataset).size).toBe(0);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
 });
 
 it("validates new events and refuses missing/deleted messages, duplicate IDs and foreign Undos", () => {
@@ -163,7 +220,7 @@ it("validates new events and refuses missing/deleted messages, duplicate IDs and
   expect(() => appendUndo(dataset, room, { ...undo, actor: bob })).toThrow(
     expect.objectContaining({ code: "not-author" }),
   );
-  const withUndo = new Store([...dataset, ...appendUndo(dataset, room, undo)]);
+  const withUndo = new Store([...dataset, ...(appendUndo(dataset, room, undo) as Store)]);
   expect(() => appendUndo(withUndo, room, undo)).toThrow(
     expect.objectContaining({ code: "duplicate" }),
   );

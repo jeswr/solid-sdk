@@ -281,6 +281,58 @@ it("adds reactions from the compact picker and restores focus on Escape", async 
   await act(() => (view.host.querySelector('[role="log"]') as HTMLElement).focus());
   await accessible(view.host);
 });
+it("keeps keyboard focus in the message after picking a reaction and when its last chip disappears", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const react = vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();
+  const active = session(pod);
+  const base = message("focus");
+  const tree = (reactions: Message["reactions"]) =>
+    h(ChatProvider, {
+      session: active,
+      children: h(Timeline, { ...timelineProps, messages: [{ ...base, reactions }] }),
+    });
+  const view = await mount(tree([{ emoji: "👍", count: 1, reactedByMe: true }]));
+  const trigger = view.host.querySelector('[aria-label="Add reaction"]') as HTMLButtonElement;
+  await act(() => trigger.focus());
+  await key(trigger, "ArrowDown");
+  const party = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (choice) => choice.getAttribute("aria-label") === "React with 🎉",
+  ) as HTMLElement;
+  await act(() => party.focus());
+  await key(party, "Enter");
+  await nextFrame();
+  expect(react).toHaveBeenCalledWith(ROOM, base.id, "🎉");
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  const chip = view.host.querySelector(".chat-reaction") as HTMLButtonElement;
+  await act(() => chip.focus());
+  await click(chip);
+  expect(react).toHaveBeenLastCalledWith(ROOM, base.id, "👍");
+  await view.render(tree([]));
+  expect(view.host.querySelector(".chat-reactions")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+it("collapses a flood of distinct reactions, keeping the reader's own visible", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const reactions = Array.from({ length: 30 }, (_, index) => ({
+    emoji: String.fromCodePoint(0x1f600 + index),
+    count: 1,
+    reactedByMe: index === 29,
+  }));
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(Timeline, {
+        ...timelineProps,
+        messages: [{ ...message("flood"), reactions }],
+      }),
+    }),
+  );
+  const chips = [...view.host.querySelectorAll(".chat-reaction")];
+  expect(chips).toHaveLength(20);
+  expect(chips.at(-1)?.getAttribute("aria-pressed")).toBe("true");
+  expect(view.host.querySelector(".chat-reaction-more")?.textContent).toBe("+10 more");
+});
 it("hides reaction controls on deleted and pending messages", async () => {
   const pod = createDemoPod({ root: ROOT });
   const item = {

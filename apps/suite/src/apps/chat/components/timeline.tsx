@@ -18,7 +18,7 @@ import {
 import { MoreHorizontal, SmilePlus } from "lucide-react";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "../lib/client";
-import { buildTimeline } from "../lib/timeline";
+import { buildTimeline, visibleReactions } from "../lib/timeline";
 import { type Outgoing, useChat, useChatActions } from "../state/chat-context";
 import { useProfile } from "./chat-app";
 import { MessageText } from "./message-text";
@@ -69,15 +69,38 @@ function MessageArticle({
 }) {
   const { session } = useChat();
   const actions = useChatActions();
+  // A ref guards double submits; chips stay focusable (aria-disabled) so focus is never dropped.
+  // IconButton's `disabled` is aria-disabled too, so the picker returns focus to its trigger.
+  const busy = useRef(false);
   const [reacting, setReacting] = useState(false);
+  const chips = useRef<HTMLFieldSetElement>(null);
+  const addReaction = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
   const react = (emoji: string) => {
-    if (reacting) return;
+    if (busy.current) return;
+    busy.current = true;
+    refocus.current = !!chips.current?.contains(document.activeElement);
     setReacting(true);
     void actions
       .react(url, message.id, emoji)
-      .catch(() => toast.error("Couldn't update reaction"))
-      .finally(() => setReacting(false));
+      .catch(() => {
+        refocus.current = false;
+        toast.error("Couldn't update reaction");
+      })
+      .finally(() => {
+        busy.current = false;
+        setReacting(false);
+      });
   };
+  // Removing the last reaction of an emoji unmounts the focused chip; keep focus in the message.
+  useLayoutEffect(() => {
+    if (!message.reactions || !refocus.current) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    refocus.current = false;
+    addReaction.current?.focus();
+  }, [message.reactions]);
+  const { shown, hidden } = visibleReactions(message.reactions);
   const profile = useProfile(message.author ?? "");
   const name = profile.displayName || message.author || "Unknown author";
   const time = message.published
@@ -115,8 +138,8 @@ function MessageArticle({
           <p className="chat-task-marker">Task: {message.task.title}</p>
         )}
         {!message.deleted && !message.status && message.reactions.length > 0 && (
-          <fieldset className="chat-reactions" aria-label="Reactions">
-            {message.reactions.map(({ emoji, count, reactedByMe }) => (
+          <fieldset ref={chips} className="chat-reactions" aria-label="Reactions">
+            {shown.map(({ emoji, count, reactedByMe }) => (
               <Button
                 key={emoji}
                 size="sm"
@@ -124,12 +147,13 @@ function MessageArticle({
                 className="chat-reaction"
                 aria-pressed={reactedByMe}
                 aria-label={`${emoji} ${count} ${count === 1 ? "reaction" : "reactions"}${reactedByMe ? ", including you" : ""}`}
-                disabled={reacting}
+                aria-disabled={reacting || undefined}
                 onClick={() => react(emoji)}
               >
                 <span aria-hidden="true">{emoji}</span> {count}
               </Button>
             ))}
+            {hidden > 0 && <span className="chat-reaction-more">+{hidden} more</span>}
           </fieldset>
         )}
         {message.status === "sending" && <p className="chat-delivery">Sending…</p>}
@@ -149,7 +173,13 @@ function MessageArticle({
         <div className="chat-message-tools">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <IconButton label="Add reaction" size="icon-sm" variant="ghost" disabled={reacting}>
+              <IconButton
+                ref={addReaction}
+                label="Add reaction"
+                size="icon-sm"
+                variant="ghost"
+                disabled={reacting}
+              >
                 <SmilePlus size={18} aria-hidden="true" />
               </IconButton>
             </DropdownMenuTrigger>
