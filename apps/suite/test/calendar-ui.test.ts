@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -1219,8 +1220,8 @@ it("does not write before discovery has identified the user's calendars", async 
   });
 });
 it("parses and saves a quick-create title through the existing mutations", async () => {
-  // "tomorrow" is relative to the real clock: pin it to the seed's day so the test can't expire.
-  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  // "tomorrow" is relative to the clock: pin it to the day before the asserted date.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T12:00:00Z") });
   onTestFinished(() => {
     vi.useRealTimers();
   });

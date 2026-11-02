@@ -121,7 +121,12 @@ export type FetchLike = (
 ) => Promise<SafeFetchResponse>;
 
 export interface SafeFetchOptions {
-  /** Injected fetch (auth-fetch seam / test stub). Defaults to the Node DNS-pinned guard. */
+  /**
+   * Injected fetch (auth-fetch seam / test stub). Defaults to the Node DNS-pinned
+   * guard. With an injected fetch the URL guard cannot resolve DNS, so a
+   * hostname that resolves to a private address is NOT refused here: the
+   * injected fetch must apply its own SSRF guard (e.g. `@jeswr/guarded-fetch`).
+   */
   fetch?: FetchLike;
   /** Request timeout in milliseconds. Default 15000. */
   timeoutMs?: number;
