@@ -670,6 +670,8 @@ export function createProviders(
       selections.clear();
       // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
       const generation = await fence.generation();
+      // Only a login made before any root was known is keyed to the callback URL.
+      const bootstrap = boundary.roots().length === 0;
       const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
         signal: AbortSignal.any([signal, fence.signalFor(generation)]),
       });
@@ -682,7 +684,7 @@ export function createProviders(
       await hooks.session(request, claims, "solid-oidc", selected);
       // hooks.session loaded the verified roots; only the first inherits the login grant.
       const root = boundary.roots()[0];
-      if (root !== undefined)
+      if (bootstrap && root !== undefined)
         loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
       // Later requests keep the account login selected instead of asking for a WebID again.
       hint = selected;
