@@ -47,6 +47,7 @@ export const preferencesSchema = z.object({
   offlineHintSeen: z.boolean().catch(false),
   technicalDetails: z.boolean().catch(false),
   accountIds: z.boolean().catch(false),
+  onboarding: z.enum(["not-started", "complete", "skipped"]).catch("not-started"),
 });
 export type Preferences = z.output<typeof preferencesSchema>;
 export const defaultPreferences: Preferences = preferencesSchema.parse({});

@@ -26,7 +26,7 @@ import { writeResource } from "../pod/resource.js";
 import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
-import { importFile, parseImportArgs, runCli } from "./cli.js";
+import { EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
@@ -1567,5 +1567,72 @@ describe("streaming CLI export files", () => {
     const large = await importFile(exportPath, googleTakeoutFileAdapter);
     expect(large.size).toBe(65 * 1024 * 1024);
     await expect(large.text()).rejects.toThrow(/limit/);
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("CLI cancellation at the Pod write boundary", () => {
+  const stateUrl = `${TEST_POD_ROOT}integrations/spotify/state.json`;
+  const container = `${TEST_POD_ROOT}integrations/spotify/`;
+  const writes = new Set(["PUT", "PATCH", "POST", "DELETE"]);
+  it.each([
+    ["the checkpoint read", (url: string, method: string) => method === "HEAD" && url === stateUrl],
+    [
+      "the import session's implicit document read",
+      (url: string, method: string) =>
+        method === "GET" &&
+        url.startsWith(container) &&
+        url !== stateUrl &&
+        !url.endsWith("_provenance.ttl"),
+    ],
+    [
+      "finalisation's provenance read",
+      (url: string, method: string) => method === "GET" && url.endsWith("/_provenance.ttl"),
+    ],
+  ] as const)("sends no Pod write after a cancel during %s and exits cancelled", async (_name, paused) => {
+    const { pod, transport, requests } = fixturePod();
+    const options = {
+      configPath: await configPath(),
+      sourceAuth: { fetch: fixtureFetch("spotify", spotifyAdapter.fixtures()) },
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+    };
+    // A previous successful checkpoint that a cancelled run must leave untouched.
+    expect(await runCli(["import", "spotify"], { ...options, podTransport: transport })).toBe(0);
+    const checkpoint = pod.get(stateUrl);
+    const provenance = pod.get(`${container}_provenance.ttl`);
+    const controller = new AbortController();
+    let reached!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pausedOnce = false;
+    const podTransport: typeof fetch = async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!pausedOnce && paused(url, (init?.method ?? "GET").toUpperCase())) {
+        pausedOnce = true;
+        reached();
+        await released;
+      }
+      return transport(input, init);
+    };
+    const result = runCli(["import", "spotify"], {
+      ...options,
+      podTransport,
+      signal: controller.signal,
+    });
+    await started;
+    const before = requests.length;
+    controller.abort(new Error("synthetic-cancellation"));
+    release();
+    expect(await result).toBe(EXIT_CODES.cancelled);
+    expect(requests.slice(before).filter((request) => writes.has(request.method))).toEqual([]);
+    expect(pod.get(stateUrl)).toBe(checkpoint);
+    expect(pod.get(`${container}_provenance.ttl`)).toBe(provenance);
+    expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
   });
 });

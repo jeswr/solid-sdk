@@ -86,6 +86,7 @@ describe.each([
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
         ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
+        "context_read",
         "fetch",
         "pod_list",
         "pod_read",

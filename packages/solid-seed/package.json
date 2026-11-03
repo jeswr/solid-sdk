@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/synthetic-rdf": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@solid/object": "^0.6.0",
