@@ -167,9 +167,21 @@ public final class PdfPreviewStore {
         return safe;
     }
 
-    private static void remove(File entry) throws IOException {
-        File[] children = entry.isDirectory() ? entry.listFiles() : null;
-        if (children != null) for (File child : children) remove(child);
+    /**
+     * Never follows a link: a symlink, or anything that does not resolve to itself inside the store,
+     * is unlinked rather than descended into, so cleanup cannot delete files outside the cache.
+     */
+    private void remove(File entry) throws IOException {
+        if (contained(entry) && entry.isDirectory()) {
+            File[] children = entry.listFiles();
+            if (children == null) throw new IOException("Cannot list " + entry.getName());
+            for (File child : children) remove(child);
+        }
         if (!entry.delete() && entry.exists()) throw new IOException("Cannot remove " + entry.getName());
+    }
+
+    private boolean contained(File entry) throws IOException {
+        File canonical = entry.getCanonicalFile();
+        return entry.getAbsoluteFile().equals(canonical) && canonical.toPath().startsWith(root.toPath());
     }
 }
