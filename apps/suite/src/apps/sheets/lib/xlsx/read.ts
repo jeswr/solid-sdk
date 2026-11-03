@@ -121,15 +121,20 @@ function readSheet(
     sheet.rowCount = Math.max(sheet.rowCount as number, row + 1);
     sheet.columnCount = Math.max(sheet.columnCount as number, column + 1);
   };
+  const rows = new Set<number>();
   for (const row of elements(doc, "row")) {
     const r = numberAttribute(row, "r", 0);
     requireXlsx(Number.isInteger(r) && r > 0, "Invalid Excel row");
+    requireXlsx(!rows.has(r), "Duplicate Excel row");
+    rows.add(r);
     // Spreadsheet apps often write empty formatted rows to the sheet's end: skip those.
     if (r > LIMITS.rows && elements(row, "c").length === 0) continue;
     requireXlsx(r <= LIMITS.rows, "Excel row limit exceeded");
     if (row.hasAttribute("ht")) {
       const h = (numberAttribute(row, "ht", 0) * 96) / 72;
       requireXlsx(Number.isFinite(h), "Invalid Excel row height");
+      // Row heights count towards the workbook's cell limit, like cells and merges.
+      countCell();
       (sheet.rowData as IWorksheetData["rowData"])[r - 1] = { h };
     }
   }
@@ -196,20 +201,37 @@ function readSheet(
   }
   const merges = elements(doc, "mergeCell");
   requireXlsx(merges.length <= LIMITS.merges, "Too many merged Excel cells");
+  const ranges: NonNullable<IWorksheetData["mergeData"]> = [];
   for (const merge of merges) {
     const refs = (merge.getAttribute("ref") ?? "").split(":");
     requireXlsx(refs.length === 2, "Invalid Excel merge range");
     const start = coordinate(refs[0] as string);
     const end = coordinate(refs[1] as string);
     requireXlsx(start.row <= end.row && start.column <= end.column, "Invalid Excel merge range");
+    // A one-cell merge merges nothing.
+    if (start.row === end.row && start.column === end.column) continue;
+    countCell();
     touch(end.row, end.column);
-    (sheet.mergeData as NonNullable<IWorksheetData["mergeData"]>).push({
+    ranges.push({
       startRow: start.row,
       endRow: end.row,
       startColumn: start.column,
       endColumn: end.column,
     });
   }
+  // Merged ranges may not overlap. Sorted by first row, each range is compared only with
+  // the later ranges that start within its rows; the merge cap bounds the worst case.
+  ranges.sort((a, b) => a.startRow - b.startRow);
+  for (const [i, a] of ranges.entries())
+    for (let j = i + 1; j < ranges.length; j++) {
+      const b = ranges[j] as (typeof ranges)[number];
+      if (b.startRow > a.endRow) break;
+      requireXlsx(
+        b.startColumn > a.endColumn || b.endColumn < a.startColumn,
+        "Overlapping Excel merged cells",
+      );
+    }
+  sheet.mergeData = ranges;
   // Column definitions often run to the last Excel column; keep widths only for the
   // columns the sheet uses (at least A:Z), without growing the sheet.
   // Ranges may not overlap, so expanding them is bounded by the column count.
@@ -371,6 +393,8 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       "Excel file must contain between 1 and 200 worksheets",
     );
     const needed = new Set(sheets.map((sheet) => targets.get(relationshipId(sheet)) as string));
+    // Each worksheet part is read once: repeated references would multiply its cost.
+    requireXlsx(needed.size === sheets.length, "Excel worksheets must be separate parts");
     const worksheets = extract(data, (name) => needed.has(name), budget);
     const strings = parts.get("xl/sharedStrings.xml")
       ? elements(parseXml(parts.get("xl/sharedStrings.xml"), "shared strings"), "si").map(richText)

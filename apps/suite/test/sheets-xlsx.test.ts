@@ -736,6 +736,62 @@ it("stops reading the parts after the first one over the limit", () => {
   }
 });
 
+it("reads each worksheet part once and counts row heights and merges as cells", () => {
+  rejects(
+    {
+      "xl/workbook.xml": bookXml('<sheet name="A" r:id="r1"/><sheet name="B" r:id="r1"/>'),
+    },
+    "separate parts",
+  );
+  rejects(
+    { "xl/worksheets/data.xml": worksheet('<sheetData><row r="2"/><row r="2"/></sheetData>') },
+    "Duplicate Excel row",
+  );
+  const { cells } = LIMITS;
+  LIMITS.cells = 2;
+  try {
+    rejects(
+      {
+        "xl/worksheets/data.xml": worksheet(
+          '<sheetData><row r="1" ht="20"/><row r="2" ht="20"/><row r="3" ht="20"/></sheetData>',
+        ),
+      },
+      "Excel cell limit",
+    );
+    rejects(
+      {
+        "xl/worksheets/data.xml": worksheet(
+          '<mergeCells><mergeCell ref="A1:B1"/><mergeCell ref="A2:B2"/><mergeCell ref="A3:B3"/></mergeCells>',
+        ),
+      },
+      "Excel cell limit",
+    );
+  } finally {
+    LIMITS.cells = cells;
+  }
+});
+
+it("skips one-cell merges and rejects overlapping merges", () => {
+  expect(
+    sheet(
+      '<mergeCells><mergeCell ref="C3:C3"/><mergeCell ref="A1:B2"/><mergeCell ref="C1:D2"/><mergeCell ref="A5:A6"/></mergeCells>',
+    ).mergeData,
+  ).toEqual([
+    { startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 },
+    { startRow: 0, endRow: 1, startColumn: 2, endColumn: 3 },
+    { startRow: 4, endRow: 5, startColumn: 0, endColumn: 0 },
+  ]);
+  for (const second of ["B2:C3", "A1:A2", "A2:B2"])
+    rejects(
+      {
+        "xl/worksheets/data.xml": worksheet(
+          `<mergeCells><mergeCell ref="A1:B2"/><mergeCell ref="${second}"/></mergeCells>`,
+        ),
+      },
+      "Overlapping Excel merged cells",
+    );
+});
+
 it("rejects a ZIP whose compressed data is corrupt", () => {
   const bytes = fixture({ "xl/worksheets/data.xml": worksheet(" ".repeat(2000)) });
   localEntries(bytes, (view, offset, name) => {

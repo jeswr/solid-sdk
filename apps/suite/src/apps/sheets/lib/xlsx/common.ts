@@ -12,7 +12,7 @@ export const LIMITS = {
   rows: 100_000,
   columns: 16_384,
   cells: 2_000_000,
-  merges: 100_000,
+  merges: 10_000,
   /** UTF-16 code units of cell text and formulas, counted per cell even when strings are shared. */
   text: 20_000_000,
 };

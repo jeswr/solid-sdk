@@ -34,11 +34,12 @@ formatting, hidden state, print settings and other workbook metadata are omitted
 The 1904 date system is not supported; those workbooks are rejected.
 
 Import rejects DTDs, malformed XML, unsafe relationship targets, duplicate cell
-references and ZIP entries, overlapping column ranges, and files over these
+references, rows and ZIP entries, worksheets that share a part, overlapping column
+ranges or merged cells, and files over these
 limits: 1,000 ZIP entries, 20 MiB per part and 100 MiB in total inflated (counted
 as the bytes inflate, since the sizes a ZIP declares can't be trusted), 200
 worksheets, 100,000 rows, 16,384 columns, 2 million cells or occupied grid
-positions, 100,000 merges per sheet, and 20 million characters of cell text and
+positions (row heights and merges count as cells), 10,000 merges per sheet, and 20 million characters of cell text and
 formulas (a shared string counts once per cell that uses it). Only workbook
 metadata and referenced worksheets are inflated, so media doesn't count. Empty
-rows past the row limit are skipped. Sheet IDs are generated.
+rows past the row limit and one-cell merges are skipped. Sheet IDs are generated.
