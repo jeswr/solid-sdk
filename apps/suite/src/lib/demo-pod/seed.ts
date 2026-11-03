@@ -13,6 +13,7 @@ import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
+import { buildHomeSeed } from "./seed-home";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
 
@@ -110,6 +111,7 @@ export async function buildDemoSeed(
     "",
   ].join("\n");
   const files: DemoSeedFile[] = [
+    ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {

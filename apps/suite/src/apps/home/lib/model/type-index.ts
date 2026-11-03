@@ -42,7 +42,14 @@ export async function readTypeIndexes(
   webId: string,
   profile: DatasetCore,
   storage: string,
-  options: DiscoveryBudgetOptions = {},
+  options: DiscoveryBudgetOptions & {
+    /** Successful index reads, including the preferences documents needed to discover them. */
+    onIndex?: (
+      url: string,
+      locations: readonly RegisteredLocation[],
+      via: readonly string[],
+    ) => void;
+  } = {},
 ): Promise<{ locations: RegisteredLocation[]; failures: DiscoveryFailure[]; truncated: boolean }> {
   const budget = options.budget ?? new DiscoveryBudget(options);
   const node = subjectOf(profile, webId);
@@ -50,15 +57,16 @@ export async function readTypeIndexes(
     ["publicTypeIndex", "privateTypeIndex"].flatMap((name) => node.iris(NS.SOLID + name)),
   );
   const pending = [
-    ...[...links].map((url) => ({ url, preferences: false })),
+    ...[...links].map((url) => ({ url, preferences: false, via: [] as string[] })),
     ...[...new Set(node.iris("http://www.w3.org/ns/pim/space#preferencesFile"))].map((url) => ({
       url,
       preferences: true,
+      via: [] as string[],
     })),
   ];
   const locations: RegisteredLocation[] = [];
   const failures: DiscoveryFailure[] = [];
-  for (const { url, preferences } of pending) {
+  for (const { url, preferences, via } of pending) {
     try {
       if (!inStorage(url, storage))
         throw new TypeError(
@@ -73,11 +81,13 @@ export async function readTypeIndexes(
           for (const indexUrl of preferencesNode.iris(NS.SOLID + name)) {
             if (links.has(indexUrl)) continue;
             links.add(indexUrl);
-            pending.push({ url: indexUrl, preferences: false });
+            pending.push({ url: indexUrl, preferences: false, via: [...via, url] });
           }
         }
       } else {
-        locations.push(...registrationsFrom(dataset));
+        const registered = registrationsFrom(dataset);
+        options.onIndex?.(url, registered, via);
+        locations.push(...registered);
       }
     } catch (error) {
       budget.throwIfCancelled();

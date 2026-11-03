@@ -220,3 +220,14 @@ it("reads the pathname without the trailing slash, and the root before the route
   expect(seen.at(0)).toBe("/photos/a/REF");
   expect(seen.at(-1)).toBe("/");
 });
+
+it("reads a Home item's domain and ref from the native pathname, leaving the placeholder unmatched", async () => {
+  const { matchRouteParams } = await import("../src/lib/route-params");
+  const pattern = "/home/[domain]/i/[ref]";
+  expect(matchRouteParams(pattern, "/home/health/i/aHR0cHM6Ly9wb2Qv/")).toEqual({
+    domain: "health",
+    ref: "aHR0cHM6Ly9wb2Qv",
+  });
+  expect(matchRouteParams(pattern, "/home/__/i/__/")).toBeUndefined();
+  expect(matchRouteParams(pattern, "/home/health/")).toBeUndefined();
+});

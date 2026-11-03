@@ -182,7 +182,7 @@ test("unknown/invalid refs, row Edit link, title commit, recurrence clearing and
   await detail.getByRole("textbox", { name: "Due date", exact: true }).fill("3 November 2027");
   await detail.getByRole("textbox", { name: "Due date", exact: true }).press("Tab");
   await detail.getByRole("button", { name: "Repeat", exact: true }).click();
-  await page.getByLabel("Frequency", { exact: true }).selectOption("DAILY");
+  await page.getByRole("combobox", { name: "Frequency", exact: true }).selectOption("DAILY");
   await page.keyboard.press("Escape");
   await expect(detail).toBeVisible();
   await expect(detail).toContainText("Every day");

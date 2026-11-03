@@ -57,6 +57,15 @@ public final class NavigationPolicy {
         }
     }
 
+    /**
+     * The trusted app URL: {@code server.url} in remote mode, else Capacitor's local origin
+     * ({@code https://localhost}) in bundled mode (MOB-P3 E6). Null when neither is http(s).
+     */
+    public static String appUrl(String serverUrl, String localUrl) {
+        String url = serverUrl != null ? serverUrl : localUrl;
+        return origin(url) == null ? null : url;
+    }
+
     /** origin + raw path, or null when not an http(s) URL. */
     static String page(String url) {
         String origin = origin(url);

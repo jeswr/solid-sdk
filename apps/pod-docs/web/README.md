@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
 
 # `web/` — the Pod Docs static host shell
@@ -10,7 +11,12 @@ shape replicates across every `pod-*` app (see the recipe at the bottom).
 The host is intentionally tiny. The whole app is: log in → derive the user's pod
 from the session → mount the library component → let it read/write the pod. All
 the data logic (LDP, RDF, optimistic create/save, Type-Index discovery) lives in
-the library; the host only wires **auth + a pod root**.
+the library; the host wires auth, a pod root, and the saved documents collection.
+`CollectionBrowser` persists server-assigned collection URLs in local storage keyed by
+WebID and storage root, and passes `container` / `onContainerChange` to the library.
+Remounts restore the exact collection identifier; identity and root changes use separate
+selections. A late assignment remains associated with its original identity. If storage
+cannot be read or written, the host reports an error before creating another collection.
 
 ## How it works
 
@@ -19,8 +25,8 @@ index.html → src/main.tsx
   └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
        └─ <App>                   (src/App.tsx)
             ├─ logged out → <LoginScreen>          (WebID-first login)
-            └─ logged in  → <DocumentBrowser       (@jeswr/pod-docs/ui)
-                              podRoot webId />
+            └─ logged in  → <CollectionBrowser>    (src/CollectionBrowser.tsx)
+                              └─ <DocumentBrowser podRoot webId container onContainerChange />
 ```
 
 ### Auth (standalone, no server)

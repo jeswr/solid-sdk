@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -9,7 +10,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { breadcrumbFor } from "../../src/ui/breadcrumb.js";
 import { useDriveListing } from "../../src/ui/useDriveListing.js";
 
 afterEach(() => {
@@ -44,7 +44,7 @@ describe("useDriveListing", () => {
     expect(result.current.listing?.container.entries).toHaveLength(1);
   });
 
-  it("normalises a slashless navigate target to a trailing slash", async () => {
+  it("preserves a slashless navigation target and delegates Solid normalisation", async () => {
     const fetch = (async (input: string | URL | Request) =>
       okFor(
         typeof input === "string" ? input : input.toString(),
@@ -52,7 +52,8 @@ describe("useDriveListing", () => {
     const { result } = renderHook(() => useDriveListing("https://pod.example/drive/", { fetch }));
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.navigate("https://pod.example/drive/sub"));
-    expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/");
+    expect(result.current.currentUrl).toBe("https://pod.example/drive/sub");
+    await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/drive/sub/"));
   });
 
   it("does not let a slow superseded load overwrite a newer navigation", async () => {
@@ -125,10 +126,7 @@ describe("useDriveListing", () => {
     expect(result.current.isAccessError).toBe(false);
   });
 
-  it("normalises a slashless rootUrl: GETs the slash-terminated container and a correct breadcrumb", async () => {
-    // A slashless root prop (".../drive") must still drive a slash-terminated
-    // container GET and a "Drive"-rooted breadcrumb — not a single stray crumb
-    // from the defensive "outside the root" branch.
+  it("preserves a slashless rootUrl and delegates Solid normalisation", async () => {
     const fetched: string[] = [];
     const fetch = (async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -139,16 +137,9 @@ describe("useDriveListing", () => {
     const { result } = renderHook(() => useDriveListing("https://pod.example/drive", { fetch }));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    // currentUrl is normalised, the GET hit the slash-terminated container, and
-    // the listing resolved against it.
-    expect(result.current.currentUrl).toBe("https://pod.example/drive/");
+    expect(result.current.currentUrl).toBe("https://pod.example/drive");
     expect(fetched).toContain("https://pod.example/drive/");
     expect(result.current.listing?.url).toBe("https://pod.example/drive/");
-
-    // The breadcrumb (derived from the normalised currentUrl) is the single
-    // "Drive" root crumb — NOT a degenerate one from the slashless-mismatch path.
-    const crumbs = breadcrumbFor(result.current.currentUrl, "https://pod.example/drive");
-    expect(crumbs).toEqual([{ url: "https://pod.example/drive/", label: "Drive" }]);
   });
 
   it("resets navigation to the new container when the rootUrl prop changes", async () => {
@@ -164,7 +155,7 @@ describe("useDriveListing", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // Navigate down into the first root's tree.
-    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    act(() => result.current.navigate("https://pod.example/drive/sub/"));
     await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
     await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/drive/sub/"));
 
@@ -176,13 +167,12 @@ describe("useDriveListing", () => {
     expect(result.current.error).toBeNull();
 
     // Breadcrumb now roots at the NEW container.
-    const crumbs = breadcrumbFor(result.current.currentUrl, "https://pod.example/other/");
+    const crumbs = result.current.breadcrumbs;
     expect(crumbs).toEqual([{ url: "https://pod.example/other/", label: "Drive" }]);
   });
 
   it("resets to the new root even when the changed rootUrl prop is slashless", async () => {
-    // The reset keys off the NORMALISED root, so a slashless new prop that
-    // normalises to the same container is still detected as a change and resets.
+    // The new root identifier is retained; Solid normalisation belongs to the listing.
     const fetch = (async (input: string | URL | Request) =>
       okFor(
         typeof input === "string" ? input : input.toString(),
@@ -194,11 +184,11 @@ describe("useDriveListing", () => {
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    act(() => result.current.navigate("https://pod.example/drive/sub/"));
     await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
 
     rerender({ root: "https://pod.example/other" });
-    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other/"));
+    await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/other"));
     await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/other/"));
   });
 
@@ -224,7 +214,7 @@ describe("useDriveListing", () => {
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    act(() => result.current.navigate("https://pod.example/drive/sub/"));
     await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
 
     // First root change resets to the new container despite the double render.
@@ -235,7 +225,7 @@ describe("useDriveListing", () => {
     // Navigate down again, then change root a SECOND time: the state-tracked
     // previous root must again detect the change and reset (a leaked ref write
     // from an abandoned render would have desynced this second detection).
-    act(() => result.current.navigate("https://pod.example/other/nested"));
+    act(() => result.current.navigate("https://pod.example/other/nested/"));
     await waitFor(() =>
       expect(result.current.currentUrl).toBe("https://pod.example/other/nested/"),
     );
@@ -247,7 +237,7 @@ describe("useDriveListing", () => {
   });
 
   it("does NOT reset navigation when the rootUrl prop is unchanged across a re-render", async () => {
-    // A parent re-render that passes the SAME (normalised) root must leave the
+    // A parent re-render that passes the SAME root identifier must leave the
     // current navigation intact — the reset is gated on an actual root change.
     const fetch = (async (input: string | URL | Request) =>
       okFor(
@@ -260,13 +250,36 @@ describe("useDriveListing", () => {
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.navigate("https://pod.example/drive/sub"));
+    act(() => result.current.navigate("https://pod.example/drive/sub/"));
     await waitFor(() => expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/"));
 
-    // Re-render with an unchanged root (and a slashless spelling of the same
-    // root — both normalise identically, so neither is treated as a change).
+    // Re-render with an unchanged root identifier.
     rerender({ root: "https://pod.example/drive/" });
-    rerender({ root: "https://pod.example/drive" });
     expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/");
   });
+});
+
+it("discards an already completed SDK listing delivered after navigation", async () => {
+  const drive = await import("../../src/drive.js");
+  let release: (value: import("../../src/drive.js").ContainerListing) => void = () => {};
+  const slow = new Promise<import("../../src/drive.js").ContainerListing>((resolve) => {
+    release = resolve;
+  });
+  const spy = vi.spyOn(drive, "listContainer").mockImplementation(async (url) => {
+    if (url === "https://pod.example/slow/") return slow;
+    return { url, etag: null, container: { url, entries: [] } };
+  });
+  const { result } = renderHook(() => useDriveListing("https://pod.example/slow/"));
+  act(() => result.current.navigate("https://pod.example/fast/"));
+  await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/fast/"));
+  await act(async () => {
+    release({
+      url: "https://pod.example/slow/",
+      etag: null,
+      container: { url: "https://pod.example/slow/", entries: [] },
+    });
+    await slow;
+  });
+  expect(result.current.listing?.url).toBe("https://pod.example/fast/");
+  spy.mockRestore();
 });

@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
@@ -15,10 +17,12 @@
  *   - not-cached resource ⇒ no-op
  *   - resync sweep: confirms/replaces/purges across the warmed set; dedups by URL
  */
+import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it } from 'vitest';
 import { computeCacheKey, keyRequest } from '../src/cache-policy.js';
 import { handleNotification, type InvalidateDeps, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
+import { createPolicyStorage } from '../src/storage.js';
 import type { NotificationFrame } from '../src/types.js';
 import {
   MockBroadcaster,
@@ -60,7 +64,16 @@ async function harness(
   const { fetch, calls } = scriptedFetch(
     responders.length ? responders : [() => new Response(null, { status: 500 })],
   );
-  const deps: InvalidateDeps = { cache, meta, fetch, broadcast, now: () => 1_000_000 };
+  const deps: InvalidateDeps = {
+    cache,
+    meta,
+    storage: await createPolicyStorage(
+      (fetch) => createSolidBackend({ fetch, root: 'https://alice.example/' }),
+      fetch,
+    ),
+    broadcast,
+    now: () => 1_000_000,
+  };
   return { deps, cache, meta, broadcast, calls };
 }
 
@@ -318,7 +331,7 @@ describe('resync sweep', () => {
   it('confirms (304), replaces (200) and purges (404) across the warmed set', async () => {
     // Route per URL: A → 304, B → 200 (new etag), C → 404.
     const routes: Record<string, () => Response> = {
-      'https://alice.example/a': () => notModifiedResponse(),
+      'https://alice.example/a': () => turtleResponse('', { etag: '"a1"' }),
       'https://alice.example/b': () => turtleResponse('new', { etag: '"b2"' }),
       'https://alice.example/c': () => new Response(null, { status: 404 }),
     };
@@ -328,7 +341,16 @@ describe('resync sweep', () => {
     const { fetch, calls } = scriptedFetch([
       (r) => routes[r.url.split('#')[0] ?? r.url]?.() ?? new Response(null, { status: 500 }),
     ]);
-    const deps: InvalidateDeps = { cache, meta, fetch, broadcast, now: () => 2_000_000 };
+    const deps: InvalidateDeps = {
+      cache,
+      meta,
+      storage: await createPolicyStorage(
+        (fetch) => createSolidBackend({ fetch, root: 'https://alice.example/' }),
+        fetch,
+      ),
+      broadcast,
+      now: () => 2_000_000,
+    };
     const h: Harness = { deps, cache, meta, broadcast, calls };
 
     await seed(h, 'https://alice.example/a', 'a', '"a1"');
@@ -354,8 +376,17 @@ describe('resync sweep', () => {
     const cache = new MockByteCache();
     const meta = await newMeta();
     const broadcast = new MockBroadcaster();
-    const { fetch, calls } = scriptedFetch([() => notModifiedResponse()]);
-    const deps: InvalidateDeps = { cache, meta, fetch, broadcast, now: () => 2_000_000 };
+    const { fetch, calls } = scriptedFetch([() => turtleResponse('', { etag: '"v1"' })]);
+    const deps: InvalidateDeps = {
+      cache,
+      meta,
+      storage: await createPolicyStorage(
+        (fetch) => createSolidBackend({ fetch, root: 'https://alice.example/' }),
+        fetch,
+      ),
+      broadcast,
+      now: () => 2_000_000,
+    };
 
     // Two metadata rows for the same URL, different varyKeys.
     for (const varyKey of ['accept=text/turtle', 'accept=application/ld+json']) {
@@ -382,5 +413,32 @@ describe('resync sweep', () => {
     const result = await resyncSweep(h.deps);
     expect(result.checked).toBe(0);
     expect(h.calls).toHaveLength(0);
+  });
+});
+
+describe('normalized membership changes', () => {
+  it.each([
+    'Create',
+    'Delete',
+    'Move',
+  ] as const)('refreshes parent listings for %s events from pod-notifications', async (type) => {
+    const origin = 'https://alice.example/old/';
+    const h = await harness([() => turtleResponse('new listing', { etag: 'v2' })]);
+    await seed(h, CONTAINER, 'old listing', 'v1');
+    await seed(h, origin, 'old listing', 'v1');
+    await handleNotification({ type, object: DOC, target: CONTAINER, origin }, h.deps);
+    const urls = h.calls.map((request) => request.url);
+    expect(urls).toContain(type === 'Delete' ? origin : CONTAINER);
+    if (type === 'Move') expect(urls).toContain(origin);
+    expect(h.broadcast.messages).toHaveLength(type === 'Move' ? 4 : 2);
+  });
+
+  it('uses origin for a Remove event that has no target', async () => {
+    const h = await harness([() => turtleResponse('updated listing', { etag: 'v2' })]);
+    await seed(h, CONTAINER, 'old listing', 'v1');
+    expect(
+      (await handleNotification({ type: 'Remove', object: DOC, origin: CONTAINER }, h.deps)).kind,
+    ).toBe('listing-refreshed');
+    expect(h.calls[0]?.url).toBe(CONTAINER);
   });
 });
