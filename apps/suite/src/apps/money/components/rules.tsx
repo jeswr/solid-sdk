@@ -43,6 +43,7 @@ export function RulesScreen() {
   const [deleting, setDeleting] = useState<SavedRule>();
   const [error, setError] = useState<{ field: "value" | "category"; text: string }>();
   const [announcement, setAnnouncement] = useState("");
+  const [resetting, setResetting] = useState(false);
   // After a move, keep focus on the same control of the moved rule.
   const focusAfterMove = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -77,7 +78,7 @@ export function RulesScreen() {
     // At the new end, the button just used no longer applies; use the other one.
     const end = to === 0 || to === money.rules.length - 1;
     focusAfterMove.current = `${rule.id}:${end ? (by < 0 ? "down" : "up") : by < 0 ? "up" : "down"}`;
-    setAnnouncement(`Moved to position ${to + 1} of ${money.rules.length}`);
+    setAnnouncement(`${describe(rule)} moved to position ${to + 1} of ${money.rules.length}`);
     void change((rules) => {
       const index = rules.findIndex((value) => value.id === rule.id);
       const target = index + by;
@@ -119,19 +120,26 @@ export function RulesScreen() {
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
-      {money.rulesUnreadable && (
+      {money.rulesProblem && (
         <div className="mon-rules-warning" role="status">
-          <p>
-            Your saved rules couldn&apos;t be read, so imports use category names instead. Start
-            again with no rules to add new ones.
-          </p>
-          <Button
-            variant="outline"
-            disabled={money.saving}
-            onClick={() => void money.mutate(() => resetRules(money.session))}
-          >
-            Start again with no rules
-          </Button>
+          {money.rulesProblem === "invalid" ? (
+            <>
+              <p>
+                Your saved rules couldn&apos;t be read, so imports use category names instead. Start
+                again with no rules to add new ones.
+              </p>
+              <Button variant="outline" disabled={money.saving} onClick={() => setResetting(true)}>
+                Start again with no rules
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>Your rules couldn&apos;t be loaded. Imports use category names until they are.</p>
+              <Button variant="outline" onClick={() => void money.refresh()}>
+                Try again
+              </Button>
+            </>
+          )}
         </div>
       )}
       <section className="mon-panel">
@@ -146,7 +154,7 @@ export function RulesScreen() {
               </Button>
             }
           />
-        ) : money.rulesUnreadable ? null : !money.rules.length ? (
+        ) : money.rulesProblem ? null : !money.rules.length ? (
           <EmptyState
             title="Sort transactions automatically"
             body="For example: when the description contains “Tesco”, file it under Groceries. Without rules, imports look for category names in descriptions."
@@ -308,6 +316,31 @@ export function RulesScreen() {
             }}
           >
             Delete rule
+          </Button>
+        </div>
+      </Modal>
+      <Modal
+        open={resetting}
+        onOpenChange={setResetting}
+        title="Start again with no rules?"
+        description="Your saved rules file can't be read. This replaces it with an empty one."
+      >
+        <div className="mon-form">
+          <p>If the file has been fixed on another device in the meantime, it is kept.</p>
+          <Button
+            variant="destructive"
+            disabled={money.saving}
+            onClick={async () => {
+              let replaced = false;
+              const done = await money.mutate(async () => {
+                replaced = await resetRules(money.session);
+              });
+              if (!done) return;
+              setResetting(false);
+              setAnnouncement(replaced ? "Rules cleared" : "Your rules can be read again");
+            }}
+          >
+            Start again
           </Button>
         </div>
       </Modal>

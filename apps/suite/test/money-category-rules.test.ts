@@ -16,6 +16,7 @@ import {
   loadRules,
   parseRules,
   RULES_FILE,
+  RulesFileError,
   replaceRule,
   resetRules,
   ruleMatches,
@@ -80,7 +81,7 @@ describe("categorisation rules", () => {
 
   it("saves rules with conditional writes and reads them back", async () => {
     const c = client();
-    expect(await loadRules(c)).toEqual({ rules: [], etag: null });
+    expect(await loadRules(c)).toEqual({ rules: [], etag: null, exists: false });
     await saveRules(c, (rules) => [...rules, rule("a", "Tesco", "groceries")]);
     await saveRules(c, (rules) => [...rules, rule("b", "Rail", "travel", "startsWith")]);
     const loaded = await loadRules(c);
@@ -175,6 +176,9 @@ describe("categorisation rules", () => {
   it("adds by id and refuses to bring back a rule deleted elsewhere", () => {
     const a = rule("a", "Tesco", "groceries");
     expect(addRule([a], a)).toEqual([a]);
+    // A retry with changed text keeps the latest text.
+    const other = rule("z", "Other", "travel");
+    expect(addRule([other, a], { ...a, value: "Aldi" })).toEqual([other, { ...a, value: "Aldi" }]);
     expect(addRule([], a)).toEqual([a]);
     expect(replaceRule([a], { ...a, value: "Aldi" })).toEqual([{ ...a, value: "Aldi" }]);
     const b = rule("b", "Rail", "travel");
@@ -187,39 +191,46 @@ describe("categorisation rules", () => {
     expect(stillUncategorised(tx("1", "x", { creditAccount: "a" }))).toBe(false);
   });
 
-  it("refuses rules files it can't save safely, and can start again", async () => {
+  it("tells unusable files from failed reads, and resets only a still-broken file", async () => {
     const c = client();
     const url = storeOf(c).resolve(RULES_FILE);
-    // Nothing to reset yet: creates an empty file.
-    await resetRules(c);
-    expect(await loadRules(c)).toMatchObject({ rules: [] });
-    await c.fetch(url, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rules: [{ id: "a", match: "regex", value: "x", category: "y" }] }),
-    });
-    await expect(loadRules(c)).rejects.toThrow(TypeError);
-    await resetRules(c);
-    expect((await loadRules(c)).rules).toEqual([]);
+    const write = (body: string) =>
+      c.fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body });
+    // Nothing to reset yet.
+    expect(await resetRules(c)).toBe(false);
+    await write(
+      JSON.stringify({ rules: [{ id: "a", match: "regex", value: "x", category: "y" }] }),
+    );
+    await expect(loadRules(c)).rejects.toBeInstanceOf(RulesFileError);
+    await write("{");
+    await expect(loadRules(c)).rejects.toBeInstanceOf(RulesFileError);
+    expect(await resetRules(c)).toBe(true);
+    expect(await loadRules(c)).toMatchObject({ rules: [], exists: true });
+    // A file that reads fine again (repaired elsewhere) is never reset.
+    await saveRules(c, () => [rule("a", "Tesco", "groceries")]);
+    expect(await resetRules(c)).toBe(false);
+    expect((await loadRules(c)).rules).toHaveLength(1);
     const tagless: MoneyClient = {
       storageUrl: c.storageUrl,
       fetch: async (input, init) => {
         const response = await c.fetch(input, init);
         const headers = new Headers(response.headers);
         headers.delete("etag");
-        return new Response(init?.method === "HEAD" ? null : await response.text(), {
-          status: response.status,
-          headers,
-        });
+        return new Response(await response.text(), { status: response.status, headers });
       },
     };
-    await expect(loadRules(tagless)).rejects.toThrow("didn't say which version");
-    // Resetting without a version tag can only create, which fails while the file exists.
-    await expect(resetRules(tagless)).rejects.toMatchObject({ status: 412 });
+    // Rules still load without a version tag, but can't be saved or reset safely.
+    expect(await loadRules(tagless)).toMatchObject({ etag: null, exists: true });
+    await expect(saveRules(tagless, (rules) => rules.slice(1))).rejects.toThrow(
+      "didn't say which version",
+    );
+    await write("{");
+    await expect(resetRules(tagless)).rejects.toThrow("didn't say which version");
     const failing: MoneyClient = {
       storageUrl: c.storageUrl,
       fetch: async () => new Response(null, { status: 503 }),
     };
+    await expect(loadRules(failing)).rejects.not.toBeInstanceOf(RulesFileError);
     await expect(resetRules(failing)).rejects.toMatchObject({ status: 503 });
   });
 

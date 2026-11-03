@@ -17,6 +17,13 @@ export interface SavedRule {
 export interface RuleFile {
   readonly rules: SavedRule[];
   readonly etag: string | null;
+  readonly exists: boolean;
+}
+/** The rules file is there but its contents can't be used (as opposed to a failed read). */
+export class RulesFileError extends Error {
+  constructor() {
+    super("Your saved rules couldn't be read.");
+  }
 }
 /** Rules are a preference, kept as JSON beside the money data. */
 export const RULES_FILE = "rules.json";
@@ -66,31 +73,50 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
     redirect: "error",
     headers: { accept: "application/json", "cache-control": "no-cache" },
   });
-  if (response.status === 404) return { rules: [], etag: null };
+  if (response.status === 404) return { rules: [], etag: null, exists: false };
   if (!response.ok) throw new MoneyIoError(response.status);
-  const rules = parseRules(await response.json());
-  const etag = response.headers.get("etag");
-  // Without a version tag a save can't be made safely against other devices' edits.
-  if (!etag) throw new Error("Your pod didn't say which version of your rules it has.");
-  return { rules, etag };
+  let rules: SavedRule[];
+  try {
+    rules = parseRules(JSON.parse(await response.text()));
+  } catch {
+    throw new RulesFileError();
+  }
+  return { rules, etag: response.headers.get("etag"), exists: true };
 }
 
-/** Replaces an unreadable rules file with an empty one. */
-export async function resetRules(client: MoneyClient): Promise<void> {
+/** Without a version tag a write can't be made safely against other devices' edits. */
+function condition(file: { etag: string | null; exists: boolean }) {
+  if (!file.exists) return { create: true } as const;
+  if (!file.etag) throw new Error("Your pod didn't say which version of your rules it has.");
+  return { etag: file.etag };
+}
+
+/**
+ * Replaces the rules file with an empty one, but only if it still can't be read:
+ * a file that has since become readable (repaired elsewhere) is left alone.
+ * Resolves true when it reset the file.
+ */
+export async function resetRules(client: MoneyClient): Promise<boolean> {
   const store = storeOf(client);
   const response = await client.fetch(store.resolve(RULES_FILE), {
-    method: "HEAD",
     redirect: "error",
-    headers: { "cache-control": "no-cache" },
+    headers: { accept: "application/json", "cache-control": "no-cache" },
   });
-  if (!response.ok && response.status !== 404) throw new MoneyIoError(response.status);
-  const etag = response.headers.get("etag");
+  if (response.status === 404) return false;
+  if (!response.ok) throw new MoneyIoError(response.status);
+  try {
+    parseRules(JSON.parse(await response.text()));
+    return false;
+  } catch {
+    // Still unreadable: replace exactly the version that was just read.
+  }
   await store.put(
     RULES_FILE,
     JSON.stringify({ rules: [] }),
     "application/json",
-    response.status === 404 || !etag ? { create: true } : { etag },
+    condition({ etag: response.headers.get("etag"), exists: true }),
   );
+  return true;
 }
 
 /** Edits must not bring back a rule another device deleted. */
@@ -98,9 +124,14 @@ export function replaceRule(rules: readonly SavedRule[], rule: SavedRule): Saved
   if (!rules.some((value) => value.id === rule.id)) throw new MoneyIoError(412);
   return rules.map((value) => (value.id === rule.id ? rule : value));
 }
-/** Adding is keyed by the rule's id, so retrying after a lost response adds it once. */
+/**
+ * Adding is keyed by the rule's id, so retrying after a lost response adds it once
+ * (with the latest text, if it was changed before the retry).
+ */
 export function addRule(rules: readonly SavedRule[], rule: SavedRule): SavedRule[] {
-  return rules.some((value) => value.id === rule.id) ? [...rules] : [...rules, rule];
+  return rules.some((value) => value.id === rule.id)
+    ? rules.map((value) => (value.id === rule.id ? rule : value))
+    : [...rules, rule];
 }
 
 const same = (a: readonly SavedRule[], b: readonly SavedRule[]) =>
@@ -127,7 +158,7 @@ export async function saveRules(
         RULES_FILE,
         JSON.stringify({ rules: next }),
         "application/json",
-        loaded.etag ? { etag: loaded.etag } : { create: true },
+        condition(loaded),
       ),
     () => loadRules(client),
   );

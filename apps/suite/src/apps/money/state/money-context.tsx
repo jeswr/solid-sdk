@@ -17,7 +17,7 @@ import { type AccountSummary, listAccounts } from "../lib/data/accounts";
 import { loadCategories } from "../lib/data/categories";
 import { moneyRoot } from "../lib/data/container";
 import { allTransactions, type LedgerFilters, ledgerRows } from "../lib/data/ledger";
-import { loadRules, type SavedRule } from "../lib/data/rules";
+import { loadRules, RulesFileError, type SavedRule } from "../lib/data/rules";
 import type { Category, Range, Transaction } from "../lib/model";
 export interface Snapshot {
   accounts: AccountSummary[];
@@ -25,8 +25,11 @@ export interface Snapshot {
   categories: Category[];
   /** Categorisation rules, in priority order. */
   rules: SavedRule[];
-  /** The rules file exists but couldn't be read; imports fall back to category names. */
-  rulesUnreadable: boolean;
+  /**
+   * Why the rules couldn't be loaded, if they couldn't: the file's contents are
+   * unusable, or the read failed. Imports fall back to category names meanwhile.
+   */
+  rulesProblem?: "invalid" | "unavailable" | undefined;
 }
 type Optimistic = (snapshot: Snapshot) => Snapshot;
 interface MoneyState extends Snapshot {
@@ -44,7 +47,6 @@ const empty: Snapshot = {
   transactions: [],
   categories: [],
   rules: [],
-  rulesUnreadable: false,
 };
 export function MoneyProvider({ session, children }: { session: PodSession; children: ReactNode }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -75,8 +77,12 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
     }
     // A broken rules file must not stop the rest of Money from loading.
     const rules = await loadRules(session).then(
-      (file) => ({ rules: file.rules, rulesUnreadable: false }),
-      () => ({ rules: [], rulesUnreadable: true }),
+      (file) => ({ rules: file.rules, rulesProblem: undefined }),
+      (failure: unknown) => ({
+        rules: [],
+        rulesProblem:
+          failure instanceof RulesFileError ? ("invalid" as const) : ("unavailable" as const),
+      }),
     );
     return { accounts, transactions, categories: result.categories, ...rules };
   }, [session, today]);
