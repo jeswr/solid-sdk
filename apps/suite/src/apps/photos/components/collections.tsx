@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Badge,
@@ -15,9 +16,10 @@ import {
 } from "@jeswr/suite-ui";
 import { Album, Heart, Images, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { normalizePathname, useRoutePathname } from "@/lib/route-params";
 import { changeMembers, type StoredAlbum } from "../lib/data/albums";
 import { type LibraryPhoto, searchPhotos } from "../lib/data/library";
 import { usePhotos } from "../state/photos-context";
@@ -34,6 +36,7 @@ export function collectionPhotos(
   from: string,
 ): LibraryPhoto[] {
   const url = new URL(from, "https://suite.invalid");
+  url.pathname = normalizePathname(url.pathname);
   if (url.pathname === "/photos/favourites")
     return photos.filter((photo) => favourites.includes(photo.ref));
   if (url.pathname === "/photos/search")
@@ -59,7 +62,7 @@ export function CollectionScreen({
 }) {
   const state = usePhotos();
   const requestUpload = useRequestUpload();
-  const currentPath = usePathname();
+  const currentPath = useRoutePathname();
   const pathname = collectionPath?.split("?")[0] ?? currentPath;
   const search = useSearchParams();
   const [selecting, setSelecting] = useState(false);

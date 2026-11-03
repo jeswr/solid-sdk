@@ -38,6 +38,15 @@ function SessionGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out") {
+    return (
+      <div className="hm-boot">
+        <h1>Home</h1>
+        <p role="status">Sign in to open your pod</p>
+      </div>
+    );
+  }
   return (
     <HomeSessionContext value={state.session}>
       <SuiteFrame app="home" sidebar={<HomeSidebar />}>
